@@ -5,6 +5,7 @@ severity = "fix"
 sources = [3321909800, 3693921900, 4010053911, 4233418839]
 near_misses = [3351930886, 3928145105]
 needs_repo_search = true
+min_precision = 0.4
 repo_search_hint = "Open the module or function that the comment names and compare the two copies."
 guidance = '''
 When you write a comment or docstring saying this code copies, mirrors, or must be kept in sync with code elsewhere, share it instead. Import the constant from one module, call one parametrized function, or build one registry that both sides read.

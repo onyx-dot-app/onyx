@@ -16,6 +16,8 @@ from pathlib import Path, PurePosixPath
 from typing import NewType
 
 __all__ = [
+    "RULES_DIR",
+    "SETTINGS_FILE",
     "Budget",
     "Calibration",
     "CalibrationPolicy",
@@ -26,6 +28,7 @@ __all__ = [
     "LlmSettings",
     "Prices",
     "Question",
+    "Quote",
     "Registry",
     "RegistryError",
     "Rule",
@@ -33,7 +36,9 @@ __all__ = [
     "Scope",
     "Settings",
     "Severity",
+    "WindowSettings",
     "load_registry",
+    "precision_floor",
     "write_calibration",
 ]
 
@@ -150,6 +155,9 @@ class Rule:
     near_misses: frozenset[CommentId]
     needs_repo_search: bool
     repo_search_hint: str | None
+    # Overrides the severity's floor, such as for reuse rules whose citation
+    # check supplies the precision.
+    min_precision: float | None
     calibration: Calibration | None
 
     @property
@@ -236,6 +244,13 @@ class Registry:
         if unknown:
             raise RegistryError(f"unknown rule ids: {', '.join(sorted(unknown))}")
         return replace(self, rules=tuple(r for r in self.rules if r.id in wanted))
+
+
+def precision_floor(rule: Rule, settings: Settings) -> float:
+    """The Wilson lower bound of tune precision a rule needs to post."""
+    if rule.min_precision is not None:
+        return rule.min_precision
+    return settings.calibration.min_precision[rule.severity]
 
 
 def load_registry(directory: Path = RULES_DIR) -> Registry:
@@ -510,6 +525,9 @@ def _parse_rule(file: Path) -> Rule:
         near_misses=table.comment_ids("near_misses"),
         needs_repo_search=needs_repo_search,
         repo_search_hint=table.optional_text("repo_search_hint"),
+        min_precision=(
+            table.number("min_precision") if table.has("min_precision") else None
+        ),
         calibration=(
             _parse_calibration(table.table("calibration"))
             if table.has("calibration")
@@ -518,6 +536,8 @@ def _parse_rule(file: Path) -> Rule:
     )
     if not rule.sources:
         raise RegistryError(f"{file}: `sources` must cite at least one comment")
+    if rule.min_precision is not None and not 0 <= rule.min_precision <= 1:
+        raise table.error("`min_precision` must be between 0 and 1")
     if rule.repo_search_hint and not needs_repo_search:
         raise RegistryError(f"{file}: `repo_search_hint` needs `needs_repo_search`")
     return table.done(rule)

@@ -5,10 +5,10 @@ with bare python3 (no uv, no deps). Each task script only writes its prompt,
 output schema, and validation; this module owns the API plumbing.
 
 `call_responses_api` submits in background mode and polls — research calls
-with web_search routinely exceed what a synchronous request tolerates.
-`call_responses_sync` sends one plain request with no tools, for short calls.
-Both return the completed response object; `extract_output_text` turns it into
-the JSON text the caller parses and validates.
+with web_search routinely exceed what a synchronous request tolerates. It
+returns the completed response object; `extract_output_text` turns it into
+the JSON text the caller parses and validates. Short synchronous calls send
+`structured_request_body(...)` with `api_request` directly.
 
 Usage:
     from openai_agent import WEB_SEARCH_TOOL, call_responses_api, extract_output_text
@@ -16,12 +16,15 @@ Usage:
 
 import json
 import time
+import urllib.error
 import urllib.request
 from typing import Any
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 # Built-in web search tool on the Responses API.
 WEB_SEARCH_TOOL = {"type": "web_search"}
+RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+MAX_ATTEMPTS = 4
 
 
 def api_request(
@@ -35,8 +38,20 @@ def api_request(
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
-        return json.loads(response.read())
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+                return json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            if error.code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS - 1:
+                raise
+            retry_after = error.headers.get("Retry-After", "")
+            time.sleep(float(retry_after) if retry_after.isdigit() else 2**attempt)
+        except urllib.error.URLError:
+            if attempt == MAX_ATTEMPTS - 1:
+                raise
+            time.sleep(2**attempt)
+    raise AssertionError("unreachable")
 
 
 def call_responses_api(
@@ -55,7 +70,7 @@ def call_responses_api(
     `response_id` to resume polling an existing background response."""
     if response_id is None:
         body = {
-            **_structured_body(prompt, model, schema, reasoning_effort),
+            **structured_request_body(prompt, model, schema, reasoning_effort),
             "background": True,
             "tools": [WEB_SEARCH_TOOL],
         }
@@ -89,25 +104,10 @@ def call_responses_api(
         print(f"  response {response_id}: {status}", flush=True)
 
 
-def call_responses_sync(
-    prompt: str,
-    model: str,
-    api_key: str,
-    schema: dict[str, Any],
-    timeout: float,
-    reasoning_effort: str = "low",
-) -> dict[str, Any]:
-    """One synchronous structured-output request with no tools.
-
-    `schema` is a strict-mode JSON schema for structured output."""
-    return api_request(
-        "", api_key, timeout, _structured_body(prompt, model, schema, reasoning_effort)
-    )
-
-
-def _structured_body(
+def structured_request_body(
     prompt: str, model: str, schema: dict[str, Any], reasoning_effort: str
 ) -> dict[str, Any]:
+    """A Responses API body whose answer must match the strict-mode `schema`."""
     return {
         "model": model,
         "reasoning": {"effort": reasoning_effort},

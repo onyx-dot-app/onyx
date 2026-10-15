@@ -5,6 +5,7 @@ severity = "fix"
 sources = [2591235235, 2591248884, 2591338265, 3991993200]
 near_misses = [2992465457]
 needs_repo_search = true
+min_precision = 0.4
 repo_search_hint = "Grep backend/onyx/llm/ for get_model_map and the provider metadata helpers that already resolve the field."
 guidance = '''
 Set supports_image_input, supports_reasoning and token limits from litellm (get_model_map()), the provider's metadata, or the base model. Do not hardcode False, a fallback limit, or a table keyed by model names.

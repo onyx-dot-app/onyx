@@ -30,7 +30,7 @@ from semantic_lint.diff import (
     cut_windows,
     parse_hunks,
 )
-from semantic_lint.github import GitHub
+from semantic_lint.github import base_sha, compare, review_comment
 from semantic_lint.registry import (
     Calibration,
     CalibrationPolicy,
@@ -39,6 +39,7 @@ from semantic_lint.registry import (
     Rule,
     RuleId,
     Settings,
+    precision_floor,
     write_calibration,
 )
 from semantic_lint.screen import (
@@ -52,12 +53,15 @@ from semantic_lint.screen import (
 )
 
 __all__ = [
+    "CACHE_DIR",
+    "JEV_CACHE_FILE",
     "Case",
     "CachedJev",
     "EvalData",
     "Label",
     "Point",
     "RuleResult",
+    "Scored",
     "Split",
     "build_cases",
     "choose_threshold",
@@ -116,15 +120,13 @@ class EvalData:
     """Review comments and review-time diffs, read through a local cache.
 
     Reads `cache_dir`, then each seed directory (such as a mined corpus with the
-    same layout), then GitHub. Fetched rows are written to `cache_dir` only.
+    same layout), then GitHub through `gh`. Fetched rows go to `cache_dir` only.
     """
 
-    def __init__(
-        self, cache_dir: Path, seed_dirs: Sequence[Path], github: GitHub | None
-    ) -> None:
+    def __init__(self, cache_dir: Path, seed_dirs: Sequence[Path], repo: str) -> None:
         self._dirs: tuple[Path, ...] = (cache_dir, *seed_dirs)
         self._cache_dir: Path = cache_dir
-        self._github: GitHub | None = github
+        self._repo: str = repo
 
     def comments(self, ids: Iterable[CommentId]) -> dict[CommentId, ReviewComment]:
         wanted = set(ids)
@@ -138,7 +140,7 @@ class EvalData:
                     if row["id"] in wanted:
                         rows.setdefault(row["id"], row)
         for comment_id in sorted(wanted - set(rows)):
-            payload = self._require_github().review_comment(comment_id)
+            payload = review_comment(self._repo, comment_id)
             if payload is None:
                 continue
             row = {
@@ -165,8 +167,7 @@ class EvalData:
             None,
         )
         if payload is None:
-            github = self._require_github()
-            payload = github.compare(github.base_sha(pr), commit)
+            payload = compare(self._repo, base_sha(self._repo, pr), commit)
             target = self._cache_dir / DIFFS_DIR / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps(payload))
@@ -180,11 +181,6 @@ class EvalData:
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         with (self._cache_dir / file_name).open("a") as file:
             file.write(json.dumps(row) + "\n")
-
-    def _require_github(self) -> GitHub:
-        if self._github is None:
-            raise RuntimeError("eval needs GITHUB_TOKEN to fetch what the cache lacks")
-        return self._github
 
 
 def _parse_comment(row: Mapping[str, object]) -> ReviewComment | None:
@@ -459,7 +455,7 @@ def _result(
     tune = [(s.p, s.label) for s in scored if s.case.split is Split.TUNE]
     held_out = [(s.p, s.label) for s in scored if s.case.split is Split.REPORT]
     policy = settings.calibration
-    chosen = choose_threshold(tune, policy, policy.min_precision[rule.severity])
+    chosen = choose_threshold(tune, policy, precision_floor(rule, settings))
     report = _point(held_out, chosen.threshold) if chosen else None
     calibration = (
         Calibration(

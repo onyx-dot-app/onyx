@@ -24,6 +24,7 @@ sources = [
 ]
 near_misses = [3204269657, 3647410231, 3856569085]
 needs_repo_search = true
+min_precision = 0.4
 repo_search_hint = "Grep for the concept's owner, such as get_current_tier, credential_family_for_source, resolve_model_mode, user_can_access_*, can_manage_*, build_connector_kwargs, getters in backend/onyx/db/<entity>.py, construct_message_history and run_llm_step in backend/onyx/chat/, and the docfetching and indexing modules."
 guidance = '''
 Do not write a local version of a product-wide rule or pipeline step that a shared function already owns, such as the deployment tier, a credential family, a model type from its name, an access check, loading search settings, persisting hierarchy nodes, building a source client, changing index attempt status, an agent LLM loop, or building a connector from stored config. Call that function, and extend it when it lacks a condition.

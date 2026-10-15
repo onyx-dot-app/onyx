@@ -5,6 +5,7 @@ severity = "fix"
 sources = [2412076503, 3112650552, 3982855330]
 near_misses = [2442700233]
 needs_repo_search = false
+min_precision = 0.4
 guidance = '''
 Wrap connector API calls with retry_builder, rate_limit_builder, or rl_requests (which honors Retry-After). Do not hand-write a backoff, use the next checkpoint call as the delay, or ask admins to tune rate limits.
 

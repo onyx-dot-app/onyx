@@ -1,6 +1,6 @@
 """semantic-lint. Review a pull request against rules mined from Onyx reviewers.
 
-python3 tools/semantic-lint/lint.py pr NUMBER [--publish] [--comment-out FILE]
+python3 tools/semantic-lint/lint.py pr NUMBER [--compare-json FILE] [--publish-dir DIR]
 python3 tools/semantic-lint/lint.py eval [--rule ID ...] [--write] [--seed DIR ...]
 python3 tools/semantic-lint/lint.py check
 """
@@ -9,7 +9,6 @@ import argparse
 import math
 import os
 import sys
-import traceback
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -23,18 +22,9 @@ from semantic_lint.evaluate import (
     Scored,
     run_eval,
 )
-from semantic_lint.github import GitHub
+from semantic_lint.github import pull_request, render_summary, write_outputs
 from semantic_lint.registry import Registry, RuleId, load_registry
-from semantic_lint.review import (
-    Failed,
-    Llm,
-    Outcome,
-    Report,
-    Skipped,
-    check_run,
-    render_summary,
-    review,
-)
+from semantic_lint.review import Llm, review
 from semantic_lint.screen import Jev, Mode, Usage, active_threshold, rule_mode
 
 DEFAULT_REPO: str = "onyx-dot-app/onyx"
@@ -46,8 +36,12 @@ def main(argv: Sequence[str]) -> int:
     pr_parser = commands.add_parser("pr", help="review one pull request")
     pr_parser.add_argument("number", type=int)
     pr_parser.add_argument("--repo", default=DEFAULT_REPO)
-    pr_parser.add_argument("--publish", action="store_true", help="post the check run")
-    pr_parser.add_argument("--comment-out", type=Path, help="write the summary here")
+    pr_parser.add_argument(
+        "--compare-json", type=Path, help="read the diff from this compare payload"
+    )
+    pr_parser.add_argument(
+        "--publish-dir", type=Path, help="write check-run.json and summary.md here"
+    )
     eval_parser = commands.add_parser("eval", help="measure rules and set thresholds")
     eval_parser.add_argument("--rule", action="append", default=[])
     eval_parser.add_argument("--write", action="store_true")
@@ -77,51 +71,18 @@ def _require_env(name: str) -> str:
     return value
 
 
-def _github_token() -> str:
-    return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
-
-
 def _pr(registry: Registry, args: argparse.Namespace) -> int:
-    github = GitHub(_require_env("GITHUB_TOKEN"), args.repo)
-    head_sha = github.head_sha(args.number)
-    outcome = _review(github, registry, args.number)
-    if isinstance(outcome, Report):
-        head_sha = outcome.pr.head_sha
-    summary = render_summary(outcome, registry, head_sha)
-    print(summary)
-    if args.comment_out is not None:
-        args.comment_out.write_text(summary)
-    if args.publish:
-        if github.publish_check_run(
-            args.number, check_run(outcome, registry, head_sha)
-        ):
-            print(f"Published the check run on {head_sha}.", file=sys.stderr)
-        else:
-            print("The PR head moved. Published nothing.", file=sys.stderr)
+    pr = pull_request(args.repo, args.number, args.compare_json)
+    jev = Jev(_require_env("TYPESAFE_API_KEY"))
+    report = review(pr, registry, jev, Llm(_require_env("OPENAI_API_KEY")))
+    print(render_summary(report, registry))
+    if args.publish_dir is not None:
+        write_outputs(report, registry, args.publish_dir)
     return 0
 
 
-def _review(github: GitHub, registry: Registry, number: int) -> Outcome:
-    """Every failure becomes an outcome, so the check run is always neutral or success."""
-    missing = [
-        name
-        for name in ("TYPESAFE_API_KEY", "OPENAI_API_KEY")
-        if not os.environ.get(name)
-    ]
-    if missing:
-        return Skipped(f"{' and '.join(missing)} not set.")
-    try:
-        pr = github.pull_request(number)
-        jev = Jev(os.environ["TYPESAFE_API_KEY"])
-        return review(pr, registry, jev, Llm(os.environ["OPENAI_API_KEY"]))
-    except Exception as error:
-        traceback.print_exc()
-        return Failed(f"{type(error).__name__}: {error}")
-
-
 def _eval(registry: Registry, args: argparse.Namespace) -> int:
-    token = _github_token()
-    data = EvalData(args.cache, args.seed, GitHub(token, args.repo) if token else None)
+    data = EvalData(args.cache, args.seed, args.repo)
     jev = CachedJev(Jev(_require_env("TYPESAFE_API_KEY")), args.cache / JEV_CACHE_FILE)
     rule_ids = [RuleId(rule_id) for rule_id in args.rule]
     results, usage = run_eval(registry, rule_ids, data, jev, args.write)

@@ -5,6 +5,7 @@ severity = "fix"
 sources = [2071069970, 2083265002, 2087640412, 2820066676, 3222558006, 3455971127]
 near_misses = [3313792519]
 needs_repo_search = false
+min_precision = 0.4
 guidance = '''
 Do not start threading.Thread or build a ThreadPoolExecutor directly. Use the helpers in onyx/utils/threadpool_concurrency.py, such as run_functions_tuples_in_parallel, parallel_yield, run_in_background and run_with_timeout, or add a new helper there.
 

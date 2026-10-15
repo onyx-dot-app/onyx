@@ -1,41 +1,188 @@
-"""GitHub REST reads and the check run write, plus the JSON transport Jev shares."""
+"""GitHub's shapes. Reads a pull request and review comments, writes the run's output.
+
+Reads go through the `gh` CLI, which owns auth, pagination and retries. The tool
+posts nothing. `write_outputs` writes the check run body and the summary
+comment, and the workflow posts both with `gh api`.
+"""
 
 import json
-import time
-import urllib.error
-import urllib.request
-from collections.abc import Mapping
+import subprocess
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from semantic_lint.diff import FilePatch, PullRequest
+from semantic_lint.registry import Registry, RuleId, Severity
+from semantic_lint.review import Report
+from semantic_lint.screen import Hit
 
 __all__ = [
-    "CHECK_NAME",
-    "MAX_SUMMARY_CHARS",
+    "CHECK_RUN_FILE",
+    "SUMMARY_FILE",
     "SUMMARY_MARKER",
-    "Annotation",
-    "CheckRun",
-    "CheckRunOutput",
-    "GitHub",
-    "HttpError",
-    "request_json",
+    "base_sha",
+    "compare",
+    "pull_request",
+    "render_summary",
+    "review_comment",
+    "write_outputs",
 ]
 
-API_URL: str = "https://api.github.com"
 CHECK_NAME: str = "semantic-lint"
-# The workflow's comment upsert finds the comment by this prefix and reads the
-# finding count from it.
-SUMMARY_MARKER: str = "<!-- semantic-lint:summary"
+CHECK_RUN_FILE: str = "check-run.json"
+SUMMARY_FILE: str = "summary.md"
+# The workflow's comment upsert finds the comment by the first line and reads
+# the second to decide whether a first comment is worth posting.
+SUMMARY_MARKER: str = "<!-- semantic-lint:summary -->"
+CLEAN_MARKER: str = "<!-- semantic-lint: clean -->"
+FINDINGS_MARKER: str = "<!-- semantic-lint: findings -->"
 # GitHub rejects a check run summary longer than this.
 MAX_SUMMARY_CHARS: int = 65535
-RETRY_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504, 529})
-MAX_ATTEMPTS: int = 5
-FILES_PER_PAGE: int = 100
-# GitHub lists at most 3,000 files for a pull request.
-MAX_FILE_PAGES: int = 30
 
 
-class Annotation(TypedDict):
+def _gh_api(path: str) -> Any:
+    result = subprocess.run(
+        ["gh", "api", path], capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"gh api {path} failed: {result.stderr.strip()}")
+    return json.loads(result.stdout)
+
+
+def compare(repo: str, base: str, head: str) -> Any:
+    """`base...head` trimmed to the fields windows need. Eval caches this shape."""
+    payload = _gh_api(f"repos/{repo}/compare/{base}...{head}")
+    return {
+        "status": payload["status"],
+        "ahead_by": payload["ahead_by"],
+        "files": [
+            {
+                "filename": item["filename"],
+                "status": item["status"],
+                "patch": item.get("patch"),
+            }
+            for item in payload.get("files", [])
+        ],
+    }
+
+
+def pull_request(repo: str, number: int, compare_json: Path | None) -> PullRequest:
+    """The PR's shas, and its diff from `compare_json` or from the compare API."""
+    pull = _gh_api(f"repos/{repo}/pulls/{number}")
+    base, head = str(pull["base"]["sha"]), str(pull["head"]["sha"])
+    payload = (
+        json.loads(compare_json.read_text())
+        if compare_json is not None
+        else compare(repo, base, head)
+    )
+    return PullRequest(
+        repo=repo,
+        number=number,
+        base_sha=base,
+        head_sha=head,
+        files=tuple(
+            FilePatch(item["filename"], item.get("patch")) for item in payload["files"]
+        ),
+    )
+
+
+def base_sha(repo: str, number: int) -> str:
+    return str(_gh_api(f"repos/{repo}/pulls/{number}")["base"]["sha"])
+
+
+def review_comment(repo: str, comment_id: int) -> Any | None:
+    """A pull request review comment, or None when GitHub no longer has it."""
+    try:
+        return _gh_api(f"repos/{repo}/pulls/comments/{comment_id}")
+    except RuntimeError as error:
+        if "(HTTP 404)" in str(error):
+            return None
+        raise
+
+
+def render_summary(report: Report, registry: Registry) -> str:
+    """Markdown for stdout, the check run summary and the PR comment."""
+    rules = {rule.id: rule for rule in registry.rules}
+    settings = registry.settings
+    head = report.pr.head_sha
+    blob = f"https://github.com/{report.pr.repo}/blob/{head}"
+    lines = [
+        SUMMARY_MARKER,
+        FINDINGS_MARKER if report.findings else CLEAN_MARKER,
+        f"### Semantic lint (advisory) for {head[:7]}",
+        "",
+        f"{len(report.findings)} findings. Screened {report.windows_screened} windows "
+        f"against {report.rules_live} live rules and {report.rules_shadow} shadow rules.",
+    ]
+    if report.findings:
+        lines += [
+            "",
+            "| Severity | Rule | Where | Finding |",
+            "| --- | --- | --- | --- |",
+        ]
+        for finding in report.findings:
+            where = f"[{finding.path}:{finding.line}]({blob}/{finding.path}#L{finding.line})"
+            message = _cell(finding.message)
+            if finding.citation:
+                cited = finding.citation
+                message += (
+                    f" (`{_cell(cited.symbol)}` in [{cited.path}]({blob}/{cited.path}))"
+                )
+            severity = rules[finding.rule_id].severity.value
+            lines.append(f"| {severity} | `{finding.rule_id}` | {where} | {message} |")
+    jev, llm = report.jev_usage, report.llm_usage
+    prices = settings.prices
+    jev_cost = jev.input_tokens * prices.jev_input / 1e6
+    llm_cost = (
+        llm.input_tokens * prices.llm_input + llm.output_tokens * prices.llm_output
+    ) / 1e6
+    sent = (
+        len(report.findings)
+        + len(report.hits_dropped_by_llm)
+        + len(report.hits_without_citation)
+    )
+    lines += [
+        "",
+        "<details><summary>Cost, latency and coverage</summary>",
+        "",
+        "| Stage | Requests | Input tokens | Output tokens | Cost | Time |",
+        "| --- | --- | --- | --- | --- | --- |",
+        f"| Jev {settings.jev_model} | {jev.requests} | {jev.input_tokens:,} | "
+        f"{jev.output_tokens:,} | ${jev_cost:.4f} | {jev.seconds:.1f} s |",
+        f"| LLM {settings.llm.model} | {llm.requests} | {llm.input_tokens:,} | "
+        f"{llm.output_tokens:,} | ${llm_cost:.4f} | {llm.seconds:.1f} s |",
+        f"| Total | | | | ${report.cost_usd:.4f} | {report.seconds:.1f} s |",
+        "",
+        f"- Live hits sent to the LLM: {sent}. Judged wrong: "
+        f"{len(report.hits_dropped_by_llm)}. No verified citation (no_citation): "
+        f"{len(report.hits_without_citation)}. Over budget: {len(report.over_budget)}.",
+        f"- Shadow hits, not posted: {len(report.shadow_hits)}"
+        + _rule_counts(report.shadow_hits),
+        f"- Not screened: {report.windows_over_budget} windows over budget, "
+        f"{len(report.files_without_patch)} files without a patch.",
+        f"- Inactive rules (no valid calibration): {report.rules_inactive}.",
+        "",
+        "</details>",
+    ]
+    return "\n".join(lines)[:MAX_SUMMARY_CHARS] + "\n"
+
+
+def _rule_counts(hits: Sequence[Hit]) -> str:
+    counts: dict[RuleId, int] = {}
+    for hit in hits:
+        counts[hit.rule.id] = counts.get(hit.rule.id, 0) + 1
+    if not counts:
+        return "."
+    return (
+        " (" + ", ".join(f"`{rule}` {n}" for rule, n in sorted(counts.items())) + ")."
+    )
+
+
+def _cell(text: str) -> str:
+    return " ".join(text.split()).replace("|", "\\|")
+
+
+class _Annotation(TypedDict):
     path: str
     start_line: int
     end_line: int
@@ -44,138 +191,56 @@ class Annotation(TypedDict):
     message: str
 
 
-class CheckRunOutput(TypedDict):
+class _CheckRunOutput(TypedDict):
     title: str
     summary: str
-    annotations: list[Annotation]
+    annotations: list[_Annotation]
 
 
-class CheckRun(TypedDict):
+class _CheckRun(TypedDict):
     name: str
     head_sha: str
     status: Literal["completed"]
-    # Advisory: never "failure".
+    # Advisory, so never "failure".
     conclusion: Literal["success", "neutral"]
-    output: CheckRunOutput
+    output: _CheckRunOutput
 
 
-class HttpError(RuntimeError):
-    def __init__(self, status: int, message: str) -> None:
-        super().__init__(message)
-        self.status: int = status
-
-
-def request_json(
-    url: str,
-    method: str = "GET",
-    headers: Mapping[str, str] | None = None,
-    body: object | None = None,
-    timeout: float = 60.0,
-) -> Any:
-    """Send one JSON request and return the parsed body, or None for an empty one.
-
-    Retries RETRY_STATUSES and network errors with exponential backoff, then raises.
-    """
-    data = json.dumps(body).encode() if body is not None else None
-    for attempt in range(MAX_ATTEMPTS):
-        request = urllib.request.Request(  # noqa: S310
-            url,
-            data=data,
-            method=method,
-            headers={"Content-Type": "application/json", **(headers or {})},
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
-                raw = response.read()
-            return json.loads(raw) if raw else None
-        except urllib.error.HTTPError as error:
-            if error.code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS - 1:
-                detail = error.read()[:500].decode(errors="replace")
-                raise HttpError(
-                    error.code, f"{method} {url} returned {error.code}: {detail}"
-                ) from error
-            retry_after = error.headers.get("Retry-After", "")
-            time.sleep(float(retry_after) if retry_after.isdigit() else 2**attempt)
-        except (urllib.error.URLError, TimeoutError) as error:
-            if attempt == MAX_ATTEMPTS - 1:
-                raise RuntimeError(f"{method} {url} failed: {error}") from error
-            time.sleep(2**attempt)
-    raise AssertionError("unreachable")
-
-
-class GitHub:
-    """One repository on the GitHub REST API. Tests subclass it and override `request`."""
-
-    def __init__(self, token: str, repo: str) -> None:
-        self._token: str = token
-        self.repo: str = repo
-
-    def request(self, method: str, path: str, body: object | None = None) -> Any:
-        return request_json(
-            f"{API_URL}/repos/{self.repo}/{path}",
-            method=method,
-            headers={
-                "Authorization": f"Bearer {self._token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-            body=body,
-        )
-
-    def head_sha(self, number: int) -> str:
-        return str(self.request("GET", f"pulls/{number}")["head"]["sha"])
-
-    def pull_request(self, number: int) -> PullRequest:
-        pull = self.request("GET", f"pulls/{number}")
-        files: list[FilePatch] = []
-        for page in range(1, MAX_FILE_PAGES + 1):
-            batch = self.request(
-                "GET", f"pulls/{number}/files?per_page={FILES_PER_PAGE}&page={page}"
-            )
-            files.extend(
-                FilePatch(item["filename"], item.get("patch")) for item in batch
-            )
-            if len(batch) < FILES_PER_PAGE:
-                break
-        return PullRequest(
-            repo=self.repo,
-            number=number,
-            base_sha=str(pull["base"]["sha"]),
-            head_sha=str(pull["head"]["sha"]),
-            files=tuple(files),
-        )
-
-    def base_sha(self, number: int) -> str:
-        return str(self.request("GET", f"pulls/{number}")["base"]["sha"])
-
-    def compare(self, base: str, head: str) -> Any:
-        """The compare payload trimmed to what eval caches."""
-        payload = self.request("GET", f"compare/{base}...{head}")
-        return {
-            "status": payload["status"],
-            "ahead_by": payload["ahead_by"],
-            "files": [
-                {
-                    "filename": item["filename"],
-                    "status": item["status"],
-                    "patch": item.get("patch"),
-                }
-                for item in payload.get("files", [])
-            ],
+def _check_run(report: Report, registry: Registry, summary: str) -> _CheckRun:
+    rules = {rule.id: rule for rule in registry.rules}
+    annotations: list[_Annotation] = [
+        {
+            "path": finding.path,
+            "start_line": finding.line,
+            "end_line": finding.line,
+            "annotation_level": (
+                "warning"
+                if rules[finding.rule_id].severity is Severity.FIX
+                else "notice"
+            ),
+            "title": f"{finding.rule_id}: {rules[finding.rule_id].title}"[:255],
+            "message": finding.message,
         }
+        for finding in report.findings[: registry.settings.budget.max_annotations]
+    ]
+    return {
+        "name": CHECK_NAME,
+        "head_sha": report.pr.head_sha,
+        "status": "completed",
+        "conclusion": "neutral" if report.findings else "success",
+        "output": {
+            "title": f"{len(report.findings)} findings" if report.findings else "Clean",
+            "summary": summary,
+            "annotations": annotations,
+        },
+    }
 
-    def review_comment(self, comment_id: int) -> Any | None:
-        """A pull request review comment, or None when GitHub no longer has it."""
-        try:
-            return self.request("GET", f"pulls/comments/{comment_id}")
-        except HttpError as error:
-            if error.status == 404:
-                return None
-            raise
 
-    def publish_check_run(self, number: int, check_run: CheckRun) -> bool:
-        """Create the check run unless the PR head moved since the run began."""
-        if self.head_sha(number) != check_run["head_sha"]:
-            return False
-        self.request("POST", "check-runs", check_run)
-        return True
+def write_outputs(report: Report, registry: Registry, directory: Path) -> None:
+    """Write the check run POST body and the summary comment for the workflow."""
+    summary = render_summary(report, registry)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / SUMMARY_FILE).write_text(summary)
+    (directory / CHECK_RUN_FILE).write_text(
+        json.dumps(_check_run(report, registry, summary), indent=2) + "\n"
+    )

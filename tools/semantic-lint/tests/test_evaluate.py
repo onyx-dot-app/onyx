@@ -145,7 +145,7 @@ class BuildCasesTest(RulesDirTest):
             (seed / "pull_comments.jsonl").write_text(
                 "".join(json.dumps(row) + "\n" for row in rows)
             )
-            data = EvalData(seed / "cache", [seed], github=None)
+            data = EvalData(seed / "cache", [seed], "onyx-dot-app/onyx")
 
             cases, unanchored = build_cases(registry, data)
 

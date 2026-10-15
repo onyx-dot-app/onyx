@@ -19,6 +19,7 @@ sources = [
 ]
 near_misses = [2830946829, 3715253812]
 needs_repo_search = true
+min_precision = 0.4
 repo_search_hint = "Grep backend/pyproject.toml (or web/package.json) for an installed parser library, and backend/onyx/utils/, backend/onyx/file_processing/ and backend/onyx/connectors/cross_connector_utils/ for an existing parse helper."
 guidance = '''
 Do not hand-write a parser or regex for a standard format such as JSON, Markdown, CSV, URLs, email addresses, subtitle files or ISO timestamps. Use a shared helper or an installed library, and if none fits, add a comment that names what you tried and why it fails.

@@ -52,6 +52,7 @@ near_misses = [
   4200066791,
 ]
 needs_repo_search = true
+min_precision = 0.4
 repo_search_hint = "Search backend/onyx/utils/, backend/onyx/file_processing/ (file_types.py for OnyxFileExtensions and OnyxMimeTypes, extract_file_text.py, password_validation.py), backend/onyx/connectors/cross_connector_utils/, backend/onyx/utils/url.py (validate_outbound_http_url, ssrf_safe_get), backend/onyx/utils/batching.py, backend/onyx/utils/b64.py, backend/onyx/utils/retry_wrapper.py and backend/onyx/cache/ for a function with the same job; grep the operation's verbs (dedupe, batch, decode, normalize, mime, retry, rate_limit)."
 guidance = '''
 Before you hand-write general-purpose work in feature, connector, tool or route code (decode bytes, sniff a file type, batch or dedupe a list, retry, rate limit, validate an outbound URL, map extensions to MIME types, normalize a name, drain a checkpointed connector, a set operation written as a loop), use the shared helper or standard operation. If none fits, extend the shared helper or add the new one in the shared module.

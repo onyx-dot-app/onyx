@@ -12,16 +12,23 @@ model it was measured with are unchanged.
 import hashlib
 import json
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
 from itertools import batched
-from typing import Literal, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from semantic_lint.diff import Window
-from semantic_lint.github import request_json
-from semantic_lint.registry import Registry, Rule, RuleId, Settings
+from semantic_lint.registry import (
+    Registry,
+    Rule,
+    RuleId,
+    Settings,
+    precision_floor,
+)
 
 __all__ = [
     "Hit",
@@ -45,6 +52,9 @@ STATE_FORMAT: int = 1
 MAX_QUESTIONS_PER_REQUEST: int = 50
 PARALLEL_REQUESTS: int = 16
 JEV_TIMEOUT_SECONDS: float = 60.0
+# TypeSafe documents 429 and 529 as retryable. The 5xx codes are gateway blips.
+RETRY_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504, 529})
+MAX_ATTEMPTS: int = 5
 
 
 @dataclass(frozen=True)
@@ -193,7 +203,7 @@ def active_threshold(rule: Rule, settings: Settings) -> float | None:
 def rule_mode(rule: Rule, settings: Settings) -> Mode:
     if rule.calibration is None or active_threshold(rule, settings) is None:
         return Mode.INACTIVE
-    floor = settings.calibration.min_precision[rule.severity]
+    floor = precision_floor(rule, settings)
     return Mode.LIVE if rule.calibration.tune_precision_lower >= floor else Mode.SHADOW
 
 
@@ -207,16 +217,12 @@ class Jev:
         self, model: str, window: Window, rules: Sequence[Rule]
     ) -> tuple[dict[RuleId, float], Usage]:
         started = time.monotonic()
-        response = request_json(
-            JEV_URL,
-            method="POST",
-            headers={"Authorization": f"Bearer {self._api_key}"},
-            body={
+        response = self._post(
+            {
                 "model": model,
                 "state": {"file": window.path, "diff": window.render()},
                 "questions": {rule.id: _question(rule) for rule in rules},
-            },
-            timeout=JEV_TIMEOUT_SECONDS,
+            }
         )
         answers = response["answers"]
         probabilities: dict[RuleId, float] = {}
@@ -234,6 +240,35 @@ class Jev:
             seconds=time.monotonic() - started,
         )
         return probabilities, usage
+
+    def _post(self, body: object) -> Any:
+        request = urllib.request.Request(  # noqa: S310
+            JEV_URL,
+            data=json.dumps(body).encode(),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        for attempt in range(MAX_ATTEMPTS):
+            try:
+                with urllib.request.urlopen(  # noqa: S310
+                    request, timeout=JEV_TIMEOUT_SECONDS
+                ) as response:
+                    return json.loads(response.read())
+            except urllib.error.HTTPError as error:
+                if error.code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS - 1:
+                    detail = error.read()[:500].decode(errors="replace")
+                    raise RuntimeError(
+                        f"Jev returned {error.code}: {detail}"
+                    ) from error
+                time.sleep(2**attempt)
+            except (urllib.error.URLError, TimeoutError):
+                if attempt == MAX_ATTEMPTS - 1:
+                    raise
+                time.sleep(2**attempt)
+        raise AssertionError("unreachable")
 
 
 def screen(windows: Sequence[Window], registry: Registry, jev: Jev) -> Screening:

@@ -13,6 +13,7 @@ from semantic_lint.registry import (
     RuleId,
     Severity,
     load_registry,
+    precision_floor,
     write_calibration,
 )
 
@@ -52,6 +53,19 @@ class LoadRegistryTest(RulesDirTest):
     def test_the_committed_registry_loads(self) -> None:
         load_registry()
 
+    def test_a_rule_can_lower_its_precision_floor(self) -> None:
+        [rule] = load_registry(self.rules_dir).rules
+        settings = load_registry(self.rules_dir).settings
+        self.assertEqual(precision_floor(rule, settings), 0.5)
+        self.rule_file.write_text(
+            RULE_TOML.replace(
+                "needs_repo_search = false",
+                "needs_repo_search = false\nmin_precision = 0.4",
+            )
+        )
+        [rule] = load_registry(self.rules_dir).rules
+        self.assertEqual(precision_floor(rule, settings), 0.4)
+
     def test_rejects_invalid_rule_files(self) -> None:
         cases = {
             "unknown key": RULE_TOML.replace("title =", "titel = 1\ntitle ="),
@@ -65,6 +79,10 @@ class LoadRegistryTest(RulesDirTest):
                 'needs_repo_search = false\nrepo_search_hint = "def parse_"',
             ),
             "said without comment": RULE_TOML.replace("comment = 2528675138\n", ""),
+            "floor above one": RULE_TOML.replace(
+                "needs_repo_search = false",
+                "needs_repo_search = false\nmin_precision = 1.5",
+            ),
             "calibration not last": RULE_TOML.replace(
                 "[[flag]]", "[calibration]\nthreshold = 0.5\n\n[[flag]]"
             ),

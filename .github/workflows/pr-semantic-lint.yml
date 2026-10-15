@@ -27,13 +27,15 @@ jobs:
       checks: write
       pull-requests: write
     env:
+      GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      # Full history, because the repo search greps the PR's base and head commits.
+      # The merge ref, so the first PR that adds the linter can run it, and the
+      # LLM's git grep sees the base tip plus the PR. The diff comes from the API.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       # 3.13 for PurePath.full_match, which the rule scopes use.
@@ -41,57 +43,63 @@ jobs:
         with:
           python-version: "3.13"
 
-      # Without TYPESAFE_API_KEY or OPENAI_API_KEY the tool posts a neutral
-      # "Skipped" check run. Any other failure inside the review becomes a
-      # neutral check run too, so this step fails only on a crash before publish.
       - name: Run semantic lint
         id: lint
         continue-on-error: true
         env:
-          GITHUB_TOKEN: ${{ github.token }}
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
+          if [ -z "${TYPESAFE_API_KEY}" ] || [ -z "${OPENAI_API_KEY}" ]; then
+            echo "outcome=skipped" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
           python3 tools/semantic-lint/lint.py pr "${PR_NUMBER}" --repo "${REPO}" \
-            --publish --comment-out "${RUNNER_TEMP}/semantic-lint.md" \
-            | tee -a "${GITHUB_STEP_SUMMARY}"
+            --publish-dir "${RUNNER_TEMP}/semantic-lint" | tee -a "${GITHUB_STEP_SUMMARY}"
+          echo "outcome=reviewed" >> "${GITHUB_OUTPUT}"
 
-      - name: Post a neutral check run after a crash
-        if: steps.lint.outcome == 'failure'
+      # A newer push starts a new run, so a stale review posts nothing.
+      - name: Post the check run
         env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          OUTCOME: ${{ steps.lint.outputs.outcome }}
         run: |
           set -euo pipefail
-          TITLE="Linter error. The job log has the details."
+          CURRENT_SHA=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq .head.sha)
+          if [ "${CURRENT_SHA}" != "${HEAD_SHA}" ]; then
+            echo "The PR head moved to ${CURRENT_SHA}. Posting nothing."
+            exit 0
+          fi
+          CHECK_RUN="${RUNNER_TEMP}/semantic-lint/check-run.json"
+          if [ "${OUTCOME}" = "reviewed" ] && [ "$(jq -r .head_sha "${CHECK_RUN}")" = "${HEAD_SHA}" ]; then
+            gh api --method POST "repos/${REPO}/check-runs" --input "${CHECK_RUN}" >/dev/null
+            exit 0
+          fi
+          if [ "${OUTCOME}" = "skipped" ]; then
+            TITLE="Skipped: TYPESAFE_API_KEY or OPENAI_API_KEY is not set"
+          else
+            TITLE="Linter error. The job log has the details."
+          fi
           gh api --method POST "repos/${REPO}/check-runs" \
             -f name=semantic-lint -f head_sha="${HEAD_SHA}" \
             -f status=completed -f conclusion=neutral \
             -f "output[title]=${TITLE}" -f "output[summary]=${TITLE}" >/dev/null
 
       # The marker upsert from pr-golang-tests.yml. One comment per PR, edited in
-      # place. A run without findings edits an earlier comment and never posts a
-      # new one.
+      # place. A clean run edits an earlier comment and never posts a new one.
       - name: Upsert the summary comment
-        if: steps.lint.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
+        if: steps.lint.outputs.outcome == 'reviewed'
         run: |
           set -euo pipefail
-          SUMMARY_FILE="${RUNNER_TEMP}/semantic-lint.md"
-          if [ ! -s "${SUMMARY_FILE}" ]; then
-            echo "The linter wrote no summary. Skipping the PR comment."
-            exit 0
-          fi
-          MARKER="<!-- semantic-lint:summary"
-          BODY="$(cat "${SUMMARY_FILE}")"
+          SUMMARY="${RUNNER_TEMP}/semantic-lint/summary.md"
+          MARKER="<!-- semantic-lint:summary -->"
+          BODY="$(cat "${SUMMARY}")"
 
           # --paginate: on a long PR the marker can sit past the first page.
           EXISTING_COMMENT_ID=$(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" \
             --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
 
-          if head -1 "${SUMMARY_FILE}" | grep -q 'findings=0 -->' && [ -z "${EXISTING_COMMENT_ID}" ]; then
+          if sed -n 2p "${SUMMARY}" | grep -qx '<!-- semantic-lint: clean -->' && [ -z "${EXISTING_COMMENT_ID}" ]; then
             echo "No findings and no earlier comment. Skipping the PR comment."
             exit 0
           fi
