@@ -24,7 +24,7 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	writeSkill(t, source, "enforced", "rule-b", "second", "Do B.")
 	writeSkill(t, source, "skills", "on-demand", "db work", "Use sessions.")
 
-	skills, err := discoverLLMContextSkills(source)
+	skills, err := discoverAgentContextSkills(source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 
 func TestInstallSkill_agentCodexEndToEnd(t *testing.T) {
 	home, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source, "--agent", "codex")
@@ -232,7 +232,7 @@ func requireNonRoot(t *testing.T) {
 
 func TestInstallSkill_claudeMDWriteFailureFailsTheInstall(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
 	skillWriteSource(t, source)
 	// .claude exists as a file, so creating the directory fails.
 	deployWriteFile(t, filepath.Join(repoRoot, ".claude"), "in the way")

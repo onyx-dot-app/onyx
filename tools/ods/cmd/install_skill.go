@@ -15,10 +15,16 @@ import (
 )
 
 const (
-	defaultSkillSource = ".claude/skills/onyx-llm-context"
-	claudeSkillsDir    = ".claude/skills"
-	claudeMDFile       = ".claude/CLAUDE.md"
-	llmContextCloneURL = "https://github.com/onyx-dot-app/onyx-llm-context.git"
+	defaultSkillSource = ".claude/skills/onyx-infra"
+	// Checkout location used before the skills moved into onyx-infra, still
+	// honored when it is the only checkout on disk.
+	legacySkillSource = ".claude/skills/onyx-llm-context"
+	claudeSkillsDir   = ".claude/skills"
+	claudeMDFile      = ".claude/CLAUDE.md"
+	// The skills live in the agent-context/ subdirectory of onyx-infra, a
+	// private repo that is large, so --clone fetches only that subdirectory.
+	agentContextCloneURL = "https://github.com/onyx-dot-app/onyx-infra.git"
+	agentContextDir      = "agent-context"
 
 	agentClaudeCode = "claude-code"
 	agentCursor     = "cursor"
@@ -28,11 +34,11 @@ const (
 // knownAgents maps each supported --agent value to its installer. Every
 // installer regenerates its output, so reruns update in place.
 var knownAgents = map[string]func(
-	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, copyMode bool,
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, copyMode bool,
 ) error{
 	agentClaudeCode: installClaudeSkills,
 	agentCursor: func(
-		cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, _ bool,
+		cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, _ bool,
 	) error {
 		return installCursorSkills(cmd, ui, skills, repoRoot)
 	},
@@ -50,8 +56,9 @@ func NewInstallSkillCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "install-skill",
-		Short: "Install onyx-llm-context skills for your coding agent",
-		Long: `Install skills from onyx-llm-context for one or more coding agents.
+		Short: "Install Onyx agent-context skills for your coding agent",
+		Long: `Install skills from agent-context/ in onyx-infra (private) for one or more
+coding agents.
 
 claude-code (default):
   Enforced skills (enforced/) are added as @imports in .claude/CLAUDE.md
@@ -72,11 +79,13 @@ codex:
 The checkout is fast-forwarded before installing, so a plain rerun picks up
 new skills; --no-pull installs from the checkout as it is.
 
-By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
+By default, looks for an onyx-infra checkout at ~/.claude/skills/onyx-infra.
+--clone fetches only its agent-context/ directory (shallow, sparse). Checkouts
+of the old onyx-llm-context repo still work.`,
 		Example: `  ods install-skill --clone
   ods install-skill --agent cursor
   ods install-skill --agent claude-code --agent cursor --agent codex
-  ods install-skill --source /path/to/onyx-llm-context
+  ods install-skill --source /path/to/onyx-infra
   ods install-skill --copy`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			installers, err := resolveAgents(agents)
@@ -90,18 +99,26 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 					return fmt.Errorf("could not determine home directory: %w", err)
 				}
 				source = filepath.Join(home, defaultSkillSource)
+				legacy := filepath.Join(home, legacySkillSource)
+				if _, err := os.Stat(source); os.IsNotExist(err) && !cloneRepo {
+					if _, err := os.Stat(legacy); err == nil {
+						_, _ = fmt.Fprintf(
+							cmd.ErrOrStderr(),
+							"Warning: using the old checkout at %s, which is no longer updated.\n"+
+								"  Re-run with --clone to switch to onyx-infra.\n",
+							legacy,
+						)
+						source = legacy
+					}
+				}
 			}
 
 			if _, err := os.Stat(source); os.IsNotExist(err) {
 				if !cloneRepo {
-					return fmt.Errorf("onyx-llm-context not found at %s\n  Re-run with --clone to fetch it automatically", source)
+					return fmt.Errorf("onyx-infra checkout not found at %s\n  Re-run with --clone to fetch it automatically", source)
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cloning %s → %s\n", llmContextCloneURL, source)
-				gitCmd := exec.Command("git", "clone", llmContextCloneURL, source)
-				gitCmd.Stdout = cmd.OutOrStdout()
-				gitCmd.Stderr = cmd.ErrOrStderr()
-				if err := gitCmd.Run(); err != nil {
-					return fmt.Errorf("git clone failed: %w", err)
+				if err := cloneAgentContext(cmd, agentContextCloneURL, source); err != nil {
+					return err
 				}
 			} else if !noPull {
 				pullSource(cmd, source)
@@ -111,7 +128,7 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 			if err != nil {
 				return err
 			}
-			skills, err := discoverLLMContextSkills(source)
+			skills, err := discoverAgentContextSkills(source)
 			if err != nil {
 				return err
 			}
@@ -125,13 +142,43 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&source, "source", "", "Path to onyx-llm-context (default: ~/.claude/skills/onyx-llm-context)")
+	cmd.Flags().StringVar(&source, "source", "", "Path to an onyx-infra checkout (default: ~/.claude/skills/onyx-infra)")
 	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking (claude-code and codex manual skills)")
-	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone onyx-llm-context from %s if not already present", llmContextCloneURL))
+	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone the agent-context/ directory of %s if not already present", agentContextCloneURL))
 	cmd.Flags().BoolVar(&noPull, "no-pull", false, "Install from the checkout as it is, without updating it first")
 	cmd.Flags().StringSliceVar(&agents, "agent", []string{agentClaudeCode}, "Agents to install for (repeatable): claude-code, cursor, codex")
 
 	return cmd
+}
+
+// cloneAgentContext makes a shallow, sparse checkout of url at dest holding
+// only agent-context/, since onyx-infra is large and the rest is not needed.
+func cloneAgentContext(cmd *cobra.Command, url, dest string) error {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cloning %s (%s/ only) → %s\n", url, agentContextDir, dest)
+	steps := [][]string{
+		{"clone", "--depth", "1", "--filter=blob:none", "--sparse", url, dest},
+		{"-C", dest, "sparse-checkout", "set", agentContextDir},
+	}
+	for i, args := range steps {
+		gitCmd := exec.Command("git", args...)
+		gitCmd.Stdout = cmd.OutOrStdout()
+		gitCmd.Stderr = cmd.ErrOrStderr()
+		if err := gitCmd.Run(); err != nil {
+			if i > 0 {
+				// A half-configured checkout would be mistaken for a good one on the next run.
+				_ = os.RemoveAll(dest)
+			}
+			if i == 0 {
+				return fmt.Errorf(
+					"git clone failed: %w\n  onyx-infra is a private repo; make sure you have access to it "+
+						"and that git can authenticate to GitHub (for example with `gh auth login`)",
+					err,
+				)
+			}
+			return fmt.Errorf("git sparse-checkout failed: %w", err)
+		}
+	}
+	return nil
 }
 
 // pullSource fast-forwards the source checkout so a plain rerun picks up new
@@ -173,9 +220,9 @@ func pullSource(cmd *cobra.Command, source string) {
 // deduplicated. An unknown agent is an error rather than a skip, so a typo
 // never reads as a successful install.
 func resolveAgents(agents []string) (
-	[]func(*cobra.Command, *installUI, []llmContextSkill, string, bool) error, error,
+	[]func(*cobra.Command, *installUI, []agentContextSkill, string, bool) error, error,
 ) {
-	var installers []func(*cobra.Command, *installUI, []llmContextSkill, string, bool) error
+	var installers []func(*cobra.Command, *installUI, []agentContextSkill, string, bool) error
 	seen := make(map[string]bool, len(agents))
 	for _, agent := range agents {
 		if seen[agent] {
@@ -198,7 +245,7 @@ func resolveAgents(agents []string) (
 }
 
 func installClaudeSkills(
-	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, copyMode bool,
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, copyMode bool,
 ) error {
 	if err := installEnforcedSkills(cmd, skills, repoRoot); err != nil {
 		return err
@@ -208,7 +255,7 @@ func installClaudeSkills(
 
 // installEnforcedSkills writes @imports for all enforced skills into .claude/CLAUDE.md at the repo root.
 func installEnforcedSkills(
-	cmd *cobra.Command, skills []llmContextSkill, repoRoot string,
+	cmd *cobra.Command, skills []agentContextSkill, repoRoot string,
 ) error {
 	var imports []string
 	for _, skill := range skills {
@@ -241,13 +288,13 @@ func installEnforcedSkills(
 // skills directory under the home directory (~/.claude/skills for Claude,
 // ~/.agents/skills for agents that read the universal layout, such as Codex).
 func linkManualSkills(
-	cmd *cobra.Command, ui *installUI, skills []llmContextSkill,
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill,
 	kind, homeRelativeDir string, copyMode bool,
 ) error {
 	if len(skills) == 0 {
 		return nil
 	}
-	var manual []llmContextSkill
+	var manual []agentContextSkill
 	for _, skill := range skills {
 		if !skill.Enforced {
 			manual = append(manual, skill)
@@ -320,7 +367,7 @@ func linkManualSkills(
 // for a link, since only this command links from there. Hand-written entries,
 // links to other places and past --copy installs are left alone.
 func removeStaleSkillLinks(
-	cmd *cobra.Command, skillsDir, source string, manual []llmContextSkill,
+	cmd *cobra.Command, skillsDir, source string, manual []agentContextSkill,
 ) error {
 	current := make(map[string]bool, len(manual))
 	for _, skill := range manual {

@@ -19,7 +19,7 @@ func pullFixture(t *testing.T) (clone string) {
 	gittest.Git(t, remote, "add", "-A")
 	gittest.Git(t, remote, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "one skill")
 
-	clone = filepath.Join(t.TempDir(), "onyx-llm-context")
+	clone = filepath.Join(t.TempDir(), "onyx-infra")
 	gittest.Git(t, t.TempDir(), "clone", "-q", remote, clone)
 
 	deployWriteFile(t, filepath.Join(remote, "skills", "fresh", "SKILL.md"), "fresh")
@@ -89,7 +89,7 @@ func TestInstallSkill_failedPullWarnsAndInstallsTheLocalState(t *testing.T) {
 
 func TestInstallSkill_plainDirectorySourceInstallsWithoutUpdateNoise(t *testing.T) {
 	skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source)

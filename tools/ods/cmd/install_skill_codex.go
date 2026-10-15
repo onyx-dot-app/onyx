@@ -29,7 +29,7 @@ const (
 // read it) and symlinks each on-demand skill into Codex's native skill
 // directory, the way the claude-code installer does with ~/.claude/skills.
 func installCodexSkills(
-	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string, copyMode bool,
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, copyMode bool,
 ) error {
 	// The exclusion comes first: a file written before a failed exclusion
 	// would sit unignored, one `git add .` away from publishing the private
@@ -44,7 +44,7 @@ func installCodexSkills(
 }
 
 func writeAgentsLocal(
-	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string,
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string,
 ) error {
 	var sections []string
 	for _, skill := range skills {
@@ -62,7 +62,7 @@ func writeAgentsLocal(
 
 	content := fmt.Sprintf(
 		"%s\n\n# Onyx developer-local agent guidance\n\n"+
-			"Always-on rules from onyx-llm-context. Never committed.\n\n%s\n",
+			"Always-on rules from onyx-infra agent-context. Never committed.\n\n%s\n",
 		generatedRuleMarker,
 		strings.Join(sections, "\n\n"),
 	)
@@ -74,7 +74,7 @@ func writeAgentsLocal(
 		return nil
 	}
 	// A file of this name the user wrote themselves is never silently replaced.
-	if err == nil && !strings.Contains(string(existing), generatedRuleMarker) {
+	if err == nil && !strings.Contains(string(existing), generatedRuleMarkerPrefix) {
 		if ui.resolveConflict(dest) == conflictKeepBoth {
 			if err := backUpFile(cmd, dest); err != nil {
 				return err
@@ -99,7 +99,7 @@ func removeStaleAgentsLocal(cmd *cobra.Command, repoRoot string) error {
 	if err != nil {
 		return fmt.Errorf("could not read %s: %w", dest, err)
 	}
-	if !strings.Contains(string(content), generatedRuleMarker) {
+	if !strings.Contains(string(content), generatedRuleMarkerPrefix) {
 		return nil
 	}
 	if err := os.Remove(dest); err != nil {

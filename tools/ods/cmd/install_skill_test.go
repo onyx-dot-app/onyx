@@ -32,9 +32,10 @@ func skillEnv(t *testing.T) (home, repoRoot string) {
 	return home, resolved
 }
 
-// skillWriteSource creates an onyx-llm-context checkout with one enforced
-// skill, one enforced directory without a SKILL.md, and one manual skill with
-// a nested file.
+// skillWriteSource creates a skills root (the agent-context/ directory of
+// onyx-infra, or an old onyx-llm-context checkout) with one enforced skill,
+// one enforced directory without a SKILL.md, and one manual skill with a
+// nested file.
 func skillWriteSource(t *testing.T, source string) {
 	t.Helper()
 	deployWriteFile(t, filepath.Join(source, "enforced", "style", "SKILL.md"), "style")
@@ -67,7 +68,7 @@ func skillReadFile(t *testing.T, path string) string {
 
 func TestInstallSkill_linksManualSkillsAndImportsEnforcedOnes(t *testing.T) {
 	home, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
 	skillWriteSource(t, source)
 	// A stale copy from an earlier --copy install must be replaced by a link.
 	deployWriteFile(t, filepath.Join(home, ".claude", "skills", "review", "stale.md"), "stale")
@@ -117,7 +118,7 @@ func TestInstallSkill_linksManualSkillsAndImportsEnforcedOnes(t *testing.T) {
 
 func TestInstallSkill_copyModeCopiesSkillTrees(t *testing.T) {
 	home, _ := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source, "--copy")
@@ -168,27 +169,34 @@ func TestInstallSkill_missingSourceRequiresClone(t *testing.T) {
 
 	_, err := skillRun(t)
 
-	wantSource := filepath.Join(home, ".claude", "skills", "onyx-llm-context")
-	if err == nil || !strings.Contains(err.Error(), "onyx-llm-context not found at "+wantSource) || !strings.Contains(err.Error(), "--clone") {
+	wantSource := filepath.Join(home, ".claude", "skills", "onyx-infra")
+	if err == nil || !strings.Contains(err.Error(), "onyx-infra checkout not found at "+wantSource) || !strings.Contains(err.Error(), "--clone") {
 		t.Fatalf("expected a hint to use --clone for %s, got %v", wantSource, err)
 	}
 }
 
-// skillFakeGit puts a git wrapper first on PATH that records clone calls and
-// runs script for them; every other git call goes to the real git.
-func skillFakeGit(t *testing.T, cloneScript string) string {
+// skillFakeGit puts a git wrapper first on PATH that records clone and
+// sparse-checkout calls and runs the given scripts for them (the destination
+// directory is "$dest"); every other git call goes to the real git.
+func skillFakeGit(t *testing.T, cloneScript, sparseScript string) string {
 	t.Helper()
 	realGit, err := exec.LookPath("git")
 	if err != nil {
 		t.Skip("git is not installed")
 	}
 	dir := t.TempDir()
-	record := filepath.Join(dir, "clone-args")
+	record := filepath.Join(dir, "git-calls")
 	t.Setenv("ODS_TEST_REAL_GIT", realGit)
 	script := "#!/bin/sh\n" +
+		"for dest; do :; done\n" +
 		"if [ \"$1\" = clone ]; then\n" +
-		"  printf '%s\\n' \"$@\" > \"${0%/*}/clone-args\"\n" +
+		"  printf '%s\\n' \"$@\" >> \"${0%/*}/git-calls\"\n" +
 		cloneScript +
+		"fi\n" +
+		"if [ \"$1\" = -C ] && [ \"$3\" = sparse-checkout ]; then\n" +
+		"  dest=$2\n" +
+		"  printf '%s\\n' \"$@\" >> \"${0%/*}/git-calls\"\n" +
+		sparseScript +
 		"fi\n" +
 		"exec \"$ODS_TEST_REAL_GIT\" \"$@\"\n"
 	deployWriteFile(t, filepath.Join(dir, "git"), script)
@@ -199,42 +207,143 @@ func skillFakeGit(t *testing.T, cloneScript string) string {
 	return record
 }
 
-func TestInstallSkill_cloneFetchesTheDefaultSource(t *testing.T) {
+func TestInstallSkill_cloneFetchesTheDefaultSourceSparsely(t *testing.T) {
 	home, _ := skillEnv(t)
-	record := skillFakeGit(t, "  mkdir -p \"$3/skills/review\" && echo review > \"$3/skills/review/SKILL.md\"\n  exit 0\n")
+	record := skillFakeGit(t,
+		"  mkdir -p \"$dest/agent-context/skills/review\" && echo review > \"$dest/agent-context/skills/review/SKILL.md\"\n  exit 0\n",
+		"  exit 0\n",
+	)
 
 	out, err := skillRun(t, "--clone")
 	if err != nil {
 		t.Fatalf("install-skill: %v", err)
 	}
 
-	source := filepath.Join(home, ".claude", "skills", "onyx-llm-context")
-	wantArgs := "clone\n" + llmContextCloneURL + "\n" + source + "\n"
+	source := filepath.Join(home, ".claude", "skills", "onyx-infra")
+	wantArgs := "clone\n--depth\n1\n--filter=blob:none\n--sparse\n" + agentContextCloneURL + "\n" + source + "\n" +
+		"-C\n" + source + "\nsparse-checkout\nset\nagent-context\n"
 	if got := skillReadFile(t, record); got != wantArgs {
 		t.Fatalf("expected git args %q, got %q", wantArgs, got)
 	}
 	if got := skillReadFile(t, filepath.Join(home, ".claude", "skills", "review", "SKILL.md")); got != "review\n" {
 		t.Fatalf("expected the cloned skill to be installed, got %q", got)
 	}
-	if !strings.Contains(out, "Cloning "+llmContextCloneURL+" → "+source) {
+	if !strings.Contains(out, "Cloning "+agentContextCloneURL) || !strings.Contains(out, source) {
 		t.Fatalf("expected clone output, got %q", out)
 	}
 }
 
 func TestInstallSkill_cloneFailureStopsTheInstall(t *testing.T) {
 	home, _ := skillEnv(t)
-	skillFakeGit(t, "  echo 'fatal: unable to access' >&2\n  exit 128\n")
+	skillFakeGit(t, "  echo 'fatal: unable to access' >&2\n  exit 128\n", "  exit 0\n")
 
 	out, err := skillRun(t, "--clone")
 
 	if err == nil || !strings.Contains(err.Error(), "git clone failed") {
 		t.Fatalf("expected clone failure, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "private repo") || !strings.Contains(err.Error(), "gh auth login") {
+		t.Fatalf("expected an access hint, got %v", err)
+	}
 	if !strings.Contains(out, "fatal: unable to access") {
 		t.Fatalf("expected git's error output to be forwarded, got %q", out)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude", "skills")); !os.IsNotExist(err) {
 		t.Fatalf("expected nothing installed, got %v", err)
+	}
+}
+
+func TestInstallSkill_sparseCheckoutFailureRemovesTheCheckout(t *testing.T) {
+	home, _ := skillEnv(t)
+	skillFakeGit(t, "  mkdir -p \"$dest\"\n  exit 0\n", "  echo 'fatal: sparse' >&2\n  exit 1\n")
+
+	_, err := skillRun(t, "--clone")
+
+	if err == nil || !strings.Contains(err.Error(), "sparse-checkout failed") {
+		t.Fatalf("expected sparse-checkout failure, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "onyx-infra")); !os.IsNotExist(err) {
+		t.Fatalf("expected the half-made checkout to be removed, got %v", err)
+	}
+}
+
+// TestCloneAgentContext_checksOutOnlyTheSkillsDirectory runs the real git
+// against a local repo.
+func TestCloneAgentContext_checksOutOnlyTheSkillsDirectory(t *testing.T) {
+	skillEnv(t)
+	remote := t.TempDir()
+	gittest.Git(t, remote, "init", "--quiet", "-b", "main")
+	deployWriteFile(t, filepath.Join(remote, "agent-context", "skills", "review", "SKILL.md"), "review")
+	deployWriteFile(t, filepath.Join(remote, "customers", "big", "values.yaml"), "not needed")
+	gittest.Git(t, remote, "add", "-A")
+	gittest.Git(t, remote, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+
+	dest := filepath.Join(t.TempDir(), "onyx-infra")
+	cmd := NewInstallSkillCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := cloneAgentContext(cmd, "file://"+remote, dest); err != nil {
+		t.Fatalf("clone: %v\n%s", err, out.String())
+	}
+
+	if got := skillReadFile(t, filepath.Join(dest, "agent-context", "skills", "review", "SKILL.md")); got != "review" {
+		t.Fatalf("expected the skill to be checked out, got %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "customers")); !os.IsNotExist(err) {
+		t.Fatalf("expected the rest of the repo not to be checked out, got %v", err)
+	}
+	skills, err := discoverAgentContextSkills(dest)
+	if err != nil || len(skills) != 1 || skills[0].Name != "review" {
+		t.Fatalf("expected to discover the review skill, got %v, %v", skills, err)
+	}
+}
+
+func TestInstallSkill_readsSkillsFromTheAgentContextDirectory(t *testing.T) {
+	home, _ := skillEnv(t)
+	checkout := filepath.Join(t.TempDir(), "onyx-infra")
+	skillWriteSource(t, filepath.Join(checkout, "agent-context"))
+	deployWriteFile(t, filepath.Join(checkout, "skills", "decoy", "SKILL.md"), "decoy")
+
+	if _, err := skillRun(t, "--source", checkout, "--no-pull"); err != nil {
+		t.Fatalf("install-skill: %v", err)
+	}
+
+	link := filepath.Join(home, ".claude", "skills", "review")
+	if got := skillReadFile(t, filepath.Join(link, "SKILL.md")); got != "review" {
+		t.Fatalf("expected the agent-context skill, got %q", got)
+	}
+	if _, err := os.Lstat(filepath.Join(home, ".claude", "skills", "decoy")); !os.IsNotExist(err) {
+		t.Fatalf("expected only agent-context/ to be read, got %v", err)
+	}
+}
+
+func TestInstallSkill_sourceWithoutSkillsIsAnError(t *testing.T) {
+	skillEnv(t)
+	checkout := filepath.Join(t.TempDir(), "onyx-infra")
+	deployWriteFile(t, filepath.Join(checkout, "README.md"), "an onyx-infra without agent-context/")
+
+	_, err := skillRun(t, "--source", checkout, "--no-pull")
+
+	if err == nil || !strings.Contains(err.Error(), "no agent-context/ directory found") {
+		t.Fatalf("expected a missing agent-context error, got %v", err)
+	}
+}
+
+func TestInstallSkill_fallsBackToTheOldDefaultCheckout(t *testing.T) {
+	home, _ := skillEnv(t)
+	skillWriteSource(t, filepath.Join(home, ".claude", "skills", "onyx-llm-context"))
+
+	out, err := skillRun(t, "--no-pull")
+	if err != nil {
+		t.Fatalf("install-skill: %v", err)
+	}
+
+	if got := skillReadFile(t, filepath.Join(home, ".claude", "skills", "review", "SKILL.md")); got != "review" {
+		t.Fatalf("expected the old checkout to be installed, got %q", got)
+	}
+	if !strings.Contains(out, "old checkout") || !strings.Contains(out, "--clone") {
+		t.Fatalf("expected a warning about the old checkout, got %q", out)
 	}
 }
 
@@ -252,7 +361,7 @@ func TestInstallSkill_refusesSymlinkedDestinations(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, repoRoot := skillEnv(t)
-			source := filepath.Join(t.TempDir(), "onyx-llm-context")
+			source := filepath.Join(t.TempDir(), "onyx-infra")
 			skillWriteSource(t, source)
 			target := filepath.Join(t.TempDir(), "target")
 			if c.content != "" {
