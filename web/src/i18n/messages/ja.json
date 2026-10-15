@@ -2460,6 +2460,10 @@
           "tooltip": "{count, plural, other {# 件のドキュメントが失敗}}",
           "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
         },
+        "newModel": {
+          "label": "新しいモデル",
+          "tooltip": "現在のモデルを置き換える埋め込みモデルでインデックスされました。"
+        },
         "figures": {
           "indexed": "件インデックス済み",
           "synced": "件同期済み",

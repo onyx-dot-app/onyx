@@ -444,6 +444,13 @@ export default function RunRow({
                   title={tBadges(tag.labelKey)}
                   color={tag.color}
                 />
+                {run.kind === "indexing" && run.attempt.is_new_model && (
+                  <Tag
+                    title={t("newModel.label")}
+                    tooltip={t("newModel.tooltip")}
+                    color="purple"
+                  />
+                )}
                 {run.kind === "indexing" && <StageDetailsTrigger />}
                 {run.kind === "checks" &&
                   run.attempt.check_results.length > 0 && <CheckRunTrigger />}

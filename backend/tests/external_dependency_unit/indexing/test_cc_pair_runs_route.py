@@ -24,6 +24,7 @@ from onyx.db.enums import (
     CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     IndexingStatus,
+    IndexModelStatus,
     PermissionSyncStatus,
 )
 from onyx.db.models import (
@@ -34,6 +35,7 @@ from onyx.db.models import (
     ExternalGroupPermissionSyncAttempt,
     IndexAttempt,
     IndexAttemptError,
+    SearchSettings,
     User,
 )
 from onyx.db.search_settings import get_current_search_settings
@@ -45,8 +47,16 @@ from onyx.server.documents.cc_pair import (
     get_cc_pair_runs,
     get_cc_pair_throughput,
 )
-from onyx.server.documents.models import CCPairRunsResponse, CCPairThroughputWindow
+from onyx.server.documents.models import (
+    CCPairRunsResponse,
+    CCPairThroughputWindow,
+    IndexAttemptSnapshot,
+)
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair_and_future,
+    make_future_search_settings,
+)
 
 # The sync kinds come from the EE-only sync_params helpers.
 pytestmark = pytest.mark.usefixtures("enable_ee")
@@ -94,10 +104,13 @@ def _index_attempt(
     error_msg: str | None = None,
     celery_task_id: str | None = None,
     started: bool = True,
+    search_settings_id: int | None = None,
 ) -> IndexAttempt:
     attempt = IndexAttempt(
         connector_credential_pair_id=cc_pair.id,
-        search_settings_id=get_current_search_settings(db_session).id,
+        search_settings_id=(
+            search_settings_id or get_current_search_settings(db_session).id
+        ),
         from_beginning=False,
         status=status,
         error_msg=error_msg,
@@ -297,6 +310,57 @@ def test_errors_filter_keeps_runs_with_open_or_resolved_doc_errors(
     assert clean.id not in {
         run.attempt.id for run in by_doc_error.items if run.kind == "indexing"
     }
+
+
+def test_lists_a_model_switch_runs_and_marks_them(db_session: Session) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
+    future = make_future_search_settings(db_session)
+    past = make_future_search_settings(db_session, status=IndexModelStatus.PAST)
+    try:
+        current = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+        new_model = _index_attempt(
+            db_session,
+            cc_pair,
+            1,
+            IndexingStatus.COMPLETED_WITH_ERRORS,
+            search_settings_id=future.id,
+        )
+        _doc_error(db_session, new_model, is_resolved=False)
+        _index_attempt(
+            db_session, cc_pair, 2, IndexingStatus.SUCCESS, search_settings_id=past.id
+        )
+
+        feed = _runs(db_session, admin, cc_pair)
+        unresolved = _runs(
+            db_session, admin, cc_pair, errors=CCPairRunErrors.UNRESOLVED
+        )
+
+        # The retired model's run stays out of the feed.
+        assert _order(feed) == [
+            (CCPairRunKind.INDEXING, new_model.id),
+            (CCPairRunKind.INDEXING, current.id),
+        ]
+        attempts = {run.attempt.id: run.attempt for run in feed.items}
+        new_snapshot = attempts[new_model.id]
+        assert isinstance(new_snapshot, IndexAttemptSnapshot)
+        assert new_snapshot.is_new_model
+        assert new_snapshot.open_doc_error_count == 1
+        current_snapshot = attempts[current.id]
+        assert isinstance(current_snapshot, IndexAttemptSnapshot)
+        assert not current_snapshot.is_new_model
+        assert _order(unresolved) == [(CCPairRunKind.INDEXING, new_model.id)]
+    finally:
+        db_session.rollback()
+        db_session.query(IndexAttemptError).filter(
+            IndexAttemptError.connector_credential_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+        cleanup_cc_pair_and_future(db_session, cc_pair, future.id)
+        db_session.query(SearchSettings).filter(SearchSettings.id == past.id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
 
 
 def test_leaves_out_another_pairs_runs(db_session: Session) -> None:
