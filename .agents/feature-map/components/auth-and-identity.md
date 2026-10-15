@@ -483,6 +483,7 @@ Management keeps its owner-or-admin permission checks; initiation and callback r
 ### Custom-action OAuth setup checks
 
 `POST /admin/oauth-config/pkce-support` checks OAuth or OpenID Connect provider metadata.
+It requires global `MANAGE_ACTIONS` permission; scoped group-management authority does not grant discovery access.
 The authorization and token endpoints must match the submitted pair before metadata can establish support.
 The result distinguishes advertised S256 support, no advertised S256 support, and unknown support.
 Discovery observes the outbound URL policy and does not send client credentials.

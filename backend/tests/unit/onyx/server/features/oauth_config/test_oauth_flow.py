@@ -643,9 +643,9 @@ def test_draft_state_cannot_be_used_in_normal_callback(
     assert token_post.call_count == 1
 
 
-@pytest.mark.parametrize("authorized", [False, True])
+@pytest.mark.parametrize("authority", list(PermissionAuthority))
 def test_draft_http_permission_and_provider_error_contract(
-    monkeypatch: pytest.MonkeyPatch, authorized: bool
+    monkeypatch: pytest.MonkeyPatch, authority: PermissionAuthority
 ) -> None:
     from onyx.db.enums import Permission
 
@@ -653,13 +653,14 @@ def test_draft_http_permission_and_provider_error_contract(
     monkeypatch.setattr(
         oauth_config_api, "validate_oauth_endpoint_url", lambda *_a, **_kw: None
     )
+    monkeypatch.setattr(oauth_config_api, "detect_pkce_support", lambda *_: "supported")
     monkeypatch.setattr(
         permissions,
         "has_permission",
         lambda _user, permission: (
             PermissionAuthority.GLOBAL
-            if authorized or permission == Permission.BASIC_ACCESS
-            else PermissionAuthority.NONE
+            if permission == Permission.BASIC_ACCESS
+            else authority
         ),
     )
     token_post.side_effect = requests.HTTPError("provider body contains secret")
@@ -669,6 +670,16 @@ def test_draft_http_permission_and_provider_error_contract(
     app.dependency_overrides[oauth_config_api.get_session] = lambda: db
     app.dependency_overrides[current_user] = lambda: user
     with TestClient(app) as client:
+        discovery = client.post(
+            "/admin/oauth-config/pkce-support",
+            json={
+                "authorization_url": config.authorization_url,
+                "token_url": config.token_url,
+            },
+        )
+        assert discovery.status_code == (
+            200 if authority is PermissionAuthority.GLOBAL else 403
+        )
         started = client.post(
             "/admin/oauth-config/test/initiate",
             json={
@@ -678,16 +689,8 @@ def test_draft_http_permission_and_provider_error_contract(
                 "client_secret": "draft",
             },
         )
-        if not authorized:
+        if authority is PermissionAuthority.NONE:
             assert started.status_code == 403
-            discovery = client.post(
-                "/admin/oauth-config/pkce-support",
-                json={
-                    "authorization_url": config.authorization_url,
-                    "token_url": config.token_url,
-                },
-            )
-            assert discovery.status_code == 403
             callback = client.post(
                 "/admin/oauth-config/test/callback",
                 params={"code": "code", "state": "state"},

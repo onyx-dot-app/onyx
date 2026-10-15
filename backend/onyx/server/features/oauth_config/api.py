@@ -220,7 +220,7 @@ def _assert_can_manage_oauth_config(
 @admin_router.post("/pkce-support")
 def check_pkce_support(
     request: OAuthPKCESupportRequest,
-    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> OAuthPKCESupportResponse:
     """Check advertised support without sending client credentials."""
     _validate_oauth_endpoint_urls(request.authorization_url, request.token_url)
