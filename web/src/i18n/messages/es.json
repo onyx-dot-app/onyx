@@ -2544,10 +2544,8 @@
           "all": "Todos los niveles",
           "failures": "Fallos",
           "errors": "Errores",
-          "other": "Otros"
-        },
-        "resolved": {
-          "label": "Resueltos"
+          "other": "Otros",
+          "resolved": "Resueltos"
         },
         "groups": {
           "failures": "{count, plural, one {# fallo} other {# fallos}}",

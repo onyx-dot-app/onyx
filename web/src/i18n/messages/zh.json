@@ -2544,10 +2544,8 @@
           "all": "所有级别",
           "failures": "失败",
           "errors": "错误",
-          "other": "其他"
-        },
-        "resolved": {
-          "label": "已解决"
+          "other": "其他",
+          "resolved": "已解决"
         },
         "groups": {
           "failures": "{count, plural, other {# 次失败}}",

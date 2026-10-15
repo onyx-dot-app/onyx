@@ -10,7 +10,6 @@ import {
   FilterButton,
   InputTypeIn,
   MessageCard,
-  SelectButton,
   Tag,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
@@ -42,8 +41,8 @@ import {
 
 const LOADER_ROWS = 2;
 
-/** Which groups the filter shows. Resolved runs replace them all when toggled on. */
-type Shown = "all" | "failures" | "errors" | "other";
+/** Which groups the filter shows. "all" leaves out the resolved runs. */
+type Shown = "all" | ActivityGroup;
 
 export interface ActivityCountTagsProps {
   failures: number;
@@ -130,19 +129,15 @@ export default function ActivityPanel({
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   const [shown, setShown] = useState<Shown>("all");
-  const [resolved, setResolved] = useState(false);
   const { resolving, resolve } = useResolveRunErrors();
   // The fleet panel lists every run. A pair's page has its run list for that.
   const shownOptions: Shown[] =
     scope === "fleet"
-      ? ["all", "failures", "errors", "other"]
-      : ["all", "failures", "errors"];
+      ? ["all", "failures", "errors", "other", "resolved"]
+      : ["all", "failures", "errors", "resolved"];
   const isShown = (group: ActivityGroup) =>
-    group === "resolved"
-      ? resolved
-      : !resolved &&
-        shownOptions.includes(group) &&
-        (shown === "all" || shown === group);
+    shownOptions.includes(group) &&
+    (shown === "all" ? group !== "resolved" : shown === group);
 
   // The failures and errors totals head the panel, so both always poll.
   const failures = useActivityItems(
@@ -178,11 +173,9 @@ export default function ActivityPanel({
   const emptyTitle =
     search !== ""
       ? t("empty.filtered")
-      : resolved
-        ? t("empty.resolved")
-        : shown === "all"
-          ? t("empty.title")
-          : t(`empty.${shown}`);
+      : shown === "all"
+        ? t("empty.title")
+        : t(`empty.${shown}`);
 
   // Full width once the page stacks its columns, the panel's own width beside them.
   return (
@@ -282,18 +275,11 @@ export default function ActivityPanel({
                   items={shownOptions.map((candidate) => ({
                     kind: "option" as const,
                     value: candidate,
+                    icon: candidate === "resolved" ? SvgEyeClosed : undefined,
                     title: t(`filter.${candidate}`),
                   }))}
                 />
               </Dropdown>
-              <SelectButton
-                icon={SvgEyeClosed}
-                state={resolved ? "selected" : "empty"}
-                aria-pressed={resolved}
-                onClick={() => setResolved((current) => !current)}
-              >
-                {t("resolved.label")}
-              </SelectButton>
             </Section>
           </Section>
 
