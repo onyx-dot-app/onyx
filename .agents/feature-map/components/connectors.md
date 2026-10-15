@@ -155,7 +155,8 @@ encryption. This component only consumes the pairing at run time (§4).
   SharePoint/OneDrive (`microsoft_utils/drive_items.py`), blob, Drupal Wiki and
   the file connector pass the setting. The placeholder is part of the content
   hash, so a file is re-indexed the next time it is fetched after the setting
-  changes.
+  changes. Docprocessing replaces tabular sections that still reach it in the
+  same way ([[indexing-pipeline]] §4.3).
 - **`DocumentBase`** / **`Document`** (`Document` requires `id`, `source`,
   `sections`, `semantic_identifier`, and `metadata`. On `DocumentBase`, `id` and
   `source` are optional, and the other three are still required. The remaining

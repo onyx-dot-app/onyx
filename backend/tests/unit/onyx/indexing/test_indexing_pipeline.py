@@ -1173,6 +1173,50 @@ def _make_tabular_doc(doc_id: str, section: TabularSection) -> Document:
     )
 
 
+def test_index_batch_skips_tabular_sections_that_reach_it() -> None:
+    """A tabular section that reaches docprocessing (for example, in a batch
+    staged before the option was set) becomes one placeholder before the change
+    gate. Other sections and documents stay."""
+    workbook = Document(
+        id="workbook",
+        title="Budget.xlsx",
+        semantic_identifier="Budget.xlsx",
+        sections=[
+            TextSection(text="Notes", link="notes-link"),
+            TabularSection(csv_file_id="sheet-1", link="sheet-1-link"),
+            TabularSection(csv_file_id="sheet-2", link="sheet-2-link"),
+        ],
+        source=DocumentSource.GOOGLE_DRIVE,
+        metadata={},
+    )
+    text_doc = _make_doc("text-doc")
+    adapter = MagicMock()
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = None
+
+    with patch(
+        f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+        side_effect=lambda documents: documents,
+    ):
+        index_doc_batch(
+            document_batch=[workbook, text_doc],
+            chunker=MagicMock(),
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            skip_spreadsheet_content=True,
+        )
+
+    prepared_workbook, prepared_text_doc = adapter.prepare.call_args.args[0]
+    assert prepared_workbook.sections == [
+        TextSection(text="Notes", link="notes-link"),
+        TextSection(text=CONTENT_SKIPPED_PLACEHOLDER, link="sheet-1-link"),
+    ]
+    assert prepared_text_doc == text_doc
+
+
 def test_skipped_spreadsheet_embeds_as_its_title(
     embedder: DefaultIndexingEmbedder,
 ) -> None:
