@@ -439,6 +439,7 @@ jobs:
       SANDBOX_TEST_FRONTEND_URL: "http://127.0.0.1:3000"
       SANDBOX_TEST_KUBE_CONTEXT: "kind-onyx-craft-ci"
       SANDBOX_TEST_IP_FAMILY: "ipv4"
+      ONYX_FIRECRACKER_DEDICATED_HOST: "true"
 
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
@@ -517,10 +518,10 @@ jobs:
           nodes:
             - role: control-plane
               extraMounts:
-                - hostPath: /dev/kvm
-                  containerPath: /dev/kvm
-                - hostPath: /dev/vhost-vsock
-                  containerPath: /dev/vhost-vsock
+                - hostPath: /dev
+                  containerPath: /dev
+                  readOnly: false
+                  propagation: None
                 - hostPath: /lib/modules
                   containerPath: /lib/modules
                   readOnly: true

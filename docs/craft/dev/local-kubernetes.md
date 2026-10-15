@@ -20,7 +20,7 @@ Install the Python, uv, and Bun tools described in CONTRIBUTING.md.
 Run `uv sync --frozen` at the repository root before image refresh.
 Refresh requires the development `.venv` and Docker support for `docker image save --platform`.
 The runtime host must provide Linux KVM and `/dev/vhost-vsock`.
-The existing runtime helper supports Linux x86_64 kind hosts.
+The existing runtime helper supports dedicated, disposable Linux x86_64 test hosts or VMs.
 macOS Docker Desktop does not supply these prerequisites.
 Install kind, Helm, and kubectl on the Linux runtime host.
 On a Mac development client, use these client tools.
@@ -35,6 +35,10 @@ chmod +x /opt/homebrew/bin/telepresence
 
 ### Configure a Linux KVM kind cluster
 
+Run this profile only in a dedicated disposable Linux test host or VM.
+The privileged kind node shares writable host `/dev` and can change device permissions and ownership.
+Do not use this profile on a shared workstation or production node.
+
 Use a fresh cluster for first-time runtime installation. Preserve existing clusters and their data.
 Copy this kind configuration to a local file, such as `/tmp/onyx-kind.yaml`.
 
@@ -44,10 +48,10 @@ apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
     extraMounts:
-      - hostPath: /dev/kvm
-        containerPath: /dev/kvm
-      - hostPath: /dev/vhost-vsock
-        containerPath: /dev/vhost-vsock
+      - hostPath: /dev
+        containerPath: /dev
+        readOnly: false
+        propagation: None
       - hostPath: /lib/modules
         containerPath: /lib/modules
         readOnly: true
@@ -58,6 +62,7 @@ Run these commands on the Linux host.
 ```bash
 export KIND_CLUSTER_NAME=onyx-dev
 export KIND_NODE_NAME=onyx-dev-control-plane
+export ONYX_FIRECRACKER_DEDICATED_HOST=true
 deployment/helm/dev/firecracker-ci.sh preflight-host
 kind create cluster --name onyx-dev --image kindest/node:v1.33.1 --config /tmp/onyx-kind.yaml
 kubectl config use-context kind-onyx-dev
@@ -66,6 +71,8 @@ deployment/helm/dev/firecracker-ci.sh install-kata
 ```
 
 `configure-kind-node` creates the devmapper pool once. It refuses existing backing files and pools.
+The acknowledgement confirms that this host is disposable; it does not detect host safety.
+Host and node `/dev` must use devtmpfs so Kata can access newly created `/dev/dm-N` paths.
 The stock kind daemon excludes devmapper. Setup replaces only that daemon with
 the checksum-pinned official containerd 2.1.1 build at the same source revision.
 It sets `DM_DISABLE_UDEV=1` for setup and containerd because kind does not run udev.

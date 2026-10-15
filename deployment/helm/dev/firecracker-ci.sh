@@ -54,6 +54,7 @@ assert_kind_node_for_cluster() {
 preflight_host() {
   require_bin docker
   require_bin sudo
+  require_bin findmnt
 
   if [ "$(uname -s)" != "Linux" ]; then
     echo "::error::Kata Firecracker CI requires a Linux runner" >&2
@@ -65,6 +66,10 @@ preflight_host() {
   fi
   if ! grep -Eq '(vmx|svm)' /proc/cpuinfo; then
     echo "::error::runner CPU does not expose vmx/svm; RunsOn nested-virt is required" >&2
+    exit 1
+  fi
+  if [ "$(findmnt --noheadings --output FSTYPE --target /dev)" != devtmpfs ]; then
+    echo "::error::host /dev must use devtmpfs for dynamic devmapper devices" >&2
     exit 1
   fi
 
@@ -96,11 +101,21 @@ preflight_host() {
 
 configure_kind_node() {
   require_bin docker
-  local role_label
+  require_bin findmnt
+  local role_label dev_bind
   assert_kind_node_for_cluster "${KIND_NODE_NAME}"
   role_label="$(docker inspect -f '{{ index .Config.Labels "io.x-k8s.kind.role" }}' "${KIND_NODE_NAME}")"
   if [ "${role_label}" != "control-plane" ]; then
     echo "::error::refusing to configure ${KIND_NODE_NAME}; expected control-plane, got role=${role_label}" >&2
+    exit 1
+  fi
+  dev_bind="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/dev"}}{{.Type}} {{.Source}} {{.RW}} {{.Propagation}}{{end}}{{end}}' "${KIND_NODE_NAME}")"
+  if [ "${dev_bind}" != 'bind /dev true rprivate' ]; then
+    echo "::error::kind node requires a writable /dev bind from host /dev with rprivate propagation" >&2
+    exit 1
+  fi
+  if [ "$(findmnt --noheadings --output FSTYPE --target /dev)" != devtmpfs ]; then
+    echo "::error::host /dev must use devtmpfs for dynamic devmapper devices" >&2
     exit 1
   fi
 
@@ -120,12 +135,16 @@ CONTAINERD_REVISION="cb1076646aa3740577fafbf3d914198b7fe8e3f7"
 CONTAINERD_X86_64_TGZ_SHA256="918e88fd393c28c89424e6535df0546ca36c1dfa7d8a5d685dee70b449380a9b"
 CONTAINERD_URL="https://github.com/containerd/containerd/releases/download/${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION#v}-linux-amd64.tar.gz"
 
-for bin in dmsetup losetup blockdev containerd ctr systemctl awk sed truncate curl sha256sum tar install mktemp mv rm; do
+for bin in dmsetup losetup blockdev containerd ctr systemctl awk sed truncate curl sha256sum tar install mktemp mv rm findmnt; do
   if ! command -v "${bin}" >/dev/null 2>&1; then
     echo "::error::${bin} is required inside the kind node" >&2
     exit 1
   fi
 done
+if [ "$(findmnt --noheadings --output FSTYPE --target /dev)" != devtmpfs ]; then
+  echo "::error::node /dev must use devtmpfs for dynamic devmapper devices" >&2
+  exit 1
+fi
 for dev in /dev/kvm /dev/vhost-vsock; do
   if [ ! -e "${dev}" ]; then
     echo "::error::${dev} is not mounted into the kind node" >&2
@@ -232,7 +251,7 @@ printf '[Service]\nEnvironment=DM_DISABLE_UDEV=1\n' \
 systemctl daemon-reload
 systemctl restart containerd
 ctr plugins ls | awk '
-  $1 ~ /snapshotter/ && $2 == "devmapper" && $4 == "ok" { found = 1 }
+  $1 ~ /snapshotter/ && $2 == "devmapper" { print; if ($4 == "ok") found = 1 }
   END { exit !found }
 '
 NODE
@@ -333,10 +352,84 @@ install_kata() {
   install_pinned_firecracker
 }
 
+verify_devmapper_snapshot() (
+  require_bin docker
+  require_bin findmnt
+  require_bin stat
+  require_bin sudo
+  require_bin blockdev
+  assert_kind_node_for_cluster "${KIND_NODE_NAME}"
+  if [ "$(findmnt --noheadings --output FSTYPE --target /dev)" != devtmpfs ] || \
+    [ "$(docker exec "${KIND_NODE_NAME}" findmnt --noheadings --output FSTYPE --target /dev)" != devtmpfs ]; then
+    echo "::error::host and node /dev must use devtmpfs for dynamic devmapper devices" >&2
+    exit 1
+  fi
+  docker exec "${KIND_NODE_NAME}" bash -c 'for bin in ctr jq stat blockdev awk; do command -v "${bin}" >/dev/null || exit 1; done'
+  docker exec "${KIND_NODE_NAME}" ctr plugins ls | awk '
+    $1 ~ /snapshotter/ && $2 == "devmapper" { print; if ($4 == "ok") found = 1 }
+    END { exit !found }
+  '
+
+  snapshot_cli=(docker exec "${KIND_NODE_NAME}" ctr --namespace k8s.io snapshots --snapshotter devmapper)
+  probe_key="onyx-devmapper-probe-$(cat /proc/sys/kernel/random/uuid)"
+  snapshot_keys="$("${snapshot_cli[@]}" list)"
+  if printf '%s\n' "${snapshot_keys}" | awk -v key="${probe_key}" 'NR > 1 && $1 == key { found = 1 } END { exit !found }'; then
+    echo "::error::devmapper probe ${probe_key} already exists; refusing to replace it" >&2
+    exit 1
+  fi
+  created=false
+  status=0
+  trap 'status=$?; if [ "${created}" = true ]; then if ! "${snapshot_cli[@]}" remove "${probe_key}"; then echo "::error::failed to remove owned devmapper probe ${probe_key}" >&2; status=1; fi; fi; exit "${status}"' EXIT
+  mounts="$("${snapshot_cli[@]}" prepare --mounts "${probe_key}")"
+  created=true
+  snapshot_source="$(printf '%s\n' "${mounts}" | docker exec -i "${KIND_NODE_NAME}" jq -er \
+    'if type == "array" and length == 1 then .[0].Source | select(type == "string") else error("expected one snapshot mount") end')"
+  if [[ "${snapshot_source}" != "/dev/mapper/${DEVMAPPER_POOL_NAME}-snap-"* ]] || \
+    [[ ! "${snapshot_source##*-snap-}" =~ ^[0-9]+$ ]]; then
+    echo "::error::unexpected devmapper snapshot source ${snapshot_source}" >&2
+    exit 1
+  fi
+  if ! docker exec "${KIND_NODE_NAME}" test -b "${snapshot_source}"; then
+    echo "::error::devmapper snapshot source ${snapshot_source} is not a block device" >&2
+    exit 1
+  fi
+  rdev="$(docker exec "${KIND_NODE_NAME}" stat -Lc '%t:%T' "${snapshot_source}")"
+  if [[ ! "${rdev}" =~ ^[[:xdigit:]]+:[[:xdigit:]]+$ ]]; then
+    echo "::error::invalid devmapper device identity ${rdev}" >&2
+    exit 1
+  fi
+  sysfs_path="/sys/dev/block/$((16#${rdev%:*})):$((16#${rdev#*:}))/uevent"
+  devname="$(docker exec "${KIND_NODE_NAME}" awk -F= '$1 == "DEVNAME" { print $2 }' "${sysfs_path}")"
+  if [[ ! "${devname}" =~ ^dm-[0-9]+$ ]] || \
+    [ "$(awk -F= '$1 == "DEVNAME" { print $2 }' "${sysfs_path}")" != "${devname}" ]; then
+    echo "::error::host and node sysfs disagree on devmapper device identity" >&2
+    exit 1
+  fi
+  canonical_path="/dev/${devname}"
+  if [ ! -b "${canonical_path}" ] || ! docker exec "${KIND_NODE_NAME}" test -b "${canonical_path}"; then
+    echo "::error::canonical devmapper device ${canonical_path} is missing or is not a block device on host or node" >&2
+    exit 1
+  fi
+  if [ "$(stat -Lc '%t:%T' "${canonical_path}")" != "${rdev}" ] || \
+    [ "$(docker exec "${KIND_NODE_NAME}" stat -Lc '%t:%T' "${canonical_path}")" != "${rdev}" ]; then
+    echo "::error::host and node canonical devmapper device identity does not match ${rdev}" >&2
+    exit 1
+  fi
+  node_bytes="$(docker exec "${KIND_NODE_NAME}" blockdev --getsize64 "${canonical_path}")"
+  host_bytes="$(sudo -n blockdev --getsize64 "${canonical_path}")"
+  if [[ ! "${node_bytes}" =~ ^[0-9]+$ ]] || [ "${node_bytes}" -eq 0 ] || [ "${host_bytes}" != "${node_bytes}" ]; then
+    echo "::error::host and node canonical devmapper device size must be positive and match" >&2
+    exit 1
+  fi
+  printf 'Verified devmapper probe %s source=%s canonical=%s rdev=%s bytes=%s\n' \
+    "${probe_key}" "${snapshot_source}" "${canonical_path}" "${rdev}" "${node_bytes}"
+)
+
 verify_runtime() {
   require_bin docker
   require_bin kubectl
   verify_pinned_firecracker
+  verify_devmapper_snapshot
 
   local smoke_name
   smoke_name="kata-fc-smoke"
@@ -371,6 +464,7 @@ YAML
   pod_node="$(kubectl -n "${KATA_SMOKE_NAMESPACE}" get pod "${smoke_name}" -o jsonpath='{.spec.nodeName}')"
   node_boot_id="$(kubectl get node "${pod_node}" -o jsonpath='{.status.nodeInfo.bootID}')"
   guest_boot_id="$(kubectl -n "${KATA_SMOKE_NAMESPACE}" exec "${smoke_name}" -- cat /proc/sys/kernel/random/boot_id)"
+  printf 'Kata smoke boot IDs node=%s guest=%s\n' "${node_boot_id}" "${guest_boot_id}"
 
   if [ -z "${node_boot_id}" ] || [ -z "${guest_boot_id}" ]; then
     echo "::error::failed to read node or guest boot ID" >&2
@@ -385,6 +479,15 @@ YAML
   kubectl -n "${KATA_SMOKE_NAMESPACE}" get pod "${smoke_name}" -o jsonpath='{.spec.runtimeClassName}' | grep -qx 'kata-fc'
   kubectl get runtimeclass kata-fc -o jsonpath='{.handler}' | grep -qx 'kata-fc'
 }
+
+case "${1:-}" in
+  preflight-host|configure-kind-node|install-kata|verify|all)
+    if [ "${ONYX_FIRECRACKER_DEDICATED_HOST:-false}" != true ]; then
+      echo "::error::set ONYX_FIRECRACKER_DEDICATED_HOST=true only on a dedicated disposable Linux host or test VM; setup shares host /dev and device metadata" >&2
+      exit 1
+    fi
+    ;;
+esac
 
 case "${1:-}" in
   preflight-host)

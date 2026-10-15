@@ -312,6 +312,10 @@ Run only the gates that match the change:
   source revision, `ctr`, and runc shim, and refuses existing pools/backing files.
   Setup and containerd use `DM_DISABLE_UDEV=1` for pool and thin-device nodes
   because the pinned kind node does not run udev.
+  The dedicated disposable test-host profile shares writable host `/dev` with
+  private propagation and requires `ONYX_FIRECRACKER_DEDICATED_HOST=true`.
+  This exposes Kata's dynamic canonical device paths and permits shared device
+  metadata changes. Never use that kind profile on shared or production hosts.
   Its disposable kind cluster installs checksum-pinned Calico 3.31.7 before
   Kata, with the default kind CNI disabled. Network tests must still prove
   direct traffic is denied; CNI readiness alone does not prove isolation.

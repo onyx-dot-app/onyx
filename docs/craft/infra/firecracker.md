@@ -183,10 +183,15 @@ smoke pod that checks boot IDs and the live Firecracker executable.
 The stock kind daemon excludes devmapper. Node setup installs the checksum-pinned
 official containerd 2.1.1 daemon at the same source revision. It leaves `ctr` and
 the runc shim unchanged. Existing pools and backing files prevent replacement.
-This helper targets fresh Linux/amd64 kind nodes, not existing production nodes.
+This helper targets dedicated, disposable Linux/amd64 test hosts or VMs, never shared workstations or production nodes.
+It requires `ONYX_FIRECRACKER_DEDICATED_HOST=true` as an explicit acknowledgement.
+The privileged node shares writable host `/dev` with private mount propagation.
+Systemd can change shared device permissions and ownership; private propagation does not prevent these metadata changes.
+Host and node devtmpfs expose the dynamic `/dev/dm-N` paths that Kata derives from sysfs.
 The pinned kind node does not run udev. Setup and containerd use
 `DM_DISABLE_UDEV=1` so libdm creates pool and thin-device nodes directly.
 Setup verifies the owned pool by name, path, and block-device type before restart.
+Before guest smoke, the helper creates one temporary snapshot, verifies its canonical device, then removes that snapshot.
 
 The installer verifies architecture-specific SHA-256 checksums. This verifies
 the binary pin. Runtime compatibility and Craft readiness need separate live
