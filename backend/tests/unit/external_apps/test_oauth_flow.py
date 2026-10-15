@@ -13,6 +13,8 @@ from onyx.auth.pkce import compute_s256_challenge
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp, User
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.base import OAuthExternalAppProvider
+from onyx.external_apps.providers.registry import PROVIDERS
 from onyx.server.features.build.external_apps import oauth as oauth_route
 from onyx.server.features.build.external_apps.models import OAuthCallbackRequest
 from tests.unit.fakes import FakeCache
@@ -190,3 +192,191 @@ def test_callback_rejects_configuration_changed_after_start(
         )
 
     token_post.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("app_type", "token_body", "expected_scopes", "json_encoded"),
+    [
+        (
+            ExternalAppType.LINEAR,
+            {
+                "access_token": "access",
+                "refresh_token": "refresh",
+                "scope": "read,write",
+                "expires_in": 3600,
+            },
+            ["read", "write"],
+            False,
+        ),
+        (
+            ExternalAppType.GITHUB,
+            {"access_token": "access", "scope": "repo,read:org"},
+            ["repo", "read:org"],
+            False,
+        ),
+        (
+            ExternalAppType.SLACK,
+            {
+                "ok": True,
+                "access_token": "bot-token-must-not-be-stored",
+                "authed_user": {
+                    "access_token": "access",
+                    "scope": "chat:write,search:read",
+                },
+            },
+            ["chat:write", "search:read"],
+            False,
+        ),
+        (
+            ExternalAppType.NOTION,
+            {"access_token": "access", "workspace_id": "workspace"},
+            None,
+            True,
+        ),
+        (
+            ExternalAppType.HUBSPOT,
+            {"access_token": "access", "refresh_token": "refresh"},
+            ["oauth", "crm.objects.contacts.read"],
+            False,
+        ),
+    ],
+)
+def test_callback_preserves_provider_exchange_and_grant(
+    monkeypatch: pytest.MonkeyPatch,
+    app_type: ExternalAppType,
+    token_body: dict[str, Any],
+    expected_scopes: list[str] | None,
+    json_encoded: bool,
+) -> None:
+    app, _, db_session, token_post = _configure_route(monkeypatch)
+    app.app_type = app_type
+    owner = _user("owner")
+    persist = MagicMock()
+    push = MagicMock()
+    monkeypatch.setattr(oauth_route, "upsert_external_app_user_credential", persist)
+    monkeypatch.setattr(oauth_route, "push_skills_for_users", push)
+    info_response = MagicMock(spec=requests.Response)
+    info_response.json.return_value = {"scopes": expected_scopes}
+    monkeypatch.setattr(
+        oauth_route.requests, "get", MagicMock(return_value=info_response)
+    )
+    token_post.return_value.json.return_value = token_body
+
+    query = _authorize_query(app=app, user=owner, db_session=db_session)
+    uses_pkce = app_type in (ExternalAppType.LINEAR, ExternalAppType.GITHUB)
+    assert ("code_challenge" in query) == uses_pkce
+    if app_type == ExternalAppType.SLACK:
+        assert "user_scope" in query
+        assert "scope" not in query
+    result = oauth_route.handle_external_app_oauth_callback(
+        OAuthCallbackRequest(code="auth-code", state=query["state"][0]),
+        user=owner,
+        db_session=db_session,
+    )
+    assert result.success
+    assert result.external_app_id == app.id
+    request = token_post.call_args.kwargs
+    body = request["json" if json_encoded else "data"]
+    assert request["data" if json_encoded else "json"] is None
+    assert body["code"] == "auth-code"
+    assert ("code_verifier" in body) == uses_pkce
+    if json_encoded:
+        assert request["headers"]["Authorization"].startswith("Basic ")
+        assert "client_id" not in body
+        assert "client_secret" not in body
+    else:
+        assert body["client_id"] == "linear-client-id"
+        assert body["client_secret"] == "linear-client-secret"
+    persisted = persist.call_args.kwargs
+    assert persisted["user_credentials"]["access_token"] == "access"
+    if token_body.get("refresh_token"):
+        assert persisted["user_credentials"]["refresh_token"] == "refresh"
+    if token_body.get("expires_in"):
+        assert "expires_at" in persisted["user_credentials"]
+    assert persisted["granted_scopes"] == expected_scopes
+    assert persisted["user_id"] == owner.id
+    push.assert_called_once_with({owner.id}, db_session)
+    db_session.commit.assert_called_once()
+
+
+@pytest.mark.parametrize("malformed_body", [None, [], "not-an-object"])
+def test_callback_rejects_non_object_token_response(
+    monkeypatch: pytest.MonkeyPatch, malformed_body: object
+) -> None:
+    app, _, db_session, token_post = _configure_route(monkeypatch)
+    owner = _user("owner")
+    query = _authorize_query(app=app, user=owner, db_session=db_session)
+    token_post.return_value.json.return_value = malformed_body
+    with pytest.raises(OnyxError, match="invalid token response") as error:
+        oauth_route.handle_external_app_oauth_callback(
+            OAuthCallbackRequest(code="code", state=query["state"][0]),
+            user=owner,
+            db_session=db_session,
+        )
+    assert error.value.status_code == 502
+    db_session.commit.assert_not_called()
+
+
+def test_non_json_success_response_is_a_gateway_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, _, db_session, token_post = _configure_route(monkeypatch)
+    owner = _user("owner")
+    query = _authorize_query(app=app, user=owner, db_session=db_session)
+    token_post.return_value.json.side_effect = ValueError("invalid JSON")
+    with pytest.raises(OnyxError, match="non-JSON") as error:
+        oauth_route.handle_external_app_oauth_callback(
+            OAuthCallbackRequest(code="code", state=query["state"][0]),
+            user=owner,
+            db_session=db_session,
+        )
+    assert error.value.status_code == 502
+
+
+@pytest.mark.parametrize("removed", [True, False])
+def test_callback_rechecks_app_availability(
+    monkeypatch: pytest.MonkeyPatch, removed: bool
+) -> None:
+    app, _, db_session, token_post = _configure_route(monkeypatch)
+    owner = _user("owner")
+    query = _authorize_query(app=app, user=owner, db_session=db_session)
+    if removed:
+        monkeypatch.setattr(oauth_route, "get_external_app_by_id", lambda *_: None)
+    else:
+        app.enabled = False
+    with pytest.raises(OnyxError, match="no longer exists|disabled"):
+        oauth_route.handle_external_app_oauth_callback(
+            OAuthCallbackRequest(code="code", state=query["state"][0]),
+            user=owner,
+            db_session=db_session,
+        )
+    token_post.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "app_type",
+    [
+        key
+        for key, provider in PROVIDERS.items()
+        if isinstance(provider, OAuthExternalAppProvider)
+    ],
+)
+def test_all_oauth_providers_preserve_authorization_parameters(
+    monkeypatch: pytest.MonkeyPatch, app_type: ExternalAppType
+) -> None:
+    app, _, db_session, _ = _configure_route(monkeypatch)
+    app.app_type = app_type
+    provider = PROVIDERS[app_type]
+    assert isinstance(provider, OAuthExternalAppProvider)
+    oauth = provider.spec.oauth
+    query = _authorize_query(app=app, user=_user("owner"), db_session=db_session)
+    assert query["response_type"] == ["code"]
+    assert query["client_id"] == ["linear-client-id"]
+    assert "client_secret" not in query
+    if oauth.scope:
+        assert query[oauth.scope_param] == [oauth.scope]
+    if oauth.optional_scope:
+        assert query[oauth.optional_scope_param] == [oauth.optional_scope]
+    for key, value in oauth.extra_authorize_params.items():
+        assert query[key] == [value]
+    assert ("code_challenge" in query) == oauth.supports_pkce

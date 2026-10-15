@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
 from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.oauth.protocol import build_authorization_code_token_body
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -301,22 +302,18 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         RFC-6749 form-encoded client credentials in the body. Override for a
         provider that requires HTTP Basic client auth and/or a JSON body (e.g.
         Notion)."""
-        body = {
-            "grant_type": "authorization_code",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code": code,
-            "redirect_uri": redirect_uri,
-        }
-        if code_verifier is not None:
-            body["code_verifier"] = code_verifier
-
         return TokenExchangeRequest(
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "application/json",
             },
-            body=body,
+            body=build_authorization_code_token_body(
+                code=code,
+                client_id=client_id,
+                client_secret=client_secret,
+                redirect_uri=redirect_uri,
+                code_verifier=code_verifier,
+            ),
         )
 
     # --- Refresh template method (override a hook below, not this) ---

@@ -110,7 +110,6 @@ class LinearProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             # actor=user is Linear's default but explicit — actor=application
             # would mint an app-acting token instead of user-acting.
             extra_authorize_params={
-                "response_type": "code",
                 "actor": "user",
             },
         ),

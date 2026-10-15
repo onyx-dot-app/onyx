@@ -425,9 +425,15 @@ identical in shape whether a human or a grant decided.
 ### 4.6 OAuth connect and token refresh
 
 Connect: `GET /api/build/apps/{id}/oauth/start` builds the provider's
-authorize URL (`server/features/build/external_apps/oauth.py`); the callback
-exchanges the code, stamps an absolute `expires_at`
-(`external_apps/token_utils.py:stamp_expires_at`) and stores the granted scopes verbatim.
+authorize URL through the shared OAuth builder (`server/features/build/external_apps/oauth.py`).
+Each attempt is bound to the user, tenant, app, and OAuth configuration.
+`AuthorizationAttemptStore` keeps attempts for ten minutes through `CacheBackend`.
+GitHub and Linear use S256 PKCE. Other providers keep their existing exchange format.
+The callback consumes the attempt before token exchange and rejects changed configuration.
+A failed exchange requires a new connection attempt; retries cannot reuse state.
+Providers own scope parameters, client authentication, and token and grant extraction.
+The callback stamps an absolute `expires_at`
+(`external_apps/token_utils.py:stamp_expires_at`), stores the granted scopes, and refreshes the user's sandbox skills.
 
 Refresh is lazy and happens at the credential-injection seam, not on a
 schedule: `ExternalAppResolver.resolve` calls `ensure_fresh_credentials`

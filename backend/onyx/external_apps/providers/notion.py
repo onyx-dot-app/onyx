@@ -22,6 +22,7 @@ from onyx.external_apps.providers.base import (
     OrgCredentialField,
     TokenExchangeRequest,
 )
+from onyx.oauth.protocol import build_authorization_code_token_body
 
 # Pinned across the provider and the sandbox skill so request-shaping stays
 # consistent with what the OAuth exchange negotiated. 2025-09-03 is the current
@@ -208,7 +209,6 @@ class NotionProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             # `owner=user` is required by Notion's public OAuth flow so the
             # authorization is granted on behalf of the connecting user.
             extra_authorize_params={
-                "response_type": "code",
                 "owner": "user",
             },
         ),
@@ -277,11 +277,10 @@ class NotionProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "Accept": "application/json",
                 "Notion-Version": _NOTION_VERSION,
             },
-            body={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-            },
+            body=build_authorization_code_token_body(
+                code=code,
+                redirect_uri=redirect_uri,
+            ),
             json_encoded=True,
         )
 

@@ -1,6 +1,5 @@
 import secrets
 from datetime import datetime, timezone
-from urllib.parse import urlencode
 
 import requests
 from fastapi import APIRouter, Depends
@@ -26,8 +25,10 @@ from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
     canonical_json_fingerprint,
+    generate_authorization_state,
 )
 from onyx.oauth.models import OAuthConfigurationFingerprint, PKCECodeVerifier
+from onyx.oauth.protocol import build_authorization_url
 from onyx.server.features.build.external_apps.models import (
     OAuthCallbackRequest,
     OAuthCallbackResponse,
@@ -42,7 +43,7 @@ router = APIRouter()
 
 # Must be registered as a redirect URI in each provider's developer
 # console.
-_FRONTEND_CALLBACK_PATH = "/craft/v1/apps/oauth/callback"
+_FRONTEND_CALLBACK_URL = f"{WEB_DOMAIN}/craft/v1/apps/oauth/callback"
 
 
 class _ExternalAppOAuthAttemptPayload(BaseModel):
@@ -73,10 +74,6 @@ def _oauth_client_credentials(app: ExternalApp) -> tuple[str, str]:
     return client_id, client_secret
 
 
-def _frontend_callback_url() -> str:
-    return f"{WEB_DOMAIN}{_FRONTEND_CALLBACK_PATH}"
-
-
 def _oauth_provider_or_raise(app: ExternalApp) -> OAuthExternalAppProvider:
     """Resolve the app's provider and assert it authenticates via OAuth, or
     400. Only the OAuth subset of built-in providers can drive these routes."""
@@ -100,7 +97,7 @@ def _configuration_fingerprint(
             "app_type": app.app_type.value,
             "client_id": client_id,
             "client_secret": client_secret,
-            "redirect_uri": _frontend_callback_url(),
+            "redirect_uri": _FRONTEND_CALLBACK_URL,
             "oauth": provider.spec.oauth.model_dump(mode="json"),
         },
     )
@@ -126,25 +123,30 @@ def start_external_app_oauth(
     provider = _oauth_provider_or_raise(app)
     client_id, client_secret = _oauth_client_credentials(app)
 
-    redirect_uri = _frontend_callback_url()
     oauth = provider.spec.oauth
-    params: dict[str, str] = {
-        **oauth.extra_authorize_params,
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        oauth.scope_param: oauth.scope,
-    }
+    additional_params = dict(oauth.extra_authorize_params)
     if oauth.optional_scope:
-        params[oauth.optional_scope_param] = oauth.optional_scope
+        additional_params[oauth.optional_scope_param] = oauth.optional_scope
 
     code_verifier: str | None = None
+    code_challenge: str | None = None
     if oauth.supports_pkce:
         code_verifier, code_challenge = generate_pkce_pair()
-        params["code_challenge"] = code_challenge
-        params["code_challenge_method"] = "S256"
 
-    attempt = _AUTHORIZATION_ATTEMPTS.store(
+    state = generate_authorization_state()
+    authorize_url = build_authorization_url(
+        authorization_url=oauth.authorize_url,
+        client_id=client_id,
+        redirect_uri=_FRONTEND_CALLBACK_URL,
+        state=state,
+        scope=oauth.scope,
+        scope_param=oauth.scope_param,
+        additional_params=additional_params,
+        code_challenge=code_challenge,
+    )
+    _AUTHORIZATION_ATTEMPTS.store(
         owner_id=str(user.id),
+        state=state,
         payload=_ExternalAppOAuthAttemptPayload(
             external_app_id=external_app_id,
             configuration_fingerprint=_configuration_fingerprint(
@@ -153,11 +155,6 @@ def start_external_app_oauth(
             code_verifier=code_verifier,
         ),
     )
-    params["state"] = attempt.state
-
-    # urlencode so URI-shaped scopes (Google) get `:` and `/`
-    # percent-encoded.
-    authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"
     return OAuthStartResponse(authorize_url=authorize_url)
 
 
@@ -201,7 +198,7 @@ def handle_external_app_oauth_callback(
         request.code,
         client_id,
         client_secret,
-        _frontend_callback_url(),
+        _FRONTEND_CALLBACK_URL,
         code_verifier=payload.code_verifier,
     )
     try:
@@ -235,7 +232,12 @@ def handle_external_app_oauth_callback(
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             f"{app.name} returned a non-JSON response during OAuth.",
-            status_code_override=response.status_code,
+        )
+
+    if not isinstance(response_data, dict):
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"{app.name} returned an invalid token response during OAuth.",
         )
 
     error = provider.classify_token_response(response, response_data)
