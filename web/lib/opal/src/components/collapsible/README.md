@@ -12,13 +12,13 @@ A section whose header opens and closes the body under it. The header is a title
   description="Specify how the connector will operate indexing."
 >
   <InputVertical title="Refresh frequency">…</InputVertical>
-</Collapsible>
+</Collapsible>;
 
 // Controlled
 const [open, setOpen] = useState(false);
 <Collapsible title="Schedule" open={open} onOpenChange={setOpen}>
   …
-</Collapsible>
+</Collapsible>;
 ```
 
 ## Props
@@ -36,3 +36,22 @@ const [open, setOpen] = useState(false);
 | `children`      | `ReactNode`               | —       | The body that opens and closes                               |
 
 The whole header row toggles on click and drives the `Button`'s hover state. The `Button` is the keyboard control: Tab reaches it, keyboard focus shows as its hover state (no focus ring), and Enter or Space toggles. It carries `aria-expanded` and `aria-controls` pointing at the body. Its tooltip comes from `OpalStrings` (`collapsibleFold`, `collapsibleExpand`), and its accessible name includes the title (`collapsibleFoldSection`, `collapsibleExpandSection`), e.g. "Expand Schedule". The body renders from the first open and then stays mounted, so a section that starts closed does no work (fetches included) until it is opened. Reduced motion turns the animation off.
+
+## Composable parts
+
+For a collapsible whose header you draw yourself (a card, a row, a custom button), use the parts instead of the section:
+
+```tsx
+<Collapsible.Root open={open} onOpenChange={setOpen}>
+  <Collapsible.Trigger asChild>
+    <button>…your header…</button>
+  </Collapsible.Trigger>
+  <Collapsible.Content>…body…</Collapsible.Content>
+</Collapsible.Root>
+```
+
+| Part                  | Props                                                       | Notes                                                                                          |
+| --------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `Collapsible.Root`    | `open`, `onOpenChange`, `defaultOpen` (`false`), `disabled` | Holds the state; renders a `div` with `data-state`.                                            |
+| `Collapsible.Trigger` | `asChild`, plus `<button>` props                            | Toggles the root. Sets `aria-expanded`, `aria-controls` and `data-state` on its element.       |
+| `Collapsible.Content` | `keepMounted`                                               | Opens and closes with `Fold`'s animation; drops its children once closed unless `keepMounted`. |

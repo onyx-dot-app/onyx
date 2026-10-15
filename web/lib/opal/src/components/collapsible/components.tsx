@@ -1,7 +1,8 @@
 "use client";
 
 import "@opal/components/collapsible/styles.css";
-import { useId, useState } from "react";
+import { createContext, useContext, useId, useState } from "react";
+import { Slot } from "@radix-ui/react-slot";
 import type { RichStr } from "@opal/types";
 import { ContentAction, Section } from "@opal/layouts";
 import { Button, type TagProps } from "@opal/components";
@@ -27,7 +28,7 @@ interface CollapsibleProps {
   children?: React.ReactNode;
 }
 
-function Collapsible({
+function CollapsibleSection({
   title,
   description,
   tag,
@@ -143,4 +144,124 @@ function Collapsible({
   );
 }
 
-export { Collapsible, type CollapsibleProps };
+// ---------------------------------------------------------------------------
+// Composable parts
+// ---------------------------------------------------------------------------
+
+interface CollapsibleContextValue {
+  open: boolean;
+  toggle: () => void;
+  contentId: string;
+}
+
+const CollapsibleContext = createContext<CollapsibleContextValue | null>(null);
+
+function useCollapsibleContext(part: string): CollapsibleContextValue {
+  const context = useContext(CollapsibleContext);
+  if (!context) {
+    throw new Error(`Collapsible.${part} must be inside Collapsible.Root`);
+  }
+  return context;
+}
+
+interface CollapsibleRootProps {
+  /** Controlled open state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Initial open state when uncontrolled. @default false */
+  defaultOpen?: boolean;
+  /** Locks the current open state: the trigger does not toggle. */
+  disabled?: boolean;
+  children?: React.ReactNode;
+}
+
+/**
+ * The state of a collapsible whose header the caller draws: pair it with
+ * `Collapsible.Trigger` and `Collapsible.Content`. For a titled section with
+ * Opal's own header and fold button, use `Collapsible` itself.
+ */
+function CollapsibleRoot({
+  open: openProp,
+  onOpenChange,
+  defaultOpen = false,
+  disabled = false,
+  children,
+}: CollapsibleRootProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const open = openProp ?? uncontrolledOpen;
+  const contentId = useId();
+
+  function toggle() {
+    if (disabled) return;
+    const next = !open;
+    if (openProp === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  }
+
+  return (
+    <CollapsibleContext.Provider value={{ open, toggle, contentId }}>
+      <div data-state={open ? "open" : "closed"}>{children}</div>
+    </CollapsibleContext.Provider>
+  );
+}
+
+type CollapsibleTriggerProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  /** Toggles through the child element instead of a `<button>`. */
+  asChild?: boolean;
+};
+
+/** Toggles the nearest `Collapsible.Root`. */
+function CollapsibleTrigger({
+  asChild = false,
+  onClick,
+  ...props
+}: CollapsibleTriggerProps) {
+  const { open, toggle, contentId } = useCollapsibleContext("Trigger");
+  const Component = asChild ? Slot : "button";
+  return (
+    <Component
+      {...(asChild ? {} : { type: "button" as const })}
+      {...props}
+      aria-expanded={open}
+      aria-controls={contentId}
+      data-state={open ? "open" : "closed"}
+      onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) toggle();
+      }}
+    />
+  );
+}
+
+interface CollapsibleContentProps {
+  /** Keep the children while closed. Off, they drop once it closes. */
+  keepMounted?: boolean;
+  children?: React.ReactNode;
+}
+
+/** The part that opens and closes, with Opal's fold animation. */
+function CollapsibleContent({
+  keepMounted,
+  children,
+}: CollapsibleContentProps) {
+  const { open, contentId } = useCollapsibleContext("Content");
+  return (
+    <Fold open={open} keepMounted={keepMounted} id={contentId}>
+      {children}
+    </Fold>
+  );
+}
+
+const Collapsible = Object.assign(CollapsibleSection, {
+  Root: CollapsibleRoot,
+  Trigger: CollapsibleTrigger,
+  Content: CollapsibleContent,
+});
+
+export {
+  Collapsible,
+  type CollapsibleProps,
+  type CollapsibleRootProps,
+  type CollapsibleTriggerProps,
+  type CollapsibleContentProps,
+};

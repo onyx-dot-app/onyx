@@ -197,6 +197,9 @@ export {
 export {
   Collapsible,
   type CollapsibleProps,
+  type CollapsibleRootProps,
+  type CollapsibleTriggerProps,
+  type CollapsibleContentProps,
 } from "@opal/components/collapsible/components";
 
 /* MessageCard */
