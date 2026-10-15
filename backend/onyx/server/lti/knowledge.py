@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.lti_knowledge import validate_lti_course_knowledge_scope
 from onyx.db.models import User
+from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_raw_redis_client
@@ -35,7 +36,10 @@ def validate_lti_course_knowledge_selection(
     hierarchy_node_ids: list[int],
     document_ids: list[str],
 ) -> None:
-    require_lti_instructor_launch_context(user, course_id)
+    # Administrators can manage tutors from the admin interface without an
+    # LTI launch, but their selections must still pass the course scope check.
+    if user.role != UserRole.ADMIN:
+        require_lti_instructor_launch_context(user, course_id)
     validate_lti_course_knowledge_scope(
         db_session=db_session,
         course_id=course_id,

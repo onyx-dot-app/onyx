@@ -42,7 +42,9 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntity
 from onyx.db.models import KGRelationship
+from onyx.db.models import Persona__Document
 from onyx.db.models import User
+from onyx.db.persona import disable_search_for_personas_without_knowledge__no_commit
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import (
     delete_from_kg_relationships_extraction_staging__no_commit,
@@ -1052,7 +1054,21 @@ def delete_all_documents_by_connector_credential_pair__no_commit(
 
 
 def delete_documents__no_commit(db_session: Session, document_ids: list[str]) -> None:
+    # Document deletion cascades saved file selections. Remember affected
+    # assistants before the cascade so losing their last attachment cannot
+    # silently turn a restricted Search tool into unrestricted search.
+    affected_persona_ids = list(
+        db_session.scalars(
+            select(Persona__Document.persona_id)
+            .where(Persona__Document.document_id.in_(document_ids))
+            .distinct()
+        )
+    )
     db_session.execute(delete(DbDocument).where(DbDocument.id.in_(document_ids)))
+    disable_search_for_personas_without_knowledge__no_commit(
+        db_session=db_session,
+        persona_ids=affected_persona_ids,
+    )
 
 
 def delete_documents_complete__no_commit(

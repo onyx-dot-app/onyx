@@ -9,6 +9,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db import lti_knowledge as knowledge
 from onyx.db.document import get_lti_course_website_document_ids
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.hierarchy.models import DocumentSortDirection
@@ -108,7 +109,7 @@ def test_course_website_document_selection_requires_course_ownership(
 ) -> None:
     db_session = MagicMock()
     db_session.execute.return_value.scalars.return_value.all.return_value = []
-    user = SimpleNamespace(email="instructor@example.edu")
+    user = SimpleNamespace(email="instructor@example.edu", role=UserRole.BASIC)
     scope = knowledge.LtiCourseKnowledgeScope(
         cc_pair_keys=[(10, 20)], accessible_node_ids={30}
     )
