@@ -3609,6 +3609,26 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configurar conector do Jira Service Management",
+          "subtext": "Configure qual conteúdo do Jira Service Management indexar. Por padrão, todos os projetos de service desk são indexados; você também pode fixar um único projeto ou informar uma consulta JQL personalizada. Se um conector do Jira já indexa este site, primeiro exclua dele os projetos de service desk (fixe os projetos dele ou, no Jira Cloud, use a JQL projectType != service_desk) para que esses tickets sejam atribuídos ao Jira Service Management.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Todos os service desks"
+                }
+              }
+            },
+            "everything": {
+              "label": "Todos os service desks",
+              "description": "Este conector indexará todos os projetos de service desk aos quais as credenciais fornecidas têm acesso!"
+            },
+            "project_key": {
+              "description": "A chave de um projeto de service desk específico a indexar (por exemplo, 'SUP')."
+            }
+          }
+        },
         "salesforce": {
           "description": "Configurar conector do Salesforce",
           "fields": {

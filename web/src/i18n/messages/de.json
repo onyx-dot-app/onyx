@@ -3609,6 +3609,26 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Jira Service Management-Connector konfigurieren",
+          "subtext": "Legen Sie fest, welche Jira Service Management-Inhalte indexiert werden. Standardmäßig werden alle Service-Desk-Projekte indexiert; Sie können auch ein einzelnes Projekt festlegen oder eine eigene JQL-Abfrage angeben. Wenn bereits ein Jira-Connector diese Site indexiert, schließen Sie dort zuerst die Service-Desk-Projekte aus (legen Sie seine Projekte fest oder verwenden Sie in Jira Cloud die JQL projectType != service_desk), damit diese Tickets Jira Service Management zugeordnet werden.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Alle Service Desks"
+                }
+              }
+            },
+            "everything": {
+              "label": "Alle Service Desks",
+              "description": "Dieser Connector indexiert alle Service-Desk-Projekte, auf die die angegebenen Zugangsdaten Zugriff haben!"
+            },
+            "project_key": {
+              "description": "Der Schlüssel eines bestimmten Service-Desk-Projekts, das indexiert werden soll (z. B. 'SUP')."
+            }
+          }
+        },
         "salesforce": {
           "description": "Salesforce-Connector konfigurieren",
           "fields": {

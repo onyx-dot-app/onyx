@@ -289,8 +289,8 @@ const zoomWebinarIdsOption: ListOption = {
 };
 
 /**
- * Whether an Atlassian API token (Confluence, Jira) has scopes. It sits below
- * the site URL in both connectors.
+ * Whether an Atlassian API token (Confluence, Jira, Jira Service Management)
+ * has scopes. It sits below the site URL in each of these connectors.
  */
 const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
   type: "checkbox",
@@ -1009,72 +1009,60 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira_service_management: {
-    description: "Configure Jira Service Management connector",
-    subtext: `Configure which Jira Service Management content to index. By default all service desk projects are indexed; you can also pin a single project or provide a custom JQL query. If a Jira connector already indexes this site, first exclude the service desk projects from it (pin its projects, or on Jira Cloud use the JQL projectType != service_desk) so these tickets are attributed to Jira Service Management.`,
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira_service_management.subtext",
     values: [
       {
         type: "text",
-        query: "Enter the Jira base URL:",
-        label: "Jira Base URL",
+        label: "connectors.jira.fields.jira_base_url.label",
         name: "jira_base_url",
         optional: false,
-        description:
-          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
       },
-      {
-        type: "checkbox",
-        query: "Using scoped token?",
-        label: "Using scoped token",
-        name: "scoped_token",
-        optional: true,
-        default: false,
-      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Jira Service Management?",
         optional: true,
         tabs: [
           {
             value: "everything",
-            label: "All Service Desks",
+            label:
+              "connectors.jira_service_management.fields.indexing_scope.tabs.everything.label",
             fields: [
               {
                 type: "string_tab",
-                label: "All Service Desks",
+                label:
+                  "connectors.jira_service_management.fields.everything.label",
                 name: "everything",
                 description:
-                  "This connector will index all service desk projects the provided credentials have access to!",
+                  "connectors.jira_service_management.fields.everything.description",
               },
             ],
           },
           {
             value: "project",
-            label: "Project",
+            label: "connectors.jira.fields.indexing_scope.tabs.project.label",
             fields: [
               {
                 type: "text",
-                query: "Enter the project key:",
-                label: "Project Key",
+                label: "connectors.jira.fields.project_key.label",
                 name: "project_key",
                 description:
-                  "The key of a specific service desk project to index (e.g., 'SUP').",
+                  "connectors.jira_service_management.fields.project_key.description",
               },
             ],
           },
           {
             value: "jql",
-            label: "JQL Query",
+            label: "connectors.jira.fields.indexing_scope.tabs.jql.label",
             fields: [
               {
                 type: "text",
-                query: "Enter the JQL query:",
-                label: "JQL Query",
+                label: "connectors.jira.fields.jql_query.label",
                 name: "jql_query",
-                description:
-                  "A custom JQL query to filter Jira Service Management issues." +
-                  "\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
-                  "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
+                description: "connectors.jira.fields.jql_query.description",
               },
             ],
           },
@@ -1083,11 +1071,10 @@ export const connectorConfigs: Record<
       },
       {
         type: "list",
-        query: "Enter email addresses to blacklist from comments:",
-        label: "Comment Email Blacklist",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
         name: "comment_email_blacklist",
         description:
-          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+          "connectors.jira.fields.comment_email_blacklist.description",
         optional: true,
       },
     ],

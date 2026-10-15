@@ -3609,6 +3609,26 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクターを設定",
+          "subtext": "インデックスする Jira Service Management コンテンツを設定します。デフォルトではすべてのサービスデスクプロジェクトをインデックスします。単一のプロジェクトを指定したり、カスタム JQL クエリを指定したりすることもできます。このサイトを既に Jira コネクターでインデックスしている場合は、先にそのコネクターからサービスデスクプロジェクトを除外してください(プロジェクトを指定するか、Jira Cloud では JQL projectType != service_desk を使用します)。これにより、これらのチケットは Jira Service Management に帰属されます。",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべてのサービスデスク"
+                }
+              }
+            },
+            "everything": {
+              "label": "すべてのサービスデスク",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのサービスデスクプロジェクトをインデックスします。"
+            },
+            "project_key": {
+              "description": "インデックスする特定のサービスデスクプロジェクトのキー(例: 'SUP')。"
+            }
+          }
+        },
         "salesforce": {
           "description": "Salesforce コネクターを設定",
           "fields": {

@@ -3609,6 +3609,26 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "配置要索引的 Jira Service Management 内容。默认索引所有服务台项目；您也可以指定单个项目或提供自定义 JQL 查询。如果已有 Jira 连接器在索引此站点，请先在该连接器中排除服务台项目（指定其项目，或在 Jira Cloud 上使用 JQL projectType != service_desk），以便这些工单归属到 Jira Service Management。",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "所有服务台"
+                }
+              }
+            },
+            "everything": {
+              "label": "所有服务台",
+              "description": "此连接器将索引所提供凭据有权访问的所有服务台项目！"
+            },
+            "project_key": {
+              "description": "要索引的特定服务台项目的键（例如 “SUP”）。"
+            }
+          }
+        },
         "salesforce": {
           "description": "配置 Salesforce 连接器",
           "fields": {
