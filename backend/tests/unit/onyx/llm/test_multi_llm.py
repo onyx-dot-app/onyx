@@ -642,6 +642,9 @@ def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
         ("claude-sonnet-5", {"type": "disabled"}),
         ("claude-opus-5", {"type": "disabled"}),
         ("claude-opus-4-7", {"type": "disabled"}),
+        # Sonnet 5.5 rejects disabled and spells off as between_tools.
+        ("claude-sonnet-5-5", {"type": "between_tools"}),
+        ("us.anthropic.claude-sonnet-5-5", {"type": "between_tools"}),
         # Pre-adaptive Claude only thinks when the param asks for it.
         ("claude-3-7-sonnet", None),
     ],
@@ -668,12 +671,23 @@ def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> 
     assert kwargs["output_config"] == {"effort": "low"}
 
 
-def test_reasoning_off_follows_deployment_alias_over_model_name() -> None:
-    # The alias is the model that answers, and Opus 5 accepts disabled thinking.
+@pytest.mark.parametrize(
+    "model_name, deployment_name, expected_thinking",
+    [
+        # Opus 5 accepts disabled thinking where Fable never does.
+        ("claude-fable-5", "claude-opus-5", {"type": "disabled"}),
+        # Sonnet 5.5 spells off as between_tools where Sonnet 5 takes disabled.
+        ("claude-sonnet-5", "claude-sonnet-5-5", {"type": "between_tools"}),
+    ],
+)
+def test_reasoning_off_follows_deployment_alias_over_model_name(
+    model_name: str, deployment_name: str, expected_thinking: dict[str, str]
+) -> None:
+    # The alias is the model that answers.
     kwargs = _anthropic_completion_kwargs(
-        "claude-fable-5", ReasoningEffort.OFF, deployment_name="claude-opus-5"
+        model_name, ReasoningEffort.OFF, deployment_name=deployment_name
     )
-    assert kwargs["thinking"] == {"type": "disabled"}
+    assert kwargs["thinking"] == expected_thinking
     assert "output_config" not in kwargs
 
 
