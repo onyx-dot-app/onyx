@@ -7392,6 +7392,16 @@
           "error": "No se pudieron cargar los modelos de enrutamiento.",
           "retry": "Reintentar"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Modelos personalizados",
+          "companyName": "Proveedores compatibles con LiteLLM"
+        },
+        "openAICompatible": {
+          "productName": "Modelos personalizados",
+          "companyName": "Endpoints compatibles con OpenAI"
+        }
       }
     },
     "mcpActions": {

@@ -45,6 +45,7 @@ import {
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
 import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import type {
@@ -457,9 +458,16 @@ export default function ModelSelectorContent({
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
 
+  const providerNames = useProviderNames();
   const llmOptions = useMemo(
-    () => buildLlmOptions(llmProviders, currentModelName, includeHiddenModels),
-    [llmProviders, currentModelName, includeHiddenModels]
+    () =>
+      buildLlmOptions(
+        llmProviders,
+        currentModelName,
+        includeHiddenModels,
+        providerNames
+      ),
+    [llmProviders, currentModelName, includeHiddenModels, providerNames]
   );
 
   // "Auto" selects the admin-configured router; router rows never list.

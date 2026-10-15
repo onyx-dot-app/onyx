@@ -7392,6 +7392,16 @@
           "error": "无法加载路由器模型。",
           "retry": "重试"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "自定义模型",
+          "companyName": "兼容 LiteLLM 的提供商"
+        },
+        "openAICompatible": {
+          "productName": "自定义模型",
+          "companyName": "兼容 OpenAI 的端点"
+        }
       }
     },
     "mcpActions": {

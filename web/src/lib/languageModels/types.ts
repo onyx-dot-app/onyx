@@ -467,9 +467,18 @@ export interface CostOverrideUpsert {
   cache_read_cost_per_mtok: number | null;
 }
 
+/**
+ * A provider whose names are copy rather than brand names. Its names come from
+ * `admin.languageModels.providers.<key>`; show them with `useProviderNames`.
+ */
+export type ProviderCopyKey = "custom" | "openAICompatible";
+
 export interface ProviderEntry {
   icon: IconFunctionComponent;
+  /** A brand name, or the provider key when `copyKey` holds its names. */
   productName: string;
+  /** A brand name, or the provider key when `copyKey` holds its names. */
   companyName: string;
+  copyKey?: ProviderCopyKey;
   Modal: React.ComponentType<LLMProviderFormProps>;
 }
