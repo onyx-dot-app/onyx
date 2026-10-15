@@ -11,7 +11,6 @@ from pydantic import BaseModel
 # (ONYX-BACKEND-H6FM). Bump to 128 MiB, matching the order of magnitude the
 # salesforce connector already opts into for bulk exports.
 _CSV_FIELD_SIZE_LIMIT_BYTES = 128 * 1024 * 1024
-csv.field_size_limit(_CSV_FIELD_SIZE_LIMIT_BYTES)
 
 _NEWLINE_CSV_ERROR = "new-line character seen in unquoted field"
 
@@ -20,6 +19,17 @@ _NEWLINE_CSV_ERROR = "new-line character seen in unquoted field"
 # beginning with one of these enables CSV/formula injection (e.g. DDE payloads
 # like `=cmd|' /C calc'!A1`) against whoever opens the export.
 _FORMULA_PREFIX_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_reader(source: Iterable[str], dialect: str = "excel") -> Iterator[list[str]]:
+    """Read a CSV with the field size limit this codebase needs.
+
+    Read every CSV through here. The limit is process-global state, so setting
+    it once at import makes correctness depend on which modules happened to be
+    imported first; setting it at the point of use does not.
+    """
+    csv.field_size_limit(_CSV_FIELD_SIZE_LIMIT_BYTES)
+    return csv.reader(source, dialect=dialect)
 
 
 def sanitize_csv_cell(value: str) -> str:
@@ -67,7 +77,7 @@ def read_csv_header(csv_text: str) -> list[str]:
     """
 
     def _read(text: str) -> list[str]:
-        for row in csv.reader(io.StringIO(text)):
+        for row in csv_reader(io.StringIO(text)):
             if any(c.strip() for c in row):
                 return row
         return []
@@ -92,7 +102,7 @@ def parse_csv_stream(lines: Iterable[str]) -> Iterator[ParsedRow]:
     Assumes clean line endings; `parse_csv_string` wraps this for in-memory
     strings that may use bare-``\\r`` (old Mac) row separators.
     """
-    reader = csv.reader(lines)
+    reader = csv_reader(lines)
     header: list[str] | None = None
     for row in reader:
         if not any(cell.strip() for cell in row):
@@ -101,16 +111,6 @@ def parse_csv_stream(lines: Iterable[str]) -> Iterator[ParsedRow]:
             header = row
             continue
         yield ParsedRow(header=header, row=row)
-
-
-def read_csv_rows(lines: Iterable[str]) -> Iterator[list[str]]:
-    """Stream the raw rows of a CSV line source, header row included and
-    nothing paired up, for callers that do their own header detection.
-
-    Importing this module is also what raises the csv field size limit, so read
-    CSVs through here rather than calling `csv.reader` directly.
-    """
-    yield from csv.reader(lines)
 
 
 def parse_csv_string(csv_text: str) -> Generator[ParsedRow, None, None]:

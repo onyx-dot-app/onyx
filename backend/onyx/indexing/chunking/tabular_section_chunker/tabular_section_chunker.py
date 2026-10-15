@@ -26,7 +26,7 @@ from onyx.indexing.chunking.tabular_section_chunker.workbook_chunks import (
     build_workbook_chunks,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.utils.csv_utils import read_csv_rows
+from onyx.utils.csv_utils import csv_reader
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -37,7 +37,7 @@ _HEADING_SHEET_SEPARATOR = " :: "
 def _open_staged_csv_rows(csv_file_id: str) -> Iterator[list[str]]:
     file_store = get_default_file_store()
     with file_store.read_file(csv_file_id, use_tempfile=True) as raw:
-        yield from read_csv_rows(io.TextIOWrapper(raw, encoding="utf-8", newline=""))
+        yield from csv_reader(io.TextIOWrapper(raw, encoding="utf-8", newline=""))
 
 
 def _sheet_name(section: TabularSection) -> str:
