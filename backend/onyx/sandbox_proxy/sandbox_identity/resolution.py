@@ -29,8 +29,8 @@ logger = setup_logger()
 class SandboxIPLookup(Protocol):
     """Backend-specific IP -> SandboxIdentity resolver.
 
-    Implementations must return `None` for unknown IPs and have
-    `wait_for_initial_sync` block until the cache is populated.
+    Implementations must return `None` for unknown IPs or while unsynced.
+    `wait_for_initial_sync` blocks until the cache is first populated.
     """
 
     def start(self) -> None: ...

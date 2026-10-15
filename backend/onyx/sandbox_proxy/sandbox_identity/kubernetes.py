@@ -119,6 +119,8 @@ class K8sInformerLookup(SandboxIPLookup):
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
+            if not self._synced.is_set():
+                return None
             return self._cache.get(src_ip)
 
     def _run(self) -> None:

@@ -290,14 +290,19 @@ component's code.
 Base identity (`sandbox_id`, `user_id`, `tenant_id`) is resolved purely from
 the TCP source IP of the connection into the proxy
 (`sandbox_proxy/sandbox_identity/resolution.py:IdentityResolver.resolve_sandbox`), against a
-cache the proxy itself builds by watching sandbox pods/containers
+cache the proxy itself builds by watching sandbox pods
 (`sandbox_identity/kubernetes.py:K8sInformerLookup`). Code inside the sandbox
 cannot change its own source IP as seen by the proxy, so this layer is not
 spoofable from inside a sandbox.
 
-**This assumes the deployment topology puts one sandbox per pod/container
+The lookup withholds cached identities while the informer is known to be
+unsynced. Requests fail closed until a fresh full list restores sync. This also
+applies to new requests on an already accepted connection. It does not remove
+asynchronous watch lag or revoke an identity already resolved by an in-flight request.
+
+**This assumes the deployment topology puts one sandbox per pod
 with a stable, uniquely-labelled IP, and that nothing NATs multiple
-sandboxes behind one IP the proxy sees.** Both lookups fail loud on a
+sandboxes behind one IP the proxy sees.** The lookup fails loud on a
 duplicate IP mapping to two different `sandbox_id`s at initial sync
 (`sandbox_identity/kubernetes.py:_initial_list`), which is the code's own
 acknowledgment of that assumption.

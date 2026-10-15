@@ -30,8 +30,10 @@ def _make_pod(
     )
 
 
-def _make_lookup() -> K8sInformerLookup:
-    return K8sInformerLookup(core_api=MagicMock(spec=client.CoreV1Api))
+def _make_synced_lookup() -> K8sInformerLookup:
+    lookup = K8sInformerLookup(core_api=MagicMock(spec=client.CoreV1Api))
+    lookup._synced.set()
+    return lookup
 
 
 def test_identity_from_pod_returns_none_when_missing_ip() -> None:
@@ -60,7 +62,7 @@ def test_identity_from_pod_happy_path() -> None:
 
 
 def test_apply_event_added_populates_cache() -> None:
-    lookup = _make_lookup()
+    lookup = _make_synced_lookup()
     lookup._apply_event({"type": "ADDED", "object": _make_pod()})
 
     identity = lookup.lookup("10.0.0.1")
@@ -69,7 +71,7 @@ def test_apply_event_added_populates_cache() -> None:
 
 
 def test_apply_event_modified_with_new_ip_evicts_old() -> None:
-    lookup = _make_lookup()
+    lookup = _make_synced_lookup()
     lookup._apply_event({"type": "ADDED", "object": _make_pod(pod_ip="10.0.0.1")})
     assert lookup.lookup("10.0.0.1") is not None
 
@@ -82,20 +84,50 @@ def test_apply_event_modified_with_new_ip_evicts_old() -> None:
 
 
 def test_apply_event_deleted_evicts_cache() -> None:
-    lookup = _make_lookup()
+    lookup = _make_synced_lookup()
     pod = _make_pod()
     lookup._apply_event({"type": "ADDED", "object": pod})
+    identity = lookup.lookup("10.0.0.1")
+    assert identity is not None
+    assert identity.sandbox_name == "sandbox-aaaa1111"
     lookup._apply_event({"type": "DELETED", "object": pod})
 
     assert lookup.lookup("10.0.0.1") is None
 
 
 def test_apply_event_modified_without_ip_evicts_pending_pod() -> None:
-    lookup = _make_lookup()
+    lookup = _make_synced_lookup()
     lookup._apply_event({"type": "ADDED", "object": _make_pod(pod_ip="10.0.0.1")})
+    identity = lookup.lookup("10.0.0.1")
+    assert identity is not None
+    assert identity.sandbox_name == "sandbox-aaaa1111"
 
     lookup._apply_event({"type": "MODIFIED", "object": _make_pod(pod_ip=None)})
 
+    assert lookup.lookup("10.0.0.1") is None
+
+
+def test_lookup_withholds_cached_identity_until_synced_and_after_sync_loss() -> None:
+    core_api = MagicMock(spec=client.CoreV1Api)
+    core_api.list_namespaced_pod.return_value = client.V1PodList(
+        metadata=client.V1ListMeta(resource_version="42"),
+        items=[_make_pod()],
+    )
+    lookup = K8sInformerLookup(core_api=core_api)
+
+    assert lookup._initial_list() == "42"
+    assert not lookup.is_synced()
+    assert not lookup.wait_for_initial_sync(0)
+    assert lookup.lookup("10.0.0.1") is None
+
+    lookup._synced.set()
+    identity = lookup.lookup("10.0.0.1")
+    assert identity is not None
+    assert str(identity.sandbox_id) == "11111111-1111-1111-1111-111111111111"
+    assert identity.tenant_id == "public"
+    assert lookup.lookup("10.0.0.2") is None
+
+    lookup._synced.clear()
     assert lookup.lookup("10.0.0.1") is None
 
 
