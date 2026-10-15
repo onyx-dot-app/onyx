@@ -167,6 +167,55 @@ def _mock_discussion(
     }
 
 
+def _mock_quiz_question(
+    question_id: int = 501,
+    question_text: str = "<p>What is 2 + 2?</p>",
+    answers: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": question_id,
+        "position": 1,
+        "question_name": f"Question {question_id}",
+        "question_type": "multiple_choice_question",
+        "question_text": question_text,
+        "answers": (
+            answers
+            if answers is not None
+            else [
+                {"id": 1, "text": "3", "weight": 0, "comments": "Incorrect"},
+                {"id": 2, "text": "4", "weight": 100, "comments": "Correct"},
+            ]
+        ),
+    }
+
+
+def _mock_new_quiz(quiz_id: int = 80) -> dict[str, Any]:
+    return {
+        "id": str(quiz_id),
+        "title": "New Quiz 1",
+        "instructions": "<p>Review the module.</p>",
+        "published": True,
+    }
+
+
+def _mock_new_quiz_item(item_id: str = "item-1") -> dict[str, Any]:
+    return {
+        "id": item_id,
+        "position": 1,
+        "entry_type": "Item",
+        "entry": {
+            "item_body": "<p>Which structure repeats work?</p>",
+            "interaction_type_slug": "choice",
+            "interaction_data": {
+                "choices": [
+                    {"id": "a", "item_body": "<p>Loop</p>"},
+                    {"id": "b", "item_body": "<p>Comment</p>"},
+                ]
+            },
+        },
+    }
+
+
 def _mock_module(
     module_id: int = 70,
     name: str = "Module 1: Variables",
@@ -188,10 +237,14 @@ def _make_url_dispatcher(
     modules: list[dict[str, Any]] | None = None,
     module_items: list[dict[str, Any]] | None = None,
     quizzes: list[dict[str, Any]] | None = None,
+    quiz_questions: dict[int, list[dict[str, Any]]] | None = None,
+    new_quizzes: list[dict[str, Any]] | None = None,
+    new_quiz_items: dict[int, list[dict[str, Any]]] | None = None,
     discussions: list[dict[str, Any]] | None = None,
     syllabus_body: str | None = None,
     page_error: bool = False,
     file_content: bytes = b"",
+    quiz_questions_error_ids: set[int] | None = None,
 ) -> Any:
     """Return a side_effect function that dispatches by URL path.
 
@@ -215,6 +268,14 @@ def _make_url_dispatcher(
         module_items = []
     if quizzes is None:
         quizzes = []
+    if quiz_questions is None:
+        quiz_questions = {}
+    if new_quizzes is None:
+        new_quizzes = []
+    if new_quiz_items is None:
+        new_quiz_items = {}
+    if quiz_questions_error_ids is None:
+        quiz_questions_error_ids = set()
     if discussions is None:
         discussions = []
 
@@ -235,6 +296,14 @@ def _make_url_dispatcher(
         # /api/v1/files/:id/public_url hands back a self-authorizing URL.
         if "/public_url" in url:
             return _mock_response(json_data={"public_url": SIGNED_FILE_URL})
+        if "/quizzes/" in url and "/questions" in url:
+            quiz_id = int(url.rstrip("/").split("/")[-2])
+            if quiz_id in quiz_questions_error_ids:
+                return _mock_response(500, {"error": "Question fetch failed"})
+            return _mock_response(json_data=quiz_questions.get(quiz_id, []))
+        if "/api/quiz/v1/" in url and "/items" in url:
+            quiz_id = int(url.rstrip("/").split("/")[-2])
+            return _mock_response(json_data=new_quiz_items.get(quiz_id, []))
         if "/modules/" in url and "/items" in url:
             return _mock_response(json_data=module_items)
         elif "/modules" in url:
@@ -247,6 +316,8 @@ def _make_url_dispatcher(
             return _mock_response(json_data=announcements)
         elif "/files" in url:
             return _mock_response(json_data=files)
+        elif "/api/quiz/v1/" in url and "/quizzes" in url:
+            return _mock_response(json_data=new_quizzes)
         elif "/quizzes" in url:
             return _mock_response(json_data=quizzes)
         elif "/discussion_topics" in url:
@@ -1585,19 +1656,24 @@ class TestLoadFromCheckpoint:
         items5, cp = _run_checkpoint(connector, cp, start, end)
         assert cp.stage == "quizzes"
 
-        # Stage 6: quizzes -> discussions
+        # Stage 6: classic quizzes -> new quizzes
         mock_requests.get.side_effect = dispatcher
         items6, cp = _run_checkpoint(connector, cp, start, end)
-        assert cp.stage == "discussions"
+        assert cp.stage == "new_quizzes"
 
-        # Stage 7: discussions -> syllabus
+        # Stage 7: new quizzes -> discussions
         mock_requests.get.side_effect = dispatcher
         items7, cp = _run_checkpoint(connector, cp, start, end)
-        assert cp.stage == "syllabus"
+        assert cp.stage == "discussions"
 
-        # Stage 8: syllabus -> advance course
+        # Stage 8: discussions -> syllabus
         mock_requests.get.side_effect = dispatcher
         items8, cp = _run_checkpoint(connector, cp, start, end)
+        assert cp.stage == "syllabus"
+
+        # Stage 9: syllabus -> advance course
+        mock_requests.get.side_effect = dispatcher
+        items9, cp = _run_checkpoint(connector, cp, start, end)
         assert cp.current_course_index == 1
         assert cp.stage == "pages"
         assert cp.has_more is False
@@ -1953,7 +2029,7 @@ class TestEEGetCoursePermissions:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
         client = MagicMock(spec=CanvasApiClient)
-        client.get.return_value = (
+        client.paginate.return_value = [
             [
                 _mock_enrollment(
                     "prof@school.edu", enrollment_type="TeacherEnrollment"
@@ -1961,9 +2037,8 @@ class TestEEGetCoursePermissions:
                 _mock_enrollment(
                     "student@school.edu", enrollment_type="StudentEnrollment"
                 ),
-            ],
-            None,
-        )
+            ]
+        ]
 
         result = get_course_permissions(client, course_id=1)
 
@@ -1978,10 +2053,9 @@ class TestEEGetCoursePermissions:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
         client = MagicMock(spec=CanvasApiClient)
-        client.get.return_value = (
-            [{"type": "StudentEnrollment", "user": {"email": "fallback@school.edu"}}],
-            None,
-        )
+        client.paginate.return_value = [
+            [{"type": "StudentEnrollment", "user": {"email": "fallback@school.edu"}}]
+        ]
 
         result = get_course_permissions(client, course_id=1)
 
@@ -1994,13 +2068,12 @@ class TestEEGetCoursePermissions:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
         client = MagicMock(spec=CanvasApiClient)
-        client.get.return_value = (
+        client.paginate.return_value = [
             [
                 _mock_enrollment("valid@school.edu"),
                 {"type": "StudentEnrollment", "user": {}},
-            ],
-            None,
-        )
+            ]
+        ]
 
         result = get_course_permissions(client, course_id=1)
 
@@ -2013,13 +2086,12 @@ class TestEEGetCoursePermissions:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
         client = MagicMock(spec=CanvasApiClient)
-        client.get.return_value = (
+        client.paginate.return_value = [
             [
                 _mock_enrollment("same@school.edu"),
                 _mock_enrollment("same@school.edu", enrollment_type="TaEnrollment"),
-            ],
-            None,
-        )
+            ]
+        ]
 
         result = get_course_permissions(client, course_id=1)
 
@@ -2032,12 +2104,9 @@ class TestEEGetCoursePermissions:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
         client = MagicMock(spec=CanvasApiClient)
-        client.get.side_effect = [
-            (
-                [_mock_enrollment("page1@school.edu")],
-                "https://canvas.example.com/api/v1/next",
-            ),
-            ([_mock_enrollment("page2@school.edu")], None),
+        client.paginate.return_value = [
+            [_mock_enrollment("page1@school.edu")],
+            [_mock_enrollment("page2@school.edu")],
         ]
 
         result = get_course_permissions(client, course_id=1)
@@ -2045,14 +2114,14 @@ class TestEEGetCoursePermissions:
         expected_emails = {"page1@school.edu", "page2@school.edu"}
 
         assert result.external_user_emails == expected_emails
-        assert client.get.call_count == 2
+        client.paginate.assert_called_once()
 
     def test_empty_enrollments_returns_empty_access(self) -> None:
         """No enrollments returns ExternalAccess.empty()."""
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
         client = MagicMock(spec=CanvasApiClient)
-        client.get.return_value = ([], None)
+        client.paginate.return_value = [[]]
 
         result = get_course_permissions(client, course_id=1)
 
@@ -2063,7 +2132,7 @@ class TestEEGetCoursePermissions:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
         client = MagicMock(spec=CanvasApiClient)
-        client.get.side_effect = Exception("Canvas API down")
+        client.paginate.side_effect = Exception("Canvas API down")
 
         result = get_course_permissions(client, course_id=1)
 
@@ -2297,6 +2366,7 @@ class TestDocumentConversionNewTypes:
 
     def test_convert_quiz_to_document(self) -> None:
         from onyx.connectors.canvas.connector import CanvasQuiz
+        from onyx.connectors.canvas.connector import CanvasQuizQuestion
 
         connector = _build_connector()
         quiz = CanvasQuiz(
@@ -2310,7 +2380,18 @@ class TestDocumentConversionNewTypes:
             course_id=1,
             updated_at="2025-06-01T12:00:00Z",
         )
-        doc = connector._convert_quiz_to_document(quiz)
+        questions = [
+            CanvasQuizQuestion.from_api(
+                _mock_quiz_question(
+                    question_text="<p>What concept controls loop termination?</p>",
+                    answers=[
+                        {"id": 1, "text": "Condition", "weight": 100},
+                        {"id": 2, "text": "Compiler", "weight": 0},
+                    ],
+                )
+            )
+        ]
+        doc = connector._convert_quiz_to_document(quiz, questions)
 
         assert doc.id == "canvas-quiz-1-50"
         assert doc.semantic_identifier == "Midterm Review"
@@ -2319,7 +2400,136 @@ class TestDocumentConversionNewTypes:
         assert "Midterm Review" in text
         assert "Practice for the midterm" in text
         assert "Questions: 20" in text
+        assert "Question 1" in text
+        assert "What concept controls loop termination?" in text
+        assert "Condition" in text
+        assert "Compiler" in text
         assert doc.parent_hierarchy_raw_node_id == "canvas-type-course-1-quiz"
+
+    def test_convert_quiz_to_document_omits_answer_metadata(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasQuiz
+        from onyx.connectors.canvas.connector import CanvasQuizQuestion
+
+        connector = _build_connector()
+        quiz = CanvasQuiz(
+            id=50,
+            title="Midterm Review",
+            description="<p>Practice for the midterm</p>",
+            html_url=f"{FAKE_BASE_URL}/courses/1/quizzes/50",
+            question_count=1,
+            published=True,
+            course_id=1,
+            updated_at="2025-06-01T12:00:00Z",
+        )
+        questions = [
+            CanvasQuizQuestion.from_api(
+                _mock_quiz_question(
+                    answers=[
+                        {"id": 1, "text": "A", "weight": 100, "comments": "Correct"},
+                        {"id": 2, "text": "B", "weight": 0, "comments": "Incorrect"},
+                    ]
+                )
+            )
+        ]
+
+        doc = connector._convert_quiz_to_document(quiz, questions)
+
+        text = doc.sections[0].text
+        assert "A" in text
+        assert "B" in text
+        assert "Correct" not in text
+        assert "Incorrect" not in text
+
+    @pytest.mark.parametrize(
+        "question_type",
+        [
+            "short_answer_question",
+            "fill_in_multiple_blanks_question",
+            "matching_question",
+            "numerical_question",
+            "unknown_question",
+        ],
+    )
+    def test_convert_quiz_omits_instructor_only_answers(
+        self, question_type: str
+    ) -> None:
+        from onyx.connectors.canvas.connector import CanvasQuiz
+        from onyx.connectors.canvas.models import CanvasQuizQuestion
+
+        payload = _mock_quiz_question(
+            question_text="<p>Complete the definition.</p>",
+            answers=[{"text": "hidden solution", "weight": 100}],
+        )
+        payload["question_type"] = question_type
+        doc = _build_connector()._convert_quiz_to_document(
+            CanvasQuiz.from_api(_mock_quiz(), course_id=1),
+            [CanvasQuizQuestion.from_api(payload)],
+        )
+
+        assert "Complete the definition." in _section_text(doc)
+        assert "hidden solution" not in _section_text(doc)
+
+    @pytest.mark.parametrize(
+        "question_type", ["rich-fill-blank", "ordering", "unknown"]
+    )
+    def test_convert_new_quiz_omits_non_choice_answer_payloads(
+        self, question_type: str
+    ) -> None:
+        from onyx.connectors.canvas.models import CanvasNewQuiz
+        from onyx.connectors.canvas.models import CanvasNewQuizItem
+
+        item = _mock_new_quiz_item()
+        item["entry"]["interaction_type_slug"] = question_type
+        doc = _build_connector()._convert_new_quiz_to_document(
+            CanvasNewQuiz.from_api(_mock_new_quiz(), course_id=1),
+            [CanvasNewQuizItem.from_api(item)],
+        )
+
+        assert "Which structure repeats work?" in _section_text(doc)
+        assert "Loop" not in _section_text(doc)
+        assert "Comment" not in _section_text(doc)
+
+    def test_convert_quiz_to_document_without_choices(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasQuiz
+        from onyx.connectors.canvas.connector import CanvasQuizQuestion
+
+        connector = _build_connector()
+        quiz = CanvasQuiz(
+            id=50,
+            title="Reflection Quiz",
+            html_url=f"{FAKE_BASE_URL}/courses/1/quizzes/50",
+            question_count=1,
+            published=True,
+            course_id=1,
+            updated_at="2025-06-01T12:00:00Z",
+        )
+        questions = [
+            CanvasQuizQuestion.from_api(
+                {
+                    "id": 600,
+                    "position": 1,
+                    "question_type": "essay_question",
+                    "question_text": "<p>Explain your debugging process.</p>",
+                    "answers": [],
+                }
+            )
+        ]
+
+        doc = connector._convert_quiz_to_document(quiz, questions)
+
+        text = doc.sections[0].text
+        assert "Question 1" in text
+        assert "Explain your debugging process." in text
+
+    def test_convert_quiz_to_document_with_null_answers(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasQuizQuestion
+
+        question_payload = _mock_quiz_question()
+        question_payload["answers"] = None
+
+        question = CanvasQuizQuestion.from_api(question_payload)
+
+        assert question.answers == []
 
     def test_convert_discussion_to_document(self) -> None:
         from onyx.connectors.canvas.connector import CanvasDiscussion
@@ -2391,7 +2601,20 @@ class TestCheckpointNewStages:
         self, mock_requests: MagicMock
     ) -> None:
         quiz = _mock_quiz(50, updated_at="2025-06-15T12:00:00Z")
-        mock_requests.get.side_effect = _make_url_dispatcher(quizzes=[quiz])
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            quizzes=[quiz],
+            quiz_questions={
+                50: [
+                    _mock_quiz_question(
+                        question_text="<p>Which structure repeats work?</p>",
+                        answers=[
+                            {"id": 1, "text": "Loop", "weight": 100},
+                            {"id": 2, "text": "Comment", "weight": 0},
+                        ],
+                    )
+                ]
+            },
+        )
         connector = _build_connector()
         cp = CanvasConnectorCheckpoint(
             has_more=True, course_ids=[1], current_course_index=0, stage="quizzes"
@@ -2404,7 +2627,77 @@ class TestCheckpointNewStages:
         assert len(items) == 1
         assert isinstance(items[0], Document)
         assert items[0].id == "canvas-quiz-1-50"
+        assert "Which structure repeats work?" in items[0].sections[0].text
+        assert "Loop" in items[0].sections[0].text
+        assert new_cp.stage == "new_quizzes"
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_quizzes_stage_falls_back_when_question_fetch_fails(
+        self, mock_requests: MagicMock
+    ) -> None:
+        quiz = _mock_quiz(50, updated_at="2025-06-15T12:00:00Z")
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            quizzes=[quiz], quiz_questions_error_ids={50}
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="quizzes"
+        )
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        items, new_cp = _run_checkpoint(connector, cp, start, end)
+
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+        assert new_cp.stage == "quizzes"
+        assert new_cp.next_url is None
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_new_quizzes_stage_yields_question_content(
+        self, mock_requests: MagicMock
+    ) -> None:
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            new_quizzes=[_mock_new_quiz(80)],
+            new_quiz_items={80: [_mock_new_quiz_item()]},
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage="new_quizzes",
+        )
+
+        items, new_cp = _run_checkpoint(connector, cp)
+
+        assert len(items) == 1
+        assert isinstance(items[0], Document)
+        assert items[0].id == "canvas-new-quiz-1-80"
+        assert "Which structure repeats work?" in items[0].sections[0].text
+        assert "Loop" in items[0].sections[0].text
         assert new_cp.stage == "discussions"
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_quizzes_stage_falls_back_when_question_list_is_empty(
+        self, mock_requests: MagicMock
+    ) -> None:
+        quiz = _mock_quiz(50, updated_at="2025-06-15T12:00:00Z")
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            quizzes=[quiz], quiz_questions={50: []}
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="quizzes"
+        )
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        items, _ = _run_checkpoint(connector, cp, start, end)
+
+        assert len(items) == 1
+        assert isinstance(items[0], Document)
+        assert "Question 1" not in items[0].sections[0].text
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_quizzes_stage_skips_unpublished(self, mock_requests: MagicMock) -> None:
@@ -2820,6 +3113,7 @@ class TestSlimDocsNewTypes:
             announcements=[],
             files=[_mock_file(40)],
             quizzes=[_mock_quiz(50)],
+            new_quizzes=[_mock_new_quiz(80)],
             discussions=[_mock_discussion(60)],
             syllabus_body="<p>Syllabus content</p>",
         )
@@ -2831,6 +3125,7 @@ class TestSlimDocsNewTypes:
 
         assert "canvas-file-1-40" in slim_ids
         assert "canvas-quiz-1-50" in slim_ids
+        assert "canvas-new-quiz-1-80" in slim_ids
         assert "canvas-discussion-1-60" in slim_ids
         assert "canvas-syllabus-1" in slim_ids
 

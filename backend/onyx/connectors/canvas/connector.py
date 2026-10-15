@@ -24,6 +24,9 @@ from onyx.configs.lti_configs import LTI_CANVAS_OAUTH_CLIENT_ID
 from onyx.configs.lti_configs import LTI_CANVAS_OAUTH_CLIENT_SECRET
 from onyx.connectors.canvas.access import get_course_permissions
 from onyx.connectors.canvas.client import CanvasApiClient
+from onyx.connectors.canvas.models import CanvasNewQuiz
+from onyx.connectors.canvas.models import CanvasNewQuizItem
+from onyx.connectors.canvas.models import CanvasQuizQuestion
 from onyx.connectors.canvas.oauth import CANVAS_ACCESS_TOKEN_KEY
 from onyx.connectors.canvas.oauth import canvas_credential_is_oauth
 from onyx.connectors.canvas.oauth import canvas_token_needs_refresh
@@ -60,6 +63,15 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Other question types use their answer payload for instructor-only solutions.
+_CLASSIC_QUIZ_VISIBLE_CHOICE_TYPES = {
+    "multiple_choice_question",
+    "multiple_answers_question",
+    "multiple_dropdowns_question",
+    "true_false_question",
+}
+_NEW_QUIZ_VISIBLE_CHOICE_TYPES = {"choice", "multi-answer", "true-false"}
 
 
 def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
@@ -409,6 +421,7 @@ CanvasStage: TypeAlias = Literal[
     "files",
     "modules",
     "quizzes",
+    "new_quizzes",
     "discussions",
     "syllabus",
 ]
@@ -975,6 +988,49 @@ class CanvasConnector(
         return quizzes
 
     @retry(tries=3, delay=1, backoff=2)
+    def _list_new_quizzes(self, course_id: int) -> list[CanvasNewQuiz]:
+        quizzes: list[CanvasNewQuiz] = []
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/quizzes",
+            params={"per_page": "100"},
+            api_version="/api/quiz/v1",
+        ):
+            for payload in page:
+                quiz = CanvasNewQuiz.from_api(payload, course_id)
+                if self._canvas_object_is_released(quiz):
+                    quizzes.append(quiz)
+        return quizzes
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _list_quiz_questions(
+        self, course_id: int, quiz_id: int
+    ) -> list[CanvasQuizQuestion]:
+        """Fetch all questions for a given quiz."""
+        logger.debug(f"Fetching questions for quiz {quiz_id} in course {course_id}")
+
+        questions: list[CanvasQuizQuestion] = []
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/quizzes/{quiz_id}/questions",
+            params={"per_page": "100"},
+        ):
+            for question_payload in page:
+                questions.append(CanvasQuizQuestion.from_api(question_payload))
+        return questions
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _list_new_quiz_items(
+        self, course_id: int, assignment_id: int
+    ) -> list[CanvasNewQuizItem]:
+        items: list[CanvasNewQuizItem] = []
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/quizzes/{assignment_id}/items",
+            params={"per_page": "100"},
+            api_version="/api/quiz/v1",
+        ):
+            items.extend(CanvasNewQuizItem.from_api(item) for item in page)
+        return items
+
+    @retry(tries=3, delay=1, backoff=2)
     def _list_discussions(self, course_id: int) -> list[CanvasDiscussion]:
         """Fetch all published discussion topics for a given course."""
         logger.debug(f"Fetching discussions for course {course_id}")
@@ -1261,7 +1317,47 @@ class CanvasConnector(
             ),
         )
 
-    def _convert_quiz_to_document(self, quiz: CanvasQuiz) -> Document:
+    def _format_quiz_questions(self, questions: list[CanvasQuizQuestion]) -> list[str]:
+        question_sections: list[str] = []
+
+        ordered_questions = sorted(
+            enumerate(questions),
+            key=lambda item: (
+                item[1].position is None,
+                item[1].position if item[1].position is not None else item[0],
+            ),
+        )
+
+        for index, (_original_index, question) in enumerate(ordered_questions, start=1):
+            section_parts = [f"Question {index}"]
+            question_text = (
+                parse_html_page_basic(question.question_text)
+                if question.question_text
+                else ""
+            )
+            if question_text:
+                section_parts.append(question_text)
+
+            answers = (
+                question.answers
+                if question.question_type in _CLASSIC_QUIZ_VISIBLE_CHOICE_TYPES
+                else []
+            )
+            for answer in answers:
+                answer_text = parse_html_page_basic(answer.html) if answer.html else ""
+                if not answer_text and answer.text:
+                    answer_text = answer.text.strip()
+                if answer_text:
+                    section_parts.append(answer_text)
+
+            if len(section_parts) > 1:
+                question_sections.append("\n".join(section_parts))
+
+        return question_sections
+
+    def _convert_quiz_to_document(
+        self, quiz: CanvasQuiz, questions: list[CanvasQuizQuestion] | None = None
+    ) -> Document:
         """Convert a Canvas quiz to a Document."""
         text_parts = [quiz.title]
         desc_text = parse_html_page_basic(quiz.description) if quiz.description else ""
@@ -1271,6 +1367,8 @@ class CanvasConnector(
             text_parts.append(f"Quiz type: {quiz.quiz_type}")
         if quiz.question_count is not None:
             text_parts.append(f"Questions: {quiz.question_count}")
+        if questions:
+            text_parts.extend(self._format_quiz_questions(questions))
 
         doc_updated_at = (
             datetime.fromisoformat(quiz.updated_at.replace("Z", "+00:00")).astimezone(
@@ -1286,6 +1384,60 @@ class CanvasConnector(
             text="\n\n".join(text_parts),
             semantic_identifier=quiz.title or f"Quiz {quiz.id}",
             doc_updated_at=doc_updated_at,
+            course_id=quiz.course_id,
+            doc_type="quiz",
+            parent_hierarchy_raw_node_id=self._resolve_doc_parent(
+                quiz.course_id, "quiz", quiz.id
+            ),
+        )
+
+    def _format_new_quiz_items(self, items: list[CanvasNewQuizItem]) -> list[str]:
+        sections: list[str] = []
+        ordered_items = sorted(
+            enumerate(items),
+            key=lambda item: (
+                item[1].position is None,
+                item[1].position if item[1].position is not None else item[0],
+            ),
+        )
+        for index, (_original_index, item) in enumerate(ordered_items, start=1):
+            entry = item.entry
+            item_body = entry.get("item_body")
+            if not isinstance(item_body, str):
+                continue
+            section_parts = [f"Question {index}", parse_html_page_basic(item_body)]
+            interaction_data = entry.get("interaction_data")
+            if entry.get(
+                "interaction_type_slug"
+            ) in _NEW_QUIZ_VISIBLE_CHOICE_TYPES and isinstance(interaction_data, dict):
+                choices = interaction_data.get("choices")
+                if isinstance(choices, list):
+                    for choice in choices:
+                        if not isinstance(choice, dict):
+                            continue
+                        choice_body = choice.get("item_body")
+                        if isinstance(choice_body, str):
+                            choice_text = parse_html_page_basic(choice_body)
+                            if choice_text:
+                                section_parts.append(choice_text)
+            sections.append("\n".join(part for part in section_parts if part))
+        return sections
+
+    def _convert_new_quiz_to_document(
+        self, quiz: CanvasNewQuiz, items: list[CanvasNewQuizItem]
+    ) -> Document:
+        text_parts = [quiz.title]
+        if quiz.instructions:
+            instructions = parse_html_page_basic(quiz.instructions)
+            if instructions:
+                text_parts.append(instructions)
+        text_parts.extend(self._format_new_quiz_items(items))
+        return self._build_document(
+            doc_id=f"canvas-new-quiz-{quiz.course_id}-{quiz.id}",
+            link=f"{self.canvas_base_url}/courses/{quiz.course_id}/assignments/{quiz.id}",
+            text="\n\n".join(text_parts),
+            semantic_identifier=quiz.title or f"Quiz {quiz.id}",
+            doc_updated_at=None,
             course_id=quiz.course_id,
             doc_type="quiz",
             parent_hierarchy_raw_node_id=self._resolve_doc_parent(
@@ -1502,7 +1654,7 @@ class CanvasConnector(
         checkpoint: CanvasConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
-        """Shared implementation for load_from_checkpoint and load_from_checkpoint_with_perm_sync."""
+        """Shared implementation for regular and permission-sync checkpoint loads."""
         if not checkpoint.course_ids:
             self._release_check_time = datetime.now(timezone.utc)
         else:
@@ -1554,6 +1706,7 @@ class CanvasConnector(
             "files",
             "modules",
             "quizzes",
+            "new_quizzes",
             "discussions",
             "syllabus",
         }
@@ -1701,6 +1854,11 @@ class CanvasConnector(
                 "endpoint": f"courses/{course_id}/quizzes",
                 "params": {"per_page": "100"},
             },
+            "new_quizzes": {
+                "endpoint": f"courses/{course_id}/quizzes",
+                "params": {"per_page": "100"},
+                "api_version": "/api/quiz/v1",
+            },
             "discussions": {
                 "endpoint": f"courses/{course_id}/discussion_topics",
                 "params": {"per_page": "100"},
@@ -1715,7 +1873,9 @@ class CanvasConnector(
                 )
             else:
                 response, result_next_url = self.canvas_client.get(
-                    config["endpoint"], params=config["params"]
+                    config["endpoint"],
+                    params=config["params"],
+                    api_version=config.get("api_version", "/api/v1"),
                 )
         except OnyxError as oe:
             # Re-raise security errors from _parse_next_link (host/scheme
@@ -1804,7 +1964,16 @@ class CanvasConnector(
                         continue
                     if not quiz.updated_at or not _in_time_window(quiz.updated_at):
                         continue
-                    doc = self._convert_quiz_to_document(quiz)
+                    quiz_questions = self._list_quiz_questions(course_id, quiz.id)
+                    doc = self._convert_quiz_to_document(quiz, quiz_questions)
+                    yield from _emit_doc(doc)
+
+                elif stage == "new_quizzes":
+                    new_quiz = CanvasNewQuiz.from_api(item, course_id=course_id)
+                    if not self._canvas_object_is_released(new_quiz):
+                        continue
+                    new_quiz_items = self._list_new_quiz_items(course_id, new_quiz.id)
+                    doc = self._convert_new_quiz_to_document(new_quiz, new_quiz_items)
                     yield from _emit_doc(doc)
 
                 elif stage == "discussions":
@@ -1841,6 +2010,11 @@ class CanvasConnector(
                     failure_message=f"Failed to process {stage.removesuffix('s')}: {e}",
                     exception=e,
                 )
+                if stage in {"quizzes", "new_quizzes"}:
+                    # Do not checkpoint an incomplete quiz page. A later connector
+                    # run must retry fetching its question content.
+                    new_checkpoint.has_more = True
+                    return new_checkpoint
 
         # If there are more pages, save the cursor and return
         if result_next_url:
@@ -1854,7 +2028,8 @@ class CanvasConnector(
                 "announcements": "files",
                 "files": "modules",
                 # modules handled specially above; quizzes comes after
-                "quizzes": "discussions",
+                "quizzes": "new_quizzes",
+                "new_quizzes": "discussions",
                 "discussions": "syllabus",
                 # syllabus handled specially above
             }
@@ -2048,6 +2223,12 @@ class CanvasConnector(
                     continue
                 yield from _emit_slim(
                     "quiz", f"canvas-quiz-{course_id}-{quiz.id}", quiz.id
+                )
+            for new_quiz in self._list_new_quizzes(course_id):
+                yield from _emit_slim(
+                    "quiz",
+                    f"canvas-new-quiz-{course_id}-{new_quiz.id}",
+                    new_quiz.id,
                 )
             for disc in self._list_discussions(course_id):
                 if not self._content_is_released_for_module_membership(
