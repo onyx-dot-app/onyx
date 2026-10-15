@@ -1763,6 +1763,9 @@ configMap:
   INDEXING_WORKER_MEMORY_LIMIT_MB: ""
   INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
+  # Index spreadsheets and other tabular files (xlsx, Google Sheets, CSV, TSV)
+  # by title only, with "<content-skipped>" as their content; "" = false
+  SKIP_SPREADSHEET_CONTENT: ""
   # OpenSearch Point-In-Time keep-alive for the reindex/port scan (default 5m)
   PIT_KEEP_ALIVE: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""

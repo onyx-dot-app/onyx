@@ -78,6 +78,7 @@ is already local.
 | `INDEX_BATCH_SIZE` | 16 | Documents per connector-fetch batch, and thus per `docprocessing` task. |
 | `MAX_CHUNKS_PER_DOC_BATCH` | 1000 | Sub-batch size for the embed step inside one docprocessing task; see §4.4. |
 | `MAX_DOCUMENT_CHARS` | set | A document above this char count is skipped with a `ConnectorFailure`, not chunked. |
+| `SKIP_SPREADSHEET_CONTENT` | false | Connector indexing replaces each document's `TabularSection`s (xlsx, Google Sheets, CSV, TSV) with one `<content-skipped>` text section, so the file indexes as its title only. See §4.3. |
 | `PERSISTENT_INDEXING` | see configs | When true, an unhandled docprocessing batch exception is converted into per-doc failures and the attempt can finish (`COMPLETED_WITH_ERRORS`) instead of `FAILED`. Unhandled connector-generator exceptions in docfetching still mark the attempt `FAILED`. See `indexing/persistent_indexing.py` and §4.5. |
 | `ENABLE_CONTEXTUAL_RAG` | see configs | Contextual RAG is on when this global flag or `SearchSettings.enable_contextual_rag` is true. A per-model false does not turn off a true global flag (`indexing_pipeline.py`). |
 | `USE_DOCUMENT_SUMMARY` / `USE_CHUNK_SUMMARY` (`onyx/configs/app_configs.py`) | see configs | Which contextual-RAG LLM calls run; at least one must be true for `enable_contextual_rag`. |
@@ -264,7 +265,12 @@ builds a `Chunker` sized to that generation's multipass/contextual-RAG config, a
 calls `index_doc_batch`, which:
 
 1. `filter_documents` drops documents with no title and no content, or over
-   `MAX_DOCUMENT_CHARS`.
+   `MAX_DOCUMENT_CHARS`. Before it, when `SKIP_SPREADSHEET_CONTENT` is true,
+   `skip_tabular_content` replaces each document's `TabularSection`s with one
+   `<content-skipped>` `TextSection` and keeps its other sections. Only
+   docprocessing and targeted reindex set this; user files and the ingestion API
+   do not. The placeholder is part of the content hash (step 3), so after the
+   option changes, a tabular document is re-indexed the next time it is fetched.
 2. `_apply_document_ingestion_hook` runs the EE `DOCUMENT_INGESTION` hook, which can
    rewrite a document's sections or drop it (`hooks/points/document_ingestion.py`).
 3. `adapter.prepare` -> `index_doc_batch_prepare` -> `get_docs_to_update`: a
