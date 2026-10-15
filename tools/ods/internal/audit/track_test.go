@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -102,5 +103,34 @@ func TestRenderTrackSummary_noFlaggedCVEs(t *testing.T) {
 	got := RenderTrackSummary(History{Snapshots: []Snapshot{{Date: "2026-10-15", Images: map[string]ImageSnapshot{"web": {Total: 1, Resolved: 1}}}}})
 	if !strings.HasSuffix(got, "*🚩 Open 90+ days:* none.") {
 		t.Errorf("got:\n%s", got)
+	}
+}
+
+func TestHistoryFiles_reportBrokenPaths(t *testing.T) {
+	dir := t.TempDir()
+	if h, err := ReadHistory(filepath.Join(dir, "missing.json")); err != nil || len(h.Snapshots) != 0 {
+		t.Fatalf("a missing history is empty, got %+v, %v", h, err)
+	}
+	if _, err := ReadHistory(dir); err == nil {
+		t.Fatal("expected reading a directory to fail")
+	}
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte("{"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadHistory(bad); err == nil || !strings.Contains(err.Error(), "failed to parse CVE history") {
+		t.Fatalf("expected a parse error, got %v", err)
+	}
+	if err := WriteHistory(filepath.Join(dir, "no", "h.json"), History{}); err == nil {
+		t.Fatal("expected writing into a missing directory to fail")
+	}
+}
+
+func TestFirstNonEmpty(t *testing.T) {
+	if got := firstNonEmpty("", "b", "c"); got != "b" {
+		t.Errorf("got %q", got)
+	}
+	if got := firstNonEmpty("", ""); got != "" {
+		t.Errorf("got %q", got)
 	}
 }

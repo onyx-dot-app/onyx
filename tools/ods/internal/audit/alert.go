@@ -110,7 +110,7 @@ type alertPlan struct {
 	Update []Alert
 	// Known holds alerts with an open issue and nothing new to announce.
 	Known []Alert
-	Retry  []Alert
+	Retry []Alert
 	// Close holds issues whose package no longer blocks.
 	Close []trackedIssue
 }

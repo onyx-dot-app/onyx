@@ -134,3 +134,18 @@ func TestImageLabel_namesLockfilesWithoutAnImage(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestAnnounceHelpers(t *testing.T) {
+	if got := truncateRunes("héllo", 2); got != "hé" {
+		t.Errorf("truncateRunes: got %q", got)
+	}
+	if got := issueLink(Alert{Issue: 3}); got != "" {
+		t.Errorf("issueLink without a URL: got %q", got)
+	}
+	if got := ignoreReason(" \n "); got != "&lt;why this is not exploitable in Onyx&gt;" {
+		t.Errorf("ignoreReason of blank: got %q", got)
+	}
+	if got := ignoreReason(strings.Repeat("a", 130)); len(got) != 120 {
+		t.Errorf("ignoreReason should cap at 120 runes, got %d", len(got))
+	}
+}
