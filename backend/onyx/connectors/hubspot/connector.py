@@ -8,6 +8,9 @@ from typing import Any, cast
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    RateLimitTriedTooManyTimesError,
+)
 from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InsufficientPermissionsError,
@@ -40,13 +43,16 @@ from onyx.connectors.interfaces import (
     GenerateSlimDocumentOutput,
     LoadConnector,
     PollConnector,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
+    ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
     HierarchyNode,
     ImageSection,
     SlimDocument,
@@ -160,6 +166,11 @@ ASSOCIATED_TYPES: dict[HubSpotObjectType, list[HubSpotObjectType]] = {
 HS_OBJECT_ID_PROPERTY = "hs_object_id"
 _SLIM_BATCH_SIZE = 1000
 _SLIM_DOC_SYNC_LABEL = "hubspot_slim_doc_sync"
+_DOCUMENT_ID_PATTERN = re.compile(r"^hubspot_([a-z]+)_(\d+)$")
+_OBJECT_TYPE_BY_NOUN: dict[str, HubSpotObjectType] = {
+    spec.document_noun: object_type
+    for object_type, spec in HUBSPOT_OBJECT_SPECS.items()
+}
 
 _Properties = dict[str, str | None]
 
@@ -168,6 +179,40 @@ logger = setup_logger()
 
 def hubspot_document_id(object_type: HubSpotObjectType, object_id: str) -> str:
     return f"hubspot_{HUBSPOT_OBJECT_SPECS[object_type].document_noun}_{object_id}"
+
+
+def parse_hubspot_document_id(
+    document_id: str,
+) -> tuple[HubSpotObjectType, str] | None:
+    """The object type and record id behind a document id, or None when the
+    id is not one hubspot_document_id writes."""
+    match: re.Match[str] | None = _DOCUMENT_ID_PATTERN.match(document_id)
+    if match is None:
+        return None
+    object_type: HubSpotObjectType | None = _OBJECT_TYPE_BY_NOUN.get(match.group(1))
+    if object_type is None:
+        return None
+    return object_type, match.group(2)
+
+
+def _fails_the_whole_run(error: Exception) -> bool:
+    """A missing or rejected token and an exhausted rate limit fail every
+    target alike, so they end the run instead of one failure per target."""
+    if isinstance(
+        error, (ConnectorMissingCredentialError, RateLimitTriedTooManyTimesError)
+    ):
+        return True
+    return isinstance(error, HubSpotApiError) and error.status == 401
+
+
+def _target_failure(
+    document_id: str, message: str, error: Exception | None = None
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=DocumentFailure(document_id=document_id),
+        failure_message=message,
+        exception=error,
+    )
 
 
 def _utc(timestamp: SecondsSinceUnixEpoch | None) -> datetime | None:
@@ -376,6 +421,7 @@ class HubSpotConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
     CredentialsConnector,
+    Resolver,
 ):
     # The slim listings filter on the same modified date as poll_source.
     slim_listing_honors_indexing_start = True
@@ -720,40 +766,43 @@ class HubSpotConnector(
             for note in self._get_associated_notes(object_type, record.id)
         )
 
+    def _build_document(
+        self, object_type: HubSpotObjectType, record: HubSpotRecord
+    ) -> Document:
+        spec: HubSpotObjectSpec = HUBSPOT_OBJECT_SPECS[object_type]
+        parts: HubSpotDocumentParts = _DOCUMENT_PARTS[object_type](record)
+        sections: list[TextSection] = [
+            TextSection(link=self._record_url(object_type, record.id), text=parts.text)
+        ]
+        metadata: dict[str, str | list[str]] = dict(parts.metadata)
+        self._add_associations(object_type, record, sections, metadata)
+        return Document(
+            id=hubspot_document_id(object_type, record.id),
+            sections=cast(list[TextSection | ImageSection], sections),
+            source=DocumentSource.HUBSPOT,
+            semantic_identifier=parts.title,
+            doc_created_at=record.created_at,
+            doc_updated_at=record.updated_at,
+            metadata=metadata,
+            doc_metadata={
+                "hierarchy": {
+                    "source_path": [object_type.value.capitalize()],
+                    "object_type": spec.document_noun,
+                    "object_id": record.id,
+                }
+            },
+        )
+
     def _documents(
         self,
         object_type: HubSpotObjectType,
         start: datetime | None,
         end: datetime | None,
     ) -> Generator[Document | HierarchyNode, None, None]:
-        spec: HubSpotObjectSpec = HUBSPOT_OBJECT_SPECS[object_type]
         for record in self._iter_records(
             object_type, INDEXED_PROPERTIES[object_type], start, end
         ):
-            parts: HubSpotDocumentParts = _DOCUMENT_PARTS[object_type](record)
-            sections: list[TextSection] = [
-                TextSection(
-                    link=self._record_url(object_type, record.id), text=parts.text
-                )
-            ]
-            metadata: dict[str, str | list[str]] = dict(parts.metadata)
-            self._add_associations(object_type, record, sections, metadata)
-            yield Document(
-                id=hubspot_document_id(object_type, record.id),
-                sections=cast(list[TextSection | ImageSection], sections),
-                source=DocumentSource.HUBSPOT,
-                semantic_identifier=parts.title,
-                doc_created_at=record.created_at,
-                doc_updated_at=record.updated_at,
-                metadata=metadata,
-                doc_metadata={
-                    "hierarchy": {
-                        "source_path": [object_type.value.capitalize()],
-                        "object_type": spec.document_noun,
-                        "object_id": record.id,
-                    }
-                },
-            )
+            yield self._build_document(object_type, record)
 
     def _process(
         self,
@@ -860,6 +909,127 @@ class HubSpotConnector(
             self._iter_slim_docs_with_access(_utc(start), _utc(end), callback),
             _SLIM_BATCH_SIZE,
         )
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Re-reads each failed record by id with the batch-read API. The crawl
+        yields no entity failures, so entity targets are skipped."""
+        # Object type to record id to the input document id.
+        targets: dict[HubSpotObjectType, dict[str, str]] = {}
+        for error in errors:
+            if error.failed_document is None:
+                continue
+            document_id: str = error.failed_document.document_id
+            parsed: tuple[HubSpotObjectType, str] | None = parse_hubspot_document_id(
+                document_id
+            )
+            if parsed is None:
+                yield _target_failure(
+                    document_id,
+                    f"'{document_id}' is not a HubSpot document id this connector "
+                    "writes, so there is no record to reindex",
+                )
+                continue
+            object_type, record_id = parsed
+            if object_type.value not in self.object_types:
+                yield _target_failure(
+                    document_id,
+                    f"HubSpot {object_type.value} are not in this connector's "
+                    f"object types, so {document_id} is out of scope",
+                )
+                continue
+            targets.setdefault(object_type, {})[record_id] = document_id
+
+        if not targets:
+            return
+
+        reader: HubSpotPermissionReader | None = (
+            self._permission_reader() if include_permissions else None
+        )
+        for object_type, document_ids in targets.items():
+            for chunk in batch_generator(list(document_ids), HUBSPOT_PAGE_SIZE):
+                yield from self._reindex_chunk(
+                    object_type,
+                    {record_id: document_ids[record_id] for record_id in chunk},
+                    reader,
+                )
+
+    def _reindex_chunk(
+        self,
+        object_type: HubSpotObjectType,
+        document_ids: dict[str, str],
+        reader: HubSpotPermissionReader | None,
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """One batch read for up to a page of records, then their viewers in
+        batches when a reader is given."""
+        try:
+            records: list[HubSpotRecord] = self.ops.read_records(
+                variant=object_type.value,
+                ids=list(document_ids),
+                properties=INDEXED_PROPERTIES[object_type],
+            )
+        except Exception as e:
+            if _fails_the_whole_run(e):
+                raise
+            logger.exception("HubSpot batch read of %s failed", object_type.value)
+            for document_id in document_ids.values():
+                yield _target_failure(
+                    document_id, f"Failed to read HubSpot {document_id}: {e}", e
+                )
+            return
+
+        # The batch read leaves out ids that are deleted, archived or unreadable.
+        found: dict[str, HubSpotRecord] = {
+            record.id: record for record in records if record.id in document_ids
+        }
+        viewers: dict[str, set[int]] = {}
+        viewer_errors: dict[str, Exception] = {}
+        if reader is not None:
+            for chunk in batch_generator(list(found), PERMITTED_USERS_BATCH_SIZE):
+                try:
+                    viewers.update(reader.viewers(object_type, chunk))
+                except Exception as e:
+                    if _fails_the_whole_run(e):
+                        raise
+                    logger.exception(
+                        "HubSpot viewer read of %s failed", object_type.value
+                    )
+                    viewer_errors.update(dict.fromkeys(chunk, e))
+
+        for record_id, document_id in document_ids.items():
+            record: HubSpotRecord | None = found.get(record_id)
+            if record is None:
+                yield _target_failure(
+                    document_id,
+                    f"HubSpot returned no {object_type.value} record for "
+                    f"{document_id}. It may be deleted, archived or unreadable.",
+                )
+                continue
+            viewer_error: Exception | None = viewer_errors.get(record_id)
+            if viewer_error is not None:
+                yield _target_failure(
+                    document_id,
+                    f"Failed to read the viewers of HubSpot {document_id}: "
+                    f"{viewer_error}",
+                    viewer_error,
+                )
+                continue
+            try:
+                document: Document = self._build_document(object_type, record)
+                if reader is not None:
+                    document.external_access = reader.access_for(viewers[record_id])
+            except Exception as e:
+                if _fails_the_whole_run(e):
+                    raise
+                logger.exception("Failed to reindex HubSpot %s", document_id)
+                yield _target_failure(
+                    document_id, f"Failed to reindex HubSpot {document_id}: {e}", e
+                )
+                continue
+            yield document
 
     @property
     def settings(self) -> HubSpotConnectorConfig:
