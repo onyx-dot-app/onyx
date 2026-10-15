@@ -11,7 +11,6 @@ from onyx.db.oauth_config import get_user_oauth_token, upsert_user_oauth_token
 from onyx.oauth.protocol import (
     OAuthFlowParams,
     build_authorization_code_token_body,
-    build_oauth_authorization_url,
 )
 from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import get_security_settings

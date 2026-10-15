@@ -393,7 +393,7 @@ def handle_oauth_callback(
             _OAUTH_CALLBACK_URL,
             code_verifier=payload.code_verifier,
         )
-    except (requests.RequestException, ValueError) as error:
+    except (requests.RequestException, SSRFException, ValueError) as error:
         logger.warning("OAuth token exchange failed (%s)", type(error).__name__)
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,

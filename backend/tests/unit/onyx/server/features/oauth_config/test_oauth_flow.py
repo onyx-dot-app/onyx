@@ -25,6 +25,7 @@ from onyx.server.features.oauth_config.models import (
     OAuthConfigUpdate,
     OAuthInitiateRequest,
 )
+from onyx.utils.url import SSRFException
 from tests.unit.fakes import FakeCache
 
 
@@ -49,7 +50,7 @@ def _user() -> User:
 
 
 def _successful_token_response() -> requests.Response:
-    response = MagicMock(spec=requests.Response)
+    response = MagicMock(spec=requests.Response, status_code=200)
     response.json.return_value = {
         "access_token": "access-token",
         "refresh_token": "refresh-token",
@@ -357,8 +358,10 @@ def test_persistence_failure_is_not_reported_as_provider_failure(
         )
 
 
+@pytest.mark.parametrize("invalid_endpoint", [False, True])
 def test_provider_failure_returns_http_error_and_consumes_attempt(
     monkeypatch: pytest.MonkeyPatch,
+    invalid_endpoint: bool,
 ) -> None:
     oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
     monkeypatch.setattr(
@@ -369,7 +372,14 @@ def test_provider_failure_returns_http_error_and_consumes_attempt(
     app.include_router(oauth_config_api.router)
     app.dependency_overrides[oauth_config_api.get_session] = lambda: db_session
     app.dependency_overrides[current_user] = lambda: user
-    token_post.side_effect = requests.HTTPError("provider body contains secret")
+    if invalid_endpoint:
+        monkeypatch.setattr(
+            oauth_token_manager,
+            "validate_oauth_endpoint_url",
+            MagicMock(side_effect=SSRFException("private endpoint secret")),
+        )
+    else:
+        token_post.side_effect = requests.HTTPError("provider body contains secret")
     with TestClient(app) as client:
         started = client.post(
             "/oauth-config/initiate", json={"oauth_config_id": oauth_config.id}
@@ -382,4 +392,4 @@ def test_provider_failure_returns_http_error_and_consumes_attempt(
         assert "secret" not in failed.text
         replay = client.post("/oauth-config/callback", params=params)
         assert replay.status_code == 400
-    assert token_post.call_count == 1
+    assert token_post.call_count == (0 if invalid_endpoint else 1)
