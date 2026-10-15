@@ -233,6 +233,7 @@ test.describe("Connector runs", () => {
     // All time lists every run and shows the chart's widest window.
     await expect(detail.timeWindowPicker).toHaveText("All time");
     await expect.poll(() => chartWindows.at(-1)).toBe("7d");
+    await expect.poll(() => runsQueries.length).toBeGreaterThan(0);
     expect(runsQueries.every((query) => !query.has("since"))).toBe(true);
 
     await detail.pickTimeWindow("Last 24 hours");
