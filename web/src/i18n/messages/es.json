@@ -1046,6 +1046,9 @@
         },
         "federatedSlack": {
           "description": "Buscar en Slack al consultar"
+        },
+        "jiraServiceManagement": {
+          "description": "Mesa de servicio de TI y solicitudes de clientes"
         }
       }
     },
@@ -4258,6 +4261,36 @@
             "mailboxes": {
               "label": "Buzones",
               "description": "Especifica los buzones a indexar (p. ej., INBOX, Sent, Drafts). Déjalo vacío para indexar todos los buzones."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar el conector de Jira Service Management",
+          "subtext": "Configure qué mesas de servicio, colas o solicitudes de Jira Service Management desea indexar.",
+          "fields": {
+            "service_desk_ids": {
+              "label": "ID de mesa de servicio",
+              "description": "Lista opcional de ID de mesa de servicio (p. ej., '1', '2') para indexar. Déjelo vacío para indexar todas las mesas de servicio accesibles."
+            },
+            "queue_ids": {
+              "label": "ID de cola",
+              "description": "Lista opcional de ID de colas de mesa de servicio para indexar tickets de colas específicas."
+            },
+            "request_types": {
+              "label": "Tipos de solicitud",
+              "description": "Lista opcional de nombres de tipos de solicitud de clientes para filtrar los tickets indexados."
+            },
+            "include_internal_comments": {
+              "label": "Incluir comentarios internos",
+              "description": "Indexar las notas internas de los agentes además de las respuestas públicas de los clientes."
+            },
+            "include_sla": {
+              "label": "Incluir métricas de SLA",
+              "description": "Obtener e indexar métricas de temporizador de SLA y estados de incumplimiento en cada solicitud."
+            },
+            "include_changelog": {
+              "label": "Incluir historial de cambios",
+              "description": "Obtener e indexar transiciones de estado e historial de cambios de campos para cada ticket."
             }
           }
         }

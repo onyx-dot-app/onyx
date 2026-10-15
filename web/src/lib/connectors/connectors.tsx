@@ -1008,6 +1008,99 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira_service_management.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jira.fields.jira_base_url.label",
+        name: "jira_service_management_base_url",
+        optional: false,
+        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
+      {
+        type: "text",
+        label: "connectors.jira.fields.project_key.label",
+        name: "project_key",
+        description: "connectors.jira.fields.project_key.description",
+        optional: true,
+      },
+      {
+        type: "list",
+        label: "connectors.jira_service_management.fields.service_desk_ids.label",
+        name: "service_desk_ids",
+        description:
+          "connectors.jira_service_management.fields.service_desk_ids.description",
+        optional: true,
+      },
+      {
+        type: "list",
+        label: "connectors.jira_service_management.fields.queue_ids.label",
+        name: "queue_ids",
+        description:
+          "connectors.jira_service_management.fields.queue_ids.description",
+        optional: true,
+      },
+      {
+        type: "list",
+        label: "connectors.jira_service_management.fields.request_types.label",
+        name: "request_types",
+        description:
+          "connectors.jira_service_management.fields.request_types.description",
+        optional: true,
+      },
+      {
+        type: "text",
+        label: "connectors.jira.fields.jql_query.label",
+        name: "jql_query",
+        description: "connectors.jira.fields.jql_query.description",
+        optional: true,
+      },
+      {
+        type: "list",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
+        name: "comment_email_blacklist",
+        description:
+          "connectors.jira.fields.comment_email_blacklist.description",
+        optional: true,
+      },
+      buildIncludeAttachmentsOption(false),
+    ],
+    advanced_values: [
+      {
+        type: "checkbox",
+        label:
+          "connectors.jira_service_management.fields.include_internal_comments.label",
+        name: "include_internal_comments",
+        description:
+          "connectors.jira_service_management.fields.include_internal_comments.description",
+        optional: true,
+        default: true,
+      },
+      {
+        type: "checkbox",
+        label: "connectors.jira_service_management.fields.include_sla.label",
+        name: "include_sla",
+        description:
+          "connectors.jira_service_management.fields.include_sla.description",
+        optional: true,
+        default: true,
+      },
+      {
+        type: "checkbox",
+        label:
+          "connectors.jira_service_management.fields.include_changelog.label",
+        name: "include_changelog",
+        description:
+          "connectors.jira_service_management.fields.include_changelog.description",
+        optional: true,
+        default: true,
+      },
+    ],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [

@@ -1046,6 +1046,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "jiraServiceManagement": {
+          "description": "ITサービスデスク＆カスタマーリクエスト"
         }
       }
     },
@@ -4258,6 +4261,36 @@
             "mailboxes": {
               "label": "メールボックス",
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクタの設定",
+          "subtext": "インデックス化する Jira Service Management のサービスデスク、キュー、またはリクエストを設定します。",
+          "fields": {
+            "service_desk_ids": {
+              "label": "サービスデスク ID",
+              "description": "インデックス化するサービスデスク ID（例: '1', '2'）のオプションリスト。空のままにするとアクセス可能なすべてのサービスデスクをインデックス化します。"
+            },
+            "queue_ids": {
+              "label": "キュー ID",
+              "description": "特定のキューからチケットをインデックス化するためのサービスデスクキュー ID のオプションリスト。"
+            },
+            "request_types": {
+              "label": "リクエストタイプ",
+              "description": "インデックス化するチケットをフィルタリングするカスタマーリクエストタイプ名のオプションリスト。"
+            },
+            "include_internal_comments": {
+              "label": "内部コメントを含める",
+              "description": "公開されている顧客への返信に加えて、エージェントの内部メモもインデックス化します。"
+            },
+            "include_sla": {
+              "label": "SLA メトリクスを含める",
+              "description": "各リクエストの SLA タイマーメトリクスと違反ステータスを取得してインデックス化します。"
+            },
+            "include_changelog": {
+              "label": "変更履歴を含める",
+              "description": "各チケットのステータス遷移とフィールド変更履歴を取得してインデックス化します。"
             }
           }
         }

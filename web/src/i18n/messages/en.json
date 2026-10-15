@@ -1046,6 +1046,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "jiraServiceManagement": {
+          "description": "IT service desk & customer requests"
         }
       }
     },
@@ -4258,6 +4261,36 @@
             "mailboxes": {
               "label": "Mailboxes",
               "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Configure which Jira Service Management service desks, queues, or requests to index.",
+          "fields": {
+            "service_desk_ids": {
+              "label": "Service Desk IDs",
+              "description": "Optional list of Service Desk IDs (e.g., '1', '2') to index. Leave empty to index all accessible service desks."
+            },
+            "queue_ids": {
+              "label": "Queue IDs",
+              "description": "Optional list of Service Desk Queue IDs to index tickets from specific queues."
+            },
+            "request_types": {
+              "label": "Request Types",
+              "description": "Optional list of Customer Request Type names (e.g., 'Get IT help') to filter indexed tickets."
+            },
+            "include_internal_comments": {
+              "label": "Include Internal Comments",
+              "description": "Index internal agent notes in addition to public customer replies."
+            },
+            "include_sla": {
+              "label": "Include SLA Metrics",
+              "description": "Fetch and index SLA timer metrics and breach statuses on each request."
+            },
+            "include_changelog": {
+              "label": "Include Changelog History",
+              "description": "Fetch and index status transitions and field change history for each ticket."
             }
           }
         }

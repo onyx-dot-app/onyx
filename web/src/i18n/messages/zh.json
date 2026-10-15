@@ -1046,6 +1046,9 @@
         },
         "federatedSlack": {
           "description": "查询时搜索 Slack"
+        },
+        "jiraServiceManagement": {
+          "description": "IT 服务台与客户请求"
         }
       }
     },
@@ -4258,6 +4261,36 @@
             "mailboxes": {
               "label": "邮箱",
               "description": "指定要索引的邮箱（例如 INBOX、Sent、Drafts）。留空则索引所有邮箱。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "配置要索引的 Jira Service Management 服务台、队列或请求。",
+          "fields": {
+            "service_desk_ids": {
+              "label": "服务台 ID",
+              "description": "要索引的可选服务台 ID 列表（例如 '1'、'2'）。留空则索引所有可访问的服务台。"
+            },
+            "queue_ids": {
+              "label": "队列 ID",
+              "description": "用于从特定队列索引工单的可选服务台队列 ID 列表。"
+            },
+            "request_types": {
+              "label": "请求类型",
+              "description": "用于过滤已索引工单的可选客户请求类型名称列表（例如 '获取 IT 帮助'）。"
+            },
+            "include_internal_comments": {
+              "label": "包含内部评论",
+              "description": "除公开客户回复外，还索引内部坐席备注。"
+            },
+            "include_sla": {
+              "label": "包含 SLA 指标",
+              "description": "获取并索引每个请求上的 SLA 计时器指标和违约状态。"
+            },
+            "include_changelog": {
+              "label": "包含变更历史记录",
+              "description": "获取并索引每个工单的状态流转和字段变更历史记录。"
             }
           }
         }
