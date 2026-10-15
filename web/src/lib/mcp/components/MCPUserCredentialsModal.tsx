@@ -5,8 +5,12 @@ import { useTranslations } from "next-intl";
 import { Button, InputPasswordTypeIn, Modal, Text } from "@opal/components";
 import { SvgArrowLeft, SvgKey } from "@opal/icons";
 import { FormField } from "@/refresh-components/form/FormField";
+import { getMcpConnectionStatus } from "@/lib/mcp/auth";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
-import type { MCPAuthenticationServer } from "@/lib/mcp/types";
+import {
+  MCPConnectionStatus,
+  type MCPAuthenticationServer,
+} from "@/lib/mcp/types";
 
 export interface MCPUserCredentialsModalProps {
   server: MCPAuthenticationServer;
@@ -88,15 +92,18 @@ export function MCPUserCredentialsContent({
     else requestExit("close");
   }
 
-  const isAuthenticated = server.user_can_authenticate === true;
-  const title = isAuthenticated
+  const status = getMcpConnectionStatus(server);
+  const isUpdatingCredentials =
+    status === MCPConnectionStatus.CONNECTED ||
+    status === MCPConnectionStatus.REAUTH_REQUIRED;
+  const title = isUpdatingCredentials
     ? isTemplate
       ? t("header.manageCredentials.title")
       : t("header.manageApiKey.title")
     : isTemplate
       ? t("header.enterCredentials.title")
       : t("header.enterApiKey.title");
-  const description = isAuthenticated
+  const description = isUpdatingCredentials
     ? isTemplate
       ? t("intro.updateCredentials.text", { server: server.name })
       : t("intro.updateApiKey.text", { server: server.name })
@@ -105,7 +112,7 @@ export function MCPUserCredentialsContent({
       : t("intro.enterApiKey.text", { server: server.name });
   const submitLabel = isSubmitting
     ? t("submitButton.saving.label")
-    : isAuthenticated
+    : isUpdatingCredentials
       ? isTemplate
         ? t("submitButton.updateCredentials.label")
         : t("submitButton.updateApiKey.label")

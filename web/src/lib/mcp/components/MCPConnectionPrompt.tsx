@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Modal, Text } from "@opal/components";
 import { SvgCheck, SvgKey, SvgServer } from "@opal/icons";
@@ -14,13 +14,16 @@ import { useMcpAuthentication } from "@/lib/mcp/hooks";
 import {
   canAuthenticateMcpServer,
   getMcpAuthenticationFlow,
+  getMcpConnectionStatus,
 } from "@/lib/mcp/auth";
+import { MCPConnectionStatus } from "@/lib/mcp/types";
 import { MCPUserCredentialsContent } from "@/lib/mcp/components/MCPUserCredentialsModal";
 
 interface MCPConnectionPromptProps {
   agent: Pick<MinimalAgent, "id" | "tools">;
   toolConfiguration: Pick<ToolConfigurationHandle, "disabledToolIds" | "ready">;
   disabled?: boolean;
+  isStreaming?: boolean;
   onConnectionsClosed?: () => void;
 }
 
@@ -30,19 +33,28 @@ function WarningKey({ className, ...props }: IconProps) {
   );
 }
 
+function ConnectionKey({ className, ...props }: IconProps) {
+  return (
+    <SvgKey {...props} className={cn(className, "stroke-status-info-05")} />
+  );
+}
+
 export default function MCPConnectionPrompt({
   agent,
   toolConfiguration,
   disabled = false,
+  isStreaming = false,
   onConnectionsClosed,
 }: MCPConnectionPromptProps) {
   const t = useTranslations("chat.mcpConnections");
   const [open, setOpen] = useState(false);
   const [openedServerIds, setOpenedServerIds] = useState<number[]>([]);
   const navigatingToCredentials = useRef(false);
+  const wasStreaming = useRef(isStreaming);
   const triggerRef = useRef<HTMLElement>(null);
   const {
     servers,
+    refresh,
     authenticate,
     loadingServerId,
     authenticationError,
@@ -51,9 +63,16 @@ export default function MCPConnectionPrompt({
     submitCredentials,
   } = useMcpAuthentication(agent.id);
 
+  useEffect(() => {
+    if (wasStreaming.current && !isStreaming) void refresh();
+    wasStreaming.current = isStreaming;
+  }, [isStreaming, refresh]);
+
   const pendingServers = servers.filter(
     (server) =>
-      server.user_can_authenticate === false &&
+      (getMcpConnectionStatus(server) === MCPConnectionStatus.NOT_CONNECTED ||
+        getMcpConnectionStatus(server) ===
+          MCPConnectionStatus.REAUTH_REQUIRED) &&
       canAuthenticateMcpServer(server) &&
       agent.tools.some(
         (tool) =>
@@ -61,6 +80,10 @@ export default function MCPConnectionPrompt({
           tool.enabled &&
           !toolConfiguration.disabledToolIds.includes(tool.id)
       )
+  );
+  const needsReauthentication = pendingServers.some(
+    (server) =>
+      getMcpConnectionStatus(server) === MCPConnectionStatus.REAUTH_REQUIRED
   );
   const visibleServers = servers.filter((server) =>
     openedServerIds.includes(server.id)
@@ -77,13 +100,20 @@ export default function MCPConnectionPrompt({
         <div className="ps-1">
           <div
             className={cn(
-              "rounded-08 bg-status-warning-00 transition-colors",
-              disabled ? "opacity-50" : "hover:bg-status-warning-01"
+              "rounded-08 transition-colors",
+              needsReauthentication
+                ? "bg-status-warning-00"
+                : "bg-status-info-00",
+              disabled
+                ? "opacity-50"
+                : needsReauthentication
+                  ? "hover:bg-status-warning-01"
+                  : "hover:bg-status-info-01"
             )}
           >
             <Button
               ref={triggerRef}
-              icon={WarningKey}
+              icon={needsReauthentication ? WarningKey : ConnectionKey}
               variant="default"
               prominence="tertiary"
               size="md"
@@ -157,7 +187,10 @@ export default function MCPConnectionPrompt({
             <Modal.Body gap={3}>
               <div className="flex w-full flex-col gap-2">
                 {visibleServers.map((server) => {
-                  const connected = server.user_can_authenticate === true;
+                  const status = getMcpConnectionStatus(server);
+                  const connected = status === MCPConnectionStatus.CONNECTED;
+                  const reconnect =
+                    status === MCPConnectionStatus.REAUTH_REQUIRED;
                   const connecting = loadingServerId === server.id;
                   return (
                     <div
@@ -182,9 +215,14 @@ export default function MCPConnectionPrompt({
                                 size="md"
                                 icon={connecting ? IconLoader : SvgKey}
                                 disabled={loadingServerId !== null}
-                                aria-label={t("connect.accessibleLabel", {
-                                  server: server.name,
-                                })}
+                                aria-label={t(
+                                  reconnect
+                                    ? "reconnect.accessibleLabel"
+                                    : "connect.accessibleLabel",
+                                  {
+                                    server: server.name,
+                                  }
+                                )}
                                 onClick={() => {
                                   navigatingToCredentials.current =
                                     getMcpAuthenticationFlow(server) ===
@@ -195,7 +233,9 @@ export default function MCPConnectionPrompt({
                                 {t(
                                   connecting
                                     ? "connecting.label"
-                                    : "connect.label"
+                                    : reconnect
+                                      ? "reconnect.label"
+                                      : "connect.label"
                                 )}
                               </Button>
                             </div>

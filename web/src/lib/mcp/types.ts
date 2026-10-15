@@ -28,6 +28,7 @@ export interface MCPServer {
   // Whether this user's credentials resolve for the server right now (or the
   // server needs no per-user auth). Absent when there is no user context.
   user_can_authenticate?: boolean;
+  connection_status?: MCPConnectionStatus | null;
   // Whether Craft will actually emit this server into the user's sessions, i.e.
   // whether the sandbox proxy can authenticate them against it. Unlike the flag
   // above it asks whether stored credentials yield auth headers, not whether a
@@ -96,6 +97,12 @@ export interface MCPTool {
   permissions?: PermissionsOf<"Action">;
 }
 
+export enum MCPConnectionStatus {
+  NOT_CONNECTED = "not_connected",
+  CONNECTED = "connected",
+  REAUTH_REQUIRED = "reauth_required",
+}
+
 export enum MCPAuthenticationType {
   NONE = "NONE",
   API_TOKEN = "API_TOKEN",
@@ -139,6 +146,7 @@ export type MCPAuthenticationServer = Pick<
   | "auth_performer"
   | "auth_template"
   | "user_can_authenticate"
+  | "connection_status"
   | "user_credentials"
   | "transport"
 >;

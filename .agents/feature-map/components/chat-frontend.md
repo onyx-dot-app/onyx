@@ -324,7 +324,8 @@ Craft uses the same parser with bounded preview limits; chat keeps its complete-
 ### 4.9 Pickers
 
 - **Tool connections**: `AppInputBar` shows `MCPConnectionPrompt` after Deep Research
-  when an enabled tool requires a user connection. Its modal connects MCP servers
+  when an enabled tool requires a user connection. The pill is blue for first-time
+  setup and orange if any pending connection requires reauthentication. Its modal connects MCP servers
   for the active agent, including the default Onyx agent. It does not block send
   or open automatically. Switching agents resets the modal. See
   [[mcp-and-custom-tools]] for credential scope and connection handling.

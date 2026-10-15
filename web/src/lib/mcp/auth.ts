@@ -1,4 +1,5 @@
 import {
+  MCPConnectionStatus,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   type MCPAuthenticationServer,
@@ -29,4 +30,19 @@ export function canAuthenticateMcpServer(
   server: MCPAuthenticationServer
 ): boolean {
   return getMcpAuthenticationFlow(server) !== null;
+}
+
+/** Older servers expose only the boolean; do not infer a failed connection. */
+export function getMcpConnectionStatus(
+  server: Pick<
+    MCPAuthenticationServer,
+    "connection_status" | "user_can_authenticate"
+  >
+): MCPConnectionStatus | undefined {
+  if (server.connection_status != null) return server.connection_status;
+  if (server.user_can_authenticate === true)
+    return MCPConnectionStatus.CONNECTED;
+  if (server.user_can_authenticate === false)
+    return MCPConnectionStatus.NOT_CONNECTED;
+  return undefined;
 }

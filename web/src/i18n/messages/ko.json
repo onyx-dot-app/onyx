@@ -11393,6 +11393,10 @@
         "label": "연결",
         "accessibleLabel": "{server} 연결"
       },
+      "reconnect": {
+        "label": "다시 연결",
+        "accessibleLabel": "{server} 다시 연결"
+      },
       "connecting": {
         "label": "연결 중…"
       },

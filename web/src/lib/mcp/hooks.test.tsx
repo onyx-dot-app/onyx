@@ -3,6 +3,7 @@ import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
 import { useMcpAuthentication } from "@/lib/mcp/hooks";
 import {
+  MCPConnectionStatus,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   type MCPServer,
@@ -49,7 +50,16 @@ beforeEach(() => {
 });
 
 describe("useMcpAuthentication", () => {
-  it("loads default agent 0 and shares refreshed credential state across chat surfaces", async () => {
+  it("loads default agent 0 and shares replacement credential status across chat surfaces", async () => {
+    jest.mocked(errorHandlingFetcher).mockResolvedValue({
+      mcp_servers: [
+        {
+          ...server,
+          user_can_authenticate: false,
+          connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
+        },
+      ],
+    });
     const { result } = renderHook(
       () => ({
         first: useMcpAuthentication(0),
@@ -58,6 +68,9 @@ describe("useMcpAuthentication", () => {
       { wrapper: makeWrapper() }
     );
     await waitFor(() => expect(result.current.first.servers).toHaveLength(1));
+    expect(result.current.first.servers[0]?.connection_status).toBe(
+      MCPConnectionStatus.REAUTH_REQUIRED
+    );
     expect(errorHandlingFetcher).toHaveBeenCalledWith(
       "/api/mcp/servers/persona/0"
     );
@@ -65,10 +78,17 @@ describe("useMcpAuthentication", () => {
       result.current.first.authenticate({
         ...server,
         auth_type: MCPAuthenticationType.API_TOKEN,
+        connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
       })
     );
     jest.mocked(errorHandlingFetcher).mockResolvedValue({
-      mcp_servers: [{ ...server, user_can_authenticate: true }],
+      mcp_servers: [
+        {
+          ...server,
+          user_can_authenticate: true,
+          connection_status: MCPConnectionStatus.CONNECTED,
+        },
+      ],
     });
     await act(async () => {
       await result.current.first.submitCredentials({
@@ -82,6 +102,9 @@ describe("useMcpAuthentication", () => {
     );
     await waitFor(() =>
       expect(result.current.second.servers[0]?.user_can_authenticate).toBe(true)
+    );
+    expect(result.current.second.servers[0]?.connection_status).toBe(
+      MCPConnectionStatus.CONNECTED
     );
     expect(result.current.first.credentialRequest).toBeNull();
   });
@@ -136,6 +159,52 @@ describe("useMcpAuthentication", () => {
     await act(() => result.current.authenticate(server));
     expect(startMCPUserOAuth).toHaveBeenCalledTimes(1);
     window.history.replaceState(null, "", "/");
+  });
+  it("forces a fresh OAuth grant when the server requires reauthentication", async () => {
+    jest.mocked(startMCPUserOAuth).mockResolvedValue({
+      status: "authorization_required",
+      server_id: server.id,
+      authorization_url: "#reauth",
+      redirect_url: "/app",
+    });
+    jest.mocked(getMCPUserOAuthNavigationUrl).mockReturnValue("#reauth");
+    const { result } = renderHook(() => useMcpAuthentication(0), {
+      wrapper: makeWrapper(),
+    });
+    await act(() =>
+      result.current.authenticate({
+        ...server,
+        connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
+      })
+    );
+    expect(startMCPUserOAuth).toHaveBeenCalledWith(server.id, "/", {
+      forceReauthentication: true,
+    });
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("keeps forced reauthentication through the required-header form", async () => {
+    jest.mocked(startMCPUserOAuth).mockRejectedValue(new Error("Retry"));
+    const { result } = renderHook(() => useMcpAuthentication(0), {
+      wrapper: makeWrapper(),
+    });
+    await act(() =>
+      result.current.authenticate({
+        ...server,
+        connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
+        auth_template: { headers: {}, required_fields: ["workspace"] },
+      })
+    );
+    expect(result.current.credentialRequest?.forceReauthentication).toBe(true);
+    await act(async () => {
+      await expect(
+        result.current.submitCredentials({ workspace: "new" })
+      ).rejects.toThrow("Retry");
+    });
+    expect(startMCPUserOAuth).toHaveBeenCalledWith(server.id, "/", {
+      forceReauthentication: true,
+    });
+    expect(result.current.credentialRequest).not.toBeNull();
   });
   it("surfaces OAuth failure and clears the pending state", async () => {
     const failure = new Error("Authorization unavailable");

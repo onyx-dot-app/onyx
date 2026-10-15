@@ -677,6 +677,7 @@ const AppInputBar = React.memo(
             {!isSearchMode && !controlsLoading && activeAgent && (
               <MCPConnectionPrompt
                 key={`mcp-auth-${activeAgent.id}`}
+                isStreaming={chatState === "streaming"}
                 agent={activeAgent}
                 toolConfiguration={toolConfiguration}
                 disabled={disabled}

@@ -2,6 +2,7 @@ import { render, screen, setupUser } from "@tests/setup/test-utils";
 import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
 import { useMcpAuthentication } from "@/lib/mcp/hooks";
 import {
+  MCPConnectionStatus,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPServerStatus,
@@ -80,6 +81,199 @@ describe("MCPConnectionPrompt", () => {
     await user.click(screen.getByRole("button", { name: "Connect Calendar" }));
     expect(authenticate).toHaveBeenCalledWith(server);
   });
+  it("refreshes connection status after a tool-using response completes", () => {
+    const refresh = mockedUseAuthentication(0).refresh;
+    const view = render(
+      <MCPConnectionPrompt
+        agent={agent}
+        toolConfiguration={toolConfiguration}
+        isStreaming
+      />
+    );
+    expect(refresh).not.toHaveBeenCalled();
+    view.rerender(
+      <MCPConnectionPrompt
+        agent={agent}
+        toolConfiguration={toolConfiguration}
+        isStreaming={false}
+      />
+    );
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows blue for first-time setup", () => {
+    setServers([
+      { ...server, connection_status: MCPConnectionStatus.NOT_CONNECTED },
+    ]);
+    render(
+      <MCPConnectionPrompt
+        agent={agent}
+        toolConfiguration={toolConfiguration}
+      />
+    );
+    const trigger = screen.getByRole("button", {
+      name: "Tools need credentials (1)",
+    });
+    expect(trigger.closest(".bg-status-info-00")).not.toBeNull();
+    expect(trigger.closest(".bg-status-warning-00")).toBeNull();
+  });
+
+  it("shows orange if any enabled tool needs reconnection, even with new connections", async () => {
+    const user = setupUser();
+    const reconnectServer = {
+      ...server,
+      id: 2,
+      name: "Mail",
+      connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
+    };
+    setServers([
+      { ...server, connection_status: MCPConnectionStatus.NOT_CONNECTED },
+      reconnectServer,
+    ]);
+    render(
+      <MCPConnectionPrompt
+        agent={{
+          ...agent,
+          tools: [...agent.tools, { ...tool, id: 6, mcp_server_id: 2 }],
+        }}
+        toolConfiguration={toolConfiguration}
+      />
+    );
+    const trigger = screen.getByRole("button", {
+      name: "Tools need credentials (2)",
+    });
+    expect(trigger.closest(".bg-status-warning-00")).not.toBeNull();
+    await user.click(trigger);
+    expect(
+      screen.getByRole("button", { name: "Connect Calendar" })
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reconnect Mail" }));
+    expect(authenticate).toHaveBeenCalledWith(reconnectServer);
+  });
+
+  it("changes orange to blue after reconnection, then hides after all connections succeed", async () => {
+    const user = setupUser();
+    const firstTimeServer = {
+      ...server,
+      connection_status: MCPConnectionStatus.NOT_CONNECTED,
+    };
+    const staleServer = {
+      ...server,
+      id: 2,
+      name: "Mail",
+      connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
+    };
+    const scopedAgent = {
+      ...agent,
+      tools: [...agent.tools, { ...tool, id: 6, mcp_server_id: 2 }],
+    };
+    const onConnectionsClosed = jest.fn();
+    setServers([firstTimeServer, staleServer]);
+    const prompt = (
+      <MCPConnectionPrompt
+        agent={scopedAgent}
+        toolConfiguration={toolConfiguration}
+        onConnectionsClosed={onConnectionsClosed}
+      />
+    );
+    const view = render(prompt);
+    const trigger = screen.getByRole("button", {
+      name: "Tools need credentials (2)",
+    });
+    expect(trigger.closest(".bg-status-warning-00")).not.toBeNull();
+    await user.click(trigger);
+    expect(
+      screen.getByRole("button", { name: "Reconnect Mail" })
+    ).toBeInTheDocument();
+
+    const connectedMail = {
+      ...staleServer,
+      user_can_authenticate: true,
+      connection_status: MCPConnectionStatus.CONNECTED,
+    };
+    setServers([firstTimeServer, connectedMail]);
+    view.rerender(
+      <MCPConnectionPrompt
+        agent={scopedAgent}
+        toolConfiguration={toolConfiguration}
+        onConnectionsClosed={onConnectionsClosed}
+      />
+    );
+    expect(
+      screen
+        .getByLabelText("Tools need credentials (1)")
+        .closest(".bg-status-info-00")
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Reconnect Mail" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+
+    setServers([
+      {
+        ...firstTimeServer,
+        user_can_authenticate: true,
+        connection_status: MCPConnectionStatus.CONNECTED,
+      },
+      connectedMail,
+    ]);
+    view.rerender(
+      <MCPConnectionPrompt
+        agent={scopedAgent}
+        toolConfiguration={toolConfiguration}
+        onConnectionsClosed={onConnectionsClosed}
+      />
+    );
+    expect(
+      screen.queryByLabelText(/Tools need credentials/)
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Connected")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(onConnectionsClosed).toHaveBeenCalled();
+  });
+
+  it("ignores reconnect status on disabled tools when choosing the color", () => {
+    setServers([
+      { ...server, connection_status: MCPConnectionStatus.NOT_CONNECTED },
+      {
+        ...server,
+        id: 2,
+        connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
+      },
+    ]);
+    render(
+      <MCPConnectionPrompt
+        agent={{
+          ...agent,
+          tools: [...agent.tools, { ...tool, id: 6, mcp_server_id: 2 }],
+        }}
+        toolConfiguration={{ ...toolConfiguration, disabledToolIds: [6] }}
+      />
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Tools need credentials (1)" })
+        .closest(".bg-status-info-00")
+    ).not.toBeNull();
+  });
+
+  it("hides the pill when all connections are usable", () => {
+    setServers([
+      {
+        ...server,
+        user_can_authenticate: true,
+        connection_status: MCPConnectionStatus.CONNECTED,
+      },
+    ]);
+    render(
+      <MCPConnectionPrompt
+        agent={agent}
+        toolConfiguration={toolConfiguration}
+      />
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
   it("shows the credential page in one dialog and returns to the list", async () => {
     const user = setupUser();
     const view = render(

@@ -39,8 +39,9 @@ per-user credential (a personal API key, or a personal OAuth login), each user
 who wants to use it connects it themselves from the chat's MCP dropdown,
 separately from the admin's setup.
 
-Chat shows a light-orange **Tools need credentials** pill after Deep Research
-when an enabled tool needs a user connection. The modal lists actionable
+Chat shows a **Tools need credentials** pill after Deep Research when an enabled
+tool needs a user connection. The pill is blue when all pending connections need
+first-time setup, and orange when any requires reauthentication. The modal lists actionable
 connections for the current agent, including the default Onyx agent. It uses
 `MCPConnectionPrompt` (`web/src/lib/mcp/components/MCPConnectionPrompt.tsx`).
 Its tooltip explains that tools remain unavailable until the user connects an
@@ -53,7 +54,22 @@ The prompt and Actions menu share persona-scoped SWR data through
 `web/src/lib/mcp/hooks.ts`. The hook exposes credential requests and submit/cancel
 actions; each UI owns its modal props. Shared authentication types live in
 `web/src/lib/mcp/types.ts`.
-Credential submission refreshes this data; window focus also revalidates it.
+Credential submission, completed chat responses, and window focus refresh this data.
+`connection_status` distinguishes `not_connected`, `connected`, and
+`reauth_required`. The modal shows **Connect** for initial setup and **Reconnect**
+for replacement credentials. Reconnect forces a fresh OAuth grant; successful
+credential entry replaces the user's stored credentials. Older backend responses
+without this field use the boolean for a blue setup prompt, without guessing
+whether credentials expired.
+The backend records confirmed OAuth `invalid_grant` and HTTP 401 rejection of
+user API tokens or required headers in the encrypted connection config. Rejections are marked
+only if stored credentials still match the failed request. Expired OAuth grants
+without refresh tokens also require reconnection. Temporary failures do not change
+the connection state. Successful replacement credentials clear the rejection marker;
+OAuth header edits and authorization attempts retain it until authorization succeeds.
+A new user connection does not inherit the admin connection's rejection history.
+Pass-through OAuth rejection does not mark extra headers stale, since the failure
+may concern the user's Onyx login token.
 `user_can_authenticate` reports whether credentials resolve, not whether a
 Connect button should appear. The client checks supported authentication flows
 separately with `canAuthenticateMcpServer`. It delegates to

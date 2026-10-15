@@ -15,7 +15,7 @@ from onyx.db.enums import (
 from onyx.db.mcp import create_connection_config
 from onyx.db.models import MCPServer
 from onyx.server.features.mcp.api import _db_mcp_server_to_api_mcp_server
-from onyx.server.features.mcp.models import MCPConnectionData
+from onyx.server.features.mcp.models import MCPConnectionData, MCPConnectionStatus
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -58,6 +58,7 @@ def test_oauth_tokenless_row_is_not_authenticated(db_session: Session) -> None:
 
     api_server = _db_mcp_server_to_api_mcp_server(server, db_session, request_user=user)
     assert api_server.user_can_authenticate is False
+    assert api_server.connection_status == MCPConnectionStatus.NOT_CONNECTED
 
 
 def test_oauth_row_with_tokens_is_authenticated(db_session: Session) -> None:
@@ -76,6 +77,7 @@ def test_oauth_row_with_tokens_is_authenticated(db_session: Session) -> None:
 
     api_server = _db_mcp_server_to_api_mcp_server(server, db_session, request_user=user)
     assert api_server.user_can_authenticate is True
+    assert api_server.connection_status == MCPConnectionStatus.CONNECTED
 
 
 def test_api_token_row_is_authenticated_without_tokens_key(
@@ -96,3 +98,11 @@ def test_api_token_row_is_authenticated_without_tokens_key(
 
     api_server = _db_mcp_server_to_api_mcp_server(server, db_session, request_user=user)
     assert api_server.user_can_authenticate is True
+    assert api_server.connection_status == MCPConnectionStatus.CONNECTED
+
+
+def test_connection_status_without_user_is_unknown(db_session: Session) -> None:
+    server = _make_per_user_server(db_session, MCPAuthenticationType.OAUTH)
+    api_server = _db_mcp_server_to_api_mcp_server(server, db_session, request_user=None)
+    assert api_server.user_can_authenticate is None
+    assert api_server.connection_status is None

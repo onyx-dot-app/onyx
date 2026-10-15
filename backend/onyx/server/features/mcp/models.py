@@ -104,6 +104,12 @@ class MCPOAuthKeys(str, Enum):
     TOKEN_EXPIRES_AT = "token_expires_at"
 
 
+class MCPConnectionStatus(str, Enum):
+    NOT_CONNECTED = "not_connected"
+    CONNECTED = "connected"
+    REAUTH_REQUIRED = "reauth_required"
+
+
 class MCPConnectionData(TypedDict):
     """TypedDict to allow use as a type hint for a JSONB column
     in Postgres"""
@@ -121,6 +127,9 @@ class MCPConnectionData(TypedDict):
     # serves as the template); empty/absent on regular per-user configs and on
     # admin-credential configs.
     required_fields: NotRequired[list[str]]
+
+    # Confirmed credential rejection persists until credentials are replaced.
+    reauth_required: NotRequired[bool]
 
     # For OAuth only
     # Note: Update MCPOAuthKeys if necessary when modifying these
@@ -718,6 +727,7 @@ class MCPServer(BaseModel):
     # Whether this user's credentials resolve for the server right now (or the
     # server needs no per-user auth). None when there is no user context.
     user_can_authenticate: Optional[bool] = None
+    connection_status: MCPConnectionStatus | None = None
     status: MCPServerStatus
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)

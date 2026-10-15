@@ -13,8 +13,11 @@ import type {
   MCPServersResponse,
   MCPTool,
 } from "@/lib/mcp/types";
-import { MCPAuthenticationType } from "@/lib/mcp/types";
-import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
+import { MCPAuthenticationType, MCPConnectionStatus } from "@/lib/mcp/types";
+import {
+  getMcpAuthenticationFlow,
+  getMcpConnectionStatus,
+} from "@/lib/mcp/auth";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
@@ -273,7 +276,8 @@ export function useMcpAuthentication(
 
   async function authenticate(
     server: MCPAuthenticationServer,
-    forceReauthentication = false
+    forceReauthentication = getMcpConnectionStatus(server) ===
+      MCPConnectionStatus.REAUTH_REQUIRED
   ) {
     if (loadingServerId !== null) return;
     const flow = getMcpAuthenticationFlow(server);

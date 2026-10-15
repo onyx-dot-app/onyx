@@ -1,9 +1,11 @@
 import {
   canAuthenticateMcpServer,
   getMcpAuthenticationFlow,
+  getMcpConnectionStatus,
 } from "@/lib/mcp/auth";
 import {
   type MCPAuthenticationServer,
+  MCPConnectionStatus,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
 } from "@/lib/mcp/types";
@@ -113,4 +115,24 @@ describe("MCP authentication flow selection", () => {
       ).toBeNull();
     }
   );
+});
+
+describe("MCP connection status compatibility", () => {
+  it("uses the explicit status when present", () => {
+    expect(
+      getMcpConnectionStatus({
+        connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
+        user_can_authenticate: false,
+      })
+    ).toBe(MCPConnectionStatus.REAUTH_REQUIRED);
+  });
+  it("does not guess reauthentication from the old boolean", () => {
+    expect(getMcpConnectionStatus({ user_can_authenticate: false })).toBe(
+      MCPConnectionStatus.NOT_CONNECTED
+    );
+    expect(getMcpConnectionStatus({ user_can_authenticate: true })).toBe(
+      MCPConnectionStatus.CONNECTED
+    );
+    expect(getMcpConnectionStatus({})).toBeUndefined();
+  });
 });
