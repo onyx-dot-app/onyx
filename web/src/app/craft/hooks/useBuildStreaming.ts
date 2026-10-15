@@ -1126,6 +1126,11 @@ export function useBuildStreaming({
           model,
           attachments
         );
+        // The accepted turn guarantees that the first message is persisted.
+        // Naming belongs to the store and survives navigation or unmount.
+        if (turn.turn_index === 0) {
+          void useBuildSessionStore.getState().nameBuildSession(sessionId);
+        }
         if (!ownsTurn()) return;
         if (queuedMessageId !== undefined) {
           appendMessageToSession(sessionId, {

@@ -47,7 +47,6 @@ import {
   createSession as apiCreateSession,
   fetchSession,
   fetchSessionHistory,
-  generateSessionName,
   updateSessionName,
   deleteSession as apiDeleteSession,
   fetchMessages,
@@ -815,6 +814,8 @@ export function canReuseSession(
     session.sandbox?.status !== "failed"
   );
 }
+
+const sessionNamingRequests = new Map<string, symbol>();
 
 const completedTranscriptReads: Map<string, Promise<void>> = new Map();
 
@@ -2431,28 +2432,32 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   nameBuildSession: async (sessionId: string) => {
+    const request = Symbol();
+    sessionNamingRequests.set(sessionId, request);
     try {
-      // Generate name using LLM based on first user message
-      const generatedName = await generateSessionName(sessionId);
+      const session = await updateSessionName(sessionId, null);
+      const name = session.name;
+      if (!name || sessionNamingRequests.get(sessionId) !== request) return;
 
-      // Optimistically update the session title in sessionHistory immediately
-      // This triggers the typewriter animation in the sidebar
       set((state) => ({
         sessionHistory: state.sessionHistory.map((item) =>
-          item.id === sessionId ? { ...item, title: generatedName } : item
+          item.id === sessionId ? { ...item, title: name } : item
         ),
       }));
-
-      // Persist the name to backend (fire and forget - error handling below)
-      await updateSessionName(sessionId, generatedName);
     } catch (err) {
       console.error("Failed to auto-name session:", err);
-      // On error, refresh to get the actual state from backend
-      await get().refreshSessionHistory();
+      if (sessionNamingRequests.get(sessionId) === request) {
+        await get().refreshSessionHistory();
+      }
+    } finally {
+      if (sessionNamingRequests.get(sessionId) === request) {
+        sessionNamingRequests.delete(sessionId);
+      }
     }
   },
 
   renameBuildSession: async (sessionId: string, newName: string) => {
+    sessionNamingRequests.delete(sessionId);
     try {
       await updateSessionName(sessionId, newName);
       set((state) => ({

@@ -809,8 +809,8 @@ class SessionManager:
         """
         Update the name of a build session.
 
-        If name is None, auto-generates a name using LLM based on the first
-        user message in the session.
+        If name is None, names an unnamed session from its first user message.
+        An automatic name never replaces an existing or concurrent manual name.
 
         Args:
             session_id: The session UUID
@@ -828,8 +828,18 @@ class SessionManager:
             # Manual rename
             session.name = name
         else:
-            # Auto-generate name from first user message using LLM
-            session.name = generate_session_name(self._db_session, session_id)
+            if session.name is not None:
+                return session
+            generated_name = generate_session_name(self._db_session, session_id)
+            # Lock only for the save, after the slow model call. Reread the row
+            # so another request's manual or automatic name takes precedence.
+            session = get_build_session(
+                session_id, user_id, self._db_session, for_update=True
+            )
+            if session is None:
+                return None
+            if session.name is None:
+                session.name = generated_name
 
         update_session_activity(session_id, self._db_session)
         self._db_session.commit()
