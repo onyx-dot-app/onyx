@@ -293,6 +293,8 @@ class IndexAttemptSnapshot(BaseModel):
     # A one-off run over poll_range_start..poll_range_end outside the pair's
     # incremental cursor; it does not drive the pair's status.
     is_backfill: bool = False
+    # Indexed under the FUTURE search settings of a running model switch.
+    is_new_model: bool = False
 
     @classmethod
     def from_index_attempt_db_model(
@@ -328,6 +330,10 @@ class IndexAttemptSnapshot(BaseModel):
             time_finished=finished.isoformat() if finished else None,
             poll_range_start=index_attempt.poll_range_start,
             poll_range_end=index_attempt.poll_range_end,
+            is_new_model=(
+                index_attempt.search_settings is not None
+                and index_attempt.search_settings.status.is_future()
+            ),
             is_backfill=index_attempt.is_backfill,
         )
 

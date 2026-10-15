@@ -2460,6 +2460,10 @@
           "tooltip": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}"
         },
+        "newModel": {
+          "label": "Nouveau modèle",
+          "tooltip": "Indexé avec le modèle d'embedding qui remplacera le modèle actuel."
+        },
         "figures": {
           "indexed": "indexés",
           "synced": "synchronisés",

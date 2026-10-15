@@ -207,6 +207,13 @@ export default function ActivityCard({
                 width="fit"
                 height="fit"
               >
+                {run.kind === "indexing" && run.attempt.is_new_model && (
+                  <Tag
+                    title={tRuns("newModel.label")}
+                    tooltip={tRuns("newModel.tooltip")}
+                    color="purple"
+                  />
+                )}
                 <Text font="secondary-body" color="text-03" maxLines={1}>
                   {identity}
                 </Text>

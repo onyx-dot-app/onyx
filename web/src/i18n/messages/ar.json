@@ -2460,6 +2460,10 @@
           "tooltip": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
           "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
         },
+        "newModel": {
+          "label": "نموذج جديد",
+          "tooltip": "تمت الفهرسة باستخدام نموذج التضمين الذي سيحل محل النموذج الحالي."
+        },
         "figures": {
           "indexed": "مفهرس",
           "synced": "متزامن",

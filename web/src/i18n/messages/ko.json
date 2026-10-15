@@ -2460,6 +2460,10 @@
           "tooltip": "{count, plural, other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}"
         },
+        "newModel": {
+          "label": "새 모델",
+          "tooltip": "현재 모델을 대체할 임베딩 모델로 인덱싱되었습니다."
+        },
         "figures": {
           "indexed": "인덱싱됨",
           "synced": "동기화됨",

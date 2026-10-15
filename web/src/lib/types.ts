@@ -224,6 +224,8 @@ export interface IndexAttemptSnapshot {
   time_updated: string;
   /** When a finished attempt ended. `time_updated` also moves on checkpoint cleanup. */
   time_finished: string | null;
+  /** Indexed under the FUTURE search settings of a running model switch. */
+  is_new_model: boolean;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The

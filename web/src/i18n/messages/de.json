@@ -2460,6 +2460,10 @@
           "tooltip": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}"
         },
+        "newModel": {
+          "label": "Neues Modell",
+          "tooltip": "Mit dem Embedding-Modell indexiert, das das aktuelle Modell ersetzt."
+        },
         "figures": {
           "indexed": "indiziert",
           "synced": "synchronisiert",

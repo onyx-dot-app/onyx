@@ -2460,6 +2460,10 @@
           "tooltip": "{count, plural, other {# 个文档失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}"
         },
+        "newModel": {
+          "label": "新模型",
+          "tooltip": "使用将替换当前模型的嵌入模型编入索引。"
+        },
         "figures": {
           "indexed": "已索引",
           "synced": "已同步",

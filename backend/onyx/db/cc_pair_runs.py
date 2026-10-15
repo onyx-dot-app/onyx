@@ -103,16 +103,20 @@ def _narrowed(
     return stmt
 
 
-def _index_runs(cc_pair_ids: list[int]) -> Select:
-    """The pairs' index runs under the current search settings. Targeted
-    reindexes refetch chosen documents, not the pair, so they are not runs."""
+def _index_runs(
+    cc_pair_ids: list[int],
+    settings_statuses: tuple[IndexModelStatus, ...] = (IndexModelStatus.PRESENT,),
+) -> Select:
+    """The pairs' index runs under the given search settings, the current ones
+    by default. Targeted reindexes refetch chosen documents, not the pair, so
+    they are not runs."""
     return (
         select(IndexAttempt)
         .join(SearchSettings)
         .where(
             IndexAttempt.connector_credential_pair_id.in_(cc_pair_ids),
             IndexAttempt.targeted_reindex_job_id.is_(None),
-            SearchSettings.status == IndexModelStatus.PRESENT,
+            SearchSettings.status.in_(settings_statuses),
         )
     )
 
@@ -140,7 +144,12 @@ def _group_sync_scope(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
 def _index_attempt_runs(
     run_filter: CCPairRunFilter, with_status_filter: bool
 ) -> Select:
-    stmt = _index_runs(run_filter.cc_pair_ids)
+    # The feed also lists a model switch's runs, so their document errors
+    # are visible before the swap.
+    stmt = _index_runs(
+        run_filter.cc_pair_ids,
+        (IndexModelStatus.PRESENT, IndexModelStatus.FUTURE),
+    )
     own_errors = exists().where(IndexAttemptError.index_attempt_id == IndexAttempt.id)
     unresolved = own_errors.where(IndexAttemptError.is_resolved.is_(False))
     match run_filter.errors:
