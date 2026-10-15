@@ -13824,6 +13824,7 @@
           "askOption": "询问",
           "autoApproveOption": "自动批准",
           "customOption": "自定义",
+          "defaultOption": "默认",
           "description": "选择智能体可以执行的操作。“询问”会在每个操作运行前在聊天中提示您；“自动批准”则无需提示即可运行。使用“高级”为每个操作单独设置策略。",
           "title": "权限"
         },

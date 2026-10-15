@@ -562,6 +562,7 @@ class ExternalAppType(str, PyEnum):
     GITHUB = "GITHUB"
     HUBSPOT = "HUBSPOT"
     NOTION = "NOTION"
+    ZENDESK = "ZENDESK"
     CUSTOM = "CUSTOM"
 
     @property

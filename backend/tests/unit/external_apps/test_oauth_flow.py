@@ -25,6 +25,7 @@ class _OrganizationCredentials:
         self.values = {
             "client_id": "linear-client-id",
             "client_secret": "linear-client-secret",
+            "subdomain": "acme",
         }
 
     def get_value(self, **_: object) -> dict[str, str]:
@@ -99,10 +100,13 @@ def _configure_route(
     return app, credentials, db_session, token_post
 
 
+@pytest.mark.parametrize("app_type", [ExternalAppType.LINEAR, ExternalAppType.ZENDESK])
 def test_overlapping_pkce_attempts_use_their_own_verifiers(
     monkeypatch: pytest.MonkeyPatch,
+    app_type: ExternalAppType,
 ) -> None:
     app, _, db_session, token_post = _configure_route(monkeypatch)
+    app.app_type = app_type
     owner = _user("owner")
 
     first = _authorize_query(app=app, user=owner, db_session=db_session)
@@ -128,7 +132,8 @@ def test_overlapping_pkce_attempts_use_their_own_verifiers(
     }
     states_by_code = {"first-code": first_state, "second-code": second_state}
     token_request_bodies: list[dict[str, Any]] = [
-        call.kwargs["data"] for call in token_post.call_args_list
+        call.kwargs["json" if app_type == ExternalAppType.ZENDESK else "data"]
+        for call in token_post.call_args_list
     ]
     assert {body["code"] for body in token_request_bodies} == set(states_by_code)
     for body in token_request_bodies:
@@ -175,13 +180,24 @@ def test_attempt_is_owner_bound_and_claimed_before_token_exchange(
     assert token_post.call_count == 1
 
 
+@pytest.mark.parametrize(
+    ("app_type", "field", "value"),
+    [
+        (ExternalAppType.LINEAR, "client_secret", "rotated-client-secret"),
+        (ExternalAppType.ZENDESK, "subdomain", "other-account"),
+    ],
+)
 def test_callback_rejects_configuration_changed_after_start(
     monkeypatch: pytest.MonkeyPatch,
+    app_type: ExternalAppType,
+    field: str,
+    value: str,
 ) -> None:
     app, credentials, db_session, token_post = _configure_route(monkeypatch)
+    app.app_type = app_type
     user = _user("owner")
     query = _authorize_query(app=app, user=user, db_session=db_session)
-    credentials.values["client_secret"] = "rotated-client-secret"
+    credentials.values[field] = value
 
     with pytest.raises(
         OnyxError,
@@ -209,6 +225,17 @@ def test_callback_rejects_configuration_changed_after_start(
             },
             ["read", "write"],
             False,
+        ),
+        (
+            ExternalAppType.ZENDESK,
+            {
+                "access_token": "access",
+                "refresh_token": "refresh",
+                "scope": "read tickets:write",
+                "expires_in": 3600,
+            },
+            ["read", "tickets:write"],
+            True,
         ),
         (
             ExternalAppType.GITHUB,
@@ -264,8 +291,19 @@ def test_callback_preserves_provider_exchange_and_grant(
     )
     token_post.return_value.json.return_value = token_body
 
-    query = _authorize_query(app=app, user=owner, db_session=db_session)
-    uses_pkce = app_type in (ExternalAppType.LINEAR, ExternalAppType.GITHUB)
+    start = oauth_route.start_external_app_oauth(
+        app.id, user=owner, db_session=db_session
+    )
+    authorization_url = urlparse(start.authorize_url)
+    query = parse_qs(authorization_url.query)
+    if app_type == ExternalAppType.ZENDESK:
+        assert authorization_url.hostname == "acme.zendesk.com"
+        assert authorization_url.path == "/oauth/authorizations/new"
+    uses_pkce = app_type in (
+        ExternalAppType.LINEAR,
+        ExternalAppType.GITHUB,
+        ExternalAppType.ZENDESK,
+    )
     assert ("code_challenge" in query) == uses_pkce
     if app_type == ExternalAppType.SLACK:
         assert "user_scope" in query
@@ -282,13 +320,19 @@ def test_callback_preserves_provider_exchange_and_grant(
     assert request["data" if json_encoded else "json"] is None
     assert body["code"] == "auth-code"
     assert ("code_verifier" in body) == uses_pkce
-    if json_encoded:
+    if app_type == ExternalAppType.NOTION:
         assert request["headers"]["Authorization"].startswith("Basic ")
         assert "client_id" not in body
         assert "client_secret" not in body
     else:
         assert body["client_id"] == "linear-client-id"
         assert body["client_secret"] == "linear-client-secret"
+    if app_type == ExternalAppType.ZENDESK:
+        assert token_post.call_args.args == ("https://acme.zendesk.com/oauth/tokens",)
+        assert body["expires_in"] == 86400
+        assert (
+            compute_s256_challenge(body["code_verifier"]) == query["code_challenge"][0]
+        )
     persisted = persist.call_args.kwargs
     assert persisted["user_credentials"]["access_token"] == "access"
     if token_body.get("refresh_token"):

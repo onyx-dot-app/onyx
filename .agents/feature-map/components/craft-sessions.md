@@ -85,6 +85,8 @@ the turn pauses and the user sees an approval card; the user can approve or
 reject just that request, or approve it for the rest of the session. Files
 the agent produces appear as artifacts the user can browse, download, or
 (for Markdown) export as a `.docx`.
+An app connection card resolves its pending agent request even when credentials already exist.
+It shows Connected only after the decision endpoint succeeds. Failed decisions remain retryable.
 Passive discoveries update the inventory without adding tabs, opening the panel, or changing selection.
 Explicit resource actions create and select tabs. See [[craft-streaming]] for inventory and revision rules.
 The user's own uploaded library files

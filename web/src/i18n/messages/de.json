@@ -13824,6 +13824,7 @@
           "askOption": "Nachfragen",
           "autoApproveOption": "Automatisch genehmigen",
           "customOption": "Benutzerdefiniert",
+          "defaultOption": "Standard",
           "description": "Lege fest, was der Agent tun darf. „Nachfragen“ fragt dich im Chat vor jeder Aktion; „Automatisch genehmigen“ führt sie ohne Rückfrage aus. Mit „Erweitert“ legst du eine Richtlinie pro Aktion fest.",
           "title": "Berechtigungen"
         },
