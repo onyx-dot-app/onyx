@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -92,20 +93,28 @@ func runWebScript(args []string) {
 // prepareWebDir installs dependencies and builds the workspace libraries when
 // they are missing or stale, so a bun script can run.
 func prepareWebDir(webDir string) {
+	if err := prepareWebDirOutput(webDir, os.Stdout); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// prepareWebDirOutput is prepareWebDir with the tool output on output. It
+// returns the failure instead of exiting, so a caller can record it.
+func prepareWebDirOutput(webDir string, output io.Writer) error {
 	if needsInstall, reason := nodeModulesNeedsInstall(webDir); needsInstall {
 		log.Infof("%s, running bun install --frozen-lockfile...", reason)
 		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
 		installCmd.Dir = webDir
-		installCmd.Stdout = os.Stdout
+		installCmd.Stdout = output
 		installCmd.Stderr = os.Stderr
 		installCmd.Stdin = os.Stdin
 		if err := installCmd.Run(); err != nil {
-			log.Fatalf("Failed to run bun install: %v", err)
+			return fmt.Errorf("bun install --frozen-lockfile in %s: %w", webDir, err)
 		}
 		writeLockStamp(webDir)
 	}
 
-	ensureWorkspaceLibsBuilt(webDir)
+	return ensureWorkspaceLibsBuilt(webDir, output)
 }
 
 // lockStampName is the file inside node_modules recording the sha256 of the
@@ -197,8 +206,8 @@ func fileSHA256(path string) (string, error) {
 var webLibPackages = []string{"lib/shared", "lib/opal"}
 
 // ensureWorkspaceLibsBuilt builds each workspace library whose dist/ is
-// missing or older than its sources.
-func ensureWorkspaceLibsBuilt(webDir string) {
+// missing or older than its sources. Build output goes to output.
+func ensureWorkspaceLibsBuilt(webDir string, output io.Writer) error {
 	for _, rel := range webLibPackages {
 		pkgDir := filepath.Join(webDir, rel)
 		needsBuild, reason := libNeedsBuild(pkgDir)
@@ -208,12 +217,13 @@ func ensureWorkspaceLibsBuilt(webDir string) {
 		log.Infof("web/%s %s, running bun run build...", rel, reason)
 		buildCmd := exec.Command("bun", "run", "build")
 		buildCmd.Dir = pkgDir
-		buildCmd.Stdout = os.Stdout
+		buildCmd.Stdout = output
 		buildCmd.Stderr = os.Stderr
 		if err := buildCmd.Run(); err != nil {
-			log.Fatalf("Failed to build web/%s: %v", rel, err)
+			return fmt.Errorf("build web/%s: %w", rel, err)
 		}
 	}
+	return nil
 }
 
 // libNeedsBuild reports whether a workspace library's dist/ is missing or

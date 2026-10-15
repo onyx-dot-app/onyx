@@ -236,6 +236,7 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
   CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK
     connector_permission_sync_generator_task
       create_doc_permission_sync_attempt          onyx/db/permission_sync_attempt.py
+      fails the attempt if the cc_pair is no longer perm-synced
       mark_doc_permission_sync_attempt_in_progress
       doc_sync_func(cc_pair, fetch_existing_docs_fn, fetch_existing_doc_ids_fn, callback)
         -> Generator[ElementExternalAccess]
@@ -247,6 +248,12 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
       complete_doc_permission_sync_attempt (SUCCESS or COMPLETED_WITH_ERRORS)
       on exception: _fail_doc_permission_sync_attempt, fence cleared, re-raised
 ```
+
+The manual triggers `POST /manage/admin/cc-pair/{id}/sync-permissions` and
+`/sync-groups` (`ee/onyx/server/documents/cc_pair.py`) return `INVALID_INPUT`
+for a cc_pair that is not perm-synced. The indexing pipeline
+(`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
+`external_access` unless the writing cc_pair is perm-synced.
 
 Most doc-sync implementations funnel through
 `ee/onyx/external_permissions/utils.py:generic_doc_sync`, which:
@@ -347,8 +354,14 @@ sync safe to lag doc sync.
 ```
 beat: CHECK_FOR_EXTERNAL_GROUP_SYNC (every 20s)
   check_for_external_group_sync                  external_group_syncing/tasks.py
-    get_all_auto_sync_cc_pairs
-    _is_external_group_sync_due(cc_pair)           per cc_pair, per §2 frequency table
+    get_all_auto_sync_cc_pairs                     every perm-synced cc_pair
+    (filter in check_for_external_group_sync)      keeps only active statuses (not PAUSED,
+                                                   INVALID, DELETING); for agnostic sources
+                                                   keeps the lowest-id active cc_pair
+    is_external_group_sync_due(cc_pair)            per cc_pair, per §2 frequency table
+    get_external_group_sync_retry_after            backs off after consecutive FAILED attempts
+                                                   (request_retry_delay: 5 min doubling to 6 h);
+                                                   the manual sync endpoint ignores it
     try_creating_external_group_sync_task          fences, inserts SyncRecord, dispatches:
   CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK
     connector_external_group_sync_generator_task -> _perform_external_group_sync
@@ -385,8 +398,9 @@ access via a synced group.
 (`source_group_sync_is_cc_pair_agnostic` returns `True` for these sources in
 `sync_params.py`). `group_sync_utils.py:mark_all_relevant_cc_pairs_as_external_group_synced`
 looks up every cc_pair for that source and marks all of them synced after one
-successful run, and `permission_sync_attempt.py:get_relevant_external_group_sync_attempts_for_cc_pair`
-widens its query to the whole source for these two, with a documented caveat:
+successful run, and `permission_sync_attempt.py:relevant_external_group_sync_attempts_filter`
+(used by the run feed in `db/cc_pair_runs.py`) widens the attempt filter to
+the whole source for these two, with a documented caveat:
 two independent Confluence sites in the same deployment share one merged
 attempt history.
 

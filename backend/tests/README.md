@@ -105,3 +105,22 @@ directory — it only affects tests defined in the conftest itself (which is non
 Use the autouse fixture wrapper pattern shown above instead.
 
 Do NOT inline `global_version.set_ee()` — always use the fixture.
+
+### Craft sandbox network enforcement
+
+Run the deployed Kubernetes networking suite against a disposable cluster with an enforcing CNI.
+Test both `sandboxPod.netAdminLockdown=true` and `false` through the deployment's Helm values.
+Set these variables for the target deployment:
+
+```bash
+export SANDBOX_TEST_FRONTEND_URL=http://localhost:3000
+export SANDBOX_TEST_KUBE_CONTEXT=your-test-context
+export SANDBOX_TEST_IP_FAMILY=ipv4
+export SANDBOX_TEST_NET_ADMIN_LOCKDOWN=false
+uv run pytest backend/tests/integration/tests/craft/k8s/networking
+```
+
+Set the expected lockdown value to match each Helm configuration.
+The suite checks the actual pod configuration, proxy requests, and blocked direct API, public internet, and DNS connections.
+DNS and public connection checks first verify that the target responds from the proxy.
+Use an IPv6 cluster and `SANDBOX_TEST_IP_FAMILY=ipv6` to check that family.

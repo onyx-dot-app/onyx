@@ -69,8 +69,10 @@ export default function InlineFileManagement({
     const selectedFiles = event.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
 
-    setFilesToAdd((prev) => [...prev, ...Array.from(selectedFiles)]);
-    // Reset the input
+    // Copied now: resetting the input below empties this live FileList
+    // before the updater runs.
+    const picked = Array.from(selectedFiles);
+    setFilesToAdd((prev) => [...prev, ...picked]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -178,6 +180,7 @@ export default function InlineFileManagement({
               prominence="secondary"
               onClick={() => setIsEditing(true)}
               icon={SvgEdit}
+              data-testid="file-manager-edit"
             >
               {t("fileManagement.editButton.label")}
             </Button>

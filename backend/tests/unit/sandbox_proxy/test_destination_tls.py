@@ -1,17 +1,12 @@
 """Exercise destination pinning through mitmproxy's real TLS connection path."""
 
 import asyncio
-import datetime as dt
 import socket
 import ssl
 from contextlib import suppress
 from pathlib import Path
 
 import pytest
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
 from mitmproxy import tls
 from mitmproxy.proxy import server_hooks
 from mitmproxy.tools.dump import DumpMaster
@@ -23,11 +18,14 @@ from onyx.sandbox_proxy.destination_policy import (
     UpstreamEventLoop,
     parse_destination_policy,
 )
+from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
     RecordingCredentialResolver,
     StubResolver,
     make_resolved_sandbox,
+    make_tls_context,
     unused_cache,
     wait_for_proxy_listener,
 )
@@ -47,41 +45,6 @@ class _Connections:
     def tls_failed_server(self, data: tls.TlsData) -> None:
         assert data.conn.error is not None
         self.tls_errors.append(data.conn.error)
-
-
-def _tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Path]:
-    key: rsa.RSAPrivateKey = rsa.generate_private_key(
-        public_exponent=65537, key_size=2048
-    )
-    subject: x509.Name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
-    now: dt.datetime = dt.datetime.now(dt.timezone.utc)
-    certificate: x509.Certificate = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(subject)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now - dt.timedelta(minutes=1))
-        .not_valid_after(now + dt.timedelta(days=1))
-        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
-        .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False
-        )
-        .sign(key, hashes.SHA256())
-    )
-    cert_path: Path = tmp_path / "upstream.crt"
-    key_path: Path = tmp_path / "upstream.key"
-    cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
-    key_path.write_bytes(
-        key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
-        )
-    )
-    context: ssl.SSLContext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(cert_path, key_path)
-    return context, cert_path
 
 
 def _mock_dns(monkeypatch: pytest.MonkeyPatch, loopback: str) -> None:
@@ -153,18 +116,23 @@ async def _read_response(reader: asyncio.StreamReader) -> bytes:
     return headers + body
 
 
+@pytest.mark.parametrize("connection_strategy", ["eager", "lazy"])
+@pytest.mark.parametrize("mcp_destination", [False, True])
 @pytest.mark.parametrize("certificate_host", [_HOST, "wrong.test"])
 @pytest.mark.parametrize("loopback", ["127.0.0.1", "::1"])
+@pytest.mark.usefixtures("mcp_ssrf_settings")
 def test_pinned_tls_preserves_hostname_verification_and_injection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     certificate_host: str,
+    mcp_destination: bool,
+    connection_strategy: str,
     loopback: str,
 ) -> None:
     async def exercise() -> None:
         context: ssl.SSLContext
         upstream_ca: Path
-        context, upstream_ca = _tls_context(tmp_path, certificate_host)
+        context, upstream_ca = make_tls_context(tmp_path, certificate_host)
         server_names: list[str | None] = []
         requests: list[bytes] = []
 
@@ -214,21 +182,41 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
             server, "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", str(upstream_ca)
         )
         master: DumpMaster = server._build_mitm_master()
-        master.options.update(connection_strategy="eager")
+        master.options.update(connection_strategy=connection_strategy)
         connected: _Connections = _Connections()
         master.addons.add(connected)
         credential: RecordingCredentialResolver = RecordingCredentialResolver(
             headers={"Authorization": "Bearer injected"}
         )
+        mcp_resolver = MCPServerResolver()
+        monkeypatch.setattr(
+            mcp_resolver,
+            "_load_targets",
+            lambda _tenant: (
+                CraftMCPTarget(
+                    server_id=1,
+                    scheme="https",
+                    host=_HOST,
+                    port=upstream_port,
+                    path_prefix="",
+                ),
+            ),
+        )
+        monkeypatch.setattr(
+            mcp_resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+        )
         master.addons.add(
             GateAddon(
+                mcp_resolver=mcp_resolver if mcp_destination else None,
                 identity=StubResolver(sandbox=make_resolved_sandbox()),
                 request_evaluator=NoMatchedRequest(),
                 cache_factory=unused_cache,
                 proxy_instance_id="tls-test",
                 credential_dispatcher=CredentialInjectionDispatcher([credential]),
                 destination_policy=parse_destination_policy(
-                    f"https://{_HOST}:{upstream_port}"
+                    "https://onyx.test"
+                    if mcp_destination
+                    else f"https://{_HOST}:{upstream_port}"
                 ),
             )
         )

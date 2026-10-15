@@ -809,6 +809,12 @@
         "ariaLabel": "ツールを検索",
         "placeholder": "ツールを検索…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://mcp-sabaa.com/mcp"
     }
   },
   "admin": {
@@ -819,6 +825,9 @@
         },
         "messaging": {
           "label": "メッセージング"
+        },
+        "meetings": {
+          "label": "会議"
         },
         "sales": {
           "label": "営業・GTM"
@@ -2036,23 +2045,11 @@
           "days": "{count, plural, one {# 日} other {# 日}}",
           "hours": "{count, plural, one {# 時間} other {# 時間}}",
           "minutes": "{count, plural, one {# 分} other {# 分}}"
-        },
-        "indexingStart": {
-          "label": "インデックス作成の開始日"
-        },
-        "pruningFrequency": {
-          "label": "プルーニングの頻度"
-        },
-        "refreshFrequency": {
-          "label": "更新の頻度"
         }
       },
       "configItem": {
         "booleanFalse": "いいえ",
         "booleanTrue": "はい",
-        "edit": {
-          "tooltip": "編集"
-        },
         "showAll": {
           "label": "すべて表示（{count} 件）"
         },
@@ -2075,22 +2072,6 @@
       "deletionError": {
         "description": "コネクターの削除中にこのエラーが発生しました。「削除」ボタンをクリックすると、削除をもう一度実行できます。",
         "title": "削除エラー"
-      },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "同期済みドキュメント数",
-          "errorMessage": "エラーメッセージ",
-          "permissionErrors": "権限エラー",
-          "status": "ステータス",
-          "timeStarted": "開始時刻"
-        },
-        "empty": {
-          "description": "ドキュメント権限の同期は、バックグラウンドでスケジュールされます。表示されるまで少し時間がかかる場合があります。30 秒ほどで再読み込みしてください。",
-          "title": "ドキュメント権限の同期はまだ実行されていません"
-        },
-        "errorModal": {
-          "title": "ドキュメント権限の同期エラー"
-        }
       },
       "docsLink": {
         "checkOutDocs": {
@@ -2184,23 +2165,6 @@
           "heading": "{multiple, select, true {選択されたファイル} other {選択されたファイル}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "エラーメッセージ",
-          "groups": "グループ",
-          "memberships": "メンバーシップ",
-          "status": "ステータス",
-          "timeStarted": "開始時刻",
-          "users": "ユーザー"
-        },
-        "empty": {
-          "description": "グループメンバーシップの同期は、バックグラウンドでスケジュールされます。表示されるまで少し時間がかかる場合があります。30 秒ほどで再読み込みしてください。",
-          "title": "グループメンバーシップの同期はまだ実行されていません"
-        },
-        "errorModal": {
-          "title": "グループメンバーシップの同期エラー"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "全員がソースから同期されたアクセス権を保持します。",
@@ -2222,37 +2186,13 @@
           "title": "グループへのアクセス制限"
         }
       },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "エラーメッセージ",
-          "newDocs": "新規ドキュメント数",
-          "status": "ステータス",
-          "timeStarted": "開始時刻",
-          "totalDocs": "総ドキュメント数",
-          "totalDocsTooltip": "このインデックス作成の試行でインデックス内に置き換えられたドキュメントの総数"
-        },
-        "docsPerMinute": "{rate} ドキュメント / 分",
-        "docsRemoved": "（ソースで削除が検出された {count} 件のドキュメントも削除しました）",
-        "empty": {
-          "description": "インデックス作成の試行はバックグラウンドでスケジュールされるため、表示されるまで少し時間がかかる場合があります。30 秒ほどでページを再読み込みしてください。",
-          "title": "インデックス作成の試行はまだスケジュールされていません"
-        },
-        "noAdditionalDocs": "追加で処理されたドキュメントはありません",
-        "reindexTooltip": {
-          "completed": "このインデックス作成の試行は、完全な再インデックスでした。ソースのすべてのドキュメントがシステムに同期されました。",
-          "inProgress": "このインデックス作成の試行は、完全な再インデックスです。ソースのすべてのドキュメントがシステムに同期されています。"
-        },
-        "stageMetricsButton": {
-          "tooltip": "ステージメトリクスを表示"
-        },
-        "viewTrace": {
-          "ariaLabel": "完全なトレースを表示"
-        }
-      },
       "indexErrorsAlert": {
-        "description": "一部のドキュメントの処理中に問題が発生しました。<details>詳細を表示</details>",
+        "description": "一部のドキュメントの処理中に問題が発生しました。",
         "resolvingStatus": "失敗を解決しています",
-        "title": "一部のドキュメントのインデックス作成に失敗しました"
+        "title": "一部のドキュメントのインデックス作成に失敗しました",
+        "detailsButton": {
+          "label": "詳細を表示"
+        }
       },
       "invalidState": {
         "description": "このコネクターは無効な状態です。再インデックスの前に、認証情報を更新するか、新しいコネクターを作成してください。",
@@ -2270,7 +2210,6 @@
           }
         },
         "reIndex": {
-          "label": "再インデックス",
           "tooltip": {
             "indexing": "インデックス作成の実行中は再インデックスできません",
             "invalid": "再インデックスの前にコネクターの設定を修正してください",
@@ -2279,45 +2218,28 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "一時停止"
+            "label": "インデックスを一時停止",
+            "description": "進行中および今後のインデックス実行と同期をすべて取り消します。"
           },
           "resume": {
-            "label": "再開"
+            "label": "インデックスを再開",
+            "description": "スケジュールされたインデックス実行と同期を再び許可します。"
           },
           "tooltip": {
             "updating": "ステータスを更新しています"
           }
         },
         "trigger": {
-          "label": "管理"
+          "label": "インデックスを管理"
+        },
+        "updateIndex": {
+          "label": "インデックスを更新",
+          "description": "前回成功したインデックス実行以降の更新を取得してインデックスします。"
+        },
+        "fullReindex": {
+          "label": "完全な再インデックス",
+          "description": "ソースの全ドキュメントを再インデックスします。規模によっては数時間から数日かかります。"
         }
-      },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "キャンセル済み"
-        },
-        "completedWithErrors": {
-          "label": "エラーありで完了"
-        },
-        "failed": {
-          "label": "失敗"
-        },
-        "fallback": {
-          "label": "未開始"
-        },
-        "inProgress": {
-          "label": "実行中"
-        },
-        "notStarted": {
-          "label": "スケジュール済み"
-        },
-        "success": {
-          "label": "成功"
-        }
-      },
-      "pruningFrequencyModal": {
-        "description": "コネクターをプルーニングする頻度（時間単位）",
-        "title": "プルーニングの頻度"
       },
       "reEnableModal": {
         "actionButton": {
@@ -2326,247 +2248,133 @@
         "additionalDetails": "このコネクターは以前、無効としてマークされました。再有効化する前に、設定が正しいことを確認してください。続行してもよろしいですか？",
         "entityType": "無効なコネクター"
       },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "ソースのすべてのドキュメントが完全に再インデックスされます。",
-          "note": "<strong>注意：</strong> ソースに保存されているドキュメントの数によっては、長い時間がかかる場合があります。"
-        },
-        "fullReindexButton": {
-          "label": "完全な再インデックスを実行"
-        },
-        "title": "インデックス作成の実行",
-        "update": {
-          "description": "前回成功したインデックス作成以降に変更または追加されたすべてのドキュメントを取得し、インデックスに登録します。"
-        },
-        "updateButton": {
-          "label": "更新を実行"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "コネクターを更新する頻度（分単位）",
-        "title": "更新の頻度"
-      },
-      "sections": {
-        "advanced": {
-          "title": "詳細設定"
-        },
-        "advancedConfiguration": {
-          "title": "詳細な構成"
-        },
-        "connectorConfiguration": {
-          "title": "コネクターの構成"
-        },
-        "credential": {
-          "title": "認証情報"
-        },
-        "indexing": {
-          "title": "インデックス作成"
-        },
-        "indexingAttempts": {
-          "title": "インデックス作成の試行"
-        }
-      },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "試行のオーバーヘッドを非表示"
-          },
-          "showButton": {
-            "label": "試行のオーバーヘッドを表示"
-          }
-        },
-        "batchTotal": {
-          "empty": "完了したバッチはまだありません",
-          "summary": "平均バッチ：{avgLabel}、{count, plural, one {# バッチ} other {# バッチ}} — 分布は以下のとおりです。"
-        },
-        "empty": {
-          "description": "この試行のステージ計測データは、まだ記録されていません。ステージ計測の導入前に実行された古い試行には、メトリクスがありません。"
-        },
         "loadError": {
-          "description": "この試行のステージ計測データを読み込めませんでした。メトリクスを記録できない場合でもパイプラインは実行されるため、インデックス作成そのものに問題があるとは限りません。",
           "title": "ステージメトリクスの読み込みに失敗しました"
         },
-        "loading": "ステージメトリクスを読み込んでいます…",
         "perBatch": {
-          "columns": {
-            "avgTime": "平均時間",
-            "calls": "呼び出し回数",
-            "max": "最大",
-            "min": "最小",
-            "stage": "ステージ",
-            "totalTime": "合計時間"
-          },
           "empty": "バッチごとのステージデータは記録されていません。"
-        },
-        "sort": {
-          "label": "並び替え：",
-          "pipelineOrder": {
-            "label": "パイプライン順"
-          },
-          "timeTaken": {
-            "label": "所要時間"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "オブジェクトストレージからバッチを読み戻し、ワーカーのメモリに展開します。",
             "label": "バッチ読み込み"
           },
           "batchTotal": {
-            "description": "1 つのバッチを最初から最後まで処理するのにかかった実時間の合計です。",
             "label": "バッチ合計"
           },
           "batchUnaccounted": {
-            "description": "どの名前付きステージにも割り当てられていないバッチ時間です。値が大きい場合は、計測の欠落が考えられます。",
             "label": "未計上"
           },
           "checkpointLoad": {
-            "description": "保存されたチェックポイントを読み込み、前回の実行が停止した位置から試行を再開します。",
             "label": "チェックポイント読み込み"
           },
           "chunking": {
-            "description": "各ドキュメントを、embedding 生成とインデックス登録の対象となるチャンクに分割します。",
             "label": "チャンク分割"
           },
           "connectorFetch": {
-            "description": "コネクターがソースの API を呼び出し、生のドキュメントを返すのにかかる時間です。",
             "label": "コネクター取得"
           },
           "connectorValidation": {
-            "description": "取得を開始する前に、コネクターが正しく設定され、到達可能であることを検証します。",
             "label": "コネクター検証"
           },
           "contextualRag": {
-            "description": "検索の精度を高めるため、LLM でチャンクごとのコンテキスト要約を生成します。",
             "label": "Contextual RAG"
           },
           "coordLockAcquireWait": {
-            "description": "試行の共有進捗カウンターを保護する調整ロックの取得を待機します。",
             "label": "調整ロック取得待ち"
           },
           "coordinationUpdate": {
-            "description": "完了したバッチが UI に反映されるよう、試行の進捗カウンターを更新します。",
             "label": "調整更新"
           },
           "docBatchEnqueue": {
-            "description": "保存したバッチを Celery キューに送信し、docprocessing ワーカーが取得できるようにします。",
             "label": "ドキュメントバッチのキュー投入"
           },
           "docBatchStore": {
-            "description": "取得したドキュメントのバッチを、docprocessing ワーカー向けにオブジェクトストレージへ保存します。",
             "label": "ドキュメントバッチ保存"
           },
           "docDbPrepare": {
-            "description": "どのドキュメントが新規または更新されたかを判別し、データベースの行を準備します。",
             "label": "ドキュメント DB の準備"
           },
           "docLockAcquireWait": {
-            "description": "ドキュメントごとのロックを待機し、同時に実行される試行が同じドキュメントに書き込まないようにします。",
             "label": "ドキュメントロックの取得待ち"
           },
           "docprocessingSetup": {
-            "description": "ワーカーを準備します。検索設定、embedding モデル、インデックスクライアントを読み込みます。",
             "label": "ドキュメント処理のセットアップ"
           },
           "embedding": {
-            "description": "embedding モデルを呼び出し、チャンクをベクトルに変換します。通常、最も時間のかかる段階です。",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "書き込みの前に、各チャンクへアクセス制御、ブースト、その他のメタデータを付与します。",
             "label": "エンリッチメントの準備"
           },
           "finalization": {
-            "description": "処理の完了後に、ワーカーのリソースを整理し、バッチを解放します。",
             "label": "最終処理"
           },
           "gcCollect": {
-            "description": "バッチ間の明示的なガベージコレクションに要した時間です。",
             "label": "ガベージコレクション"
           },
           "hierarchyUpsert": {
-            "description": "ソースのフォルダーまたはスペースの階層を書き込み、場所でドキュメントを絞り込めるようにします。",
             "label": "階層のアップサート"
           },
           "imageProcessing": {
-            "description": "画像を抽出して要約し、その内容を検索できるテキストにします。",
             "label": "画像処理"
           },
           "permissionValidation": {
-            "description": "認証情報にソースのドキュメントを読み取る権限があるか確認します。",
             "label": "権限の検証"
           },
           "postIndexDbUpdate": {
-            "description": "インデックスへの書き込みが成功した後、Postgres のドキュメント行を更新します。",
             "label": "インデックス後の DB 更新"
           },
           "queueWait": {
-            "description": "ドキュメント処理ワーカーが開始するまでに、バッチがキューで待機した時間です。",
             "label": "キューの待ち時間"
           },
           "vectorDbWrite": {
-            "description": "embedding 済みのチャンクをドキュメントインデックスに書き込みます。",
             "label": "ベクトル DB への書き込み"
+          },
+          "embeddingRateLimitWait": {
+            "label": "埋め込みレート制限の待機",
+            "description": "インデックス設定で設定した埋め込みのレート制限により、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "プロバイダーの制限による待機",
+            "description": "埋め込みプロバイダーがリクエストを制限した後に、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "このインデックス試行における、バッチ単位および試行単位の処理時間です。",
-        "title": "インデックス作成の段階メトリクス"
       },
       "statusCard": {
         "documentsIndexed": {
           "label": "インデックス済みドキュメント数"
         },
-        "indexingSpeed": "（{speed} 件 / 分）",
+        "indexingSpeed": "{speed} 件/分",
         "lastIndexed": {
-          "label": "最終インデックス作成"
+          "value": "最終インデックス作成 {when}"
         },
-        "lastSynced": {
-          "label": "最終同期"
+        "title": "インデックス状況",
+        "documents": {
+          "label": "直近 / 合計",
+          "total": "/ {total}"
         },
-        "permissionSyncing": {
-          "label": "権限の同期"
+        "throughput": {
+          "ariaLabel": "時間ごとのインデックス済みドキュメント",
+          "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
+          "loadError": "グラフを読み込めませんでした。"
         },
-        "status": {
-          "label": "ステータス"
-        }
-      },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "エラーメッセージの全文を表示"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "ドキュメント権限の同期",
-          "notApplicableDescription": "このコネクターは、ドキュメント権限の同期ジョブを個別に使用しません。"
-        },
-        "groupMembership": {
-          "label": "グループメンバーシップの同期",
-          "notApplicableDescription": "このコネクターは、グループメンバーシップの同期ジョブを個別に使用しません。"
-        },
-        "indexing": {
-          "label": "インデックス作成"
-        },
-        "loadError": {
-          "title": "同期試行の読み込みに失敗しました"
-        },
-        "notApplicable": {
-          "title": "対象外"
+        "hold": {
+          "checks_running": "インデックス前チェックを実行中",
+          "checks_failed_to_run": "保留中: チェックを実行できませんでした",
+          "required_checks_failed": "保留中: 必須チェックが失敗しました",
+          "start": "インデックス作成を開始",
+          "released": "インデックス作成を開始しました",
+          "releaseFailed": "インデックス作成を開始できませんでした",
+          "viewChecks": "コネクタのチェックを表示"
         }
       },
       "toasts": {
         "completeReindexStarted": "完全な再インデックス作成を開始しました",
-        "completeReindexStarting": "完全な再インデックス作成を開始しています...",
         "deletionScheduleFailed": "コネクターの削除をスケジュールできませんでした - {message}",
-        "indexingProcessStartFailed": "インデックス作成の処理を開始できませんでした",
         "indexingStartFailed": "インデックス作成を開始できませんでした",
         "indexingStartUnexpectedError": "インデックス作成の開始中に予期しないエラーが発生しました",
         "indexingUpdateStarted": "インデックスの更新を開始しました",
-        "indexingUpdateStarting": "インデックスの更新を開始しています...",
-        "invalidPruningFrequency": "プルーニング頻度が無効です。有効な数値を入力してください",
-        "invalidRefreshFrequency": "更新頻度が無効です。整数を入力してください",
         "nameUpdateFailed": "コネクター名を更新できませんでした",
         "nameUpdated": "コネクター名を更新しました",
         "noUnresolvedErrors": "再試行する未解決のエラーはありません。",
@@ -2575,7 +2383,323 @@
         "refreshFrequencyUpdateFailed": "コネクターの更新頻度を変更できませんでした",
         "refreshFrequencyUpdated": "コネクターの更新頻度を変更しました",
         "targetedReindexFailed": "対象を指定した再インデックス作成に失敗しました: {message}",
-        "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。"
+        "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。",
+        "checkFrequencyUpdated": "コネクタのチェック頻度を更新しました",
+        "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした"
+      },
+      "backButton": {
+        "label": "すべてのコネクタ"
+      },
+      "account": {
+        "title": "認証アカウント",
+        "editButton": {
+          "label": "アカウントを編集"
+        }
+      },
+      "configuration": {
+        "title": "インデックス設定",
+        "description": "{source} • {count, plural, one {# 件の設定} other {# 件の設定}}",
+        "editButton": {
+          "label": "設定を編集"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, other {フォルダ}}",
+            "source": "{count, plural, other {ソース}}",
+            "stub": "{count, plural, other {ノード}}",
+            "shared_drive": "{count, plural, other {共有ドライブ}}",
+            "my_drive": "{count, plural, other {マイドライブ}}",
+            "space": "{count, plural, other {スペース}}",
+            "page": "{count, plural, other {ページ}}",
+            "project": "{count, plural, other {プロジェクト}}",
+            "database": "{count, plural, other {データベース}}",
+            "workspace": "{count, plural, other {ワークスペース}}",
+            "site": "{count, plural, other {サイト}}",
+            "drive": "{count, plural, other {ドキュメントライブラリ}}",
+            "channel": "{count, plural, other {チャンネル}}",
+            "mailbox": "{count, plural, other {メールボックス}}"
+          },
+          "counts": {
+            "folder": "{count, plural, other {# フォルダ}}",
+            "source": "{count, plural, other {# ソース}}",
+            "stub": "{count, plural, other {# ノード}}",
+            "shared_drive": "{count, plural, other {# 共有ドライブ}}",
+            "my_drive": "{count, plural, other {# マイドライブ}}",
+            "space": "{count, plural, other {# スペース}}",
+            "page": "{count, plural, other {# ページ}}",
+            "project": "{count, plural, other {# プロジェクト}}",
+            "database": "{count, plural, other {# データベース}}",
+            "workspace": "{count, plural, other {# ワークスペース}}",
+            "site": "{count, plural, other {# サイト}}",
+            "drive": "{count, plural, other {# ドキュメントライブラリ}}",
+            "channel": "{count, plural, other {# チャンネル}}",
+            "mailbox": "{count, plural, other {# メールボックス}}"
+          },
+          "notIndexed": "未インデックス",
+          "other": "その他のドキュメント",
+          "loadError": "ドキュメントの内訳を読み込めませんでした。",
+          "open": "ソースで開く",
+          "empty": "まだインデックスされたドキュメントはありません。",
+          "unavailable": "最初の実行が成功した後に利用できます。",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, other {件のドキュメント}}"
+        },
+        "summary": "{realm} • {counts}"
+      },
+      "sharing": {
+        "title": "共有設定",
+        "summary": {
+          "everyone": "ドキュメントは**全員**と共有",
+          "groups": "ドキュメントは**{count, plural, one {# 件のグループ} other {# 件のグループ}}**と共有",
+          "sync": "ドキュメントへのアクセスは**{source} と同期**",
+          "managedByAdmins": "**管理者**が管理",
+          "managedByGroups": "**{count, plural, one {# 件のグループ} other {# 件のグループ}}**が管理",
+          "syncRestricted": "ドキュメントへのアクセスは**{source} と同期**し、**{count, plural, one {# 件のグループ} other {# 件のグループ}}**に制限",
+          "groupsPending": "ドキュメントは**特定のグループ**と共有",
+          "syncRestrictedPending": "ドキュメントへのアクセスは**{source} と同期**し、**特定のグループ**に制限"
+        },
+        "manageAccess": {
+          "title": "コネクタ管理アクセス",
+          "unavailable": "このコネクタを管理しているユーザーは表示できません。"
+        },
+        "editButton": {
+          "label": "アクセスを編集"
+        },
+        "groupsUnavailable": "グループを読み込めませんでした。"
+      },
+      "schedule": {
+        "refresh": "**{every}**ごとに更新",
+        "prune": "**{every}**ごとに整理",
+        "checks": "**{every}**ごとにチェックを実行"
+      },
+      "runs": {
+        "kinds": {
+          "label": "実行の種類",
+          "all": "すべての種類",
+          "indexing": "ドキュメントインデックス",
+          "doc_permission_sync": "権限の同期",
+          "group_sync": "グループメンバーシップの同期",
+          "pruning": "ドキュメントのプルーニング",
+          "checks": "コネクタチェック"
+        },
+        "detail": {
+          "queued": "待機中",
+          "running": "実行中",
+          "rate": "{rate} 件/分",
+          "finished": "{time}（{minutes, number} 分）"
+        },
+        "actions": {
+          "stages": "ステージの指標を表示",
+          "cancel": "キャンセル",
+          "logs": "ログを表示",
+          "checks": "チェック結果を表示"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, other {# 件のドキュメントが失敗}}",
+          "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
+        },
+        "figures": {
+          "indexed": "件インデックス済み",
+          "synced": "件同期済み",
+          "memberships": "件のメンバーシップ",
+          "removed": "件削除",
+          "checks": "件のチェックを実行"
+        },
+        "counts": {
+          "newDocs": "{count, plural, other {# 件の新しいドキュメント}}",
+          "updatedDocs": "更新されたドキュメント",
+          "removedDocs": "{count, plural, other {# 件のドキュメントを削除}}",
+          "users": "{count, plural, other {# 人のユーザー}}",
+          "groups": "{count, plural, other {# 件のグループ}}",
+          "running": "{count, plural, other {# 件の実行が進行中}}",
+          "succeeded": "{count, plural, other {# 件の実行が成功}}",
+          "failed": "{count, plural, other {# 件の実行が失敗}}",
+          "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
+          "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"
+        },
+        "search": {
+          "placeholder": "インデックス実行を検索..."
+        },
+        "window": {
+          "label": "期間",
+          "all": "全期間",
+          "h1": "過去 1 時間",
+          "h12": "過去 12 時間",
+          "h24": "過去 24 時間",
+          "d7": "過去 7 日間",
+          "d30": "過去 30 日間"
+        },
+        "statusGroups": {
+          "label": "ステータス",
+          "all": "すべてのステータス",
+          "running": "実行中",
+          "succeeded": "成功",
+          "failed": "失敗",
+          "canceled": "キャンセル済み"
+        },
+        "loadError": {
+          "title": "実行を読み込めませんでした。"
+        },
+        "empty": {
+          "title": "まだ実行はありません",
+          "filteredTitle": "このフィルターに一致する実行はありません。",
+          "description": "実行はバックグラウンドでスケジュールされるため、表示されるまでに少し時間がかかる場合があります。"
+        },
+        "units": "{count, plural, other {件の実行}}",
+        "errorModal": {
+          "indexing": "インデックス実行のエラー",
+          "doc_permission_sync": "ドキュメント権限の同期エラー",
+          "group_sync": "グループメンバーシップの同期エラー",
+          "pruning": "ドキュメントのプルーニングエラー",
+          "checks": "コネクタチェックのエラー"
+        },
+        "toasts": {
+          "canceled": "実行をキャンセルしています。",
+          "cancelFailed": "実行をキャンセルできませんでした。もう一度お試しください。"
+        },
+        "checkResults": {
+          "title": "コネクタチェック",
+          "close": "閉じる",
+          "count": "({count})"
+        }
+      },
+      "activity": {
+        "search": {
+          "placeholder": "アクティビティ履歴を検索..."
+        },
+        "counts": {
+          "failures": "{count, plural, other {失敗した実行 # 件}}",
+          "errors": "{count, plural, other {ドキュメントエラーのある実行 # 件}}"
+        },
+        "filter": {
+          "label": "表示",
+          "all": "すべてのレベル",
+          "failures": "失敗",
+          "errors": "エラー",
+          "other": "その他"
+        },
+        "resolved": {
+          "label": "解決済み"
+        },
+        "groups": {
+          "failures": "{count, plural, other {失敗 # 件}}",
+          "errors": "{count, plural, other {エラー # 件}}",
+          "resolved": "{count, plural, other {解決済み # 件}}",
+          "other": "その他"
+        },
+        "title": {
+          "indexing": {
+            "failed": "インデックス作成に失敗しました",
+            "running": "エラーを伴いインデックス作成中",
+            "stopped": "エラーを伴いインデックス作成が停止しました",
+            "errors": "エラーを伴いインデックス作成が完了しました",
+            "resolved": "インデックス作成のエラーが解決されました",
+            "succeeded": "インデックスが正常に完了しました",
+            "inProgress": "インデックス実行中",
+            "canceled": "インデックスが停止しました"
+          },
+          "doc_permission_sync": {
+            "failed": "権限の同期に失敗しました",
+            "running": "エラーを伴い権限を同期中",
+            "stopped": "エラーを伴い権限の同期が停止しました",
+            "errors": "エラーを伴い権限が同期されました",
+            "resolved": "権限同期のエラーが解決されました",
+            "succeeded": "権限の同期が正常に完了しました",
+            "inProgress": "権限を同期中",
+            "canceled": "権限の同期が停止しました"
+          },
+          "group_sync": {
+            "failed": "グループメンバーシップの同期に失敗しました",
+            "running": "エラーを伴いグループメンバーシップを同期中",
+            "stopped": "エラーを伴いグループメンバーシップの同期が停止しました",
+            "errors": "エラーを伴いグループメンバーシップが同期されました",
+            "resolved": "グループメンバーシップ同期のエラーが解決されました",
+            "succeeded": "グループメンバーシップの同期が正常に完了しました",
+            "inProgress": "グループメンバーシップを同期中",
+            "canceled": "グループ同期が停止しました"
+          },
+          "pruning": {
+            "failed": "プルーニングに失敗しました",
+            "running": "エラーを伴うプルーニングを実行中",
+            "stopped": "プルーニングがエラーで停止しました",
+            "errors": "プルーニングがエラーを伴って完了しました",
+            "resolved": "プルーニングのエラーが解決されました",
+            "succeeded": "プルーニングが正常に完了しました",
+            "inProgress": "プルーニングを実行中",
+            "canceled": "プルーニングが停止しました"
+          },
+          "checks": {
+            "failed": "コネクタチェックに失敗しました",
+            "running": "エラーを伴うコネクタチェックを実行中",
+            "stopped": "コネクタチェックがエラーで停止しました",
+            "errors": "コネクタチェックがエラーを伴って完了しました",
+            "resolved": "コネクタチェックのエラーが解決されました",
+            "succeeded": "コネクタチェックに合格しました",
+            "inProgress": "コネクタチェックを実行中",
+            "canceled": "コネクタチェックが停止しました"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, other {# 件のドキュメントをインデックス化}}。実行時間 {minutes, plural, other {# 分}}。",
+          "doc_permission_sync": "{count, plural, other {# 件のドキュメントを同期}}。実行時間 {minutes, plural, other {# 分}}。",
+          "group_sync": "{count, plural, other {# 件のメンバーシップを同期}}。実行時間 {minutes, plural, other {# 分}}。",
+          "pruning": "{count, plural, one {# 件のドキュメントを削除} other {# 件のドキュメントを削除}}。プルーニングの実行時間 {minutes, plural, one {# 分} other {# 分}}。",
+          "checks": "{count, plural, one {# 件のチェックを実行} other {# 件のチェックを実行}}。チェックの実行時間 {minutes, plural, one {# 分} other {# 分}}。",
+          "checksFailed": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}。"
+        },
+        "tags": {
+          "stackTrace": "スタックトレース",
+          "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
+          "doc_permission_sync": "{count, plural, other {# 件のドキュメントの同期に失敗}}",
+          "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
+          "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}",
+          "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
+          "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
+        },
+        "more": "さらに表示",
+        "empty": {
+          "title": "失敗もエラーもありません",
+          "resolved": "解決済みのエラーはありません",
+          "filtered": "この検索に一致するものはありません。",
+          "failures": "失敗はありません",
+          "errors": "エラーはありません",
+          "other": "その他の実行はありません"
+        },
+        "loadError": {
+          "title": "アクティビティを読み込めませんでした。"
+        },
+        "docs": {
+          "title": "失敗したドキュメント",
+          "search": {
+            "placeholder": "ファイルを検索..."
+          },
+          "resolveAll": "すべて解決",
+          "resolveOne": "このドキュメントを解決",
+          "more": "さらに表示",
+          "less": "折りたたむ",
+          "unknownDocument": "不明なドキュメント",
+          "empty": "未解決のドキュメントエラーはありません",
+          "loadError": "失敗したドキュメントを読み込めませんでした。",
+          "open": "ドキュメントを開く"
+        },
+        "trace": {
+          "runId": "実行 ID: {id}",
+          "copy": "スタックトレースをコピー"
+        },
+        "actions": {
+          "resolve": "解決"
+        }
+      },
+      "stageDetails": {
+        "title": "ステージ詳細",
+        "calls": "バッチ",
+        "averageTime": "平均時間",
+        "maxTime": "最大時間",
+        "uneven": {
+          "tooltip": "このステージのバッチ時間は大きくばらついています"
+        },
+        "close": "ステージ詳細を閉じる"
       }
     },
     "connectorTitle": {
@@ -2744,6 +2868,10 @@
             "label": "アカウントを削除",
             "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。"
           },
+          "updateButton": {
+            "label": "認証情報を更新",
+            "tooltip": "このアカウントを使うすべてのコネクタの保存値を変更します。"
+          },
           "usedBy": {
             "label": "{count, plural, other {# 個のコネクタ}}で使用中"
           },
@@ -2803,19 +2931,12 @@
         "fieldInvalid": "「{field}」を確認してください: {detail}",
         "rejected": "この認証情報はこの設定では使用できません。{detail}"
       },
-      "credentialsLoadError": {
-        "title": "認証情報の読み込みに失敗しました。"
-      },
       "field": {
         "optionalSuffix": {
           "label": "任意"
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Google Drive の認証情報を作成しました。認証情報の一覧から管理または取り消しができます。",
-          "title": "認証が完了しました"
-        },
         "authFailed": {
           "toast": "Google Drive での認証に失敗しました - {error}"
         },
@@ -2823,58 +2944,15 @@
           "label": "Google Drive で認証",
           "pendingLabel": "認証しています..."
         },
-        "createButton": {
-          "label": "認証情報を作成",
-          "pendingLabel": "作成しています..."
-        },
-        "credentialsLoadError": {
-          "title": "Google Drive の認証情報の読み込みに失敗しました。"
-        },
-        "invalidFile": {
-          "toast": "指定したファイルが無効です - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "指定したファイルが無効です - サービスアカウントの JSON キーが必要です"
-        },
-        "missingServiceAccountKey": {
-          "toast": "認証情報を作成する前に、サービスアカウントキーをアップロードしてください"
-        },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Drive を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ",
           "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Google Drive と Gmail へのアクセスをまとめて求めます。このアカウントを Google Drive だけに使う場合は、同意画面で Gmail のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
-        },
-        "primaryAdmin": {
-          "description": "インデックスを作成する Google Drive を所有する Google 組織の、管理者またはオーナーのメールアドレスを入力してください。",
-          "invalidEmail": "有効なメールアドレスを入力してください",
-          "label": "主管理者のメールアドレス",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必須です"
-        },
-        "section": {
-          "title": "Google Drive の認証"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "サービスアカウントの認証情報を作成できませんでした - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "サービスアカウントの認証情報を作成しました"
-        },
-        "serviceAccountOption": {
-          "title": "オプション 2: サービスアカウント"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "サービスアカウントの JSON キーをアップロードまたは貼り付け"
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "Gmail の認証情報を作成しました。認証情報の一覧から管理または取り消しができます。",
-          "title": "認証が完了しました"
-        },
         "authFailed": {
           "toast": "Gmail での認証に失敗しました - {error}"
         },
@@ -2882,51 +2960,12 @@
           "label": "Gmail で認証",
           "pendingLabel": "認証しています..."
         },
-        "createButton": {
-          "label": "認証情報を作成",
-          "pendingLabel": "作成しています..."
-        },
-        "credentialsLoadError": {
-          "title": "Gmail の認証情報の読み込みに失敗しました。"
-        },
-        "invalidFile": {
-          "toast": "指定したファイルが無効です - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "指定したファイルが無効です - サービスアカウントの JSON キーが必要です"
-        },
-        "missingServiceAccountKey": {
-          "toast": "認証情報を作成する前に、サービスアカウントキーをアップロードしてください"
-        },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Gmail を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ",
           "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Gmail と Google Drive へのアクセスをまとめて求めます。このアカウントを Gmail だけに使う場合は、同意画面で Google Drive のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
-        },
-        "primaryAdmin": {
-          "description": "インデックスを作成する Gmail アカウントを所有する Google 組織の、管理者またはオーナーのメールアドレスを入力してください。",
-          "invalidEmail": "有効なメールアドレスを入力してください",
-          "label": "主管理者のメールアドレス",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必須です"
-        },
-        "section": {
-          "title": "Gmail の認証"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "サービスアカウントの認証情報を作成できませんでした - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "サービスアカウントの認証情報を作成しました"
-        },
-        "serviceAccountOption": {
-          "title": "オプション 2: サービスアカウント"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "サービスアカウントの JSON キーをアップロードまたは貼り付け"
         }
       },
       "header": {
@@ -3085,6 +3124,10 @@
         "units": {
           "hours": "時間",
           "minutes": "分"
+        },
+        "checkFrequency": {
+          "title": "チェックの実行間隔",
+          "description": "接続の機能と状態を確認します。"
         }
       },
       "settings": {
@@ -3137,6 +3180,1109 @@
           "title": "コネクタの管理アクセス"
         },
         "title": "コネクタ設定"
+      },
+      "optionsListInput": {
+        "placeholder": "リストから {label} を選択するか入力"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "画像やドキュメントを含むページの添付ファイルを処理します",
+              "label": "添付ファイルを含める"
+            },
+            "scoped_token": {
+              "label": "スコープ付き API トークンを使用する",
+              "description": "スコープ付きトークンは、Atlassian の API ゲートウェイ経由のルーティングが必要です。従来型トークンの場合はオフのままにしてください。"
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "ミーティング ID",
+              "description": "定期ミーティングは、開催回ごとにインデックスされます。Zoom が返す開催回は過去 15 か月分のみのため、それより古い回はミーティング ID では取得できません。さらに過去の履歴をインデックスするには、ホストのメールアドレスまたは Zoom グループで範囲を指定してください。どちらにもこの制限はありません。"
+            },
+            "webinar_ids": {
+              "label": "ウェビナー ID",
+              "description": "ウェビナーには、ホストに対して有効化された Webinar アドオンも必要です。ミーティング ID と異なり、ウェビナーの履歴には 15 か月の制限がありません。"
+            },
+            "host_emails": {
+              "label": "ホストのメールアドレス",
+              "description": "これらのユーザーがホストするすべてのセッションのうち、下でチェックした種類のものをインデックスします。Zoom ユーザーに一致しないメールアドレスは、無視されずにインデックスエラーとして報告されます。"
+            },
+            "group_id": {
+              "label": "Zoom グループ ID",
+              "description": "1 つの Zoom グループのメンバーがホストするすべてのセッションのうち、下でチェックした種類のものをインデックスします。Zoom は実行のたびにメンバー一覧を再取得するため、このコネクターを編集しなくても、参加者や退出者が反映されます。"
+            },
+            "include_meetings": {
+              "label": "ミーティングを含める",
+              "description": "ホストのメールアドレスと Zoom グループに適用されます。上の ID 一覧では、各 ID の種類がすでに指定されています。"
+            },
+            "include_webinars": {
+              "label": "ウェビナーを含める",
+              "description": "ホストのメールアドレスと Zoom グループに適用されます。ウェビナーには、ホストに対して有効化された Webinar アドオンも必要です。"
+            },
+            "treat_link_access_as_public": {
+              "label": "リンクアクセスを公開として扱う",
+              "description": "権限同期を使用する場合のみ有効です。オンにすると、リンクアクセスが「リンクを知っている全員」またはサインイン済みユーザー向けのルールになっている録画は、すべての Onyx ユーザーに表示され、ドメイン向けのルールの場合はそのドメインのユーザーに表示されます。オフにすると、Zoom は「アクセス権のあるユーザー」に誰が含まれるかを返せないため、すべての文字起こしは録画の所有者のみに表示されます。"
+            },
+            "plan_tier": {
+              "label": "Zoom プラン",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "このコネクターが Zoom を呼び出せる速度を設定します。Pro アカウントでは `pro` を、Business、Education、Enterprise、Partner では `business_plus` を選択してください。"
+            },
+            "rate_limit_percent": {
+              "label": "Zoom API レート制限",
+              "description": "このコネクターが使用できる、アカウントの Zoom レート制限の割合を 1 から 100 の整数(パーセント)で指定します。空欄の場合は 50 になり、お客様の他の Zoom 連携用の余裕が残ります。各 Zoom コネクターは自身のペースを調整し、他のコネクターを把握できないため、1 つの Zoom アカウントに 2 つのコネクターがあると、それぞれがこの割合を消費します。複数実行する場合は、値を分割してください。"
+            }
+          },
+          "description": "Zoom コネクターを設定",
+          "subtext": "Zoom Pro プラン以上で、各 Zoom セッションのクラウドレコーディングの文字起こしをインデックスします。クラウド録画されなかったセッションはスキップされます。「詳細設定」でインデックス開始日を設定してください。Zoom は録画を 1 リクエストにつき 1 か月分ずつ一覧表示するため、開始日がないと、最初のクロールで 2013 年までのすべての月を要求し、何もない年のためにアカウントの API 利用枠を消費してしまいます。"
+        },
+        "web": {
+          "description": "Web コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL",
+              "placeholder": "https://example.com"
+            },
+            "web_connector_type": {
+              "label": "スクレイピング方法",
+              "options": {
+                "recursive": "再帰",
+                "single": "単一",
+                "sitemap": "サイトマップ"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "スクレイピング前にスクロールする",
+              "description": "目的のコンテンツを読み込むためにスクロールが必要なウェブサイトの場合に有効にします"
+            },
+            "url_rewrites": {
+              "label": "URL の書き換え",
+              "description": "保存前にドキュメントの URL を書き換えます。社内ミラー経由でクロールしつつ、正規の公開リンクを保存する場合に便利です。例: https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "元の URL プレフィックス",
+              "rightLabel": "置換後のプレフィックス",
+              "leftPlaceholder": "https://naibu-mira.example.com",
+              "rightPlaceholder": "https://docs.example.com"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "LumApps コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "API ベース URL(セルホスト)",
+              "description": "LumApps のセル/API ホスト。例: https://go-cell-005.api.lumapps.com(ドキュメントサイトの api.lumapps.com ではありません)。"
+            },
+            "organization_id": {
+              "label": "組織 ID",
+              "description": "LumApps の組織 ID(数値)。"
+            },
+            "instance_ids": {
+              "label": "インスタンス(サイト)ID",
+              "description": "インデックス対象を特定のインスタンス/サイト ID に限定します。空欄の場合は、サービスユーザーが閲覧できるすべてのコンテンツをインデックスします。"
+            },
+            "custom_content_types": {
+              "label": "カスタムコンテンツタイプ ID",
+              "description": "特定のカスタムコンテンツタイプ ID に限定します。空欄の場合は、すべてのコンテンツタイプをインデックスします。"
+            },
+            "lang": {
+              "label": "言語",
+              "description": "コンテンツのタイトル/本文とメタデータラベルに使用する言語(ISO 639-1。例: en、fr)。"
+            }
+          }
+        },
+        "github": {
+          "description": "GitHub コネクターを設定",
+          "fields": {
+            "github_base_url": {
+              "label": "GitHub Enterprise Server の URL",
+              "description": "github.com を使用する場合は空欄のままにしてください。",
+              "placeholder": "https://github.example.com"
+            },
+            "repo_owner": {
+              "label": "リポジトリのオーナー"
+            },
+            "github_mode": {
+              "label": "インデックスする GitHub コンテンツ",
+              "tabs": {
+                "repo": {
+                  "label": "特定のリポジトリ"
+                },
+                "everything": {
+                  "label": "すべて"
+                }
+              }
+            },
+            "repositories": {
+              "label": "リポジトリ名",
+              "description": "複数のリポジトリを指定する場合は、名前をカンマ区切りで入力してください(例: repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのリポジトリをインデックスします。"
+            },
+            "include_prs": {
+              "label": "プルリクエストを含める",
+              "description": "リポジトリのプルリクエストをインデックスします"
+            },
+            "include_issues": {
+              "label": "Issue を含める",
+              "description": "リポジトリの Issue をインデックスします"
+            },
+            "include_files": {
+              "label": "ドキュメントを含める",
+              "description": "リポジトリのテキストベースのドキュメント(Markdown、テキストなど)をインデックスします"
+            },
+            "branch": {
+              "label": "ブランチ",
+              "description": "ドキュメントをインデックスするブランチ(例: gh-pages)。空欄の場合は、各リポジトリのデフォルトブランチを使用します。「ドキュメントを含める」が有効な場合のみ適用されます。既存のコネクターでこの設定を変更した後は、再インデックスを実行すると新しいブランチがすぐに反映されます。"
+            }
+          }
+        },
+        "testrail": {
+          "description": "TestRail コネクターを設定",
+          "fields": {
+            "testrail_base_url": {
+              "label": "TestRail のベース URL",
+              "placeholder": "https://acme.testrail.io"
+            },
+            "project_ids": {
+              "label": "プロジェクト ID",
+              "description": "インデックスする TestRail プロジェクト ID のカンマ区切りリスト(例: 1 または 1,2,3)。空欄の場合は、すべてのプロジェクトをインデックスします。"
+            },
+            "cases_page_size": {
+              "label": "ケースのページサイズ",
+              "description": "TestRail API から 1 ページあたりに取得するテストケース数(デフォルト: 250)"
+            },
+            "max_pages": {
+              "label": "最大ページ数",
+              "description": "無限ループを防ぐために取得するページ数の上限(デフォルト: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "ドキュメントの文字数上限(スキップ)",
+              "description": "この文字数を超えるテストケースのインデックスをスキップします(デフォルト: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "GitLab コネクターを設定",
+          "fields": {
+            "gitlab_url": {
+              "label": "GitLab の URL",
+              "placeholder": "https://gitlab.com"
+            },
+            "project_owner": {
+              "label": "プロジェクトのオーナー"
+            },
+            "project_name": {
+              "label": "プロジェクト名"
+            },
+            "include_mrs": {
+              "label": "MR を含める",
+              "description": "リポジトリのマージリクエストをインデックスします"
+            },
+            "include_issues": {
+              "label": "Issue を含める",
+              "description": "リポジトリの Issue をインデックスします"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "Bitbucket コネクターを設定",
+          "subtext": "Bitbucket コネクターを設定します(Cloud のみ)。ワークスペース、特定のプロジェクト、またはリポジトリをインデックスできます。",
+          "fields": {
+            "workspace": {
+              "label": "ワークスペース",
+              "description": "インデックスする Bitbucket ワークスペース(例: https://bitbucket.org/atlassian/workspace の \"atlassian\")。"
+            },
+            "bitbucket_mode": {
+              "label": "インデックスする Bitbucket コンテンツ",
+              "tabs": {
+                "repo": {
+                  "label": "特定のリポジトリ"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "workspace": {
+                  "label": "ワークスペース"
+                }
+              }
+            },
+            "repositories": {
+              "label": "リポジトリのスラッグ",
+              "description": "複数のリポジトリを指定する場合は、スラッグをカンマ区切りで入力してください(例: repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "プロジェクトキー",
+              "description": "1 つ以上の Bitbucket プロジェクトキー(カンマ区切り)。それらのプロジェクト内のすべてのリポジトリをインデックスします(例: PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "ワークスペース",
+              "description": "このコネクターは、ワークスペース内のすべてのリポジトリをインデックスします。"
+            }
+          }
+        },
+        "gitbook": {
+          "description": "GitBook コネクターを設定",
+          "fields": {
+            "space_id": {
+              "label": "スペース ID",
+              "description": "インデックスする GitBook スペースの ID。スペース内のページの URL で確認できます。たとえば URL が `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/` の場合、スペース ID は `8JkzVx8QCIGRrmxhGHU8` です。"
+            }
+          }
+        },
+        "google_drive": {
+          "description": "Google Drive コネクターを設定",
+          "fields": {
+            "credential_kind": {
+              "label": "認証情報の種類"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "一般"
+                },
+                "Specific": {
+                  "label": "特定"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "共有ドライブを含める",
+              "description": {
+                "oauth": "アクセス権のある共有ドライブ内のすべてをインデックスすることを Onyx に許可します。",
+                "serviceAccount": "組織の共有ドライブ内のすべてをインデックスすることを Onyx に許可します。"
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "マイドライブを含める",
+                "serviceAccount": "全員のマイドライブを含める"
+              },
+              "description": {
+                "oauth": "マイドライブ内のすべてをインデックスすることを Onyx に許可します。",
+                "serviceAccount": "全員のマイドライブ内のすべてをインデックスすることを Onyx に許可します。"
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "あなたと共有されているすべてのファイルをインデックスすることを Onyx に許可します。",
+              "label": "あなたと共有されているすべてのファイルを含める"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "インデックスする共有ドライブの URL をカンマ区切りで入力してください。これらの共有ドライブにアクセスできる必要があります。",
+                "serviceAccount": "インデックスする共有ドライブの URL をカンマ区切りで入力してください。"
+              },
+              "label": "共有ドライブの URL"
+            },
+            "shared_folder_urls": {
+              "description": "インデックスするフォルダーの URL をカンマ区切りで入力してください。これらのフォルダー(およびすべてのサブフォルダー)内のファイルがインデックスされます。",
+              "label": "フォルダーの URL"
+            },
+            "my_drive_emails": {
+              "description": "マイドライブをインデックスするユーザーのメールアドレスをカンマ区切りで入力してください。",
+              "label": "マイドライブのメールアドレス"
+            },
+            "specific_user_emails": {
+              "description": "インデックスする特定のユーザーのメールアドレスをカンマ区切りで入力してください。これらのユーザーがアクセスできるファイルのみがインデックスされます。",
+              "label": "特定のユーザーのメールアドレス"
+            },
+            "exclude_domain_link_only": {
+              "label": "ドメイン内リンクのみのファイルを非表示にする",
+              "description": "有効にすると、Onyx は広範囲(ドメイン全体または公開)に共有されていても、アクセスにリンクが必要なファイルをスキップします。"
+            }
+          }
+        },
+        "gmail": {
+          "description": "Gmail コネクターを設定"
+        },
+        "bookstack": {
+          "description": "Bookstack コネクターを設定",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "BookStack のベース URL",
+              "placeholder": "https://bookstack.example.com"
+            }
+          }
+        },
+        "outline": {
+          "description": "Outline コネクターを設定",
+          "fields": {
+            "outline_base_url": {
+              "label": "Outline のベース URL",
+              "placeholder": "https://app.getoutline.com"
+            }
+          }
+        },
+        "confluence": {
+          "description": "Confluence コネクターを設定",
+          "fields": {
+            "is_cloud": {
+              "label": "クラウド版",
+              "description": "atlassian.net 上のサイトには Confluence Cloud を、セルフホストの Confluence Server または Data Center サイトには Confluence Data Center を選択してください。"
+            },
+            "wiki_base": {
+              "label": "サイト URL",
+              "placeholder": "https://domein-mei.atlassian.net/wiki"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "space": {
+                  "label": "スペース"
+                },
+                "page": {
+                  "label": "ページ"
+                },
+                "cql": {
+                  "label": "CQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのページをインデックスします。"
+            },
+            "space": {
+              "label": "スペースキー",
+              "description": "インデックスする Confluence のスペースキー(例: `KB`)。"
+            },
+            "page_id": {
+              "label": "ページ ID",
+              "description": "インデックスする特定のページ ID(例: `131368`)"
+            },
+            "index_recursively": {
+              "label": "再帰的にインデックス",
+              "description": "オンにすると、ページ ID で指定したページと、そのすべての子ページをインデックスします。"
+            },
+            "cql_query": {
+              "label": "CQL クエリ",
+              "description": "重要: 現在、'page' タイプのオブジェクトを返す CQL クエリのみがサポートされています。つまり、すべての CQL クエリで、唯一のタイプフィルターとして 'type=page' を含める必要があります。また、コネクターのポーリングロジックに問題が生じるため、'lastModified' のフィルターは使用しないでください。コネクターが独自の並び順を設定するため、ORDER BY も使用しないでください。CQL クエリが返すページの添付ファイルとコメントは、すべて取得されます。'lastmodified' フィルターは上書きされます。詳細は、Atlassian の [CQL ドキュメント](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)を参照してください。"
+            }
+          }
+        },
+        "jira": {
+          "description": "Jira コネクターを設定",
+          "subtext": "インデックスする Jira コンテンツを設定します。すべてをインデックスすることも、特定のプロジェクトを指定することもできます。",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://domein-mei.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "jql": {
+                  "label": "JQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべての Issue をインデックスします。"
+            },
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "インデックスする特定のプロジェクトのキー(例: 'PROJ')。"
+            },
+            "jql_query": {
+              "label": "JQL クエリ",
+              "description": "Jira の Issue を絞り込むカスタム JQL クエリ。\n\n重要: コネクターのロジックと競合するため、JQL クエリに時間ベースのフィルターを含めないでください。また、ORDER BY 句も含めないでください。\n\n構文の詳細は、Atlassian の [JQL ドキュメント](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)を参照してください。"
+            },
+            "comment_email_blacklist": {
+              "label": "コメントのメール除外リスト",
+              "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "salesforce": {
+          "description": "Salesforce コネクターを設定",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "設定タイプ",
+              "tabs": {
+                "simple": {
+                  "label": "シンプル"
+                },
+                "advanced": {
+                  "label": "詳細"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "対象オブジェクト",
+              "description": "インデックスする Salesforce オブジェクトタイプを指定します。不明な場合はオブジェクトを指定しなければ、Onyx はデフォルトで 'Account' をインデックスします。\n\nヒント: オブジェクト名は単数形で指定してください(例: 'Opportunities' ではなく 'Opportunity')。"
+            },
+            "custom_query_config": {
+              "label": "カスタムクエリ設定",
+              "description": "インデックスするフィールドと子オブジェクトを正確に定義する JSON 設定を入力してください。これにより、データ構造を完全に制御できます。\n\n例: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n詳細は[ドキュメントを参照]({docsAdminsPath}/connectors/official/salesforce)してください。"
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "SharePoint コネクターを設定",
+          "fields": {
+            "sites": {
+              "label": "サイト",
+              "description": "- サイトを指定しない場合、組織内のすべてのサイトがインデックスされます(`Sites.Read.All` 権限が必要)。\n- たとえば `https://onyxai.sharepoint.com/sites/support` を指定すると、このサイトのみがインデックスされます。\n- たとえば `https://onyxai.sharepoint.com/sites/support/subfolder` を指定すると、このフォルダーのみがインデックスされます。\n- ユーザーの個人サイトをインデックスするには、[OneDrive コネクター]({docsAdminsPath}/connectors/official/onedrive)を使用してください。\n- サイトの指定は現在、英語、スペイン語、ドイツ語を使用する SharePoint インスタンスで動作します。他の言語への対応が必要な場合は、Onyx チームにお問い合わせください。"
+            },
+            "include_site_documents": {
+              "label": "ドキュメントをインデックス",
+              "description": "上で定義したすべての SharePoint ライブラリまたはフォルダーのドキュメントをインデックスします。"
+            },
+            "include_site_pages": {
+              "label": "ASPX サイトをインデックス",
+              "description": "ライブラリやフォルダーが指定されている場合でも、上で定義したすべての SharePoint サイトの aspx ページをインデックスします。"
+            },
+            "treat_sharing_link_as_public": {
+              "label": "共有リンクを公開として扱う",
+              "description": "有効にすると、共有リンク(匿名または組織全体)があるドキュメントは公開(すべての Onyx ユーザーに表示)として扱われます。無効にすると、明示的なロールが割り当てられたユーザーとグループのみがドキュメントを閲覧できます。"
+            },
+            "excluded_sites": {
+              "label": "除外するサイト",
+              "description": "インデックスから除外するサイトの URL または glob パターン。一致したサイトは、上のサイト一覧に含まれていても、インデックスされません。例: `https://contoso.sharepoint.com/sites/archive`(完全一致)、`*://*/sites/archive-*`(glob パターン)。"
+            },
+            "excluded_paths": {
+              "label": "除外するパス",
+              "description": "ドキュメントライブラリ内で、インデックスから除外するファイルパスの glob パターン。パターンは、相対パス全体とファイル名の両方に対して照合されます。例: `*.tmp`(一時ファイル)、`~$*`(Office のロックファイル)、`Archive/*`(フォルダー)。"
+            },
+            "authority_host": {
+              "label": "認証局ホスト",
+              "description": "認証に使用する Microsoft ID 認証局のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://login.microsoftonline.us を使用してください。"
+            },
+            "graph_api_host": {
+              "label": "Graph API ホスト",
+              "description": "Microsoft Graph API のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://graph.microsoft.us を使用してください。"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "SharePoint ドメインサフィックス",
+              "description": "SharePoint サイトのドメインサフィックス(例: sharepoint.com)。ほとんどの環境ではデフォルトのままにしてください。GCC High の場合は、sharepoint.us を使用してください。"
+            }
+          }
+        },
+        "teams": {
+          "description": "Teams コネクターを設定",
+          "fields": {
+            "teams": {
+              "label": "チーム",
+              "description": "インデックスするチームを 0 個以上指定します。たとえば、'onyxai' 組織の 'Support' チームを指定すると、'Support' チームに属するチャンネルで送信されたメッセージのみがインデックスされます。チームを指定しない場合は、組織内のすべてのチームがインデックスされます。"
+            },
+            "include_attachments": {
+              "description": "各チャンネルの「ファイル」タブにあるファイルを、SharePoint が付与する閲覧者付きの独立したドキュメントとしてインデックスします。証明書認証情報、Graph の Files.Read.All または Sites.Read.All、および各ファイルの閲覧者を読み取るための SharePoint API の Sites.FullControl.All が必要です。Sites.Selected を使用する場合は、各チャンネルサイトでアプリにフルコントロールを付与してください。"
+            },
+            "include_inline_images": {
+              "label": "インライン画像を含める",
+              "description": "チャンネルメッセージに貼り付けられた画像を、スレッドとともにインデックスします。追加の権限は不要です。検索設定で画像の抽出と分析がオフの間は、何もダウンロードされません。"
+            },
+            "include_meeting_transcripts": {
+              "label": "ミーティングの文字起こしを含める",
+              "description": "予定されたミーティングの文字起こしを、主催者と参加者が閲覧できる独立したドキュメントとしてインデックスします。OnlineMeetingTranscript.Read.All、OnlineMeetings.Read.All、User.Read.All のアプリケーション権限、Graph API による文字起こしへのアクセスを許可するテナント設定、および主催者に付与されたアプリケーションアクセスポリシーが必要です。チャンネルミーティングは対象外です。過去 6 か月分の文字起こしがインデックスされ、それより古くなった文字起こしはインデックスから削除されます。"
+            },
+            "include_meeting_chats": {
+              "label": "ミーティングのチャットを含める",
+              "description": "予定されたミーティングのチャットに書き込まれた内容を、チャットのメンバーが閲覧できる 1 日 1 ドキュメントとしてインデックスします。Chat.Read.All と User.Read.All のアプリケーション権限が必要です。このテナントで主催されたミーティングが対象です。Microsoft は、他の組織が設定したミーティングのチャットを提供しません。"
+            },
+            "meeting_organizers": {
+              "label": "ミーティング主催者",
+              "description": "ミーティングの文字起こしとチャットをインデックスする主催者のユーザープリンシパル名。空欄の場合は、Teams ライセンスを持つ有効なすべてのユーザーが対象です。"
+            },
+            "authority_host": {
+              "label": "認証局ホスト",
+              "description": "認証に使用する Microsoft ID 認証局のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://login.microsoftonline.us を使用してください。"
+            },
+            "graph_api_host": {
+              "label": "Graph API ホスト",
+              "description": "Microsoft Graph API のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://graph.microsoft.us を使用してください。"
+            }
+          }
+        },
+        "outlook": {
+          "description": "Outlook コネクターを設定",
+          "fields": {
+            "mailboxes": {
+              "label": "メールボックス",
+              "description": "インデックスするメールボックスのユーザープリンシパル名またはプライマリメールアドレス。この項目とメールボックスグループの両方を空欄にすると、アプリ登録で開けるすべてのメールボックスをインデックスします。共有メールボックスは自動的には取得されないため、ここに記載する必要があります。"
+            },
+            "mailbox_groups": {
+              "label": "メールボックスグループ",
+              "description": "Entra グループの表示名またはオブジェクト ID。ネストされたグループのメンバーを含め、すべてのメンバーのメールボックスがインデックスされるため、テナントを Onyx を使用するユーザーに限定できます。GroupMember.Read.All アプリケーション権限が必要です。"
+            },
+            "include_attachments": {
+              "description": "ファイル添付のテキストをインデックスします。インライン画像、ネストされたアイテム、クラウドリンクはスキップされます。"
+            },
+            "include_calendar": {
+              "label": "カレンダーを含める",
+              "description": "各メールボックスのメールに加えて、カレンダーもインデックスします。Calendars.Read アプリケーション権限が必要です。"
+            },
+            "excluded_folders": {
+              "label": "除外するフォルダー",
+              "description": "すべてのメールボックスでスキップするフォルダー名。常にスキップされる「迷惑メール」、「削除済みアイテム」、「下書き」、「送信トレイ」に追加されます。"
+            },
+            "calendar_past_days": {
+              "label": "カレンダーの過去日数",
+              "description": "「カレンダーを含める」がオンの場合に使用します。カレンダーの対象期間をどれだけ過去にさかのぼるかを指定します。これより古い予定は、期間が進むにつれて、次回のプルーニング時にインデックスから削除されます。後で期間を広げる場合は、変更されていない予定は自動的に再取り込みされないため、再インデックスが必要です。"
+            },
+            "calendar_future_days": {
+              "label": "カレンダーの未来日数",
+              "description": "「カレンダーを含める」がオンの場合に使用します。カレンダーの対象期間をどれだけ先まで含めるかを指定します。後で期間を広げる場合は、変更されていない予定は自動的に再取り込みされないため、再インデックスが必要です。"
+            },
+            "authority_host": {
+              "label": "認証局ホスト",
+              "description": "認証に使用する Microsoft ID 認証局のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://login.microsoftonline.us を使用してください。"
+            },
+            "graph_api_host": {
+              "label": "Graph API ホスト",
+              "description": "Microsoft Graph API のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://graph.microsoft.us を使用してください。"
+            }
+          }
+        },
+        "discourse": {
+          "description": "Discourse コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL"
+            },
+            "categories": {
+              "label": "カテゴリ"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "Drupal Wiki コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL",
+              "description": "Drupal Wiki インスタンスのベース URL(例: https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "インデックスする Drupal Wiki コンテンツ",
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "specific": {
+                  "label": "特定のスペース/ページ"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのスペースをインデックスします。"
+            },
+            "spaces": {
+              "label": "スペース ID",
+              "description": "インデックスするスペース ID を 1 つ以上指定します。数値のみ使用できます。"
+            },
+            "pages": {
+              "label": "ページ ID",
+              "description": "インデックスするページ ID を 1 つ以上指定します。数値のみ使用できます。"
+            }
+          }
+        },
+        "axero": {
+          "description": "Axero コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "Axero のベース URL",
+              "placeholder": "https://axero.example.com"
+            },
+            "spaces": {
+              "label": "スペース",
+              "description": "インデックスするスペースを(スペース ID で)0 個以上指定します。スペース ID を指定しない場合は、すべてのスペースがインデックスされます。"
+            }
+          }
+        },
+        "productboard": {
+          "description": "Productboard コネクターを設定"
+        },
+        "slack": {
+          "description": "Slack コネクターを設定",
+          "fields": {
+            "channels": {
+              "label": "チャンネル",
+              "description": "インデックスするチャンネルを 0 個以上指定します。リストからチャンネルを選ぶと ID で追跡されるため、名前が変更されてもインデックスは中断されません。リストに表示されないチャンネル(ボットが招待された非公開チャンネルなど)は、名前を入力してください。チャンネルを指定しない場合は、ワークスペース内のすべてのチャンネルがインデックスされます。"
+            },
+            "channel_regex_enabled": {
+              "label": "チャンネルの正規表現を有効にする",
+              "description": "有効にすると、上で指定した「チャンネル」を正規表現として扱います。チャンネル名が指定した正規表現のいずれかに完全一致する場合、そのチャンネルのメッセージがコネクターによって取り込まれます。\n\n例: 「チャンネル」として `.*-support.*` を指定すると、名前に「-support」を含むすべてのチャンネルが対象になります。"
+            },
+            "exclude_channels": {
+              "label": "除外するチャンネル",
+              "description": "除外するチャンネルを 0 個以上指定します。除外は上の「チャンネル」フィルターの後に適用されるため、両方に一致するチャンネルは除外されます。チャンネルを指定しない場合は、何も除外されません。"
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "除外チャンネルの正規表現を有効にする",
+              "description": "有効にすると、上で指定した「除外するチャンネル」を正規表現として扱います。チャンネル名が指定した正規表現のいずれかに完全一致する場合、そのチャンネルは除外されます。\n\n例: 「除外するチャンネル」として `.*-alerts` を指定すると、名前が「-alerts」で終わるすべてのチャンネルがスキップされます。"
+            },
+            "include_bot_messages": {
+              "label": "ボットのメッセージを含める",
+              "description": "有効にすると、ボットやアプリからのメッセージがインデックスされます。主にボットが投稿するフィード(CRM の更新、自動メモなど)のチャンネルに便利です。"
+            }
+          }
+        },
+        "slab": {
+          "description": "Slab コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL",
+              "description": "Slab チームのベース URL を指定します。次のような形式です: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "Guru コネクターを設定"
+        },
+        "gong": {
+          "description": "Gong コネクターを設定",
+          "fields": {
+            "gong_base_url": {
+              "label": "Gong API のベース URL",
+              "description": "デフォルトは `https://api.gong.io` です。",
+              "placeholder": "https://api.gong.io"
+            },
+            "workspaces": {
+              "label": "ワークスペース",
+              "description": "インデックスするワークスペースを 0 個以上指定します。ワークスペース ID、または Gong 上の正確なワークスペース名を入力してください。ワークスペースを指定しない場合は、すべてのワークスペースの文字起こしがインデックスされます。"
+            }
+          }
+        },
+        "loopio": {
+          "description": "Loopio コネクターを設定",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Loopio サブドメイン",
+              "description": "Loopio サイトのサブドメイン。`acme.loopio.com` の `acme` の部分です。",
+              "placeholder": "acme"
+            },
+            "loopio_stack_name": {
+              "label": "Loopio スタック名",
+              "description": "ライブラリ管理の名前と完全に一致する必要があります。すべてのスタックをインデックスする場合は空欄にしてください"
+            }
+          }
+        },
+        "file": {
+          "description": "ファイルコネクターを設定",
+          "fields": {
+            "file_locations": {
+              "label": "ファイル"
+            }
+          }
+        },
+        "zulip": {
+          "description": "Zulip コネクターを設定",
+          "fields": {
+            "realm_name": {
+              "label": "レルム名"
+            },
+            "realm_url": {
+              "label": "レルム URL"
+            }
+          }
+        },
+        "coda": {
+          "description": "Coda コネクターを設定"
+        },
+        "notion": {
+          "description": "Notion コネクターを設定",
+          "fields": {
+            "root_page_id": {
+              "label": "ルートページ ID",
+              "description": "指定すると、そのページとすべての子ページのみをインデックスします。空欄の場合は、インテグレーションにアクセスが付与されたすべてのページをインデックスします。"
+            }
+          }
+        },
+        "hubspot": {
+          "description": "HubSpot コネクターを設定",
+          "fields": {
+            "object_types": {
+              "label": "オブジェクトタイプ",
+              "options": {
+                "tickets": "チケット",
+                "companies": "会社",
+                "deals": "取引",
+                "contacts": "コンタクト"
+              },
+              "description": "インデックスする HubSpot オブジェクトタイプを選択します。デフォルトではすべてのタイプが選択されています。"
+            }
+          }
+        },
+        "document360": {
+          "description": "Document360 コネクターを設定",
+          "fields": {
+            "workspace": {
+              "label": "ワークスペース"
+            },
+            "categories": {
+              "label": "カテゴリ",
+              "description": "インデックスするカテゴリを 0 個以上指定します。たとえば、カテゴリ 'Help' を指定すると、'Help' カテゴリ内のすべてのコンテンツのみがインデックスされます。カテゴリを指定しない場合は、ワークスペース内のすべてのカテゴリがインデックスされます。"
+            }
+          }
+        },
+        "clickup": {
+          "description": "ClickUp コネクターを設定",
+          "fields": {
+            "connector_type": {
+              "label": "コネクタータイプ",
+              "options": {
+                "list": "リスト",
+                "folder": "フォルダー",
+                "space": "スペース",
+                "workspace": "ワークスペース"
+              }
+            },
+            "connector_ids": {
+              "label": "コネクター ID",
+              "description": "インデックス元の ID を 0 個以上指定します。"
+            },
+            "retrieve_task_comments": {
+              "label": "タスクコメントを取得",
+              "description": "オンにすると、各タスクのすべてのコメントも取得してインデックスします。"
+            }
+          }
+        },
+        "google_sites": {
+          "description": "Google Sites コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL",
+              "placeholder": "https://sites.google.com/view/saito-mei"
+            },
+            "file_locations": {
+              "label": "サイトのエクスポート",
+              "description": "Google サイトの HTML を含む `.zip` ファイルをアップロードしてください。"
+            }
+          }
+        },
+        "zendesk": {
+          "description": "Zendesk コネクターを設定",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Zendesk サブドメイン",
+              "description": "Zendesk サイトのサブドメイン。`acme.zendesk.com` の `acme` の部分です。",
+              "placeholder": "acme"
+            },
+            "content_type": {
+              "label": "コンテンツタイプ",
+              "options": {
+                "articles": "記事",
+                "tickets": "チケット"
+              }
+            },
+            "calls_per_minute": {
+              "label": "1 分あたりの API 呼び出し数",
+              "description": "このコネクターが 1 分間に実行できる Zendesk API 呼び出し数を制限します(このコネクターのみに適用)。デフォルト値は次を参照してください: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "Box コネクターを設定",
+          "fields": {
+            "folder_ids": {
+              "label": "フォルダー",
+              "description": "インデックスする Box のフォルダー ID またはフォルダー URL(例: https://app.box.com/folder/123456789)。空欄の場合は、認証済みユーザーが閲覧できるすべてをインデックスします。"
+            },
+            "include_web_links": {
+              "label": "Web リンクを含める",
+              "description": "Box の Web リンク(ブックマーク)も、軽量なドキュメントとしてインデックスします。"
+            }
+          }
+        },
+        "dropbox": {
+          "description": "Dropbox コネクターを設定"
+        },
+        "s3": {
+          "description": "S3 コネクターを設定",
+          "fields": {
+            "bucket_name": {
+              "label": "バケット名"
+            },
+            "prefix": {
+              "label": "プレフィックス"
+            },
+            "region_name": {
+              "label": "AWS リージョン",
+              "description": "バケットの AWS リージョン(例: us-east-1)。GovCloud(us-gov-west-1)などデフォルト以外のパーティションにあるバケットでは必須です。それ以外の場合は、デフォルトのリージョン解決が使用されます。"
+            },
+            "bucket_type": {
+              "label": "バケットタイプ"
+            }
+          }
+        },
+        "r2": {
+          "description": "R2 コネクターを設定",
+          "fields": {
+            "bucket_name": {
+              "label": "バケット名"
+            },
+            "prefix": {
+              "label": "プレフィックス"
+            },
+            "european_residency": {
+              "label": "EU データレジデンシー",
+              "description": "バケットで EU データレジデンシーが有効な場合は、このボックスをチェックしてください。"
+            },
+            "bucket_type": {
+              "label": "バケットタイプ"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "Google Cloud Storage コネクターを設定",
+          "fields": {
+            "bucket_name": {
+              "label": "バケット名",
+              "description": "インデックスする GCS バケットの名前(例: my-gcs-bucket)"
+            },
+            "prefix": {
+              "label": "パスプレフィックス"
+            },
+            "bucket_type": {
+              "label": "バケットタイプ"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "OCI Storage コネクターを設定",
+          "fields": {
+            "bucket_name": {
+              "label": "バケット名"
+            },
+            "prefix": {
+              "label": "プレフィックス"
+            },
+            "bucket_type": {
+              "label": "バケットタイプ"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "Wikipedia コネクターを設定",
+          "fields": {
+            "language_code": {
+              "label": "言語コード",
+              "description": "有効な Wikipedia の言語コードを入力してください(例: 'en'、'es')"
+            },
+            "categories": {
+              "label": "インデックスするカテゴリ",
+              "description": "インデックスするカテゴリ名を 0 個以上指定します。ほとんどの Wikipedia サイトでは、これらは 'Category: XYZ' という形式の名前を持ち、他のページやカテゴリの一覧となっているページです。カテゴリの URL ではなく、名前のみを指定してください。"
+            },
+            "pages": {
+              "label": "ページ",
+              "description": "インデックスするページ名を 0 個以上指定します。"
+            },
+            "recurse_depth": {
+              "label": "再帰の深さ",
+              "description": "サブカテゴリを持つカテゴリをインデックスする場合に、何階層までインデックスするかを決定します。0 を指定すると、カテゴリ自体のみをインデックスします(再帰なし)。-1 を指定すると、再帰の深さは無制限になります。まれに、カテゴリが依存関係に自分自身を含み、無限ループが発生する場合があります。これが起きないと確信できる場合のみ -1 を使用してください。"
+            }
+          }
+        },
+        "xenforo": {
+          "description": "Xenforo コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "インデックスする XenForo v2.2 フォーラムの URL。ボードまたはスレッドを指定できます。"
+            }
+          }
+        },
+        "asana": {
+          "description": "Asana コネクターを設定",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "ワークスペース ID",
+              "description": "インデックスする Asana ワークスペースの ID。https://app.asana.com/api/1.0/workspaces で確認できます。1234567890123456 のような数値です。"
+            },
+            "asana_project_ids": {
+              "label": "プロジェクト ID",
+              "description": "インデックスする特定の Asana プロジェクトの ID をカンマ区切りで指定します。空欄の場合は、ワークスペース内のすべてのプロジェクトをインデックスします。例: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "チーム ID",
+              "description": "チームに表示されるタスクにアクセスするためのチーム ID。公開タスクに加えて、チームに表示されるタスクもインデックスできます。この機能を使用しない場合は空欄にしてください。"
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "MediaWiki コネクターを設定",
+          "fields": {
+            "language_code": {
+              "label": "言語コード",
+              "description": "有効な MediaWiki の言語コードを入力してください(例: 'en'、'es')"
+            },
+            "hostname": {
+              "label": "MediaWiki サイトの URL"
+            },
+            "categories": {
+              "label": "インデックスするカテゴリ",
+              "description": "インデックスするカテゴリ名を 0 個以上指定します。ほとんどの MediaWiki サイトでは、これらは 'Category: XYZ' という形式の名前を持ち、他のページやカテゴリの一覧となっているページです。カテゴリの URL ではなく、名前のみを指定してください。"
+            },
+            "pages": {
+              "label": "ページ",
+              "description": "インデックスするページ名を 0 個以上指定します。ページの URL ではなく、名前のみを指定してください。"
+            },
+            "recurse_depth": {
+              "label": "再帰の深さ",
+              "description": "サブカテゴリを持つカテゴリをインデックスする場合に、何階層までインデックスするかを決定します。0 を指定すると、カテゴリ自体のみをインデックスします(再帰なし)。-1 を指定すると、再帰の深さは無制限になります。まれに、カテゴリが依存関係に自分自身を含み、無限ループが発生する場合があります。これが起きないと確信できる場合のみ -1 を使用してください。"
+            }
+          }
+        },
+        "discord": {
+          "description": "Discord コネクターを設定",
+          "fields": {
+            "server_ids": {
+              "label": "サーバー ID",
+              "description": "含めるサーバー ID を 0 個以上指定します。その内部のチャンネルのみがインデックスの対象になります"
+            },
+            "channel_names": {
+              "label": "チャンネル",
+              "description": "インデックスするチャンネルを 0 個以上指定します。たとえば、チャンネル \"support\" を指定すると、\"#support\" チャンネル内のすべてのコンテンツのみがインデックスされます。チャンネルを指定しない場合は、ボットがアクセスできるすべてのチャンネルがインデックスされます。"
+            },
+            "start_date": {
+              "label": "開始日",
+              "description": "この日付以降のメッセージのみがインデックスされます。形式: YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "Freshdesk コネクターを設定",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Freshdesk ドメイン",
+              "description": "Freshdesk サイトのサブドメイン。`acme.freshdesk.com` の `acme` の部分です。",
+              "placeholder": "acme"
+            }
+          }
+        },
+        "fireflies": {
+          "description": "Fireflies コネクターを設定"
+        },
+        "braintrust": {
+          "description": "Braintrust コネクターを設定",
+          "fields": {
+            "project_name": {
+              "label": "プロジェクト名",
+              "description": "このプロジェクトのプロンプト、データセット、実験のみをインデックスします。空欄の場合は、組織全体をインデックスします。"
+            },
+            "experiment_row_lookback_days": {
+              "label": "実験行の遡及期間(日数)",
+              "description": "この日数以内に作成された実験の行ごとの結果のみをインデックスします。実験のサマリーは常にインデックスされます。0 を指定すると、すべての実験の行をインデックスします。"
+            }
+          }
+        },
+        "canvas": {
+          "description": "Canvas コネクターを設定",
+          "fields": {
+            "canvas_base_url": {
+              "label": "Canvas のベース URL",
+              "description": "例: https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "Egnyte コネクターを設定",
+          "fields": {
+            "domain": {
+              "label": "Egnyte ドメイン",
+              "description": "Egnyte サイトのサブドメイン。`acme.egnyte.com` の `acme` の部分です。",
+              "placeholder": "acme"
+            },
+            "folder_path": {
+              "label": "フォルダーパス",
+              "description": "インデックスするフォルダーパス(例: '/Shared/Documents')。空欄の場合は、すべてをインデックスします。"
+            }
+          }
+        },
+        "airtable": {
+          "description": "Airtable コネクターを設定",
+          "fields": {
+            "airtable_scope": {
+              "label": "インデックスする Airtable コンテンツ",
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "specific": {
+                  "label": "特定のテーブル"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "すべて",
+              "description": "このコネクターは、API トークンでアクセスできるすべてのベースとテーブルを自動的に検出してインデックスします。"
+            },
+            "airtable_url": {
+              "label": "Airtable の URL",
+              "description": "テーブルを表示しているときのブラウザーの URL を貼り付けてください。例: https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "共有 ID",
+              "description": "任意。レコードリンクに共有ビューの URL を使用する場合は、ここに共有 ID を入力してください。例: shrkfjEzDmLaDtK83。"
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "添付ファイル以外のすべてのフィールドをメタデータとして扱う",
+              "description": "インデックスする主なコンテンツが添付ファイルで、その他のすべての列がそれらの添付ファイルのメタデータである場合に選択してください。"
+            }
+          }
+        },
+        "highspot": {
+          "description": "Highspot コネクターを設定",
+          "fields": {
+            "highspot_url": {
+              "label": "Highspot の URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
+            },
+            "highspot_scope": {
+              "label": "インデックスする Highspot コンテンツ",
+              "tabs": {
+                "spots": {
+                  "label": "特定のスポット"
+                },
+                "everything": {
+                  "label": "すべて"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "スポット名",
+              "description": "複数のスポットを指定する場合は、スポット名を 1 つずつ入力してください。"
+            },
+            "everything": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのスポットをインデックスします。"
+            }
+          }
+        },
+        "imap": {
+          "description": "メールコネクターを設定",
+          "fields": {
+            "host": {
+              "label": "IMAP サーバーのホスト",
+              "description": "IMAP サーバーのホスト名(例: imap.gmail.com、outlook.office365.com)"
+            },
+            "port": {
+              "label": "IMAP サーバーのポート",
+              "description": "IMAP サーバーのポート(デフォルト: SSL の場合は 993)"
+            },
+            "mailboxes": {
+              "label": "メールボックス",
+              "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
+            }
+          }
+        }
       }
     },
     "costOverrides": {
@@ -3199,6 +4345,10 @@
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
         "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -3393,9 +4543,6 @@
         },
         "createdOnBy": {
           "label": "<i>{date}</i> に <i>{email}</i> が作成"
-        },
-        "unnamed": {
-          "label": "認証情報 #{id}"
         }
       },
       "create": {
@@ -3450,23 +4597,6 @@
         },
         "confirmTitle": "削除の確認"
       },
-      "edit": {
-        "name": {
-          "label": "名前 (任意):"
-        },
-        "permissions": {
-          "note": "適切な権限を持つ認証情報に更新してください!"
-        },
-        "resetButton": {
-          "label": "変更をリセット"
-        },
-        "updateButton": {
-          "label": "更新"
-        },
-        "updateError": {
-          "toast": "認証情報の更新中にエラーが発生しました"
-        }
-      },
       "displayNames": {
         "accessKeyId": "{source} アクセスキー ID",
         "secretAccessKey": "{source} シークレットアクセスキー",
@@ -3506,11 +4636,12 @@
         "namespace": "{source} ネームスペース",
         "region": "{source} リージョン",
         "portalId": "{source} ポータル ID",
-        "oauthTokens": "{source} OAuth トークン",
         "isSandbox": "サンドボックス環境かどうか",
         "serviceUserEmail": "サービスユーザーのメールアドレス",
         "zuliprcContent": "Zuliprc の内容",
-        "authenticationMethod": "認証方法"
+        "authenticationMethod": "認証方法",
+        "primaryAdminEmail": "プライマリ管理者のメールアドレス",
+        "serviceAccountKey": "サービスアカウントキー"
       },
       "hints": {
         "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
@@ -3519,8 +4650,9 @@
         "jiraUserEmail": "Jira Cloud では必須です。",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
-        "pfxFile": "PFX ファイルです。",
-        "testrailBaseUrl": "例: https://yourcompany.testrail.io。"
+        "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
+        "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
+        "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。"
       },
       "methods": {
         "labels": {
@@ -3529,7 +4661,9 @@
           "certificate": "証明書",
           "accessKeyAndSecret": "アクセスキーとシークレット",
           "iamRole": "IAM ロール",
-          "assumeRole": "ロールの引き受け"
+          "assumeRole": "ロールの引き受け",
+          "serviceAccount": "サービスアカウント",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "このモードでは、SharePoint コネクタはクライアントシークレットで認証します。クライアント ID とクライアントシークレットを入力してください。",
@@ -3541,34 +4675,12 @@
           "s3AssumeRole": "このモードでは、Amazon EC2 インスタンスが既存のロールを引き受けて S3 にアクセスします。追加の認証情報は不要です。"
         }
       },
-      "modal": {
-        "createTitle": "{source} の認証情報を作成",
-        "editTitle": "認証情報を編集",
-        "updateTitle": "認証情報を更新"
-      },
-      "modify": {
-        "createButton": {
-          "label": "作成"
-        },
-        "instructions": {
-          "message": "必要に応じて認証情報を選択してください!このコネクタに適切な権限を持つ認証情報を選択したことを確認してください!"
-        },
-        "selectButton": {
-          "label": "選択"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "接続"
         },
         "connectError": {
           "title": "接続できませんでした"
-        },
-        "redirectFailed": {
-          "message": "{source} でのサインインにリダイレクトできませんでした。もう一度お試しください。"
-        },
-        "retryButton": {
-          "label": "再試行"
         },
         "signIn": {
           "description": "{appName} には読み取り専用のスコープが必要です。",
@@ -3578,44 +4690,28 @@
           "message": "OAuth を開始できません"
         }
       },
-      "swap": {
-        "error": {
-          "toast": "認証情報の切り替えに問題があります: {detail}"
-        },
-        "success": {
-          "toast": "認証情報を正常に切り替えました!"
-        }
+      "validation": {
+        "authMethodRequired": "認証方式を選択してください",
+        "empty": "{field}は空にできません",
+        "fileRequired": "{field}のファイルを選択してください",
+        "invalidEmail": "{field}に有効なメールアドレスを入力してください",
+        "required": "{field}を入力してください"
       },
-      "table": {
-        "actions": {
-          "label": "操作"
-        },
-        "created": {
-          "header": "作成日"
-        },
-        "edit": {
-          "ariaLabel": "認証情報を編集"
-        },
-        "empty": {
-          "message": "このコネクタには認証情報がありません!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "最終更新"
-        },
+      "edit": {
         "name": {
-          "header": "名前"
+          "label": "名前 (任意):"
         },
-        "select": {
-          "label": "選択"
+        "permissions": {
+          "note": "適切な権限を持つ認証情報に更新してください!"
         },
-        "selected": {
-          "badge": "選択済み"
+        "resetButton": {
+          "label": "変更をリセット"
         },
-        "untitled": {
-          "label": "無題"
+        "updateButton": {
+          "label": "更新"
+        },
+        "updateError": {
+          "toast": "認証情報の更新中にエラーが発生しました"
         }
       },
       "update": {
@@ -3626,12 +4722,8 @@
           "toast": "認証情報を更新しました"
         }
       },
-      "validation": {
-        "authMethodRequired": "認証方式を選択してください",
-        "empty": "{field}は空にできません",
-        "fileRequired": "{field}のファイルを選択してください",
-        "invalidEmail": "{field}に有効なメールアドレスを入力してください",
-        "required": "{field}を入力してください"
+      "modal": {
+        "editTitle": "認証情報を編集"
       }
     },
     "customAnalytics": {
@@ -4709,6 +5801,9 @@
           "name": "基本",
           "description": "基本権限を持つ全ユーザーのデフォルトグループ。"
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -4982,6 +6077,9 @@
           "name": "クエリ処理",
           "description": "パイプラインに入る前のすべてのユーザークエリに対して実行されます。クエリの書き換え、フィルタリング、拒否が可能です。"
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://api-endopointo.com"
       }
     },
     "imageGeneration": {
@@ -5700,152 +6798,106 @@
           "description": "ページを再読み込みして、もう一度お試しください。",
           "title": "コネクタアクセスの更新を読み込めませんでした"
         }
+      },
+      "embeddingRateLimit": {
+        "title": "埋め込みのレート制限",
+        "description": "インデックス作成が一定時間内に送信する埋め込みリクエストの数を、すべてのインデックス作成ワーカーを通して制限します。上限に達すると、インデックス作成は失敗せずに待機してから再試行するため、ワーカーは新しい作業を取りにくくなります。バッチが失敗するのは、待機が長すぎる場合だけです。検索クエリは制限されません。",
+        "requests": {
+          "title": "時間枠あたりのリクエスト数",
+          "description": "空欄にすると制限なしになります。",
+          "placeholder": "制限なし"
+        },
+        "period": {
+          "title": "時間枠の長さ",
+          "description": "例: 1 分あたりの制限なら 60。",
+          "suffix": "（秒）"
+        },
+        "restoreDefault": "デフォルトに戻す",
+        "validation": {
+          "requests": "1 から {max, number} までの整数を入力するか、制限なしにする場合は空欄にしてください。",
+          "period": "1 から {max, number} までの整数の秒数を入力してください。"
+        },
+        "toasts": {
+          "saved": "レート制限を保存しました。",
+          "failed": "レート制限を保存できませんでした。"
+        }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
-      "status": {
+      "connectorCreated": {
+        "toast": "コネクターを作成しました"
+      },
+      "overview": {
+        "connectors": {
+          "caption": "インデックス中 / 有効",
+          "label": "コネクタ"
+        },
+        "documents": {
+          "caption": "最近インデックス済み / 合計",
+          "label": "ドキュメント"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "概要を読み込めませんでした。"
+      },
+      "activities": {
+        "title": "アクティビティ",
+        "history": "アクティビティ履歴をすべて表示",
+        "viewLogs": "アクティビティ履歴を表示",
+        "panel": {
+          "title": "アクティビティ履歴",
+          "close": "アクティビティ履歴を閉じる"
+        }
+      },
+      "list": {
+        "search": {
+          "placeholder": "コネクタを検索..."
+        },
+        "statusFilter": {
+          "label": "ステータス",
+          "all": "すべてのステータス"
+        },
+        "counts": {
+          "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
+          "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
+          "failed": "{count, plural, other {# 件のコネクタが失敗}}",
+          "paused": "{count, plural, other {# 件のコネクタが一時停止中}}"
+        },
         "access": {
-          "inherited": {
-            "label": "{source} から継承"
-          },
-          "organizationPublic": {
-            "label": "組織全体に公開"
-          },
-          "private": {
-            "label": "非公開"
-          }
+          "public": "公開",
+          "private": "非公開",
+          "sync": "自動同期",
+          "sync_restricted": "自動同期（制限付き）"
         },
-        "connectorCreated": {
-          "toast": "コネクターを作成しました"
+        "detail": {
+          "queued": "キューの {position, selectordinal, other {#}} 番目",
+          "lastIndexed": "最終インデックス {when}",
+          "neverIndexed": "まだインデックスされていません"
         },
-        "empty": {
-          "message": "コネクターがまだ設定されていないようです。[コネクターを追加](/admin/connectors) ページで開始してください。"
+        "docs": {
+          "label": "ドキュメント",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "管理",
+          "manageFederated": "フェデレーテッドコネクタを管理",
+          "expand": "詳細を表示",
+          "collapse": "詳細を隠す"
         },
         "federated": {
-          "access": {
-            "label": "フェデレーションアクセス"
-          },
-          "indexed": {
-            "label": "インデックス済み"
-          },
-          "notApplicable": {
-            "label": "該当なし"
-          }
+          "tag": "フェデレーテッド"
         },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "自動同期"
-            },
-            "private": {
-              "label": "非公開"
-            },
-            "public": {
-              "label": "公開"
-            },
-            "title": "アクセス種別"
-          },
-          "applyButton": {
-            "label": "適用"
-          },
-          "docCount": {
-            "placeholder": "件数",
-            "title": "ドキュメント数"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "エラーありで完了"
-            },
-            "failed": {
-              "label": "失敗"
-            },
-            "inProgress": {
-              "label": "実行中"
-            },
-            "interrupted": {
-              "label": "中断"
-            },
-            "notStarted": {
-              "label": "未開始"
-            },
-            "success": {
-              "label": "成功"
-            },
-            "title": "最終ステータス"
-          },
-          "title": "コネクターを絞り込む"
+        "empty": {
+          "title": "コネクタはまだありません",
+          "description": "[コネクタを追加](/admin/connectors) ページから始めてください。",
+          "filteredTitle": "これらのフィルターに一致するコネクタはありません。"
         },
-        "filters": {
-          "accessBadge": {
-            "label": "アクセス：{values}"
-          },
-          "clearBadge": {
-            "label": "クリア"
-          },
-          "docsAnyBadge": {
-            "label": "ドキュメント数 {operator} 任意"
-          },
-          "docsBadge": {
-            "label": "ドキュメント数 {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "ステータス：{values}"
-          }
-        },
-        "loadError": {
-          "message": "インデックスステータスの読み込みでエラーが発生しました。"
-        },
-        "manageConnector": {
-          "tooltip": "コネクターを管理"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "フェデレーションコネクターを管理"
-        },
-        "search": {
-          "placeholder": "コネクターを検索..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "アクティブなコネクター"
-          },
-          "publicConnectors": {
-            "label": "公開コネクター"
-          },
-          "totalConnectors": {
-            "label": "コネクター合計"
-          },
-          "totalDocsIndexed": {
-            "label": "インデックス済みドキュメント合計"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "すべて確認済みです。表示するコネクターはこれ以上ありません"
-          },
-          "lastIndexed": {
-            "header": "最終インデックス日時"
-          },
-          "name": {
-            "header": "名前"
-          },
-          "permissions": {
-            "header": "権限 / アクセス"
-          },
-          "status": {
-            "header": "ステータス"
-          },
-          "totalDocs": {
-            "header": "ドキュメント合計"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "すべて折りたたむ"
-          },
-          "expand": {
-            "label": "すべて展開"
-          }
-        }
+        "loadError": "コネクタを読み込めませんでした。",
+        "units": "{count, plural, other {件のコネクタ}}"
       }
     },
     "languageModels": {
@@ -7033,6 +8085,11 @@
         "securitySettingsUpdated": "セキュリティ設定を更新しました",
         "settingsUpdateFailed": "設定を更新できませんでした",
         "settingsUpdated": "設定を更新しました"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -7713,7 +8770,8 @@
           },
           "nameField": {
             "description": "ログイン URL に使用する一意の小文字スラッグです。後から変更できません。",
-            "title": "名前"
+            "title": "名前",
+            "placeholder": "kaisha-a"
           },
           "providerTypeField": {
             "description": "このプロバイダーが認証に使用するプロトコルです。",
@@ -7783,7 +8841,8 @@
         },
         "openidConfigUrl": {
           "label": "OpenID 設定 URL",
-          "description": "IdP の OpenID Connect ディスカバリードキュメントの URL。"
+          "description": "IdP の OpenID Connect ディスカバリードキュメントの URL。",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "メール検証済みクレームを必須にする",
@@ -7791,27 +8850,33 @@
         },
         "idpEntityId": {
           "label": "IdP エンティティ ID",
-          "description": "ID プロバイダーのエンティティ ID（発行者）。"
+          "description": "ID プロバイダーのエンティティ ID（発行者）。",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "IdP SSO URL",
-          "description": "サインインリクエストを受け取る IdP のエンドポイント。"
+          "description": "サインインリクエストを受け取る IdP のエンドポイント。",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "IdP X.509 証明書",
-          "description": "アサーションの検証に使用する IdP の署名証明書。"
+          "description": "アサーションの検証に使用する IdP の署名証明書。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "SP エンティティ ID",
-          "description": "IdP に登録されたこのインスタンスのエンティティ ID。"
+          "description": "IdP に登録されたこのインスタンスのエンティティ ID。",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "SP X.509 証明書",
-          "description": "このインスタンスがリクエストに署名する、またはアサーションを復号する場合のみ。"
+          "description": "このインスタンスがリクエストに署名する、またはアサーションを復号する場合のみ。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "SP 秘密鍵",
-          "description": "SP 証明書と対になる秘密鍵。暗号化して保存されます。"
+          "description": "SP 証明書と対になる秘密鍵。暗号化して保存されます。",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "メール属性",
@@ -7975,6 +9040,9 @@
         "deleted": {
           "message": "標準回答 {id} を削除しました"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:IT|サポート)\\s*チケット"
       }
     },
     "status": {
@@ -7984,18 +9052,22 @@
         "deleting": "削除中",
         "error": "エラー",
         "failed": "失敗",
-        "inProgress": "進行中",
         "indexed": "インデックス済み",
         "indexing": "インデックス作成中",
         "initialIndexing": "初回インデックス作成",
         "interrupted": "中断",
         "invalid": "無効",
         "invalidConnectorTooltip": "コネクタが無効な状態です。認証情報を更新するか、新しいコネクタを作成してください。",
-        "none": "なし",
         "notStarted": "未開始",
         "paused": "一時停止中",
         "scheduled": "予定済み",
-        "succeeded": "成功"
+        "synced": "同期済み",
+        "syncing": "同期中",
+        "pruning": "プルーニング中",
+        "pruned": "プルーニング済み",
+        "checking": "チェック中",
+        "passed": "成功",
+        "failedToRun": "実行できませんでした"
       }
     },
     "systemInfo": {
@@ -8138,6 +9210,9 @@
         "logo": {
           "alt": "ロゴ"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -8361,11 +9436,13 @@
             },
             "project": {
               "label": "プロジェクト名",
-              "description": "トレースを記録する Braintrust のプロジェクト名。"
+              "description": "トレースを記録する Braintrust のプロジェクト名。",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "API URL",
-              "description": "デフォルトは米国リージョンです。他のリージョンやセルフホストの場合は Braintrust の API URL を貼り付けてください。"
+              "description": "デフォルトは米国リージョンです。他のリージョンやセルフホストの場合は Braintrust の API URL を貼り付けてください。",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -8382,7 +9459,8 @@
             },
             "host": {
               "label": "API ベース URL",
-              "description": "デフォルトは EU リージョンです。他のリージョンやセルフホストの場合は Langfuse のベース URL を貼り付けてください。"
+              "description": "デフォルトは EU リージョンです。他のリージョンやセルフホストの場合は Langfuse のベース URL を貼り付けてください。",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -8939,6 +10017,9 @@
       },
       "unexpectedError": {
         "message": "予期しないエラーが発生しました。"
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -9055,11 +10136,14 @@
         },
         "searxngBaseUrl": {
           "label": "SearXNG ベース URL",
-          "description": "[SearXNG インスタンス](https://docs.searxng.org/admin/installation.html)のベース URL を貼り付けてください。"
+          "description": "[SearXNG インスタンス](https://docs.searxng.org/admin/installation.html)のベース URL を貼り付けてください。",
+          "placeholder": "https://searxng-insutansu.com"
         },
         "firecrawlBaseUrl": {
           "label": "API ベース URL",
-          "description": "Firecrawl API のベース URL。"
+          "description": "Firecrawl API のベース URL。",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -9140,6 +10224,17 @@
         "completed": "チェックが完了しました。",
         "inProgress": "チェックを実行中...",
         "waiting": "コネクタ設定を待機中..."
+      },
+      "advisory": {
+        "title": "一部のコンテンツはインデックスされません。",
+        "description": "**{count, plural, other {# 件の必須でないコネクタチェックが失敗しました。}}** コネクタ全体のインデックス作成は妨げませんが、影響を受けるコンテンツはインデックスされません。",
+        "proceed": "このままコネクタを作成し、後で対処することもできます。",
+        "viewButton": {
+          "label": "失敗したチェックを表示"
+        },
+        "proceedButton": {
+          "label": "それでもコネクタを作成"
+        }
       }
     },
     "connectorEdit": {
@@ -11295,18 +12390,6 @@
           "label": "変更"
         }
       },
-      "editProperty": {
-        "header": {
-          "title": "{property} を編集"
-        },
-        "submitButton": {
-          "label": "プロパティを更新",
-          "loadingLabel": "更新中..."
-        },
-        "valueInput": {
-          "placeholder": "プロパティの値"
-        }
-      },
       "feedback": {
         "additionalDetails": {
           "dislikePlaceholder": "この応答のどこが良くなかったですか？",
@@ -11867,12 +12950,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {ファイルを選択} other {ファイルを選択}}"
-      },
-      "prompt": "{multiple, select, true {またはここにファイルをドラッグ＆ドロップしてください。} other {またはここにファイルをドラッグ＆ドロップしてください。}}"
-    },
     "textListField": {
       "addButton": {
         "label": "新規追加"
@@ -12408,6 +13485,31 @@
         "label": "プランをアップグレード"
       },
       "availableFor": "{plan}で利用可能"
+    },
+    "placeholders": {
+      "email": "namae@kaisha-mei.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://risosu-mei.cognitiveservices.azure.com/openai/deployments/dipuroi-mei/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://risosu-mei.cognitiveservices.azure.com/openai/deployments/dipuroi-mei/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://risosu_mei.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://risosu_rijon.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://bifrost-geto-uei.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://litellm-purokishi.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "vertex-purojekuto",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -12591,7 +13693,10 @@
           }
         },
         "saveButton": "保存",
-        "savingButton": "保存中…"
+        "savingButton": "保存中…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "アプリ「{appName}」には「{skillName}」という名前の関連スキルがすでにあります。別の名前のスキルをアップロードしてください。"
@@ -12774,22 +13879,6 @@
         "label": "データを接続"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "ワークスペースをクラフトしています...",
-        "enchanting": "魔法でエンチャントしています...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "資源を集めています...",
-        "miningDependencies": "依存関係を採掘しています...",
-        "placingBlocks": "ブロックを設置しています...",
-        "punchingWood": "木を殴っています...",
-        "smeltingCode": "コードを精錬しています...",
-        "worldGenerated": "ワールド生成が完了しました..."
-      },
-      "tagline": {
-        "label": "次の素晴らしいアイデアをクラフト中..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "クリア"
@@ -12879,6 +13968,12 @@
       "csv": {
         "truncated": "プレビューは{rows, number}行、{columns, number}列、{cells, number}セルまでです。すべてのデータを見るには元のファイルをダウンロードしてください。",
         "malformed": "このCSVには引用符で囲まれた無効なフィールドがあります。確認するには元のファイルをダウンロードしてください。"
+      },
+      "imageTooLarge": {
+        "description": "この画像は大きすぎるためプレビューできません。元のファイルをダウンロードして開いてください。"
+      },
+      "unsupported": {
+        "description": "このファイルはプレビューできません。元のファイルをダウンロードして開いてください。"
       }
     },
     "filesTab": {
@@ -12895,9 +13990,37 @@
       "preparing": {
         "description": "開発環境をセットアップしています",
         "title": "サンドボックスを準備しています..."
+      },
+      "download": {
+        "label": "ダウンロード"
+      },
+      "partial": {
+        "label": "一部のフォルダーを読み込めませんでした。更新してもう一度お試しください。"
+      },
+      "noMatches": {
+        "label": "一致するファイルはありません"
+      },
+      "previousPage": {
+        "label": "前のページ"
+      },
+      "nextPage": {
+        "label": "次のページ"
+      },
+      "page": {
+        "label": "{total}ページ中{page}ページ"
+      },
+      "upload": {
+        "label": "ファイルをアップロード",
+        "error": "ファイルをアップロードできませんでした。もう一度お試しください。"
+      },
+      "emptyDirectory": {
+        "label": "このディレクトリにはファイルがありません"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "コントラスト背景"
+      },
       "error": {
         "description": "画像を表示できませんでした",
         "title": "画像を読み込めませんでした"
@@ -12907,9 +14030,6 @@
       },
       "preview": {
         "ariaLabel": "{name} のプレビュー"
-      },
-      "background": {
-        "contrast": "コントラスト背景"
       }
     },
     "inputBar": {
@@ -13067,6 +14187,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDFの操作"
+      },
+      "thumbnails": {
+        "toggle": "ページのサムネイルを表示・非表示",
+        "resize": "ページのサムネイルの幅を変更",
+        "label": "ページのサムネイル"
+      },
+      "page": {
+        "previous": "前のページ",
+        "next": "次のページ",
+        "counter": "{current} / {total}",
+        "preview": "ページ{page}のプレビュー",
+        "select": "ページ{page}に移動"
+      },
+      "zoom": {
+        "out": "縮小",
+        "in": "拡大",
+        "label": "ズーム",
+        "fitWidth": "幅に合わせる",
+        "fitPage": "ページに合わせる"
+      },
       "error": {
         "description": "PDF ファイルを読み込めませんでした。",
         "title": "PDF をプレビューできません"
@@ -13079,6 +14221,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "プレゼンテーションの操作"
+      },
+      "thumbnails": {
+        "toggle": "スライドのサムネイルを表示・非表示"
+      },
+      "resize": {
+        "ariaLabel": "スライドのサムネイルの幅を変更"
+      },
       "slides": {
         "label": "スライド"
       },
@@ -13089,7 +14240,7 @@
         "label": "次のスライド"
       },
       "converting": {
-        "label": "プレゼンテーションを変換しています..."
+        "label": "プレビューを準備中..."
       },
       "empty": {
         "label": "このプレゼンテーションにはスライドがありません"
@@ -13102,9 +14253,6 @@
       },
       "slide": {
         "counter": "スライド {current} / {total}"
-      },
-      "resize": {
-        "ariaLabel": "スライドのサムネイルの幅を変更"
       }
     },
     "previewTab": {
@@ -13538,7 +14686,8 @@
         "ariaLabel": "URL をコピー: {url}"
       },
       "downloadFile": {
-        "tooltip": "ファイルをダウンロード"
+        "tooltip": "ファイルをダウンロード",
+        "label": "ダウンロード"
       },
       "export": {
         "button": ".docx にエクスポート",
@@ -13608,6 +14757,170 @@
     "welcome": {
       "input": {
         "placeholder": "データを分析してダッシュボードを作成..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "すべてのファイル"
+      },
+      "browser": {
+        "label": "アプリ"
+      },
+      "list": {
+        "label": "出力タブ"
+      },
+      "close": {
+        "label": "{name}を閉じる"
+      },
+      "reordered": {
+        "label": "タブを{count}個中{position}番目に移動しました"
+      },
+      "open": {
+        "label": "タブを開く"
+      },
+      "outputs": {
+        "label": "出力"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "アプリをプレビュー"
+      },
+      "home": {
+        "title": "アプリ",
+        "action": "アプリ"
+      },
+      "checking": {
+        "label": "Webアプリを確認中"
+      },
+      "failed": {
+        "description": "ローカルWebアプリを確認できませんでした。再読み込みしてもう一度お試しください。"
+      },
+      "unavailable": {
+        "description": "Webアプリを利用できません。サンドボックスを復元するか、再読み込みしてお試しください。",
+        "label": "利用不可"
+      },
+      "empty": {
+        "title": "利用可能なWebアプリはありません",
+        "description": "ローカルアプリが実行中になると、ここに表示されます。"
+      },
+      "starting": {
+        "label": "Webアプリを起動中"
+      },
+      "loading": {
+        "label": "Webアプリを読み込み中"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "出力を開く"
+      },
+      "close": {
+        "ariaLabel": "出力を閉じる"
+      },
+      "expand": {
+        "ariaLabel": "出力を拡大"
+      },
+      "restore": {
+        "ariaLabel": "出力を元のサイズに戻す"
+      },
+      "resize": {
+        "ariaLabel": "出力のサイズを変更"
+      },
+      "files": {
+        "search": {
+          "placeholder": "ファイルを検索"
+        },
+        "location": {
+          "label": "サンドボックス内のすべてのファイル"
+        }
+      },
+      "browser": {
+        "placeholder": "サンドボックス内のウェブアプリ"
+      },
+      "reload": {
+        "file": "ファイルを再読み込み",
+        "files": "ファイルを更新",
+        "browser": "Webアプリを更新",
+        "unavailable": "更新するにはサンドボックスを復元してください"
+      },
+      "export": {
+        "failed": "ファイルをエクスポートできませんでした。もう一度お試しください。"
+      },
+      "empty": {
+        "title": "ワークスペースの表示を選択"
+      },
+      "status": {
+        "provisioning": "サンドボックスを初期化中",
+        "running": "サンドボックス実行中",
+        "sleeping": "サンドボックス休止中",
+        "restoring": "セッションを復元中",
+        "terminated": "サンドボックス終了",
+        "failed": "サンドボックスでエラー",
+        "ready": "サンドボックス準備完了",
+        "loading": "サンドボックスを検索中"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "すべて閲覧済みにする",
+        "error": "出力を閲覧済みにできませんでした。もう一度お試しください。"
+      },
+      "home": {
+        "description": "エージェントが作成したファイル"
+      },
+      "empty": {
+        "description": "エージェントが作成したファイルはここに表示されます。"
+      },
+      "loading": {
+        "label": "出力を読み込み中…"
+      },
+      "unavailable": {
+        "description": "サンドボックスの準備ができると出力が表示されます。"
+      },
+      "error": {
+        "description": "出力を更新できませんでした。もう一度お試しください。"
+      },
+      "incomplete": {
+        "description": "一部の出力を読み込めませんでした。"
+      },
+      "filter": {
+        "label": "ファイルの種類",
+        "all": "すべて",
+        "folders": "フォルダー",
+        "noExtension": "拡張子なし"
+      },
+      "folders": {
+        "ariaLabel": "出力フォルダー",
+        "root": "出力"
+      },
+      "filtered": {
+        "empty": "一致する出力がありません"
+      },
+      "search": {
+        "placeholder": "出力を検索"
+      },
+      "scope": {
+        "turn": "ターン {turn, number} の出力",
+        "all": "すべての出力"
+      },
+      "unseen": "新規または更新済み"
+    },
+    "turnOutputs": {
+      "showAll": "{count}件の出力をすべて表示",
+      "app": "アプリ",
+      "unavailable": "利用できなくなりました",
+      "appTitle": "アプリをプレビュー"
+    },
+    "upgrade": {
+      "title": "Craft には Business プランが必要です",
+      "adminDescription": "Craft は Business プランと Enterprise プランで利用できます。Craft がメインチャットに統合されるまで、Community Edition ではサポートされません。",
+      "userDescription": "Craft は Business プランと Enterprise プランで利用できます。Craft を使用するには、管理者にアップグレードを依頼してください。",
+      "backToChat": {
+        "label": "チャットに戻る"
+      },
+      "viewPlans": {
+        "label": "プランを表示"
       }
     }
   },
@@ -13948,8 +15261,19 @@
       "year": "年"
     },
     "inputFile": {
-      "attachFile": "ファイルを添付",
       "clearFile": "ファイルをクリア"
+    },
+    "inputMultiUpload": {
+      "placeholder": "ファイルを追加…",
+      "dropToAdd": "ここにファイルをドロップして追加",
+      "dropToAddMore": "ここにドロップしてファイルをさらに追加"
+    },
+    "inputUpload": {
+      "placeholder": "ファイルを追加…",
+      "pasted": "貼り付けたテキスト",
+      "attached": "ファイル添付済み",
+      "dropToAdd": "ここにファイルをドロップして追加",
+      "dropToReplace": "ここにドロップしてファイルを置き換え"
     },
     "inputImage": {
       "alt": "画像",
@@ -14639,7 +15963,8 @@
         "title": "エージェント"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "エージェントを探す"
@@ -15131,6 +16456,9 @@
         "transferredToast": {
           "message": "所有権を譲渡しました。"
         }
+      },
+      "placeholders": {
+        "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
       }
     },
     "page": {

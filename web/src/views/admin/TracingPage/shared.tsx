@@ -25,11 +25,7 @@ export function SecretField({ field }: SecretFieldProps) {
     >
       <PasswordInputTypeInField
         name={field.name}
-        placeholder={
-          field.placeholderKey
-            ? t(field.placeholderKey)
-            : (field.placeholder ?? label)
-        }
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : label}
       />
     </InputVertical>
   );
@@ -53,11 +49,7 @@ export function ConfigField({ field }: ConfigFieldProps) {
     >
       <InputTypeInField
         name={field.name}
-        placeholder={
-          field.placeholderKey
-            ? t(field.placeholderKey)
-            : (field.placeholder ?? "")
-        }
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : ""}
       />
     </InputVertical>
   );

@@ -4,9 +4,8 @@ import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { InputSingleSelectField } from "@opal/form";
+import { InputSingleUploadField, InputSingleSelectField } from "@opal/form";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
@@ -61,6 +60,7 @@ function VertexAIModalInternals({
   isOnboarding,
 }: VertexAIModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   const tInputSelect = useTranslations("common.inputSelect");
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
@@ -134,7 +134,10 @@ function VertexAIModalInternals({
             title={t("vertexAi.credentialsField.title")}
             subDescription={t("vertexAi.credentialsField.description")}
           >
-            <FileUploadFormField name={FIELD_VERTEX_CREDENTIALS} label="" />
+            <InputSingleUploadField
+              name={FIELD_VERTEX_CREDENTIALS}
+              accept="application/json,.json"
+            />
           </InputVertical>
         </InputPadder>
       )}
@@ -159,7 +162,7 @@ function VertexAIModalInternals({
             >
               <InputTypeInField
                 name={FIELD_VERTEX_PROJECT}
-                placeholder="my-vertex-project"
+                placeholder={tPlaceholders("vertexAi.projectId")}
               />
             </InputVertical>
           </Card>

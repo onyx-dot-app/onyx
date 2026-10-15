@@ -49,6 +49,10 @@ export interface Settings {
   image_extraction_and_analysis_enabled?: boolean;
   image_analysis_max_size_mb?: number | null;
 
+  // Global limit on indexing embedding requests; null means no limit
+  embedding_rate_limit_requests?: number | null;
+  embedding_rate_limit_period_seconds?: number;
+
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
   user_file_max_upload_size_mb?: number | null;
@@ -66,6 +70,9 @@ export interface Settings {
   // Deployment-level Craft availability, ignoring workspace/per-user policy.
   // Gates visibility of the admin Craft-access controls.
   onyx_craft_available?: boolean;
+
+  // Craft is switched on but the tier is too low: show the upgrade prompt.
+  onyx_craft_requires_upgrade?: boolean;
 
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;

@@ -1,4 +1,5 @@
 import type { SWRResponse } from "swr";
+import type { CapabilityCheckResult } from "@/lib/connectors/checks/types";
 import type { CredentialSpec } from "@/lib/credentials/types/spec";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
@@ -137,6 +138,11 @@ export interface CredentialSetup {
     credential: AnyCredential,
     failureMessage: string
   ) => Promise<string | null>;
+  /** Saves a credential's sharing (and name when given), then refetches. Rejects when the save fails. */
+  saveSharing: (
+    credentialId: number,
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+  ) => Promise<SimilarCredential>;
   /** Refetches the credential list. */
   refresh: () => void;
   /** Opens the hosted OAuth popup. `invalidUrlMessage` is the caller's copy. */
@@ -176,7 +182,10 @@ export interface CredentialCheckReport {
   connector_id: number | null;
   run_status: CredentialCheckRunStatus;
   run_started_at: string | null;
-  report: { checked_at: string } | null;
+  report: {
+    checked_at: string;
+    check_results: CapabilityCheckResult[];
+  } | null;
   time_updated: string;
 }
 

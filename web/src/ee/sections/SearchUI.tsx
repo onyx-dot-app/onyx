@@ -1,6 +1,7 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
@@ -9,7 +10,6 @@ import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
 import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { getSourceMetadata } from "@/lib/sources";
 import { Tag } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import {

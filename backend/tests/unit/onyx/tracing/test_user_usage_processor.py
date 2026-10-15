@@ -437,3 +437,33 @@ def test_flush_swallows_record_errors(
 
     processor.force_flush()
     assert recorded_calls == []
+
+
+def test_routed_model_prices_the_call_but_keeps_router_as_ledger_key(
+    monkeypatch: pytest.MonkeyPatch,
+    processor: UserUsageTracingProcessor,
+    recorded_calls: list[dict[str, Any]],
+) -> None:
+    priced: list[tuple[str, str | None]] = []
+
+    def _compute(**kwargs: Any) -> tuple[float, float]:
+        priced.append((kwargs["model"], kwargs["served_model"]))
+        return 1.0, 2.0
+
+    monkeypatch.setattr(proc_mod, "compute_cost_cents", _compute)
+    span = _generation_span(
+        model="openrouter/auto",
+        provider="openrouter",
+        usage={"input_tokens": 10, "output_tokens": 5},
+    )
+    span.span_data.routed_model = "deepseek/deepseek-v4-flash"
+
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        processor.on_span_end(span)
+        processor.shutdown()
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    assert priced == [("openrouter/auto", "deepseek/deepseek-v4-flash")]
+    assert recorded_calls[0]["usage"].model == "openrouter/auto"

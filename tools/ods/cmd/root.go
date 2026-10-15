@@ -12,7 +12,13 @@ import (
 var (
 	Version string
 	Commit  string
+
+	// rootProject is the --project flag, read by commands that derive their
+	// own project name when it is empty.
+	rootProject string
 )
+
+func flagProjectName() string { return rootProject }
 
 // RootOptions holds options for the root command.
 type RootOptions struct {
@@ -37,6 +43,7 @@ func NewRootCommand() *cobra.Command {
 			log.SetFormatter(&log.TextFormatter{
 				DisableTimestamp: true,
 			})
+			rootProject = opts.Project
 			docker.SetProjectFlags(opts.Project)
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", Version, Commit),
@@ -64,6 +71,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewPullCommand())
 	cmd.AddCommand(NewRunCICommand())
 	cmd.AddCommand(NewScreenshotDiffCommand())
+	cmd.AddCommand(NewStackCommand())
 	cmd.AddCommand(NewTestCommand())
 	cmd.AddCommand(NewCoverageCommand())
 	cmd.AddCommand(NewTypeCoverageCommand())

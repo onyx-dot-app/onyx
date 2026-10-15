@@ -244,11 +244,14 @@ indexing/adapters/document_indexing_adapter.py:DocumentIndexingAdapter.prepare_e
                     - user_groups from fetch_user_groups_for_documents (the data-access
                       groups of the document's PRIVATE cc-pairs; PUBLIC cc-pairs give their
                       manage groups, which changes nothing; perm-synced pairs give none)
-                    - external_user_emails / external_user_group_ids from the Document row
-                    - is_public widened to True if the document is public in the source
-                      system, or "censoring only" applies for this source and the document
-                      is under a perm-synced cc-pair (see §4.5), or one of its external
-                      groups is in fetch_public_external_group_ids
+                    - only when a live (non-DELETING) cc-pair of the document is
+                      perm-synced (db/document.py:get_document_access_types):
+                      external_user_emails / external_user_group_ids from the Document
+                      row, and is_public widened to True if the document is public in
+                      the source system, or "censoring only" applies for this source
+                      (see §4.5), or one of its external groups is in
+                      fetch_public_external_group_ids. Otherwise the source columns
+                      are stale or connector-supplied and are ignored.
 
 DocMetadataAwareIndexChunk.from_index_chunk(access=<DocumentAccess>, ...)
   └─ opensearch_document_index.py:generate_opensearch_filtered_access_control_list(access)

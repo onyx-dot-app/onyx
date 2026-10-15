@@ -7,15 +7,13 @@ Fail-open: `RequestEvaluator` exceptions and non-matching action types.
 import asyncio
 import base64
 import binascii
-import ipaddress
 import operator
 import threading
 from collections.abc import Callable
-from typing import Protocol
 from uuid import UUID
 
 from cachetools import TTLCache, cachedmethod
-from mitmproxy import http
+from mitmproxy import connection, http
 from mitmproxy.proxy import server_hooks
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
@@ -35,7 +33,6 @@ from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import (
     clear_destination,
-    is_destination_blocked,
     pin_destination,
     resolve_destination,
 )
@@ -62,7 +59,12 @@ from onyx.sandbox_proxy.models import (
     InjectionOutcome,
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    SandboxIdentityResolver,
+    source_ip,
+)
 from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
@@ -77,16 +79,6 @@ logger = setup_logger()
 # the false blocker: anything the upstream would accept passes through, and a
 # genuinely oversized request gets the upstream's own 413, not an opaque 403.
 PARSER_MAX_BODY_BYTES = 32 * 1024 * 1024
-
-
-class _IdentityResolver(Protocol):
-    """Subset of `IdentityResolver` the gate uses."""
-
-    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
-
-    def resolve_session_by_id(
-        self, session_id: UUID, user_id: UUID, tenant_id: str
-    ) -> UUID | None: ...
 
 
 CacheFactory = Callable[[str], CacheBackend]
@@ -148,15 +140,17 @@ class GateAddon:
 
     def __init__(
         self,
-        identity: _IdentityResolver,
+        identity: SandboxIdentityResolver,
         request_evaluator: RequestEvaluator,
         cache_factory: CacheFactory,
         proxy_instance_id: str,
         credential_dispatcher: CredentialInjectionDispatcher,
         destination_policy: DestinationPolicyConfig,
         stream_responses: bool = True,
+        mcp_resolver: MCPServerResolver | None = None,
     ) -> None:
         self._destination_policy = destination_policy
+        self._mcp_resolver = mcp_resolver
         self._identity = identity
         self._request_evaluator = request_evaluator
         self._cache_factory = cache_factory
@@ -170,6 +164,12 @@ class GateAddon:
         # client connection id -> session tag, captured from the CONNECT's
         # Proxy-Authorization (only place it's visible for MITM'd HTTPS).
         self._conn_session_tags: dict[str, str] = {}
+        # Eager CONNECT opens TCP before mitmproxy marks the server as TLS.
+        self._conn_connect_origins: dict[str, tuple[str, int]] = {}
+        # Pool selection follows request(); include pending and open upstream addresses.
+        self._upstream_addresses: dict[
+            str, dict[connection.Server, tuple[str, ...]]
+        ] = {}
         # Tracks running `request()` coroutines so the drain can `asyncio.wait`
         # on real completion instead of sleeping. Self-cleaning.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
@@ -197,12 +197,18 @@ class GateAddon:
         # inner request is re-checked in `request`, and `server_connect` is the
         # authoritative rebinding-proof enforcement (resolve-once + IP pin). The check
         # can do a blocking DNS lookup, so run it off the event loop.
-        if await asyncio.get_running_loop().run_in_executor(
-            None,
-            is_destination_blocked,
-            self._destination_policy,
-            flow.request.host,
-            flow.request.port,
+        if (
+            await asyncio.to_thread(
+                resolve_destination,
+                self._destination_policy,
+                flow.request.host,
+                flow.request.port,
+                scheme="https",
+                peer=flow.client_conn.peername,
+                identity=self._identity,
+                mcp_resolver=self._mcp_resolver,
+            )
+            is None
         ):
             logger.info(
                 "egress_denied_internal_destination phase=connect host=%s port=%s",
@@ -230,6 +236,7 @@ class GateAddon:
         )
         if conn_id is None:
             return
+        self._conn_connect_origins[conn_id] = (flow.request.host, flow.request.port)
         if tag:
             self._conn_session_tags[conn_id] = tag
 
@@ -238,6 +245,8 @@ class GateAddon:
         conn_id = getattr(client, "id", None)  # ods: ignore[getattr]
         if conn_id is not None:
             self._conn_session_tags.pop(conn_id, None)
+            self._conn_connect_origins.pop(conn_id, None)
+            self._upstream_addresses.pop(conn_id, None)
 
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
         """Validate the final addresses and pin them while preserving TLS SNI."""
@@ -245,8 +254,21 @@ class GateAddon:
         if server.error or not server.address:
             return
         host, port = server.address[0], server.address[1]
-        addresses: tuple[str, ...] | None = await asyncio.to_thread(
-            resolve_destination, self._destination_policy, host, port
+        scheme = (
+            "https"
+            if server.tls
+            or self._conn_connect_origins.get(data.client.id) == (host, port)
+            else "http"
+        )
+        addresses = await asyncio.to_thread(
+            resolve_destination,
+            self._destination_policy,
+            host,
+            port,
+            scheme=scheme,
+            peer=data.client.peername,
+            identity=self._identity,
+            mcp_resolver=self._mcp_resolver,
         )
         if addresses is None:
             logger.info(
@@ -263,12 +285,25 @@ class GateAddon:
             pin_destination(host, port, addresses)
         except RuntimeError:
             server.error = "destination_blocked: upstream resolver unavailable"
+            return
+        self._upstream_addresses.setdefault(data.client.id, {})[server] = addresses
 
-    def server_connected(self, data: server_hooks.ServerConnectionHookData) -> None:  # noqa: ARG002
+    def server_connected(self, data: server_hooks.ServerConnectionHookData) -> None:
         clear_destination()
+        upstreams = self._upstream_addresses.get(data.client.id)
+        if upstreams is not None and data.server in upstreams and data.server.peername:
+            upstreams[data.server] = (data.server.peername[0],)
 
-    def server_connect_error(self, data: server_hooks.ServerConnectionHookData) -> None:  # noqa: ARG002
+    def server_connect_error(self, data: server_hooks.ServerConnectionHookData) -> None:
         clear_destination()
+        self.server_disconnected(data)
+
+    def server_disconnected(self, data: server_hooks.ServerConnectionHookData) -> None:
+        upstreams = self._upstream_addresses.get(data.client.id)
+        if upstreams is not None:
+            upstreams.pop(data.server, None)
+            if not upstreams:
+                self._upstream_addresses.pop(data.client.id, None)
 
     def responseheaders(self, flow: http.HTTPFlow) -> None:
         """
@@ -287,17 +322,33 @@ class GateAddon:
             self._inflight_tasks.add(task)
             task.add_done_callback(self._inflight_tasks.discard)
 
+        upstream_addresses = tuple(
+            address
+            for server, addresses in self._upstream_addresses.get(
+                flow.client_conn.id, {}
+            ).items()
+            if server.address == (flow.request.host, flow.request.port)
+            and server.tls == (flow.request.scheme == "https")
+            for address in addresses
+        )
         # Deny forwards to internal addresses with a clear 403 — both plain-HTTP
         # (GET http://internal/...) and the decrypted inner request of a MITM'd
         # HTTPS tunnel, so the structured error reaches the agent regardless of
         # scheme. `server_connect` is the authoritative rebinding-proof backstop +
         # pin. Resolution can block, so run it off the event loop.
-        if await asyncio.get_running_loop().run_in_executor(
-            None,
-            is_destination_blocked,
-            self._destination_policy,
-            flow.request.host,
-            flow.request.port,
+        if (
+            await asyncio.to_thread(
+                resolve_destination,
+                self._destination_policy,
+                flow.request.host,
+                flow.request.port,
+                scheme=flow.request.scheme,
+                peer=flow.client_conn.peername,
+                identity=self._identity,
+                mcp_resolver=self._mcp_resolver,
+                upstream_addresses=upstream_addresses,
+            )
+            is None
         ):
             logger.info(
                 "egress_denied_internal_destination phase=request host=%s port=%s",
@@ -1113,7 +1164,7 @@ class GateAddon:
 
     def _resolve_sandbox(self, flow: http.HTTPFlow) -> ResolvedSandbox | None:
         """Identify the peer before accepting HTTP requests or CONNECT tunnels."""
-        src_ip: str | None = self._extract_src_ip(flow)
+        src_ip = source_ip(flow.client_conn.peername)
         if src_ip is None:
             # mitmproxy peername returned no usable IP -- should never happen
             # over real TCP. Log loudly so a stuck NAT or transport-mode mishap
@@ -1153,23 +1204,6 @@ class GateAddon:
             return None
 
         return sandbox
-
-    def _extract_src_ip(self, flow: http.HTTPFlow) -> str | None:
-        peer = flow.client_conn.peername
-        if peer is None or len(peer) < 1:
-            return None
-        addr = peer[0]
-        if not isinstance(addr, str):
-            return None
-        try:
-            parsed: ipaddress.IPv4Address | ipaddress.IPv6Address = (
-                ipaddress.ip_address(addr)
-            )
-        except ValueError:
-            return None
-        if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped:
-            return str(parsed.ipv4_mapped)
-        return str(parsed)
 
     def _resolve_gated_session(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox

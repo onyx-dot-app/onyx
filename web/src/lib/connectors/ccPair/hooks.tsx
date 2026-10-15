@@ -1,17 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import useSWR, { mutate } from "swr";
-import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { mutate } from "swr";
+import { toast } from "@opal/layouts";
+import useSWRInfinite from "swr/infinite";
 import { setCCPairStatus } from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type {
   CCPairFullInfo,
-  CCPairSyncAttemptsResponse,
+  CCPairRun,
+  CCPairRunErrors,
+  CCPairRef,
+  CCPairRunsQuery,
+  CCPairRunStatusGroup,
+  IndexingRun,
 } from "@/lib/connectors/types";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  resolveAllErrorsForCCPair,
+  resolveErrors,
+} from "@/lib/targeted_reindex";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
 // ---------------------------------------------------------------------------
@@ -84,125 +95,196 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
 }
 
 // ---------------------------------------------------------------------------
-// useSyncAttemptsPaginatedFetch
+// useActivityItems
 // ---------------------------------------------------------------------------
 
-/**
- * Thin wrapper around `usePaginatedFetch` that adapts the
- * `CCPairSyncAttemptsResponse` shape used by both per-cc-pair sync-attempt
- * endpoints (`/permission-sync-attempts` and
- * `/external-group-sync-attempts`).
- *
- * The standard `usePaginatedFetch` hook expects `{ items, total_items }`,
- * which is a strict subset of `CCPairSyncAttemptsResponse` — so the
- * underlying paginated fetch works against either endpoint without
- * modification, ignoring the extra `applicable` field on the wire.
- *
- * Surfacing `applicable` requires a separate read because
- * `usePaginatedFetch` does not expose the raw response. The applicability
- * value is invariant per (cc_pair, sync_kind), so a single SWR probe with
- * `page_size=1` is the cheapest correct way to read it. SWR's URL-keyed
- * cache shares the result across concurrent renders.
- *
- * @see plans/permission-sync-attempt-tabs.md (PR C, option B)
- */
+/** Which list of an activity panel a run sits in. "other" is every run that neither failed nor has document errors. */
+export type ActivityGroup = "failures" | "errors" | "other" | "resolved";
 
-const ATTEMPTS_REFRESH_INTERVAL_MS = 5000;
+/** How each group narrows the runs feed. Resolved errors can sit on a run of any status. */
+const ACTIVITY_GROUP_QUERY = {
+  failures: { statusGroups: ["failed"], errors: null },
+  errors: {
+    statusGroups: ["running", "succeeded", "canceled"],
+    errors: "unresolved",
+  },
+  other: { statusGroups: ["running", "succeeded", "canceled"], errors: "none" },
+  resolved: { statusGroups: null, errors: "resolved" },
+} satisfies Record<
+  ActivityGroup,
+  {
+    statusGroups: CCPairRunStatusGroup[] | null;
+    errors: CCPairRunErrors | null;
+  }
+>;
 
-interface PaginatedItem {
-  id: number | string;
+const ACTIVITY_PAGE_SIZE = 20;
+
+/** Which pairs an activity feed reads: one pair, with whether the viewer may resolve its runs' document errors, or every readable one. */
+export type ActivityScope = { ccPairId: number; canResolve: boolean } | "fleet";
+
+/** One run in an activity panel, with the pair it ran on and what the viewer may do to it. */
+export interface ActivityItem {
+  ccPairId: number;
+  run: CCPairRun;
+  /** Set when the feed spans pairs, so the card names the pair. */
+  connector: CCPairRef | undefined;
+  /** The viewer may re-fetch single documents of the run's pair. */
+  canResolve: boolean;
 }
 
-export interface UseSyncAttemptsPaginatedFetchConfig {
-  /**
-   * Base API URL for the sync-attempts endpoint, without query params.
-   * E.g. `/api/manage/admin/cc-pair/123/permission-sync-attempts`.
-   * Should be sourced from `SWR_KEYS` so that any future `mutate()` callers
-   * can target the same key.
-   */
-  endpoint: string;
-  /**
-   * SWR cache key for the applicability probe (the `?page_num=0&page_size=1`
-   * read). Must be a `SWR_KEYS` entry so that callers wanting to force-refresh
-   * the probe can do so without re-deriving the URL inline. See the
-   * `ccPair*SyncAttemptsProbe` builders in `web/src/lib/swr-keys.ts`.
-   */
-  swrProbeKey: string;
-  itemsPerPage: number;
-  pagesPerBatch: number;
-}
-
-export interface UseSyncAttemptsPaginatedFetchReturn<T extends PaginatedItem> {
-  /**
-   * `null` while the applicability probe is in flight; `true`/`false`
-   * once known. The two non-null values map to "render the table" vs
-   * "render the not-applicable message" — they are NOT redundant with
-   * `items.length === 0`, see `CCPairSyncAttemptsResponse`.
-   */
-  applicable: boolean | null;
-  applicableError: Error | null;
-  applicableIsLoading: boolean;
-
-  // Standard pagination state, only meaningful when `applicable === true`.
-  // The underlying endpoint short-circuits to `items=[], total_items=0`
-  // when not applicable, so reading these in that state is harmless but
-  // misleading — gate on `applicable` first.
-  currentPageData: T[] | null;
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  goToPage: (page: number) => void;
-  refresh: () => Promise<void>;
+export interface ActivityGroupState {
+  group: ActivityGroup;
+  runs: ActivityItem[];
+  /** Runs in the group, loaded or not. */
+  total: number;
+  loaded: boolean;
+  failed: boolean;
   isLoading: boolean;
-  error: Error | null;
+  /** Older runs than the pages loaded so far. */
+  hasMore: boolean;
+  more: () => void;
 }
 
-interface ApplicabilityProbeResponse {
-  applicable: boolean;
+/** A page of either feed. A pair's feed returns bare runs, the fleet's wraps each with its pair. */
+interface FeedPage {
+  items: (CCPairRun | IndexingRun)[];
+  total_items: number;
 }
 
-export function useSyncAttemptsPaginatedFetch<T extends PaginatedItem>({
-  endpoint,
-  swrProbeKey,
-  itemsPerPage,
-  pagesPerBatch,
-}: UseSyncAttemptsPaginatedFetchConfig): UseSyncAttemptsPaginatedFetchReturn<T> {
-  const {
-    data: probeData,
-    error: probeError,
-    isLoading: applicableIsLoading,
-  } = useSWR<CCPairSyncAttemptsResponse<T> | ApplicabilityProbeResponse>(
-    swrProbeKey,
-    errorHandlingFetcher
-  );
-
-  const applicable = probeData ? probeData.applicable : null;
-
-  // Once we know the source has no applicable sync, stop polling — the
-  // backend will keep returning `applicable=false, items=[]` every 5s
-  // for the rest of the session otherwise.
-  const refreshIntervalInMs =
-    applicable === false ? 0 : ATTEMPTS_REFRESH_INTERVAL_MS;
-
-  const paginated = usePaginatedFetch<T>({
-    endpoint,
-    itemsPerPage,
-    pagesPerBatch,
-    refreshIntervalInMs,
-  });
-
+function itemOf(
+  run: CCPairRun | IndexingRun,
+  scope: ActivityScope
+): ActivityItem {
+  if ("cc_pair" in run) {
+    return {
+      ccPairId: run.cc_pair.id,
+      run: run.run,
+      connector: run.cc_pair,
+      canResolve: run.cc_pair.can_resolve,
+    };
+  }
+  // A bare run only comes from a pair's own feed.
+  const pair = scope === "fleet" ? null : scope;
+  if (pair === null)
+    throw new Error("A fleet feed returned a run without its pair");
   return {
-    applicable,
-    applicableError: (probeError as Error | undefined) ?? null,
-    applicableIsLoading,
-
-    currentPageData: paginated.currentPageData,
-    currentPage: paginated.currentPage,
-    totalPages: paginated.totalPages,
-    totalItems: paginated.totalItems,
-    goToPage: paginated.goToPage,
-    refresh: paginated.refresh,
-    isLoading: paginated.isLoading,
-    error: paginated.error,
+    ccPairId: pair.ccPairId,
+    run,
+    connector: undefined,
+    canResolve: pair.canResolve,
   };
+}
+
+/** One activity group of the scope, polled while `enabled`. `more` loads the next page and a new search starts over. */
+export function useActivityItems(
+  scope: ActivityScope,
+  group: ActivityGroup,
+  q: string,
+  enabled: boolean,
+  pollMs: number
+): ActivityGroupState {
+  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  const canResolve = scope === "fleet" ? null : scope.canResolve;
+  const { data, error, isLoading, size, setSize } = useSWRInfinite<FeedPage>(
+    (pageIndex, previous: FeedPage | null) => {
+      if (!enabled) return null;
+      if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
+        return null;
+      }
+      const query: CCPairRunsQuery = {
+        pageNum: pageIndex,
+        pageSize: ACTIVITY_PAGE_SIZE,
+        since: null,
+        kinds: null,
+        q,
+        ...ACTIVITY_GROUP_QUERY[group],
+      };
+      return ccPairId === null
+        ? SWR_KEYS.indexMonitoringRuns(query)
+        : SWR_KEYS.ccPairRuns(ccPairId, query);
+    },
+    errorHandlingFetcher,
+    { refreshInterval: pollMs, keepPreviousData: true }
+  );
+  useEffect(() => {
+    void setSize(1);
+  }, [q, setSize]);
+  // Polling shifts the offsets, so a run can land on two pages.
+  const runs = useMemo(() => {
+    const itemScope: ActivityScope =
+      ccPairId === null || canResolve === null
+        ? "fleet"
+        : { ccPairId, canResolve };
+    const seen = new Set<string>();
+    return (data ?? []).flatMap((page) =>
+      page.items
+        .map((run) => itemOf(run, itemScope))
+        .filter((item) => {
+          const key = `${item.run.kind}-${item.run.attempt.id}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+    );
+  }, [data, ccPairId, canResolve]);
+  const first = data?.[0];
+  const last = data?.[data.length - 1];
+  return {
+    group,
+    runs,
+    total: first?.total_items ?? 0,
+    loaded: first !== undefined,
+    failed: error !== undefined,
+    isLoading,
+    hasMore:
+      first !== undefined &&
+      last !== undefined &&
+      runs.length < first.total_items &&
+      last.items.length === ACTIVITY_PAGE_SIZE,
+    more: () => void setSize(size + 1),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// useResolveRunErrors
+// ---------------------------------------------------------------------------
+
+/** Resolves a run's document errors and refreshes every feed they appear in, one submit at a time. */
+export function useResolveRunErrors() {
+  const tToasts = useTranslations("admin.connector.toasts");
+  const [resolving, setResolving] = useState(false);
+
+  // Awaits only the submit. The feeds poll, so rows clear as documents land.
+  async function resolve(item: ActivityItem, errorIds: number[] | null) {
+    if (resolving) return;
+    setResolving(true);
+    try {
+      const result =
+        errorIds === null
+          ? await resolveAllErrorsForCCPair(item.ccPairId, item.run.attempt.id)
+          : await resolveErrors(errorIds);
+      if (result.total_error_ids === 0) {
+        toast.success(tToasts("noUnresolvedErrors"));
+      } else {
+        toast.success(
+          tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
+        );
+      }
+      await mutate(
+        (key) =>
+          typeof key === "string" &&
+          (key.startsWith(SWR_KEYS.ccPairIndexingErrors(item.ccPairId)) ||
+            key.startsWith(SWR_KEYS.ccPairRunsPrefix(item.ccPairId)) ||
+            key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix))
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("targetedReindexFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  return { resolving, resolve };
 }

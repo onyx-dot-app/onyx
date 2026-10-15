@@ -310,6 +310,7 @@ def test_confluence_space_mode_shows_the_configured_space(session: Session) -> N
     assert breakdown is not None
     # Pages show only when the config names one.
     assert list(breakdown.nodes_by_type) == [HierarchyNodeType.SPACE]
+    assert breakdown.config_fields == ["space", "page_id"]
     spaces = breakdown.nodes_by_type[HierarchyNodeType.SPACE]
     assert [entry.model_dump() for entry in spaces] == [
         {

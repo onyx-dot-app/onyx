@@ -41,11 +41,13 @@ def assert_zip_within_limits(
             raise ZipSizeLimitError("Zip member is too compressed to extract")
 
 
-def assert_zip_container_within_limits(file: IO[Any]) -> None:
+def assert_zip_container_within_limits(
+    file: IO[Any], *, max_total_bytes: int | None = None
+) -> None:
     position: int = file.tell()
     try:
         with zipfile.ZipFile(file) as archive:
-            assert_zip_within_limits(archive)
+            assert_zip_within_limits(archive, max_total_bytes=max_total_bytes)
     except zipfile.BadZipFile:
         pass
     finally:

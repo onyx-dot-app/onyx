@@ -277,11 +277,27 @@ call fragments are keyed by `index`: an early chunk carries `id` and
 reading any single chunk's `tool_calls` as complete
 truncates the call.
 
+Both response converters use `model_response.py:_usage_from_usage_data` to normalize
+usage for cost accounting and tracing. A missing or null `cache_read_input_tokens`
+falls back to `prompt_tokens_details.cached_tokens`. An explicit zero takes precedence
+over the nested count. Missing counts become zero.
+
 Cost is tracked with `LitellmLLM._track_llm_cost` whenever a chunk's `usage`
 is set, which is normally only the final chunk. It records cost only when usage
 limits are enabled and the call uses an Onyx-managed API key (some providers emit a
 trailing usage-only chunk with empty `choices`, handled explicitly in
 `from_litellm_model_response_stream`).
+
+Router models (`is_router`, e.g. `openrouter/auto`) have no price of their own.
+`LitellmLLM._routed_model` reads the model the gateway reports serving the call
+(`ModelResponse.model`; for streams the `routed_model` that the OpenRouter
+`chunk_parser` monkey patch keeps in `provider_specific_fields`, because
+LiteLLM's stream wrapper overwrites chunk models with the requested name) and
+records it with `tracing/llm_utils.py:record_llm_routed_model` on the generation
+span. `_track_llm_cost` and the usage processors pass it as
+`compute_cost_cents(served_model=...)`: the catalog is priced by the served
+model, an admin cost override on the router name still wins, and the ledger key
+stays the router name.
 
 ### 4.6 Retries
 

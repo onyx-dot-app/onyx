@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
 import { Content } from "@opal/layouts";
@@ -13,7 +14,6 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAdminAgents } from "@/lib/agents/hooks";
-import { getSourceMetadata } from "@/lib/sources";
 import type { Agent } from "@/lib/agents/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import ResourceContent from "@/views/admin/GroupsPage/SharedGroupResources/ResourceContent";

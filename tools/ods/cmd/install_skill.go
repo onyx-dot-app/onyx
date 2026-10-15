@@ -10,6 +10,7 @@ import (
 
 	"github.com/charlievieth/fastwalk"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/safefs"
 	"github.com/spf13/cobra"
 )
 
@@ -220,12 +221,7 @@ func installEnforcedSkills(
 		return nil
 	}
 
-	claudeDir := filepath.Join(repoRoot, ".claude")
 	destFile := filepath.Join(repoRoot, claudeMDFile)
-
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
-		return fmt.Errorf("could not create .claude directory: %w", err)
-	}
 
 	content := strings.Join(imports, "\n") + "\n"
 	existing, err := os.ReadFile(destFile)
@@ -234,7 +230,7 @@ func installEnforcedSkills(
 		return nil
 	}
 
-	if err := os.WriteFile(destFile, []byte(content), 0o644); err != nil {
+	if err := safefs.WriteFileNoFollow(repoRoot, destFile, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("could not write %s: %w", destFile, err)
 	}
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %s\n", destFile)

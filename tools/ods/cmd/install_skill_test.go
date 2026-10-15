@@ -237,3 +237,46 @@ func TestInstallSkill_cloneFailureStopsTheInstall(t *testing.T) {
 		t.Fatalf("expected nothing installed, got %v", err)
 	}
 }
+
+func TestInstallSkill_refusesSymlinkedDestinations(t *testing.T) {
+	cases := []struct {
+		name    string
+		agent   string
+		dest    string
+		content string
+	}{
+		{name: "claude CLAUDE.md", agent: "claude-code", dest: claudeMDFile, content: "original"},
+		{name: "codex dangling .agents-local.md", agent: "codex", dest: agentsLocalFile},
+		{name: "cursor rule with marker", agent: "cursor", dest: ".cursor/rules/style.mdc", content: generatedRuleMarker},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, repoRoot := skillEnv(t)
+			source := filepath.Join(t.TempDir(), "onyx-llm-context")
+			skillWriteSource(t, source)
+			target := filepath.Join(t.TempDir(), "target")
+			if c.content != "" {
+				deployWriteFile(t, target, c.content)
+			}
+			link := filepath.Join(repoRoot, filepath.FromSlash(c.dest))
+			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, link); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := skillRun(t, "--source", source, "--agent", c.agent); err == nil {
+				t.Fatal("expected install-skill to refuse the symlinked destination")
+			}
+
+			got, err := os.ReadFile(target)
+			switch {
+			case c.content == "" && !os.IsNotExist(err):
+				t.Fatalf("dangling link target was created: %v", err)
+			case c.content != "" && string(got) != c.content:
+				t.Fatalf("link target was overwritten: %q", got)
+			}
+		})
+	}
+}

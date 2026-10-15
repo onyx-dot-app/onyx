@@ -128,20 +128,6 @@ describe("CraftInputBar queued attachments", () => {
     mockClearFiles.mockClear();
   });
 
-  it("keeps composer files when the queue rejects the handoff", () => {
-    const onQueueMessage = jest.fn().mockReturnValue(false);
-    render(
-      <CraftInputBar
-        onSubmit={jest.fn()}
-        isRunning
-        onQueueMessage={onQueueMessage}
-      />
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
-    expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
-    expect(mockClearFiles).not.toHaveBeenCalled();
-  });
-
   it("transfers composer files to the queued message and clears their association", () => {
     const onQueueMessage = jest.fn();
 
@@ -157,5 +143,19 @@ describe("CraftInputBar queued attachments", () => {
 
     expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
     expect(mockClearFiles).toHaveBeenCalledWith();
+  });
+
+  it("keeps composer files when the queue rejects the handoff", () => {
+    const onQueueMessage = jest.fn().mockReturnValue(false);
+    render(
+      <CraftInputBar
+        onSubmit={jest.fn()}
+        isRunning
+        onQueueMessage={onQueueMessage}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
+    expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
+    expect(mockClearFiles).not.toHaveBeenCalled();
   });
 });

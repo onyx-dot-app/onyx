@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import datetime
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any
 from unittest.mock import PropertyMock, patch
 from uuid import UUID
@@ -31,6 +31,7 @@ from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     cleanup_stuck_scheduled_runs,
     dispatch_due_scheduled_tasks,
 )
+from onyx.configs.constants import MessageType
 from onyx.db.enums import (
     SandboxStatus,
     ScheduledTaskErrorClass,
@@ -39,18 +40,26 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
 )
 from onyx.db.models import Sandbox, ScheduledTask, ScheduledTaskRun, User
+from onyx.server.features.build.db.build_session import get_session_messages
+from onyx.server.features.build.sandbox.base import SandboxEvent
 from onyx.server.features.build.sandbox.event_schema import (
     TURN_ERROR_CODE_TIMEOUT,
     TURN_ERROR_CODE_TRANSPORT,
+    AgentMessageChunk,
     Error,
     PromptResponse,
+    RequestPermissionRequest,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    OutputsManifestEntry,
+    OutputsManifestResponse,
 )
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
+from onyx.server.features.build.session.api import get_output_cards
 from onyx.server.features.build.session.manager import SessionManager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_user
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -101,7 +110,7 @@ def _seed_task_and_queued_run(
 
 def test_dispatch_uses_skip_locked_to_avoid_dupes(
     db_session: Session,
-    test_user: User,  # noqa: ARG001
+    test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two concurrent dispatchers each claim a disjoint subset of due tasks.
@@ -113,7 +122,7 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
     duplicate ``(task_id, status=QUEUED)`` insertion.
     """
     _ = monkeypatch  # autouse'd elsewhere; kept for symmetry with sibling tests
-    user = make_user(db_session)
+    user = test_user
     now = datetime.datetime.now(datetime.timezone.utc)
     task_ids: list[UUID] = []
     for i in range(3):
@@ -205,11 +214,11 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
 
 def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
     db_session: Session,
-    test_user: User,  # noqa: ARG001
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """A QUEUED run older than 15 min → ``cleanup_stuck_scheduled_runs`` marks it FAILED."""
-    user = make_user(db_session)
+    user = test_user
     task = ScheduledTask(
         user_id=user.id,
         name="stale",
@@ -248,7 +257,7 @@ def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
 
 def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     db_session: Session,
-    test_user: User,  # noqa: ARG001
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """A RUNNING run older than the running threshold → ``cleanup_stuck_scheduled_runs`` marks it FAILED.
@@ -256,7 +265,7 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     Production threshold is ``SCHEDULED_RUN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
     (i.e. 75 min). Backdating ``started_at`` by 80 min puts the run past that.
     """
-    user = make_user(db_session)
+    user = test_user
     task = ScheduledTask(
         user_id=user.id,
         name="long-running",
@@ -541,3 +550,144 @@ def test_run_fails_when_wake_fails(
     assert refreshed is not None
     assert refreshed.status == ScheduledTaskRunStatus.FAILED
     assert refreshed.error_class == ScheduledTaskErrorClass.SANDBOX_WAKE_FAILED.value
+
+
+# Output capture must finish before the run can release queued work.
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "success",
+        "error",
+        "approval",
+        "lost_lease",
+        "lost_final_lease",
+        "timeout",
+        "exception",
+    ],
+)
+def test_output_cards_follow_producer_close_and_precede_terminal_status(
+    db_session: Session,
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+    session_manager_with_stub: SessionManager,  # noqa: ARG001
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: str,
+) -> None:
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
+        lambda *_: ("", {}),
+    )
+    sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+    stub_sandbox_manager.health_check_returns = True
+    stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_sandbox_file_silent = True
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    lifecycle: list[str] = []
+
+    def manifest(
+        sandbox_id: UUID,  # noqa: ARG001
+        session_id: UUID,  # noqa: ARG001
+        *,
+        include_web: bool = False,
+    ) -> OutputsManifestResponse:
+        assert include_web
+        if not lifecycle:
+            lifecycle.append("baseline")
+            if outcome == "lost_lease":
+                assert stub_sandbox_manager.last_prompt_slot is not None
+                stub_sandbox_manager.last_prompt_slot.lost = True
+            return OutputsManifestResponse(entries=[])
+        assert lifecycle[-1] == "producer_closed"
+        db_session.refresh(run)
+        assert run.status == ScheduledTaskRunStatus.RUNNING
+        lifecycle.append("final_capture")
+        if outcome == "lost_final_lease":
+            assert stub_sandbox_manager.last_prompt_slot is not None
+            stub_sandbox_manager.last_prompt_slot.lost = True
+        return OutputsManifestResponse(
+            entries=[
+                OutputsManifestEntry(path="report.md", size=20, mtime_ns=1, ctime_ns=1)
+            ]
+        )
+
+    def produce(
+        *_args: object, **_kwargs: object
+    ) -> Generator[SandboxEvent | RequestPermissionRequest, None, None]:
+        lifecycle.append("producer_started")
+        try:
+            if outcome in {"exception", "timeout"}:
+                yield AgentMessageChunk.model_validate(
+                    {
+                        "sessionUpdate": "agent_message_chunk",
+                        "content": {"type": "text", "text": "Created the report."},
+                    }
+                )
+                raise RuntimeError("Producer failed after writing the report")
+            if outcome == "error":
+                yield Error.model_validate(
+                    {"code": TURN_ERROR_CODE_TRANSPORT, "message": "Transport failed"}
+                )
+            elif outcome in {"approval", "lost_final_lease"}:
+                yield RequestPermissionRequest.model_validate(
+                    {
+                        "sessionId": "scheduled-session",
+                        "options": [],
+                        "toolCall": {"toolCallId": "approval-call"},
+                    }
+                )
+            else:
+                yield PromptResponse.model_validate({"stopReason": "end_turn"})
+        finally:
+            lifecycle.append("producer_closed")
+
+    monkeypatch.setattr(stub_sandbox_manager, "get_outputs_manifest", manifest)
+    monkeypatch.setattr(stub_sandbox_manager, "send_message", produce)
+    if outcome == "timeout":
+        run_scheduled_task_logic(run.id, budget_seconds=0)
+    else:
+        run_scheduled_task_logic(run.id)
+    db_session.expire_all()
+    assert run.session_id is not None
+    cards = get_output_cards(run.session_id, test_user, db_session).cards
+    if outcome == "lost_lease":
+        assert lifecycle == ["baseline"]
+        assert cards == []
+        assert run.status == ScheduledTaskRunStatus.FAILED
+    else:
+        assert lifecycle == [
+            "baseline",
+            "producer_started",
+            "producer_closed",
+            "final_capture",
+        ]
+        if outcome == "lost_final_lease":
+            assert cards == []
+        else:
+            assert len(cards) == 1
+            assert (cards[0].path, cards[0].turn_index) == ("outputs/report.md", 0)
+        assert (
+            run.status
+            == {
+                "success": ScheduledTaskRunStatus.SUCCEEDED,
+                "error": ScheduledTaskRunStatus.FAILED,
+                "exception": ScheduledTaskRunStatus.FAILED,
+                "timeout": ScheduledTaskRunStatus.FAILED,
+                "lost_final_lease": ScheduledTaskRunStatus.FAILED,
+                "approval": ScheduledTaskRunStatus.AWAITING_APPROVAL,
+            }[outcome]
+        )
+
+    if outcome == "timeout":
+        assert run.error_class == ScheduledTaskErrorClass.TIMEOUT.value
+    if outcome == "lost_final_lease":
+        assert run.error_detail == "Prompt slot lease lost mid-turn."
+
+    if outcome == "exception":
+        messages = get_session_messages(run.session_id, db_session)
+        assistant_messages = [
+            message for message in messages if message.type == MessageType.ASSISTANT
+        ]
+        assert len(assistant_messages) == 1
+        assert "Created the report." in str(assistant_messages[0].message_metadata)

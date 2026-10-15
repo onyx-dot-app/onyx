@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect, type SelectOption } from "@opal/components";
@@ -26,7 +27,6 @@ import type { CredentialValues } from "@/lib/credentials/types";
 import { getCredentialSpec } from "@/lib/credentials/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { getSourceDisplayName } from "@/lib/sources";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
