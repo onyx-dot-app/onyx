@@ -759,6 +759,16 @@ class CCPairRunsResolveResponse(BaseModel):
     resolved_count: int
 
 
+class CCPairRunsResolveMatchingResponse(BaseModel):
+    resolved_count: int
+    # The pairs that had a run marked, so a client refetches only their feeds.
+    cc_pair_ids: list[int]
+
+
+class CCPairRunsResolvableCountResponse(BaseModel):
+    count: int
+
+
 class CCPairRef(BaseModel):
     """A pair named in a fleet-wide feed."""
 

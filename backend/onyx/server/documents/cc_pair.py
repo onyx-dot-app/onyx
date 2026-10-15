@@ -28,6 +28,7 @@ from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.cc_pair_run_resolution import resolve_runs__no_commit
 from onyx.db.cc_pair_runs import (
+    count_matching_runs,
     get_resolvable_runs,
     resolve_matching_runs__no_commit,
 )
@@ -105,7 +106,10 @@ from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_br
 from onyx.server.documents.models import (
     CCPairFullInfo,
     CCPairHierarchyBreakdown,
+    CCPairRunLevel,
+    CCPairRunsResolvableCountResponse,
     CCPairRunsResolveMatchingRequest,
+    CCPairRunsResolveMatchingResponse,
     CCPairRunsResolveRequest,
     CCPairRunsResolveResponse,
     CCPairRunsResponse,
@@ -394,17 +398,14 @@ def resolve_cc_pair_runs(
     return CCPairRunsResolveResponse(resolved_count=len(wanted))
 
 
-@router.post("/admin/cc-pair/{cc_pair_id}/runs/resolve-matching")
-def resolve_matching_cc_pair_runs(
+def _pair_open_level(
     cc_pair_id: int,
     request: CCPairRunsResolveMatchingRequest,
-    user: User = Depends(
-        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
-    ),
-    db_session: Session = Depends(get_session),
-) -> CCPairRunsResolveResponse:
-    """Marks every open run of a level that the pair's feed lists for the
-    filter resolved, and returns how many it marked."""
+    user: User,
+    db_session: Session,
+) -> tuple[list[CCPairRunKind], CCPairRunFilter]:
+    """The run kinds and filter of a level's open runs on a pair the caller
+    operates."""
     if not verify_user_has_access_to_cc_pair(
         cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
     ):
@@ -428,6 +429,43 @@ def resolve_matching_cc_pair_runs(
     run_filter = open_level_filter(
         request, [cc_pair_id], cc_pair.connector.source, set()
     )
+    return kinds, run_filter
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/runs/resolvable-count")
+def get_resolvable_cc_pair_runs_count(
+    cc_pair_id: int,
+    level: CCPairRunLevel = Query(...),
+    q: str | None = Query(None, max_length=200),
+    since: datetime | None = Query(None),
+    kinds: list[CCPairRunKind] | None = Query(None),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolvableCountResponse:
+    """How many runs ``resolve-matching`` would mark for the same filter."""
+    request = CCPairRunsResolveMatchingRequest(
+        level=level, q=q, since=since, kinds=kinds
+    )
+    wanted, run_filter = _pair_open_level(cc_pair_id, request, user, db_session)
+    return CCPairRunsResolvableCountResponse(
+        count=count_matching_runs(db_session, wanted, run_filter)
+    )
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/runs/resolve-matching")
+def resolve_matching_cc_pair_runs(
+    cc_pair_id: int,
+    request: CCPairRunsResolveMatchingRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveMatchingResponse:
+    """Marks every open run of a level that the pair's feed lists for the
+    filter resolved, and returns how many it marked."""
+    kinds, run_filter = _pair_open_level(cc_pair_id, request, user, db_session)
     resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filter, user.id)
     db_session.commit()
     count = sum(resolved.values())
@@ -439,7 +477,9 @@ def resolve_matching_cc_pair_runs(
         resource_id=cc_pair_id,
         extra={"resolved_matching_runs": count},
     )
-    return CCPairRunsResolveResponse(resolved_count=count)
+    return CCPairRunsResolveMatchingResponse(
+        resolved_count=count, cc_pair_ids=sorted(resolved)
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/throughput")

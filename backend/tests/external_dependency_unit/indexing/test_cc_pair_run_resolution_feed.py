@@ -37,6 +37,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.cc_pair import get_cc_pair_runs, resolve_cc_pair_runs
 from onyx.server.documents.index_monitoring import (
     get_indexing_runs,
+    get_resolvable_indexing_runs_count,
     resolve_indexing_runs,
 )
 from onyx.server.documents.models import (
@@ -332,6 +333,18 @@ def test_fleet_batch_resolve_marks_only_the_operated_pairs_matching_runs(
     second = _index_attempt(db_session, operated, 1, IndexingStatus.FAILED, mark)
     other = _index_attempt(db_session, read_only, 2, IndexingStatus.FAILED, mark)
 
+    def resolvable() -> int:
+        return get_resolvable_indexing_runs_count(
+            level=CCPairRunLevel.FAILURES,
+            q=mark,
+            since=None,
+            kinds=None,
+            user=scoped,
+            db_session=db_session,
+        ).count
+
+    assert resolvable() == 2
+
     response = resolve_indexing_runs(
         request=CCPairRunsResolveMatchingRequest(level=CCPairRunLevel.FAILURES, q=mark),
         user=scoped,
@@ -339,6 +352,8 @@ def test_fleet_batch_resolve_marks_only_the_operated_pairs_matching_runs(
     )
 
     assert response.resolved_count == 2
+    assert response.cc_pair_ids == [operated.id]
+    assert resolvable() == 0
 
     def fleet(resolved: bool) -> list[int]:
         feed = get_indexing_runs(

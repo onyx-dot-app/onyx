@@ -14,6 +14,7 @@ from onyx.auth.permissions import (
 )
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
 from onyx.db.cc_pair_runs import (
+    count_matching_runs,
     count_pairs_indexing,
     resolve_matching_runs__no_commit,
 )
@@ -51,8 +52,10 @@ from onyx.server.documents.cc_pair_runs_feed import (
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.models import (
     CCPairRef,
+    CCPairRunLevel,
+    CCPairRunsResolvableCountResponse,
     CCPairRunsResolveMatchingRequest,
-    CCPairRunsResolveResponse,
+    CCPairRunsResolveMatchingResponse,
     CCPairThroughputWindow,
     ConnectorCredentialPairIdentifier,
     IndexAttemptSnapshot,
@@ -409,16 +412,11 @@ def _pair_of_run(
     return sibling
 
 
-@router.post("/runs/resolve")
-def resolve_indexing_runs(
-    request: CCPairRunsResolveMatchingRequest,
-    user: User = Depends(
-        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
-    ),
-    db_session: Session = Depends(get_session),
-) -> CCPairRunsResolveResponse:
-    """Marks every open run of a level that the fleet feed lists for the
-    filter resolved, on the pairs the caller operates, and returns how many."""
+def _operated_open_level(
+    db_session: Session, user: User, request: CCPairRunsResolveMatchingRequest
+) -> tuple[list[CCPairRunKind], CCPairRunFilter] | None:
+    """The run kinds and filter of a level's open runs on the pairs the caller
+    operates, or None when they operate none."""
     pairs = _readable_cc_pairs(db_session, user)
     operate_ids = _managed_ids(
         db_session,
@@ -428,7 +426,7 @@ def resolve_indexing_runs(
         has_global_permission(user, Permission.MANAGE_CONNECTORS),
     )
     if not operate_ids:
-        return CCPairRunsResolveResponse(resolved_count=0)
+        return None
     operated_sources = {
         pairs[cc_pair_id].connector.source for cc_pair_id in operate_ids
     }
@@ -441,6 +439,47 @@ def resolve_indexing_runs(
     kinds = [
         kind for kind in CCPairRunKind if request.kinds is None or kind in request.kinds
     ]
+    return kinds, run_filter
+
+
+@router.get("/runs/resolvable-count")
+def get_resolvable_indexing_runs_count(
+    level: CCPairRunLevel = Query(...),
+    q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
+    since: datetime | None = Query(None),
+    kinds: list[CCPairRunKind] | None = Query(None),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolvableCountResponse:
+    """How many runs ``POST /runs/resolve`` would mark for the same filter."""
+    request = CCPairRunsResolveMatchingRequest(
+        level=level, q=q, since=since, kinds=kinds
+    )
+    scoped = _operated_open_level(db_session, user, request)
+    if scoped is None:
+        return CCPairRunsResolvableCountResponse(count=0)
+    kinds_wanted, run_filter = scoped
+    return CCPairRunsResolvableCountResponse(
+        count=count_matching_runs(db_session, kinds_wanted, run_filter)
+    )
+
+
+@router.post("/runs/resolve")
+def resolve_indexing_runs(
+    request: CCPairRunsResolveMatchingRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveMatchingResponse:
+    """Marks every open run of a level that the fleet feed lists for the
+    filter resolved, on the pairs the caller operates, and returns how many."""
+    scoped = _operated_open_level(db_session, user, request)
+    if scoped is None:
+        return CCPairRunsResolveMatchingResponse(resolved_count=0, cc_pair_ids=[])
+    kinds, run_filter = scoped
     resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filter, user.id)
     db_session.commit()
     for cc_pair_id, count in resolved.items():
@@ -452,7 +491,9 @@ def resolve_indexing_runs(
             resource_id=cc_pair_id,
             extra={"resolved_matching_runs": count},
         )
-    return CCPairRunsResolveResponse(resolved_count=sum(resolved.values()))
+    return CCPairRunsResolveMatchingResponse(
+        resolved_count=sum(resolved.values()), cc_pair_ids=sorted(resolved)
+    )
 
 
 @router.get("/runs")

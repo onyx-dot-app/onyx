@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { mutate } from "swr";
+import useSWR, { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import useSWRInfinite from "swr/infinite";
 import {
@@ -17,6 +17,7 @@ import type {
   CCPairRun,
   CCPairRunErrors,
   CCPairRef,
+  CCPairRunLevel,
   CCPairRunsQuery,
   CCPairRunStatusGroup,
   IndexingRun,
@@ -305,19 +306,42 @@ export function useActivityItems(
   };
 }
 
-const ANY_PAIR_FEED = /^\/api\/manage\/admin\/cc-pair\/\d+\/(errors|runs\?)/;
-
-/** Refetches the pair's feeds and the fleet feed, or, for null, every pair's. */
-function refreshFeeds(ccPairId: number | null) {
+/** Refetches the fleet feed and the given pairs' feeds. */
+function refreshFeeds(ccPairIds: number[]) {
+  const prefixes = [
+    SWR_KEYS.indexMonitoringRunsPrefix,
+    SWR_KEYS.indexMonitoringResolvableRunsCountPrefix,
+    ...ccPairIds.flatMap((ccPairId) => [
+      SWR_KEYS.ccPairIndexingErrors(ccPairId),
+      SWR_KEYS.ccPairRunsPrefix(ccPairId),
+      SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId),
+    ]),
+  ];
   return mutate(
     (key) =>
       typeof key === "string" &&
-      (key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix) ||
-        (ccPairId === null
-          ? ANY_PAIR_FEED.test(key)
-          : key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId)) ||
-            key.startsWith(SWR_KEYS.ccPairRunsPrefix(ccPairId))))
+      prefixes.some((prefix) => key.startsWith(prefix))
   );
+}
+
+/** How many open runs of the level the batch resolve would mark for the search, on the pair or the pairs the caller operates. Null skips the fetch. */
+export function useResolvableRunsCount(
+  scope: ActivityScope,
+  level: CCPairRunLevel | null,
+  q: string,
+  pollMs: number
+): { count: number; isLoading: boolean } {
+  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  const { data, isLoading } = useSWR<{ count: number }>(
+    level === null
+      ? null
+      : ccPairId === null
+        ? SWR_KEYS.indexMonitoringResolvableRunsCount(level, q)
+        : SWR_KEYS.ccPairResolvableRunsCount(ccPairId, level, q),
+    errorHandlingFetcher,
+    { refreshInterval: pollMs, keepPreviousData: true }
+  );
+  return { count: data?.count ?? 0, isLoading };
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +369,7 @@ export function useResolveRunErrors() {
           tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
         );
       }
-      await refreshFeeds(item.ccPairId);
+      await refreshFeeds([item.ccPairId]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("targetedReindexFailed", { message }));
@@ -363,7 +387,7 @@ export function useResolveRunErrors() {
         { kind: item.run.kind, attempt_id: item.run.attempt.id },
       ]);
       toast.success(tToasts("runResolved"));
-      await refreshFeeds(item.ccPairId);
+      await refreshFeeds([item.ccPairId]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("runResolveFailed", { message }));
@@ -375,21 +399,21 @@ export function useResolveRunErrors() {
   // Marks every open run of the level the panel lists for the search resolved.
   async function resolveMatching(
     scope: ActivityScope,
-    level: "failures" | "errors",
+    level: CCPairRunLevel,
     q: string
   ) {
     if (resolving) return;
     setResolving(true);
     const ccPairId = scope === "fleet" ? null : scope.ccPairId;
     try {
-      const count = await resolveMatchingRuns(ccPairId, {
+      const result = await resolveMatchingRuns(ccPairId, {
         level,
         q: q || null,
         since: null,
         kinds: null,
       });
-      toast.success(tToasts("runsResolved", { count }));
-      await refreshFeeds(ccPairId);
+      toast.success(tToasts("runsResolved", { count: result.resolved_count }));
+      await refreshFeeds(ccPairId === null ? result.cc_pair_ids : [ccPairId]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("runResolveFailed", { message }));

@@ -2,6 +2,7 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   ConnectorCredentialPairStatus,
   type CCPairRunKind,
+  type CCPairRunLevel,
 } from "@/lib/connectors/types";
 import { toast } from "@opal/layouts";
 
@@ -82,17 +83,23 @@ export async function resolveCCPairRuns(
 
 /** The open runs of one activity level, narrowed as the runs feed narrows them. */
 export interface CCPairRunsMatchingFilter {
-  level: "failures" | "errors";
+  level: CCPairRunLevel;
   q: string | null;
   since: string | null;
   kinds: CCPairRunKind[] | null;
 }
 
-/** Marks every open run the filter matches resolved, on the pair or, for null, on every pair the caller operates. Returns how many. */
+export interface CCPairRunsResolveMatchingResponse {
+  resolved_count: number;
+  /** The pairs that had a run marked. */
+  cc_pair_ids: number[];
+}
+
+/** Marks every open run the filter matches resolved, on the pair or, for null, on every pair the caller operates. */
 export async function resolveMatchingRuns(
   ccPairId: number | null,
   filter: CCPairRunsMatchingFilter
-): Promise<number> {
+): Promise<CCPairRunsResolveMatchingResponse> {
   const response = await fetch(
     ccPairId === null
       ? "/api/manage/admin/index-monitoring/runs/resolve"
@@ -107,6 +114,5 @@ export async function resolveMatchingRuns(
     const { detail }: ErrorResponseBody = await response.json();
     throw new Error(detail);
   }
-  const { resolved_count }: { resolved_count: number } = await response.json();
-  return resolved_count;
+  return response.json();
 }

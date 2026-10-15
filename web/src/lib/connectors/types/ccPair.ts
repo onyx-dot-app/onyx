@@ -289,6 +289,9 @@ export interface CCPairRunsResponse {
   status_counts: Record<CCPairRunStatusGroup, number>;
 }
 
+/** An activity level that holds open runs, as the batch resolve routes take it. */
+export type CCPairRunLevel = "failures" | "errors";
+
 /** The run list's query, as `GET /admin/cc-pair/{id}/runs` takes it. */
 export interface CCPairRunsQuery {
   pageNum: number;

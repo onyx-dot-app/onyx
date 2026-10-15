@@ -33,12 +33,14 @@ import type { RichStr } from "@opal/types";
 import { cn } from "@opal/utils";
 import {
   useActivityItems,
+  useResolvableRunsCount,
   useResolveRunErrors,
   type ActivityGroup,
   type ActivityGroupState,
   type ActivityItem,
   type ActivityScope,
 } from "@/lib/connectors/ccPair/hooks";
+import type { CCPairRunLevel } from "@/lib/connectors/types";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
 import {
   RUNS_POLL_MS,
@@ -153,7 +155,13 @@ export default function ActivityPanel({
   const [shown, setShown] = useState<Shown>("all");
   // Adds the resolved and superseded runs of the levels shown.
   const [showResolved, setShowResolved] = useState(false);
-  const [confirmingResolveAll, setConfirmingResolveAll] = useState(false);
+  // The filter and count the confirm states, fixed when it opens so a search
+  // typed meanwhile cannot widen what the click resolves.
+  const [confirmingResolveAll, setConfirmingResolveAll] = useState<{
+    level: CCPairRunLevel;
+    q: string;
+    count: number;
+  } | null>(null);
   const { resolving, resolve, resolveRun, resolveMatching } =
     useResolveRunErrors();
   // The fleet panel lists every run. A pair's page has its run list for that.
@@ -216,12 +224,20 @@ export default function ActivityPanel({
   // Resolves the open runs of the one level shown, as the search narrows them.
   const resolvableLevel =
     shown === "failures" ? failures : shown === "errors" ? errors : null;
-  const resolveAllLevel =
+  const resolveAllLevel: CCPairRunLevel | null =
     shown === "failures" || shown === "errors" ? shown : null;
-  const mayResolveRuns =
-    scope === "fleet"
-      ? [...failures.runs, ...errors.runs].some((item) => item.canResolveRuns)
-      : scope.canResolveRuns;
+  const resolvable = useResolvableRunsCount(
+    scope,
+    scope === "fleet" || scope.canResolveRuns ? resolveAllLevel : null,
+    search,
+    RUNS_POLL_MS
+  );
+  // Waits until the list and count match the search typed.
+  const resolveAllSettled =
+    searchInput.trim() === search &&
+    !resolvable.isLoading &&
+    resolvableLevel !== null &&
+    !resolvableLevel.isLoading;
   const emptyTitle =
     search !== ""
       ? t("empty.filtered")
@@ -351,16 +367,18 @@ export default function ActivityPanel({
                   ]}
                 />
               </Dropdown>
-              {mayResolveRuns && (
+              {resolveAllLevel !== null && resolvable.count > 0 && (
                 <Button
                   icon={SvgCheckAll}
                   prominence="tertiary"
-                  disabled={
-                    resolving ||
-                    resolvableLevel === null ||
-                    resolvableLevel.runs.length === 0
+                  disabled={resolving || !resolveAllSettled}
+                  onClick={() =>
+                    setConfirmingResolveAll({
+                      level: resolveAllLevel,
+                      q: search,
+                      count: resolvable.count,
+                    })
                   }
-                  onClick={() => setConfirmingResolveAll(true)}
                 >
                   {t("resolveAll.button")}
                 </Button>
@@ -401,31 +419,35 @@ export default function ActivityPanel({
           </ShadowDiv>
         </Section>
       </Card>
-      {confirmingResolveAll &&
-        resolvableLevel !== null &&
-        resolveAllLevel !== null && (
-          <ConfirmationModalLayout
-            icon={SvgCheckAll}
-            title={t("resolveAll.title")}
-            onClose={() => setConfirmingResolveAll(false)}
-            submit={
-              <Button
-                onClick={() => {
-                  setConfirmingResolveAll(false);
-                  void resolveMatching(scope, resolveAllLevel, search);
-                }}
-              >
-                {t("resolveAll.confirm")}
-              </Button>
-            }
-          >
-            {scope === "fleet"
-              ? t("resolveAll.fleetDescription", {
-                  count: resolvableLevel.total,
-                })
-              : t("resolveAll.description", { count: resolvableLevel.total })}
-          </ConfirmationModalLayout>
-        )}
+      {confirmingResolveAll !== null && (
+        <ConfirmationModalLayout
+          icon={SvgCheckAll}
+          title={t("resolveAll.title")}
+          onClose={() => setConfirmingResolveAll(null)}
+          submit={
+            <Button
+              onClick={() => {
+                setConfirmingResolveAll(null);
+                void resolveMatching(
+                  scope,
+                  confirmingResolveAll.level,
+                  confirmingResolveAll.q
+                );
+              }}
+            >
+              {t("resolveAll.confirm")}
+            </Button>
+          }
+        >
+          {scope === "fleet"
+            ? t("resolveAll.fleetDescription", {
+                count: confirmingResolveAll.count,
+              })
+            : t("resolveAll.description", {
+                count: confirmingResolveAll.count,
+              })}
+        </ConfirmationModalLayout>
+      )}
     </Section>
   );
 }

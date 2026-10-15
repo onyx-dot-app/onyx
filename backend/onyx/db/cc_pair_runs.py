@@ -603,6 +603,18 @@ def get_resolvable_runs(
     return found
 
 
+def count_matching_runs(
+    db_session: Session, kinds: list[CCPairRunKind], run_filter: CCPairRunFilter
+) -> int:
+    """How many runs of ``kinds`` the filter keeps, which is what
+    ``resolve_matching_runs__no_commit`` marks for the same filter."""
+    total = 0
+    for kind in kinds:
+        matching = _runs_of_kind(kind, run_filter, True).subquery()
+        total += db_session.scalar(select(func.count()).select_from(matching)) or 0
+    return total
+
+
 def resolve_matching_runs__no_commit(
     db_session: Session,
     kinds: list[CCPairRunKind],
