@@ -1271,6 +1271,11 @@ class SalesforceConnector(
         `include_permissions` has no effect. Salesforce has no doc sync: access
         is enforced at query time by chunk censoring, so documents keep
         `external_access=None`, the same as the normal crawl.
+
+        Filter parity with the crawl: only configured parent types are fetched;
+        SOQL `query` (like the Bulk 2.0 `query` the crawl uses) excludes deleted
+        and archived records; child relationships and fields come from the same
+        describe step (blacklist, Attachments, custom_query_config).
         """
         targets: dict[str, str] = {}  # document id -> record id
         for failure in errors:
