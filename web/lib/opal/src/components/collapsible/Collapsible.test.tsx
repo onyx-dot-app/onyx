@@ -124,9 +124,9 @@ describe("Collapsible parts", () => {
     render(
       <Collapsible.Root disabled>
         <Collapsible.Trigger asChild onClick={onTriggerClick}>
-          <div role="button" tabIndex={0} onClick={onChildClick}>
+          <button type="button" onClick={onChildClick}>
             Toggle
-          </div>
+          </button>
         </Collapsible.Trigger>
         <Collapsible.Content>Body</Collapsible.Content>
       </Collapsible.Root>
