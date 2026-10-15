@@ -1,6 +1,3 @@
-from collections.abc import Mapping
-from typing import Any
-
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -65,29 +62,6 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     None`` is the "is this app Onyx-managed" check)."""
     provider = PROVIDERS.get(app_type)
     return provider if isinstance(provider, OnyxManagedExtApp) else None
-
-
-def skill_template_values_for(
-    app_type: ExternalAppType,
-    org_credentials: Mapping[str, Any],
-) -> dict[str, str]:
-    """The ``{{APP:<key>}}`` values this app's provider contributes to its
-    rendered SKILL.md, or ``{}`` for a CUSTOM / unregistered type.
-
-    Only non-secret credential fields are passed through: the rendered file
-    ships to the sandbox, and an admin form echoes secrets back masked anyway.
-    """
-    provider = PROVIDERS.get(app_type)
-    if provider is None:
-        return {}
-    public = {
-        field.key: value
-        if isinstance(value := org_credentials.get(field.key), str)
-        else ""
-        for field in provider.spec.descriptor.required_org_credential_fields
-        if not field.secret
-    }
-    return provider.skill_template_values(public)
 
 
 def uses_cloud_scope(app_type: ExternalAppType) -> bool:

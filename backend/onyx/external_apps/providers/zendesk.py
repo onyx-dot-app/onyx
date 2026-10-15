@@ -225,6 +225,7 @@ _ENDPOINTS: list[EndpointSpec] = [
                 "/api/v2/tickets/{ticket_id}/tags",
             ),
             *_routes("POST", "/api/v2/tickets/{ticket_id}/tags"),
+            *_routes("DELETE", "/api/v2/tickets/{ticket_id}/tags"),
         ),
     ),
     EndpointSpec(
@@ -269,10 +270,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
             extra_authorize_params={"response_type": "code"},
         ),
         descriptor=AdminDescriptorSpec(
-            # A template the Configure modal fills from the subdomain below, so
-            # the app matches one account rather than every `*.zendesk.com` — a
-            # wildcard would leak this tenant's token to another account.
-            # Unfilled it matches nothing, which fails closed.
+            # The write path resolves this template from restored credentials.
             upstream_url_patterns=[r"https://{subdomain}\.zendesk\.com/api/v2/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[
@@ -323,19 +321,27 @@ class ZendeskProvider(OAuthExternalAppProvider):
     # /oauth/tokens takes a JSON body for the exchange and the refresh alike.
     refresh_json_encoded = True
 
-    def _subdomain(self, org_credentials: Mapping[str, str]) -> str:
-        return normalise_subdomain(org_credentials.get(SUBDOMAIN_FIELD))
+    def resolve_upstream_url_patterns(
+        self,
+        org_credentials: Mapping[str, str],
+        submitted: list[str],  # noqa: ARG002 — the account owns its host
+    ) -> list[str]:
+        subdomain = normalise_subdomain(org_credentials.get(SUBDOMAIN_FIELD))
+        return [
+            pattern.replace("{subdomain}", re.escape(subdomain))
+            for pattern in self.spec.descriptor.upstream_url_patterns
+        ]
 
     def skill_template_values(
         self, org_credentials: Mapping[str, str]
     ) -> dict[str, str]:
-        subdomain = self._subdomain(org_credentials)
+        subdomain = normalise_subdomain(org_credentials.get(SUBDOMAIN_FIELD))
         return {"base_url": f"https://{subdomain}{_ZENDESK_HOST_SUFFIX}"}
 
     def resolve_oauth_endpoints(
         self, org_credentials: Mapping[str, str]
     ) -> OAuthEndpoints:
-        subdomain = self._subdomain(org_credentials)
+        subdomain = normalise_subdomain(org_credentials.get(SUBDOMAIN_FIELD))
         return OAuthEndpoints(
             authorize_url=self.spec.oauth.authorize_url.format(subdomain=subdomain),
             token_url=self.spec.oauth.token_url.format(subdomain=subdomain),

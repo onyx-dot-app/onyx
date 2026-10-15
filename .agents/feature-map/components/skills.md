@@ -229,11 +229,11 @@ built-in's `SKILL.md` is regenerated per user at push time
 `render_company_search_skill` (`skills/rendering.py`), substituting
 `{{AVAILABLE_SOURCES_SECTION}}` with the user's connected, non-internal-only
 document sources; an external-app skill goes through
-`rendering.py:render_external_app_skill_for`, which resolves a
+`rendering.py:render_external_app_files`, which resolves a
 `cloud-description:` frontmatter override on cloud deployments, strips or keeps
 `{{#IF_CLOUD_SCOPE}}...{{/IF_CLOUD_SCOPE}}` blocks, substitutes any
 `{{APP:<key>}}` value the provider derived from this app row's configuration
-(`external_apps/providers/registry.py:skill_template_values_for` — a
+(`skills/rendering.py:_app_template_values` — a
 Zendesk account's base URL), and fills `{{ACTION_AVAILABILITY_SECTION}}` with a "these
 actions are unavailable and should not be attempted" list built from
 `build_action_availability_section`: cloud-withheld actions plus the admin's

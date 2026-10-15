@@ -454,13 +454,10 @@ there.
   `upstream_url_patterns` in the admin response; an admin on Cloud can only
   toggle enablement and edit policy for these, by design
   (`docs/craft/features/external-apps/cloud-managed-app-credentials.md`).
-- **A built-in's gateway patterns are whatever the client sent.** The backend
-  stores `upstream_url_patterns` for a built-in as submitted (it validates
-  globs only for `CUSTOM`), so the Configure modal is what decides the
-  credential-injection boundary. It fills `{field}` placeholders in the
-  descriptor's patterns from the admin's credential input
-  (`ConfigureProviderModal.tsx:fillUpstreamPatterns`), which is how a provider
-  on a per-account host (Zendesk) ends up pinned to one account.
+- **Per-account providers own their gateway host.** The database write path
+  restores masked credentials, then asks the provider to resolve its patterns.
+  Zendesk validates one subdomain and uses it for OAuth, skill files, and the
+  gateway. Fixed-host built-ins keep submitted patterns; `CUSTOM` uses globs.
 - **`app_type` is immutable on update.** `update_external_app` raises rather
   than allowing a cross-edit between built-in and custom; deleting and
   recreating is the only path to change it.

@@ -5,16 +5,12 @@ and the skill's base URL all come from one admin-supplied field."""
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
 
 import pytest
 
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.registry import (
-    PROVIDERS,
-    skill_template_values_for,
-)
+from onyx.external_apps.providers.registry import PROVIDERS
 from onyx.external_apps.providers.zendesk import ZendeskProvider, normalise_subdomain
 
 
@@ -103,32 +99,12 @@ def test_spec_urls_stay_templates() -> None:
     assert "{subdomain}" in oauth.token_url
 
 
-def test_skill_template_values_withhold_secret_fields(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The rendered SKILL.md ships to the sandbox, so no secret may reach it."""
-    captured: dict[str, str] = {}
-
-    def _spy(
-        _self: ZendeskProvider, org_credentials: Mapping[str, str]
-    ) -> dict[str, str]:
-        captured.update(org_credentials)
-        return {}
-
-    monkeypatch.setattr(ZendeskProvider, "skill_template_values", _spy)
-    skill_template_values_for(
-        ExternalAppType.ZENDESK,
-        {"subdomain": "acme", "client_id": "cid", "client_secret": "shh"},
-    )
-    assert captured == {"subdomain": "acme", "client_id": "cid"}
-
-
 def test_providers_on_a_fixed_host_contribute_no_skill_values() -> None:
     """Empty unless a provider's skill needs its own configuration."""
-    for app_type, provider in PROVIDERS.items():
+    for provider in PROVIDERS.values():
         if isinstance(provider, ZendeskProvider):
             continue  # per-account: covered above
-        assert skill_template_values_for(app_type, {}) == {}
+        assert provider.skill_template_values({}) == {}
 
 
 def test_token_exchange_posts_json_with_an_explicit_expiry() -> None:

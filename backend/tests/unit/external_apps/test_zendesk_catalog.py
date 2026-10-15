@@ -127,6 +127,8 @@ def test_tags_cannot_be_changed_outside_the_ticket_update_action() -> None:
     tag_routes = [
         ("PUT", "/api/v2/tickets/12345/tags"),
         ("POST", "/api/v2/tickets/12345/tags"),
+        ("DELETE", "/api/v2/tickets/12345/tags"),
+        ("DELETE", "/api/v2/tickets/12345/tags.json"),
         ("PUT", "/api/v2/tickets/12345"),
         ("PUT", "/api/v2/tickets/update_many"),
     ]

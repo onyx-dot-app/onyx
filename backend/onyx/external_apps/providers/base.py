@@ -197,6 +197,14 @@ class ExternalAppProvider(ABC):
         ``action_type``. Empty by default; override to register decoders."""
         return {}
 
+    def resolve_upstream_url_patterns(
+        self,
+        org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
+        submitted: list[str],
+    ) -> list[str]:
+        """Resolve account-specific hosts; fixed-host providers keep submitted patterns."""
+        return submitted
+
     def skill_template_values(
         self,
         org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides

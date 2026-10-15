@@ -19,7 +19,7 @@ from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
     action_policy_views,
-    skill_template_values_for,
+    get_provider_for_app,
     uses_cloud_scope,
     withheld_on_cloud,
 )
@@ -186,17 +186,24 @@ def render_external_app_skill(
     return rendered
 
 
-def app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
+def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
     """The provider's ``{{APP:<key>}}`` values for this app row, or ``{}`` when
     there is no row or its config no longer resolves — rendering is a read-only
     projection, so a rejected config leaves placeholders unconfigured."""
     if external_app is None:
         return {}
+    provider = get_provider_for_app(external_app)
+    if provider is None:
+        return {}
+    credentials = external_app.organization_credentials.get_value(apply_mask=False)
+    # Only public fields may enter files sent to a sandbox or shown in previews.
+    public = {
+        field.key: value if isinstance(value := credentials.get(field.key), str) else ""
+        for field in provider.spec.descriptor.required_org_credential_fields
+        if not field.secret
+    }
     try:
-        return skill_template_values_for(
-            external_app.app_type,
-            external_app.organization_credentials.get_value(apply_mask=False),
-        )
+        return provider.skill_template_values(public)
     except OnyxError:
         logger.warning(
             "Could not resolve app config for external_app %s; rendering its "
@@ -222,7 +229,7 @@ def render_external_app_files(
         if external_app
         else {}
     )
-    values = app_template_values(external_app)
+    values = _app_template_values(external_app)
     rendered = {
         SKILL_MD_NAME: render_external_app_skill(
             (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, stored, values
@@ -234,16 +241,3 @@ def render_external_app_files(
         name = path.relative_to(source_dir).with_suffix("").as_posix()
         rendered[name] = substitute_app_values(path.read_text(), values)
     return rendered
-
-
-def render_external_app_skill_for(
-    db_session: Session,
-    skill: Skill,
-    app_type: ExternalAppType,
-    source_dir: Path,
-) -> str:
-    """``skill``'s SKILL.md as the sandbox will see it. Shared by the push and
-    the library preview, so a user previews what the agent reads."""
-    return render_external_app_files(db_session, skill, app_type, source_dir)[
-        SKILL_MD_NAME
-    ]

@@ -36,26 +36,6 @@ import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 // descriptor-declared credential key.
 const NAME_KEY = "__name";
 
-// Only a DNS label is safe to splice into a pattern: it carries no regex
-// metacharacter, so it cannot widen the pattern beyond the text typed.
-const GATEWAY_VALUE = /^[a-z0-9][a-z0-9-]*$/;
-
-/** Fill `{field_key}` placeholders in a descriptor's upstream URL patterns from
- * the admin's credential values. A rejected or missing value leaves the
- * placeholder, and a pattern still holding `{...}` matches no URL — the safe
- * failure, since this pattern decides which host gets the app's credentials. */
-function fillUpstreamPatterns(
-  patterns: string[],
-  values: Record<string, string>
-): string[] {
-  return patterns.map((pattern) =>
-    pattern.replace(/\{([A-Za-z0-9_]+)\}/g, (placeholder, key: string) => {
-      const value = values[key]?.trim().toLowerCase() ?? "";
-      return GATEWAY_VALUE.test(value) ? value : placeholder;
-    })
-  );
-}
-
 interface ConfigureProviderModalProps {
   onClose: () => void;
   onSaved: () => void;
@@ -154,10 +134,7 @@ export default function ConfigureProviderModal({
       );
       const shared = {
         name: (values[NAME_KEY] ?? "").trim(),
-        upstream_url_patterns: fillUpstreamPatterns(
-          descriptor.upstream_url_patterns,
-          credentialValues
-        ),
+        upstream_url_patterns: descriptor.upstream_url_patterns,
         auth_template: descriptor.auth_template,
         action_policies: policies,
       };

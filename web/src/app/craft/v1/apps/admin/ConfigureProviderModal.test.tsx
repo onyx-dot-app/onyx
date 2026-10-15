@@ -177,9 +177,7 @@ describe("ConfigureProviderModal", () => {
     expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
   });
 
-  it("pins a per-account provider's gateway pattern to the account entered", async () => {
-    // The saved pattern is what makes the proxy attach this app's
-    // credentials, so it must name the one account configured.
+  it("sends account input to the backend for gateway resolution", async () => {
     const perAccountDescriptor: BuiltInExternalAppDescriptor = {
       ...DESCRIPTOR,
       app_type: "ZENDESK",
@@ -215,96 +213,12 @@ describe("ConfigureProviderModal", () => {
     await waitFor(() =>
       expect(externalAppsService.createBuiltInExternalApp).toHaveBeenCalledWith(
         expect.objectContaining({
-          upstream_url_patterns: ["https://acme\\.zendesk\\.com/api/v2/.*"],
-        })
-      )
-    );
-  });
-
-  it("leaves an unfilled gateway placeholder alone so it matches nothing", async () => {
-    // Failing closed beats matching every subdomain of the vendor.
-    const perAccountDescriptor: BuiltInExternalAppDescriptor = {
-      ...DESCRIPTOR,
-      app_type: "ZENDESK",
-      upstream_url_patterns: ["https://{subdomain}\\.zendesk\\.com/api/v2/.*"],
-      required_org_credential_fields: [],
-    };
-    jest
-      .mocked(externalAppsService.createBuiltInExternalApp)
-      .mockResolvedValue({ ...APP, associated_skills: [] });
-
-    render(
-      <ConfigureProviderModal
-        onClose={jest.fn()}
-        onSaved={jest.fn()}
-        descriptor={perAccountDescriptor}
-        existingApp={null}
-      />
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
-
-    await waitFor(() =>
-      expect(externalAppsService.createBuiltInExternalApp).toHaveBeenCalledWith(
-        expect.objectContaining({
           upstream_url_patterns: perAccountDescriptor.upstream_url_patterns,
+          organization_credentials: { subdomain: "acme" },
         })
       )
     );
   });
-
-  it.each([
-    ["a regex metacharacter", "evil\\.com/|x"],
-    ["a wildcard", ".*"],
-    ["a pasted account URL", "https://acme.zendesk.com"],
-  ])(
-    "refuses to splice %s into the gateway pattern",
-    async (_label: string, typed: string) => {
-      // The pattern is a regex deciding which host gets the credentials, so
-      // anything but a plain DNS label must leave the placeholder in place.
-      const perAccountDescriptor: BuiltInExternalAppDescriptor = {
-        ...DESCRIPTOR,
-        app_type: "ZENDESK",
-        upstream_url_patterns: [
-          "https://{subdomain}\\.zendesk\\.com/api/v2/.*",
-        ],
-        required_org_credential_fields: [
-          {
-            key: "subdomain",
-            label: "Subdomain",
-            description: "Your Zendesk subdomain",
-            secret: false,
-          },
-        ],
-      };
-      jest
-        .mocked(externalAppsService.createBuiltInExternalApp)
-        .mockResolvedValue({ ...APP, associated_skills: [] });
-
-      render(
-        <ConfigureProviderModal
-          onClose={jest.fn()}
-          onSaved={jest.fn()}
-          descriptor={perAccountDescriptor}
-          existingApp={null}
-        />
-      );
-
-      fireEvent.change(screen.getByPlaceholderText("Subdomain"), {
-        target: { value: typed },
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
-
-      await waitFor(() =>
-        expect(
-          externalAppsService.createBuiltInExternalApp
-        ).toHaveBeenCalledWith(
-          expect.objectContaining({
-            upstream_url_patterns: perAccountDescriptor.upstream_url_patterns,
-          })
-        )
-      );
-    }
-  );
 
   it("guards unsaved provider edits before skill creation", () => {
     const { onClose } = renderExistingProvider();

@@ -3,6 +3,7 @@ per-account provider (Zendesk) tells the agent which account it is on."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
@@ -12,11 +13,11 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import Skill
+from onyx.external_apps.providers.zendesk import ZendeskProvider
 from onyx.skills.built_in import BUILT_IN_SKILLS, BUILTIN_SKILLS_PATH
 from onyx.skills.rendering import (
     render_external_app_files,
     render_external_app_skill,
-    render_external_app_skill_for,
 )
 
 _TEMPLATE = "---\nname: x\ndescription: d\n---\n\nbase: {{APP:base_url}}\n"
@@ -76,14 +77,14 @@ def test_the_push_and_preview_paths_render_the_same_markdown(
     )
     monkeypatch.setattr("onyx.skills.rendering.get_action_policies", lambda *_: {})
 
-    rendered = render_external_app_skill_for(
+    rendered = render_external_app_files(
         cast(Session, None),
         cast(Skill, SimpleNamespace(id=uuid4())),
         ExternalAppType.ZENDESK,
         BUILT_IN_SKILLS["zendesk"].source_dir,
     )
-    assert "https://acme.zendesk.com" in rendered
-    assert "{{" not in rendered
+    assert "https://acme.zendesk.com" in rendered["SKILL.md"]
+    assert "{{" not in rendered["SKILL.md"]
 
 
 def test_an_unresolvable_app_config_still_renders(
@@ -104,14 +105,14 @@ def test_an_unresolvable_app_config_still_renders(
     )
     monkeypatch.setattr("onyx.skills.rendering.get_action_policies", lambda *_: {})
 
-    rendered = render_external_app_skill_for(
+    rendered = render_external_app_files(
         cast(Session, None),
         cast(Skill, SimpleNamespace(id=uuid4())),
         ExternalAppType.ZENDESK,
         BUILT_IN_SKILLS["zendesk"].source_dir,
     )
-    assert "not configured" in rendered
-    assert "{{" not in rendered
+    assert "not configured" in rendered["SKILL.md"]
+    assert "{{" not in rendered["SKILL.md"]
 
 
 def test_a_helper_template_is_rendered_beside_the_skill(
@@ -142,3 +143,40 @@ def test_a_helper_template_is_rendered_beside_the_skill(
     assert "SKILL.md" in rendered
     # The raw templates never ship; only their rendered names do.
     assert not any(name.endswith(".template") for name in rendered)
+
+
+def test_rendered_files_withhold_secret_credential_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    def capture_values(
+        _self: ZendeskProvider, credentials: Mapping[str, str]
+    ) -> dict[str, str]:
+        captured.update(credentials)
+        return {}
+
+    app = SimpleNamespace(
+        id=1,
+        app_type=ExternalAppType.ZENDESK,
+        organization_credentials=SimpleNamespace(
+            get_value=lambda **_: {
+                "subdomain": "acme",
+                "client_id": "cid",
+                "client_secret": "secret",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: app
+    )
+    monkeypatch.setattr("onyx.skills.rendering.get_action_policies", lambda *_: {})
+    monkeypatch.setattr(ZendeskProvider, "skill_template_values", capture_values)
+    rendered = render_external_app_files(
+        cast(Session, None),
+        cast(Skill, SimpleNamespace(id=uuid4())),
+        ExternalAppType.ZENDESK,
+        BUILT_IN_SKILLS["zendesk"].source_dir,
+    )
+    assert captured == {"subdomain": "acme", "client_id": "cid"}
+    assert all("secret" not in content for content in rendered.values())

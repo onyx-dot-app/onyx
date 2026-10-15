@@ -226,10 +226,10 @@ def test_self_hosted_built_in_response_shows_config_and_masked_creds(
     )
 
     assert resp.upstream_url_patterns  # config visible
-    # Creds are present, not blanked away: the secret masked, the client id not.
+    # All organization credential values remain masked.
     assert resp.organization_credentials != {}
     assert resp.organization_credentials != _GMAIL_CREDS
-    assert resp.organization_credentials["client_id"] == _GMAIL_CREDS["client_id"]
+    assert resp.organization_credentials["client_id"] != _GMAIL_CREDS["client_id"]
     assert (
         resp.organization_credentials["client_secret"] != _GMAIL_CREDS["client_secret"]
     )
