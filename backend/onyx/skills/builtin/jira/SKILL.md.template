@@ -1,0 +1,133 @@
+---
+name: jira
+description: Search, read, and write Jira Cloud issues and comments on the connected user's behalf via a light REST wrapper.
+---
+
+# Jira
+
+Call the Jira Cloud REST API as the connected user via the bundled helper.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/jira/jira_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. The writes are
+`create-issue`, `update-issue`, `comment`, `transition`, and `delete-issue`. Use
+`--raw` to skip empty-field pruning; `python jira_api.py <command> -h` shows its
+flags.
+
+Every command except `sites` is scoped to an Atlassian site by its cloud id,
+which is resolved automatically from the first accessible site. Target a
+specific site with a global `--cloud-id CLOUD_ID` or `--site "<name or url
+substring>"` before the subcommand.
+
+### Accessible sites
+
+```
+python jira_api.py sites
+```
+
+Lists the Atlassian sites (Jira Cloud instances) the grant can reach, each with
+the `id` (cloud id) used to scope every other call.
+
+### The connected user
+
+```
+python jira_api.py me
+```
+
+### Projects
+
+```
+python jira_api.py projects [--limit N]
+```
+
+### Search issues with JQL
+
+```
+python jira_api.py search 'project = ENG AND status != Done' [--limit N]
+```
+
+The argument is a JQL query. Example clauses: `project = ENG`,
+`assignee = currentUser()`, `status = "In Progress"`, `text ~ "onboarding"`.
+
+### Read an issue by id or key
+
+```
+python jira_api.py issue ISSUE_KEY_OR_ID [--fields summary,description,status]
+```
+
+By default it expands `summary`, `description`, `status`, `assignee`,
+`priority`, `issuetype`, and `labels`.
+
+### List an issue's comments
+
+```
+python jira_api.py comments ISSUE_KEY [--limit N]
+```
+
+### Create an issue (write)
+
+```
+python jira_api.py create-issue --project KEY --summary "Title" \
+  --description "Body text" [--type Task]
+```
+
+`--type` is the issue type name (default `Task`). `--description` takes plain
+text; the helper wraps it into Atlassian Document Format (ADF).
+
+### Update an issue (write)
+
+```
+python jira_api.py update-issue ISSUE_KEY --summary "New title" \
+  [--description "New body"] [--labels bug,backend]
+```
+
+Only the fields you pass are changed. An update may require the issue's `edit`
+metadata; the helper sends the fields directly and surfaces any API error.
+
+### Comment on an issue (write)
+
+```
+python jira_api.py comment ISSUE_KEY "Looking into this"
+```
+
+### Transition an issue (write)
+
+```
+python jira_api.py transitions ISSUE_KEY
+python jira_api.py transition ISSUE_KEY TRANSITION_ID
+```
+
+`transitions` lists the available transitions for the issue (each with its
+`id` and target status); `transition` applies one by id.
+
+### Delete an issue (write)
+
+```
+python jira_api.py delete-issue ISSUE_KEY
+```
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "<key>": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures return `{"ok": false, "status": <code>, "error": "<message>"}` and exit
+non-zero — surface the error rather than retrying blindly.
+
+## Notes
+
+- Issue keys look like `PROJ-123`; numeric ids also work. Get them from
+  `search` or `projects` (project keys) output.
+- Jira Cloud's v3 API renders rich text as Atlassian Document Format (ADF). The
+  helper accepts plain text for descriptions and comment bodies and wraps it in
+  a single ADF paragraph (`{"type": "doc", "version": 1, ...}`).
+- The connected user's token is injected by the egress gateway — send no
+  credentials yourself.
+- A 401 / 403 usually means the connected user lacks permission on the project
+  or issue, or the app wasn't granted the needed scope — tell the user rather
+  than retrying.
+- This built-in covers Jira **Cloud** only. Jira Data Center / Server is
+  self-hosted with different auth and is not supported here.
