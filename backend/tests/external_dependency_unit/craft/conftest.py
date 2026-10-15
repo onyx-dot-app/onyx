@@ -65,7 +65,7 @@ def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as session:
-                session.execute(text("SET lock_timeout = '10s'"))
+                session.execute(text("SET LOCAL lock_timeout = '10s'"))
                 for row_id in ids:
                     row = session.get(model, row_id)
                     if row is not None:
