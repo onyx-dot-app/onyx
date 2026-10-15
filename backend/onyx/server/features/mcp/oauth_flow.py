@@ -15,11 +15,6 @@ from mcp.client.auth.utils import (
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 
-from onyx.auth.oauth_token_manager import (
-    OAuthFlowParams,
-    build_oauth_authorization_url,
-    conflicting_authorization_params,
-)
 from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPServer
@@ -28,6 +23,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
     generate_authorization_state,
+)
+from onyx.oauth.protocol import (
+    OAuthFlowParams,
+    build_oauth_authorization_url,
+    validate_authorization_params,
 )
 from onyx.server.features.mcp.client import initialize_mcp_client
 from onyx.server.features.mcp.client_metadata import mcp_oauth_redirect_uri
@@ -85,15 +85,14 @@ def _known_provider_flow_params(
             "Known-provider OAuth requires oauth_authorization_endpoint, "
             "oauth_token_endpoint, and a non-empty client_id.",
         )
-    reserved_params = conflicting_authorization_params(
-        mcp_server.oauth_additional_auth_params
-    )
-    if reserved_params:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Known-provider OAuth additional parameters cannot override: "
-            f"{', '.join(sorted(reserved_params))}",
+    try:
+        validate_authorization_params(
+            mcp_server.oauth_authorization_endpoint,
+            mcp_server.oauth_additional_auth_params,
+            owns_resource=True,
         )
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
     return OAuthFlowParams(
         authorization_url=mcp_server.oauth_authorization_endpoint,
         token_url=mcp_server.oauth_token_endpoint,
@@ -246,6 +245,7 @@ def start_known_provider_oauth_flow(
         state,
         code_challenge=pkce.code_challenge,
         resource=resource,
+        owns_resource=True,
     )
     mcp_oauth_attempt_store().store(
         owner_id=user_id,

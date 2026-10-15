@@ -403,6 +403,11 @@ code or exception surfaces as the raw response body or propagates up to
 
 ---
 
+Known-provider OAuth uses `onyx/oauth/protocol.py` for authorization URLs.
+Both endpoint queries and configured extras reject flow-owned parameters,
+including `resource`. The pending-attempt store resolves the tenant cache on
+each operation and consumes state before exchanging the authorization code.
+
 ## 5. Contracts and invariants
 
 1. **A tool name must be unique within one turn's tool set**, or the LLM

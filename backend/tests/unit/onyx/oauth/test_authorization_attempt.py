@@ -262,3 +262,21 @@ def test_store_rejects_invalid_caller_state(state: str) -> None:
             state=state,
             payload=_Payload(target_id=1),
         )
+
+
+def test_store_resolves_tenant_cache_for_each_operation() -> None:
+    caches = {"first": FakeCache(), "second": FakeCache()}
+    current_tenant = "first"
+    store = AuthorizationAttemptStore(
+        cache_backend_provider=lambda: caches[current_tenant],
+        namespace="external-app",
+        payload_type=_Payload,
+    )
+    store.store(owner_id="owner", state=_STATE_ONE, payload=_Payload(target_id=1))
+    current_tenant = "second"
+    with pytest.raises(OnyxError, match="Invalid or expired"):
+        store.consume(owner_id="owner", state=_STATE_ONE)
+    store.store(owner_id="owner", state=_STATE_ONE, payload=_Payload(target_id=2))
+    assert store.consume(owner_id="owner", state=_STATE_ONE).payload.target_id == 2
+    current_tenant = "first"
+    assert store.consume(owner_id="owner", state=_STATE_ONE).payload.target_id == 1

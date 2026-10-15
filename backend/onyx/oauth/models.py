@@ -21,7 +21,9 @@ SafeOAuthReturnPath = Annotated[
     AfterValidator(_validate_safe_oauth_return_path),
 ]
 OAuthConfigurationFingerprint = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-PKCECodeVerifier = Annotated[str, Field(min_length=43, max_length=128)]
+PKCECodeVerifier = Annotated[
+    str, Field(min_length=43, max_length=128, pattern=r"^[A-Za-z0-9._~-]+$")
+]
 
 
 class AuthorizationAttempt(BaseModel, Generic[PayloadT]):

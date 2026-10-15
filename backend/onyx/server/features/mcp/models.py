@@ -11,7 +11,6 @@ from mcp.shared.auth import (
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
-from onyx.auth.oauth_token_manager import conflicting_authorization_params
 from onyx.db.enums import (
     EndpointPolicy,
     MCPAuthenticationPerformer,
@@ -25,6 +24,7 @@ from onyx.oauth.models import (
     PKCECodeVerifier,
     SafeOAuthReturnPath,
 )
+from onyx.oauth.protocol import validate_authorization_params
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
@@ -385,14 +385,11 @@ class MCPToolCreateRequest(BaseModel):
                 raise ValueError(
                     "oauth_token_endpoint is required for known-provider OAuth mode"
                 )
-            reserved_params = conflicting_authorization_params(
-                self.oauth_additional_auth_params
+            validate_authorization_params(
+                self.oauth_authorization_endpoint,
+                self.oauth_additional_auth_params,
+                owns_resource=True,
             )
-            if reserved_params:
-                raise ValueError(
-                    "oauth_additional_auth_params cannot override reserved OAuth "
-                    f"parameters: {', '.join(sorted(reserved_params))}"
-                )
         else:
             # AUTO_DISCOVERY: clear fields that only apply to KNOWN_PROVIDER
             self.oauth_authorization_endpoint = None

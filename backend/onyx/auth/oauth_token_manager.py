@@ -1,15 +1,18 @@
+import math
 import time
-from collections.abc import Mapping
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from uuid import UUID
 
 import requests
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.db.models import OAuthConfig, OAuthUserToken
 from onyx.db.oauth_config import get_user_oauth_token, upsert_user_oauth_token
+from onyx.oauth.protocol import (
+    OAuthFlowParams,
+    build_authorization_code_token_body,
+    build_oauth_authorization_url,
+)
 from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
@@ -38,102 +41,6 @@ def validate_oauth_endpoint_url(url: str, *, resolve_dns: bool = True) -> None:
 
 logger = setup_logger()
 
-OAUTH_RESPONSE_TYPE_CODE = "code"
-OAUTH_GRANT_TYPE_AUTHORIZATION_CODE = "authorization_code"
-OAUTH_PKCE_CHALLENGE_METHOD_S256 = "S256"
-
-# Providers that issue a refresh token only when the authorization request
-# explicitly asks for offline access, keyed by authorization-endpoint host.
-# Without these params the grant dies at access-token expiry with no way to
-# refresh. Explicitly configured params always win over these defaults.
-_OFFLINE_ACCESS_AUTH_PARAMS_BY_HOST: dict[str, dict[str, str]] = {
-    # `prompt=consent` because Google issues a refresh token only on flows
-    # that show the consent screen; a silent re-auth would leave a reconnected
-    # config without one. Matches Onyx's own Google login flow.
-    "accounts.google.com": {"access_type": "offline", "prompt": "consent"},
-}
-
-_PROTOCOL_AUTHORIZATION_PARAMS = frozenset(
-    {
-        "client_id",
-        "code_challenge",
-        "code_challenge_method",
-        "redirect_uri",
-        "resource",
-        "response_type",
-        "scope",
-        "state",
-    }
-)
-
-
-def conflicting_authorization_params(
-    additional_params: Mapping[str, object] | None,
-) -> frozenset[str]:
-    """Return configured parameters whose values the OAuth flow must own."""
-    return _PROTOCOL_AUTHORIZATION_PARAMS.intersection(additional_params or {})
-
-
-def ensure_offline_access_auth_params(authorization_url: str) -> str:
-    """Merge missing offline-access params into a built authorize URL.
-    Params already in the URL win."""
-    parsed = urlparse(authorization_url)
-    defaults = _OFFLINE_ACCESS_AUTH_PARAMS_BY_HOST.get((parsed.hostname or "").lower())
-    if not defaults:
-        return authorization_url
-    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    missing = {key: value for key, value in defaults.items() if key not in query}
-    if not missing:
-        return authorization_url
-    query.update(missing)
-    return urlunparse(parsed._replace(query=urlencode(query)))
-
-
-class OAuthFlowParams(BaseModel):
-    """Stateless inputs for the OAuth 2.0 authorization-code grant, decoupled
-    from any storage model so both `OAuthConfig`-backed tool OAuth and MCP
-    known-provider OAuth can share the wire primitives below."""
-
-    authorization_url: str
-    token_url: str
-    client_id: str
-    client_secret: str | None = None
-    scopes: list[str] | None = None
-    additional_params: dict[str, Any] | None = None
-
-
-def build_oauth_authorization_url(
-    params: OAuthFlowParams,
-    redirect_uri: str,
-    state: str,
-    *,
-    code_challenge: str | None = None,
-    resource: str | None = None,
-) -> str:
-    """Construct an authorization-code-grant authorize URL. `code_challenge`
-    adds PKCE (S256); `resource` adds the RFC 8707 resource indicator. Both are
-    off by default so non-PKCE callers get an unchanged URL."""
-    query: dict[str, Any] = {
-        "client_id": params.client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": OAUTH_RESPONSE_TYPE_CODE,
-        "state": state,
-    }
-    if params.scopes:
-        query["scope"] = " ".join(params.scopes)
-    if code_challenge:
-        query["code_challenge"] = code_challenge
-        query["code_challenge_method"] = OAUTH_PKCE_CHALLENGE_METHOD_S256
-    if resource:
-        query["resource"] = resource
-    if params.additional_params:
-        query.update(params.additional_params)
-
-    separator = "&" if "?" in params.authorization_url else "?"
-    return ensure_offline_access_auth_params(
-        f"{params.authorization_url}{separator}{urlencode(query)}"
-    )
-
 
 def exchange_oauth_code_for_token(
     params: OAuthFlowParams,
@@ -145,16 +52,13 @@ def exchange_oauth_code_for_token(
     """Exchange an authorization code for tokens at the token endpoint. Sends
     `code_verifier` when provided (PKCE). Returns the raw provider payload with
     a computed `expires_at`; raises `requests.HTTPError` on a non-2xx response."""
-    data: dict[str, str] = {
-        "grant_type": OAUTH_GRANT_TYPE_AUTHORIZATION_CODE,
-        "code": code,
-        "client_id": params.client_id,
-        "redirect_uri": redirect_uri,
-    }
-    if params.client_secret:
-        data["client_secret"] = params.client_secret
-    if code_verifier:
-        data["code_verifier"] = code_verifier
+    data = build_authorization_code_token_body(
+        code=code,
+        redirect_uri=redirect_uri,
+        client_id=params.client_id,
+        client_secret=params.client_secret,
+        code_verifier=code_verifier,
+    )
 
     validate_oauth_endpoint_url(params.token_url)
     response = requests.post(
@@ -163,8 +67,22 @@ def exchange_oauth_code_for_token(
     response.raise_for_status()
 
     token_data = response.json()
+    if (
+        not isinstance(token_data, dict)
+        or not isinstance(token_data.get("access_token"), str)
+        or not token_data["access_token"]
+    ):
+        raise ValueError("OAuth token response must contain a non-empty access token")
     if "expires_in" in token_data:
-        token_data["expires_at"] = int(time.time()) + token_data["expires_in"]
+        expires_in = token_data["expires_in"]
+        if (
+            isinstance(expires_in, bool)
+            or not isinstance(expires_in, (int, float))
+            or not math.isfinite(expires_in)
+            or expires_in < 0
+        ):
+            raise ValueError("OAuth token response has an invalid expiration")
+        token_data["expires_at"] = int(time.time()) + expires_in
     return token_data
 
 
