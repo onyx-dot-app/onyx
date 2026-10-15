@@ -18,7 +18,7 @@ const server: MCPServer = {
   server_url: "https://example.com/mcp",
   auth_type: MCPAuthenticationType.OAUTH,
   auth_performer: MCPAuthenticationPerformer.PER_USER,
-  user_can_authenticate: false,
+  connection_status: MCPConnectionStatus.NOT_CONNECTED,
   status: MCPServerStatus.CONNECTED,
   is_public: true,
   groups: [],
@@ -188,7 +188,6 @@ describe("MCPConnectionPrompt", () => {
 
     const connectedMail = {
       ...staleServer,
-      user_can_authenticate: true,
       connection_status: MCPConnectionStatus.CONNECTED,
     };
     setServers([firstTimeServer, connectedMail]);
@@ -212,7 +211,6 @@ describe("MCPConnectionPrompt", () => {
     setServers([
       {
         ...firstTimeServer,
-        user_can_authenticate: true,
         connection_status: MCPConnectionStatus.CONNECTED,
       },
       connectedMail,
@@ -261,7 +259,6 @@ describe("MCPConnectionPrompt", () => {
     setServers([
       {
         ...server,
-        user_can_authenticate: true,
         connection_status: MCPConnectionStatus.CONNECTED,
       },
     ]);
@@ -353,7 +350,9 @@ describe("MCPConnectionPrompt", () => {
     await user.click(
       screen.getByRole("button", { name: "Tools need credentials (1)" })
     );
-    setServers([{ ...server, user_can_authenticate: true }]);
+    setServers([
+      { ...server, connection_status: MCPConnectionStatus.CONNECTED },
+    ]);
     view.rerender(
       <MCPConnectionPrompt
         agent={agent}
@@ -380,7 +379,7 @@ describe("MCPConnectionPrompt", () => {
   });
   it("does not offer unknown credentials or unsupported auth flows", () => {
     setServers([
-      { ...server, user_can_authenticate: undefined },
+      { ...server, connection_status: null },
       { ...server, auth_type: MCPAuthenticationType.PT_OAUTH },
       { ...server, auth_performer: MCPAuthenticationPerformer.ADMIN },
     ]);

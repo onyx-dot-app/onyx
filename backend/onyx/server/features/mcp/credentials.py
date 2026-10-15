@@ -14,7 +14,6 @@ Each function here answers exactly one, with the consumer noted:
   credential at all, or is it usable from admin/none config alone?
 - ``user_connection_status`` — resolves the user's first connection, usable
   credentials, or required replacement state for API listings.
-- ``user_can_authenticate`` — compatibility boolean derived from that status.
 
 This module holds pure logic plus the resolve orchestration; the DB fetch lives
 in ``onyx.db.mcp``. It must not import ``onyx.server.features.mcp.oauth``.
@@ -362,17 +361,3 @@ def user_connection_status(
     except MCPCredentialsError:
         return MCPConnectionStatus.NOT_CONNECTED
     return credentials.connection_status()
-
-
-def user_can_authenticate(
-    mcp_server: MCPServer,
-    user: User,
-    db_session: Session,
-    *,
-    user_configs: Mapping[int, MCPConnectionConfig] | None = None,
-) -> bool:
-    """Whether the effective credentials are usable, including lazy refresh."""
-    return (
-        user_connection_status(mcp_server, user, db_session, user_configs=user_configs)
-        == MCPConnectionStatus.CONNECTED
-    )

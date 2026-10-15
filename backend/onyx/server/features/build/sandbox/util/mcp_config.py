@@ -17,7 +17,8 @@ from onyx.db.mcp import (
 )
 from onyx.db.models import MCPServer, User
 from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
-from onyx.server.features.mcp.credentials import user_can_authenticate
+from onyx.server.features.mcp.credentials import user_connection_status
+from onyx.server.features.mcp.models import MCPConnectionStatus
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -50,7 +51,10 @@ def resolve_craft_mcp_servers(
     )
     servers: list[MCPServer] = []
     for server in accessible:
-        if user_can_authenticate(server, user, db_session, user_configs=user_configs):
+        if (
+            user_connection_status(server, user, db_session, user_configs=user_configs)
+            == MCPConnectionStatus.CONNECTED
+        ):
             servers.append(server)
         else:
             # Craft reads no MCP status back from opencode; this is the only

@@ -11,11 +11,7 @@ import { cn } from "@opal/utils";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { useMcpAuthentication } from "@/lib/mcp/hooks";
-import {
-  canAuthenticateMcpServer,
-  getMcpAuthenticationFlow,
-  getMcpConnectionStatus,
-} from "@/lib/mcp/auth";
+import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
 import { MCPConnectionStatus } from "@/lib/mcp/types";
 import { MCPUserCredentialsContent } from "@/lib/mcp/components/MCPUserCredentialsModal";
 
@@ -68,22 +64,22 @@ export default function MCPConnectionPrompt({
     wasStreaming.current = isStreaming;
   }, [isStreaming, refresh]);
 
-  const pendingServers = servers.filter(
-    (server) =>
-      (getMcpConnectionStatus(server) === MCPConnectionStatus.NOT_CONNECTED ||
-        getMcpConnectionStatus(server) ===
-          MCPConnectionStatus.REAUTH_REQUIRED) &&
-      canAuthenticateMcpServer(server) &&
+  const pendingServers = servers.filter((server) => {
+    const status = server.connection_status;
+    return (
+      (status === MCPConnectionStatus.NOT_CONNECTED ||
+        status === MCPConnectionStatus.REAUTH_REQUIRED) &&
+      getMcpAuthenticationFlow(server) !== null &&
       agent.tools.some(
         (tool) =>
           tool.mcp_server_id === server.id &&
           tool.enabled &&
           !toolConfiguration.disabledToolIds.includes(tool.id)
       )
-  );
+    );
+  });
   const needsReauthentication = pendingServers.some(
-    (server) =>
-      getMcpConnectionStatus(server) === MCPConnectionStatus.REAUTH_REQUIRED
+    (server) => server.connection_status === MCPConnectionStatus.REAUTH_REQUIRED
   );
   const visibleServers = servers.filter((server) =>
     openedServerIds.includes(server.id)
@@ -187,7 +183,7 @@ export default function MCPConnectionPrompt({
             <Modal.Body gap={3}>
               <div className="flex w-full flex-col gap-2">
                 {visibleServers.map((server) => {
-                  const status = getMcpConnectionStatus(server);
+                  const status = server.connection_status;
                   const connected = status === MCPConnectionStatus.CONNECTED;
                   const reconnect =
                     status === MCPConnectionStatus.REAUTH_REQUIRED;

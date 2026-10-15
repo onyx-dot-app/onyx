@@ -85,7 +85,7 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/utils";
 import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
-import { MCPServer } from "@/lib/mcp/types";
+import { MCPConnectionStatus, MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
 import { Tier } from "@/lib/tiers/types";
 
@@ -129,7 +129,7 @@ function MCPServerCard({
 
   const allToolIds = tools.map((t) => t.id);
   const serverEnabled = tools.some((t) => isToolEnabled(t.id));
-  const needsAuth = !server.user_can_authenticate;
+  const needsAuth = server.connection_status !== MCPConnectionStatus.CONNECTED;
   const authTooltip = needsAuth ? t("mcpServer.authTooltip") : undefined;
 
   const expanded = !isFolded;

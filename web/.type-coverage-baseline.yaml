@@ -67,9 +67,9 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 99.1
+  src/lib/connectors: 99
   src/lib/constants: 100
-  src/lib/credentials: 98.9
+  src/lib/credentials: 98.4
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/hierarchy: 100
@@ -87,7 +87,7 @@ packages:
   src/lib/search: 99.2
   src/lib/searchFilters: 98.1
   src/lib/searchSettings: 99.5
-  src/lib/settings: 96.7
+  src/lib/settings: 96.6
   src/lib/sidebar: 100
   src/lib/skills: 97.4
   src/lib/sso: 99.3
@@ -131,5 +131,5 @@ packages:
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
-  src/views/admin: 98.6
+  src/views/admin: 98.5
   types: 100

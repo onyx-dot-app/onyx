@@ -1,5 +1,5 @@
 """OAuth MCP grants that can never refresh must read as unauthenticated (ext-dep):
-`user_can_authenticate` semantics, Craft config exclusion, and the persisted token
+`user_connection_status` semantics, Craft config exclusion, and the persisted token
 discard on an `invalid_grant` refresh response, against a real DB."""
 
 from __future__ import annotations
@@ -36,7 +36,6 @@ from onyx.server.features.mcp import api
 from onyx.server.features.mcp.api import save_user_credentials
 from onyx.server.features.mcp.credentials import (
     extract_connection_data,
-    user_can_authenticate,
     user_connection_status,
 )
 from onyx.server.features.mcp.models import (
@@ -109,7 +108,6 @@ def test_expired_token_with_refresh_token_is_authenticated(
         expires_at=time.time() - 60,
         refresh_token="refresh-token",
     )
-    assert user_can_authenticate(server, user, db_session)
     assert (
         user_connection_status(server, user, db_session)
         == MCPConnectionStatus.CONNECTED
@@ -131,7 +129,6 @@ def test_dead_grant_is_not_authenticated_and_excluded_from_craft(
     _store_grant(
         db_session, server, user, expires_at=time.time() + 3600, refresh_token=None
     )
-    assert user_can_authenticate(server, user, db_session)
     assert (
         user_connection_status(server, user, db_session)
         == MCPConnectionStatus.CONNECTED
@@ -141,7 +138,6 @@ def test_dead_grant_is_not_authenticated_and_excluded_from_craft(
     _store_grant(
         db_session, server, user, expires_at=time.time() - 60, refresh_token=None
     )
-    assert not user_can_authenticate(server, user, db_session)
     assert (
         user_connection_status(server, user, db_session)
         == MCPConnectionStatus.REAUTH_REQUIRED
@@ -210,7 +206,6 @@ def test_invalid_grant_refresh_discards_persisted_tokens(
     assert "tokens" not in config_value
     assert "token_expires_at" not in config_value
     assert "Authorization" not in config_value.get("headers", {})
-    assert not user_can_authenticate(server, user, db_session)
     assert (
         user_connection_status(server, user, db_session)
         == MCPConnectionStatus.REAUTH_REQUIRED

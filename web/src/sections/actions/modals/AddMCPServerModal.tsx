@@ -11,6 +11,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { createMCPServer, updateMCPServer } from "@/lib/mcp/svc";
 import {
+  MCPConnectionStatus,
   MCPServerCreateRequest,
   MCPServerStatus,
   MCPServer,
@@ -222,7 +223,7 @@ export default function AddMCPServerModal({
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&
-                  server?.user_can_authenticate &&
+                  server?.connection_status === MCPConnectionStatus.CONNECTED &&
                   server?.status === MCPServerStatus.CONNECTED && (
                     <Section
                       flexDirection="row"

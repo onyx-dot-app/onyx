@@ -24,10 +24,16 @@ jest.mock("@/lib/mcp/svc", () => ({
 
 const server: Pick<
   MCPServer,
-  "id" | "name" | "auth_type" | "auth_performer" | "auth_template"
+  | "id"
+  | "name"
+  | "auth_type"
+  | "auth_performer"
+  | "auth_template"
+  | "connection_status"
 > = {
   id: 5,
   name: "Example",
+  connection_status: MCPConnectionStatus.NOT_CONNECTED,
   auth_type: MCPAuthenticationType.OAUTH,
   auth_performer: MCPAuthenticationPerformer.PER_USER,
 };
@@ -55,7 +61,6 @@ describe("useMcpAuthentication", () => {
       mcp_servers: [
         {
           ...server,
-          user_can_authenticate: false,
           connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
         },
       ],
@@ -85,7 +90,6 @@ describe("useMcpAuthentication", () => {
       mcp_servers: [
         {
           ...server,
-          user_can_authenticate: true,
           connection_status: MCPConnectionStatus.CONNECTED,
         },
       ],
@@ -101,10 +105,9 @@ describe("useMcpAuthentication", () => {
       undefined
     );
     await waitFor(() =>
-      expect(result.current.second.servers[0]?.user_can_authenticate).toBe(true)
-    );
-    expect(result.current.second.servers[0]?.connection_status).toBe(
-      MCPConnectionStatus.CONNECTED
+      expect(result.current.second.servers[0]?.connection_status).toBe(
+        MCPConnectionStatus.CONNECTED
+      )
     );
     expect(result.current.first.credentialRequest).toBeNull();
   });

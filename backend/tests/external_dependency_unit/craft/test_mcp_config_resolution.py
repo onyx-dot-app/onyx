@@ -265,7 +265,7 @@ def test_craft_listing_agrees_with_session_emission(
     a server the session never gets, so pin the two together across the auth
     matrix rather than trusting them to stay in sync by hand.
 
-    Asserting each consumer against `user_can_authenticate` directly cannot
+    Asserting each consumer against `user_connection_status` directly cannot
     serve this purpose: both derive from it, so per-consumer assertions would
     pass even if the two consumers drifted apart.
     """

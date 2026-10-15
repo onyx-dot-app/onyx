@@ -8,16 +8,12 @@ import { getActionIcon } from "@/lib/tools/utils";
 import type {
   AgentEditorMCPServer,
   MCPAuthenticationServer,
-  MCPCredentialRequest,
   MCPServer,
   MCPServersResponse,
   MCPTool,
 } from "@/lib/mcp/types";
 import { MCPAuthenticationType, MCPConnectionStatus } from "@/lib/mcp/types";
-import {
-  getMcpAuthenticationFlow,
-  getMcpConnectionStatus,
-} from "@/lib/mcp/auth";
+import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
@@ -48,20 +44,6 @@ export function useMcpServers() {
     error,
     mutateMcpServers,
   };
-}
-
-/** Servers attached to this chat's agent, including the default agent (0). */
-export function useChatMcpServers(agentId: number | undefined, enabled = true) {
-  const {
-    data,
-    error,
-    isLoading,
-    mutate: refresh,
-  } = useSWR<MCPServersResponse>(
-    enabled && agentId !== undefined ? SWR_KEYS.agentMcpServers(agentId) : null,
-    errorHandlingFetcher
-  );
-  return { servers: data?.mcp_servers ?? [], error, isLoading, refresh };
 }
 
 /**
@@ -244,11 +226,24 @@ export function useServerTools(
   };
 }
 
+interface MCPCredentialRequest {
+  server: MCPAuthenticationServer;
+  forceReauthentication: boolean;
+}
+
 export function useMcpAuthentication(
   agentId: number | undefined,
   enabled = true
 ) {
-  const listing = useChatMcpServers(agentId, enabled);
+  const {
+    data,
+    error,
+    isLoading,
+    mutate: refresh,
+  } = useSWR<MCPServersResponse>(
+    enabled && agentId !== undefined ? SWR_KEYS.agentMcpServers(agentId) : null,
+    errorHandlingFetcher
+  );
   const [loadingServerId, setLoadingServerId] = useState<number | null>(null);
   const [authenticationError, setAuthenticationError] = useState<Error | null>(
     null
@@ -276,7 +271,7 @@ export function useMcpAuthentication(
 
   async function authenticate(
     server: MCPAuthenticationServer,
-    forceReauthentication = getMcpConnectionStatus(server) ===
+    forceReauthentication = server.connection_status ===
       MCPConnectionStatus.REAUTH_REQUIRED
   ) {
     if (loadingServerId !== null) return;
@@ -307,13 +302,16 @@ export function useMcpAuthentication(
     if (server.auth_type === MCPAuthenticationType.OAUTH) {
       await startOAuth(server, forceReauthentication);
     } else {
-      await listing.refresh();
+      await refresh();
     }
     setCredentialRequest(null);
   }
 
   return {
-    ...listing,
+    servers: data?.mcp_servers ?? [],
+    error,
+    isLoading,
+    refresh,
     authenticate,
     loadingServerId,
     authenticationError,

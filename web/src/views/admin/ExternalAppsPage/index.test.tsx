@@ -71,6 +71,7 @@ const MCP_SERVER: MCPServer = {
   server_url: "https://mcp.atlassian.com/v1/sse",
   owner: "admin@example.com",
   status: MCPServerStatus.CONNECTED,
+  connection_status: null,
   is_public: true,
   groups: [],
   users: [],

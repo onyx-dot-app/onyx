@@ -2,6 +2,7 @@ import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { Modal } from "@opal/components";
 import { MCPUserCredentialsContent } from "@/lib/mcp/components/MCPUserCredentialsModal";
 import {
+  MCPConnectionStatus,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
 } from "@/lib/mcp/types";
@@ -12,7 +13,7 @@ const server: MCPAuthenticationServer = {
   name: "Calendar",
   auth_type: MCPAuthenticationType.API_TOKEN,
   auth_performer: MCPAuthenticationPerformer.PER_USER,
-  user_can_authenticate: false,
+  connection_status: MCPConnectionStatus.NOT_CONNECTED,
 };
 function setup(
   userCredentials?: Record<string, string>,

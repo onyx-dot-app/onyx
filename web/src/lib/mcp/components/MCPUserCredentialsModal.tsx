@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Button, InputPasswordTypeIn, Modal, Text } from "@opal/components";
 import { SvgArrowLeft, SvgKey } from "@opal/icons";
 import { FormField } from "@/refresh-components/form/FormField";
-import { getMcpConnectionStatus } from "@/lib/mcp/auth";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import {
   MCPConnectionStatus,
@@ -56,6 +55,9 @@ export function MCPUserCredentialsContent({
   const templateFields = server.auth_template?.required_fields ?? [];
   const isTemplate = templateFields.length > 0;
   const fields = isTemplate ? templateFields : ["api_key"];
+  const hasRequiredCredentials = fields.every((field) =>
+    credentials[field]?.trim()
+  );
   const dirty = fields.some(
     (field) =>
       (credentials[field] ?? "") !== (initialCredentials.current[field] ?? "")
@@ -92,7 +94,7 @@ export function MCPUserCredentialsContent({
     else requestExit("close");
   }
 
-  const status = getMcpConnectionStatus(server);
+  const status = server.connection_status;
   const isUpdatingCredentials =
     status === MCPConnectionStatus.CONNECTED ||
     status === MCPConnectionStatus.REAUTH_REQUIRED;
@@ -122,8 +124,7 @@ export function MCPUserCredentialsContent({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSubmitting || !fields.every((field) => credentials[field]?.trim()))
-      return;
+    if (isSubmitting || !hasRequiredCredentials) return;
     setIsSubmitting(true);
     setError(null);
     try {
@@ -236,10 +237,7 @@ export function MCPUserCredentialsContent({
               </Button>
               <Button
                 type="submit"
-                disabled={
-                  isSubmitting ||
-                  !fields.every((field) => credentials[field]?.trim())
-                }
+                disabled={isSubmitting || !hasRequiredCredentials}
               >
                 {submitLabel}
               </Button>

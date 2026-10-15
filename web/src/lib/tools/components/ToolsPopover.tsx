@@ -17,7 +17,8 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { MinimalAgent } from "@/lib/agents/types";
 import MCPUserCredentialsModal from "@/lib/mcp/components/MCPUserCredentialsModal";
 import { useMcpAuthentication } from "@/lib/mcp/hooks";
-import { canAuthenticateMcpServer } from "@/lib/mcp/auth";
+import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
+import { MCPConnectionStatus } from "@/lib/mcp/types";
 import { toast } from "@opal/layouts";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
@@ -189,8 +190,8 @@ export default function ToolsPopover({
   const showActiveReauthRow =
     !!selectedMcpServer &&
     selectedMcpTools.length > 0 &&
-    canAuthenticateMcpServer(selectedMcpServer) &&
-    selectedMcpServer.user_can_authenticate === true;
+    getMcpAuthenticationFlow(selectedMcpServer) !== null &&
+    selectedMcpServer.connection_status === MCPConnectionStatus.CONNECTED;
 
   const mcpToggleItems: SwitchListItem[] = selectedMcpTools.map((tool) => ({
     id: tool.id.toString(),
@@ -276,7 +277,9 @@ export default function ToolsPopover({
               isActive={selectedMcpServerId === server.id}
               tools={serverTools}
               enabledTools={enabledTools}
-              isAuthenticated={server.user_can_authenticate === true}
+              isAuthenticated={
+                server.connection_status === MCPConnectionStatus.CONNECTED
+              }
               isLoading={loadingServerId === server.id}
               onSelect={() =>
                 setSecondaryView({
