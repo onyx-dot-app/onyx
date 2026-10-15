@@ -972,7 +972,7 @@ class LitellmLLM(LLM):
             and reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
         ):
-            off_type = (
+            off_type: str = (
                 "between_tools"
                 if anthropic_identity_turns_thinking_off_between_tools(
                     model_identity_names

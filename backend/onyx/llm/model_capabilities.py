@@ -698,7 +698,7 @@ def anthropic_thinking_is_always_on(model_name: str) -> bool:
     checked first so a tier word elsewhere ("fable-writer-v2") can't match."""
     if not anthropic_uses_adaptive_thinking(model_name):
         return False
-    tier = _anthropic_tier(model_name)
+    tier: str | None = _anthropic_tier(model_name)
     return tier in _ANTHROPIC_ALWAYS_THINKING_TIERS or (
         tier == "opus"
         and _anthropic_meets_version(
