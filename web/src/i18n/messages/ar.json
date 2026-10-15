@@ -2238,29 +2238,6 @@
           "description": "إعادة فهرسة كل المستندات من المصدر. قد يستغرق ذلك ساعات أو أيامًا حسب حجم المحتوى."
         }
       },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "ملغاة"
-        },
-        "completedWithErrors": {
-          "label": "اكتملت مع أخطاء"
-        },
-        "failed": {
-          "label": "فشلت"
-        },
-        "fallback": {
-          "label": "لم تبدأ"
-        },
-        "inProgress": {
-          "label": "قيد التنفيذ"
-        },
-        "notStarted": {
-          "label": "مجدولة"
-        },
-        "success": {
-          "label": "نجحت"
-        }
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "إعادة التفعيل"

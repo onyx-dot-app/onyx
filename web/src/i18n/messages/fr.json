@@ -2238,29 +2238,6 @@
           "description": "Réindexer tous les documents de la source. Cela peut prendre des heures ou des jours selon le volume."
         }
       },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "Annulé"
-        },
-        "completedWithErrors": {
-          "label": "Terminé avec des erreurs"
-        },
-        "failed": {
-          "label": "En échec"
-        },
-        "fallback": {
-          "label": "Non démarré"
-        },
-        "inProgress": {
-          "label": "En cours"
-        },
-        "notStarted": {
-          "label": "Planifié"
-        },
-        "success": {
-          "label": "Réussi"
-        }
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Réactiver"

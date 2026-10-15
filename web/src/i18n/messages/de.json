@@ -2238,29 +2238,6 @@
           "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang Stunden oder Tage dauern."
         }
       },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "Abgebrochen"
-        },
-        "completedWithErrors": {
-          "label": "Mit Fehlern abgeschlossen"
-        },
-        "failed": {
-          "label": "Fehlgeschlagen"
-        },
-        "fallback": {
-          "label": "Nicht gestartet"
-        },
-        "inProgress": {
-          "label": "Läuft"
-        },
-        "notStarted": {
-          "label": "Geplant"
-        },
-        "success": {
-          "label": "Erfolgreich"
-        }
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Wieder aktivieren"
