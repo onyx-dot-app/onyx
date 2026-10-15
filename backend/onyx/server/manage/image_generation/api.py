@@ -71,10 +71,7 @@ def _build_llm_provider_request(
 ) -> LLMProviderUpsertRequest:
     """Build the LLM provider request for an image generation config."""
     if not provider:
-        raise HTTPException(
-            status_code=400,
-            detail="No provider provided",
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No provider provided")
 
     custom_config = _validate_and_normalize_vertex_auth(provider, custom_config)
 
@@ -167,10 +164,7 @@ def test_image_generation(
     provider = test_request.provider
 
     if provider is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No provider provided",
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No provider provided")
 
     custom_config = _validate_and_normalize_vertex_auth(
         provider, test_request.custom_config

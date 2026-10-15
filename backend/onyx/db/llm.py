@@ -760,16 +760,18 @@ def fetch_existing_llm_providers(
     db_session: Session,
     flow_type_filter: list[LLMModelFlowType],
     only_public: bool = False,
+    exclude_image_generation_providers: bool = True,
     include_model_configurations: bool = True,
     include_model_flows: bool = False,
 ) -> list[LLMProviderModel]:
-    """Fetch all LLM providers with optional filtering. Providers that back an
-    image generation config are always excluded.
+    """Fetch all LLM providers with optional filtering.
 
     Args:
         db_session: Database session
         flow_type_filter: List of flow types to filter by, empty list for no filter
         only_public: If True, only return public providers
+        exclude_image_generation_providers: If True, exclude providers that are
+            used for image generation configs
         include_model_configurations: If False, leave model_configurations
             unloaded. A provider can hold tens of thousands of rows, so callers
             that only need a page use fetch_model_configurations_page instead.
@@ -787,10 +789,11 @@ def fetch_existing_llm_providers(
         )
         stmt = stmt.where(LLMProviderModel.id.in_(providers_with_flows))
 
-    image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
-        ImageGenerationConfig
-    )
-    stmt = stmt.where(~LLMProviderModel.id.in_(image_gen_provider_ids))
+    if exclude_image_generation_providers:
+        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
+            ImageGenerationConfig
+        )
+        stmt = stmt.where(~LLMProviderModel.id.in_(image_gen_provider_ids))
 
     stmt = stmt.options(
         selectinload(LLMProviderModel.groups),

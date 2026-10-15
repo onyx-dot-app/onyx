@@ -118,8 +118,9 @@ creates a fresh `LLMProvider` row and `ModelConfiguration` row, then an
 (`db/image_generation.py:create_image_generation_config__no_commit`).
 `_build_llm_provider_request` calls `validate_credentials`
 (`image_gen/factory.py`) before persisting. An update with an unchanged (masked)
-key keeps the old provider's key. These `LLMProvider` rows never appear in the
-admin LLM provider list (`db/llm.py:fetch_existing_llm_providers`).
+key keeps the old provider's key. These `LLMProvider` rows are left out of the
+admin LLM provider list unless the caller passes `include_image_gen=true`, as
+the Terraform provider does (`db/llm.py:fetch_existing_llm_providers`).
 `test_image_generation` is a separate, optional step: it lets an admin
 generate a throwaway test image before saving.
 
