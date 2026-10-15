@@ -147,7 +147,16 @@ encryption. This component only consumes the pairing at run time (§4).
   `ImageSection.image_file_id` points at a file-store blob. `TabularSection`
   stages a CSV in the file store (`csv_file_id`) and is streamed row-by-row at
   chunk time so a large sheet never sits on the worker heap
-  (`TabularSection.materialize_text`).
+  (`TabularSection.materialize_text`). When `SKIP_SPREADSHEET_CONTENT` is true,
+  `cross_connector_utils/tabular_section_utils.py:tabular_file_to_sections`
+  returns one `<content-skipped>` `TextSection` instead and parses and stages
+  nothing, so the file indexes as its title only.
+  `extract_and_stage_tabular_file` still stages the raw file. Google Drive,
+  SharePoint/OneDrive (`microsoft_utils/drive_items.py`), blob, Drupal Wiki and
+  the file connector pass the setting. The placeholder is part of the content
+  hash, so a file is re-indexed the next time it is fetched after the setting
+  changes. Docprocessing replaces tabular sections that still reach it in the
+  same way ([[indexing-pipeline]] §4.3).
 - **`DocumentBase`** / **`Document`** (`Document` requires `id`, `source`,
   `sections`, `semantic_identifier`, and `metadata`. On `DocumentBase`, `id` and
   `source` are optional, and the other three are still required. The remaining

@@ -1554,6 +1554,17 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
 
+# When true, connectors replace the content of spreadsheets and other tabular
+# files (xlsx, Google Sheets, CSV, TSV) with a "<content-skipped>" placeholder
+# at fetch time, so each file indexes as its title only. The sheets are not
+# parsed, but the raw file is still downloaded and stored. Docprocessing applies
+# the same replacement to tabular sections that still reach it, e.g. in batches
+# staged before this was set. Bounds the embedding cost of large spreadsheets.
+# User uploads keep their content. Set it on docfetching and docprocessing.
+SKIP_SPREADSHEET_CONTENT = (
+    os.environ.get("SKIP_SPREADSHEET_CONTENT", "").lower() == "true"
+)
+
 # Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
 # docfetching watchdog terminates the worker and fails the attempt with a clear
 # error, pre-empting a kernel OOM kill of the whole pod — which would also kill

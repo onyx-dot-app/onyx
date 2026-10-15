@@ -22,7 +22,7 @@ from collections.abc import Iterable, Sequence
 from more_itertools import chunked
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, SKIP_SPREADSHEET_CONTENT
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import (
@@ -158,6 +158,7 @@ def _flush_batch(
         document_batch=documents,
         request_id=metadata.request_id,
         adapter=adapter,
+        skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
     )
 
     failed_ids: set[str] = set()
