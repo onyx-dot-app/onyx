@@ -13,6 +13,8 @@ from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.naming import generate_session_name
 
+pytestmark = pytest.mark.usefixtures("session_manager_with_stub")
+
 
 @pytest.fixture
 def unnamed_session(db_session: Session, build_session: BuildSession) -> BuildSession:

@@ -2457,9 +2457,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   renameBuildSession: async (sessionId: string, newName: string) => {
-    sessionNamingRequests.delete(sessionId);
     try {
       await updateSessionName(sessionId, newName);
+      sessionNamingRequests.delete(sessionId);
       set((state) => ({
         sessionHistory: state.sessionHistory.map((item) =>
           item.id === sessionId ? { ...item, title: newName } : item

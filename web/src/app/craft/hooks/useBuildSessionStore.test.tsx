@@ -4044,6 +4044,37 @@ describe("Session naming", () => {
       );
     }
   );
+  it("applies automatic naming after a failed manual rename refreshes history", async () => {
+    const automatic = deferred<ApiSessionResponse>();
+    const failure = new Error("Rename failed");
+    jest
+      .mocked(api.updateSessionName)
+      .mockReturnValueOnce(automatic.promise)
+      .mockRejectedValueOnce(failure);
+    jest
+      .mocked(api.fetchSessionHistory)
+      .mockResolvedValue([
+        { id: sessionId, title: "Fresh Craft", createdAt: new Date() },
+      ]);
+    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const naming = useBuildSessionStore
+        .getState()
+        .nameBuildSession(sessionId);
+      await expect(
+        useBuildSessionStore.getState().renameBuildSession(sessionId, "My name")
+      ).rejects.toBe(failure);
+      expect(api.fetchSessionHistory).toHaveBeenCalled();
+      automatic.resolve(response);
+      await naming;
+      expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+        "Saved name"
+      );
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
   it("updates the saved title after history refresh replaces the placeholder", async () => {
     const automatic = deferred<ApiSessionResponse>();
     jest.mocked(api.updateSessionName).mockReturnValueOnce(automatic.promise);

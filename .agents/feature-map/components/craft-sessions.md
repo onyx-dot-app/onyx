@@ -655,7 +655,8 @@ than silently leaving the instance on the old config until pod death.
 `send-message` response guarantees that the user message is committed.
 The frontend store requests `PUT /sessions/{id}/name` with `name: null`.
 The backend names only unnamed sessions and checks the name again under a
-row lock after generation. A manual rename takes precedence. Empty or failed
+row lock after generation. A successful manual rename takes precedence. Failed
+manual renames leave pending automatic names eligible to update the sidebar. Empty or failed
 model responses use the first message, trimmed to 40 characters. Empty
 sessions reject naming instead of saving a UUID label. The generate-name
 endpoint remains a preview and does not persist its result.
