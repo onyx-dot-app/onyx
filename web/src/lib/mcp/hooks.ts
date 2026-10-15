@@ -38,6 +38,20 @@ export function useMcpServers() {
   };
 }
 
+/** Servers attached to this chat's agent, including the default agent (0). */
+export function useChatMcpServers(agentId: number | undefined, enabled = true) {
+  const {
+    data,
+    error,
+    isLoading,
+    mutate: refresh,
+  } = useSWR<MCPServersResponse>(
+    enabled && agentId !== undefined ? SWR_KEYS.agentMcpServers(agentId) : null,
+    errorHandlingFetcher
+  );
+  return { servers: data?.mcp_servers ?? [], error, isLoading, refresh };
+}
+
 /**
  * Every configured MCP server, from the admin endpoint. Use this only on admin
  * surfaces; {@link useMcpServers} is what user-facing UI should read.

@@ -19,19 +19,20 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
 } from "@/lib/mcp/types";
+import { canAuthenticateMcpServer } from "@/lib/mcp/auth";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 
-export interface MCPServer {
-  id: number;
-  name: string;
-  owner_email: string;
-  server_url: string;
-  auth_type: MCPAuthenticationType;
-  auth_performer: MCPAuthenticationPerformer;
-  user_can_authenticate?: boolean;
-  auth_template?: any;
-  user_credentials?: Record<string, string>;
-}
+export type MCPServer = Pick<
+  import("@/lib/mcp/types").MCPServer,
+  | "id"
+  | "name"
+  | "server_url"
+  | "auth_type"
+  | "auth_performer"
+  | "user_can_authenticate"
+  | "auth_template"
+  | "user_credentials"
+> & { owner_email?: string };
 
 export interface MCPLineItemProps {
   server: MCPServer;
@@ -54,9 +55,7 @@ export default function MCPLineItem({
   isAuthenticated,
   isLoading,
 }: MCPLineItemProps) {
-  const showAuthTrigger =
-    server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-    server.auth_type !== MCPAuthenticationType.NONE;
+  const showAuthTrigger = canAuthenticateMcpServer(server);
 
   const canClickIntoServer = isAuthenticated && tools.length > 0;
   const showInlineReauth = showAuthTrigger && canClickIntoServer;

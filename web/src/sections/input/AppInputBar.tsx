@@ -36,6 +36,7 @@ import { ProjectFile } from "@/lib/projects/types";
 import { isFilePending } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
+import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -671,6 +672,16 @@ const AppInputBar = React.memo(
                   {t("appInputBar.deepResearchButton.label")}
                 </SelectButton>
               )
+            )}
+
+            {!isSearchMode && !controlsLoading && activeAgent && (
+              <MCPConnectionPrompt
+                key={`mcp-auth-${activeAgent.id}`}
+                agent={activeAgent}
+                toolConfiguration={toolConfiguration}
+                disabled={disabled}
+                onConnectionsClosed={() => inputRef.current?.focus()}
+              />
             )}
 
             {(() => {

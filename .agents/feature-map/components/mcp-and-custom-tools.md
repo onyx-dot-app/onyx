@@ -39,6 +39,31 @@ per-user credential (a personal API key, or a personal OAuth login), each user
 who wants to use it connects it themselves from the chat's MCP dropdown,
 separately from the admin's setup.
 
+Chat shows a light-orange **Tools need credentials** pill after Deep Research
+when an enabled tool needs a user connection. The modal lists actionable
+connections for the current agent, including the default Onyx agent. It uses
+`MCPConnectionPrompt` (`web/src/lib/mcp/components/MCPConnectionPrompt.tsx`).
+Its tooltip explains that tools remain unavailable until the user connects an
+account or adds credentials. Users can continue chatting without connecting.
+Shared admin credentials and pass-through OAuth without user header fields do not produce a connection prompt.
+Servers with required user header values can prompt with `NONE` or `PT_OAUTH`.
+
+The prompt and Actions menu share persona-scoped SWR data through
+`useChatMcpServers` and connection handling through `useMcpAuthentication`.
+Credential submission refreshes this data; window focus also revalidates it.
+`user_can_authenticate` reports whether credentials resolve, not whether a
+Connect button should appear. The client checks supported authentication flows
+separately with `canAuthenticateMcpServer`.
+
+Credential entry replaces the connection list within the same dialog.
+A shared backdrop stays mounted across screens to prevent transition flashes.
+**Back to tools** returns to the list. Back, close, Escape, and outside clicks
+ask for confirmation before discarding edited credentials. The confirmation
+replaces the form in the same dialog; keeping edits restores the entered values.
+Unchanged forms can leave without confirmation. Submission blocks dismissal.
+Successful credential saves return to the list with the server marked connected.
+
+
 **OpenAPI (custom) action.** The admin pastes an OpenAPI 3.x schema and,
 optionally, static headers. Every operation in the schema (identified by its
 `operationId`) becomes its own callable action. The admin can turn on

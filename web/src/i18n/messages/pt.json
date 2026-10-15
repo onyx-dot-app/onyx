@@ -11379,6 +11379,36 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "As ferramentas precisam de credenciais ({count})",
+        "tooltip": "Algumas ferramentas ficam indisponíveis até você conectar sua conta ou adicionar credenciais."
+      },
+      "modal": {
+        "title": "Conectar ferramentas",
+        "description": "Adicione suas credenciais para usar estas ferramentas no Onyx.",
+        "hint": "Você pode continuar conversando sem conectar estas ferramentas, mas os recursos do seu agente podem ficar limitados."
+      },
+      "connect": {
+        "label": "Conectar",
+        "accessibleLabel": "Conectar {server}"
+      },
+      "connecting": {
+        "label": "Conectando…"
+      },
+      "connected": {
+        "label": "Conectado"
+      },
+      "required": {
+        "label": "Credenciais necessárias"
+      },
+      "done": {
+        "label": "Concluído"
+      },
+      "error": {
+        "description": "Não foi possível conectar. Tente novamente."
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {Um arquivo falhou e foi removido: {names}} other {Alguns arquivos falharam e foram removidos: {names}}}"
@@ -11825,6 +11855,9 @@
         "credentials": {
           "text": "Suas credenciais serão validadas no servidor e armazenadas com segurança."
         }
+      },
+      "backButton": {
+        "label": "Voltar às ferramentas"
       }
     },
     "messages": {

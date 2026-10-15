@@ -40,6 +40,15 @@ function ModalOverlay({ ref, ...props }: ModalOverlayProps) {
   );
 }
 
+/** A persistent backdrop for flows that switch between Content screens. */
+function ModalBackdrop() {
+  return (
+    <DialogPrimitive.Portal>
+      <ModalOverlay />
+    </DialogPrimitive.Portal>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
@@ -500,6 +509,7 @@ function ModalFooter({
  */
 const Modal = Object.assign(ModalRoot, {
   Content: ModalContent,
+  Backdrop: ModalBackdrop,
   Header: ModalHeader,
   Body: ModalBody,
   Footer: ModalFooter,

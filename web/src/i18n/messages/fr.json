@@ -11379,6 +11379,36 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "Les outils nécessitent des identifiants ({count})",
+        "tooltip": "Certains outils sont indisponibles tant que vous n’avez pas connecté votre compte ou ajouté vos identifiants."
+      },
+      "modal": {
+        "title": "Connecter les outils",
+        "description": "Ajoutez vos identifiants pour utiliser ces outils dans Onyx.",
+        "hint": "Vous pouvez continuer à discuter sans connecter ces outils, mais les capacités de votre agent peuvent être limitées."
+      },
+      "connect": {
+        "label": "Connecter",
+        "accessibleLabel": "Connecter {server}"
+      },
+      "connecting": {
+        "label": "Connexion en cours…"
+      },
+      "connected": {
+        "label": "Connecté"
+      },
+      "required": {
+        "label": "Identifiants requis"
+      },
+      "done": {
+        "label": "Terminé"
+      },
+      "error": {
+        "description": "Connexion impossible. Réessayez."
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {Un fichier a échoué et a été supprimé : {names}} other {Des fichiers ont échoué et ont été supprimés : {names}}}"
@@ -11825,6 +11855,9 @@
         "credentials": {
           "text": "Vos identifiants seront validés auprès du serveur et stockés de manière sécurisée."
         }
+      },
+      "backButton": {
+        "label": "Retour aux outils"
       }
     },
     "messages": {
