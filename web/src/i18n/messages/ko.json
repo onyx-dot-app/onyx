@@ -2078,33 +2078,6 @@
           "text": "이 커넥터 구성에 대한 자세한 내용은 <link>문서</link>를 참조하세요."
         }
       },
-      "errorsModal": {
-        "columns": {
-          "documentId": "실패 ID",
-          "errorMessage": "오류 메시지",
-          "status": "상태",
-          "time": "시간"
-        },
-        "description": "인덱싱 중에 발생한 오류입니다. 각 행은 실패한 문서 또는 엔터티를 나타냅니다.",
-        "empty": {
-          "description": "이 페이지에 오류가 없습니다"
-        },
-        "fullReindex": {
-          "description": "아래 버튼을 클릭하면 전체 재인덱싱을 시작하여 이러한 오류를 해결할 수 있습니다. 전체 재인덱싱은 일반 업데이트보다 훨씬 오래 걸릴 수 있습니다."
-        },
-        "resolveAllButton": {
-          "label": "모두 해결"
-        },
-        "status": {
-          "resolved": "해결됨",
-          "unresolved": "미해결"
-        },
-        "targetedReindex": {
-          "description": "아래 버튼을 클릭하면 실패한 문서만 다시 가져옵니다. 전체 재인덱싱보다 훨씬 빠릅니다."
-        },
-        "title": "인덱싱 오류",
-        "unknownDocument": "알 수 없음"
-      },
       "fileManagement": {
         "addFilesButton": {
           "label": "파일 추가"
@@ -2184,14 +2157,6 @@
         "toggle": {
           "description": "선택한 그룹의 멤버로 접근을 제한합니다. 동기화된 권한은 계속 적용됩니다.",
           "title": "그룹으로 접근 제한"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "일부 문서를 처리하는 중에 문제가 발생했습니다.",
-        "resolvingStatus": "실패 해결 중",
-        "title": "일부 문서를 인덱싱하지 못했습니다",
-        "detailsButton": {
-          "label": "상세 보기"
         }
       },
       "invalidState": {

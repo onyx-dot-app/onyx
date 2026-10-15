@@ -2078,33 +2078,6 @@
           "text": "このコネクタの設定について詳しくは<link>ドキュメント</link>をご覧ください。"
         }
       },
-      "errorsModal": {
-        "columns": {
-          "documentId": "失敗 ID",
-          "errorMessage": "エラーメッセージ",
-          "status": "ステータス",
-          "time": "時刻"
-        },
-        "description": "以下は、インデックス作成中に発生したエラーです。各行は失敗したドキュメントまたはエンティティを表します。",
-        "empty": {
-          "description": "このページにエラーはありません"
-        },
-        "fullReindex": {
-          "description": "これらのエラーの解決を試みるには、下のボタンをクリックして完全な再インデックスを開始してください。完全な再インデックスは、通常の更新よりもはるかに時間がかかる場合があります。"
-        },
-        "resolveAllButton": {
-          "label": "すべて解決"
-        },
-        "status": {
-          "resolved": "解決済み",
-          "unresolved": "未解決"
-        },
-        "targetedReindex": {
-          "description": "下のボタンをクリックすると、失敗したドキュメントだけを再取得します。完全な再インデックスよりはるかに高速です。"
-        },
-        "title": "インデックス作成エラー",
-        "unknownDocument": "不明"
-      },
       "fileManagement": {
         "addFilesButton": {
           "label": "ファイルを追加"
@@ -2184,14 +2157,6 @@
         "toggle": {
           "description": "選択したグループのメンバーにアクセスを限定します。同期された権限も引き続き適用されます。",
           "title": "グループへのアクセス制限"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "一部のドキュメントの処理中に問題が発生しました。",
-        "resolvingStatus": "失敗を解決しています",
-        "title": "一部のドキュメントのインデックス作成に失敗しました",
-        "detailsButton": {
-          "label": "詳細を表示"
         }
       },
       "invalidState": {
