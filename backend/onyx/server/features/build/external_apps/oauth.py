@@ -19,7 +19,7 @@ from onyx.db.external_app import (
 from onyx.db.models import ExternalApp, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import OAuthEndpoints, OAuthExternalAppProvider
+from onyx.external_apps.providers.base import OAuthExternalAppProvider, OAuthFlowSpec
 from onyx.external_apps.providers.registry import get_provider_or_raise
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.oauth.authorization_attempt import (
@@ -88,10 +88,9 @@ def _oauth_provider_or_raise(app: ExternalApp) -> OAuthExternalAppProvider:
 
 def _configuration_fingerprint(
     app: ExternalApp,
-    provider: OAuthExternalAppProvider,
+    oauth: OAuthFlowSpec,
     client_id: str,
     client_secret: str,
-    endpoints: OAuthEndpoints,
 ) -> str:
     return canonical_json_fingerprint(
         {
@@ -99,8 +98,7 @@ def _configuration_fingerprint(
             "client_id": client_id,
             "client_secret": client_secret,
             "redirect_uri": _FRONTEND_CALLBACK_URL,
-            "oauth": provider.spec.oauth.model_dump(mode="json"),
-            "endpoints": endpoints.model_dump(mode="json"),
+            "oauth": oauth.model_dump(mode="json"),
         },
     )
 
@@ -124,11 +122,10 @@ def start_external_app_oauth(
         )
     provider = _oauth_provider_or_raise(app)
     client_id, client_secret = _oauth_client_credentials(app)
-    endpoints = provider.resolve_oauth_endpoints(
+    oauth = provider.resolve_oauth_flow(
         app.organization_credentials.get_value(apply_mask=False)
     )
 
-    oauth = provider.spec.oauth
     additional_params = dict(oauth.extra_authorize_params)
     if oauth.optional_scope:
         additional_params[oauth.optional_scope_param] = oauth.optional_scope
@@ -140,7 +137,7 @@ def start_external_app_oauth(
 
     state = generate_authorization_state()
     authorize_url = build_authorization_url(
-        authorization_url=endpoints.authorize_url,
+        authorization_url=oauth.authorize_url,
         client_id=client_id,
         redirect_uri=_FRONTEND_CALLBACK_URL,
         state=state,
@@ -155,7 +152,7 @@ def start_external_app_oauth(
         payload=_ExternalAppOAuthAttemptPayload(
             external_app_id=external_app_id,
             configuration_fingerprint=_configuration_fingerprint(
-                app, provider, client_id, client_secret, endpoints
+                app, oauth, client_id, client_secret
             ),
             code_verifier=code_verifier,
         ),
@@ -189,12 +186,12 @@ def handle_external_app_oauth_callback(
     provider = _oauth_provider_or_raise(app)
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
-    endpoints = provider.resolve_oauth_endpoints(
+    oauth = provider.resolve_oauth_flow(
         app.organization_credentials.get_value(apply_mask=False)
     )
     if not secrets.compare_digest(
         payload.configuration_fingerprint,
-        _configuration_fingerprint(app, provider, client_id, client_secret, endpoints),
+        _configuration_fingerprint(app, oauth, client_id, client_secret),
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -210,7 +207,7 @@ def handle_external_app_oauth_callback(
     )
     try:
         response = requests.post(
-            endpoints.token_url,
+            oauth.token_url,
             headers=token_request.headers,
             data=None if token_request.json_encoded else token_request.body,
             json=token_request.body if token_request.json_encoded else None,

@@ -18,7 +18,7 @@ from onyx.external_apps.providers.base import (
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.zendesk import ZendeskProvider
 
-_GOOGLE_TOKEN_URL = GoogleCalendarProvider().resolve_oauth_endpoints({}).token_url
+_GOOGLE_TOKEN_URL = GoogleCalendarProvider().resolve_oauth_flow({}).token_url
 
 # ---------------------------------------------------------------------------
 # Provider.refresh_credentials (RFC-6749 default on OAuthExternalAppProvider)
@@ -246,7 +246,7 @@ def test_refresh_posts_to_a_per_account_token_url(
         {"refresh_token": "rt"},
         "cid",
         "secret",
-        token_url=provider.resolve_oauth_endpoints({"subdomain": "acme"}).token_url,
+        token_url=provider.resolve_oauth_flow({"subdomain": "acme"}).token_url,
     )
     assert captured["url"] == "https://acme.zendesk.com/oauth/tokens"
 

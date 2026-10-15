@@ -173,7 +173,7 @@ def _load_refresh_inputs(
         )
         return None
     try:
-        token_url = provider.resolve_oauth_endpoints(org_credentials).token_url
+        token_url = provider.resolve_oauth_flow(org_credentials).token_url
     except OnyxError as exc:
         # Nothing to POST to, so keep the existing token rather than clear it.
         logger.warning(

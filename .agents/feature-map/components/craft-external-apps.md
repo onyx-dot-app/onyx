@@ -451,13 +451,14 @@ View and trigger write scopes are not requested.
 Search and ticket audits require broad `read`; resource-specific read scopes do not cover these endpoints.
 Existing users must reconnect after allowed scopes change to obtain the new grant.
 
-The authorize and token URLs come from
-`OAuthExternalAppProvider.resolve_oauth_endpoints`, not straight from the
+The resolved `OAuthFlowSpec` comes from
+`OAuthExternalAppProvider.resolve_oauth_flow`, not straight from the
 spec: a provider whose endpoints live on the customer's own host (Zendesk's
 `<subdomain>.zendesk.com`) resolves them from the app's organization
 credentials. Both OAuth routes and the refresh path resolve them the same
 way. The attempt fingerprint includes these resolved endpoints, so an account
-change rejects pending callbacks before any token exchange. Refresh requires this
+change rejects pending callbacks before any token exchange. The same resolved
+configuration supplies URLs, scopes, and PKCE settings. Refresh requires the
 resolved token URL; it cannot fall back to an unresolved spec template.
 
 Refresh is lazy and happens at the credential-injection seam, not on a

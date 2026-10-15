@@ -89,7 +89,7 @@ class OAuthFlowSpec(BaseModel):
 
     ``authorize_url`` and ``token_url`` may carry ``{placeholder}`` fields for a
     per-account provider, so read them through
-    :meth:`OAuthExternalAppProvider.resolve_oauth_endpoints`, not off the spec."""
+    :meth:`OAuthExternalAppProvider.resolve_oauth_flow`, not off the spec."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -275,15 +275,6 @@ class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
         return None
 
 
-class OAuthEndpoints(BaseModel):
-    """The authorize/token URLs in force for one configured app row."""
-
-    model_config = ConfigDict(frozen=True)
-
-    authorize_url: str
-    token_url: str
-
-
 class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     """A provider whose users authenticate via OAuth 2.0. Subclasses supply an
     :class:`OAuthProviderSpec` and implement :meth:`extract_credentials`.
@@ -308,16 +299,12 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     # Mirrors ``TokenExchangeRequest.json_encoded``, for the refresh POST.
     refresh_json_encoded: ClassVar[bool] = False
 
-    def resolve_oauth_endpoints(
+    def resolve_oauth_flow(
         self,
         org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
-    ) -> OAuthEndpoints:
-        """The authorize/token URLs for one app row. The spec's static URLs
-        unless a provider's endpoints live on a per-account domain."""
-        return OAuthEndpoints(
-            authorize_url=self.spec.oauth.authorize_url,
-            token_url=self.spec.oauth.token_url,
-        )
+    ) -> OAuthFlowSpec:
+        """Resolve account-specific URLs while preserving the provider's OAuth settings."""
+        return self.spec.oauth
 
     @abstractmethod
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
@@ -379,7 +366,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         Clockless (the caller stamps ``expires_at``), mirroring
         :meth:`extract_credentials`. Override `build_refresh_request` /
         `classify_token_response` for a divergent provider. ``token_url``
-        comes from :meth:`resolve_oauth_endpoints` for a per-account provider.
+        comes from :meth:`resolve_oauth_flow` for a per-account provider.
 
         Raises:
             TokenRefreshTerminalError: the grant is dead (reconnect required).

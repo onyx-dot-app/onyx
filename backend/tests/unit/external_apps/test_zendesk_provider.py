@@ -85,11 +85,9 @@ def test_skill_template_values_carry_the_account_base_url() -> None:
 
 
 def test_oauth_endpoints_are_on_the_configured_account() -> None:
-    endpoints = _provider().resolve_oauth_endpoints({"subdomain": "acme"})
-    assert (
-        endpoints.authorize_url == "https://acme.zendesk.com/oauth/authorizations/new"
-    )
-    assert endpoints.token_url == "https://acme.zendesk.com/oauth/tokens"
+    oauth = _provider().resolve_oauth_flow({"subdomain": "acme"})
+    assert oauth.authorize_url == "https://acme.zendesk.com/oauth/authorizations/new"
+    assert oauth.token_url == "https://acme.zendesk.com/oauth/tokens"
 
 
 def test_spec_urls_stay_templates() -> None:

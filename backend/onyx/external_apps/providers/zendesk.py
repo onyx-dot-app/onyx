@@ -12,7 +12,6 @@ from onyx.external_apps.providers.actions import (
 )
 from onyx.external_apps.providers.base import (
     AdminDescriptorSpec,
-    OAuthEndpoints,
     OAuthExternalAppProvider,
     OAuthFlowSpec,
     OAuthProviderSpec,
@@ -343,7 +342,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
         app_type=ExternalAppType.ZENDESK,
         app_name="Zendesk",
         oauth=OAuthFlowSpec(
-            # `resolve_oauth_endpoints` fills `{subdomain}` before either is used.
+            # `resolve_oauth_flow` fills `{subdomain}` before either is used.
             authorize_url="https://{subdomain}.zendesk.com/oauth/authorizations/new",
             token_url="https://{subdomain}.zendesk.com/oauth/tokens",
             scope=" ".join(_SCOPES),
@@ -424,13 +423,15 @@ class ZendeskProvider(OAuthExternalAppProvider):
         subdomain = normalise_subdomain(org_credentials.get(SUBDOMAIN_FIELD))
         return {"base_url": f"https://{subdomain}{_ZENDESK_HOST_SUFFIX}"}
 
-    def resolve_oauth_endpoints(
-        self, org_credentials: Mapping[str, str]
-    ) -> OAuthEndpoints:
+    def resolve_oauth_flow(self, org_credentials: Mapping[str, str]) -> OAuthFlowSpec:
         subdomain = normalise_subdomain(org_credentials.get(SUBDOMAIN_FIELD))
-        return OAuthEndpoints(
-            authorize_url=self.spec.oauth.authorize_url.format(subdomain=subdomain),
-            token_url=self.spec.oauth.token_url.format(subdomain=subdomain),
+        return self.spec.oauth.model_copy(
+            update={
+                "authorize_url": self.spec.oauth.authorize_url.format(
+                    subdomain=subdomain
+                ),
+                "token_url": self.spec.oauth.token_url.format(subdomain=subdomain),
+            }
         )
 
     def build_token_exchange_request(
@@ -467,10 +468,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
         self, refresh_token: str, client_id: str, client_secret: str
     ) -> dict[str, Any]:
         return {
-            "grant_type": "refresh_token",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
+            **super().build_refresh_request(refresh_token, client_id, client_secret),
             # Re-stated per refresh; Zendesk rotates the refresh token with it.
             "expires_in": _ACCESS_TOKEN_TTL_SECONDS,
         }
