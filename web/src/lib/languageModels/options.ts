@@ -6,6 +6,7 @@ import type {
 } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import { getModelIcon, getProvider } from "@/lib/languageModels/utils";
+import type { ProviderNames } from "@/lib/languageModels/useProviderNames";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import type {
   DefaultModel,
@@ -68,9 +69,7 @@ export function llmOptionKey(option: {
  * an explicit admin opt-in.
  */
 /** `useProviderNames()`: a provider entry's names as the UI shows them. */
-export type ProviderNamesResolver = (entry: ProviderEntry) => {
-  productName: string;
-};
+export type ProviderNamesResolver = (entry: ProviderEntry) => ProviderNames;
 
 /**
  * Pass `providerNames` wherever the options are shown, so a provider whose
