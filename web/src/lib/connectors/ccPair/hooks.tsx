@@ -223,6 +223,14 @@ function itemOf(
   };
 }
 
+interface ActivityFeed {
+  ccPairId: number | null;
+  revalidate: () => Promise<void>;
+}
+
+// SWR's key-filter mutate skips useSWRInfinite keys, so each mounted feed registers its own revalidate.
+const activityFeeds = new Set<ActivityFeed>();
+
 /** One activity level of the scope, its open runs or its `closed` ones, polled while `enabled`. `more` loads the next page and a new search starts over. */
 export function useActivityItems(
   scope: ActivityScope,
@@ -238,32 +246,45 @@ export function useActivityItems(
   const canResolve = pair?.canResolve ?? null;
   const canResolveRuns = pair?.canResolveRuns ?? null;
   const groupQuery = ACTIVITY_GROUP_QUERY[group][closed ? "closed" : "open"];
-  const { data, error, isLoading, size, setSize } = useSWRInfinite<FeedPage>(
-    (pageIndex, previous: FeedPage | null) => {
-      if (!enabled || groupQuery === null) return null;
-      if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
-        return null;
-      }
-      const query: CCPairRunsQuery = {
-        pageNum: pageIndex,
-        pageSize: ACTIVITY_PAGE_SIZE,
-        since: null,
-        kinds: null,
-        q,
-        ...groupQuery,
-        // A search finds old failures too, under the failures group.
-        superseded: q ? null : groupQuery.superseded,
-      };
-      return ccPairId === null
-        ? SWR_KEYS.indexMonitoringRuns(query)
-        : SWR_KEYS.ccPairRuns(ccPairId, query);
-    },
-    errorHandlingFetcher,
-    { refreshInterval: pollMs, keepPreviousData: true }
-  );
+  const { data, error, isLoading, size, setSize, mutate } =
+    useSWRInfinite<FeedPage>(
+      (pageIndex, previous: FeedPage | null) => {
+        if (!enabled || groupQuery === null) return null;
+        if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
+          return null;
+        }
+        const query: CCPairRunsQuery = {
+          pageNum: pageIndex,
+          pageSize: ACTIVITY_PAGE_SIZE,
+          since: null,
+          kinds: null,
+          q,
+          ...groupQuery,
+          // A search finds old failures too, under the failures group.
+          superseded: q ? null : groupQuery.superseded,
+        };
+        return ccPairId === null
+          ? SWR_KEYS.indexMonitoringRuns(query)
+          : SWR_KEYS.ccPairRuns(ccPairId, query);
+      },
+      errorHandlingFetcher,
+      { refreshInterval: pollMs, keepPreviousData: true }
+    );
   useEffect(() => {
     void setSize(1);
   }, [q, setSize]);
+  useEffect(() => {
+    const feed: ActivityFeed = {
+      ccPairId,
+      revalidate: async () => {
+        await mutate();
+      },
+    };
+    activityFeeds.add(feed);
+    return () => {
+      activityFeeds.delete(feed);
+    };
+  }, [ccPairId, mutate]);
   // Polling shifts the offsets, so a run can land on two pages.
   const runs = useMemo(() => {
     const itemScope: ActivityScope =
@@ -302,13 +323,20 @@ export function useActivityItems(
 }
 
 function refreshFeeds(item: ActivityItem) {
-  return mutate(
-    (key) =>
-      typeof key === "string" &&
-      (key.startsWith(SWR_KEYS.ccPairIndexingErrors(item.ccPairId)) ||
-        key.startsWith(SWR_KEYS.ccPairRunsPrefix(item.ccPairId)) ||
-        key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix))
-  );
+  return Promise.all([
+    mutate(
+      (key) =>
+        typeof key === "string" &&
+        (key.startsWith(SWR_KEYS.ccPairIndexingErrors(item.ccPairId)) ||
+          key.startsWith(SWR_KEYS.ccPairRunsPrefix(item.ccPairId)) ||
+          key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix))
+    ),
+    ...Array.from(activityFeeds)
+      .filter(
+        (feed) => feed.ccPairId === null || feed.ccPairId === item.ccPairId
+      )
+      .map((feed) => feed.revalidate()),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
