@@ -15,8 +15,10 @@ more than ``max_chunks`` chunks. The full data stays in the file; the chunks
 only have to make the file findable and describe what it contains.
 """
 
+import calendar
 import math
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from datetime import date
@@ -77,63 +79,14 @@ _YMD_SLASH_RE = re.compile(r"^(\d{4})/(\d{1,2})/(\d{1,2})$")
 _NUMERIC_DMY_RE = re.compile(r"^(\d{1,2})([/.])(\d{1,2})\2(\d{4})$")
 _DAY_MONTH_YEAR_RE = re.compile(r"^(\d{1,2})[ -]([A-Za-z]{3,9})\.?,?[ -](\d{4})$")
 _MONTH_DAY_YEAR_RE = re.compile(r"^([A-Za-z]{3,9})\.?[ -](\d{1,2}),?[ -](\d{4})$")
-_MONTH_NAMES = {
-    name: number
-    for number, names in enumerate(
-        [
-            ("jan", "january"),
-            ("feb", "february"),
-            ("mar", "march"),
-            ("apr", "april"),
-            ("may",),
-            ("jun", "june"),
-            ("jul", "july"),
-            ("aug", "august"),
-            ("sep", "sept", "september"),
-            ("oct", "october"),
-            ("nov", "november"),
-            ("dec", "december"),
-        ],
-        start=1,
-    )
-    for name in names
-}
 _LONG_DECIMAL_RE = re.compile(r"^-?\d+\.\d{7,}$")
 _ID_VALUE_RE = re.compile(r"^[A-Za-z]{1,10}[-_ #]?\d+[A-Za-z]?$")
 _YEAR_RE = re.compile(r"^(?:19|20|21)\d{2}$")
 _WORD_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
 _NAME_SPLIT_RE = re.compile(r"[\s_\-./]+")
 _DIGITS_RE = re.compile(r"(\d+)")
-_UNIT_SUFFIXES = ("USD", "EUR", "GBP", "PCT")
-# Leading or trailing markers that make a number a currency amount.
-_CURRENCY_SYMBOLS = "$€£¥₹₽₩₪₦฿"
 # Column names that read as an identifier rather than a value.
 _ID_NAME_TOKENS = ("id", "uuid", "uid", "guid", "key")
-# Generic spreadsheet abbreviations, expanded in column aliases.
-_ABBREVIATIONS = {
-    "acct": "account",
-    "acq": "acquisition",
-    "addr": "address",
-    "amt": "amount",
-    "avg": "average",
-    "cnt": "count",
-    "cust": "customer",
-    "dept": "department",
-    "desc": "description",
-    "emp": "employee",
-    "est": "estimated",
-    "mgmt": "management",
-    "mo": "month",
-    "num": "number",
-    "pct": "percent",
-    "qty": "quantity",
-    "rev": "revenue",
-    "std": "standard",
-    "tot": "total",
-    "txn": "transaction",
-    "yr": "year",
-    "ytd": "year to date",
-}
 
 
 class DateOrder(str, Enum):
@@ -180,9 +133,9 @@ def _parse_number(value: str) -> float | None:
     sign = ""
     if text[0] in ("+", "-"):
         sign, text = text[0], text[1:].lstrip()
-    if text and text[0] in _CURRENCY_SYMBOLS:
+    if text and _is_currency_symbol(text[0]):
         text = text[1:].lstrip()
-    elif text and text[-1] in _CURRENCY_SYMBOLS:
+    elif text and _is_currency_symbol(text[-1]):
         text = text[:-1].rstrip()
     if not text:
         return None
@@ -204,6 +157,11 @@ def is_id_name(name: str) -> bool:
     )
 
 
+def _is_currency_symbol(char: str) -> bool:
+    """Unicode classifies currency symbols, so there is no list to maintain."""
+    return unicodedata.category(char) == "Sc"
+
+
 def _unit_marker(value: str) -> str:
     """The unit a number carries, so totals keep it and percentages are never
     summed. Empty when the number is bare."""
@@ -216,9 +174,9 @@ def _unit_marker(value: str) -> str:
         text = text[1:].lstrip()
     if not text:
         return ""
-    if text[0] in _CURRENCY_SYMBOLS:
+    if _is_currency_symbol(text[0]):
         return text[0]
-    if text[-1] in _CURRENCY_SYMBOLS:
+    if _is_currency_symbol(text[-1]):
         return text[-1]
     return ""
 
@@ -234,6 +192,19 @@ def _natural_key(value: str) -> tuple[tuple[int, int, str], ...]:
 
 def _is_iso_date(value: str) -> bool:
     return bool(_ISO_DATE_RE.match(value.strip()))
+
+
+def _month_number(name: str) -> int | None:
+    """The month a written name denotes. Any prefix of three letters or more
+    works, so Jan, Sept and September all resolve without a table of
+    spellings; three letters already tell the twelve apart."""
+    text = name.lower().rstrip(".")
+    if len(text) < 3:
+        return None
+    for number in range(1, 13):
+        if calendar.month_name[number].lower().startswith(text):
+            return number
+    return None
 
 
 def _ymd(year: int, month: int, day: int) -> str | None:
@@ -275,12 +246,12 @@ def date_key(value: str, order: DateOrder | None = None) -> str | None:
 
     match = _DAY_MONTH_YEAR_RE.match(text)
     if match:
-        month = _MONTH_NAMES.get(match[2].lower())
+        month = _month_number(match[2])
         return _ymd(int(match[3]), month, int(match[1])) if month else None
 
     match = _MONTH_DAY_YEAR_RE.match(text)
     if match:
-        month = _MONTH_NAMES.get(match[1].lower())
+        month = _month_number(match[1])
         return _ymd(int(match[3]), month, int(match[2])) if month else None
 
     return None
@@ -335,18 +306,8 @@ def _split_name_words(name: str) -> list[str]:
             if len(piece) == 1 and piece.isupper():
                 pending += piece
                 continue
-            piece = pending + piece
+            words.append(pending + piece)
             pending = ""
-            for suffix in _UNIT_SUFFIXES:
-                if (
-                    piece.isupper()
-                    and piece.endswith(suffix)
-                    and len(piece) > len(suffix)
-                ):
-                    words.extend([piece[: -len(suffix)], suffix])
-                    break
-            else:
-                words.append(piece)
         if pending:
             words.append(pending)
     return words
@@ -361,7 +322,7 @@ def column_label(name: str) -> str:
     if any(ch.isspace() for ch in stripped):
         return stripped
     words = _split_name_words(stripped)
-    alias = " ".join(_ABBREVIATIONS.get(word.lower(), word) for word in words)
+    alias = " ".join(words)
     if not alias or alias == stripped:
         return stripped
     return f"{stripped} ({alias})"

@@ -105,10 +105,10 @@ def test_detect_header_row_returns_none_for_single_column_text() -> None:
 @pytest.mark.parametrize(
     "name,expected",
     [
-        ("AcqPriceUSD", "AcqPriceUSD (acquisition Price USD)"),
+        ("AcqPriceUSD", "AcqPriceUSD (Acq Price USD)"),
         ("MTTR_hours", "MTTR_hours (MTTR hours)"),
         ("TotalMWh", "TotalMWh (Total MWh)"),
-        ("ARPUUSD", "ARPUUSD (ARPU USD)"),
+        ("ARPUUSD", "ARPUUSD"),
         ("Company Name", "Company Name"),
         ("Date", "Date"),
     ],
@@ -751,3 +751,20 @@ def test_no_chunk_exceeds_the_token_budget() -> None:
 
     tokenizer = CharTokenizer()
     assert all(count_tokens(chunk, tokenizer) <= MAX_TOKENS for chunk in chunks)
+
+
+def test_month_names_resolve_by_prefix_not_by_table() -> None:
+    # Any prefix of three letters or more, so no list of spellings to keep.
+    assert date_key("5 Jan 2024") == "2024-01-05"
+    assert date_key("5 Sept 2024") == "2024-09-05"
+    assert date_key("5 September 2024") == "2024-09-05"
+    # Two letters cannot tell June from July.
+    assert date_key("5 Ju 2024") is None
+    assert date_key("5 Foo 2024") is None
+
+
+@pytest.mark.parametrize("value", ["$10", "€10", "£10", "₫10", "₴10", "¥10"])
+def test_currency_comes_from_unicode_not_a_list(value: str) -> None:
+    # Unicode classifies currency symbols, so a symbol nobody listed still works.
+    assert _parse_number(value) == 10.0
+    assert _unit_marker(value) == value[0]
