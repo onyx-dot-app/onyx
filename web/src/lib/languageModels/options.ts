@@ -88,6 +88,14 @@ export function buildLlmOptions(
   const seenKeys = new Set<string>();
   const options: LLMOption[] = [];
 
+  // The custom provider types share a product name, so an unnamed one is
+  // labelled by its description to keep its model group apart.
+  function unnamedProviderLabel(providerKey: string): string {
+    const entry = getProvider(providerKey);
+    const names = providerNames ? providerNames(entry) : entry;
+    return entry.copyKey ? names.companyName : names.productName;
+  }
+
   llmProviders.forEach((llmProvider) => {
     llmProvider.model_configurations
       .filter(
@@ -105,10 +113,7 @@ export function buildLlmOptions(
           provider: llmProvider.provider,
           providerId: llmProvider.id,
           providerDisplayName:
-            llmProvider.name ||
-            (providerNames
-              ? providerNames(getProvider(llmProvider.provider)).productName
-              : getProvider(llmProvider.provider).productName),
+            llmProvider.name || unnamedProviderLabel(llmProvider.provider),
           modelName: mc.name,
           modelConfigurationId: mc.id ?? null,
           displayName: mc.effectiveDisplayName,
