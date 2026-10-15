@@ -45,6 +45,7 @@ from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
     anthropic_identity_is_always_thinking,
+    anthropic_identity_turns_thinking_off_between_tools,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
@@ -837,8 +838,8 @@ class LitellmLLM(LLM):
             self._api_surface,
         )
 
-        # Fable and Mythos never stop thinking, so off there means the least
-        # reasoning they take rather than the API's own default.
+        # Always-thinking Claude models accept no off spelling, so off there
+        # means the least reasoning they take rather than the API's default.
         if (
             reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
@@ -953,14 +954,22 @@ class LitellmLLM(LLM):
             required_kwarg_keys = required_kwarg_keys | {"reasoning_effort"}
 
         # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
-        # No effort with it, which Opus 5 caps, and no signed-block guard like
-        # the sibling branch: that one binds only while thinking is on.
+        # No effort with it, which Opus 5 and Sonnet 5.5 cap, and no signed-block
+        # guard like the sibling branch: that one binds only while thinking is on.
+        # Sonnet 5.5 spells off as between_tools.
         if (
             is_reasoning
             and reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
         ):
-            optional_kwargs["thinking"] = {"type": "disabled"}
+            off_type: str = (
+                "between_tools"
+                if anthropic_identity_turns_thinking_off_between_tools(
+                    model_identity_names
+                )
+                else "disabled"
+            )
+            optional_kwargs["thinking"] = {"type": off_type}
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
