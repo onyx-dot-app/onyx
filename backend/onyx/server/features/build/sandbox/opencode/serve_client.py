@@ -1045,14 +1045,31 @@ class OpencodeServeClient:
         """HTTP status from ``GET /doc``, or ``None`` on transport error — lets
         the readiness probe tell a 401 (stale password) from a not-yet-listening
         pod (transport error)."""
+        probe_timeout = self._timeouts.connect_timeout if timeout is None else timeout
+        started = time.monotonic()
         try:
             with self._http.stream(
                 "GET",
                 "/doc",
-                timeout=self._timeouts.connect_timeout if timeout is None else timeout,
+                timeout=probe_timeout,
             ) as response:
+                if response.status_code != 200:
+                    logger.info(
+                        "[SANDBOX-SERVE] opencode health probe failed "
+                        "status=%d elapsed=%.3fs timeout=%.3fs",
+                        response.status_code,
+                        time.monotonic() - started,
+                        probe_timeout,
+                    )
                 return response.status_code
-        except httpx.HTTPError:
+        except httpx.HTTPError as error:
+            logger.info(
+                "[SANDBOX-SERVE] opencode health probe failed "
+                "exception=%s elapsed=%.3fs timeout=%.3fs",
+                type(error).__name__,
+                time.monotonic() - started,
+                probe_timeout,
+            )
             return None
 
     def health_check(self) -> bool:

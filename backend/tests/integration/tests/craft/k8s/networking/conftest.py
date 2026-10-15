@@ -5,9 +5,6 @@ import os
 import pytest
 
 from tests.common.craft.deployment_fixtures import (
-    _module_reset_and_seed as _module_reset_and_seed,
-)
-from tests.common.craft.deployment_fixtures import (
     _reap_module_sandboxes as _reap_module_sandboxes,
 )
 from tests.common.craft.deployment_fixtures import (

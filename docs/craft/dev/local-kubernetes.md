@@ -45,6 +45,9 @@ Copy this kind configuration to a local file, such as `/tmp/onyx-kind.yaml`.
 ```yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  disableDefaultCNI: true
+  podSubnet: 192.168.0.0/16
 nodes:
   - role: control-plane
     extraMounts:
@@ -64,18 +67,35 @@ containerdConfigPatches:
 The config retains compressed image layers so overlayfs pulls can later unpack into devmapper.
 Retained layers consume disk on the disposable kind node.
 
-Run these commands on the Linux host.
+Run these commands in Bash on the Linux host.
 
 ```bash
+set -euo pipefail
 export KIND_CLUSTER_NAME=onyx-dev
 export KIND_NODE_NAME=onyx-dev-control-plane
 export ONYX_FIRECRACKER_DEDICATED_HOST=true
 deployment/helm/dev/firecracker-ci.sh preflight-host
 kind create cluster --name onyx-dev --image kindest/node:v1.33.1 --config /tmp/onyx-kind.yaml
 kubectl config use-context kind-onyx-dev
+
+calico_manifest="$(mktemp -t onyx-calico-v3.31.7.XXXXXX)"
+curl --fail --location --silent --show-error \
+  --retry 5 --retry-delay 2 --retry-all-errors \
+  --output "${calico_manifest}" \
+  https://raw.githubusercontent.com/projectcalico/calico/v3.31.7/manifests/calico.yaml
+echo "d6d8a489a4ed8e5b8efd8b339047b496ca657b55ee2e3618e791507b0a853e8d  ${calico_manifest}" | sha256sum --check -
+kubectl create -f "${calico_manifest}"
+kubectl -n kube-system rollout status daemonset/calico-node --timeout=180s
+kubectl wait --for=condition=Ready node --all --timeout=180s
+kubectl -n kube-system rollout status deployment/calico-kube-controllers --timeout=180s
+kubectl -n kube-system rollout status deployment/coredns --timeout=180s
+
 deployment/helm/dev/firecracker-ci.sh configure-kind-node
 deployment/helm/dev/firecracker-ci.sh install-kata
 ```
+
+This profile disables Kindnet and installs the checksum-pinned Calico 3.31.7 manifest used by Craft CI.
+Wait for Calico, the node, and CoreDNS before configuring Kata.
 
 `configure-kind-node` creates the devmapper pool once. It refuses existing backing files and pools.
 The acknowledgement confirms that this host is disposable; it does not detect host safety.
@@ -101,7 +121,8 @@ KATA_SMOKE_IMAGE=onyxdotapp/sandbox:dev deployment/helm/dev/firecracker-ci.sh ve
 The smoke check verifies a separate guest boot ID and the live Firecracker binary.
 It does not replace Craft integration or browser tests.
 Craft requires a NetworkPolicy-enforcing CNI.
-Runtime preflight does not test policy enforcement.
+Runtime preflight rejects Kindnet and failed Kindnet reads.
+Kindnet absence does not prove policy enforcement.
 Run the real network isolation suite before trusting the deployment.
 
 The telepresence network daemon needs sudo for DNS + VPN setup. vscode's
@@ -225,12 +246,13 @@ can also invoke them individually for tighter rebuild loops.
 
 **1. Check the existing runtime.** Delegates to
 [`deployment/helm/dev/k8s-up.sh`](/deployment/helm/dev/k8s-up.sh). The
-script requires `kata-fc`, usable KVM devices, healthy devmapper, and the pinned binary versions.
+script rejects Kindnet and failed Kindnet reads, then requires `kata-fc`, usable KVM devices,
+healthy devmapper, and the pinned binary versions.
 These checks run before image builds, env copies, or cluster changes.
 It does not install a runtime or replace an existing cluster.
 
 `k8s-up.sh --skip-helm` creates or checks an ordinary non-Craft kind cluster.
-That path does not install Onyx, build images, patch Kindnet, or claim Firecracker support.
+That path does not install Onyx, build images, or claim Firecracker support.
 
 Watch pods (opensearch and CNPG-postgres take a minute or two on first boot):
 
@@ -485,26 +507,18 @@ Set those in the local values file, not in backend Python env.
 
 ## Troubleshooting
 
-### Sandbox egress stalls with Kindnet CPU throttling
+### Craft setup rejects Kindnet
 
-Kindnet CPU throttling can delay pod network traffic.
-Connections to the sandbox proxy and Kubernetes resource watches can stall. OpenCode startup
-can then time out while installing plugins, before sending an LLM request.
+Kindnet does not enforce the NetworkPolicies that Craft requires.
+Changing its CPU limit does not provide network isolation.
+Preserve existing clusters and their data.
+Use a fresh disposable Linux KVM host or VM and follow
+[Configure a Linux KVM kind cluster](#configure-a-linux-kvm-kind-cluster).
+That profile disables Kindnet and installs pinned Calico before Kata.
 
-Reconcile the local networking configuration after draining sandboxes:
-
-```bash
-deployment/helm/dev/k8s-up.sh --skip-cluster-create
-```
-
-Check the active CPU quota and throttling counters:
-
-```bash
-kubectl --context kind-onyx-dev -n kube-system exec daemonset/kindnet -- \
-  cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpu.stat
-```
-
-`cpu.max` starts with `max` when the container has no CPU limit.
+If the Kindnet read fails, check access to the selected `kind-<cluster-name>` context.
+Preflight stops on API read errors before image or cluster changes.
+Run the real network isolation suite before trusting a replacement CNI.
 
 ### VPN or proxy certificate errors
 

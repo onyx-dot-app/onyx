@@ -217,7 +217,8 @@ COPY --chmod=0755 seed-opencode-dependencies.sh /usr/local/bin/seed-opencode-dep
 COPY browser-cli.sh /usr/local/bin/browser
 RUN chmod 0755 /usr/local/bin/browser
 
-RUN chmod -R a+rX,go-w /opt/onyx-guest /workspace/opencode-plugins && \
+RUN rm -rf /tmp/node-compile-cache && \
+    chmod -R a+rX,go-w /opt/onyx-guest /workspace/opencode-plugins && \
     chown -R root:root /opt/onyx-guest /workspace/opencode-plugins && \
     chown sandbox:sandbox /tmp && chmod 1777 /tmp && \
     chmod 0755 /workspace /workspace/managed

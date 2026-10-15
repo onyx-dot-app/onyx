@@ -84,6 +84,17 @@ check_runtime() {
     echo "See docs/craft/dev/local-kubernetes.md before creating the cluster." >&2
     exit 1
   fi
+  local kindnet
+  if ! kindnet="$(kubectl_dev -n kube-system get daemonset kindnet --ignore-not-found -o name)"; then
+    echo "Cannot read the Kindnet DaemonSet in $EXPECTED_CTX; Craft runtime checks stopped." >&2
+    echo "See docs/craft/dev/local-kubernetes.md for fresh-host CNI setup." >&2
+    exit 1
+  fi
+  if [[ -n "$kindnet" ]]; then
+    echo "Craft requires a NetworkPolicy-enforcing CNI; Kindnet does not enforce NetworkPolicy." >&2
+    echo "See docs/craft/dev/local-kubernetes.md for fresh-host CNI setup." >&2
+    exit 1
+  fi
   if [[ "$(kubectl_dev get runtimeclass kata-fc -o jsonpath='{.handler}')" != kata-fc ]]; then
     echo "Craft requires the kata-fc RuntimeClass handler." >&2
     echo "See docs/craft/dev/local-kubernetes.md for the pinned runtime setup." >&2
@@ -163,14 +174,6 @@ if [[ -n "$existing_deployments" || -n "$existing_template" ]]; then
   CLUSTER_NAME="$CLUSTER_NAME" NAMESPACE="$NAMESPACE" "$SCRIPT_DIR/refresh-images.sh" --skip-build
 else
   CLUSTER_NAME="$CLUSTER_NAME" "$SCRIPT_DIR/refresh-images.sh" --prepare --skip-build
-fi
-
-kindnet="$(kubectl_dev -n kube-system get daemonset kindnet --ignore-not-found -o name)"
-if [[ -n "$kindnet" ]]; then
-  echo "removing the kindnet CPU limit ..."
-  kubectl_dev -n kube-system patch daemonset kindnet --type=strategic \
-    -p '{"spec":{"template":{"spec":{"containers":[{"name":"kindnet-cni","resources":{"limits":{"cpu":null}}}]}}}}'
-  kubectl_dev -n kube-system rollout status daemonset/kindnet --timeout=120s
 fi
 
 kubectl_dev get namespace "$NAMESPACE" >/dev/null 2>&1 \

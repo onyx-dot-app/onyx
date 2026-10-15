@@ -134,10 +134,12 @@ Use these production rules:
 - do not rely on Kubernetes `ephemeral-storage` limits for devmapper rootfs
   enforcement
 
-The local test setup uses an 8 GiB sparse devmapper pool and a 4 GiB rootfs.
-That is a developer smoke-test profile only. It is not a production sizing
-model. Production must reserve physical devmapper pool capacity for the full
-promised workspace quota.
+The shared local and CI test setup defaults to a `16G` sparse devmapper data
+file, a `1G` metadata file, and an `8GB` rootfs. These fresh-pool defaults leave
+more room for the full sandbox image and workspace bootstrap.
+`DEVMAPPER_DATA_SIZE`, `DEVMAPPER_META_SIZE`, and `DEVMAPPER_BASE_IMAGE_SIZE`
+override the defaults. This is a developer test profile only. Production must
+reserve physical devmapper pool capacity for the full promised workspace quota.
 
 ## Cutover from the sidecar release
 

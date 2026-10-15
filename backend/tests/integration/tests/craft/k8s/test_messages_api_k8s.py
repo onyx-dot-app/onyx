@@ -166,21 +166,32 @@ def test_interrupt_running_bash_turn_stops_work_and_allows_follow_up(
                 ).entries
             }
 
-        command = (
-            "mkdir -p outputs; sleep 120 & work_pid=$!; "
+        workload_path = f"cancel-workload-{nonce}.sh"
+        workload = (
+            f"cd /workspace/sessions/{session_id}\n"
+            "mkdir -p outputs\n"
+            "sleep 120 &\n"
+            "work_pid=$!\n"
             f"printf '%s %s %s' \"$$\" \"$work_pid\" '{nonce}' "
-            f"> outputs/{started_name}.tmp; "
-            f"mv outputs/{started_name}.tmp outputs/{started_name}; "
-            'wait "$work_pid"; '
-            f"printf '%s' '{nonce}' > outputs/{final_name}"
+            f"> outputs/{started_name}.tmp\n"
+            f"mv outputs/{started_name}.tmp outputs/{started_name}\n"
+            'wait "$work_pid"\n'
+            f"printf '%s' '{nonce}' > outputs/{final_name}\n"
+        )
+        k8s_manager._guest(
+            sandbox_id,
+            "write-file",
+            {"session_id": str(session_id), "path": workload_path},
+            stdin=workload.encode(),
         )
         turn = BuildSessionManager.start_turn(
             api_user,
             session_id,
             "Run this exact command in one foreground Bash tool call with a "
-            "180000 millisecond timeout. Do not shorten the sleep, create the "
-            "files separately, or background the tool call. It is a cancellation "
-            f"check.\n{command}",
+            "180000 millisecond timeout. The script is already written. Do not "
+            "modify it, shorten its sleep, create its files separately, or "
+            "background the tool call. It is a cancellation check.\n"
+            f"bash /workspace/sessions/{session_id}/{workload_path}",
             client_request_id=f"req-{uuid4()}",
         )
         deadline = time.monotonic() + 180

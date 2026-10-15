@@ -28,16 +28,21 @@ from onyx.db.models import (
     User__UserGroup,
 )
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE, SANDBOX_PROXY_PORT
+from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.user_library import delete_user_file, list_user_files
 from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRuntime
 from onyx.server.features.build.sandbox.manager import (
     SandboxManager,
 )
+from onyx.server.features.build.sandbox.models import SandboxExecError
 from onyx.server.features.build.sandbox.session_workspace import SESSIONS_ROOT
+from onyx.server.features.build.session.models import DetailedSessionResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.tests.craft.webapp_preview import (
@@ -86,6 +91,33 @@ class OwnedLivePod(NamedTuple):
     sandbox_id: UUID
     session_id: UUID
     pod_name: str
+
+
+def assert_api_preserves_opencode_session(
+    owned: OwnedLivePod,
+    session_id: UUID,
+    expected_opencode_session_id: str,
+) -> str:
+    response = http_client.post(
+        f"{API_SERVER_URL}/build/sessions",
+        json={"headless": True},
+        headers=owned.api_user.headers,
+        cookies=owned.api_user.cookies,
+    )
+    response.raise_for_status()
+    session = DetailedSessionResponse.model_validate(response.json())
+    assert session.id == str(session_id)
+    assert session.sandbox is not None
+    assert session.sandbox.id == str(owned.sandbox_id)
+    with get_session_with_current_tenant() as db_session:
+        stored_session = get_build_session(
+            session_id, UUID(owned.api_user.id), db_session
+        )
+        assert stored_session is not None
+        opencode_session_id = stored_session.opencode_session_id
+        assert opencode_session_id is not None
+        assert opencode_session_id == expected_opencode_session_id
+    return opencode_session_id
 
 
 class PodExecResult(NamedTuple):
@@ -810,13 +842,36 @@ def start_session_webapp(
     `webapp` tool, and return the script's output.
     """
     started_at = time.monotonic()
-    output = pod_exec(
-        k8s_client,
-        pod_name,
-        SANDBOX_NAMESPACE,
-        webapp_bootstrap_command(session_id),
-        timeout_s=WEBAPP_BOOTSTRAP_TIMEOUT_S,
-    )
+    try:
+        output = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            webapp_bootstrap_command(session_id),
+            timeout_s=WEBAPP_BOOTSTRAP_TIMEOUT_S,
+        )
+    except SandboxExecError as error:
+        diagnostics = "\n".join(
+            message
+            for message in (
+                "Permission denied",
+                "Operation not permitted",
+                "No such file or directory",
+                "No space left on device",
+                "Read-only file system",
+                "Too many open files",
+                "command not found",
+                "lockfile had changes, but lockfile is frozen",
+                "bun cache bootstrap failed",
+                "server did not become ready",
+                "bootstrap failed",
+            )
+            if message in error.stderr
+        )[:2000]
+        raise AssertionError(
+            f"Webapp bootstrap failed with exit code {error.returncode}; "
+            f"sanitized stderr={diagnostics or '(empty or unrecognized stderr)'}"
+        ) from None
     elapsed_s = time.monotonic() - started_at
     install_state = pod_exec(
         k8s_client,

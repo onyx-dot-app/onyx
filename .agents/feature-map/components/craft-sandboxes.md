@@ -307,6 +307,10 @@ Run only the gates that match the change:
   repeated restore, cleanup, unsafe targets, duplicates, and expanded limits.
   Normal application-dependent fixtures remain the full integration gate.
 - Firecracker CI uses linux/amd64 nested virtualization and requires KVM.
+  Fresh development pools default to an `8GB` rootfs and `16G` data file for
+  the full image and workspace bootstrap. Production quota sizing is separate.
+  Image cleanup removes the build-time Node compile cache before credentials
+  exist; credential tests retain their complete scan and positive controls.
   Fresh kind nodes need the checksum-pinned official containerd 2.1.1 daemon
   because the stock kind build excludes devmapper. Setup preserves the same
   source revision, `ctr`, and runc shim, and refuses existing pools/backing files.
@@ -357,9 +361,12 @@ It is a smoke-test profile, not production sizing guidance.
 Local Craft setup requires an existing kind cluster with usable KVM and
 vhost-vsock devices, healthy devmapper, and the `kata-fc` handler. It checks the
 pinned Firecracker and jailer versions before builds or cluster changes.
+Runtime preflight first rejects Kindnet and failed Kindnet reads in the selected context.
+The fresh-host guide disables the default CNI and installs checksum-pinned Calico 3.31.7 before Kata,
+with the same pod subnet and readiness checks as Craft CI.
 `--skip-helm` is an ordinary non-Craft cluster-only path. It does not configure
 Kata, install Onyx, or build guest images.
-Craft requires a NetworkPolicy-enforcing CNI. Runtime preflight does not test
+Craft requires a NetworkPolicy-enforcing CNI. Kindnet absence does not prove
 policy enforcement. Run the real isolation suite before trusting the deployment.
 
 The local Helm overlay owns backend and guest `:dev` images with

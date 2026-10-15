@@ -23,6 +23,7 @@ from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
     OwnedLivePod,
+    assert_api_preserves_opencode_session,
     pod_exec,
     session_webapp_logs,
     start_session_webapp,
@@ -172,12 +173,7 @@ def test_owned_pod_loss_restores_generated_next_preview_and_opencode_identity(
             assert stored_session is not None
             before_opencode_id = stored_session.opencode_session_id
             assert before_opencode_id is not None
-        assert (
-            k8s_manager.ensure_opencode_session(
-                owned.sandbox_id, session_id, before_opencode_id
-            )
-            == before_opencode_id
-        )
+        assert_api_preserves_opencode_session(owned, session_id, before_opencode_id)
 
         snapshot = BuildSessionManager.create_snapshot(owned.api_user, session_id)
         assert snapshot is not None
@@ -366,16 +362,9 @@ def test_owned_pod_loss_restores_generated_next_preview_and_opencode_identity(
             )
             == history_text
         )
-        after_opencode_id = k8s_manager.ensure_opencode_session(
-            owned.sandbox_id, session_id, before_opencode_id
+        after_opencode_id = assert_api_preserves_opencode_session(
+            owned, session_id, before_opencode_id
         )
-        assert after_opencode_id == before_opencode_id
-        with get_session_with_current_tenant() as db_session:
-            stored_session = get_build_session(
-                session_id, UUID(owned.api_user.id), db_session
-            )
-            assert stored_session is not None
-            assert stored_session.opencode_session_id == before_opencode_id
         print(
             json.dumps(
                 {

@@ -65,12 +65,16 @@ class BuildSessionManager:
             headers=user.headers,
             cookies=user.cookies,
         )
-        if not pre.is_error:
-            client.delete(
-                f"{_sessions_url()}/{pre.json()['id']}",
-                headers=user.headers,
-                cookies=user.cookies,
+        if pre.is_error:
+            raise AssertionError(
+                f"POST /build/sessions failed: {pre.status_code} {pre.reason_phrase} "
+                f"— body: {pre.text!r} (user_id={user.id}, is_admin={user.is_admin})"
             )
+        client.delete(
+            f"{_sessions_url()}/{pre.json()['id']}",
+            headers=user.headers,
+            cookies=user.cookies,
+        )
 
         response = client.post(
             _sessions_url(),

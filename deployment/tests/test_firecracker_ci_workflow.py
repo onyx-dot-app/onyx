@@ -534,6 +534,51 @@ def _assert_no_install_or_storage_mutation(node: NodeSetup) -> None:
     _assert_staging_cleanup(node)
 
 
+def test_node_setup_uses_development_capacity_defaults(tmp_path: Path) -> None:
+    node = _node_setup(tmp_path)
+    for name in (
+        "DEVMAPPER_DATA_SIZE",
+        "DEVMAPPER_META_SIZE",
+        "DEVMAPPER_BASE_IMAGE_SIZE",
+    ):
+        node.environment.pop(name)
+    truncate = tmp_path / "node-bin/truncate"
+    truncate.unlink()
+    _write_executable(
+        truncate,
+        f"#!{sys.executable}\n"
+        "import os\nimport sys\nfrom pathlib import Path\n"
+        "arguments = sys.argv[1:]\n"
+        "assert len(arguments) == 3 and arguments[0] == '-s'\n"
+        "target = Path(arguments[2])\n"
+        "data_dir = Path(os.environ['DEVMAPPER_DATA_DIR'])\n"
+        "assert target in (data_dir / 'data', data_dir / 'metadata')\n"
+        "with Path(os.environ['ONYX_TEST_CALLS']).open('a') as output:\n"
+        "    output.write('truncate ' + ' '.join(arguments) + '\\n')\n"
+        "with target.open('wb') as output:\n"
+        "    output.truncate(4096)\n",
+    )
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    config = tomllib.loads(node.config.read_text())
+    assert (
+        config["plugins"]["io.containerd.snapshotter.v1.devmapper"]["base_image_size"]
+        == "8GB"
+    )
+    assert [
+        call
+        for call in node.calls.read_text().splitlines()
+        if call.startswith("truncate ")
+    ] == [
+        f"truncate -s 16G {node.data_dir}/data",
+        f"truncate -s 1G {node.data_dir}/metadata",
+    ]
+    assert (node.data_dir / "data").stat().st_size == 4096
+    assert (node.data_dir / "metadata").stat().st_size == 4096
+
+
 def test_node_setup_installs_verified_daemon_atomically(tmp_path: Path) -> None:
     node = _node_setup(tmp_path)
 

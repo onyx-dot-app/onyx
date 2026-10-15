@@ -36,6 +36,7 @@ from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
     OwnedLivePod,
+    assert_api_preserves_opencode_session,
     pod_exec,
     wait_for_pod_deletion,
 )
@@ -95,12 +96,7 @@ def _seed_durable_state(
         assert session is not None
         opencode_session_id = session.opencode_session_id
         assert opencode_session_id is not None
-    assert (
-        manager.ensure_opencode_session(
-            owned.sandbox_id, owned.session_id, opencode_session_id
-        )
-        == opencode_session_id
-    )
+    assert_api_preserves_opencode_session(owned, owned.session_id, opencode_session_id)
     pod = k8s.read_namespaced_pod(owned.pod_name, SANDBOX_NAMESPACE)
     assert pod.metadata is not None
     assert isinstance(pod.metadata.uid, str)
@@ -118,7 +114,6 @@ def _seed_durable_state(
 
 
 def _assert_api_resume_restores_durable_state(
-    manager: SandboxManager,
     k8s: client.CoreV1Api,
     owned: OwnedLivePod,
     before: _RuntimeIdentity,
@@ -154,11 +149,8 @@ def _assert_api_resume_restores_durable_state(
         pod_exec(k8s, owned.pod_name, SANDBOX_NAMESPACE, f"cat {_HISTORY_PATH}")
         == _HISTORY_TEXT
     )
-    assert (
-        manager.ensure_opencode_session(
-            owned.sandbox_id, owned.session_id, before.opencode_session_id
-        )
-        == before.opencode_session_id
+    assert_api_preserves_opencode_session(
+        owned, owned.session_id, before.opencode_session_id
     )
 
 
@@ -222,7 +214,7 @@ def test_idle_worker_snapshots_and_sleeps_before_api_resume(
         if session.id == str(owned.session_id)
     )
     assert session.status == BuildSessionStatus.IDLE
-    _assert_api_resume_restores_durable_state(k8s_manager, k8s_client, owned, before)
+    _assert_api_resume_restores_durable_state(k8s_client, owned, before)
 
 
 def test_owned_pod_loss_recovers_last_durable_output_and_history(
@@ -262,4 +254,4 @@ def test_owned_pod_loss_recovers_last_durable_output_and_history(
         sandbox = get_sandbox_by_id(db_session, owned.sandbox_id)
         assert sandbox is not None
         assert sandbox.status == SandboxStatus.RUNNING
-    _assert_api_resume_restores_durable_state(k8s_manager, k8s_client, owned, before)
+    _assert_api_resume_restores_durable_state(k8s_client, owned, before)

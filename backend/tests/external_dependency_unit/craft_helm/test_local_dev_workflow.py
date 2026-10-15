@@ -88,6 +88,8 @@ elif tool == "kubectl":
             sys.exit(1)
         if resource == "runtimeclass":
             print("runc" if case == "wrong-runtime" else "kata-fc")
+        elif resource == "daemonset" and case == "kindnet":
+            print("daemonset.apps/kindnet")
         elif resource == "namespace":
             print("namespace/onyx-sandboxes")
         elif resource == "podtemplate":
@@ -139,6 +141,7 @@ def _run_script(
     *args: str,
     case: str = "ready",
     dev_dir: Path = _DEV_DIR,
+    isolated: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], list[list[str]]]:
     command_dir = tmp_path / "bin"
     command_dir.mkdir()
@@ -156,8 +159,27 @@ def _run_script(
         "CLUSTER_NAME": "test-dev",
         "NAMESPACE": "onyx",
     }
+    if isolated:
+        for tool in ("bash", "dirname", "grep"):
+            executable = Path("/bin/bash" if tool == "bash" else f"/usr/bin/{tool}")
+            (command_dir / tool).symlink_to(executable)
+        kubeconfig = tmp_path / "kubeconfig"
+        kubeconfig.write_text("")
+        env = {
+            "PATH": str(command_dir),
+            "KUBECONFIG": str(kubeconfig),
+            "CLI_LOG": str(log),
+            "CLI_CASE": case,
+            "CLUSTER_NAME": "test-dev",
+            "NAMESPACE": "onyx",
+            "LANG": "C",
+        }
     result = subprocess.run(
-        ["bash", str(dev_dir / script), *args],
+        [
+            str(command_dir / "bash") if isolated else "bash",
+            str(dev_dir / script),
+            *args,
+        ],
         capture_output=True,
         text=True,
         env=env,
@@ -171,13 +193,93 @@ def _run_script(
     return result, commands
 
 
+@pytest.mark.parametrize(
+    ("case", "error"),
+    [
+        ("kindnet", "Kindnet does not enforce NetworkPolicy"),
+        ("daemonset-api-error", "Cannot read the Kindnet DaemonSet"),
+    ],
+)
+def test_runtime_check_rejects_kindnet_or_failed_cni_read(
+    tmp_path: Path, case: str, error: str
+) -> None:
+    result, commands = _run_script(
+        tmp_path,
+        "k8s-up.sh",
+        "--cluster-name",
+        "test-dev",
+        "--check-runtime",
+        case=case,
+        isolated=True,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert error in result.stderr
+    assert "docs/craft/dev/local-kubernetes.md" in result.stderr
+    assert commands == [
+        ["kind", "get", "clusters"],
+        [
+            "kubectl",
+            "--context",
+            "kind-test-dev",
+            "-n",
+            "kube-system",
+            "get",
+            "daemonset",
+            "kindnet",
+            "--ignore-not-found",
+            "-o",
+            "name",
+        ],
+    ]
+
+
+def test_runtime_check_continues_when_kindnet_is_absent(tmp_path: Path) -> None:
+    result, commands = _run_script(
+        tmp_path,
+        "k8s-up.sh",
+        "--cluster-name",
+        "test-dev",
+        "--check-runtime",
+        isolated=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [command[0] for command in commands] == [
+        "kind",
+        "kubectl",
+        "kubectl",
+        "kind",
+        "docker",
+        "docker",
+    ]
+    assert commands[1][5:] == [
+        "get",
+        "daemonset",
+        "kindnet",
+        "--ignore-not-found",
+        "-o",
+        "name",
+    ]
+    assert commands[2] == [
+        "kubectl",
+        "--context",
+        "kind-test-dev",
+        "get",
+        "runtimeclass",
+        "kata-fc",
+        "-o",
+        "jsonpath={.handler}",
+    ]
+    assert commands[3] == ["kind", "get", "nodes", "--name", "test-dev"]
+    assert "verify-installed-version" in commands[-1]
+
+
 @pytest.mark.parametrize("case", ["missing-cluster", "wrong-runtime", "missing-kvm"])
 @pytest.mark.parametrize("script", ["k8s-up.sh", "craft-up.sh", "refresh-images.sh"])
 def test_missing_runtime_stops_before_changes(
     tmp_path: Path, case: str, script: str
 ) -> None:
     args = ("--cluster-name", "test-dev") if script != "refresh-images.sh" else ()
-    result, commands = _run_script(tmp_path, script, *args, case=case)
+    result, commands = _run_script(tmp_path, script, *args, case=case, isolated=True)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "Craft requires" in result.stderr or "needs usable KVM" in result.stderr
     assert commands
@@ -192,30 +294,36 @@ def test_missing_runtime_stops_before_changes(
     ), commands
 
 
-def test_non_craft_cluster_only_path_does_not_need_runtime(tmp_path: Path) -> None:
+@pytest.mark.parametrize("case", ["missing-cluster", "kindnet"])
+def test_non_craft_cluster_only_path_does_not_need_runtime(
+    tmp_path: Path, case: str
+) -> None:
     result, commands = _run_script(
         tmp_path,
         "craft-up.sh",
         "--cluster-name",
         "test-dev",
         "--skip-helm",
-        case="missing-cluster",
+        case=case,
+        isolated=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Craft runtime and Onyx were not installed" in result.stdout
-    assert commands == [
-        ["kind", "get", "clusters"],
-        [
-            "kind",
-            "create",
-            "cluster",
-            "--name",
-            "test-dev",
-            "--image",
-            "kindest/node:v1.33.1",
-        ],
-        ["kubectl", "--context", "kind-test-dev", "get", "nodes"],
-    ]
+    expected_commands = [["kind", "get", "clusters"]]
+    if case == "missing-cluster":
+        expected_commands.append(
+            [
+                "kind",
+                "create",
+                "cluster",
+                "--name",
+                "test-dev",
+                "--image",
+                "kindest/node:v1.33.1",
+            ]
+        )
+    expected_commands.append(["kubectl", "--context", "kind-test-dev", "get", "nodes"])
+    assert commands == expected_commands
 
 
 def test_refresh_refuses_unsaved_sandbox_before_builds(tmp_path: Path) -> None:
