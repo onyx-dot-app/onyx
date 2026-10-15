@@ -104,7 +104,7 @@ configure_kind_node() {
     exit 1
   fi
 
-  docker exec \
+  docker exec -i \
     -e DEVMAPPER_POOL_NAME="${DEVMAPPER_POOL_NAME}" \
     -e DEVMAPPER_DATA_DIR="${DEVMAPPER_DATA_DIR}" \
     -e DEVMAPPER_DATA_SIZE="${DEVMAPPER_DATA_SIZE}" \
