@@ -87,7 +87,6 @@ type installer struct {
 
 	paint    ui.Painter
 	lite     bool
-	craft    bool
 	prod     bool
 	dev      bool
 	rootless bool // daemon runs rootless (limits what compose can grant)

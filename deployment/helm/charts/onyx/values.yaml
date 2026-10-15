@@ -1624,24 +1624,10 @@ auth:
     # If not set, helm install/upgrade will fail when auth.metricsAuth.enabled=true.
     values:
       metrics_auth_token: ""
-  # Ed25519 private key for sandbox push auth (only the public key reaches sandbox pods).
-  # Generate with: python3 -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K; from cryptography.hazmat.primitives.serialization import *; print(base64.b64encode(K.generate().private_bytes(Encoding.Raw,PrivateFormat.Raw,NoEncryption())).decode())"
-  sandboxPushSecret:
-    enabled: false
-    allPods: false  # Restricted: only injected into pods that provision sandboxes (API server + scheduled-tasks worker)
-    secretName: 'onyx-sandbox-push-secret'
-    existingSecret: ""
-    secretKeys:
-      ONYX_SANDBOX_PUSH_PRIVATE_KEY: private_key
-    values:
-      private_key: ""
-
-# NetworkPolicy for the per-sandbox push daemon (port 8731).
-# In prod the strict default is correct: only api_server pods can push.
+# NetworkPolicy for OpenCode serve and preview traffic into sandbox pods.
 # Local-dev enables `allowTelepresenceAmbassador` via values-localdev.yaml so
-# that traffic intercepted from a developer's laptop (which enters the cluster
-# as the telepresence traffic-manager pod) is also permitted.
-sandboxPushPolicy:
+# that traffic intercepted from a developer's laptop enters through Telepresence.
+sandboxIngressPolicy:
   allowTelepresenceAmbassador: false
 
 configMap:
@@ -1839,8 +1825,8 @@ configMap:
   HARD_DELETE_CHATS: ""
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
-  # Sandbox config — always "kubernetes" for Helm deployments
-  SANDBOX_BACKEND: "kubernetes"
+  # Sandbox config.
+  CRAFT_SANDBOX_RUNTIME: "kubernetes_firecracker"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   # ONYX_SERVER_URL must be the full API base URL, path prefix included — e.g.
@@ -1874,7 +1860,10 @@ craft:
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
 sandboxPod:
-  # Shared OpenCode, sidecar, and preview listener. Set to "::" for IPv6-only pods.
+  # Existing Kubernetes RuntimeClass. Defaults to the Kata Firecracker handler.
+  # There is no runc fallback for Craft sandboxes.
+  runtimeClassName: "kata-fc"
+  # Shared OpenCode and preview listener. Set to "::" for IPv6-only pods.
   listenHost: "0.0.0.0"
   nodeSelector:
     onyx.app/workload: sandbox

@@ -11,16 +11,15 @@ import httpx
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.db.sandbox import get_running_sandboxes
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.deployment_fixtures import _test_client as _test_client
+from tests.common.craft.deployment_fixtures import (
+    deployed_frontend as deployed_frontend,
+)
 from tests.common.craft.users import create_or_login_admin
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
-from tests.integration.common_utils.http_client import (
-    RetryingTransport,
-    set_test_client,
-)
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import suite_sandbox_ids
@@ -32,7 +31,7 @@ pytest_plugins = (
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _reap_module_pods() -> Generator[None, None, None]:
+def _reap_module_sandboxes() -> Generator[None, None, None]:
     """Safety net for leaked suite sandboxes only.
 
     Filters to sandboxes this suite provisioned (tracked in
@@ -40,9 +39,9 @@ def _reap_module_pods() -> Generator[None, None, None]:
     cluster are never terminated.
     """
     yield
-    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
-        return
     suite_ids = suite_sandbox_ids()
+    if not suite_ids:
+        return
     with get_session_with_tenant(
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
     ) as db:
@@ -69,21 +68,6 @@ def initialize_db() -> None:
 def _start_celery_workers() -> None:
     """No-op override; Helm starts the real in-cluster Celery workers."""
     return None
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _test_client() -> Generator[httpx.Client, None, None]:
-    """Bind integration HTTP helpers to the deployed api_server."""
-    real_client = httpx.Client(
-        transport=RetryingTransport(),
-        timeout=httpx.Timeout(120.0, connect=10.0),
-    )
-    set_test_client(real_client)
-    try:
-        yield real_client
-    finally:
-        real_client.close()
-        set_test_client(None)
 
 
 @pytest.fixture(scope="session", autouse=True)

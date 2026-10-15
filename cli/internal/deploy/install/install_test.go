@@ -182,7 +182,6 @@ func isolateEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("ONYX_DEPLOYMENT_DIR", "")
 	t.Setenv("INSTALL_PREFIX", "")
-	t.Setenv("SANDBOX_DOCKER_NETWORK", "")
 }
 
 func TestRunInstallFreshLiteNoPrompt(t *testing.T) {
@@ -603,9 +602,10 @@ func TestFreshStandardInstallStartsWithoutMinIO(t *testing.T) {
 	shimDockerOnPath(t)
 	root := t.TempDir()
 	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
-	// --include-craft implies standard mode without a prompt.
+	deps.IOS.IsStdinTTY, deps.IOS.IsStdoutTTY = true, true
+	deps.IOS.In = bytes.NewBufferString("2\n")
 	if err := RunInstall(context.Background(), deps, Options{
-		NoPrompt: true, IncludeCraft: true, Tag: "edge", Dir: root, NoWait: true,
+		Tag: "edge", Dir: root, NoWait: true,
 	}); err != nil {
 		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
 	}
@@ -897,9 +897,8 @@ func TestInstallPullFailureRemovesFreshEnv(t *testing.T) {
 	}
 }
 
-// Craft binds the docker socket, so it is something to opt into rather than
-// something to be shown. --include-craft still installs it; the mode question
-// must not put it in front of someone who didn't ask.
+// Craft is no longer a docker-compose mode, so the mode question must not put
+// it in front of someone setting up a compose deployment.
 func TestModeQuestionDoesNotOfferCraft(t *testing.T) {
 	isolateEnv(t)
 	shimDockerOnPath(t)
@@ -923,66 +922,71 @@ func TestModeQuestionDoesNotOfferCraft(t *testing.T) {
 	}
 }
 
-// Leaving lite mode has to undo lite's .env adjustments, or the "standard"
-// deployment keeps storing files in Postgres and never starts the object store.
-func TestInstallRestoresStandardFileStoreWhenLeavingLite(t *testing.T) {
-	runner := &fakeRunner{handler: healthyDockerHandler}
-	root := installFixture(t, runner, "v4.0.0") // lite
-
-	// --include-craft implies standard mode on a rerun.
-	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
-	if err := RunInstall(context.Background(), deps, Options{
-		NoPrompt: true, IncludeCraft: true, Dir: root, NoWait: true,
-	}); err != nil {
-		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
-	}
-
-	env, err := os.ReadFile(filepath.Join(root, "deployment", ".env"))
-	if err != nil {
+func TestRemoveLegacyCraftOverlayWhenManagedAndUnedited(t *testing.T) {
+	root := t.TempDir()
+	deploymentDir := filepath.Join(root, "deployment")
+	if err := os.MkdirAll(deploymentDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	envStr := string(env)
-	if got := Var(envStr, "COMPOSE_PROFILES"); got != "s3-filestore" {
-		t.Errorf("COMPOSE_PROFILES = %q, want the standard s3-filestore", got)
+	content := []byte("services:\n  api_server: {}\n")
+	path := filepath.Join(root, filepath.FromSlash(legacyCraftOverlayDestRel))
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
 	}
-	if got := Var(envStr, "FILE_STORE_BACKEND"); got != "s3" {
-		t.Errorf("FILE_STORE_BACKEND = %q, want s3", got)
+	manifest := &state.Manifest{IncludeCraft: true}
+	if err := manifest.RecordFile(root, legacyCraftOverlayDestRel, content); err != nil {
+		t.Fatal(err)
 	}
-	if got := Var(envStr, "S3_LEGACY_ENDPOINT_URL"); got != "" {
-		t.Errorf("S3_LEGACY_ENDPOINT_URL = %q, want it unset since this install never ran MinIO", got)
+
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	in := newInstaller(deps, Options{Dir: root})
+	in.root.Dir = root
+	if err := in.removeLegacyCraftOverlay(manifest); err != nil {
+		t.Fatalf("removeLegacyCraftOverlay: %v", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, "deployment", "docker-compose.onyx-lite.yml")); !os.IsNotExist(statErr) {
-		t.Error("lite overlay still on disk after switching to standard")
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("legacy overlay still exists: %v", err)
+	}
+	if _, ok := manifest.Files[legacyCraftOverlayDestRel]; ok {
+		t.Fatalf("legacy overlay still recorded: %+v", manifest.Files)
 	}
 }
 
-// A lite install that ran MinIO before the object store still holds files
-// there, so leaving lite mode brings MinIO back as the legacy store.
-func TestLeavingLiteRestoresTheLegacyStoreAnInstallRanOn(t *testing.T) {
-	runner := &fakeRunner{handler: healthyDockerHandler}
-	root := installFixture(t, runner, "v4.0.0") // lite
-	envPath := filepath.Join(root, "deployment", ".env")
-	env, err := os.ReadFile(envPath)
-	if err != nil {
+func TestRemoveLegacyCraftOverlayLeavesEditedFile(t *testing.T) {
+	root := t.TempDir()
+	deploymentDir := filepath.Join(root, "deployment")
+	if err := os.MkdirAll(deploymentDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(envPath, []byte(SetVar(string(env), "MINIO_REPLICAS", "1")), 0600); err != nil {
+	content := []byte("services:\n  api_server: {}\n")
+	path := filepath.Join(root, filepath.FromSlash(legacyCraftOverlayDestRel))
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := &state.Manifest{IncludeCraft: true}
+	if err := manifest.RecordFile(root, legacyCraftOverlayDestRel, content); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(content, []byte("# user edit\n")...), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
-	if err := RunInstall(context.Background(), deps, Options{
-		NoPrompt: true, IncludeCraft: true, Dir: root, NoWait: true,
-	}); err != nil {
-		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	in := newInstaller(deps, Options{Dir: root})
+	in.root.Dir = root
+	if err := in.removeLegacyCraftOverlay(manifest); err != nil {
+		t.Fatalf("removeLegacyCraftOverlay: %v", err)
 	}
 
-	env, err = os.ReadFile(envPath)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("edited legacy overlay was removed: %v", err)
 	}
-	if got := Var(string(env), "S3_LEGACY_ENDPOINT_URL"); got != minioEndpoint {
-		t.Errorf("S3_LEGACY_ENDPOINT_URL = %q, want %q", got, minioEndpoint)
+	if _, ok := manifest.Files[legacyCraftOverlayDestRel]; !ok {
+		t.Fatalf("edited legacy overlay was removed from manifest")
+	}
+	if !strings.Contains(outBuf(deps).String(), "appears customized") {
+		t.Fatalf("missing warning:\n%s", outBuf(deps).String())
 	}
 }
 
@@ -1073,17 +1077,6 @@ func TestInstallModeSwitchKeepsUserProfiles(t *testing.T) {
 		t.Errorf("COMPOSE_PROFILES = %q in lite mode, want the user's profile kept", got)
 	}
 
-	// And back out: s3-filestore returns alongside it.
-	deps = testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
-	if err := RunInstall(context.Background(), deps, Options{
-		NoPrompt: true, IncludeCraft: true, Dir: root, NoWait: true,
-	}); err != nil {
-		t.Fatalf("switch back to standard: %v\noutput:\n%s", err, outBuf(deps).String())
-	}
-	env, _ = os.ReadFile(envPath)
-	if got := Var(string(env), "COMPOSE_PROFILES"); got != "my-monitoring,s3-filestore" {
-		t.Errorf("COMPOSE_PROFILES = %q leaving lite, want both profiles", got)
-	}
 }
 
 // A file that a pinned ref simply doesn't carry must not take the rest of the
@@ -1096,9 +1089,9 @@ func TestInstallMissingFileAtRefDoesNotDisableFetching(t *testing.T) {
 		if r.Method == http.MethodHead {
 			return
 		}
-		// The craft overlay is fetched before the nginx files but after the
+		// The dev overlay is fetched before the nginx files but after the
 		// compose file; only it is absent at this ref.
-		if strings.HasSuffix(r.URL.Path, "docker-compose.craft.yml") {
+		if strings.HasSuffix(r.URL.Path, "docker-compose.dev.yml") {
 			http.NotFound(w, r)
 			return
 		}
@@ -1109,7 +1102,7 @@ func TestInstallMissingFileAtRefDoesNotDisableFetching(t *testing.T) {
 	root := t.TempDir()
 	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, raw)
 	if err := RunInstall(context.Background(), deps, Options{
-		NoPrompt: true, IncludeCraft: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+		NoPrompt: true, Dev: true, Tag: "v4.2.0", Dir: root, NoWait: true,
 	}); err != nil {
 		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
 	}
@@ -1122,11 +1115,11 @@ func TestInstallMissingFileAtRefDoesNotDisableFetching(t *testing.T) {
 	if string(nginx) != upstream {
 		t.Errorf("nginx config fell back to embedded after an unrelated 404:\n%s", nginx)
 	}
-	craft, err := os.ReadFile(filepath.Join(root, "deployment", "docker-compose.craft.yml"))
+	dev, err := os.ReadFile(filepath.Join(root, "deployment", "docker-compose.dev.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(craft) == upstream {
-		t.Error("craft overlay should have come from the embedded copy")
+	if string(dev) == upstream {
+		t.Error("dev overlay should have come from the embedded copy")
 	}
 }

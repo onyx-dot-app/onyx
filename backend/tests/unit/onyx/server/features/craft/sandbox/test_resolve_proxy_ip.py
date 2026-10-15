@@ -11,17 +11,17 @@ from unittest.mock import MagicMock
 import pytest
 from kubernetes.client.rest import ApiException
 
-import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+import onyx.server.features.build.sandbox.kubernetes_runtime as ksm
+from onyx.server.features.build.sandbox.kubernetes_runtime import (
+    KubernetesRuntime,
 )
 
 
-def _mgr() -> tuple[KubernetesSandboxManager, MagicMock]:
-    mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    mgr._namespace = "onyx-sandboxes"
+def _mgr() -> tuple[KubernetesRuntime, MagicMock]:
+    mgr: KubernetesRuntime = object.__new__(KubernetesRuntime)
+    mgr.namespace = "onyx-sandboxes"
     core_api = MagicMock()
-    mgr._core_api = core_api
+    mgr.core_api = core_api
     return mgr, core_api
 
 

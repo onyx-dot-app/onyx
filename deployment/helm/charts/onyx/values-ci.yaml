@@ -101,11 +101,6 @@ auth:
     values:
       opensearch_admin_username: "admin"
       opensearch_admin_password: "OpenSearch1!"
-  sandboxPushSecret:
-    enabled: true
-    values:
-      private_key: ""
-
 # Keep MinIO chart-backed in CI so the workflow exercises chart object-storage
 # wiring, but size it down for the CI runner.
 minio:
@@ -115,9 +110,8 @@ minio:
     requests:
       memory: 256Mi
 
-# Web image isn't built for this lane; the Craft tests drive the API directly.
 webserver:
-  replicaCount: 0
+  replicaCount: 1
 
 api:
   replicaCount: 1

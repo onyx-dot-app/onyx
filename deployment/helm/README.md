@@ -96,14 +96,17 @@ below and set `redis.enabled: false` to skip the operator entirely.
 ## Onyx Craft with Kubernetes sandboxes
 
 When `configMap.ENABLE_CRAFT="true"`, the target cluster must run Kubernetes
-`>= 1.33`. Craft Helm deployments provision Kubernetes sandbox pods; Docker
-is not a Helm deployment backend for Craft and `configMap.SANDBOX_BACKEND` is
-not a bypass for this requirement.
+`>= 1.30` and provide the `sandboxPod.runtimeClassName` RuntimeClass, which
+defaults to Kata Firecracker's `kata-fc`. Craft Helm deployments provision
+Kubernetes sandbox pods; Docker is not a Helm deployment backend for Craft.
+The chart rejects launcher values other than `kubernetes_firecracker` when Craft is enabled.
+Sandbox exec requires WebSocket v5. Keep the API server's
+`TranslateStreamCloseWebsocketRequests` feature gate enabled, its default since Kubernetes 1.30.
 
-Craft sandbox pods use native restartable init sidecar containers:
-`sandbox-init` runs and completes first, `sidecar` starts next as an
-`initContainers` entry with `restartPolicy: Always`, and the main `sandbox` app
-container starts after the sidecar's startup restore gate is ready.
+Craft sandbox pods run one root supervisor container inside the Firecracker VM.
+A firewall-only init container installs the egress lockdown first. The main
+container installs the proxy CA into its own root filesystem, waits for history
+restore or release, and then starts OpenCode on port 4096.
 
 The chart fails during render/install on older clusters so the incompatibility
 is caught before sandbox provisioning. This guard does not apply to non-Craft

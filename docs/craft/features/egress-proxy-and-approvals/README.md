@@ -77,8 +77,6 @@ Sandbox and deployment wiring:
   Kubernetes sandboxes to the proxy.
 - `deployment/helm/charts/onyx/templates/network-policy-sandbox-egress.yaml`
   provides the Kubernetes NetworkPolicy backstop for sandbox pods.
-- `deployment/docker_compose/docker-compose.craft.yml` wires the Docker backend
-  proxy stack.
 
 Frontend:
 
@@ -99,16 +97,15 @@ Frontend:
 2. Starts `/healthz` on `SANDBOX_PROXY_HEALTHZ_PORT`.
 3. Bootstraps or loads the mitm CA and materializes
    `mitmproxy-ca.pem` into the mitmproxy confdir.
-4. Starts the backend-specific sandbox IP lookup:
-   `K8sInformerLookup` for Kubernetes, `DockerEventsLookup` for Docker.
+4. Starts the Kubernetes sandbox IP lookup with `K8sInformerLookup`.
 5. Refuses to serve traffic until the lookup completes initial sync.
 6. Registers credential resolvers in this order:
    `OnyxPatResolver`, `LLMProviderKeyResolver`, `ExternalAppResolver`.
 7. Starts mitmproxy in regular proxy mode with `GateAddon`.
 
 Readiness depends on the CA being ready, the identity lookup being synced, and
-the process not shutting down. If the Kubernetes watch or Docker events stream
-disconnects, readiness flips unhealthy while the lookup reconnects.
+the process not shutting down. If the Kubernetes watch disconnects, readiness
+flips unhealthy while the lookup reconnects.
 
 ### Sandbox Network Posture
 
@@ -135,9 +132,9 @@ IP and port, rejects other IPv4 egress, and drops all IPv6 egress. It then
 self-verifies the iptables rules.
 
 Kubernetes runs `firewall-init.sh` as an init container with `NET_ADMIN`.
-Docker runs it as the container entrypoint wrapper, starts as root only long
-enough to install the firewall and CA, then uses `setpriv` to drop to UID 1000
-and clear the capability bounding set before user code runs.
+The main container later runs the same script in `ca` mode to install the proxy
+CA into its own rootfs. User work still runs as UID 1000 through the guest
+helper and OpenCode process.
 
 Kubernetes also has a NetworkPolicy backstop: sandbox pods may egress only to
 the proxy and DNS. The proxy itself is ingress-restricted to the sandbox
@@ -149,27 +146,12 @@ datastores.
 The proxy CA is stable across proxy restarts so running or restored sandboxes
 continue to trust the proxy.
 
-Kubernetes:
-
 - Source of truth: Secret in `SANDBOX_PROXY_NAMESPACE`, containing `ca.crt` and
   `ca.key`.
 - Sandbox projection: ConfigMap in `SANDBOX_NAMESPACE`, containing only
   `ca.crt`.
 - Multiple proxy replicas cold-start safely by racing on Secret creation; losers
   reload the winning CA.
-
-Docker:
-
-- Source of truth: shared `sandbox_proxy_ca` volume.
-- The proxy mounts the volume read-write at `/var/lib/sandbox-proxy/ca`.
-- Sandboxes mount the same volume read-only at `/sandbox-ca`, so Docker
-  sandboxes can see both `ca.crt` and `ca.key` in the container filesystem.
-- `firewall-init.sh` reads only `/sandbox-ca/ca.crt`. `ca.key` is written
-  `0600` and root-owned; the Docker sandbox starts as root only for CA install
-  and firewall setup, then `setpriv` drops the agent process to UID 1000. This
-  is a root-only permission boundary, not the Kubernetes cert-only projection.
-- `ca.crt` is the rendezvous file. Half-written states fail loudly instead of
-  regenerating and invalidating already-trusted certs.
 
 ## Request Lifecycle
 
@@ -625,7 +607,7 @@ On SIGTERM, the proxy:
 6. Waits for tracked request tasks to finish, bounded by the server drain
    timeout.
 
-Kubernetes and Docker both set enough termination grace for this drain path.
+Kubernetes sets enough termination grace for this drain path.
 
 ## Invariants To Preserve
 
@@ -644,9 +626,6 @@ Kubernetes and Docker both set enough termination grace for this drain path.
   not forward with placeholders.
 - Kubernetes sandbox pods must mount only the proxy CA cert, never the Secret
   containing `ca.key`.
-- Docker sandboxes currently mount the shared CA volume read-only; `ca.key`
-  must remain `0600` and root-owned, and user code must continue to run after
-  the entrypoint drops to UID 1000.
 - Sandbox egress must remain proxy-only; bypassing `*_PROXY` must not open
   direct internet or internal network access.
 
@@ -735,10 +714,6 @@ Integration tests:
   non-gated traffic, missing session tags, unavailable app behavior, SSE
   announce packets, oversized bodies, notifications, conflict after expiration,
   and unidentified-sandbox blocking.
-- `backend/tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py`
-  exercises approve/reject and unavailable-app behavior through the Docker
-  proxy path.
-
 Frontend tests and stories cover packet parsing, approval card states, payload
 display, and scheduled-task pre-approval UI components.
 
@@ -747,7 +722,6 @@ display, and scheduled-task pre-approval UI components.
 Relevant config:
 
 - `ENABLE_CRAFT=true` enables Craft chart resources.
-- `SANDBOX_BACKEND` is `kubernetes` or `docker`.
 - `ONYX_SERVER_URL` must be the complete API base for sandbox API calls and PAT
   injection.
 - `SANDBOX_PROXY_HOST` and `SANDBOX_PROXY_PORT` tell sandboxes where to proxy.
@@ -762,10 +736,8 @@ Local development:
 
 - Kubernetes Craft development uses real sandbox pods. See
   `docs/craft/dev/local-kubernetes.md`.
-- Docker backend and proxy-specific local development are covered in
-  `docs/craft/dev/local-compose-craft.md`.
 - Sandbox proxy changes require rebuilding the backend image, loading it into
   the local cluster, and restarting the proxy/API pods.
 - Sandbox image, `firewall-init.sh`, or opencode plugin changes require
-  rebuilding the sandbox image, loading it into the local cluster or Docker
-  environment, and recycling sandbox pods/containers.
+  rebuilding the sandbox image, loading it into the local cluster, and
+  recycling sandbox pods.

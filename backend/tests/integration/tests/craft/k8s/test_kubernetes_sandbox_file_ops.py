@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import NoReturn
 from uuid import UUID
 
 import httpx
@@ -10,13 +11,13 @@ import pytest
 from kubernetes import client
 
 from onyx.server.features.build.configs import (
-    SANDBOX_BACKEND,
     SANDBOX_NAMESPACE,
-    SandboxBackend,
 )
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRuntime
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
+from onyx.server.features.build.sandbox.models import SandboxExecError
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
@@ -25,14 +26,10 @@ from tests.integration.tests.craft.k8s.k8s_fixtures import (
     OwnedLivePod,
     PoolSession,
     SandboxHandle,
+    kubernetes_runtime,
     pod_exec,
     wait_for_pod_deletion,
     wait_until_healthy,
-)
-
-pytestmark = pytest.mark.skipif(
-    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
-    reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
 )
 
 
@@ -47,15 +44,43 @@ def _artifact_response(user: DATestUser, session_id: UUID, path: str) -> httpx.R
 class TestHealthCheck:
     def test_health_check_returns_true_for_provisioned_sandbox(
         self,
-        k8s_manager: KubernetesSandboxManager,
+        k8s_manager: SandboxManager,
         pool_session: PoolSession,
     ) -> None:
         sandbox_id, _, _ = pool_session
         wait_until_healthy(k8s_manager, sandbox_id)
 
+    def test_http_health_survives_exec_transport_failure(
+        self,
+        k8s_manager: SandboxManager,
+        pool_session: PoolSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Only exec is fault-injected; Kubernetes readiness and HTTP remain real."""
+        sandbox_id, _, pod_name = pool_session
+        wait_until_healthy(k8s_manager, sandbox_id)
+        assert k8s_manager.health_check(sandbox_id, timeout=10.0)
+        runtime = k8s_manager._runtime
+        assert isinstance(runtime, KubernetesRuntime)
+        before = runtime.get_pod(sandbox_id)
+        assert before is not None
+
+        def unavailable_exec(*_args: object, **_kwargs: object) -> NoReturn:
+            raise SandboxExecError("injected Kata exec transport busy")
+
+        monkeypatch.setattr(runtime._exec, "run", unavailable_exec)
+        with pytest.raises(SandboxExecError, match="injected Kata exec transport busy"):
+            runtime._exec.run(pod_name, ["true"], timeout=1.0)
+
+        assert k8s_manager.health_check(sandbox_id, timeout=10.0)
+        after = runtime.get_pod(sandbox_id)
+        assert after is not None
+        assert after.metadata.uid == before.metadata.uid
+        assert after.metadata.deletion_timestamp is None
+
     def test_health_check_returns_false_after_terminate(
         self,
-        k8s_manager: KubernetesSandboxManager,
+        k8s_manager: SandboxManager,
         k8s_client: client.CoreV1Api,
         owned_live_pod: OwnedLivePod,
     ) -> None:
@@ -82,9 +107,10 @@ class TestListDirectory:
         # Listing the session root fails ``ls -laL`` on the user_library symlink;
         # list a subpath under outputs/ instead.
         outputs_dir = f"/workspace/sessions/{handle.session_id}/outputs"
+        runtime = kubernetes_runtime(handle.manager)
         pod_exec(
             k8s_client,
-            handle.manager._get_pod_name(handle.sandbox_id),
+            runtime.pod_name(handle.sandbox_id),
             SANDBOX_NAMESPACE,
             f"mkdir -p {outputs_dir}/subdir && echo content > {outputs_dir}/file.txt",
         )
@@ -109,9 +135,10 @@ class TestReadFile:
         handle = running_sandbox(with_session=True)
         assert handle.session_id is not None
         outputs_dir = f"/workspace/sessions/{handle.session_id}/outputs"
+        runtime = kubernetes_runtime(handle.manager)
         pod_exec(
             k8s_client,
-            handle.manager._get_pod_name(handle.sandbox_id),
+            runtime.pod_name(handle.sandbox_id),
             SANDBOX_NAMESPACE,
             f"mkdir -p {outputs_dir} && printf 'Hello, World!' > {outputs_dir}/test.txt",
         )
@@ -169,7 +196,7 @@ class TestCreateSnapshot:
 class TestTerminate:
     def test_terminate_cleans_up_resources(
         self,
-        k8s_manager: KubernetesSandboxManager,
+        k8s_manager: SandboxManager,
         k8s_client: client.CoreV1Api,
         owned_live_pod: OwnedLivePod,
     ) -> None:
@@ -183,6 +210,21 @@ class TestTerminate:
 
 
 class TestUploadFile:
+    def test_binary_upload_download_round_trip(
+        self,
+        pool_api_user: DATestUser,
+        pool_session: PoolSession,
+    ) -> None:
+        _, session_id, _ = pool_session
+        content = bytes(range(256)) * 4096
+        uploaded = BuildSessionManager.upload_file(
+            pool_api_user, session_id, "binary-proof.bin", content
+        )
+        downloaded = BuildSessionManager.download_artifact(
+            pool_api_user, session_id, uploaded.path
+        )
+        assert downloaded == content
+
     def test_upload_file_api_creates_file(
         self,
         running_sandbox: Callable[..., SandboxHandle],
@@ -252,7 +294,7 @@ class TestUploadFile:
     ) -> None:
         handle = running_sandbox(with_session=True)
         assert handle.session_id is not None
-        pod_name = handle.manager._get_pod_name(handle.sandbox_id)
+        pod_name = kubernetes_runtime(handle.manager).pod_name(handle.sandbox_id)
         agents_md_path = f"/workspace/sessions/{handle.session_id}/AGENTS.md"
         section_marker = "## Attachments (PRIORITY)"
 
@@ -298,7 +340,7 @@ class TestUploadFile:
 class TestUploadStats:
     def test_get_upload_stats_counts_and_sizes_attachments(
         self,
-        k8s_manager: KubernetesSandboxManager,
+        k8s_manager: SandboxManager,
         running_sandbox: Callable[..., SandboxHandle],
     ) -> None:
         """``get_upload_stats`` reports the real (count, total_bytes) of a

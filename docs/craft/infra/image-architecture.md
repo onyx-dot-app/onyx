@@ -9,8 +9,9 @@ same tag as the application release by default.
 
 The Craft agent (`opencode`) runs entirely inside the **sandbox container**.
 The api_server is just an HTTP client to `opencode-serve` (it never executes
-`opencode`/`node` itself), and there is no `local` sandbox backend — only
-`docker` and `kubernetes`, both of which run the agent in the sandbox.
+`opencode`/`node` itself). The only supported sandbox runtime is Kubernetes
+with the Firecracker-backed `kata-fc` RuntimeClass. See
+[`firecracker.md`](./firecracker.md) for the runtime contract.
 
 So the backend needs nothing craft-specific baked in. `ENABLE_CRAFT` is read
 at runtime (`onyx/server/features/build/configs.py`) to toggle the feature.
@@ -22,7 +23,7 @@ at runtime (`onyx/server/features/build/configs.py`) to toggle the feature.
 | `onyxdotapp/onyx-backend` | No | Standard image. `ENABLE_CRAFT=true` at runtime enables Craft. |
 | `onyxdotapp/onyx-web-server` | No | Standard image. |
 | `onyxdotapp/onyx-model-server` | No | Standard image. |
-| **`onyxdotapp/sandbox`** | **Yes** | The only Craft-specific image. Bundles Node + the `opencode` CLI; runs the agent. |
+| **`onyxdotapp/sandbox`** | **Yes** | The only Craft-specific image. Bundles Node and `opencode`; runs the agent. |
 
 ## How the sandbox image is built
 
@@ -53,15 +54,9 @@ We do not publish sandbox-only `v0.1.x` tags or a Docker Hub
 `onyxdotapp/sandbox:dev` tag for new builds. Local development can still use
 `onyxdotapp/sandbox:dev` as a locally built, kind-loaded image tag.
 
-Kubernetes sandbox pods default to the chart's app image pull policy. Internal
-clusters that deliberately use moving tags such as `latest`, `beta`, or `edge`
-should set `SANDBOX_IMAGE_PULL_POLICY=Always` alongside the matching app image
-pull policy.
-
-Docker compose follows the existing compose `IMAGE_TAG` behavior, including the
-default `latest`. Since sandboxes are created later by the Docker manager rather
-than by compose, the manager pulls immutable tags only when missing and refreshes
-moving tags once per API process.
+Kubernetes sandbox pods default to the chart's app image pull policy. Set
+`configMap.SANDBOX_IMAGE_PULL_POLICY=Always` when internal clusters
+deliberately use moving tags such as `latest`, `beta`, or `edge`.
 
 ## Deploying Craft
 
@@ -69,17 +64,10 @@ Use the **normal** application image tags and turn Craft on. Customers should
 not choose a separate sandbox tag; the app version selects the matching
 sandbox image.
 
-**docker-compose** (`--include-craft` does this for you):
-```
-ENABLE_CRAFT=true
-SANDBOX_BACKEND=docker
-# sandbox defaults to onyxdotapp/sandbox:${IMAGE_TAG}
-```
-
 **Kubernetes (helm):**
 ```
 ENABLE_CRAFT=true
-SANDBOX_BACKEND=kubernetes
 global.version: vX.Y.Z
 # sandbox defaults to onyxdotapp/sandbox:${global.version}
+# sandboxPod.runtimeClassName defaults to kata-fc
 ```

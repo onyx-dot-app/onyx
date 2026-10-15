@@ -28,7 +28,7 @@ from onyx.server.features.build.db.sandbox import (
     create_snapshot__no_commit,
     get_running_sandboxes,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.image.guest.models import (
     FilesystemEntry,
     OutputsManifestEntry,
     OutputsManifestResponse,
@@ -249,7 +249,6 @@ class TestHealthCheckFailureRecovery:
         session_id = idle_session.id
 
         stub_sandbox_manager.health_check_returns = False
-        stub_sandbox_manager.supports_opencode_history_persistence = True
         if history_snapshot_fails:
 
             def _boom(
@@ -684,7 +683,7 @@ class TestManagedContentPushOrdering:
         """Covers both cold-wake branches: fresh workspace setup and snapshot
         restore. A restore after hydration cannot clobber managed mounts —
         snapshot archives are scoped to /workspace/sessions/<id>
-        (sandbox_daemon/snapshot.py) and config regen only re-links
+        (guest/snapshot.py) and config regen only re-links
         /workspace/managed."""
         row = sandbox(user=test_user, status=SandboxStatus.SLEEPING)
         idle_session = BuildSession(
@@ -726,7 +725,7 @@ class TestManagedContentPushOrdering:
             lambda: stub,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.sandbox.factory._sandbox_manager_instance",
+            "onyx.server.features.build.sandbox.manager._sandbox_manager_instance",
             stub,
         )
 

@@ -31,7 +31,7 @@ from onyx.server.features.build.db.build_session import (
     get_webapp_access_async,
     get_webapp_target_async,
 )
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path
 from onyx.utils.logger import setup_logger
 

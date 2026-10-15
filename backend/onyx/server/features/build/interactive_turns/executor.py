@@ -38,7 +38,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.interrupt_signal import (

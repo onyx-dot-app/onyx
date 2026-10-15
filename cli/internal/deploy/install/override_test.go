@@ -162,12 +162,11 @@ func TestComposeFileNamesOverride(t *testing.T) {
 			want: []string{"docker-compose.yml", "docker-compose.override.yml"},
 		},
 		{
-			name: "lite with craft",
-			mode: func(in *installer) { in.lite, in.craft = true, true },
+			name: "lite",
+			mode: func(in *installer) { in.lite = true },
 			want: []string{
 				"docker-compose.yml",
 				"docker-compose.onyx-lite.yml",
-				"docker-compose.craft.yml",
 				"docker-compose.override.yml",
 			},
 		},

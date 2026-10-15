@@ -21,7 +21,7 @@ from onyx.db.enums import Permission, SandboxStatus
 from onyx.db.models import User
 from onyx.server.features.build.configs import ENABLE_OPENCODE_DEBUGGING
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -59,22 +59,11 @@ def stream_opencode_logs(
         )
 
     sandbox_manager = get_sandbox_manager()
-    # Only the K8s manager exposes pod logs — guard so other backends
-    # (docker dev) return a clean error rather than blowing up on attribute
-    # access.
-    stream_fn = getattr(  # ods: ignore[getattr]
-        sandbox_manager, "stream_pod_logs", None
-    )
-    if stream_fn is None:
-        raise HTTPException(
-            status_code=501,
-            detail="Pod log streaming is only available on the Kubernetes sandbox backend",
-        )
 
     def sse_generator() -> Generator[str, None, None]:
         events_yielded = 0
         try:
-            for line in stream_fn(sandbox.id):
+            for line in sandbox_manager.stream_pod_logs(sandbox.id):
                 events_yielded += 1
                 # json.dumps correctly escapes control characters (ANSI
                 # color codes, tabs, embedded newlines, U+2028/U+2029)

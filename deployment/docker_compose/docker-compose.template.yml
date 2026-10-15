@@ -121,8 +121,8 @@ services:
       # While set, writes and deletes also reach earlier releases' MinIO and reads that miss fall back to it.
       - S3_LEGACY_ENDPOINT_URL=${S3_LEGACY_ENDPOINT_URL:-}
       #!for default
-      # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
-      # Use --include-craft with install script, or manually set in .env file
+      # Craft requires the Kubernetes deployment path; docker-compose does not
+      # start Craft sandboxes.
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
       #!endfor
     #!value prod,no-letsencrypt: # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres

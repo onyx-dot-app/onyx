@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import subprocess
-import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -14,21 +12,18 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
-    OutputsManifestResponse,
-)
 from tests.common.paths import find_ancestor_containing
 
-_DAEMON_DIR = (
+_GUEST_DIR = (
     find_ancestor_containing("backend/onyx")
-    / "backend/onyx/server/features/build/sandbox/image/sandbox_daemon"
+    / "backend/onyx/server/features/build/sandbox/image/guest"
 )
 
 
 @pytest.fixture()
 def manifest_module(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
-    monkeypatch.syspath_prepend(str(_DAEMON_DIR.parent))
-    return importlib.import_module("sandbox_daemon.outputs_manifest")
+    monkeypatch.syspath_prepend(str(_GUEST_DIR.parent))
+    return importlib.import_module("guest.outputs_manifest")
 
 
 @pytest.fixture()
@@ -41,30 +36,6 @@ def session(
     outputs.mkdir(parents=True)
     monkeypatch.setattr(manifest_module, "SESSIONS_ROOT", sessions_root)
     return session_id, outputs
-
-
-def test_module_cli_validates_requests_and_returns_json() -> None:
-    command = [sys.executable, "-E", "-s", "-m", "sandbox_daemon.outputs_manifest"]
-    result = subprocess.run(
-        [*command, str(uuid4())],
-        cwd=_DAEMON_DIR.parent,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=10,
-    )
-    manifest = OutputsManifestResponse.model_validate_json(result.stdout)
-    assert manifest.entries == []
-    assert not manifest.complete
-    invalid = subprocess.run(
-        [*command, "../another-session"],
-        cwd=_DAEMON_DIR.parent,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert invalid.returncode != 0
-    assert not invalid.stdout
 
 
 @pytest.mark.parametrize("workspace_exists", [False, True])

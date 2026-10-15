@@ -14,7 +14,7 @@ DB layer          backend/onyx/server/features/build/db/user_library.py
   │ owns: file_store I/O, Document upserts, ownership checks, quota
   ▼
 Sandbox sync      backend/onyx/server/features/build/sandbox/user_library.py
-                  builds FileSet from DB + file_store, pushes via push daemon
+                  builds FileSet from DB + file_store for managed-content sync
 ```
 
 Files are stored in the **default file store** (`get_default_file_store()`) — same backend skills use. There is no Craft-specific S3 bucket for user files.
@@ -37,14 +37,14 @@ Files are stored in the **default file store** (`get_default_file_store()`) — 
 
 ### Mount path
 
-`/workspace/managed/user_library/` in the sandbox pod. Same atomic symlink swap as skills — the agent sees a stable path while the daemon swaps versioned directories underneath.
+`/workspace/managed/user_library/` in the sandbox pod. Same atomic symlink swap as skills — the agent sees a stable path while the guest helper swaps versioned directories underneath.
 
 ### Trigger points
 
 | Trigger | Calls |
 |---------|-------|
-| Session creation (cold start) | `hydrate_user_library(sandbox_id, user_id, db_session)` |
-| Existing session resume | `hydrate_user_library(...)` (same — re-hydrate to get latest state) |
+| Session creation (cold start) | `sandbox_lifecycle.build_managed_content_payload(...)` then `push_managed_content(...)` |
+| Existing session resume | Same managed-content payload path; re-pushes current files |
 | File upload (single or zip) | `sync_user_library_to_active_sandboxes(user_id, db_session)` |
 | File delete | `sync_user_library_to_active_sandboxes(...)` |
 | Toggle sync_disabled | `sync_user_library_to_active_sandboxes(...)` |
@@ -58,13 +58,13 @@ build_user_library_fileset(user_id, db_session)
     1. list_user_files() → CRAFT_FILE Document rows for user
     2. Filter: skip is_directory=True, skip sync_disabled=True
     3. For each remaining doc: file_store.read_file(doc.link)
-    4. Strip leading "/" from file_path (push daemon rejects absolute paths)
+    4. Strip leading "/" from file_path (managed paths are relative)
     5. Return FileSet { relative_path: bytes }
               │
               ▼
 sandbox_manager.push_to_sandbox / push_to_sandboxes
     mount_path="/workspace/managed/user_library"
-    → tar.gz, Ed25519-sign, POST to push daemon, atomic swap
+    → bounded tar stdin over runtime exec, guest validates/extracts, atomic swap
 ```
 
 Empty filesets push too (clears stale files via the swap).
@@ -102,7 +102,7 @@ Encoded in the document_id prefix: `CRAFT_FILE__{user_id}__{hash}`. `fetch_user_
 **Modified:**
 - `backend/onyx/server/features/build/db/user_library.py` — added all the CRUD/storage helpers
 - `backend/onyx/server/features/build/user_library/api.py` — thinned to call db helpers; `PersistentDocumentWriter` usage removed; `HTTPException` → `OnyxError`
-- `backend/onyx/server/features/build/session/manager.py` — `_hydrate_user_library` called in both `create_session__no_commit` and `get_or_create_empty_session`
+- `backend/onyx/server/features/build/session/sandbox_lifecycle.py` — `build_managed_content_payload` prepares user-library files with skills, and `push_managed_content` writes them into the sandbox
 - `backend/onyx/skills/push.py` — per-failure logging (consistent with user_library push logging)
 - `backend/tests/integration/tests/craft/k8s/k8s_fixtures.py` — `SandboxHandle.provision_api_user` returns a `WorkspaceProxy` for API-created users, eliminating duplicated `_provision_with_status` helpers
 
@@ -132,7 +132,6 @@ resulting files inside the sandbox pod.
 Direct helper coverage for the pieces that do not need Kubernetes:
 
 - `build_user_library_fileset` excludes sync-disabled files and directory records.
-- `hydrate_user_library` pushes the current fileset to one sandbox manager target.
 - `sync_user_library_to_active_sandboxes` targets only active sandbox rows.
 
 ### Integration (`test_user_library_api.py`, pre-existing)
@@ -142,8 +141,8 @@ HTTP-level coverage including cross-user 404, toggle, delete, upload caps. Alrea
 ### K8s
 
 `backend/tests/integration/tests/craft/k8s/test_user_library_sync.py` covers
-API-triggered sync against the real deployed API and sandbox pods. The lower-level push daemon
-contract (signed tarball, atomic swap) remains covered by the broader Craft
+API-triggered sync against the real deployed API and sandbox pods. The lower-level guest
+extract contract (bounded tarball, atomic swap) remains covered by the broader Craft
 k8s integration suite; user library sync reuses `write_files_to_sandbox()`
 unchanged.
 
@@ -152,4 +151,4 @@ unchanged.
 - Per-session file selection (all of the user's non-disabled files go to all of their active sandboxes)
 - Streaming for large files (office docs are typically MB-scale; 100 MiB bundle limit is fine)
 - New DB tables or migrations (reuses Document + doc_metadata)
-- Changes to the push daemon or extract logic
+- Changes to the guest extract logic

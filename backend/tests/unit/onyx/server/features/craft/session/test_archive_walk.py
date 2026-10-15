@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.image.guest.models import (
     FilesystemEntry,
 )
 from onyx.server.features.build.session.manager import SessionManager

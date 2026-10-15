@@ -201,7 +201,7 @@ Two independent settings, both read by the sandbox at session-start:
 (max 4000 characters client-side, `web/src/views/admin/CraftPreferencesPage/index.tsx:MAX_INSTRUCTIONS_LENGTH`)
 is saved onto `Settings.craft_instructions` via the same
 `updateAdminSettings` call every other settings page uses. At session-start,
-`kubernetes_sandbox_manager.py:453` calls
+`sandbox/manager.py:SandboxManager._load_agent_instructions` calls
 `generate_agent_instructions(organization_instructions=load_settings().craft_instructions, ...)`,
 which (`agent_instructions.py:build_organization_instructions_section`) renders
 it as:
@@ -246,7 +246,6 @@ not cover:
 - **Snapshots** (session persistence across restarts):
   `docs/craft/infra/snapshot-retention.md`.
 - **Streaming** (turn execution and event delivery):
-  `docs/craft/sandbox/sandbox-exec-sidecar.md`,
   `docs/craft/ui/packet-rendering-overhaul.md`.
 - **The webapp proxy** (previewing a sandbox's running app):
   `docs/craft/lazy-webapp-provisioning.md`.
@@ -351,7 +350,7 @@ not cover:
 | changes the access gate (`is_craft_enabled_for_user`, the PostHog flag, or `ENABLE_CRAFT`) | every user-facing `/build` route (they all sit behind `require_onyx_craft_enabled`; `/build/admin` routes do not); the Access page's `enabledCount` math (`CraftPage/index.tsx`); anonymous-user exclusion |
 | adds an external app (built-in or custom) | the egress ruleset the proxy reads (`sandbox_proxy/request_evaluator.py`); the catalog `default_policy` values that seed the admin form; its `upstream_url_patterns` regex correctness (a bad regex is silently skipped, not rejected); the skill it may be associated with, see [[mcp-and-custom-tools]] |
 | changes the egress policy (an action's `ALWAYS/ASK/DENY`, or the hard-coded `ASK` fallback in `apply_credential_gate`) | `sandbox_proxy/addons/gate.py`'s three branches; the credential-injection path for `ALWAYS` (a token refresh failure there still blocks); the `external-app-skill-action-availability` doc, since `DENY`d actions are meant to be fenced out of the pushed `SKILL.md` |
-| changes admin instructions (`craft_instructions` or the base template) | `agent_instructions.py:generate_agent_instructions` and both sandbox managers (`docker_sandbox_manager.py`, `kubernetes_sandbox_manager.py`) that call it; the Preferences page's base-instructions preview (`GET /build/admin/base-instructions`) must still reflect the template a change touches |
+| changes admin instructions (`craft_instructions` or the base template) | `agent_instructions.py:generate_agent_instructions` and `sandbox/manager.py:SandboxManager._load_agent_instructions`; the Preferences page's base-instructions preview (`GET /build/admin/base-instructions`) must still reflect the template a change touches |
 | changes the Craft default model | `[[llm-providers]]`'s blast radius for `LLMModelFlowType.CRAFT`; the fallback-to-chat-default resolution in `CraftPreferencesPage` |
 | changes `GatedApp` / `GatedActionPolicy` shape | both consumers: the admin API (`external_apps/api.py`) and the live proxy (`sandbox_proxy/request_evaluator.py`, `addons/gate.py`); MCP servers share this table, so an external-app-only migration will silently break MCP gating |
 
@@ -375,7 +374,7 @@ cd backend && uv run pytest tests/integration/tests/external_apps/test_external_
 cd backend && uv run pytest tests/unit/external_apps/matching/test_engine.py
 
 # Sandbox network posture (the actual egress lockdown behind §5.4)
-cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_sandbox_network_posture_docker.py
+cd backend && uv run pytest tests/integration/tests/craft/k8s/test_approval_gate.py
 
 # Craft default model
 cd backend && uv run pytest tests/external_dependency_unit/llm/test_llm_provider_default_craft_model.py
@@ -423,7 +422,7 @@ there.
 - **Craft/Build naming split.** The product is "Craft" everywhere in the UI
   and docs; the backend router, its directory, and most Python identifiers say
   "Build" (`backend/onyx/server/features/build/`, `/build` prefix,
-  `docker_sandbox_manager` comments, `BUILD_MODE_FEATURE_ID`). Do not expect
+  `BUILD_MODE_FEATURE_ID`). Do not expect
   `grep -r craft backend/` to find the router; search for `build` too. See
   `GLOSSARY.md`.
 - **The Apps page governs MCP servers too**, not only external apps.

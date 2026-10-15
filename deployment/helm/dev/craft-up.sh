@@ -14,8 +14,8 @@
 #
 # Flags:
 #   --cluster-name <name>          kind cluster name (default: onyx-dev)
-#   --skip-cluster-create          skip kind create (passthrough to k8s-up.sh)
-#   --skip-helm                    only create the cluster (passthrough)
+#   --skip-cluster-create          use the configured kind cluster
+#   --skip-helm                    non-Craft cluster-only setup; no image builds
 #   --skip-sandbox-image           skip the sandbox image build, but still run
 #                                  `kind load` so a previously-built image gets
 #                                  picked up by a fresh cluster
@@ -32,8 +32,6 @@ PASSTHROUGH=()
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-SANDBOX_IMAGE="onyxdotapp/sandbox:dev"
-SANDBOX_IMAGE_DIR="$REPO_ROOT/backend/onyx/server/features/build/sandbox/image"
 ENV_K8S="$REPO_ROOT/.vscode/.env.k8s"
 ENV_K8S_TEMPLATE="$REPO_ROOT/.vscode/.env.k8s.template"
 ENV_WEB="$REPO_ROOT/.vscode/.env.web"
@@ -92,7 +90,17 @@ if [[ "$SKIP_HELM" -eq 0 ]]; then
   require helm
 fi
 
-# ---- 1. cluster bring-up (delegates) ----
+if [[ "$SKIP_HELM" -eq 1 ]]; then
+  exec "$SCRIPT_DIR/k8s-up.sh" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+fi
+
+# Check the configured runtime before builds, env copies, or cluster changes.
+"$SCRIPT_DIR/k8s-up.sh" --check-runtime ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+IMAGE_FLAGS=(--prepare)
+if [[ "$SKIP_SANDBOX_IMAGE" -eq 1 ]]; then
+  IMAGE_FLAGS+=(--skip-sandbox-image)
+fi
+CLUSTER_NAME="$CLUSTER_NAME" "$SCRIPT_DIR/refresh-images.sh" "${IMAGE_FLAGS[@]}"
 
 echo "==> bringing up kind cluster + helm install (k8s-up.sh) ..."
 "$SCRIPT_DIR/k8s-up.sh" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
@@ -120,20 +128,6 @@ bootstrap_env_file "$ENV_K8S" "$ENV_K8S_TEMPLATE" \
   "edit <REPLACE THIS> values (at minimum GEN_AI_API_KEY)"
 
 bootstrap_env_file "$ENV_WEB" "$ENV_WEB_TEMPLATE"
-
-# ---- 3. sandbox image build + load ----
-
-if [[ "$SKIP_SANDBOX_IMAGE" -eq 1 ]]; then
-  echo "==> skipping sandbox image build (--skip-sandbox-image)"
-else
-  echo "==> building $SANDBOX_IMAGE ..."
-  docker build -t "$SANDBOX_IMAGE" "$SANDBOX_IMAGE_DIR"
-fi
-
-echo "==> loading $SANDBOX_IMAGE into kind node ($CLUSTER_NAME) ..."
-kind load docker-image "$SANDBOX_IMAGE" --name "$CLUSTER_NAME"
-
-# ---- 4. next steps ----
 
 cat <<EOF
 

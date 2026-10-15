@@ -44,7 +44,7 @@ def test_sandbox_processes_share_the_configured_listener(listen_host: str) -> No
         container["name"]: container
         for container in [*spec["containers"], *spec["initContainers"]]
     }
-    for name in ("sandbox", "sidecar"):
+    for name in ("sandbox",):
         listeners: list[dict[str, str]] = [
             env
             for env in containers[name]["env"]
@@ -72,3 +72,44 @@ def test_default_proxy_preserves_ipv4_without_runtime_egress_flag() -> None:
     assert env["SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS"] == "false"
     assert env["SANDBOX_PROXY_INTERNAL_CIDRS"] == ""
     assert "SANDBOX_PROXY_EGRESS_ALLOW_IPV6" not in env
+
+
+@pytest.mark.parametrize("preview_start,preview_end", [(3010, 3100), (3200, 3210)])
+def test_heavy_worker_can_probe_opencode_but_cannot_access_preview_ports(
+    preview_start: int, preview_end: int
+) -> None:
+    result = render_chart(
+        [
+            "--set",
+            f"configMap.SANDBOX_NEXTJS_PORT_START={preview_start}",
+            "--set",
+            f"configMap.SANDBOX_NEXTJS_PORT_END={preview_end}",
+        ]
+    )
+    assert result.returncode == 0, result.stderr
+    resources = [resource for resource in yaml.safe_load_all(result.stdout) if resource]
+    policy = next(
+        resource
+        for resource in resources
+        if resource["kind"] == "NetworkPolicy"
+        and resource["metadata"]["name"] == "onyx-sandbox-ingress"
+    )
+    heavy_rules = [
+        rule
+        for rule in policy["spec"]["ingress"]
+        if any(
+            source.get("podSelector", {}).get("matchLabels", {}).get("app")
+            == "celery-worker-heavy"
+            for source in rule["from"]
+        )
+    ]
+    assert len(heavy_rules) == 1
+    assert heavy_rules[0]["ports"] == [{"protocol": "TCP", "port": 4096}]
+    assert heavy_rules[0]["from"] == [
+        {
+            "namespaceSelector": {
+                "matchLabels": {"kubernetes.io/metadata.name": "onyx"}
+            },
+            "podSelector": {"matchLabels": {"app": "celery-worker-heavy"}},
+        }
+    ]

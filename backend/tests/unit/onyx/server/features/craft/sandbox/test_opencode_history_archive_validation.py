@@ -1,20 +1,31 @@
-"""Tests for _validate_opencode_history_archive in docker_sandbox_manager."""
+"""Validate the preserved history archive format through real guest extraction."""
 
 from __future__ import annotations
 
 import gzip
 import io
 import tarfile
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
-    _validate_opencode_history_archive,
+from onyx.server.features.build.sandbox.image.guest.opencode_history import (
+    _extract_archive_to_staging,
 )
 
 ARCHIVE_ROOT = ".opencode-data"
+
+
+def _validate_opencode_history_archive(payload: bytes) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        archive = root / "history.tar.gz"
+        archive.write_bytes(payload)
+        staging = root / "staging"
+        staging.mkdir()
+        _extract_archive_to_staging(archive, staging)
 
 
 def _archive(members: Sequence[tarfile.TarInfo]) -> bytes:
@@ -64,7 +75,7 @@ def test_valid_tree_accepted() -> None:
     _validate_opencode_history_archive(archive)
 
 
-def test_archive_built_like_the_sidecar_accepted(tmp_path: Path) -> None:
+def test_archive_built_like_the_guest_accepted(tmp_path: Path) -> None:
     """Mirrors create_opencode_history_archive_file's tar.add(arcname=...) shape."""
     staged_root = tmp_path / ARCHIVE_ROOT
     (staged_root / "opencode").mkdir(parents=True)
@@ -77,8 +88,9 @@ def test_archive_built_like_the_sidecar_accepted(tmp_path: Path) -> None:
     _validate_opencode_history_archive(buf.getvalue())
 
 
-def test_empty_archive_accepted() -> None:
-    _validate_opencode_history_archive(_archive([]))
+def test_empty_archive_rejected_without_history_root() -> None:
+    with pytest.raises(RuntimeError, match="missing"):
+        _validate_opencode_history_archive(_archive([]))
 
 
 @pytest.mark.parametrize(
@@ -108,12 +120,7 @@ def test_member_outside_archive_root_rejected(name: str) -> None:
     ],
 )
 def test_traversal_landing_back_inside_root_rejected(name: str) -> None:
-    """These normalise back inside the root, so only the `..` clause can reject them.
-
-    Docker untars as root and resolves each component against the real destination
-    tree, where a component may be a symlink. Refusing `..` outright keeps the
-    decision independent of how the extractor resolves paths.
-    """
+    """Reject traversal components even when normalization lands within history."""
     with pytest.raises(RuntimeError, match="escapes"):
         _validate_opencode_history_archive(_archive([_file(name)]))
 

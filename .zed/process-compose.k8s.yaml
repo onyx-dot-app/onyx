@@ -33,7 +33,7 @@ processes:
     environment:
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
-      - SANDBOX_BACKEND=kubernetes
+      - CRAFT_SANDBOX_RUNTIME=kubernetes_firecracker
     readiness_probe:
       http_get:
         host: 127.0.0.1
@@ -57,7 +57,7 @@ processes:
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=.
-      - SANDBOX_BACKEND=kubernetes
+      - CRAFT_SANDBOX_RUNTIME=kubernetes_firecracker
     log_location: ${ONYX_ZED_ROOT}/.zed/logs/celery-primary.log
     namespace: celery
 
@@ -99,7 +99,7 @@ processes:
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=.
-      - SANDBOX_BACKEND=kubernetes
+      - CRAFT_SANDBOX_RUNTIME=kubernetes_firecracker
     log_location: ${ONYX_ZED_ROOT}/.zed/logs/celery-docfetching.log
     namespace: celery
 
@@ -116,7 +116,7 @@ processes:
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=.
-      - SANDBOX_BACKEND=kubernetes
+      - CRAFT_SANDBOX_RUNTIME=kubernetes_firecracker
     log_location: ${ONYX_ZED_ROOT}/.zed/logs/celery-docprocessing.log
     namespace: celery
 

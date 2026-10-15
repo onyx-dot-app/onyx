@@ -100,11 +100,9 @@ repos:
         # docker-compose.prod-no-letsencrypt.yml from docker-compose.template.yml,
         # then refreshes the copies of the guided-install deployment files that
         # onyx-cli embeds (cli/internal/deploy/deployfiles/embedded/).
-        # `ods generate-compose` ships in onyx-devtools (tools/ods); changes to the
-        # generator need an ods release before this hook picks them up — until the
-        # release that adds the embedded-copy sync, the extra trigger paths below
-        # are harmless no-ops (the cli module's drift test still gates staleness).
-        args: ["--frozen", "--only-group", "ods", "ods", "generate-compose", "--write"]
+        # Run the checkout's Go source so generator changes do not need a
+        # published onyx-devtools release before this hook can validate them.
+        args: ["--frozen", "--", "bash", "-c", 'GIT_WORK_TREE="$PWD" go -C tools/ods run . generate-compose --write']
         pass_filenames: false
         files: >-
           (?x)^(
@@ -114,7 +112,6 @@ repos:
               |docker-compose\.prod\.yml
               |docker-compose\.prod-no-letsencrypt\.yml
               |docker-compose\.onyx-lite\.yml
-              |docker-compose\.craft\.yml
               |docker-compose\.dev\.yml
               |env\.template
               |env\.prod\.template
@@ -137,12 +134,8 @@ repos:
         # tools/, …) would get type-checked against the backend venv it was
         # never meant to run in.
         files: ^backend/
-        # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
-        # are sandbox-only scripts importing deps absent from the backend venv
-        # (lxml, PIL, office.*). Both are excluded from the full ty run via
-        # [tool.ty.src] in pyproject; repeat here because the explicit filenames
-        # bypass that discovery-time exclude too.
-        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)
+        # Explicit paths bypass pyproject's exclusion for sandbox-only skill dependencies.
+        exclude: ^backend/onyx/skills/builtin/
       - id: uv-run
         alias: ruff
         name: ruff
@@ -241,7 +234,7 @@ repos:
     hooks:
       - id: golangci-lint
         language_version: "1.27.1"
-        entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
+        entry: bash -c "git ls-files -z --cached --others --exclude-standard -- ':(glob)**/go.mod' | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/sirwart/ripsecrets
     rev: 7d94620933e79b8acaa0cd9e60e9864b07673d86 # frozen: v0.1.11

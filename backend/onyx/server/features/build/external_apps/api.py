@@ -58,7 +58,7 @@ from onyx.server.features.build.external_apps.models import (
     UpdateExternalAppRequest,
     UpsertUserCredentialsRequest,
 )
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from onyx.utils.encryption import mask_string
 from shared_configs.configs import MULTI_TENANT

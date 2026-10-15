@@ -7,7 +7,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.sandbox.image.guest.models import (
     FilesystemEntry,
 )
 from onyx.server.gateway.models import GatewayModelDescriptor
@@ -87,6 +89,23 @@ class PushResult(BaseModel):
     failures: list[PushFailure]
 
 
+class ExecResult(BaseModel):
+    stdout: bytes
+    stderr: str
+    returncode: int
+
+
+class SandboxExecError(RuntimeError):
+    def __init__(
+        self, message: str, *, returncode: int | None = None, stderr: str = ""
+    ) -> None:
+        super().__init__(message)
+        self.returncode = returncode
+        self.stderr = stderr.encode("utf-8")[: 64 * 1024].decode(
+            "utf-8", errors="ignore"
+        )
+
+
 class RetriableWriteError(Exception):
     """Transient failure in write_files_to_sandbox (timeout, pod not-ready)."""
 
@@ -98,3 +117,10 @@ class FatalWriteError(Exception):
 class SandboxProvisionContentionError(Exception):
     """Another provisioner holds this sandbox's provisioning lock. Retryable:
     the lifecycle layer records the attempt FAILED and the caller re-reserves."""
+
+
+class LegacySandboxError(OnyxError):
+    """A live sandbox uses the pre-Firecracker topology and must be drained first."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(OnyxErrorCode.CONFLICT, message)

@@ -18,7 +18,7 @@ from onyx.server.features.build.db.sandbox import (
     get_running_sandboxes,
     user_has_stale_active_session,
 )
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
@@ -186,10 +186,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
                     # Chat history lives outside session workspaces;
                     # keep it equally fresh.
-                    if (
-                        snapshots_created
-                        and sandbox_manager.supports_opencode_history_persistence
-                    ):
+                    if snapshots_created:
                         try:
                             sandbox_manager.create_opencode_history_snapshot(
                                 sandbox_id, tenant_id

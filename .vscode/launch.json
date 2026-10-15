@@ -218,7 +218,7 @@
       "env": {
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "onyx.main:app",
@@ -601,7 +601,7 @@
         "LOG_LEVEL": "INFO",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",
@@ -634,7 +634,7 @@
         "LOG_LEVEL": "INFO",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",
@@ -667,7 +667,7 @@
         "LOG_LEVEL": "INFO",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",
@@ -701,7 +701,7 @@
         "LOG_LEVEL": "INFO",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",
@@ -734,7 +734,7 @@
         "LOG_LEVEL": "INFO",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",
@@ -768,7 +768,7 @@
         "LOG_LEVEL": "INFO",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",
@@ -802,7 +802,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",
@@ -836,7 +836,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",
@@ -869,7 +869,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": ".",
-        "SANDBOX_BACKEND": "kubernetes"
+        "CRAFT_SANDBOX_RUNTIME": "kubernetes_firecracker"
       },
       "args": [
         "-A",

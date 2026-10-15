@@ -33,7 +33,6 @@ from onyx.db.models import (
     UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
-from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.skill.models import SkillResponse, SkillUserShareRequest
 from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
 from onyx.skills.push import (
@@ -51,10 +50,6 @@ from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle, Worksp
 logger = setup_logger()
 
 pytestmark = [
-    pytest.mark.skipif(
-        SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
-        reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
-    ),
     pytest.mark.craft_skill_isolation,
 ]
 

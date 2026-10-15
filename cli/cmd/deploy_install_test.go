@@ -55,7 +55,7 @@ func TestDeployInstallLegacyFlagsRedirect(t *testing.T) {
 	}
 }
 
-func TestDeployInstallRejectsLiteWithCraft(t *testing.T) {
+func TestDeployInstallRejectsIncludeCraft(t *testing.T) {
 	ios, _, _ := testutil.TestIOStreams()
 	cmd := newDeployInstallCmd(ios)
 	cmd.SilenceErrors = true
@@ -63,7 +63,7 @@ func TestDeployInstallRejectsLiteWithCraft(t *testing.T) {
 	cmd.SetArgs([]string{"--lite", "--include-craft", "--dry-run"})
 
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "cannot be used together") {
+	if err == nil || !strings.Contains(err.Error(), "no longer supported") {
 		t.Fatalf("err = %v", err)
 	}
 }

@@ -48,9 +48,6 @@ _CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
 _PREPULLER_TEMPLATE = "templates/sandbox-image-prepuller.yaml"
 _PODTEMPLATE_TEMPLATE = "templates/sandbox-podtemplate.yaml"
 
-# The chart refuses to render without a push keypair; any valid base64 seed works.
-_FAKE_PUSH_KEY = "ZmFrZWtleWZha2VrZXlmYWtla2V5ZmFrZWtleWZha2VrZXk="
-
 # Substrings helm uses when the gitignored subchart tarballs are absent.
 _MISSING_DEPS_MARKERS = (
     "found in Chart.yaml, but missing in charts/",
@@ -92,8 +89,6 @@ def _run_helm(
         str(_CHART_DIR / "values-ci.yaml"),
         "--kube-version",
         "1.33.0",
-        "--set",
-        f"auth.sandboxPushSecret.values.private_key={_FAKE_PUSH_KEY}",
         *(extra_args or []),
         "--show-only",
         template,

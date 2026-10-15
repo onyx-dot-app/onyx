@@ -17,8 +17,8 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentThoughtChunk,
     PromptResponse,
 )
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
@@ -30,10 +30,10 @@ _SESSION = "ses_test"
 @pytest.fixture
 def mgr(
     monkeypatch: pytest.MonkeyPatch,
-) -> Generator[KubernetesSandboxManager, None, None]:
+) -> Generator[SandboxManager, None, None]:
     monkeypatch.setattr(PodEventBus, "_ensure_reader_started", lambda _: None)
 
-    manager: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
+    manager: SandboxManager = object.__new__(SandboxManager)
     manager._init_serve_state()
     manager._load_serve_connection_info = (  # ty: ignore[invalid-assignment]
         lambda sandbox_id: ServeConnectionInfo(
@@ -77,7 +77,7 @@ def _dispatch_assistant_text_delta(bus: PodEventBus, text: str) -> None:
 
 
 def test_subscribe_to_opencode_session_coalesces_adjacent_text_deltas(
-    mgr: KubernetesSandboxManager,
+    mgr: SandboxManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(serve_transport, "LIVE_TEXT_COALESCE_SECONDS", 0.01)
@@ -175,7 +175,7 @@ def test_subscribe_to_opencode_session_coalesces_adjacent_text_deltas(
 
 
 def test_subscribe_to_opencode_session_forwards_child_events(
-    mgr: KubernetesSandboxManager,
+    mgr: SandboxManager,
 ) -> None:
     sandbox_id = uuid4()
     child_session = "ses_child"

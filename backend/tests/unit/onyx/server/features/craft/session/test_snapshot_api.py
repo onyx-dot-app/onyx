@@ -100,7 +100,6 @@ def test_create_opencode_history_snapshot_maps_runtime_failure_to_5xx(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sandbox_manager = MagicMock()
-    sandbox_manager.supports_opencode_history_persistence = True
     sandbox_manager.create_opencode_history_snapshot.side_effect = RuntimeError(
         "file store unavailable"
     )

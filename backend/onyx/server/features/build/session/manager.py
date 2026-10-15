@@ -64,12 +64,12 @@ from onyx.server.features.build.interactive_turns.state import (
     acquire_active_turn_lock,
     get_active_turn,
 )
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.image.guest.models import (
     FilesystemEntry,
     OutputsManifestResponse,
     is_hidden_workspace_name,
 )
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     DirectoryListing,
@@ -335,7 +335,6 @@ class SessionManager:
             session_id=session.id,
             agent_provider=llm_config.provider,
             agent_model=llm_config.model_name,
-            nextjs_port=session.nextjs_port,
             connectable_apps_section=build_connectable_apps_list(
                 get_connectable_apps_for_user(self._db_session, user)
             ),
@@ -400,7 +399,6 @@ class SessionManager:
                         session_id=session_id,
                         agent_provider=session.agent_provider,
                         agent_model=session.agent_model,
-                        nextjs_port=session.nextjs_port,
                         connectable_apps_section=build_connectable_apps_list(
                             get_connectable_apps_for_user(self._db_session, user)
                         ),

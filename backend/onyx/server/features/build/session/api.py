@@ -35,7 +35,7 @@ from onyx.server.features.build.db.sandbox import (
     update_sandbox_heartbeat,
 )
 from onyx.server.features.build.models import UploadResponse
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.session.errors import (
     SandboxProvisioningInProgressError,
@@ -478,12 +478,8 @@ def create_session_opencode_history_snapshot(
     """Snapshot sandbox-global opencode history for the owned session."""
     sandbox = _owned_session_sandbox(session_id, user, db_session)
 
-    sandbox_manager = get_sandbox_manager()
-    if not sandbox_manager.supports_opencode_history_persistence:
-        return OpencodeHistorySnapshotResponse(created=False)
-
     try:
-        created = sandbox_manager.create_opencode_history_snapshot(
+        created = get_sandbox_manager().create_opencode_history_snapshot(
             sandbox.id,
             get_current_tenant_id(),
         )

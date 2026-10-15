@@ -20,9 +20,9 @@ import (
 )
 
 // RunUpgrade implements `deploy upgrade`: install.sh's "type 'update'"
-// sub-flow promoted to a scriptable verb. Only the IMAGE_TAG line (plus
-// SANDBOX_BACKEND when Craft is enabled) is rewritten in .env; managed files
-// are refreshed to the target tag with user edits preserved via the manifest.
+// sub-flow promoted to a scriptable verb. Only the IMAGE_TAG line is rewritten
+// in .env; managed files are refreshed to the target tag with user edits
+// preserved via the manifest.
 func RunUpgrade(ctx context.Context, deps Deps, opts Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -36,6 +36,10 @@ func RunUpgrade(ctx context.Context, deps Deps, opts Options) error {
 }
 
 func (in *installer) runUpgrade(ctx context.Context) error {
+	if in.opts.IncludeCraft {
+		return exitcodes.New(exitcodes.BadRequest,
+			"--include-craft is no longer supported by docker-compose. Use the Kubernetes deployment path for Craft.")
+	}
 	in.root = paths.Resolve(in.opts.Dir)
 	if len(in.root.Ambiguous) > 0 {
 		return exitcodes.Newf(exitcodes.BadRequest,
@@ -104,8 +108,6 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel))
 	in.lite = !in.prod && (manifest.Mode == state.ModeLite ||
 		in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel)))
-	in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
-		in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
 	in.dev = !in.prod && (in.opts.Dev || manifest.Dev ||
 		in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel)))
 	in.resolveProject(manifest)
@@ -114,12 +116,8 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		switch {
 		case in.lite:
 			mode = "Lite"
-		case in.prod && in.craft:
-			mode = "Prod+Craft"
 		case in.prod:
 			mode = "Prod"
-		case in.craft:
-			mode = "Std+Craft"
 		}
 		if in.dev {
 			mode += "+Dev"
@@ -152,14 +150,11 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		} else {
 			in.plainf("  • Upgrade: %s → %s (config ref: %s)", installedTag, targetTag, release.ConfigRef(targetTag))
 		}
-		craftNote := ""
-		if in.craft {
-			craftNote = ", Craft: true"
-		}
+		devNote := ""
 		if in.dev {
-			craftNote += ", Dev overlay: true"
+			devNote = ", Dev overlay: true"
 		}
-		in.plainf("  • Mode: %s%s", in.modeName(), craftNote)
+		in.plainf("  • Mode: %s%s", in.modeName(), devNote)
 		if name := in.composeOverrideName(); name != "" {
 			in.plainf("  • Compose override: %s (yours, applied last)", name)
 		}
@@ -198,14 +193,13 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.infof("Refreshing config files to match %s...", configRef)
 	}
 	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
+	if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.dev), manifest, fetcher); err != nil {
+		return err
+	}
+	if err := in.removeLegacyCraftOverlay(manifest); err != nil {
 		return err
 	}
 	in.noteComposeOverride()
-
-	if in.craft {
-		in.ensureCraftResources(ctx)
-	}
 
 	// Persist the manifest's file records now: if the pull fails, the next
 	// run must still know the freshly materialized files were CLI-written,
@@ -216,14 +210,6 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 
 	in.infof("Updating configuration for version %s...", targetTag)
 	env = SetVar(env, "IMAGE_TAG", targetTag)
-	if in.craft {
-		if in.opts.IncludeCraft {
-			env = SetVarUncomment(env, "ENABLE_CRAFT", "true")
-		}
-		backend := sandboxBackendForTag(targetTag)
-		env = SetVarUncomment(env, "SANDBOX_BACKEND", backend)
-		in.successf("Aligned SANDBOX_BACKEND=%s with image tag %s", backend, targetTag)
-	}
 	// Reuse the port the deployment already runs on — scanning for a free one
 	// here would collide with our own still-running nginx and silently move
 	// Onyx to another port. Installs created by install.sh never recorded
@@ -270,7 +256,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		}
 	}
 	in.recordProject(manifest)
-	manifest.IncludeCraft = in.craft
+	manifest.IncludeCraft = false
 	manifest.Dev = in.dev
 	if !hadManifest || manifest.InstalledAt.IsZero() {
 		manifest.InstalledAt = now

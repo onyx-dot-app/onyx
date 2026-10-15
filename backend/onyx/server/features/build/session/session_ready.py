@@ -24,7 +24,7 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
-from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )

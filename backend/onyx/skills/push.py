@@ -30,7 +30,7 @@ from onyx.server.features.build.db.sandbox import (
     lock_sandbox_skills_hashes,
     set_sandbox_skills_hashes__no_commit,
 )
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,

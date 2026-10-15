@@ -607,7 +607,6 @@ class TestDeleteSession:
         db_session.add(session_row)
         db_session.commit()
 
-        stub_sandbox_manager.supports_opencode_history_persistence = True
         stub_sandbox_manager.cleanup_session_workspace_silent = True
 
         deleted = session_manager_with_stub.delete_session(
@@ -705,7 +704,6 @@ class TestDeleteSession:
         db_session.add(session_row)
         db_session.commit()
 
-        stub_sandbox_manager.supports_opencode_history_persistence = True
         stub_sandbox_manager.prompt_slot_returns = False
 
         with pytest.raises(OnyxError) as exc_info:
@@ -758,8 +756,6 @@ class TestDeleteSession:
             )
         db_session.commit()
 
-        stub_sandbox_manager.supports_opencode_history_persistence = True
-
         deleted = session_manager_with_stub.delete_session(
             session_id=session_row.id, user_id=test_user.id
         )
@@ -805,7 +801,6 @@ class TestDeleteSession:
         )
         db_session.commit()
 
-        stub_sandbox_manager.supports_opencode_history_persistence = True
         stub_sandbox_manager.cleanup_session_workspace_silent = True
 
         deleted = session_manager_with_stub.delete_session(
@@ -864,8 +859,6 @@ class TestDeleteSession:
             ]
         )
         db_session.commit()
-
-        stub_sandbox_manager.supports_opencode_history_persistence = True
 
         deleted = session_manager_with_stub.delete_session(
             session_id=session_row.id, user_id=test_user.id

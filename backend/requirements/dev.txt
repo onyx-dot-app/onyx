@@ -379,9 +379,7 @@ cryptography==50.0.0 \
     --hash=sha256:f59e38625469987d7ef6d495323c55e7db6c212eaf6112267e0d3b565a2e9c9f \
     --hash=sha256:f89831ef99dd7dd169ab06d63a831adb9e20a87aac6d380266bbda5823349169 \
     --hash=sha256:fd9192b7b70c573d7f214eb1ae35e00d359f6f5e4b27c7e21e30de1fc6204645
-    # via
-    #   google-auth
-    #   types-paramiko
+    # via google-auth
 cycler==0.12.1 \
     --hash=sha256:85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30 \
     --hash=sha256:88bb128f02ba341da8ef447245a9e138fae777f6a23943da4540077d3601eb1c
@@ -2001,9 +1999,6 @@ types-awscrt==0.28.4 \
 types-beautifulsoup4==4.12.0.3 \
     --hash=sha256:019e1a9096ecd12a37981d562cfed405398e6ed3c7717852c1f01871d052906a \
     --hash=sha256:64b71d44d6a6030e39bb324dd51ef176bec158cd4d2994ed7213c1b2b8fa0785
-types-docker==7.1.0.20260518 \
-    --hash=sha256:59893937816bfe40eb2915c84b31c3131107537500287c47d4a10dd7a9d59deb \
-    --hash=sha256:d194c4b82a4110fc58c84af05a5d9de6d3e54f94357ff745d01b5dca12c8eaaa
 types-html5lib==1.1.11.13 \
     --hash=sha256:2a5ced934bcc7b47800b88ddb2541bbdf5bded7fb6d421693c978228e1fe631d \
     --hash=sha256:d01603307f3bb39af9712e72eda5aa498420fe12179411533a54b2b03f6531eb
@@ -2014,10 +2009,6 @@ types-oauthlib==3.2.0.9 \
 types-openpyxl==3.0.4.7 \
     --hash=sha256:0ad60cf7a76c7b550a66199211c94dcc4facb515a0f09d4981d0181b3bac6b15 \
     --hash=sha256:55713e2dfb6c3db2e3e2ade2f8dc20b3dea30c0d1bd3efc5b51d52c010e0a64a
-types-paramiko==4.0.0.20260518 \
-    --hash=sha256:0ffaf1a6eb796833a49653cba4c7be13af51c8269d75234972d6239763dda270 \
-    --hash=sha256:286f6830945cba63797eedf375ed87138d93198121253afe66c5d6dbcf91318d
-    # via types-docker
 types-passlib==1.7.7.20240106 \
     --hash=sha256:2231ae83d1dd9e485b7ec6041d81b4f9c66403d1767360e860605a90db48ea27 \
     --hash=sha256:347aa64d4c2bc239f3765fe38fc79dad3d67f9def7b3ea721daaaaa835a91dad
@@ -2045,9 +2036,7 @@ types-regex==2023.3.23.1 \
 types-requests==2.32.0.20250328 \
     --hash=sha256:72ff80f84b15eb3aa7a8e2625fffb6a93f2ad5a0c20215fc1dcfa61117bcb2a2 \
     --hash=sha256:c9e67228ea103bd811c96984fac36ed2ae8da87a36a633964a21f199d60baf32
-    # via
-    #   cohere
-    #   types-docker
+    # via cohere
 types-s3transfer==0.14.0 \
     --hash=sha256:108134854069a38b048e9b710b9b35904d22a9d0f37e4e1889c2e6b58e5b3253 \
     --hash=sha256:17f800a87c7eafab0434e9d87452c809c290ae906c2024c24261c564479e9c95
@@ -2087,7 +2076,6 @@ urllib3==2.8.0 \
     #   botocore
     #   requests
     #   sentry-sdk
-    #   types-docker
     #   types-requests
 uvicorn==0.49.0 \
     --hash=sha256:ba3d14c3ee7e41c6c654c46c9eb489d33213cdd30aa1696eab1374337c13f68f \

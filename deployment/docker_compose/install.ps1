@@ -79,8 +79,6 @@ function Confirm-Action {
 }
 
 function Prompt-VersionTag {
-    # Craft uses the regular backend image (ENABLE_CRAFT is a runtime flag), so
-    # the tag is prompted for normally even with --include-craft.
     Print-Info "Which tag would you like to deploy?"
     Write-Host "  - Press Enter for edge (recommended)"
     Write-Host "  - Type a specific tag (e.g., v0.1.0)"
@@ -313,7 +311,6 @@ function Show-OnyxHelp {
     $help = "Onyx Installation Script for Windows`n"
     $help += "`nUsage: .\install.ps1 [OPTIONS]`n"
     $help += "`nOptions:"
-    $help += "`n  -IncludeCraft  Enable Onyx Craft (AI-powered web app building)"
     $help += "`n  -Lite          Deploy Onyx Lite (no OpenSearch, Redis, or model servers)"
     $help += "`n  -Local         Use existing config files instead of downloading from GitHub"
     $help += "`n  -Shutdown      Stop (pause) Onyx containers"
@@ -325,7 +322,6 @@ function Show-OnyxHelp {
     $help += "`n`nExamples:"
     $help += "`n  .\install.ps1                    # Install Onyx"
     $help += "`n  .\install.ps1 -Lite              # Install Onyx Lite"
-    $help += "`n  .\install.ps1 -IncludeCraft      # Install with Craft enabled"
     $help += "`n  .\install.ps1 -Shutdown          # Pause Onyx services"
     $help += "`n  .\install.ps1 -DeleteData        # Completely remove Onyx"
     $help += "`n  .\install.ps1 -Local             # Re-run using existing config"
@@ -740,7 +736,6 @@ function Invoke-WslInstall {
     Print-Info "Handing off to the Linux install script inside WSL2..."
     $bashArgs = @()
     if ($script:LiteMode) { $bashArgs += "--lite" }
-    if ($script:IncludeCraftMode) { $bashArgs += "--include-craft" }
     if ($NoPrompt) { $bashArgs += "--no-prompt" }
     if ($ShowVerbose) { $bashArgs += "--verbose" }
 
@@ -771,8 +766,8 @@ function Install-Docker {
 function Main {
     if ($Help) { Show-OnyxHelp; return }
     if ($PSVersionTable.PSVersion.Major -lt 5) { Print-OnyxError "PowerShell 5+ required (found $($PSVersionTable.PSVersion))"; exit 1 }
-    if ($script:LiteMode -and $script:IncludeCraftMode) {
-        Print-OnyxError "-Lite and -IncludeCraft cannot be used together."
+    if ($script:IncludeCraftMode) {
+        Print-OnyxError "-IncludeCraft is no longer supported by docker-compose. Use the Kubernetes deployment path for Craft."
         exit 1
     }
     if ($script:LiteMode) { $script:ExpectedDockerRamGB = 4; $script:ExpectedDiskGB = 16 }
@@ -957,10 +952,6 @@ function Main {
         $reply = Prompt-OrDefault "Choose an option [default: restart]" ""
 
         Prompt-DeploymentMode -LiteOverlayPath $liteOverlayPath
-        if ($script:LiteMode -and $script:IncludeCraftMode) {
-            Print-OnyxError "-IncludeCraft cannot be used with Lite mode."
-            exit 1
-        }
 
         if ($reply -eq "update") {
             $version = Prompt-VersionTag
@@ -968,12 +959,6 @@ function Main {
             Print-Success "Updated IMAGE_TAG to $version"
         } else {
             Print-Info "Keeping existing configuration"
-        }
-        # Honor -IncludeCraft on existing installs regardless of update/restart;
-        # ENABLE_CRAFT is a runtime flag, so enabling it doesn't require a new tag.
-        if ($script:IncludeCraftMode) {
-            Set-EnvFileValue -Path $envFile -Key "ENABLE_CRAFT" -Value "true" -Uncomment
-            Print-Success "Onyx Craft enabled (ENABLE_CRAFT=true)"
         }
         if ($script:LiteMode) {
             $profiles = Get-EnvFileValue -Path $envFile -Key "COMPOSE_PROFILES"
@@ -984,10 +969,6 @@ function Main {
     } else {
         Print-Info "No existing .env file found. Setting up new deployment..."
         Prompt-DeploymentMode -LiteOverlayPath $liteOverlayPath
-        if ($script:LiteMode -and $script:IncludeCraftMode) {
-            Print-OnyxError "-IncludeCraft cannot be used with Lite mode."
-            exit 1
-        }
         if ($script:LiteMode) { $script:ExpectedDockerRamGB = 4; $script:ExpectedDiskGB = 16 }
 
         $version = Prompt-VersionTag
@@ -998,12 +979,7 @@ function Main {
         if ($script:LiteMode) { Set-EnvFileValue -Path $envFile -Key "COMPOSE_PROFILES" -Value "" }
         Set-EnvFileValue -Path $envFile -Key "USER_AUTH_SECRET" -Value "`"$(New-SecureSecret)`""
         Print-Success "Generated secure USER_AUTH_SECRET"
-        if ($script:IncludeCraftMode) {
-            Set-EnvFileValue -Path $envFile -Key "ENABLE_CRAFT" -Value "true" -Uncomment
-            Print-Success "Onyx Craft enabled"
-        } else {
-            Print-Info "Onyx Craft disabled (use -IncludeCraft to enable)"
-        }
+        Print-Info "Onyx Craft requires the Kubernetes deployment path."
         Print-Success ".env file created"
         Print-Info "You can customize .env later for AI models, domain settings, and Craft."
     }

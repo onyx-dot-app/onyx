@@ -20,6 +20,7 @@ _OPENCODE_HISTORY_FILE_NAME = "opencode-history.tar.gz"
 def _copy_snapshot_stream(
     source: IO[bytes],
     target: IO[bytes],
+    max_bytes: int | None = None,
 ) -> int:
     size_bytes = 0
     while True:
@@ -27,6 +28,8 @@ def _copy_snapshot_stream(
         if not chunk:
             break
         size_bytes += len(chunk)
+        if max_bytes is not None and size_bytes > max_bytes:
+            raise ValueError(f"Stored sandbox archive exceeds {max_bytes} byte limit")
         target.write(chunk)
     return size_bytes
 
@@ -102,10 +105,8 @@ class SnapshotManager:
     ) -> tuple[str, str, int]:
         """Persist an already-built tar.gz byte stream as a snapshot.
 
-        This is used by backends (e.g. Docker) that produce the tar stream
-        inside the sandbox container via exec and stream it back to the
-        api_server, so no on-host outputs directory ever exists. The caller
-        is responsible for producing a valid tar.gz stream.
+        The guest builds the archive. The API stores its bytes without
+        extracting user files on the API host.
 
         Args:
             stream: Binary, readable stream of tar.gz bytes.
@@ -211,23 +212,25 @@ class SnapshotManager:
         self,
         storage_path: str,
         write_stream: IO[bytes],
+        *,
+        max_bytes: int | None = None,
     ) -> None:
-        """Stream a stored snapshot's bytes into a caller-provided writer.
-
-        Used by backends (e.g. Docker) that extract the archive inside the
-        sandbox container by piping bytes into a remote ``tar -x`` process,
-        avoiding an on-host extraction step.
-
-        Args:
-            storage_path: The file store path of the snapshot.
-            write_stream: Binary writable stream the bytes are written into.
-        """
+        """Stream a stored archive to the guest transfer's bounded spool."""
         file_io = None
         try:
+            if max_bytes is not None:
+                size_bytes = self._file_store.get_file_size(storage_path)
+                if size_bytes is None:
+                    raise ValueError("Cannot verify stored sandbox archive size")
+                if size_bytes > max_bytes:
+                    raise ValueError(
+                        f"Stored sandbox archive exceeds {max_bytes} byte limit"
+                    )
             file_io = self._file_store.read_file(storage_path, use_tempfile=True)
             _copy_snapshot_stream(
                 file_io,
                 write_stream,
+                max_bytes=max_bytes,
             )
             logger.info("Streamed snapshot %s to caller writer", storage_path)
         except Exception as e:

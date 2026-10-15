@@ -254,7 +254,7 @@ func TestManagedFilesProdSet(t *testing.T) {
 		return false
 	}
 
-	prod := managedFiles(true, false, false, false)
+	prod := managedFiles(true, false, false)
 	for _, want := range []deployfiles.File{
 		deployfiles.ProdCompose, deployfiles.EnvProdTemplate,
 		deployfiles.EnvNginxTemplate, deployfiles.NginxAppConfProd, deployfiles.NginxRunScript,
@@ -272,7 +272,7 @@ func TestManagedFilesProdSet(t *testing.T) {
 		}
 	}
 
-	standard := managedFiles(false, false, false, false)
+	standard := managedFiles(false, false, false)
 	if !has(standard, deployfiles.Readme) || !has(standard, deployfiles.Compose) || has(standard, deployfiles.ProdCompose) {
 		t.Error("standard set changed")
 	}
@@ -282,8 +282,8 @@ func TestManagedFilesProdSet(t *testing.T) {
 
 	// The dev overlay stacks on either non-prod mode.
 	for _, set := range [][]deployfiles.File{
-		managedFiles(false, false, false, true),
-		managedFiles(false, true, false, true),
+		managedFiles(false, false, true),
+		managedFiles(false, true, true),
 	} {
 		if !has(set, deployfiles.DevOverlay) || !has(set, deployfiles.Compose) {
 			t.Error("dev set missing the base compose file or the dev overlay")

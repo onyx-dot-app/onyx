@@ -25,7 +25,6 @@ func sampleModels() map[string]wizModel {
 				opts: []Option{
 					{Label: "Lite", Hint: "chat, tools, uploads, projects — no vector search (recommended)"},
 					{Label: "Standard", Hint: "full search, connectors, and RAG"},
-					{Label: "Standard + Craft", Hint: "adds AI web-app building (binds the docker socket)"},
 				},
 			},
 			notes: []noteMsg{{"ok", "Deployment files are up to date"}},
@@ -191,12 +190,11 @@ func TestOptionHintsShareAColumn(t *testing.T) {
 	opts := []Option{
 		{Label: "Lite", Hint: "chat, tools, uploads, projects — no vector search (recommended)"},
 		{Label: "Standard", Hint: "full search, connectors, and RAG"},
-		{Label: "Standard + Craft", Hint: "adds AI web-app building (binds the docker socket)"},
 	}
 	m := wizModel{sel: &askSelectMsg{title: "How should Onyx be deployed?", opts: opts}}
 
 	// Roomy: every hint starts past the widest label, at the same column.
-	want := cursorWidth + ansi.StringWidthWc("Standard + Craft") + hintGap
+	want := cursorWidth + ansi.StringWidthWc("Standard") + hintGap
 	for i, line := range m.selectPane(94, true, false)[1:] {
 		got := hintStart(line, opts[i].Hint)
 		if got != want {

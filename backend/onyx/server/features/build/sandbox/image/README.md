@@ -1,118 +1,71 @@
-# Sandbox Container Image
+# Craft guest image
 
-This directory contains the Dockerfile and resources for building the Onyx Craft sandbox container image.
+The image runs inside the mandatory Kata Firecracker RuntimeClass. Each user gets
+one VM and one long-lived container. Session directories share that VM.
 
-## Directory Structure
+A short init container locks both IP address families to proxy-only egress.
+The root supervisor installs the proxy CA, publishes bootstrap status, and waits for history restore.
+OpenCode starts as UID 1000 after the root-only history gate opens. The agent has
+no capabilities or supplementary groups and cannot gain privileges through exec.
+The main container has no network administration capability. A user supervisor
+forwards termination signals and reaps child processes without an added dependency.
 
-```
-image/
-├── Dockerfile              # Main container image definition
-├── .dockerignore           # Trims the build context
-├── entrypoint.sh           # Container startup (+ sidecar-entrypoint.sh, firewall-init.sh)
-├── sandbox_daemon/         # In-pod push/snapshot daemon (baked in)
-├── opencode-plugins/       # Per-session egress tagging plugin (baked in)
-├── templates/
-│   └── outputs/            # Web app scaffold template (Next.js)
-├── initial-requirements.in  # Curated Python packages pre-installed in sandbox
-├── initial-requirements.txt # Fully pinned Python lock for sandbox
-└── README.md               # This file
-```
-
-Built-in skill sources are **not** here — they live in `backend/onyx/skills/builtin/`
-and are pushed into sandboxes at session setup, never baked into the image.
-
-## Building the Image
-
-### Via CI (preferred)
-
-Application release CI publishes this image under the same tag as the app
-image, e.g. `onyxdotapp/sandbox:v4.1.2` for app tag `v4.1.2`.
-
-The sandbox jobs in `.github/workflows/deployment.yml` compute a content tag
-from this directory (`ctx-<hash>`). If the content tag already exists, the
-deployment workflow only adds the requested app tag/alias to the existing
-manifest. If the content tag does not exist, it builds multi-arch once, pushes
-`ctx-<hash>`, and then adds the app-aligned tags.
-
-Use that workflow manually only to backfill or repair a supplied application
-tag. Do not publish sandbox-only `v0.1.x` tags or a Docker Hub
-`onyxdotapp/sandbox:dev` tag for new builds. Local development can still build
-`onyxdotapp/sandbox:dev` and load it directly into kind.
-
-### Building locally
-
-The sandbox image must be built for **amd64** architecture since our Kubernetes cluster runs on x86_64 nodes.
-
-### Build for amd64 only (fastest)
+## Build
 
 ```bash
 cd backend/onyx/server/features/build/sandbox/image
-docker build --platform linux/amd64 -t onyxdotapp/sandbox:dev .
+docker build -t onyxdotapp/sandbox:firecracker-v2 .
 ```
 
-### Build multi-arch for backfill or repair
+Use `--platform linux/amd64` or `--platform linux/arm64` to match the sandbox node.
+`ENABLE_SKILLS=false` omits office tools and fonts. `ENABLE_BROWSER=false` omits
+Chromium and the browser CLI. Neither switch changes the guest security boundary.
 
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t onyxdotapp/sandbox:<app-tag> \
-  --push .
+Release CI gives the sandbox image the same tag as the application image. It also
+publishes a content tag for this build context. Deploy matching application and
+sandbox releases. Use Helm sandbox image values for local test image overrides.
+
+## Guest command
+
+The API uses Kubernetes exec through Kata's guest agent. There is no HTTP helper.
+
+```text
+/opt/onyx-guest/venv/bin/python -I -m onyx_guest OPERATION METADATA_JSON
 ```
 
-## Deploying a New Version
+The image installs `guest/` as `onyx_guest` in its own root-owned interpreter.
+The package, interpreter, boot scripts, and ancestor directories are immutable
+to UID 1000. Python isolated mode ignores workspace modules and Python environment
+settings. Root code never imports from the agent's Python environment or templates.
 
-Deploy the matching application tag. The deploy surface derives the sandbox
-image from the app version:
+Small typed fields travel in the JSON argument. File bytes, scripts, and archives
+travel on attached stdin. Read operations leave stdin detached. Payload operations
+consume it before returning metadata; `run` uses `has_stdin` to make this choice explicit. Metadata
+operations emit JSON. Reads and snapshots emit raw bytes. Empty snapshot output
+means there was no content. Errors emit bounded stderr and exit with a nonzero code.
 
-- Docker compose: `onyxdotapp/sandbox:${IMAGE_TAG}`.
-- Helm: `onyxdotapp/sandbox:${global.version}`.
+Root operations are `serve`, `status`, `push-managed`, `restore-history`, and
+`release-history`. All other operations drop to UID 1000 before accessing files
+or executing commands. History restore holds a root lock while a user child
+extracts the archive. Only successful extraction opens the startup gate.
 
-Docker compose follows the normal app-image `IMAGE_TAG` behavior, including the
-default `latest`. Kubernetes deployments should prefer immutable application
-release tags unless they deliberately opt into moving tags.
+## Filesystem
 
-`SANDBOX_CONTAINER_IMAGE` remains an internal escape hatch for local testing,
-staging, cloud, and emergency operations.
+`/workspace` and `/workspace/managed` are root-owned with mode 0755. Managed
+skills, user libraries, and document preview bundles publish through atomic
+symlink swaps. Publication prunes unused versions after a 60-second reader grace
+period. Root never executes code from these bundles.
 
-## What's Baked Into the Image
+The writable container root filesystem holds sessions, OpenCode history, the user
+home, caches, and temporary files. These paths belong to UID 1000. Only the proxy
+CA uses a projected read-only mount. Container removal destroys writable state.
+The API stores session and history archives in FileStore before normal removal.
 
-- **Base**: `python:3.13-slim` (Debian-based) with Node.js 24 copied from `node:24-trixie-slim`
-- **Templates**: `/workspace/templates/outputs/` — Next.js web app scaffold
-- **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
-- **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`
-- **onyx-cli**: `/usr/local/bin/onyx-cli` — Onyx CLI for search
-- **Snapshot sidecar daemon**: Packages and restores session files; durable storage is handled by the api_server through the Onyx FileStore
+The image preserves the existing output and attachment archive layout. Bun's
+prewarmed cache rebuilds excluded dependencies after restore. Global OpenCode
+configuration directories hardlink template dependencies. Session dependency
+copies remain independent. Templates and the agent's Python environment remain
+user-writable because only user processes execute them.
 
-Skills are **not** baked in — the API server pushes them to `/workspace/managed/skills/` at session setup.
-
-## Runtime Directory Structure
-
-When a session is created, the following structure is set up in the pod:
-
-```
-/workspace/
-├── managed/skills/         # Pushed at session-setup time (built-ins + customs)
-├── opencode-data/          # Sandbox-global opencode data in Kubernetes
-├── templates/              # Baked into image
-└── sessions/
-    └── $session_id/
-        ├── .opencode/
-        │   └── skills      # Symlink → /workspace/managed/skills
-        ├── outputs/        # Copied from templates, contains web app
-        ├── attachments/    # User-uploaded files
-        ├── AGENTS.md       # Instructions for the AI agent
-        └── opencode.json   # OpenCode configuration
-```
-
-## Troubleshooting
-
-### Verify image exists on Docker Hub
-
-```bash
-curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags" | jq '.results[].name'
-```
-
-### Check what image a pod is using
-
-```bash
-kubectl get pod <pod-name> -n onyx-sandboxes -o jsonpath='{.spec.containers[?(@.name=="sandbox")].image}'
-```
+OpenCode listens on port 4096. Generated previews use allocated session ports.
+Readiness checks use TCP 4096 after the API releases the history gate.

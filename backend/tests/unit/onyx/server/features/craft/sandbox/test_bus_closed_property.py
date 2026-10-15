@@ -3,7 +3,7 @@
 Empirical finding (2026-05-23): when the per-pod event bus exhausts its
 reconnect budget (20 consecutive failures, e.g. against a long-idle pod
 that gets evicted), it sets ``_closed=True`` and signals subscribers, but
-``KubernetesSandboxManager._event_buses[sandbox_id]`` still holds the
+``SandboxManager._event_buses[sandbox_id]`` still holds the
 dead bus. Every subsequent ``_get_or_create_event_bus`` returns the dead
 instance, the next send hangs on ``stream_ready.wait()``, and the user
 sees ``opencode /event stream did not become ready``. Three independent

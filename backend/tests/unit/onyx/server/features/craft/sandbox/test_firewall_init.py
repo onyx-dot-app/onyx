@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -106,8 +107,30 @@ def firewall_commands(tmp_path: Path) -> dict[str, str]:
 
 
 def _run(env: dict[str, str]) -> FirewallRun:
+    commands = Path(env["FIREWALL_STATE"]).parent
+    # The production script fixes PATH. Functions preserve the controlled commands.
+    substitutes = "; ".join(
+        f'{name}() {{ {shlex.quote(str(commands / name))} "$@"; }}'
+        for name in (
+            "iptables",
+            "ip6tables",
+            "getent",
+            "install",
+            "update-ca-certificates",
+        )
+    )
     process: subprocess.CompletedProcess[str] = subprocess.run(
-        ["bash", str(_SCRIPT)], env=env, capture_output=True, text=True, timeout=15
+        [
+            "bash",
+            "-c",
+            substitutes + '; source "$1" firewall',
+            "firewall-test",
+            str(_SCRIPT),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     calls: list[list[str]] = json.loads(Path(env["FIREWALL_STATE"]).read_text())[
         "calls"

@@ -34,13 +34,3 @@ from tests.common.craft.deployment_fixtures import (
 def _kubernetes_context(deployed_frontend: str) -> None:
     if deployed_frontend and not os.environ.get("SANDBOX_TEST_KUBE_CONTEXT"):
         pytest.fail("SANDBOX_TEST_KUBE_CONTEXT is required")
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _reap_module_pods() -> None:
-    pass
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _sandbox_push_key() -> None:
-    pass

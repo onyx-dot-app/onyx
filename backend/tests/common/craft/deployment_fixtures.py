@@ -1,7 +1,7 @@
 """Run against an existing deployment, without starting or resetting local services."""
 
 import os
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 import httpx
 import pytest
@@ -24,12 +24,32 @@ def deployed_frontend() -> str:
         pytest.fail(
             "Both sandbox deployment settings are required; family must be ipv4 or ipv6"
         )
-    url: httpx.URL = httpx.URL(frontend)
-    if url.scheme not in {"http", "https"} or url.path != "/":
+    return frontend.rstrip("/")
+
+
+def frontend_request_hook(frontend: str) -> Callable[[httpx.Request], None]:
+    url = httpx.URL(frontend)
+    if (
+        url.scheme not in {"http", "https"}
+        or not url.host
+        or url.path != "/"
+        or url.query
+        or url.fragment
+        or url.username
+        or url.password
+    ):
         pytest.fail(
             "SANDBOX_TEST_FRONTEND_URL must be the frontend origin without /api"
         )
-    return frontend.rstrip("/")
+    origin = f"{url.scheme}://{url.netloc.decode('ascii')}"
+
+    def through_frontend(request: httpx.Request) -> None:
+        prefix = API_SERVER_URL + "/"
+        assert str(request.url).startswith(prefix), request.url
+        request.url = httpx.URL(origin + "/api/" + str(request.url)[len(prefix) :])
+        request.headers["host"] = request.url.netloc.decode("ascii")
+
+    return through_frontend
 
 
 # The deployment owns migrations, database initialization, workers and licensing.
@@ -66,18 +86,10 @@ def _module_reset_and_seed() -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def _test_client(deployed_frontend: str) -> Generator[httpx.Client, None, None]:
-    def through_frontend(request: httpx.Request) -> None:
-        prefix: str = API_SERVER_URL + "/"
-        assert str(request.url).startswith(prefix), request.url
-        request.url = httpx.URL(
-            deployed_frontend + "/api/" + str(request.url)[len(prefix) :]
-        )
-        request.headers["host"] = request.url.netloc.decode("ascii")
-
     with httpx.Client(
         transport=RetryingTransport(),
         timeout=httpx.Timeout(240, connect=10),
-        event_hooks={"request": [through_frontend]},
+        event_hooks={"request": [frontend_request_hook(deployed_frontend)]},
     ) as deployed_client:
         set_test_client(deployed_client)
         try:

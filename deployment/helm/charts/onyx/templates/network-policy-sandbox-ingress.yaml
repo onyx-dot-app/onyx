@@ -1,0 +1,51 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.resourceName" (list . "sandbox-ingress") }}
+  namespace: {{ $sandboxNs }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: api-server
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: celery-worker-scheduled-tasks
+        {{- if .Values.sandboxIngressPolicy.allowTelepresenceAmbassador }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ambassador
+          podSelector:
+            matchLabels:
+              app: traffic-manager
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 4096
+        - protocol: TCP
+          port: {{ .Values.configMap.SANDBOX_NEXTJS_PORT_START | default 3010 }}
+          endPort: {{ sub (int (.Values.configMap.SANDBOX_NEXTJS_PORT_END | default 3100)) 1 }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: celery-worker-heavy
+      ports:
+        - protocol: TCP
+          port: 4096
+{{- end }}

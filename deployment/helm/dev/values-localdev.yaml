@@ -6,12 +6,10 @@
 #
 # See docs/craft/dev/local-kubernetes.md for the full workflow.
 
-# Track nightly `edge` builds instead of `latest` (a released tag) — keeps
-# in-cluster images closer to main, reducing schema/code skew with local
-# source. Always-pull so kind picks up edge updates.
+# Remote services use edge. Backend and sandbox images are built locally.
 global:
   version: edge
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
 # ---- Persistence (kept on, sized for a laptop) ----
 
@@ -101,6 +99,9 @@ codeInterpreter:
 
 configMap:
   ENABLE_CRAFT: "true"
+  CRAFT_SANDBOX_RUNTIME: kubernetes_firecracker
+  SANDBOX_CONTAINER_IMAGE: onyxdotapp/sandbox:dev
+  SANDBOX_IMAGE_PULL_POLICY: IfNotPresent
   # Host gateway (Docker Desktop), not internal cluster DNS; Linux-kind devs sub their own.
   # Full base URL, path prefix included — the Next dev server proxies the API under /api.
   ONYX_SERVER_URL: "http://host.docker.internal:3000/api"
@@ -132,10 +133,6 @@ auth:
       s3_aws_secret_access_key: "minioadmin"
       rootUser: "minioadmin"
       rootPassword: "minioadmin"
-  sandboxPushSecret:
-    enabled: true
-    values:
-      private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
   # Must match ENCRYPTION_KEY_SECRET in .vscode/.env.k8s
   encryptionKey:
     enabled: true
@@ -145,15 +142,15 @@ auth:
     values:
       encryption_key_secret: "6767676767676767"
 
-# ---- Sandbox push NetworkPolicy ----
+# ---- Sandbox ingress NetworkPolicy ----
 #
 # Allow telepresence's traffic-manager (in the `ambassador` namespace) as a
-# permitted ingress source for the per-sandbox push daemon. When an api_server
+# permitted ingress source for OpenCode and preview traffic. When an api_server
 # is intercepted, outbound traffic from a developer's laptop enters the cluster
 # as the traffic-manager pod, not the api_server pod, so the prod-strict
-# policy (api_server-only) blocks skills + user-library hydration. Local-dev
-# clusters opt in here; prod overlays leave this off.
-sandboxPushPolicy:
+# policy blocks local dev traffic. Local-dev clusters opt in here; prod
+# overlays leave this off.
+sandboxIngressPolicy:
   allowTelepresenceAmbassador: true
 
 # ---- App pods ----
@@ -161,6 +158,8 @@ sandboxPushPolicy:
 # Run app services locally. Keep one API pod for the Telepresence traffic agent.
 
 api:
+  image:
+    tag: dev
   replicaCount: 1
   resources:
     requests:
@@ -172,6 +171,10 @@ api:
 
 webserver:
   replicaCount: 0
+
+celery_shared:
+  image:
+    tag: dev
 
 celery_beat:
   replicaCount: 0

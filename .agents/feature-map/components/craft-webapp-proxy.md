@@ -100,8 +100,8 @@ owns the `BuildSession` row this proxy resolves through
 3. Call `get_sandbox_manager().get_webapp_url(sandbox_id, nextjs_port)`.
    On Kubernetes this returns an in-cluster service URL,
    `http://{pod_name}.{namespace}.svc.cluster.local:{port}`
-   (`kubernetes_sandbox_manager.py:_get_nextjs_url`, called from
-   `get_webapp_url`). The URL is never reachable from outside the cluster
+   (`sandbox/kubernetes_runtime.py:KubernetesRuntime.service_url`, called from
+   `SandboxManager.get_webapp_url`). The URL is never reachable from outside the cluster
    except through this proxy.
 4. Cache the resolved URL for 60 seconds.
 
@@ -195,13 +195,17 @@ runs it the first time a web app is actually being built:
    `ONYX_WEBAPP_PORT`, `ONYX_WEBAPP_BASE_PATH`, and
    `ONYX_WEBAPP_ALLOWED_DEV_ORIGINS` (`allowed_dev_origins`, derived from
    `WEB_DOMAIN`, satisfies Next 16's `allowedDevOrigins` cross-origin
-   check), then starts `bun run dev` under `flock` so a concurrent replay
+   check), then starts `bun run dev` through `setsid` under `flock` so a concurrent replay
    cannot spawn a second server for the same session
    (`sandbox/nextjs_dev.py:build_nextjs_start_script`).
 3. On snapshot restore, `build_webapp_restore_script` rewrites the script
    with the re-allocated port and auto-starts it only if the restored
    snapshot's `outputs/web/package.json` exists
-   (`kubernetes_sandbox_manager.py` `restore_snapshot`).
+   (`sandbox/manager.py:SandboxManager.restore_snapshot`).
+
+The recorded preview PID leads its process group. Workspace cleanup verifies
+the PID and working directory before signaling. Forced cleanup also stops its
+child processes so they cannot retain the session's port.
 
 Port allocation is per-user and per-session: `reserve_nextjs_port__no_commit`
 (`db/build_session.py`) allocates one port from
@@ -340,7 +344,6 @@ cd backend && uv run pytest tests/unit/onyx/server/features/craft/session/test_w
 cd backend && uv run pytest tests/external_dependency_unit/craft/test_webapp_hmr_websocket_auth.py
 cd backend && uv run pytest tests/integration/tests/craft/test_webapp_proxy.py
 cd backend && uv run pytest tests/integration/tests/craft/k8s/test_webapp_preview.py
-cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_webapp_preview_docker.py
 ```
 
 Use manual reproduction for the cache and hot-reload behaviour below.

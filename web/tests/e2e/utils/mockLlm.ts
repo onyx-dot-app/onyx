@@ -76,6 +76,7 @@ export interface MockLlmReply {
   tool_calls?: MockLlmToolCall[];
   conditions?: MockLlmRequestConditions;
   required?: boolean;
+  pause_after_first_chunk?: string;
 }
 
 export interface MockLlmConversation {
@@ -169,4 +170,17 @@ export async function addMockLlmConversation(
     conversation,
     `add mock LLM conversation ${conversation.name}`
   );
+}
+
+export async function releaseMockLlmStream(
+  gateId: string,
+  scriptId: string = MOCK_LLM_DEFAULT_SCRIPT_ID
+): Promise<void> {
+  const response = await fetch(
+    `${MOCK_LLM_SERVER_URL}/scripts/${encodeURIComponent(scriptId)}/gates/${encodeURIComponent(gateId)}/release`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to release mock LLM stream: ${response.status}`);
+  }
 }

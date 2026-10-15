@@ -1,6 +1,6 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
-{{- if not (semverCompare ">=1.33.0-0" .Capabilities.KubeVersion.Version) }}
-{{- fail (printf "Onyx Craft Kubernetes deployments support Kubernetes >= 1.33 because sandbox pods use stable native restartable init sidecar containers; target cluster reports %s. Use a newer Kubernetes cluster." .Capabilities.KubeVersion.Version) }}
+{{- if not (semverCompare ">=1.30.0-0" .Capabilities.KubeVersion.Version) }}
+{{- fail (printf "Onyx Craft requires Kubernetes >= 1.30 for WebSocket v5 exec; Helm reports %s. For offline rendering, pass --kube-version with the target cluster version." .Capabilities.KubeVersion.Version) }}
 {{- end }}
 # Craft Kubernetes sandbox version check passed for {{ .Capabilities.KubeVersion.Version }}.
 {{- else }}

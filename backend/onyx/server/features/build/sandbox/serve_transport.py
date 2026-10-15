@@ -1,9 +1,4 @@
-"""Shared opencode-serve transport plumbing.
-
-Lives outside ``base.py`` so the abstract supertype doesn't import concrete
-``opencode.*`` modules (would invert the dependency arrow). ``SandboxManager``
-composes ``_ServeMixin`` in.
-"""
+"""OpenCode message streaming and prompt coordination for Craft VMs."""
 
 from __future__ import annotations
 
@@ -36,6 +31,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     PromptResponse,
+    SandboxEvent,
 )
 from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.event_bus import (
@@ -43,6 +39,7 @@ from onyx.server.features.build.sandbox.opencode.event_bus import (
     PodEventBus,
 )
 from onyx.server.features.build.sandbox.opencode.serve_client import (
+    ClientTimeouts,
     OpencodeServeClient,
     _TurnState,
     translate_opencode_event,
@@ -60,8 +57,6 @@ from onyx.server.metrics.craft_sandbox import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-SandboxEvent = Any
 
 # Tags serve-transport logs with the api_server replica handling the prompt.
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
@@ -366,7 +361,10 @@ class _ServeMixin:
                 (
                     url,
                     OpencodeServeClient(
-                        base_url=url, password=conn.password, event_bus=None
+                        base_url=url,
+                        password=conn.password,
+                        event_bus=None,
+                        timeouts=ClientTimeouts(connect_timeout=timeout),
                     ),
                 )
                 for url in urls
@@ -375,9 +373,9 @@ class _ServeMixin:
         clients = _build_clients(info)
         password_reset_done = False
         try:
-            deadline = time.time() + timeout
+            deadline = time.monotonic() + timeout
             last_err = "no probe completed"
-            while time.time() < deadline:
+            while time.monotonic() < deadline:
                 for url, client in clients:
                     try:
                         status = client.health_check_status()

@@ -5,9 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from uuid import uuid4
 
-import pytest
-
-from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.user_library.api import (
     DeleteFileResponse,
     UploadResponse,
@@ -19,11 +16,6 @@ from tests.integration.tests.craft.user_library_http import (
     make_zip_bytes,
     upload_user_library_files,
     upload_user_library_zip,
-)
-
-pytestmark = pytest.mark.skipif(
-    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
-    reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
 )
 
 

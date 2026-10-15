@@ -53,16 +53,14 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:bf44cdfcb76cd3b41e87
 ARG ENABLE_SKILLS=true
 ARG ENABLE_BROWSER=true
 
-# firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
-# store), gosu (legacy, not currently invoked). setpriv ships with util-linux in
-# the python:3.13-slim base.
+# setpriv removes all agent capabilities before untrusted code starts.
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     curl \
     git \
     procps \
     unzip \
     iptables \
-    gosu \
+    util-linux \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -137,8 +135,9 @@ RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
     useradd -u 1000 -g sandbox -m -s /bin/bash sandbox; \
     fi
 
-RUN mkdir -p /workspace/sessions /workspace/templates /workspace/managed && \
-    chown -R sandbox:sandbox /workspace
+RUN mkdir -p /workspace/sessions /workspace/templates /workspace/managed /workspace/opencode-data && \
+    chmod 0755 /workspace /workspace/managed && \
+    chown sandbox:sandbox /workspace/sessions /workspace/templates /workspace/opencode-data
 
 COPY --exclude=.next --exclude=node_modules templates/outputs /workspace/templates/outputs
 COPY --exclude=.DS_Store templates/pptx /workspace/templates/pptx
@@ -152,7 +151,6 @@ RUN python3 -m venv /workspace/.venv && \
     chown -R sandbox:sandbox /workspace/.venv
 
 ENV PATH="/workspace/.venv/bin:${PATH}"
-ENV PYTHONPATH="/workspace"
 
 # pptxgenjs: from-scratch deck generation. lucide-static/@tabler/icons: plain
 # .svg icon files + sharp as rasterizer, for the pptx skill's scripts/icon.js.
@@ -202,25 +200,16 @@ ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 # does not need to refresh the generic models.dev catalog at runtime.
 ENV OPENCODE_DISABLE_MODELS_FETCH=1
 
-COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
-# Root-owned copy for exec-based backends: the manifest must run code the
-# sandbox user cannot replace. /workspace stays sandbox-owned below. The
-# contract model needs pydantic, so the root-owned system interpreter gets its
-# own copy (version pinned to match initial-requirements.txt): the exec path
-# must share nothing with the sandbox-owned venv.
-COPY --exclude=__pycache__ sandbox_daemon/ /opt/sandbox_daemon/
-RUN /usr/local/bin/python3 -m pip install --no-cache-dir --only-binary=:all: \
-    pydantic==2.13.4 && \
+RUN /usr/local/bin/python3 -m venv --copies /opt/onyx-guest/venv && \
+    /opt/onyx-guest/venv/bin/pip install --no-cache-dir --only-binary=:all: \
+    pydantic==2.13.4 pydantic-core==2.46.4 annotated-types==0.7.0 \
+    typing-extensions==4.15.0 typing-inspection==0.4.2 && \
     rm -rf /root/.cache/pip
-COPY entrypoint.sh /workspace/entrypoint.sh
-COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
-
-# Egress proxy bootstrap, run as the initContainer command / compose entrypoint.
-COPY firewall-init.sh /workspace/firewall-init.sh
-RUN chmod +x /workspace/firewall-init.sh
+COPY --exclude=__pycache__ guest/ /opt/onyx-guest/venv/lib/python3.13/site-packages/onyx_guest/
+COPY --chmod=0755 entrypoint.sh firewall-init.sh /opt/onyx-guest/
 
 # Per-session egress tagging plugin. Path must match
-# kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
+# kubernetes_runtime._OPENCODE_SESSION_TAG_PLUGIN_PATH.
 COPY opencode-plugins/ /workspace/opencode-plugins/
 
 COPY --chmod=0755 seed-opencode-dependencies.sh /usr/local/bin/seed-opencode-dependencies
@@ -228,12 +217,15 @@ COPY --chmod=0755 seed-opencode-dependencies.sh /usr/local/bin/seed-opencode-dep
 COPY browser-cli.sh /usr/local/bin/browser
 RUN chmod 0755 /usr/local/bin/browser
 
-RUN chown -R sandbox:sandbox /workspace
+RUN chmod -R a+rX,go-w /opt/onyx-guest /workspace/opencode-plugins && \
+    chown -R root:root /opt/onyx-guest /workspace/opencode-plugins && \
+    chown sandbox:sandbox /tmp && chmod 1777 /tmp && \
+    chmod 0755 /workspace /workspace/managed
 
-USER sandbox
+ENV OPENCODE_DATA_HOME="/workspace/opencode-data"
+ENV HOME="/home/sandbox"
 WORKDIR /workspace
 
-# 3000: Next.js dev server, 4096: opencode serve, 8731: push daemon
-EXPOSE 3000 4096 8731
+EXPOSE 3000 4096
 
-ENTRYPOINT ["/workspace/entrypoint.sh"]
+ENTRYPOINT ["/opt/onyx-guest/venv/bin/python", "-I", "-m", "onyx_guest", "serve", "{}"]

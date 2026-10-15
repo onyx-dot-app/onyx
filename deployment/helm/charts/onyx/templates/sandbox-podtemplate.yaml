@@ -1,8 +1,8 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{/*
-Static shape of the per-user sandbox Pod. _create_sandbox_pod reads this and
-overlays the dynamic fields (name, sandbox/tenant labels, per-pod
-opencode-auth + push-key env, proxy hostAliases IP).
+Static shape of the per-user sandbox Pod. The Craft sandbox manager reads this
+and overlays the dynamic fields: name, sandbox/tenant labels, per-pod
+opencode-auth env, allowed origins, and proxy hostAliases IP.
 */}}
 {{- $cm := .Values.configMap }}
 {{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
@@ -21,14 +21,13 @@ kubelet evicts sandbox pods first under node disk pressure. */}}
 {{- $nextjsStart := (index $cm "SANDBOX_NEXTJS_PORT_START") | default "3010" | int }}
 {{- $nextjsEnd := (index $cm "SANDBOX_NEXTJS_PORT_END") | default "3100" | int }}
 {{- $opencodePort := (index $cm "OPENCODE_SERVE_PORT") | default "4096" | int }}
-{{/* Keep in sync with PUSH_DAEMON_PORT in sandbox_daemon/models.py. */}}
-{{- $pushDaemonPort := include "onyx.sandboxPushDaemonPort" . }}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $proxyHost := include "onyx.sandboxProxyHost" . }}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
 {{- $serverUrl := (index $cm "ONYX_SERVER_URL") }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
 {{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}
+{{- $runtimeClassName := $sandboxPod.runtimeClassName | default "kata-fc" }}
 apiVersion: v1
 kind: PodTemplate
 metadata:
@@ -42,8 +41,10 @@ template:
     labels:
       app.kubernetes.io/component: sandbox
       app.kubernetes.io/managed-by: onyx
+      onyx.app/sandbox-protocol: "2"
       admission.datadoghq.com/enabled: "false"
   spec:
+    runtimeClassName: {{ $runtimeClassName | quote }}
     serviceAccountName: {{ $saName }}
     automountServiceAccountToken: false
     restartPolicy: Never
@@ -58,25 +59,16 @@ template:
     tolerations:
       {{- (index $sandboxPod "tolerations" | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule"))) | toYaml | nindent 6 }}
     securityContext:
-      runAsNonRoot: true
-      runAsUser: 1000
-      fsGroup: 1000
       seccompProfile:
         type: RuntimeDefault
     initContainers:
-      - name: sandbox-init
+      - name: sandbox-firewall
         image: {{ $image }}
         imagePullPolicy: {{ $pullPolicy }}
-        command: ["/workspace/firewall-init.sh"]
+        command: ["/bin/bash", "/opt/onyx-guest/firewall-init.sh", "firewall"]
         env:
           - { name: SANDBOX_PROXY_HOST, value: "{{ $proxyHost }}" }
           - { name: SANDBOX_PROXY_PORT, value: "{{ $proxyPort }}" }
-          - { name: SANDBOX_PROXY_BOOTSTRAP_MODE, value: "initcontainer" }
-          - { name: SANDBOX_PROXY_CA_BUNDLE_SRC, value: "/sandbox-ca/ca.crt" }
-          - { name: SANDBOX_PROXY_CA_BUNDLE_DST, value: "{{ $caBundleFile }}" }
-        volumeMounts:
-          - { name: sandbox-ca-source, mountPath: /sandbox-ca, readOnly: true }
-          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox }
         resources:
           requests: { cpu: "50m", memory: "32Mi" }
           limits: { cpu: "500m", memory: "128Mi" }
@@ -89,51 +81,10 @@ template:
           capabilities:
             drop: ["ALL"]
             add: ["NET_ADMIN"]
-      - name: sidecar
-        image: {{ $image }}
-        imagePullPolicy: {{ $pullPolicy }}
-        command: ["/workspace/sidecar-entrypoint.sh"]
-        restartPolicy: Always
-        ports:
-          - { name: push-daemon, containerPort: {{ $pushDaemonPort }} }
-        env:
-          - { name: SANDBOX_LISTEN_HOST, value: {{ $sandboxPod.listenHost | default "0.0.0.0" | quote }} }
-          {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
-        volumeMounts:
-          - { name: workspace, mountPath: /workspace/sessions }
-          - { name: opencode-data, mountPath: /workspace/opencode-data }
-          - { name: managed, mountPath: /workspace/managed }
-          - { name: sidecar-tmp, mountPath: /tmp }
-          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
-        resources:
-          # Snapshot tar/stream runs through this sidecar, so give it headroom.
-          # Restore buffers the downloaded archive (<=100MB cap) in /tmp.
-          requests: { cpu: "100m", memory: "256Mi", ephemeral-storage: "512Mi" }
-          limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "2Gi" }
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
-          privileged: false
-          capabilities:
-            drop: ["ALL"]
-        livenessProbe:
-          httpGet: { path: /health, port: {{ $pushDaemonPort }} }
-          initialDelaySeconds: 5
-          periodSeconds: 30
-        startupProbe:
-          httpGet: { path: /ready, port: {{ $pushDaemonPort }} }
-          periodSeconds: 2
-          failureThreshold: 180
-        readinessProbe:
-          httpGet: { path: /health, port: {{ $pushDaemonPort }} }
-          initialDelaySeconds: 1
-          periodSeconds: 2
-          failureThreshold: 10
     containers:
       - name: sandbox
         image: {{ $image }}
         imagePullPolicy: {{ $pullPolicy }}
-        command: ["/workspace/entrypoint.sh"]
         ports:
           - { name: opencode, containerPort: {{ $opencodePort }} }
           {{- range $p := untilStep $nextjsStart $nextjsEnd 1 }}
@@ -141,6 +92,8 @@ template:
           {{- end }}
         env:
           - { name: SANDBOX_LISTEN_HOST, value: {{ $sandboxPod.listenHost | default "0.0.0.0" | quote }} }
+          - { name: SANDBOX_PROXY_HOST, value: "{{ $proxyHost }}" }
+          - { name: SANDBOX_PROXY_PORT, value: "{{ $proxyPort }}" }
           - { name: ONYX_PAT, value: "replaced_by_egress_proxy" }
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
           {{/* The deployment value is the exact API base; do not append the CLI default. */}}
@@ -148,39 +101,39 @@ template:
           - { name: GH_TOKEN, value: "replaced_by_egress_proxy" }
           - { name: GH_NO_UPDATE_NOTIFIER, value: "1" }
           - { name: OPENCODE_DATA_HOME, value: "/workspace/opencode-data" }
+          - { name: SANDBOX_PROXY_CA_BUNDLE_SRC, value: "/sandbox-ca/ca.crt" }
+          - { name: SANDBOX_PROXY_CA_BUNDLE_DST, value: "{{ $caBundleFile }}" }
           {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
         volumeMounts:
-          - { name: workspace, mountPath: /workspace/sessions }
-          - { name: opencode-data, mountPath: /workspace/opencode-data }
-          - { name: managed, mountPath: /workspace/managed, readOnly: true }
-          - { name: tmp, mountPath: /tmp }
-          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
+          - { name: sandbox-ca-source, mountPath: /sandbox-ca, readOnly: true }
         resources:
           requests:
             { cpu: "{{ $cpuReq }}", memory: "{{ $memReq }}", ephemeral-storage: "{{ $ephReq }}" }
           limits:
             { cpu: "{{ $cpuLim }}", memory: "{{ $memLim }}", ephemeral-storage: "{{ $ephLim }}" }
         securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
           privileged: false
           capabilities:
             drop: ["ALL"]
+            add: ["SETUID", "SETGID", "SETPCAP", "CHOWN"]
+        startupProbe:
+          tcpSocket:
+            port: {{ $opencodePort }}
+          periodSeconds: 2
+          failureThreshold: 180
+        readinessProbe:
+          tcpSocket:
+            port: {{ $opencodePort }}
+          initialDelaySeconds: 1
+          periodSeconds: 2
+          failureThreshold: 10
     volumes:
-      - name: workspace
-        emptyDir: { sizeLimit: 50Gi }
-      - name: opencode-data
-        emptyDir: { sizeLimit: 5Gi }
-      - name: managed
-        emptyDir: { sizeLimit: 5Gi }
-      - name: tmp
-        emptyDir: { sizeLimit: 5Gi }
-      - name: sidecar-tmp
-        emptyDir: { sizeLimit: 5Gi }
       - name: sandbox-ca-source
         configMap:
           name: {{ $caConfigMap }}
           optional: false
-      - name: sandbox-ca-bundle
-        emptyDir: {}
 {{- end }}

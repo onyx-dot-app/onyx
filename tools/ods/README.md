@@ -28,6 +28,8 @@ Some commands require external tools to be installed and configured:
 - **uv** - Required for `backend` commands
   - Install from [docs.astral.sh/uv](https://docs.astral.sh/uv/)
 
+- **Go** - Required for the `docker-compose-sync` pre-commit hook; use the version in `tools/ods/go.mod`
+
 - **GitHub CLI** (`gh`) - Required for `run-ci`, `cherry-pick`, and `trace` commands
   - Install from [cli.github.com](https://cli.github.com/)
   - Authenticate with `gh auth login`

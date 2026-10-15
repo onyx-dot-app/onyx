@@ -279,10 +279,6 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 8080
 {{- end }}
 
-{{- define "onyx.sandboxPushDaemonPort" -}}
-8731
-{{- end }}
-
 {{/* Sandbox egress-proxy env. Mirrors _proxy_main_container_env_vars(). */}}
 {{- define "onyx.sandboxProxyEnv" -}}
 {{- $proxyUrl := printf "http://sandbox-proxy:%v" .proxyPort }}

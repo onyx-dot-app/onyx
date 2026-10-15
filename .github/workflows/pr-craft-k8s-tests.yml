@@ -23,8 +23,7 @@ on:
   pull_request:
     # NOTE: Intentionally no `paths:` filter. Trigger-level `paths:` is ignored
     # for `merge_group`, so we always trigger and let the `changes` job below
-    # decide whether the real test job runs (matches the docker-compose lane
-    # cadence; this lane is expensive and must not run on every PR).
+    # decide whether the real test job runs; this lane is expensive.
   push:
     tags:
       - "v*.*.*"
@@ -41,7 +40,6 @@ env:
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
-  SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
@@ -56,13 +54,14 @@ env:
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
   BACKEND_IMAGE: "localhost:5001/onyx-backend:ci"
+  WEB_IMAGE: "localhost:5001/onyx-web-server:ci"
   # Fail fast on opencode hangs (default is 900s) so a stuck turn surfaces logs
   # well within the job timeout instead of being killed with zero signal.
   SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
   KIND_VERSION: "v0.31.0"
-  KUBECTL_VERSION: "v1.35.0"
+  KUBECTL_VERSION: "v1.33.1"
   CRAFT_ASSETS_ARTIFACT: "craft-k8s-assets"
 
   # The pytest process runs on the runner, so it reaches chart-managed
@@ -121,12 +120,30 @@ jobs:
               - 'deployment/helm/charts/onyx/templates/celery-worker-scheduled-tasks*'
               - 'deployment/helm/charts/onyx/charts/code-interpreter-*'
               - 'deployment/helm/charts/onyx/values-ci.yaml'
+              - 'deployment/helm/charts/onyx/values-firecracker.yaml'
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/k8s/**'
               - 'backend/tests/common/craft/**'
+              - 'backend/tests/integration/mock_services/mock_llm_server/**'
               - 'backend/tests/integration/conftest.py'
               - 'backend/tests/integration/common_utils/**'
+              - 'web/Dockerfile'
+              - 'web/next.config.js'
+              - 'web/src/app/api/**'
+              - 'web/src/app/craft/**'
+              - 'web/tests/e2e/craft/**'
+              - 'web/tests/e2e/pages/Craft*.ts'
+              - 'web/tests/e2e/utils/auth.ts'
+              - 'web/tests/e2e/utils/mockLlm.ts'
+              - 'web/tests/e2e/utils/onyxApiClient.ts'
+              - 'web/tests/e2e/global-setup.ts'
+              - 'web/tests/e2e/constants.ts'
+              - 'web/playwright.config.ts'
+              - 'web/package.json'
+              - 'web/bun.lock'
               - '.github/workflows/pr-craft-k8s-tests.yml'
+              - 'deployment/helm/dev/firecracker-ci.sh'
+              - 'deployment/firecracker/**'
               - '.github/actions/setup-python-and-install-dependencies/**'
               - '.github/actions/setup-test-license/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
@@ -151,14 +168,22 @@ jobs:
           set -eo pipefail
           # `name` = log-friendly shard id; `path` = repo-root-relative pytest target.
           entries=""
+          product_shard=false
           for f in $(find backend/tests/integration/tests/craft/k8s \
-              -maxdepth 1 -name 'test_*.py' -type f | sort); do
+              -name 'test_*.py' -type f | sort); do
             base=$(basename "$f" .py)
             shard="${base#test_}"
+            if [[ "${shard}" == "session_provisioning_api" ]]; then
+              product_shard=true
+            fi
             entries="${entries}{\"path\":\"${f}\",\"name\":\"${shard}\"},"
           done
           if [ -z "${entries}" ]; then
             echo "::error::no craft k8s test files discovered"
+            exit 1
+          fi
+          if [[ "${product_shard}" != "true" ]]; then
+            echo "::error::session_provisioning_api is required for Craft browser acceptance" >&2
             exit 1
           fi
           echo "test-files=[${entries%,}]" >> "$GITHUB_OUTPUT"
@@ -307,6 +332,11 @@ jobs:
             # The production image; the backend Dockerfile's default (last) stage is the
             # dev variant.
             target: runtime
+          - image: web
+            context: ./web
+            file: ./web/Dockerfile
+            extra_build_args: ""
+            target: ""
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
@@ -364,11 +394,14 @@ jobs:
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
+      - ${{ vars.CRAFT_K8S_RUNS_ON_FAMILY || 'family=c8i+m8i+r8i' }}
+      - ${{ vars.CRAFT_K8S_RUNS_ON_IMAGE || 'image=ubuntu24-full-x64' }}
+      - ${{ vars.CRAFT_K8S_RUNS_ON_NESTED_VIRT || 'nested-virt' }}
       - spot=false
       - volume=100gb
       - ${{ format('run-id={0}-craft-k8s-tests-{1}', github.run_id, matrix.test-file.name) }}
       - extras=ecr-cache
-    timeout-minutes: 40
+    timeout-minutes: 60
 
     strategy:
       # fail-fast off so one shard's failure doesn't cancel the others.
@@ -386,6 +419,10 @@ jobs:
       MODEL_SERVER_HOST: "disabled"
       DISABLE_TELEMETRY: "true"
       DISABLE_VECTOR_DB: "false"
+      SANDBOX_TEST_FIRECRACKER: "true"
+      SANDBOX_TEST_FRONTEND_URL: "http://127.0.0.1:3000"
+      SANDBOX_TEST_KUBE_CONTEXT: "kind-onyx-craft-ci"
+      SANDBOX_TEST_IP_FAMILY: "ipv4"
 
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
@@ -420,6 +457,9 @@ jobs:
           tar -C "${charts_dir}" \
             -xzf "${RUNNER_TEMP}/craft-assets/helm-dependencies.tar.gz"
 
+      - name: Verify runner KVM support
+        run: deployment/helm/dev/firecracker-ci.sh preflight-host
+
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
@@ -448,12 +488,26 @@ jobs:
           }
           mirror "${ECR_CACHE}:craft-k8s-sandbox-${RUN_ID}" "${SANDBOX_CONTAINER_IMAGE}"
           mirror "${ECR_CACHE}:craft-k8s-backend-${RUN_ID}" "${BACKEND_IMAGE}"
+          mirror "${ECR_CACHE}:craft-k8s-web-${RUN_ID}" "${WEB_IMAGE}"
 
       - name: Write kind config
         run: |
           cat > "${RUNNER_TEMP}/kind-config.yaml" <<'EOF'
           kind: Cluster
           apiVersion: kind.x-k8s.io/v1alpha4
+          networking:
+            disableDefaultCNI: true
+            podSubnet: 192.168.0.0/16
+          nodes:
+            - role: control-plane
+              extraMounts:
+                - hostPath: /dev/kvm
+                  containerPath: /dev/kvm
+                - hostPath: /dev/vhost-vsock
+                  containerPath: /dev/vhost-vsock
+                - hostPath: /lib/modules
+                  containerPath: /lib/modules
+                  readOnly: true
           containerdConfigPatches:
             - |-
               [plugins."io.containerd.grpc.v1.cri".registry]
@@ -468,6 +522,22 @@ jobs:
           cluster_name: onyx-craft-ci
           node_image: kindest/node:v1.33.1
           config: ${{ runner.temp }}/kind-config.yaml
+          wait: 0s
+
+      - name: Install pinned policy-enforcing CNI
+        run: |
+          set -euo pipefail
+          manifest="${RUNNER_TEMP}/calico-v3.31.7.yaml"
+          curl --fail --location --silent --show-error \
+            --retry 5 --retry-delay 2 --retry-all-errors \
+            --output "${manifest}" \
+            https://raw.githubusercontent.com/projectcalico/calico/v3.31.7/manifests/calico.yaml
+          echo "d6d8a489a4ed8e5b8efd8b339047b496ca657b55ee2e3618e791507b0a853e8d  ${manifest}" | sha256sum --check -
+          kubectl create -f "${manifest}"
+          kubectl -n kube-system rollout status daemonset/calico-node --timeout=180s
+          kubectl wait --for=condition=Ready node --all --timeout=180s
+          kubectl -n kube-system rollout status deployment/calico-kube-controllers --timeout=180s
+          kubectl -n kube-system rollout status deployment/coredns --timeout=180s
 
       - name: Connect local registry to kind network
         run: |
@@ -478,9 +548,14 @@ jobs:
           [host.\"http://${KIND_REGISTRY_NAME}:5000\"]
           EOF"
 
-      # Pod spec sets nodeSelector onyx.app/workload=sandbox
-      # (kubernetes_sandbox_manager.py). In prod this matches a dedicated
-      # node pool; in kind we just label the single control-plane node.
+      - name: Install and verify Kata Firecracker runtime
+        run: |
+          set -euo pipefail
+          deployment/helm/dev/firecracker-ci.sh configure-kind-node
+          deployment/helm/dev/firecracker-ci.sh install-kata
+          deployment/helm/dev/firecracker-ci.sh verify
+
+      # Production uses a dedicated sandbox node pool; kind has one node.
       - name: Label kind node for sandbox workload
         run: kubectl label node onyx-craft-ci-control-plane onyx.app/workload=sandbox
 
@@ -489,24 +564,6 @@ jobs:
           helm dependency list deployment/helm/charts/onyx
           helm dependency list deployment/helm/charts/onyx \
             | awk 'NR > 1 && NF && $4 != "ok" { bad = 1 } END { exit bad }'
-
-      - name: Generate sandbox push key
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import base64
-          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-          from cryptography.hazmat.primitives.serialization import Encoding
-          from cryptography.hazmat.primitives.serialization import NoEncryption
-          from cryptography.hazmat.primitives.serialization import PrivateFormat
-
-          key = Ed25519PrivateKey.generate()
-          raw = key.private_bytes(
-              encoding=Encoding.Raw,
-              format=PrivateFormat.Raw,
-              encryption_algorithm=NoEncryption(),
-          )
-          print(f"ONYX_SANDBOX_PUSH_PRIVATE_KEY={base64.b64encode(raw).decode('ascii')}")
-          PY
 
       - name: Install Onyx chart into kind
         run: |
@@ -523,7 +580,10 @@ jobs:
               --set "api.image.tag=ci" \
               --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
               --set "celery_shared.image.tag=ci" \
-              --set-string "auth.sandboxPushSecret.values.private_key=${ONYX_SANDBOX_PUSH_PRIVATE_KEY}" \
+              --set "webserver.image.repository=localhost:5001/onyx-web-server" \
+              --set "webserver.image.tag=ci" \
+              --set-string "configMap.OVERRIDE_API_PRODUCTION=true" \
+              --set-string "configMap.WEB_DOMAIN=http://127.0.0.1:3000" \
               --timeout 10m; then
               exit 0
             fi
@@ -663,14 +723,17 @@ jobs:
       - name: Wait for chart app runtime ready
         run: |
           set -eo pipefail
-          for deployment in \
+          deployments=(
             onyx-sandbox-proxy \
             onyx-api-server \
             onyx-celery-beat \
             onyx-celery-worker-primary \
             onyx-celery-worker-light \
             onyx-celery-worker-heavy \
-            onyx-celery-worker-scheduled-tasks; do
+            onyx-celery-worker-scheduled-tasks
+            onyx-web-server
+          )
+          for deployment in "${deployments[@]}"; do
             kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
               "deployment/${deployment}" --timeout=360s
           done
@@ -699,20 +762,20 @@ jobs:
           done
           exit 1
 
-      - name: Forward chart API to runner
+      - name: Forward chart frontend to runner
         run: |
           set -eo pipefail
-          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-api-service \"$API_SERVER_PORT\":8080; sleep 1; done" \
-            > "${RUNNER_TEMP}/api-port-forward.log" 2>&1 &
-          echo "$!" > "${RUNNER_TEMP}/api-port-forward.pid"
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-webserver 3000:3000; sleep 1; done" \
+            > "${RUNNER_TEMP}/web-port-forward.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/web-port-forward.pid"
           for _ in $(seq 1 60); do
-            if curl -fsS "http://${API_SERVER_HOST}:${API_SERVER_PORT}/health"; then
-              echo "chart API reachable at ${API_SERVER_HOST}:${API_SERVER_PORT}"
+            if curl -fsS "${SANDBOX_TEST_FRONTEND_URL}/api/health"; then
+              echo "chart frontend reachable at http://127.0.0.1:3000"
               exit 0
             fi
             sleep 2
           done
-          cat "${RUNNER_TEMP}/api-port-forward.log" || true
+          cat "${RUNNER_TEMP}/web-port-forward.log" || true
           exit 1
 
       # The test process runs on the CI runner, which has no cluster DNS.
@@ -771,6 +834,114 @@ jobs:
             -m "not nightly" \
             "${{ matrix.test-file.path }}"
 
+      - name: Setup Bun for Craft browser acceptance
+        if: matrix.test-file.name == 'session_provisioning_api'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] ephemeral test runner
+        with:
+          bun-version: "1.3.13"
+
+      - name: Install Craft browser test dependencies
+        if: matrix.test-file.name == 'session_provisioning_api'
+        working-directory: ./web
+        run: |
+          bun install --frozen-lockfile
+          ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Start existing mock LLM in the test cluster
+        if: matrix.test-file.name == 'session_provisioning_api'
+        run: |
+          set -euo pipefail
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" create configmap craft-mock-llm \
+            --from-file=server.py=backend/tests/integration/mock_services/mock_llm_server/server.py \
+            --from-file=models.py=backend/tests/integration/mock_services/mock_llm_server/models.py \
+            --from-file=package-init.py=backend/tests/__init__.py
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" apply -f - <<EOF
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: craft-mock-llm
+            labels:
+              app: craft-mock-llm
+          spec:
+            automountServiceAccountToken: false
+            restartPolicy: Never
+            containers:
+              - name: mock-llm
+                image: ${BACKEND_IMAGE}
+                imagePullPolicy: IfNotPresent
+                workingDir: /mock
+                command: [python, -m, tests.integration.mock_services.mock_llm_server.server]
+                env:
+                  - name: PYTHONPATH
+                    value: /mock
+                  - name: MOCK_LLM_SERVER_PORT
+                    value: "8095"
+                readinessProbe:
+                  httpGet:
+                    path: /health
+                    port: 8095
+                volumeMounts:
+                  - name: source
+                    mountPath: /mock
+                    readOnly: true
+            volumes:
+              - name: source
+                configMap:
+                  name: craft-mock-llm
+                  items:
+                    - key: package-init.py
+                      path: tests/__init__.py
+                    - key: package-init.py
+                      path: tests/integration/__init__.py
+                    - key: package-init.py
+                      path: tests/integration/mock_services/__init__.py
+                    - key: package-init.py
+                      path: tests/integration/mock_services/mock_llm_server/__init__.py
+                    - key: server.py
+                      path: tests/integration/mock_services/mock_llm_server/server.py
+                    - key: models.py
+                      path: tests/integration/mock_services/mock_llm_server/models.py
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: craft-mock-llm
+          spec:
+            selector:
+              app: craft-mock-llm
+            ports:
+              - port: 8095
+                targetPort: 8095
+          EOF
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" wait --for=condition=Ready \
+            pod/craft-mock-llm --timeout=120s
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/craft-mock-llm 8095:8095; sleep 1; done" \
+            > "${RUNNER_TEMP}/mock-llm-port-forward.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/mock-llm-port-forward.pid"
+
+      - name: Run Craft browser acceptance
+        if: matrix.test-file.name == 'session_provisioning_api'
+        working-directory: ./web
+        env:
+          ENABLE_CRAFT: "true"
+          BASE_URL: "http://127.0.0.1:3000"
+          MOCK_LLM_SERVER_URL: "http://127.0.0.1:8095"
+          MOCK_LLM_BACKEND_URL: "http://craft-mock-llm.onyx.svc.cluster.local:8095"
+        run: |
+          bun run playwright \
+            tests/e2e/craft/craft_session_flow.spec.ts \
+            tests/e2e/craft/attachments.spec.ts \
+            --project admin --workers 1 --retries 0 --timeout 300000
+
+      - name: Upload Craft browser results
+        if: always() && matrix.test-file.name == 'session_provisioning_api'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: craft-browser-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: web/output/playwright/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Collect diagnostics on failure
         if: failure()
         run: |
@@ -816,7 +987,7 @@ jobs:
           helm status onyx -n "${HELM_RELEASE_NAMESPACE}" || true
           for dep in onyx-api-server onyx-celery-worker-primary \
               onyx-celery-worker-heavy onyx-celery-worker-scheduled-tasks \
-              onyx-cloudnative-pg redis-operator; do
+              onyx-cloudnative-pg redis-operator onyx-web-server; do
             kubectl -n "${HELM_RELEASE_NAMESPACE}" logs "deployment/${dep}" --all-containers --tail=500 || true
           done
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs statefulset/onyx-opensearch-master --all-containers --tail=500 || true
@@ -824,7 +995,8 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::port-forward logs"
-          for f in postgres redis minio object-store api; do
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs pod/craft-mock-llm --tail=500 || true
+          for f in postgres redis minio object-store web mock-llm; do
             echo "--- ${f} ---"; cat "${RUNNER_TEMP}/${f}-port-forward.log" 2>/dev/null || true
           done
           echo "::endgroup::"
@@ -841,7 +1013,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: craft-k8s-logs-${{ matrix.test-file.name }}
+          name: craft-k8s-logs-${{ matrix.test-file.name }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             kind-logs/
             sandbox-logs/
@@ -856,7 +1028,8 @@ jobs:
             "${RUNNER_TEMP}/redis-port-forward.pid" \
             "${RUNNER_TEMP}/minio-port-forward.pid" \
             "${RUNNER_TEMP}/object-store-port-forward.pid" \
-            "${RUNNER_TEMP}/api-port-forward.pid" \
+            "${RUNNER_TEMP}/web-port-forward.pid" \
+            "${RUNNER_TEMP}/mock-llm-port-forward.pid" \
             "${RUNNER_TEMP}/sandbox-log-watcher.pid"; do
             if [ -f "${pid_file}" ]; then
               kill "$(cat "${pid_file}")" 2>/dev/null || true

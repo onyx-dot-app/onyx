@@ -284,8 +284,8 @@ locked hash comparison, used by every skill-mutation endpoint to push to
 already-running sandboxes. Both write through
 `SandboxManager.push_to_sandbox(es)` to the fixed mount path
 `SKILLS_MOUNT_PATH = "/workspace/managed/skills"` (`skills/push.py`), which
-lands on the sidecar-managed `managed` volume described in
-`[[craft-sandboxes]] §4.3-4.4`; sessions symlink `.opencode/skills` into it.
+lands in the root-helper-managed `/workspace/managed` tree described in
+`[[craft-sandboxes]]`; sessions symlink `.opencode/skills` into it.
 
 ### 4.4 The hash: what it invalidates, and how staleness surfaces
 
@@ -426,7 +426,7 @@ for content that never landed.
 | changes sharing (`Skill__User`, `Skill__UserGroup`, `public_permission`) | `skill_visible_to_user`/`_is_editable_by_user` (both must move together), the scoped-manager GATE 2 check in `api.py:_assert_group_share_within_scope`, and `set_skill_public_permission`'s app-association guard |
 | changes enable/disable semantics | §5.5 above; verify disable stays a row delete, not a flag flip, and that `delete_skill` remains the only irreversible path |
 | changes GitHub ingestion (`ingest_from_github.py`) | path-traversal/symlink checks, `GITHUB_SKILL_MAX_COUNT`, and that `parse_skill_document`'s validation still runs before any bundle is stored |
-| changes what gets pushed or where (`SKILLS_MOUNT_PATH`, `push_to_sandbox(es)`) | `[[craft-sandboxes]]`'s sidecar `/push` contract and the `managed` volume mount |
+| changes what gets pushed or where (`SKILLS_MOUNT_PATH`, `push_to_sandbox(es)`) | `[[craft-sandboxes]]`'s root-helper push contract and `/workspace/managed` layout |
 
 ---
 

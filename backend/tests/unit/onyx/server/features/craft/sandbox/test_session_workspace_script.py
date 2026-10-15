@@ -1,12 +1,7 @@
 """Replay-safety contract of the generated session-workspace scripts."""
 
 import shlex
-from uuid import uuid4
 
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
-    build_sandbox_labels,
-)
-from onyx.server.features.build.sandbox.labels import LABEL_PROVISIONING_ATTEMPT
 from onyx.server.features.build.sandbox.nextjs_dev import (
     build_nextjs_start_script,
     build_webapp_script_write_snippet,
@@ -89,7 +84,7 @@ class TestNextjsStartReplaySafety:
     def test_reuses_live_server_instead_of_spawning_duplicate(self) -> None:
         script = build_nextjs_start_script(_SESSION_PATH, 3010)
         pid_guard = script.index(f"[ -f {_SESSION_PATH}/nextjs.pid ]")
-        spawn = script.index("nohup bun run dev")
+        spawn = script.index("nohup /usr/bin/setsid bun run dev")
         assert pid_guard < spawn
         assert "kill -0" in script
 
@@ -109,17 +104,17 @@ class TestNextjsStartReplaySafety:
         # lock forever.
         script = build_nextjs_start_script(_SESSION_PATH, 3010)
         assert f"9>{_SESSION_PATH}.nextjs.lock" in script
-        assert script.index("flock -x 9") < script.index("nohup bun run dev")
+        assert script.index("flock -x 9") < script.index(
+            "nohup /usr/bin/setsid bun run dev"
+        )
         assert "2>&1 9>&- &" in script
 
-
-class TestDockerSandboxLabels:
-    def test_generation_label_stamped_when_provided(self) -> None:
-        labels = build_sandbox_labels(
-            uuid4(), "tenant", None, provisioning_attempt_number=7
-        )
-        assert labels[LABEL_PROVISIONING_ATTEMPT] == "7"
-
-    def test_generation_label_omitted_for_generation_free_resources(self) -> None:
-        labels = build_sandbox_labels(uuid4(), "tenant", None)
-        assert LABEL_PROVISIONING_ATTEMPT not in labels
+    def test_recorded_pid_is_the_new_session_leader(self) -> None:
+        script = build_nextjs_start_script(_SESSION_PATH, 3010)
+        assert (
+            'nohup /usr/bin/setsid bun run dev -- -H "${SANDBOX_LISTEN_HOST:-0.0.0.0}" '
+            f"$PORT_FLAG > {_SESSION_PATH}/nextjs.log 2>&1 9>&- &\n"
+            "NEXTJS_PID=$!\n"
+            'echo "Next.js server started with PID $NEXTJS_PID"\n'
+            f"echo $NEXTJS_PID > {_SESSION_PATH}/nextjs.pid"
+        ) in script

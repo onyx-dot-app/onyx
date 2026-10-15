@@ -65,7 +65,10 @@ def test_start_script_port_is_env_driven_not_a_dup_flag() -> None:
     script = build_nextjs_start_script(_SESSION_PATH, 3010)
 
     assert "export ONYX_WEBAPP_PORT=3010" in script
-    assert 'bun run dev -- -H "${SANDBOX_LISTEN_HOST:-0.0.0.0}" $PORT_FLAG >' in script
+    assert (
+        'nohup /usr/bin/setsid bun run dev -- -H "${SANDBOX_LISTEN_HOST:-0.0.0.0}" '
+        "$PORT_FLAG >"
+    ) in script
 
 
 def test_start_script_writes_naive_path_port_file() -> None:
@@ -210,6 +213,7 @@ def test_bootstrap_uses_matching_listener_and_readiness_address(
     # flock is not available on every host; this test checks network arguments.
     command_bodies: dict[str, str] = {
         "flock": "exit 0\n",
+        "nohup": '[ "$1" = /usr/bin/setsid ] || exit 1\nshift\nexec "$@"\n',
         "bun": f'printf "%s\\n" "$@" > "{launch_args}"\n',
         "curl": (
             f'printf "%s\\n" "$@" > "{probe_args}"\n'

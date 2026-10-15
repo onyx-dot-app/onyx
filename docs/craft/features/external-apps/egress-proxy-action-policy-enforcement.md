@@ -6,7 +6,7 @@ Craft sandbox into a decision: **forward**, **hold for approval**, or **block**.
 
 This plan defines the **read + match + resolve contract** between the proxy and
 the policy system. The proxy's runtime/delivery model (in-process in
-`api_server` vs. a separate sidecar) and the full approval UX/event flow are
+`api_server` vs. a separate service) and the full approval UX/event flow are
 deliberately left open — this plan keeps the contract independent of both.
 
 ## Issues to Address
@@ -63,7 +63,7 @@ deliberately left open — this plan keeps the contract independent of both.
   owner; do not let it default by omission.
 - **Transport-agnostic contract.** Define the decision API as a pure function
   over `(app, request descriptor) -> Decision { policy, matched_action? }`. If
-  the proxy is in-process it's a direct call; if it's a sidecar it's the body of
+  the proxy is in-process it's a direct call; if it's a separate service it's the body of
   a thin RPC/HTTP endpoint. Don't couple the resolution logic to either.
 
 ## Implementation strategy

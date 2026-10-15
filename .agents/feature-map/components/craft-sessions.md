@@ -774,7 +774,6 @@ cd backend && uv run pytest tests/integration/tests/craft/test_sessions_api.py
 cd backend && uv run pytest tests/integration/tests/craft/k8s/test_approval_gate.py
 cd backend && uv run pytest tests/integration/tests/craft/k8s/test_session_provisioning_api.py
 cd backend && uv run pytest tests/integration/tests/craft/k8s/test_user_library_sync.py
-cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py
 ```
 
 See `backend/AGENTS.md` for the authoritative command forms and required
@@ -783,15 +782,13 @@ env. `backend/tests/integration/common_utils/managers/build_session.py` and
 
 ### Local dev
 
-Craft sandboxes are real Kubernetes pods; there is no non-cluster shortcut
-for interactive session/turn work. `docs/craft/dev/local-kubernetes.md` is
-the canonical setup: a local `kind` cluster pinned to Kubernetes `>= 1.33`
-(native restartable init sidecar containers require it), `telepresence` for
-DNS/VPN into the cluster, and the vscode debugger attached to
-`api_server`/`celery`/`web`. Use `docs/craft/dev/local-compose-craft.md`
-instead only when the change is in the docker sandbox backend or
-`sandbox-proxy` specifically (`SANDBOX_BACKEND=docker`); it is slower for
-general Craft work.
+Craft sandboxes are real Kubernetes pods backed by Firecracker through Kata.
+There is no local Docker backend for interactive session/turn work.
+`docs/craft/dev/local-kubernetes.md` is the canonical setup for Kubernetes
+control-plane work. Use a Linux KVM host or nested-virtualization VM for real
+Firecracker validation; ordinary macOS kind clusters cannot prove VM behavior.
+`telepresence` remains useful for DNS/VPN into the cluster with the vscode
+debugger attached to `api_server`/`celery`/`web`.
 `deployment/helm/dev/k8s-up.sh` removes Kindnet's CPU limit and waits for its
 rollout on both new and existing clusters. CPU requests and memory settings stay
 unchanged. This prevents the container's CPU quota from throttling network-policy

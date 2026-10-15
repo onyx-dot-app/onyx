@@ -18,6 +18,7 @@ PriorityClass; see the docs above before adding one back.
 {{- $image := include "onyx.sandboxImage" . }}
 {{- $pullPolicy := include "onyx.sandboxImagePullPolicy" . }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
+{{- $runtimeClassName := $sandboxPod.runtimeClassName | default "kata-fc" }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -44,6 +45,7 @@ spec:
         app.kubernetes.io/component: sandbox-image-prepuller
         admission.datadoghq.com/enabled: "false"
     spec:
+      runtimeClassName: {{ $runtimeClassName | quote }}
       {{- /* Same placement as the sandbox pods, or the wrong nodes get warmed. */}}
       nodeSelector:
         {{- (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) | toYaml | nindent 8 }}

@@ -160,7 +160,8 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/server/features/build/` | craft-sessions |
-| `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
+| `backend/onyx/server/features/build/sandbox/` | craft-sandboxes, craft-sessions |
+| `backend/onyx/server/features/build/sandbox/image/guest/` | craft-sandboxes, craft-sessions |
 | `backend/onyx/sandbox_proxy/` | craft-webapp-proxy |
 | `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
 | `backend/onyx/onyxbot/discord/` | discord-bot |
@@ -201,6 +202,8 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `deployment/` | the deployed component. For Craft, also `docs/craft/infra/`. |
+| `deployment/firecracker/` | craft-sandboxes |
+| `deployment/helm/dev/firecracker-ci.sh` | craft-sandboxes |
 | `deployment/fleet-telemetry.md` | observability |
 | `.github/workflows/` | CI. Not a product component; verify by reading the workflow. |
 | `cli/`, `tools/`, `scripts/` | developer tooling. Not a product component. |

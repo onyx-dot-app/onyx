@@ -14,8 +14,8 @@ from onyx.db.enums import PatType, Permission, SandboxStatus
 from onyx.db.models import PersonalAccessToken, Sandbox, User
 from onyx.db.pat import create_pat, list_user_pats
 from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
@@ -259,7 +259,7 @@ class TestEnsureSandboxPat:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """``KubernetesSandboxManager.provision(onyx_pat="")`` must raise
+        """``SandboxManager.provision(onyx_pat="")`` must raise
         ValueError before issuing any K8s mutation — the empty-PAT guard is
         the last line of defence against pods coming up unauthenticated.
 
@@ -267,17 +267,15 @@ class TestEnsureSandboxPat:
         stub ``_pod_exists_and_healthy`` to return False so the guard is
         actually reached.
         """
-        manager = object.__new__(KubernetesSandboxManager)
+        manager = object.__new__(SandboxManager)
 
         def _no_pod(
-            self: KubernetesSandboxManager,  # noqa: ARG001
+            self: SandboxManager,  # noqa: ARG001
             pod_name: str,  # noqa: ARG001
         ) -> bool:
             return False
 
-        monkeypatch.setattr(
-            KubernetesSandboxManager, "_pod_exists_and_healthy", _no_pod
-        )
+        monkeypatch.setattr(SandboxManager, "_pod_exists_and_healthy", _no_pod)
 
         with pytest.raises(ValueError, match="onyx_pat"):
             manager.provision(

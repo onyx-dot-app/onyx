@@ -5,27 +5,25 @@ attached to api_server / celery / web.
 
 ## When you need this
 
-This is the canonical local setup for **Onyx Craft (build mode)** — sandboxes
-are real Kubernetes pods, so there is no longer a non-cluster shortcut.
+Craft uses Firecracker VMs through Kubernetes and the `kata-fc` RuntimeClass.
 Non-Craft work can still use the docker-compose deps + vscode debugger path
 described in [CONTRIBUTING.md](/CONTRIBUTING.md); use that when you don't
 need a sandbox.
 
-For iterating on the **docker** sandbox backend specifically
-(`SANDBOX_BACKEND=docker`, the self-host compose path) — typically when
-touching `backend/onyx/sandbox_proxy/` or the docker manager — see
-[local-compose-craft.md](./local-compose-craft.md) instead.
+Craft setup requires an existing Linux KVM kind cluster with Kata configured.
+Ordinary Docker Desktop kind clusters cannot run Craft. See
+[Firecracker node prerequisites](../infra/firecracker.md).
 
 ## Prerequisites
 
-Builds on the CONTRIBUTING.md prereqs (Python 3.13, uv, Node.js 22, the venv,
-`.vscode/.env`). Docker Desktop must be running with at least 8 CPU / 16 GB
-allocated. For three active Craft sandboxes, allocate at least 12 CPU / 24 GB.
-
-Craft sandbox pods use Kubernetes native restartable init sidecar containers,
-so the cluster must run Kubernetes `>= 1.33`. The local `k8s-up.sh` script pins
-kind to `kindest/node:v1.33.1` by default; set `KIND_NODE_IMAGE` before running
-the script if you need a different compatible kind node image.
+Install the Python, uv, and Bun tools described in CONTRIBUTING.md.
+Run `uv sync --frozen` at the repository root before image refresh.
+Refresh requires the development `.venv` and Docker support for `docker image save --platform`.
+The runtime host must provide Linux KVM and `/dev/vhost-vsock`.
+The existing runtime helper supports Linux x86_64 kind hosts.
+macOS Docker Desktop does not supply these prerequisites.
+Install kind, Helm, and kubectl on the Linux runtime host.
+On a Mac development client, use these client tools.
 
 ```bash
 brew install kind helm kubectl
@@ -34,6 +32,60 @@ curl -fLo /opt/homebrew/bin/telepresence \
   https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64
 chmod +x /opt/homebrew/bin/telepresence
 ```
+
+### Configure a Linux KVM kind cluster
+
+Use a fresh cluster for first-time runtime installation. Preserve existing clusters and their data.
+Copy this kind configuration to a local file, such as `/tmp/onyx-kind.yaml`.
+
+```yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: /dev/kvm
+        containerPath: /dev/kvm
+      - hostPath: /dev/vhost-vsock
+        containerPath: /dev/vhost-vsock
+      - hostPath: /lib/modules
+        containerPath: /lib/modules
+        readOnly: true
+```
+
+Run these commands on the Linux host.
+
+```bash
+export KIND_CLUSTER_NAME=onyx-dev
+export KIND_NODE_NAME=onyx-dev-control-plane
+deployment/helm/dev/firecracker-ci.sh preflight-host
+kind create cluster --name onyx-dev --image kindest/node:v1.33.1 --config /tmp/onyx-kind.yaml
+kubectl config use-context kind-onyx-dev
+deployment/helm/dev/firecracker-ci.sh configure-kind-node
+deployment/helm/dev/firecracker-ci.sh install-kata
+```
+
+`configure-kind-node` creates the devmapper pool once. It refuses existing backing files and pools.
+Do not run it as a daily setup command. The Kata install invokes the checksum-pinned
+`deployment/firecracker/install-pinned-firecracker.sh` for Firecracker `v1.17.0` and its jailer.
+
+Check the configured prerequisites without changing the cluster.
+
+```bash
+deployment/helm/dev/k8s-up.sh --check-runtime
+```
+
+After building a guest image, use the existing smoke check on the Linux host.
+
+```bash
+KATA_SMOKE_IMAGE=onyxdotapp/sandbox:dev deployment/helm/dev/firecracker-ci.sh verify
+```
+
+The smoke check verifies a separate guest boot ID and the live Firecracker binary.
+It does not replace Craft integration or browser tests.
+Craft requires a NetworkPolicy-enforcing CNI.
+Runtime preflight does not test policy enforcement.
+Run the real network isolation suite before trusting the deployment.
 
 The telepresence network daemon needs sudo for DNS + VPN setup. vscode's
 preLaunchTask can't answer an interactive prompt, so pick one:
@@ -79,8 +131,9 @@ The API serves as a Telepresence target. The developer's local Python process ha
 Its small resource budget is deliberate; local API startup can take longer.
 
 These services request 4.8 CPU and about 6 GiB before other operators and Kubernetes system pods.
-Each sandbox adds a 1 CPU / 2 GiB request, plus its sidecar's 0.1 CPU / 256 MiB request.
-Sandbox limits remain 2 CPU / 10 GiB; its sidecar has a 1 CPU / 1 GiB limit.
+Each sandbox adds the request configured by `sandboxPod.resources`. The
+firewall init container is short-lived and does not replace VM capacity
+planning.
 These values support development. They do not guarantee performance for large indexes or models.
 
 Run `make craft-up` to apply the local overlay. Keep any local image overrides when upgrading an existing release.
@@ -90,11 +143,10 @@ Check node capacity with `kubectl describe node`; check usage with `kubectl top 
 
 ## kubectl context
 
-Every script in this doc — and the `make craft-up` wrapper — refuses to
-operate unless your `kubectl` context is exactly `kind-onyx-dev`. This is
-a deliberate safety guard: the `onyx` namespace also exists in production
-EKS, and `helm uninstall` / `kubectl delete` on the wrong cluster is
-catastrophic.
+Setup and image refresh pass `--context kind-onyx-dev` explicitly to Kubernetes
+and Helm. They do not change your active context. Set `CLUSTER_NAME` for image
+refresh or pass `--cluster-name` to setup for another configured kind cluster.
+Teardown commands still require their documented context check.
 
 List your contexts:
 
@@ -122,9 +174,17 @@ kubectl config current-context    # expect: kind-onyx-dev
 
 ## One-time setup
 
-Run **`make craft-up`** (or the **`craft: up`** vscode task). It handles
-the cluster, helm install, sandbox image build/load, and `.env.k8s`
-bootstrap in one shot. Idempotent — safe to re-run.
+After configuring the runtime, run **`make craft-up`** or the **craft: up** vscode task.
+It checks the runtime, builds local images, installs Onyx, and creates missing IDE env files.
+It refuses existing sandbox pods.
+Snapshot live sessions with the current release before draining their sandboxes.
+Before an image or protocol update, stop host Onyx API, Celery workers, and beat processes.
+This includes the VS Code **Run All Onyx Services (k8s)** debug session.
+Restart these processes only after setup or refresh succeeds.
+
+On Linux, replace `host.docker.internal` in the local Helm overlay and `.env.k8s`
+with a host address reachable through the sandbox proxy. Both `ONYX_SERVER_URL`
+values must point to the frontend API route.
 
 ```bash
 make craft-up
@@ -146,16 +206,14 @@ telepresence connect -n onyx
 For transparency / debugging, `craft-up.sh` runs these steps in order. You
 can also invoke them individually for tighter rebuild loops.
 
-**1. Bring up the cluster.** Delegates to
+**1. Check the existing runtime.** Delegates to
 [`deployment/helm/dev/k8s-up.sh`](/deployment/helm/dev/k8s-up.sh). The
-script is idempotent and refuses to run unless your kubectl context is
-`kind-onyx-dev`. It also installs the telepresence traffic-manager once
-per cluster. New clusters use the `kindest/node:v1.33.1` node image so Craft's
-native init sidecar pod shape is supported. Existing clusters are not recreated;
-set `KIND_NODE_IMAGE` to override the default for a newly created cluster.
-The script removes Kindnet's CPU limit so network-policy processing can use available CPU.
-It keeps the CPU request and memory settings, then waits for the rollout.
-This applies to existing clusters too, including runs with `--skip-helm`.
+script requires `kata-fc`, usable KVM devices, healthy devmapper, and the pinned binary versions.
+These checks run before image builds, env copies, or cluster changes.
+It does not install a runtime or replace an existing cluster.
+
+`k8s-up.sh --skip-helm` creates or checks an ordinary non-Craft kind cluster.
+That path does not install Onyx, build images, patch Kindnet, or claim Firecracker support.
 
 Watch pods (opensearch and CNPG-postgres take a minute or two on first boot):
 
@@ -163,40 +221,37 @@ Watch pods (opensearch and CNPG-postgres take a minute or two on first boot):
 kubectl -n onyx get pods -w
 ```
 
-The chart pins images to the `:edge` tag in
+The chart selects local backend and guest `:dev` images in
 [`values-localdev.yaml`](/deployment/helm/dev/values-localdev.yaml)
-with `pullPolicy: Always`, so in-cluster pods track nightly builds off `main`
-rather than the released `:latest`.
+with `IfNotPresent`. Other Onyx images use `:edge` with `IfNotPresent`.
 
-**2. Bootstrap the vscode env files.** Copies `.vscode/.env.k8s.template` to
-`.vscode/.env.k8s`, and `.vscode/env.web_template.txt` to `.vscode/.env.web`
-(read by the `Web Server` launch). Only absent files are created — existing
-ones are never overwritten, so your secrets stay intact across `craft-up` runs.
-
-**3. Build and load the sandbox image.** The chart points sandbox pods at
-`onyxdotapp/sandbox:dev`, which is local-only. Skipping this is the most
-common Craft setup failure — kind's `imagePullPolicy: IfNotPresent` will
-fail and Build sessions hang. The standalone rebuild command:
+**2. Build and load matching images.** The shared refresh script builds the
+backend and guest. Upgrades roll every in-cluster backend deployment and wait
+for old pods to terminate. Then they load the new guest image and apply the
+complete Helm PodTemplate, including both containers and its protocol label.
+Prepare leaves both live image tags unchanged when a guest template already exists.
+In-cluster rollouts do not stop your host API, Celery workers, or beat.
+The backend uses Kind's image loader. The guest loader checks each node's cluster ownership,
+imports the selected platform through containerd devmapper, and marks the image retained by CRI.
+It compares the saved Docker config digest with each node's CRI image ID and checks retention before applying the template.
+The standalone refresh command is:
 
 ```bash
-make craft-sandbox-image
+make craft-refresh-images
 ```
 
-which is equivalent to:
+`craft-sandbox-image` and `craft-backend-image` use this same refresh path.
+Neither target updates one half of a guest protocol change.
+Image and pull policy settings belong to Helm, not `.env.k8s`.
+
+**3. Bootstrap the vscode env files.** Copies `.vscode/.env.k8s.template` to
+`.vscode/.env.k8s`, and `.vscode/env.web_template.txt` to `.vscode/.env.web`.
+Only absent files are created. Existing files and their secrets remain untouched.
+
+Verify both images are present in the kind node.
 
 ```bash
-docker build -t onyxdotapp/sandbox:dev \
-  backend/onyx/server/features/build/sandbox/image
-kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev
-```
-
-The image tag (`onyxdotapp/sandbox:dev`) must match `SANDBOX_CONTAINER_IMAGE`
-in your `.env.k8s` and the chart's `sandbox.image.*` values.
-
-Verify it's present in the kind node:
-
-```bash
-docker exec onyx-dev-control-plane crictl images | grep sandbox
+docker exec onyx-dev-control-plane crictl images | grep -E 'sandbox|onyx-backend'
 ```
 
 ---
@@ -254,9 +309,6 @@ kubectl -n onyx exec -it onyx-pg-1 -- psql -U postgres
 # Restart api_server after a chart edit
 kubectl -n onyx rollout restart deployment/onyx-api-server
 
-# Delete one sandbox pod (test a recovery path)
-kubectl -n onyx-sandboxes delete pod <name>
-
 # Inspect cluster events (most-recent 30)
 kubectl -n onyx get events --sort-by=.lastTimestamp | tail -30
 ```
@@ -278,12 +330,8 @@ only `.env.k8s`. If you set `GEN_AI_API_KEY` only in `.env`, it won't be
 present in K8s mode and you'll hit confusing missing-key errors. The
 template's section 1 lists the standard `.env` vars to copy.
 
-**You must also set `SANDBOX_BACKEND=kubernetes`** (included in the
-template). This is what flips the api_server from local Docker sandboxes
-to in-cluster pod sandboxes. The vscode `(k8s)` launch profiles set it via
-their `env:` block as a safety net, but anything that reads `.env.k8s`
-directly (CLI scripts, ad-hoc invocations, tests) needs the value to be
-in the file too.
+Set `CRAFT_SANDBOX_RUNTIME=kubernetes_firecracker` and `ENABLE_CRAFT=true`.
+The removed `SANDBOX_BACKEND`, push signing key, and backend image controls have no effect.
 
 `OPENSEARCH_ADMIN_PASSWORD` is the one cluster-random value — leave it as
 `<AUTO_FROM_CLUSTER>` in your `.env.k8s`. The `k8s: telepresence intercept
@@ -328,7 +376,7 @@ Individual `Celery <name> (k8s)` configs are hidden from the picker
 `.vscode/launch.json` to run a single worker.
 
 Every `(k8s)` profile sources `.vscode/.env.k8s` (the file you copied from
-`.env.k8s.template`) and sets `SANDBOX_BACKEND=kubernetes`.
+`.env.k8s.template`).
 
 Visit `http://localhost:3000` once running.
 
@@ -338,37 +386,35 @@ Visit `http://localhost:3000` once running.
 |---|---|---|
 | Python in api_server / celery / model_server | ~instant | uvicorn / debugpy reloads. No cluster touch. |
 | Frontend (`web/`) | ~instant | Next.js HMR. |
-| Helm chart templates / values | 10–30s | Re-run `k8s-up.sh`. |
-| Backend image (`Dockerfile`) | 60–180s | `docker build` → `kind load docker-image` → `kubectl rollout restart`. |
-| Sandbox image (`backend/onyx/server/features/build/sandbox/image/`) | 60–180s | Same. New sandboxes pick up the new image immediately. |
+| Helm chart templates / values | Depends on rollout | Snapshot and drain sandboxes, stop host processes, then re-run `k8s-up.sh`. |
+| Backend or guest image and helper protocol | Depends on build and rollout | Snapshot and drain sandboxes, stop host processes, then run `make craft-refresh-images`. |
 
 ### Building and loading local images
 
+Stop new session traffic and snapshot live sessions with the current release.
+Drain those sandboxes, then stop host Onyx API, Celery workers, and beat processes.
+Stop the VS Code **Run All Onyx Services (k8s)** session and any separately launched Kubernetes backend processes.
+The refresh script does not detect or stop host processes.
+
 ```bash
-docker build -t onyxdotapp/onyx-backend:dev backend/
-kind load docker-image onyxdotapp/onyx-backend:dev --name onyx-dev
-
-# Point the chart at it (once per session). Override global.pullPolicy
-# only when you're running a locally-built tag like :dev that isn't on
-# docker.io — otherwise the localdev default (Always) is what you want
-# so the nightly :edge tag refreshes.
-helm upgrade onyx deployment/helm/charts/onyx \
-  -n onyx \
-  -f deployment/helm/dev/values-localdev.yaml \
-  --set global.pullPolicy=IfNotPresent \
-  --set api.image.tag=dev \
-  --set celery_shared.image.tag=dev
-
-kubectl -n onyx rollout restart deployment/onyx-api-server
+make craft-refresh-images
+make craft-check-images
 ```
 
-`kind load` ships straight to the kind node's containerd — no registry push.
+Restart the host processes only after refresh succeeds.
+The shared script loads images into kind without a registry push.
+Guest loading streams the image archive without a local archive file.
+It reads the archive once for the config digest, then exports the same platform to each node.
+An import, image ID, or retention failure stops refresh before template application.
+The check target reports image IDs and the live template. It does not prove source freshness or VM acceptance.
+Refresh checks for sandbox pods before image changes and after template application.
+If a sandbox appears during refresh, the script fails without deleting the pod.
+Keep the host processes stopped and preserve that sandbox's work before retrying.
 
 ### Avoid this loop when you can
 
-For logic that doesn't depend on cluster-only behavior (safe-extract, push
-wire format, tarball round-trips), drive it from unit /
-external-dependency-unit tests against a temp dir. See
+For logic that does not depend on cluster behavior, such as archive validation,
+use local or external-dependency-unit tests against a temp dir. See
 [`backend/tests/README.md`](/backend/tests/README.md).
 
 ### End of day
@@ -413,28 +459,25 @@ For Craft development, the required vars (already in the template) are:
 
 ```
 ENABLE_CRAFT=true
-SANDBOX_BACKEND=kubernetes
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev
-ONYX_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080
-ONYX_SANDBOX_PUSH_PRIVATE_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+CRAFT_SANDBOX_RUNTIME=kubernetes_firecracker
+ONYX_SERVER_URL=http://host.docker.internal:3000/api
 ```
 
-The `onyxdotapp/sandbox:dev` image referenced here is **local-only**; build
-and load it per [step 3 of One-time setup](#3-build-and-load-the-sandbox-image)
-before launching the api_server.
+Sandbox image, service account, RuntimeClass, and pull policy are Helm values.
+Set those in the local values file, not in backend Python env.
 
 ## Troubleshooting
 
 ### Sandbox egress stalls with Kindnet CPU throttling
 
-Kindnet processes network-policy packets. Its default `100m` CPU limit can delay
-connections to the sandbox proxy and Kubernetes resource watches. OpenCode startup
+Kindnet CPU throttling can delay pod network traffic.
+Connections to the sandbox proxy and Kubernetes resource watches can stall. OpenCode startup
 can then time out while installing plugins, before sending an LLM request.
 
-Apply the local networking configuration without reinstalling Onyx:
+Reconcile the local networking configuration after draining sandboxes:
 
 ```bash
-deployment/helm/dev/k8s-up.sh --skip-cluster-create --skip-helm
+deployment/helm/dev/k8s-up.sh --skip-cluster-create
 ```
 
 Check the active CPU quota and throttling counters:

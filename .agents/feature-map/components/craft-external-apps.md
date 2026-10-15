@@ -15,7 +15,7 @@
 **Owns:**
 `backend/onyx/sandbox_proxy/` (`server.py`, `request_evaluator.py`,
 `credential_injection.py`, `approval_cache.py`, `sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`,
-`sandbox_identity/docker.py`, `certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`, `certificate_authority/docker.py`, `errors.py`,
+`certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`, `errors.py`,
 `logging_utils.py`, `mcp_jsonrpc.py`, `addons/gate.py`, `resolvers/external_app.py`,
 `resolvers/mcp_server.py`, `resolvers/mcp_matching.py`, `resolvers/onyx_pat.py`),
 `backend/onyx/external_apps/` (`credentials.py`, `token_refresh.py`,
@@ -89,9 +89,7 @@ time.
 | `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS` | `configs.py` | Defaults to `false`. Enable through `sandboxProxy.allowGlobalClients` for global IPv6 pod addresses, with restricted proxy ingress. Known sandbox identity remains required. |
 | `SANDBOX_PROXY_INTERNAL_CIDRS` | `configs.py` | Comma-separated internal ranges, including global IPv6 VPC, pod, Service, node, and connected-network ranges. The proxy denies destinations in these ranges. |
 | `SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA` | `configs.py` | mitmproxy upstream cert verification mode. |
-| `SANDBOX_BACKEND` (`SandboxBackend.KUBERNETES`/`DOCKER`) | `configs.py` | Selects `K8sSecretCAStore`/`K8sInformerLookup` vs. `FileCAStore`/`DockerEventsLookup` (`sandbox_proxy/certificate_authority/bootstrap.py:build_ca_store`, `sandbox_proxy/sandbox_identity/resolution.py:build_ip_lookup`). |
 | `SANDBOX_PROXY_CA_SECRET`, `SANDBOX_PROXY_CA_CONFIGMAP`, `SANDBOX_PROXY_NAMESPACE` | `configs.py` | K8s CA persistence and cross-namespace projection targets (`certificate_authority/kubernetes.py`). |
-| `SANDBOX_PROXY_CA_VOLUME_PATH` | `configs.py` | Docker CA persistence volume (`certificate_authority/docker.py`). |
 | `ONYX_SERVER_URL` | `configs.py` | The one internal host the proxy allows through the destination-block, and the host the `OnyxPatResolver` claims (`gate.py:_parse_api_server`, `resolvers/onyx_pat.py`). |
 | `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | `configs.py` | How long the proxy parks a request awaiting an `ASK` decision before claiming `EXPIRED` (`gate.py:_await_decision`). |
 | `MCP_SESSION_TAG_HEADER` | `configs.py` | Header opencode's in-process MCP client uses to carry the session tag (`gate.py:_extract_session_tag`). |
@@ -176,7 +174,7 @@ sandbox process (opencode / a tool call)
   ▼
 1. TLS termination (MITM)
      mitmproxy decrypts the CONNECT tunnel using the proxy's own CA
-     (certificate_authority/bootstrap.py, certificate_authority/kubernetes.py / certificate_authority/docker.py), which the sandbox was made to trust
+     (certificate_authority/bootstrap.py, certificate_authority/kubernetes.py), which the sandbox was made to trust
      at boot (firewall-init.sh). GateAddon.http_connect also captures the
      in-band session tag off Proxy-Authorization here: it is only visible
      on the CONNECT, not the decrypted inner request.
@@ -196,9 +194,8 @@ sandbox process (opencode / a tool call)
   │
 3. Identity resolution
      GateAddon._resolve_and_match extracts the client's source IP and calls
-     IdentityResolver.resolve_sandbox(src_ip): backend-specific IP->identity
-     lookup (K8sInformerLookup watches sandbox pods; DockerEventsLookup
-     streams container events), then a DB read of Sandbox.user_id. Unknown IP
+     IdentityResolver.resolve_sandbox(src_ip): K8sInformerLookup watches
+     sandbox pods, then a DB read of Sandbox.user_id. Unknown IP
      -> 403 unidentified_sandbox (fail closed).
      sandbox_proxy/sandbox_identity/resolution.py:IdentityResolver.resolve_sandbox
   │
@@ -262,11 +259,9 @@ The proxy generates a self-signed CA (RSA-4096, 5-year validity,
 persists it: a Kubernetes `Secret` in the proxy's own namespace holding
 `ca.crt`/`ca.key`, with only the public cert mirrored into a `ConfigMap` in
 the sandbox namespace for cross-namespace mounting
-(`sandbox_proxy/certificate_authority/kubernetes.py:K8sSecretCAStore`); or a shared Docker Compose
-volume where `ca.key` is `0600` root-owned and `ca.crt` is world-readable
-(`sandbox_proxy/certificate_authority/docker.py:FileCAStore`). Multiple proxy replicas cold-start
-safely by racing on `Secret`/file creation; the loser reloads the winner's CA
-(`CAStoreConflictError`).
+(`sandbox_proxy/certificate_authority/kubernetes.py:K8sSecretCAStore`).
+Multiple proxy replicas cold-start safely by racing on `Secret` creation; the
+loser reloads the winner's CA (`CAStoreConflictError`).
 
 The sandbox trusts this CA at boot
 (`docs/craft/features/egress-proxy-and-approvals/README.md`: `firewall-init.sh`
@@ -296,16 +291,16 @@ Base identity (`sandbox_id`, `user_id`, `tenant_id`) is resolved purely from
 the TCP source IP of the connection into the proxy
 (`sandbox_proxy/sandbox_identity/resolution.py:IdentityResolver.resolve_sandbox`), against a
 cache the proxy itself builds by watching sandbox pods/containers
-(`sandbox_identity/kubernetes.py:K8sInformerLookup`, `sandbox_identity/docker.py:DockerEventsLookup`).
-Code inside the sandbox cannot change its own source IP as seen by the proxy,
-so this layer is not spoofable from inside a sandbox in either backend.
+(`sandbox_identity/kubernetes.py:K8sInformerLookup`). Code inside the sandbox
+cannot change its own source IP as seen by the proxy, so this layer is not
+spoofable from inside a sandbox.
 
 **This assumes the deployment topology puts one sandbox per pod/container
 with a stable, uniquely-labelled IP, and that nothing NATs multiple
 sandboxes behind one IP the proxy sees.** Both lookups fail loud on a
 duplicate IP mapping to two different `sandbox_id`s at initial sync
-(`sandbox_identity/kubernetes.py:_initial_list`, `sandbox_identity/docker.py:_initial_sync`),
-which is the code's own acknowledgment of that assumption.
+(`sandbox_identity/kubernetes.py:_initial_list`), which is the code's own
+acknowledgment of that assumption.
 
 Session-level identity (which `BuildSession` an `ASK` request belongs to) is
 different: it rides an in-band tag (the `BuildSession` id, sent as the
@@ -580,9 +575,9 @@ they can never disagree about which server owns a request; see
 | adds a new external app (built-in or custom) | `resolve_app_for_url`'s regex/glob correctness for the new `upstream_url_patterns` (a bad regex is silently skipped, per `[[craft-admin]]`); the app's catalog (`external_apps/providers/`) and default per-action policies; whether the app needs a skill association |
 | changes URL/MCP matching (`resolve_app_for_url`, `mcp_matching.py:match_request`, `recognize_actions`) | both `ExternalAppRequestEvaluator` and any credential resolver that independently re-derives attribution (`MCPServerResolver.resolve` re-parses instead of trusting the gate's cache, deliberately); the ambiguous-match fail-closed paths (`AmbiguousMCPTargetError`) |
 | changes the default for unmatched requests (whole-domain `ASK`, MCP default `ASK`, or the off-catalog pass-through) | §5 item 5 of this document; `[[craft-admin]]`'s "general internet egress is not admin-approved" invariant; every existing connected app's behavior for actions outside its catalog |
-| changes identity resolution (`sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`, `sandbox_identity/docker.py`) | the duplicate-IP fail-loud check at initial sync; `/healthz` readiness semantics; the session-tag verification in `resolve_session_by_id` (§4.3); both `SandboxIPLookup` backends must stay behavior-identical |
+| changes identity resolution (`sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`) | the duplicate-IP fail-loud check at initial sync; `/healthz` readiness semantics; the session-tag verification in `resolve_session_by_id` (§4.3) |
 | changes credential injection (`credential_injection.py`, any resolver) | the first-claim-wins resolver order in `server.py:build_resolvers`; whether a claim with no headers (`CLAIMED`) vs. a hard failure (`BLOCKED`) is still correct for the new resolver; `logging_utils.py`'s "header names only, never values" invariant |
-| changes the CA bootstrap or persistence (`certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`, `certificate_authority/docker.py`) | every running sandbox's trust store (a rotated CA without a coordinated sandbox restart breaks every in-flight TLS interception); the K8s cross-namespace `ConfigMap` projection; the half-written-state fail-loud recovery path |
+| changes the CA bootstrap or persistence (`certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`) | every running sandbox's trust store (a rotated CA without a coordinated sandbox restart breaks every in-flight TLS interception); the K8s cross-namespace `ConfigMap` projection; the half-written-state fail-loud recovery path |
 | changes the approval flow (`gate.py`'s park/wake, `approval_cache.py`, `action_approval.py`) | `[[craft-sessions]]`'s live-stream announce path; the SIGTERM drain (`GateAddon.drain_inflight`) that must terminalize every parked approval before the proxy pod exits; the frontend's `/live` polling fallback |
 | changes the request body cap (`PARSER_MAX_BODY_BYTES`) | §9's body-limit footgun; whether the new limit still matches or exceeds the relevant upstream's own limit, so the proxy is never the more restrictive failure |
 | changes `GatedApp`/`GatedActionPolicy` | both consumers: `external_apps/api.py` (admin writes) and this document's live enforcement (`request_evaluator.py`, `addons/gate.py`); MCP servers share this table with external apps |
@@ -607,9 +602,8 @@ cd backend && uv run pytest tests/unit/external_apps/matching/test_engine.py
 cd backend && uv run pytest tests/integration/tests/external_apps/test_external_app_action_policies.py
 cd backend && uv run pytest tests/integration/tests/external_apps/test_external_apps.py
 
-# Docker end-to-end: a real sandbox + real proxy container
-cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py
-cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_sandbox_network_posture_docker.py
+# Kubernetes end-to-end: a real Firecracker-backed sandbox + proxy
+cd backend && uv run pytest tests/integration/tests/craft/k8s/test_approval_gate.py
 ```
 
 `backend/tests/external_dependency_unit/sandbox_proxy/test_gate_claim_arbiter.py`
@@ -698,7 +692,7 @@ that arbiter without extending it.
   `app_name`. A change that starts matching or granting by name will
   silently collide across such instances (see `[[craft-admin]]` §9).
 - **The CA's blast radius is every sandbox in the deployment, not one
-  session.** Rotating it, or a bug that stops the K8s `ConfigMap` (or the
-  Docker volume's `ca.crt`) from projecting correctly, breaks TLS for every
-  running sandbox simultaneously, not just new ones, since existing
-  sandboxes only refresh their trust store at boot.
+  session.** Rotating it, or a bug that stops the K8s `ConfigMap` from
+  projecting correctly, breaks TLS for every running sandbox simultaneously,
+  not just new ones, since existing sandboxes only refresh their trust store at
+  boot.

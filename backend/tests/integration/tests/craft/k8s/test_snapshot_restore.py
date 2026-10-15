@@ -1,12 +1,14 @@
-"""Kubernetes sidecar snapshot/restore contract + API restore orchestration."""
+"""Guest snapshot/restore contract + API restore orchestration."""
 
 from __future__ import annotations
 
 import io
+import json
 import shutil
 import tarfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 from uuid import UUID, uuid4
 
 import httpx
@@ -17,14 +19,14 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
-    SANDBOX_BACKEND,
     SANDBOX_NAMESPACE,
-    SandboxBackend,
 )
 from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.image.guest.models import RunRequest
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
+from onyx.server.features.build.sandbox.models import SandboxExecError
 from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
@@ -35,14 +37,35 @@ from tests.integration.tests.craft.k8s.k8s_fixtures import (
     OwnedLivePod,
     PoolSession,
     SandboxHandle,
+    kubernetes_runtime,
     pod_exec,
     wait_for_pod_deletion,
     wait_until_healthy,
 )
 
-pytestmark = pytest.mark.skipif(
-    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
-    reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
+type _SnapshotHardlinkTargetKind = Literal[
+    "missing", "forward", "hardlink", "symlink", "directory"
+]
+
+SNAPSHOT_READ_ONLY_DIRECTORIES = ("outputs/locked", "outputs")
+
+LEGACY_DOCKER_SNAPSHOT_COMMAND = (
+    "tar --exclude=outputs/.document-thumbnails -czf - "
+    "$([ -d outputs ] && echo outputs) "
+    "$([ -d attachments ] && echo attachments)"
+)
+
+UNSAFE_SNAPSHOT_HARDLINK_CASES: tuple[
+    tuple[str, _SnapshotHardlinkTargetKind, str], ...
+] = (
+    ("/etc/passwd", "missing", "hardlink target"),
+    ("../outside.txt", "missing", "hardlink target"),
+    ("opencode.json", "missing", "hardlink target"),
+    ("outputs/missing.txt", "missing", "hardlink target"),
+    ("outputs/later.txt", "forward", "hardlink target"),
+    ("outputs/alias.txt", "hardlink", "hardlink target"),
+    ("outputs/symlink.txt", "symlink", "links are not allowed"),
+    ("outputs/directory", "directory", "hardlink target"),
 )
 
 
@@ -69,7 +92,7 @@ def _populate_session_workspace(
     pod_exec(k8s, pod_name, SANDBOX_NAMESPACE, "\n".join(script_lines))
 
     if include_managed_skills:
-        # managed/ is RO in the sandbox container; seed via the sidecar.
+        # managed/ is root-owned; seed through explicit fixture setup.
         pod_exec(
             k8s,
             pod_name,
@@ -77,7 +100,7 @@ def _populate_session_workspace(
             "mkdir -p /workspace/managed/skills/marker && "
             "printf '%s' 'managed-skill-content' "
             "> /workspace/managed/skills/marker/SKILL.md",
-            container="sidecar",
+            root=True,
         )
 
     return payload
@@ -106,6 +129,401 @@ def _put_snapshot_bytes(storage_path: str, body: bytes) -> None:
 def _list_archive_members(tar_path: Path) -> list[str]:
     with tarfile.open(tar_path, "r:gz") as tar:
         return tar.getnames()
+
+
+def _snapshot_guest_file(
+    manager: SandboxManager,
+    session: PoolSession,
+    operation: Literal["write-file", "read-file"],
+    path: str,
+    content: bytes | None = None,
+) -> bytes:
+    return manager._guest(
+        session.sandbox_id,
+        operation,
+        {"session_id": str(session.session_id), "path": path},
+        stdin=content,
+    )
+
+
+def _snapshot_guest_run(
+    manager: SandboxManager, session: PoolSession, argv: list[str]
+) -> bytes:
+    request = RunRequest(
+        argv=argv,
+        cwd=f"/workspace/sessions/{session.session_id}",
+        timeout_seconds=30,
+    )
+    return manager._guest(
+        session.sandbox_id,
+        "run",
+        request.model_dump(mode="json"),
+        timeout=45,
+    )
+
+
+def _snapshot_member(
+    name: str,
+    *,
+    content: bytes = b"",
+    kind: bytes = tarfile.REGTYPE,
+    target: str = "",
+    mode: int = 0o644,
+) -> tuple[tarfile.TarInfo, bytes]:
+    member = tarfile.TarInfo(name)
+    member.type = kind
+    member.linkname = target
+    member.mode = mode
+    member.size = len(content)
+    return member, content
+
+
+def _snapshot_archive(members: list[tuple[tarfile.TarInfo, bytes]]) -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        for member, content in members:
+            archive.addfile(member, io.BytesIO(content))
+    return buffer.getvalue()
+
+
+def _assert_snapshot_rejected(
+    manager: SandboxManager,
+    session: PoolSession,
+    archive: bytes,
+    expected_error: str,
+) -> None:
+    sentinels = {
+        "outputs/before-restore.txt": b"keep existing output\n",
+        "attachments/before-restore.txt": b"keep existing attachment\n",
+    }
+    for path, content in sentinels.items():
+        _snapshot_guest_file(manager, session, "write-file", path, content)
+
+    with pytest.raises(SandboxExecError) as exc_info:
+        manager._guest(
+            session.sandbox_id,
+            "restore-snapshot",
+            {"session_id": str(session.session_id)},
+            stdin=archive,
+            timeout=120,
+        )
+
+    assert exc_info.value.returncode == 1
+    assert expected_error in exc_info.value.stderr.lower(), exc_info.value.stderr
+    for path, content in sentinels.items():
+        assert _snapshot_guest_file(manager, session, "read-file", path) == content
+
+
+def test_guest_snapshot_materializes_hardlinked_files(
+    k8s_manager: SandboxManager,
+    pool_session: PoolSession,
+) -> None:
+    expected: dict[str, bytes] = {}
+    for root in ("outputs", "attachments"):
+        content = f"hardlinked {root} contents\n".encode()
+        original = f"{root}/hardlink-original.txt"
+        copied = f"{root}/hardlink-copy.txt"
+        _snapshot_guest_file(k8s_manager, pool_session, "write-file", original, content)
+        _snapshot_guest_run(k8s_manager, pool_session, ["ln", "--", original, copied])
+        expected[original] = expected[copied] = content
+
+    body = k8s_manager._guest(
+        pool_session.sandbox_id,
+        "create-snapshot",
+        {"session_id": str(pool_session.session_id)},
+        timeout=120,
+    )
+
+    with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as archive:
+        for path, content in expected.items():
+            member = archive.getmember(path)
+            assert member.isfile(), f"{path} must contain regular file data"
+            restored = archive.extractfile(member)
+            assert restored is not None
+            with restored:
+                assert restored.read() == content
+
+
+def test_guest_restore_accepts_legacy_gnu_tar_hardlinks(
+    k8s_manager: SandboxManager,
+    pool_session: PoolSession,
+) -> None:
+    content = b"legacy Docker snapshot contents\n"
+    original = "outputs/legacy-original.txt"
+    copied = "attachments/legacy-copy.txt"
+    _snapshot_guest_file(k8s_manager, pool_session, "write-file", original, content)
+    _snapshot_guest_file(
+        k8s_manager, pool_session, "write-file", "attachments/regular.txt", b"regular\n"
+    )
+    _snapshot_guest_run(k8s_manager, pool_session, ["ln", "--", original, copied])
+    assert b"GNU tar" in _snapshot_guest_run(
+        k8s_manager, pool_session, ["tar", "--version"]
+    )
+    body = _snapshot_guest_run(
+        k8s_manager,
+        pool_session,
+        ["/bin/sh", "-c", LEGACY_DOCKER_SNAPSHOT_COMMAND],
+    )
+    with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as archive:
+        members = archive.getmembers()
+        source = archive.getmember(original)
+        link = archive.getmember(copied)
+        assert source.isfile()
+        assert link.islnk()
+        assert link.linkname == original
+        assert members.index(source) < members.index(link)
+
+    _snapshot_guest_file(
+        k8s_manager, pool_session, "write-file", original, b"changed after snapshot\n"
+    )
+    k8s_manager._guest(
+        pool_session.sandbox_id,
+        "restore-snapshot",
+        {"session_id": str(pool_session.session_id)},
+        stdin=body,
+        timeout=120,
+    )
+
+    for path in (original, copied):
+        assert (
+            _snapshot_guest_file(k8s_manager, pool_session, "read-file", path)
+            == content
+        )
+    assert (
+        _snapshot_guest_run(
+            k8s_manager, pool_session, ["stat", "-c", "%h", original, copied]
+        )
+        == b"1\n1\n"
+    )
+
+
+def test_guest_restore_accepts_legacy_gnu_tar_generated_paths(
+    k8s_manager: SandboxManager,
+    pool_session: PoolSession,
+) -> None:
+    generated_source = "outputs/web/node_modules/package/index.js"
+    user_alias = "attachments/package-user-copy.js"
+    generated_files = {
+        generated_source: b"module.exports = 'keep user alias';\n",
+        "outputs/web/.next/cache/webpack/cache.pack": b"stale build cache\n",
+        "outputs/web/.nextjs-port": b"3999\n",
+        "outputs/web/nextjs.pid": b"999999\n",
+    }
+    user_files = {
+        "outputs/web/app/page.tsx": b"export default function Page() { return 'user'; }\n",
+        "attachments/notes.txt": b"keep user attachment\n",
+        user_alias: b"module.exports = 'keep user alias';\n",
+    }
+    for path, content in generated_files.items():
+        _snapshot_guest_file(k8s_manager, pool_session, "write-file", path, content)
+    for path, content in user_files.items():
+        if path != user_alias:
+            _snapshot_guest_file(k8s_manager, pool_session, "write-file", path, content)
+    _snapshot_guest_run(
+        k8s_manager, pool_session, ["ln", "--", generated_source, user_alias]
+    )
+    _snapshot_guest_run(
+        k8s_manager, pool_session, ["mkdir", "-p", "outputs/web/node_modules/.bin"]
+    )
+    generated_symlink = "outputs/web/node_modules/.bin/package"
+    _snapshot_guest_run(
+        k8s_manager,
+        pool_session,
+        ["ln", "-s", "--", "../package/index.js", generated_symlink],
+    )
+    assert b"GNU tar" in _snapshot_guest_run(
+        k8s_manager, pool_session, ["tar", "--version"]
+    )
+    body = _snapshot_guest_run(
+        k8s_manager,
+        pool_session,
+        ["/bin/sh", "-c", LEGACY_DOCKER_SNAPSHOT_COMMAND],
+    )
+    with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as archive:
+        members = archive.getmembers()
+        source = archive.getmember(generated_source)
+        alias = archive.getmember(user_alias)
+        assert source.isfile()
+        assert alias.islnk()
+        assert alias.linkname == generated_source
+        assert members.index(source) < members.index(alias)
+        symlink = archive.getmember(generated_symlink)
+        assert symlink.issym()
+        assert symlink.linkname == "../package/index.js"
+        for path in generated_files:
+            assert archive.getmember(path).isfile()
+
+    for path in user_files:
+        _snapshot_guest_file(
+            k8s_manager, pool_session, "write-file", path, b"changed after snapshot\n"
+        )
+    k8s_manager._guest(
+        pool_session.sandbox_id,
+        "restore-snapshot",
+        {"session_id": str(pool_session.session_id)},
+        stdin=body,
+        timeout=120,
+    )
+
+    for path, content in user_files.items():
+        assert (
+            _snapshot_guest_file(k8s_manager, pool_session, "read-file", path)
+            == content
+        )
+    assert (
+        _snapshot_guest_run(
+            k8s_manager,
+            pool_session,
+            ["find", "outputs/web", "-mindepth", "1", "-print"],
+        )
+        == b"outputs/web/app\noutputs/web/app/page.tsx\n"
+    )
+    assert (
+        _snapshot_guest_run(k8s_manager, pool_session, ["stat", "-c", "%h", user_alias])
+        == b"1\n"
+    )
+
+
+@pytest.mark.parametrize("directory", SNAPSHOT_READ_ONLY_DIRECTORIES)
+def test_guest_restore_preserves_read_only_directory_mode(
+    k8s_manager: SandboxManager,
+    pool_session: PoolSession,
+    directory: str,
+) -> None:
+    child = f"{directory}/child.txt"
+    body = _snapshot_archive(
+        [
+            _snapshot_member(directory, kind=tarfile.DIRTYPE, mode=0o555),
+            _snapshot_member(child, content=b"read-only parent\n"),
+        ]
+    )
+    try:
+        for _ in range(2):
+            k8s_manager._guest(
+                pool_session.sandbox_id,
+                "restore-snapshot",
+                {"session_id": str(pool_session.session_id)},
+                stdin=body,
+                timeout=120,
+            )
+            assert (
+                _snapshot_guest_file(k8s_manager, pool_session, "read-file", child)
+                == b"read-only parent\n"
+            )
+            assert (
+                _snapshot_guest_run(
+                    k8s_manager, pool_session, ["stat", "-c", "%a", directory]
+                )
+                == b"555\n"
+            )
+        k8s_manager._guest(
+            pool_session.sandbox_id,
+            "cleanup-workspace",
+            {"session_id": str(pool_session.session_id)},
+        )
+        assert json.loads(
+            k8s_manager._guest(
+                pool_session.sandbox_id,
+                "workspace-exists",
+                {"session_id": str(pool_session.session_id)},
+            )
+        ) == {"exists": False}
+    finally:
+        cleanup = RunRequest(
+            argv=[
+                "sh",
+                "-c",
+                'if test -d "$1"; then find "$1" -type d -exec chmod u+w -- {} +; fi',
+                "repair-test-workspace",
+                f"/workspace/sessions/{pool_session.session_id}",
+            ],
+            cwd="/workspace",
+            timeout_seconds=30,
+        )
+        k8s_manager._guest(
+            pool_session.sandbox_id, "run", cleanup.model_dump(mode="json"), timeout=45
+        )
+
+
+@pytest.mark.parametrize(
+    ("target", "target_kind", "expected_error"),
+    UNSAFE_SNAPSHOT_HARDLINK_CASES,
+    ids=[
+        "absolute-target",
+        "traversal-target",
+        "unexpected-root-target",
+        "unknown-target",
+        "forward-target",
+        "hardlink-target",
+        "symlink-target",
+        "directory-target",
+    ],
+)
+def test_guest_restore_rejects_unsafe_hardlinks_without_replacing_workspace(
+    k8s_manager: SandboxManager,
+    pool_session: PoolSession,
+    target: str,
+    target_kind: _SnapshotHardlinkTargetKind,
+    expected_error: str,
+) -> None:
+    members = [_snapshot_member("outputs/source.txt", content=b"safe archive file\n")]
+    if target_kind in ("hardlink", "symlink"):
+        members.append(
+            _snapshot_member(
+                target,
+                kind=tarfile.LNKTYPE if target_kind == "hardlink" else tarfile.SYMTYPE,
+                target="outputs/source.txt",
+            )
+        )
+    elif target_kind == "directory":
+        members.append(_snapshot_member(target, kind=tarfile.DIRTYPE, mode=0o755))
+    members.append(
+        _snapshot_member("outputs/rejected.txt", kind=tarfile.LNKTYPE, target=target)
+    )
+    if target_kind == "forward":
+        members.append(_snapshot_member(target, content=b"forward target\n"))
+
+    _assert_snapshot_rejected(
+        k8s_manager, pool_session, _snapshot_archive(members), expected_error
+    )
+
+
+def test_guest_restore_rejects_duplicate_archive_paths_without_replacing_workspace(
+    k8s_manager: SandboxManager,
+    pool_session: PoolSession,
+) -> None:
+    body = _snapshot_archive(
+        [
+            _snapshot_member("outputs/collision.txt", content=b"first\n"),
+            _snapshot_member("outputs/./collision.txt", content=b"second\n"),
+        ]
+    )
+    _assert_snapshot_rejected(
+        k8s_manager, pool_session, body, "duplicate snapshot path"
+    )
+
+
+def test_guest_restore_counts_hardlink_copies_toward_expanded_limit(
+    k8s_manager: SandboxManager,
+    pool_session: PoolSession,
+) -> None:
+    source = "outputs/eight-mib.bin"
+    members = [_snapshot_member(source, content=b"\x00" * (8 * 1024 * 1024))]
+    members.extend(
+        _snapshot_member(
+            f"outputs/copy-{index}.bin", kind=tarfile.LNKTYPE, target=source
+        )
+        for index in range(63)
+    )
+    body = _snapshot_archive(members)
+    assert len(body) < 64 * 1024
+
+    _assert_snapshot_rejected(
+        k8s_manager,
+        pool_session,
+        body,
+        "uncompressed size exceeds 524288000",
+    )
 
 
 def test_snapshot_includes_outputs_and_attachments_only(
@@ -173,7 +591,7 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
 
 
 def test_restore_from_snapshot_recreates_workspace(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: PoolSession,
     pool_api_user: DATestUser,
@@ -228,7 +646,7 @@ def test_restore_from_snapshot_recreates_workspace(
 
 
 def test_restore_re_pushes_skills(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     k8s_client: client.CoreV1Api,
     k8s_admin_user: DATestUser,
     running_sandbox: Callable[..., SandboxHandle],
@@ -237,7 +655,7 @@ def test_restore_re_pushes_skills(
     assert handle.session_id is not None
     sandbox_id = handle.sandbox_id
     session_id = handle.session_id
-    pod_name = handle.manager._get_pod_name(sandbox_id)
+    pod_name = kubernetes_runtime(handle.manager).pod_name(sandbox_id)
 
     payload = _populate_session_workspace(k8s_client, pod_name, session_id)
     snapshot = BuildSessionManager.create_snapshot(handle.api_user, session_id)
@@ -251,13 +669,13 @@ def test_restore_re_pushes_skills(
     try:
         SkillManager.set_enabled(skill, handle.api_user, True)
 
-        # managed/ is RO in the sandbox container; wipe via the sidecar.
+        # managed/ is root-owned; reset through explicit fixture cleanup.
         pod_exec(
             k8s_client,
             pod_name,
             SANDBOX_NAMESPACE,
             "rm -rf /workspace/managed/skills && mkdir -p /workspace/managed",
-            container="sidecar",
+            root=True,
         )
 
         k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
@@ -296,7 +714,7 @@ def test_restore_re_pushes_skills(
 
 
 def test_restore_with_missing_snapshot_creates_fresh_workspace(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: PoolSession,
 ) -> None:
@@ -324,7 +742,7 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
 
 
 def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     k8s_client: client.CoreV1Api,
     owned_live_pod: OwnedLivePod,
 ) -> None:
@@ -358,7 +776,7 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
 
 
 def test_restore_uses_data_filter_to_block_traversal(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     k8s_client: client.CoreV1Api,
     owned_live_pod: OwnedLivePod,
     tenant_context: None,  # noqa: ARG001
@@ -440,7 +858,7 @@ def test_restore_uses_data_filter_to_block_traversal(
 
 
 def test_snapshot_corruption_detected_on_restore(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     pool_session: PoolSession,
     pool_api_user: DATestUser,
     tenant_context: None,  # noqa: ARG001

@@ -31,10 +31,11 @@ Optional settings:
 - `SANDBOX_TEST_APP_NAMESPACE`: proxy namespace, default `onyx`.
 - `SANDBOX_TEST_PUBLIC_URL`: reachable public HTTPS page, default `https://example.com`.
 - `SANDBOX_TEST_FLUSH_NEIGHBORS=true`: also test IPv6 connectivity with an empty neighbor cache.
-  This requires a local kind cluster, Docker access, and privileged exec in its node container.
-  It clears only the test sandbox's neighbor cache. Other deployments skip this test.
+  This requires permission to add ephemeral containers and execute commands in the test pod.
+  The probe uses a temporary `netadmin` container inside the same guest VM.
+  It verifies the guest boot ID before clearing only that guest's neighbor cache.
 
 The suite checks single-stack pod addresses, public HTTPS, injected API credentials,
 the exact API exception, internal destination rejection for HTTP and CONNECT,
-direct egress isolation, unidentified-client rejection, signed uploads, and generated Next.js previews.
+direct egress isolation, unidentified-client rejection, guest uploads, and generated Next.js previews.
 Model turns and approval interactions have separate Craft suites.

@@ -39,8 +39,8 @@ func TestSetVarUncommentUncommentsAndSets(t *testing.T) {
 	}
 
 	// Appends when no line matches at all.
-	out = SetVarUncomment("OTHER=1\n", "SANDBOX_BACKEND", "docker")
-	if !strings.HasSuffix(out, "SANDBOX_BACKEND=docker\n") {
+	out = SetVarUncomment("OTHER=1\n", "ENABLE_CRAFT", "true")
+	if !strings.HasSuffix(out, "ENABLE_CRAFT=true\n") {
 		t.Fatalf("got %q", out)
 	}
 }
@@ -55,27 +55,6 @@ func TestVarStripsQuotesAndSpace(t *testing.T) {
 	}
 	if got := Var(content, "MISSING"); got != "" {
 		t.Fatalf("got %q", got)
-	}
-}
-
-func TestSandboxBackendForTag(t *testing.T) {
-	cases := map[string]string{
-		"edge":        "docker",
-		"latest":      "docker",
-		"nightly-x":   "docker",
-		"v4.0.6":      "docker",
-		"4.0.6":       "docker",
-		"v4.1.0":      "docker",
-		"v5.0.0":      "docker",
-		"v4.0.5":      "kubernetes",
-		"v3.9.9":      "kubernetes",
-		"v4.0.6-beta": "docker",
-		"v4.0.5-beta": "kubernetes",
-	}
-	for tag, want := range cases {
-		if got := sandboxBackendForTag(tag); got != want {
-			t.Errorf("sandboxBackendForTag(%q) = %q, want %q", tag, got, want)
-		}
 	}
 }
 

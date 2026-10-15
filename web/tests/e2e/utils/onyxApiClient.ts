@@ -161,9 +161,14 @@ export class OnyxApiClient {
    * @param data - Optional request body data
    * @returns The API response
    */
-  private async post(endpoint: string, data?: any): Promise<APIResponse> {
+  private async post(
+    endpoint: string,
+    data?: any,
+    timeout?: number
+  ): Promise<APIResponse> {
     return await this.request.post(`${this.baseUrl}${endpoint}`, {
       data,
+      timeout,
     });
   }
 
@@ -1969,7 +1974,7 @@ export class OnyxApiClient {
 
   /** Creates the worker user's empty Craft session through the real backend. */
   async createCraftSession(name: string): Promise<string> {
-    const response = await this.post("/build/sessions", { name });
+    const response = await this.post("/build/sessions", { name }, 240_000);
     const session = await this.handleResponse<{ id: string }>(
       response,
       "Failed to create Craft session"

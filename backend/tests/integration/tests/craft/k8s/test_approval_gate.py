@@ -26,11 +26,9 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.sandbox_proxy.approval_cache import pop_announcement
 from onyx.server.features.build.configs import (
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
-    SANDBOX_BACKEND,
     SANDBOX_NAMESPACE,
     SANDBOX_PROXY_NAMESPACE,
     SANDBOX_PROXY_PORT,
-    SandboxBackend,
 )
 from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
 from onyx.utils.logger import setup_logger
@@ -59,10 +57,6 @@ class GatedSession(NamedTuple):
 
 
 pytestmark = [
-    pytest.mark.skipif(
-        SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
-        reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
-    ),
     pytest.mark.craft_skill_isolation,
 ]
 

@@ -2,63 +2,60 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 from uuid import UUID, uuid4
 
-import pytest
 from kubernetes import client
 
 from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.configs import (
-    SANDBOX_BACKEND,
     SANDBOX_NAMESPACE,
-    SandboxBackend,
 )
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
-from tests.integration.common_utils.managers.build_session import BuildSessionManager
+from onyx.server.features.build.session.models import DetailedSessionResponse
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
-    cleanup_api_user_sandbox_rows,
-    wait_for_pod_deletion,
-)
-
-pytestmark = pytest.mark.skipif(
-    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
-    reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
+    cleanup_api_user_sandbox,
+    kubernetes_runtime,
+    register_suite_sandbox,
 )
 
 
 def test_create_session_provisions_running_sandbox_pod_via_api(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     k8s_client: client.CoreV1Api,
 ) -> None:
     api_user = UserManager.create(name=f"craft-k8s-session-smoke-{uuid4().hex[:8]}")
     sandbox_id: UUID | None = None
-    pod_name: str | None = None
     try:
-        session = BuildSessionManager.create(api_user, headless=True)
+        response = http_client.post(
+            f"{API_SERVER_URL}/build/sessions",
+            json={"headless": True},
+            headers=api_user.headers,
+            cookies=api_user.cookies,
+        )
+        assert response.status_code == 200, (
+            f"POST /build/sessions failed: {response.status_code} "
+            f"{response.reason_phrase}; body={response.text[:2000]!r}; "
+            f"user_id={api_user.id}"
+        )
+        session = DetailedSessionResponse.model_validate(response.json())
         sandbox = session.sandbox
         assert sandbox is not None
-        assert sandbox.status == SandboxStatus.RUNNING
-
         sandbox_id = UUID(sandbox.id)
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
+        register_suite_sandbox(sandbox_id)
+        assert sandbox.status == SandboxStatus.RUNNING
+        pod_name = kubernetes_runtime(k8s_manager).pod_name(sandbox_id)
         pod = k8s_client.read_namespaced_pod(
             name=pod_name,
             namespace=SANDBOX_NAMESPACE,
         )
         assert pod.status is not None
         assert pod.status.phase == "Running"
+        assert pod.spec is not None
+        assert pod.spec.runtime_class_name == "kata-fc"
     finally:
-        if sandbox_id is not None:
-            with suppress(Exception):
-                k8s_manager.terminate(sandbox_id)
-            # Wait for pod deletion before removing DB rows: the egress proxy resolves
-            # sandbox identity via Sandbox.user_id, so deleting the row while the pod
-            # is still alive would leave an unattributable orphaned pod.
-            if pod_name is not None:
-                with suppress(Exception):
-                    wait_for_pod_deletion(k8s_client, pod_name)
-        cleanup_api_user_sandbox_rows(UUID(api_user.id))
+        cleanup_api_user_sandbox(k8s_manager, k8s_client, UUID(api_user.id), sandbox_id)

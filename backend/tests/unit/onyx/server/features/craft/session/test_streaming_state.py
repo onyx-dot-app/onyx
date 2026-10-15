@@ -19,8 +19,6 @@ from onyx.server.features.build.session.streaming import BuildStreamingState
 
 
 class _FakeStreamingSandboxManager:
-    supports_opencode_history_persistence = True
-
     def __init__(self) -> None:
         self.last_payload: dict[str, Any] | None = None
         self.resolved_opencode_session_id: str | None = None
@@ -56,7 +54,6 @@ class _FakeStreamingSandboxManager:
 
 
 class _FakePreflightSandboxManager:
-    supports_opencode_history_persistence = True
     resolved_id = "ses_minted"
 
     def ensure_opencode_session(self, *_args: Any, **_kwargs: Any) -> str:

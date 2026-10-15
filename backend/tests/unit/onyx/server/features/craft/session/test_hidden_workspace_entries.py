@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.image.guest.models import (
     is_hidden_workspace_name,
 )
 

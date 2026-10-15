@@ -56,7 +56,6 @@ backend = [
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
-    "docker==7.1.0",
     "httpx[http2]==0.28.1",
     "httpx-oauth==0.15.1",
     "jira==3.10.5",
@@ -151,7 +150,6 @@ dev = [
     "pytest-repeat==0.9.4",
     "pytest-xdist==3.8.0",
     "pytest==9.0.3",
-    "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
     "types-oauthlib==3.2.0.9",
@@ -237,7 +235,6 @@ include = ["backend"]
 exclude = [
     "**/generated/**",
     "**/.venv/**",
-    "**/onyx/server/features/build/sandbox/image/sandbox_daemon/**",
     "**/onyx/skills/builtin/**",
     "**/onyx/server/features/build/sandbox/image/templates/**",
 ]
@@ -270,7 +267,6 @@ members = ["tools/ods"]
 include = ["backend"]
 exclude = [
     "backend/generated",
-    "backend/onyx/server/features/build/sandbox/image/sandbox_daemon",
     "backend/onyx/skills/builtin/pptx",
 ]
 typeCheckingMode = "off"

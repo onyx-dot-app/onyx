@@ -78,7 +78,6 @@ func RunInstall(ctx context.Context, deps Deps, opts Options) error {
 	in := newInstaller(deps, opts)
 	in.cancel = cancel
 	in.lite = opts.Lite
-	in.craft = opts.IncludeCraft
 	in.prod = opts.Prod
 	in.dev = opts.Dev
 	err := in.runInstall(ctx)
@@ -89,9 +88,9 @@ func RunInstall(ctx context.Context, deps Deps, opts Options) error {
 }
 
 func (in *installer) runInstall(ctx context.Context) error {
-	if in.opts.Lite && in.opts.IncludeCraft {
+	if in.opts.IncludeCraft {
 		return exitcodes.New(exitcodes.BadRequest,
-			"--lite and --include-craft cannot be used together: Craft requires services (OpenSearch, Redis, background workers) that lite mode disables")
+			"--include-craft is no longer supported by docker-compose. Use the Kubernetes deployment path for Craft.")
 	}
 	if in.opts.Prod && in.opts.Lite {
 		return exitcodes.New(exitcodes.BadRequest,
@@ -195,6 +194,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	chosenTag := pinnedTag // the tag this run deploys; "" until answered
 	var updateTag string   // rerun: non-empty means update to this tag
 	pre, preSeen := preflight{}, false
+	runningServices := false
 	if rerun {
 		// The running-services guard needs docker handles, so resolve the
 		// environment before asking anything.
@@ -209,8 +209,9 @@ func (in *installer) runInstall(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		runningServices = running
 		// The mode never changes implicitly on a rerun: the recorded mode
-		// (or the overlays on disk) wins unless --lite/--include-craft say
+		// (or the overlays on disk) wins unless --lite says
 		// otherwise. (install.sh re-asked every run, so a --no-prompt rerun
 		// silently flipped standard installs to lite.)
 		in.prod = in.opts.Prod || manifest.Mode == state.ModeProd ||
@@ -225,9 +226,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		}
 		in.wasLite = manifest.Mode == state.ModeLite ||
 			in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))
-		in.lite = !in.prod && (in.opts.Lite || (!in.opts.IncludeCraft && in.wasLite))
-		in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
-			in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+		in.lite = !in.prod && (in.opts.Lite || in.wasLite)
 		in.dev = !in.prod && (in.opts.Dev || manifest.Dev ||
 			in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel)))
 
@@ -306,8 +305,12 @@ func (in *installer) runInstall(ctx context.Context) error {
 			return err
 		}
 	}
-	if err := in.resourceWarnings(pre); err != nil {
-		return err
+	if runningServices {
+		in.printResourceWarnings(pre)
+	} else {
+		if err := in.resourceWarnings(pre); err != nil {
+			return err
+		}
 	}
 	if err := in.checkComposeVersion(ctx); err != nil {
 		return err
@@ -350,16 +353,14 @@ func (in *installer) runInstall(ctx context.Context) error {
 		initialRef = release.ConfigRef(initialTag)
 	}
 	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, initialRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
+	if err := in.materializeFiles(ctx, initialRef, managedFiles(in.prod, in.lite, in.dev), manifest, fetcher); err != nil {
+		return err
+	}
+	if err := in.removeLegacyCraftOverlay(manifest); err != nil {
 		return err
 	}
 	if !in.lite {
 		if err := in.removeOverlayIfPresent(deployfiles.LiteOverlay, manifest, "switching to standard mode"); err != nil {
-			return err
-		}
-	}
-	if !in.craft {
-		if err := in.removeOverlayIfPresent(deployfiles.CraftOverlay, manifest, "Craft disabled this run"); err != nil {
 			return err
 		}
 	}
@@ -396,7 +397,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	configRef := release.ConfigRef(effectiveTag)
 	if !in.localFiles() && configRef != initialRef {
 		in.infof("Fetching config files matching %s...", configRef)
-		if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
+		if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.dev), manifest, fetcher); err != nil {
 			// .env already names this version and nothing has been deployed
 			// yet, so it is put back for the same reason a failed pull does:
 			// a version that never ran must not be left recorded as the
@@ -409,10 +410,6 @@ func (in *installer) runInstall(ctx context.Context) error {
 	if err := in.alignObjectStoreEndpoint(envPath); err != nil {
 		in.rollbackEnv(envPath, prevEnv)
 		return err
-	}
-
-	if in.craft {
-		in.ensureCraftResources(ctx)
 	}
 
 	in.successf("Configuration ready at %s (version %s)", in.root.Dir, effectiveTag)
@@ -445,7 +442,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		manifest.Mode = state.ModeProd
 	}
 	in.recordProject(manifest)
-	manifest.IncludeCraft = in.craft
+	manifest.IncludeCraft = false
 	manifest.Dev = in.dev
 	if !hadManifest || manifest.InstalledAt.IsZero() {
 		manifest.InstalledAt = now
@@ -597,17 +594,12 @@ func (in *installer) askVersion(ctx context.Context, title, def string) (string,
 
 // askModeQuestion is the deployment-mode select. Lite stays the default for
 // new installs, matching install.sh's interactive and --no-prompt behavior.
-// Craft is deliberately not offered here: it is reachable with
-// --include-craft, and installs it the same way, but it binds the docker
-// socket and is not yet something to put in front of someone who has not
-// gone looking for it.
+// Craft is deliberately not offered here: docker-compose no longer provisions
+// Craft sandboxes. Use the Kubernetes deployment path for Craft.
 func (in *installer) askModeQuestion() error {
 	if in.opts.Lite {
 		in.infof("Deployment mode: Lite (set via --lite flag)")
 		return nil
-	}
-	if in.opts.IncludeCraft {
-		return nil // craft implies standard; the conflict was rejected earlier
 	}
 	choice, err := in.selectOne("Deployment mode",
 		[]ui.Option{
@@ -764,6 +756,22 @@ func orDetect(v, fallback string) string {
 // resourceWarnings surfaces low-resource conditions only (healthy machines
 // see nothing) and asks whether to continue, like install.sh's warning path.
 func (in *installer) resourceWarnings(pre preflight) error {
+	warning, ramWant, diskWant, mode := in.printResourceWarnings(pre)
+	if !warning {
+		return nil
+	}
+	in.warnf("Onyx recommends at least %dGB RAM and %dGB disk space in %s mode.", ramWant, diskWant, mode)
+	cont, err := in.confirmYN("Continue anyway?", true)
+	if err != nil {
+		return err
+	}
+	if !cont {
+		return exitcodes.New(exitcodes.General, "Installation cancelled. Please allocate more resources and try again.")
+	}
+	return nil
+}
+
+func (in *installer) printResourceWarnings(pre preflight) (bool, int, int, string) {
 	ramWant, diskWant := expectedRAMGB, expectedDiskGB
 	mode := "standard"
 	if in.lite {
@@ -783,18 +791,7 @@ func (in *installer) resourceWarnings(pre preflight) error {
 		in.warnf("Rootless Docker: the standard deployment's OpenSearch index requests unlimited memlock, which a rootless daemon usually can't grant.")
 		in.infof("Either raise the daemon's limits (systemctl --user edit docker: LimitMEMLOCK=infinity, LimitNOFILE=1048576, then systemctl --user restart docker) or use Lite mode, which has no OpenSearch.")
 	}
-	if !warning {
-		return nil
-	}
-	in.warnf("Onyx recommends at least %dGB RAM and %dGB disk space in %s mode.", ramWant, diskWant, mode)
-	cont, err := in.confirmYN("Continue anyway?", true)
-	if err != nil {
-		return err
-	}
-	if !cont {
-		return exitcodes.New(exitcodes.General, "Installation cancelled. Please allocate more resources and try again.")
-	}
-	return nil
+	return warning, ramWant, diskWant, mode
 }
 
 func (in *installer) checkComposeVersion(ctx context.Context) error {
@@ -858,18 +855,6 @@ func (in *installer) createFreshEnv(envPath, tag string) (string, int, error) {
 	env = SetVar(env, "S3_AWS_ACCESS_KEY_ID", accessKey)
 	env = SetVar(env, "S3_AWS_SECRET_ACCESS_KEY", secretKey)
 
-	if in.craft {
-		env = SetVarUncomment(env, "ENABLE_CRAFT", "true")
-		backend := sandboxBackendForTag(tag)
-		env = SetVarUncomment(env, "SANDBOX_BACKEND", backend)
-		in.successf("Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=%s)", backend)
-		if backend == "docker" {
-			in.plainf("%s", craftSecurityWarning)
-		} else {
-			in.infof("Image tag %s predates the docker sandbox backend (v4.0.6+); using SANDBOX_BACKEND=%s.", tag, backend)
-		}
-	}
-
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return "", 0, fmt.Errorf("failed to write .env: %w", err)
 	}
@@ -928,7 +913,7 @@ func (in *installer) alignObjectStoreEndpoint(envPath string) error {
 }
 
 // reconfigureExistingEnv applies the rerun decision: restart keeps .env
-// untouched except craft/lite alignment; a non-empty updateTag rewrites
+// untouched except lite alignment; a non-empty updateTag rewrites
 // IMAGE_TAG (and nothing else).
 func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, int, error) {
 	existing, err := os.ReadFile(envPath)
@@ -973,15 +958,6 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	effectiveTag := Var(env, "IMAGE_TAG")
 	if effectiveTag == "" {
 		effectiveTag = "edge"
-	}
-
-	// Honor --include-craft on existing installs regardless of branch,
-	// aligning SANDBOX_BACKEND with the effective tag.
-	if in.craft {
-		env = SetVarUncomment(env, "ENABLE_CRAFT", "true")
-		backend := sandboxBackendForTag(effectiveTag)
-		env = SetVarUncomment(env, "SANDBOX_BACKEND", backend)
-		in.successf("Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=%s, image tag: %s)", backend, effectiveTag)
 	}
 
 	// Lite mode drops only the s3-filestore entry so object-store doesn't start.
@@ -1038,23 +1014,6 @@ func (in *installer) guardRunningServices(ctx context.Context) (bool, error) {
 	}
 	in.forceRecreate = true
 	return true, nil
-}
-
-func (in *installer) ensureCraftResources(ctx context.Context) {
-	network := sandboxNetworkName()
-	if created, err := in.docker.EnsureNetwork(ctx, network); err != nil {
-		in.warnf("Could not create sandbox network %s — create it manually:", network)
-		in.cmdf("docker network create %s", network)
-	} else if created {
-		in.successf("Created sandbox bridge network: %s", network)
-	}
-
-	if created, err := in.docker.EnsureVolume(ctx, sandboxProxyCAVolume); err != nil {
-		in.warnf("Could not create sandbox proxy CA volume %s — create it manually:", sandboxProxyCAVolume)
-		in.cmdf("docker volume create %s", sandboxProxyCAVolume)
-	} else if created {
-		in.successf("Created sandbox proxy CA volume: %s", sandboxProxyCAVolume)
-	}
 }
 
 func (in *installer) composeRunEnv(tag string, hostPort int) map[string]string {
@@ -1699,25 +1658,17 @@ func (in *installer) noteComposeOverride() {
 // deployments run the standalone docker-compose.prod.yml on its own; every
 // other mode stacks overlays on docker-compose.yml. With autoDetect,
 // previously downloaded files are picked up from disk so users don't have to
-// repeat --lite/--prod/--include-craft/--dev for lifecycle commands
+// repeat --lite/--prod/--dev for lifecycle commands
 // (install.sh's build_compose_file_args true).
 func (in *installer) managedComposeFiles(autoDetect bool) []string {
 	prodName := filepath.Base(deployfiles.ProdCompose.DestRel)
-	craftName := filepath.Base(deployfiles.CraftOverlay.DestRel)
 	if in.prod || (autoDetect && in.overlayOnDisk(prodName)) {
-		files := []string{prodName}
-		if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
-			files = append(files, craftName)
-		}
-		return files
+		return []string{prodName}
 	}
 	files := []string{"docker-compose.yml"}
 	liteName := filepath.Base(deployfiles.LiteOverlay.DestRel)
 	if in.lite || (autoDetect && in.overlayOnDisk(liteName)) {
 		files = append(files, liteName)
-	}
-	if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
-		files = append(files, craftName)
 	}
 	// Last of the managed files, so the ports and build targets it publishes
 	// are the ones that survive the merge — that is the whole point of the

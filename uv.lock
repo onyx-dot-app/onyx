@@ -1442,20 +1442,6 @@ wheels = [
 ]
 
 [[package]]
-name = "docker"
-version = "7.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pywin32", marker = "sys_platform == 'win32'" },
-    { name = "requests" },
-    { name = "urllib3" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
-]
-
-[[package]]
 name = "docstring-parser"
 version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4030,7 +4016,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.10.2.21"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/51/e123d997aa098c61d029f76663dedbfb9bc8dcf8c60cbd6adbe42f76d049/nvidia_cudnn_cu12-9.10.2.21-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:949452be657fa16687d0930933f032835951ef0892b37d2d53824d1a84dc97a8", size = 706758467, upload-time = "2025-06-06T21:54:08.597Z" },
@@ -4041,7 +4027,7 @@ name = "nvidia-cufft-cu12"
 version = "11.3.3.83"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1f/13/ee4e00f30e676b66ae65b4f08cb5bcbb8392c03f54f2d5413ea99a5d1c80/nvidia_cufft_cu12-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:4d2dd21ec0b88cf61b62e6b43564355e5222e4a3fb394cac0db101f2dd0d4f74", size = 193118695, upload-time = "2025-03-07T01:45:27.821Z" },
@@ -4068,9 +4054,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.7.3.90"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
-    { name = "nvidia-cusparse-cu12" },
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform != 'win32'" },
+    { name = "nvidia-cusparse-cu12", marker = "sys_platform != 'win32'" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/85/48/9a13d2975803e8cf2777d5ed57b87a0b6ca2cc795f9a4f59796a910bfb80/nvidia_cusolver_cu12-11.7.3.90-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:4376c11ad263152bd50ea295c05370360776f8c3427b30991df774f9fb26c450", size = 267506905, upload-time = "2025-03-07T01:47:16.273Z" },
@@ -4081,7 +4067,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.5.8.93"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/f5/e1854cb2f2bcd4280c44736c93550cc300ff4b8c95ebe370d0aa7d2b473d/nvidia_cusparse_cu12-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:1ec05d76bbbd8b61b06a80e1eaf8cf4959c3d4ce8e711b65ebd0443bb0ebb13b", size = 288216466, upload-time = "2025-03-07T01:48:13.779Z" },
@@ -4227,7 +4213,6 @@ backend = [
     { name = "dask" },
     { name = "discord-py" },
     { name = "distributed" },
-    { name = "docker" },
     { name = "dropbox" },
     { name = "exa-py" },
     { name = "fastapi-limiter" },
@@ -4320,7 +4305,6 @@ dev = [
     { name = "ruff" },
     { name = "ty" },
     { name = "types-beautifulsoup4" },
-    { name = "types-docker" },
     { name = "types-html5lib" },
     { name = "types-oauthlib" },
     { name = "types-openpyxl" },
@@ -4406,7 +4390,6 @@ backend = [
     { name = "dask", specifier = "==2026.1.1" },
     { name = "discord-py", specifier = "==2.7.1" },
     { name = "distributed", specifier = "==2026.1.1" },
-    { name = "docker", specifier = "==7.1.0" },
     { name = "dropbox", specifier = "==12.0.2" },
     { name = "exa-py", specifier = "==1.15.4" },
     { name = "fastapi-limiter", specifier = "==0.1.6" },
@@ -4499,7 +4482,6 @@ dev = [
     { name = "ruff", specifier = "==0.16.1" },
     { name = "ty", specifier = "==0.0.63" },
     { name = "types-beautifulsoup4", specifier = "==4.12.0.3" },
-    { name = "types-docker", specifier = "==7.1.0.20260518" },
     { name = "types-html5lib", specifier = "==1.1.11.13" },
     { name = "types-oauthlib", specifier = "==3.2.0.9" },
     { name = "types-openpyxl", specifier = "==3.0.4.7" },
@@ -4914,7 +4896,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -6505,8 +6487,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -7143,20 +7125,6 @@ wheels = [
 ]
 
 [[package]]
-name = "types-docker"
-version = "7.1.0.20260518"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "types-paramiko" },
-    { name = "types-requests" },
-    { name = "urllib3" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/71/ee4bd2b713f0b3b0cecc48fd13952b244f187c3b68cfa0408360f102fde8/types_docker-7.1.0.20260518.tar.gz", hash = "sha256:d194c4b82a4110fc58c84af05a5d9de6d3e54f94357ff745d01b5dca12c8eaaa", size = 33868, upload-time = "2026-05-18T06:08:19.78Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/1d/1d174b6f94afe0de50189de0a9dfd4531d2f8170e6dd9ef68ab616aa770b/types_docker-7.1.0.20260518-py3-none-any.whl", hash = "sha256:59893937816bfe40eb2915c84b31c3131107537500287c47d4a10dd7a9d59deb", size = 48183, upload-time = "2026-05-18T06:08:18.89Z" },
-]
-
-[[package]]
 name = "types-html5lib"
 version = "1.1.11.13"
 source = { registry = "https://pypi.org/simple" }
@@ -7181,18 +7149,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0d/ae/73e86b0d1e106056fb40734bf90658c453b6d2136490fbf58294ffc02b69/types-openpyxl-3.0.4.7.tar.gz", hash = "sha256:0ad60cf7a76c7b550a66199211c94dcc4facb515a0f09d4981d0181b3bac6b15", size = 53292, upload-time = "2023-02-21T18:20:56.114Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/55/aa/c477af340dc30bec075fa460c95432ccfb1a33f1fd2cf9b59f178ddca815/types_openpyxl-3.0.4.7-py3-none-any.whl", hash = "sha256:55713e2dfb6c3db2e3e2ade2f8dc20b3dea30c0d1bd3efc5b51d52c010e0a64a", size = 103299, upload-time = "2023-02-21T18:20:54.584Z" },
-]
-
-[[package]]
-name = "types-paramiko"
-version = "4.0.0.20260518"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e4/b6/4cdb11fb6006be6309844dc5f88b6efef3f5ea5352ade42a1e9308570e28/types_paramiko-4.0.0.20260518.tar.gz", hash = "sha256:286f6830945cba63797eedf375ed87138d93198121253afe66c5d6dbcf91318d", size = 29193, upload-time = "2026-05-18T06:06:36.776Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/a2/1a54b77758c9c175526bd0448de353f0563e71ba1ddc8bd4ac0c835deafd/types_paramiko-4.0.0.20260518-py3-none-any.whl", hash = "sha256:0ffaf1a6eb796833a49653cba4c7be13af51c8269d75234972d6239763dda270", size = 38791, upload-time = "2026-05-18T06:06:35.771Z" },
 ]
 
 [[package]]

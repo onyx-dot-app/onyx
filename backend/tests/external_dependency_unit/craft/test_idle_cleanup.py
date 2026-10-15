@@ -158,7 +158,6 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     # Return our session id from the (stubbed) workspace listing so the
     # task tries to snapshot it.
     stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
-    stubbed_cleanup.supports_opencode_history_persistence = True
     stubbed_cleanup.create_opencode_history_snapshot_returns = True
     stubbed_cleanup.create_snapshot_returns = SnapshotResult(
         storage_path=f"s3://snapshots/{sandbox.id}/{session_row.id}.tar.gz",
@@ -459,7 +458,6 @@ def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
     sandbox = make_sandbox(db_session, user)
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
-    stubbed_cleanup.supports_opencode_history_persistence = True
     stubbed_cleanup.health_check_returns = True
 
     def _boom(
@@ -512,7 +510,6 @@ def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
     sandbox = make_sandbox(db_session, user)
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
-    stubbed_cleanup.supports_opencode_history_persistence = True
     stubbed_cleanup.health_check_returns = False
     stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
@@ -781,7 +778,6 @@ def test_heartbeat_refresh_mid_sweep_aborts_reap(
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
     stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
-    stubbed_cleanup.supports_opencode_history_persistence = True
     stubbed_cleanup.create_opencode_history_snapshot_returns = True
     stubbed_cleanup.terminate_silent = True
 

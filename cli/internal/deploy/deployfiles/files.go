@@ -50,12 +50,6 @@ var (
 		DestRel:   "deployment/docker-compose.onyx-lite.yml",
 		Mode:      0644,
 	}
-	CraftOverlay = File{
-		EmbedPath: "embedded/docker_compose/docker-compose.craft.yml",
-		RepoPath:  "deployment/docker_compose/docker-compose.craft.yml",
-		DestRel:   "deployment/docker-compose.craft.yml",
-		Mode:      0644,
-	}
 	// DevOverlay publishes the service ports (API, Postgres, Redis,
 	// OpenSearch, model server, object store, MinIO, code interpreter) on the host. Stacked
 	// on Compose like LiteOverlay, but flag-only (--dev): it takes the
@@ -136,7 +130,6 @@ var OverrideNames = []string{
 var All = []File{
 	Compose,
 	LiteOverlay,
-	CraftOverlay,
 	DevOverlay,
 	ProdCompose,
 	EnvTemplate,

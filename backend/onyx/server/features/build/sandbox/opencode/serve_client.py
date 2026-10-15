@@ -1046,8 +1046,10 @@ class OpencodeServeClient:
         the readiness probe tell a 401 (stale password) from a not-yet-listening
         pod (transport error)."""
         try:
-            r = self._http.get("/doc", timeout=self._timeouts.connect_timeout)
-            return r.status_code
+            with self._http.stream(
+                "GET", "/doc", timeout=self._timeouts.connect_timeout
+            ) as response:
+                return response.status_code
         except httpx.HTTPError:
             return None
 

@@ -23,7 +23,7 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_CA_SECRET,
     SANDBOX_PROXY_NAMESPACE,
 )
-from onyx.server.features.build.sandbox.kubernetes.k8s_client import build_core_v1_api
+from onyx.server.features.build.sandbox.k8s_client import build_core_v1_api
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_COMPONENT,
     LABEL_K8S_MANAGED_BY,

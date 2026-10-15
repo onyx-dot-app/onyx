@@ -1,33 +1,10 @@
 import os
-from enum import Enum
 
 # In-sandbox paths shared by every backend implementation. Kept in sync with
-# the SESSIONS_ROOT constants the individual managers define (those exist
-# separately because the K8s manager emits exec scripts and the Docker
-# manager mounts via the named volume — both happen to land at the same
-# in-container path). The daemon's sandbox_daemon/snapshot.py also has its
-# own copy because it can't import from this package at runtime.
+# the guest helper and the manager-side workspace scripts.
 BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
 BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
 
-
-class SandboxBackend(str, Enum):
-    KUBERNETES = "kubernetes"
-    DOCKER = "docker"
-
-
-SANDBOX_BACKEND = SandboxBackend.KUBERNETES
-_env_sandbox_backend = os.environ.get("SANDBOX_BACKEND", "").strip()
-if _env_sandbox_backend:
-    try:
-        SANDBOX_BACKEND = SandboxBackend(_env_sandbox_backend.lower())
-    except ValueError:
-        raise ValueError(
-            f"Invalid SANDBOX_BACKEND={_env_sandbox_backend!r}. Valid values: "
-            f"{', '.join(b.value for b in SandboxBackend)}. Unset it to use the "
-            f"default, or align it with this release if you recently changed "
-            f"image versions."
-        )
 
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [
@@ -63,20 +40,13 @@ MAX_TOTAL_UPLOAD_SIZE_BYTES = MAX_TOTAL_UPLOAD_SIZE_MB * 1024 * 1024
 ATTACHMENTS_DIRECTORY = "attachments"
 
 # ==============================================================================
-# Kubernetes sandbox (SANDBOX_BACKEND=kubernetes)
+# Kubernetes sandbox
 # ==============================================================================
 
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
-
-SANDBOX_CONTAINER_IMAGE = (
-    os.environ.get("SANDBOX_CONTAINER_IMAGE", "").strip() or "onyxdotapp/sandbox:latest"
+CRAFT_SANDBOX_RUNTIME = os.environ.get(
+    "CRAFT_SANDBOX_RUNTIME", "kubernetes_firecracker"
 )
-
-# Set to "Always" only in internal environments that deliberately pin a mutable
-# tag. Non-dev deployments should use app-aligned immutable tags.
-SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPresent")
-
-SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox")
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
@@ -84,9 +54,6 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 # build-time ENABLE_BROWSER ARG (also on); a browserless sandbox build must set
 # this false too, else the skill is advertised without its runtime.
 ENABLE_BROWSER = os.environ.get("ENABLE_BROWSER", "true").lower() == "true"
-
-SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
-
 
 ONYX_GATEWAY_PROVIDER_ID = "onyx"
 
@@ -99,14 +66,13 @@ ENABLE_OPENCODE_DEBUGGING = (
 )
 
 # Complete Onyx API base URL reachable from the sandbox, including any path
-# prefix. Must be set when SANDBOX_BACKEND=kubernetes.
+# prefix. Must be set when Craft is enabled.
 ONYX_SERVER_URL = os.environ.get("ONYX_SERVER_URL", "")
 
 # ==============================================================================
 # Sandbox egress proxy
 # ==============================================================================
 
-# Required when SANDBOX_BACKEND=kubernetes.
 SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
 SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
 
@@ -141,14 +107,6 @@ SANDBOX_PROXY_CA_CONFIGMAP = os.environ.get(
     "SANDBOX_PROXY_CA_CONFIGMAP", "sandbox-proxy-ca-bundle"
 )
 
-# Proxy-side bind path for the CA volume. Hardcoded because the compose
-# `volumes:` mount target is the source of truth; an env override would silently
-# desync.
-SANDBOX_PROXY_CA_VOLUME_PATH = "/var/lib/sandbox-proxy/ca"
-
-# Docker named-volume for the proxy CA. Hardcoded for the same reason as above.
-SANDBOX_PROXY_CA_VOLUME_NAME = "sandbox_proxy_ca"
-
 # Non-empty sentinel for every proxy-injected credential (ONYX_PAT + each
 # opencode apiKey); the proxy overwrites the real value on the wire. Sandboxes
 # never see the raw values.
@@ -162,28 +120,6 @@ SANDBOX_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
 # then strips it so it never reaches the MCP origin.
 MCP_SESSION_TAG_HEADER = "X-Onyx-Mcp-Session"
 
-
-# ==============================================================================
-# Docker sandbox (SANDBOX_BACKEND=docker, self-hosted docker-compose)
-# ==============================================================================
-
-# Mounted into the api_server container; api_server uses this to drive sandbox
-# container lifecycle.
-SANDBOX_DOCKER_SOCKET = os.environ.get("SANDBOX_DOCKER_SOCKET", "/var/run/docker.sock")
-
-# Sandbox containers join only this network and never compose's default network,
-# isolating them from api_server, postgres, redis, etc.
-SANDBOX_DOCKER_NETWORK = os.environ.get("SANDBOX_DOCKER_NETWORK", "onyx_craft_sandbox")
-
-SANDBOX_DOCKER_VOLUME_PREFIX = os.environ.get(
-    "SANDBOX_DOCKER_VOLUME_PREFIX", "onyx-craft-sandbox-"
-)
-
-# Defaults match the Kubernetes sandbox pod's *requests* (1 CPU / 2Gi), not its
-# limits (2 CPU / 10Gi). Single-VM docker-compose deployments rarely have the
-# headroom to over-commit each sandbox to 10Gi.
-SANDBOX_DOCKER_MEMORY_LIMIT = os.environ.get("SANDBOX_DOCKER_MEMORY_LIMIT", "2g")
-SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0"))
 
 # ==============================================================================
 # SSE / opencode-serve

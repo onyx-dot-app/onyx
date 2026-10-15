@@ -33,7 +33,7 @@ def _sample_files() -> FileSet:
     return {"hello.txt": b"hello world"}
 
 
-@patch("onyx.server.features.build.sandbox.base.time.sleep")
+@patch("onyx.server.features.build.sandbox.manager.time.sleep")
 def test_push_succeeds_on_first_try(
     mock_sleep: Any,  # noqa: ARG001
     mgr: StubSandboxManager,
@@ -52,7 +52,7 @@ def test_push_succeeds_on_first_try(
     assert mgr.last_write_files_to_sandbox_payload["sandbox_id"] == SB_1
 
 
-@patch("onyx.server.features.build.sandbox.base.time.sleep")
+@patch("onyx.server.features.build.sandbox.manager.time.sleep")
 def test_push_does_not_retry_fatal_error(
     mock_sleep: Any,  # noqa: ARG001
     mgr: StubSandboxManager,
@@ -73,7 +73,7 @@ def test_push_does_not_retry_fatal_error(
     assert mgr.write_files_to_sandbox_count == 1
 
 
-@patch("onyx.server.features.build.sandbox.base.time.sleep")
+@patch("onyx.server.features.build.sandbox.manager.time.sleep")
 def test_push_gives_up_after_three_retriable_errors(
     mock_sleep: Any,  # noqa: ARG001
     mgr: StubSandboxManager,
@@ -104,7 +104,7 @@ def test_push_gives_up_after_three_retriable_errors(
     assert mgr.write_files_to_sandbox_count == 3
 
 
-@patch("onyx.server.features.build.sandbox.base.time.sleep")
+@patch("onyx.server.features.build.sandbox.manager.time.sleep")
 def test_push_retries_on_retriable_error_then_succeeds(
     mock_sleep: Any,  # noqa: ARG001
     mgr: StubSandboxManager,
@@ -147,7 +147,7 @@ def test_push_retries_on_retriable_error_then_succeeds(
 # ---------------------------------------------------------------------------
 
 
-@patch("onyx.server.features.build.sandbox.base.time.sleep")
+@patch("onyx.server.features.build.sandbox.manager.time.sleep")
 def test_push_to_many_aggregates_per_sandbox_results(
     mock_sleep: Any,  # noqa: ARG001
 ) -> None:

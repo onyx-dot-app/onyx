@@ -441,7 +441,7 @@ missed."
 | If your change... | Also check |
 |---|---|
 | adds a new `BuildPacket` type | `packets.py:BuildPacket` union; `event_to_sse`'s isinstance list (`session/streaming.py`); `parsePacket.ts` gets a case or it silently drops; decide persistence in `persist_sandbox_event` |
-| adds a new sandbox event type (upstream opencode) | `event_schema.py`'s re-export list; `translate_opencode_event`'s dispatch; `SandboxEvent` union in both `serve_client.py` and `serve_transport.py`; `parsePacket.ts` |
+| adds a new sandbox event type (upstream opencode) | `event_schema.py`'s re-export list and shared `SandboxEvent` union; `translate_opencode_event`'s dispatch; `serve_client.py` and `serve_transport.py` consumers; `parsePacket.ts` |
 | changes the transport (bus reconnect policy, keepalive cadence, SSE framing) | `PodEventBus._reader_loop` backoff/give-up constants; every consumer of `event_to_sse`'s framing (`interactive_turns/api.py`, `session/api.py` scheduled-run path); `processSSEStream` on web |
 | changes the opencode-serve client (`OpencodeServeClient`) | both call sites, `send_message` (turn-owning) and `subscribe_to_opencode_session` (late-attach); the translator's `_TurnState` correlation logic; unit tests under `backend/tests/unit/onyx/server/features/craft/sandbox/test_translate_opencode_event.py` |
 | changes the interactive-turn lifecycle (claim, heartbeat, stale timeout) | `RUNNER_STALE_AFTER_SECONDS`/`INTERACTIVE_TURN_HARD_CAP_SECONDS` relationship in `timeouts.py`; the attach endpoint's `maybe_start_runner` retry throttle; scheduled-run's separate Celery-driven path in `session/manager.py`, which reuses the bus but not the runner claim |
@@ -473,10 +473,9 @@ exercises `persist_sandbox_event` against real sandbox-event payloads.
 
 ### Manual reproduction
 
-`docs/craft/dev/local-compose-craft.md` is the setup guide for the Docker
-sandbox backend specifically (proxy iteration); for general Craft streaming
-work against the default Kubernetes backend, follow
-`docs/craft/dev/local-kubernetes.md` instead (referenced by the compose doc).
+Follow `docs/craft/dev/local-kubernetes.md` for the Firecracker development stack.
+Node requirements are in `docs/craft/infra/firecracker.md`.
+Docker and Compose do not support Craft.
 
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
 2. Open the browser devtools Network tab, send a Craft message, and inspect
@@ -500,8 +499,8 @@ work against the default Kubernetes backend, follow
   wrapper, `serve_client.py`'s docstring, and a few docstrings/imports in
   `session/{streaming,manager,api}.py` still say "acp" (as the name of the
   PyPI wrapper module, `sandbox.event_schema`, or historical comments); there
-  is no live ACP exec-client code path left. `shared-acp-exec-client.md` and
-  `docker-opencode-serve.md` describe now-deleted machinery entirely.
+  is no live ACP exec-client code path left. The legacy ACP and Docker transport
+  notes have been removed.
   `opencode-serve-client.md` and `preserve-opencode-sessions.md` are closer to
   current (the latter is actively cited by `session/streaming.py`'s own
   `_ensure_opencode_session_id`), but treat every doc under this directory as

@@ -336,7 +336,9 @@ def seeded_skill(
 
 @pytest.fixture(scope="function")
 def stub_sandbox_manager() -> StubSandboxManager:
-    return StubSandboxManager()
+    stub = StubSandboxManager()
+    stub.create_opencode_history_snapshot_returns = True
+    return stub
 
 
 @pytest.fixture(scope="function")
@@ -367,7 +369,7 @@ def session_manager_with_stub(
         lambda: stub_sandbox_manager,
     )
     monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.factory._sandbox_manager_instance",
+        "onyx.server.features.build.sandbox.manager._sandbox_manager_instance",
         stub_sandbox_manager,
     )
     sm = SessionManager(db_session)

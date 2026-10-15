@@ -1,5 +1,4 @@
-"""Shared session-workspace setup script for the Docker and Kubernetes
-sandbox managers.
+"""Replay-safe session-workspace setup in a Craft VM.
 
 The script is replay-safe: the whole setup is serialized per session with an
 in-sandbox ``flock``, and an in-progress marker distinguishes a partial
@@ -26,10 +25,7 @@ MANAGED_USER_LIBRARY_PATH = "/workspace/managed/user_library"
 # complete.
 SETUP_IN_PROGRESS_MARKER = ".setup-in-progress"
 
-# Last line the setup script prints. Callers MUST verify it in the exec
-# output: the Kubernetes exec client returns buffered output without raising
-# when its timeout lapses (and never raises on a nonzero exit), so the
-# sentinel is the only reliable success signal.
+# The marker confirms materialization finished, in addition to exec success.
 WORKSPACE_SETUP_COMPLETE_SENTINEL = "ONYX_WORKSPACE_SETUP_COMPLETE"
 SESSION_CONFIG_COMPLETE_SENTINEL = "ONYX_SESSION_CONFIG_COMPLETE"
 

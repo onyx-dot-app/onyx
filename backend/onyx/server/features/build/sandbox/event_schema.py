@@ -21,6 +21,22 @@ from acp.schema import (
     ToolCallStart,
 )
 
+from onyx.server.features.build.packets import SubagentStartedPacket
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
+
+SandboxEvent = (
+    AgentMessageChunk
+    | AgentThoughtChunk
+    | ToolCallStart
+    | ToolCallProgress
+    | AgentPlanUpdate
+    | CurrentModeUpdate
+    | PromptResponse
+    | Error
+    | SubagentStartedPacket
+    | SSEKeepalive
+)
+
 
 class TextPartMetadata(TypedDict):
     """Live part identity and authoritative text from OpenCode part updates."""
@@ -45,6 +61,7 @@ class ActivityTimeoutError(Error):
 
 
 __all__ = [
+    "SandboxEvent",
     "ActivityTimeoutError",
     "AgentMessageChunk",
     "AgentPlanUpdate",

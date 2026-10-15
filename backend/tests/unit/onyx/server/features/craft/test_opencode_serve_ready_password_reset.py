@@ -16,12 +16,10 @@ from unittest import mock
 from uuid import uuid4
 
 from onyx.server.features.build.sandbox import serve_transport
-from onyx.server.features.build.sandbox.kubernetes import (
-    kubernetes_sandbox_manager as k8s_mod,
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
-)
+from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
 _STALE_PW = "stale-password"
@@ -39,9 +37,11 @@ class _FakeProbeClient:
         password: str | None,
         *,
         event_bus: object = None,  # noqa: ARG002
-    ):
+        timeouts: ClientTimeouts,
+    ) -> None:
         self.base_url = base_url
         self.password = password
+        self.timeouts = timeouts
         self.closed = False
         _FakeProbeClient.created.append(self)
 
@@ -52,12 +52,11 @@ class _FakeProbeClient:
         self.closed = True
 
 
-def _make_manager() -> KubernetesSandboxManager:
+def _make_manager() -> SandboxManager:
     # Bypass __init__ (which builds a real k8s client) — we only exercise the
     # in-process serve-transport plumbing.
-    mgr = object.__new__(KubernetesSandboxManager)
+    mgr = object.__new__(SandboxManager)
     mgr._init_serve_state()
-    mgr._namespace = "onyx-sandboxes"
     return mgr
 
 
@@ -87,33 +86,6 @@ def test_wait_for_opencode_serve_ready_resets_password_on_401() -> None:
     assert [c.password for c in _FakeProbeClient.created] == [_STALE_PW, _FRESH_PW]
     assert _FakeProbeClient.created[0].closed is True
     assert _FakeProbeClient.created[1].closed is True
+    assert all(c.timeouts.connect_timeout == 5.0 for c in _FakeProbeClient.created)
     # Cache was reloaded from the backend exactly once after invalidation.
     assert load_mock.call_count == 2
-
-
-def test_reuse_existing_pod_clears_stale_tombstone() -> None:
-    mgr = _make_manager()
-    sandbox_id = uuid4()
-
-    # A prior terminate in this process tombstoned the sandbox; reusing a live
-    # pod must clear it so event-bus creation can attach again.
-    mgr._terminated_sandboxes.add(sandbox_id)
-
-    with (
-        mock.patch.object(k8s_mod, "ONYX_SERVER_URL", "http://api"),
-        mock.patch.object(k8s_mod, "SANDBOX_PROXY_HOST", "proxy.local"),
-        mock.patch.object(mgr, "_pod_exists_and_healthy", return_value=True),
-        mock.patch.object(mgr, "_ensure_service_exists"),
-        mock.patch.object(mgr, "_wait_for_pod_ready", return_value=True),
-        mock.patch.object(mgr, "_wait_for_opencode_serve_ready", return_value=True),
-    ):
-        info = mgr.provision(
-            sandbox_id=sandbox_id,
-            user_id=uuid4(),
-            tenant_id="public",
-            onyx_pat="pat-test",
-            provisioning_attempt_number=1,
-        )
-
-    assert info.sandbox_id == sandbox_id
-    assert sandbox_id not in mgr._terminated_sandboxes

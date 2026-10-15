@@ -1,5 +1,5 @@
 """Tests for per-(sandbox_id, directory) :class:`PodEventBus` keying in
-:class:`KubernetesSandboxManager`.
+:class:`SandboxManager`.
 
 Production bug (May 2026): when two build sessions ran on the same
 opencode-serve pod, both sessions shared one bus subscribed to
@@ -15,7 +15,7 @@ The fix:
 1. ``PodEventBus`` accepts ``directory=...`` and passes it as
    ``?directory=`` to /event (wire-level scoping; tested in
    ``test_event_bus.py``).
-2. ``KubernetesSandboxManager._event_buses`` is keyed by
+2. ``SandboxManager._event_buses`` is keyed by
    ``(sandbox_id, directory)`` — one bus per session directory on the
    pod. Parallel sessions get *distinct* buses, each subscribed to its
    own ``?directory=``, so events stay scoped end to end.
@@ -40,8 +40,8 @@ from uuid import uuid4
 import pytest
 
 from onyx.server.features.build.sandbox import serve_transport
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
 
 # ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 @pytest.fixture
 def mgr(
     monkeypatch: pytest.MonkeyPatch,
-) -> Generator[KubernetesSandboxManager, None, None]:
+) -> Generator[SandboxManager, None, None]:
     """Manager with just serve-transport state initialized; stubs the
     connection-info loader and database status lookup so the test doesn't
     touch external services."""
@@ -65,7 +65,7 @@ def mgr(
     )
     monkeypatch.setattr(serve_transport, "get_sandbox_by_id", lambda *_: None)
 
-    m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
+    m: SandboxManager = object.__new__(SandboxManager)
     m._init_serve_state()
 
     m._load_serve_connection_info = (  # ty: ignore[invalid-assignment]
@@ -98,7 +98,7 @@ _DIR_B = "/workspace/sessions/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 
 
 def test_two_directories_on_same_pod_get_distinct_buses(
-    mgr: KubernetesSandboxManager,
+    mgr: SandboxManager,
 ) -> None:
     """The core fix: two sessions on the same pod (same sandbox_id, but
     different session directories) MUST get separate ``PodEventBus``
@@ -114,7 +114,7 @@ def test_two_directories_on_same_pod_get_distinct_buses(
     assert bus_b._directory == _DIR_B
 
 
-def test_same_directory_returns_cached_bus(mgr: KubernetesSandboxManager) -> None:
+def test_same_directory_returns_cached_bus(mgr: SandboxManager) -> None:
     """Memoization: repeat calls for the same ``(sandbox_id, directory)``
     return the same bus instance — otherwise every send_message would
     spin up a fresh reader thread + httpx client."""
@@ -125,7 +125,7 @@ def test_same_directory_returns_cached_bus(mgr: KubernetesSandboxManager) -> Non
 
 
 def test_different_sandboxes_same_directory_get_distinct_buses(
-    mgr: KubernetesSandboxManager,
+    mgr: SandboxManager,
 ) -> None:
     """Same directory string on two different pods is still two buses —
     the sandbox_id half of the key keeps cross-pod isolation."""
@@ -141,7 +141,7 @@ def test_different_sandboxes_same_directory_get_distinct_buses(
 
 
 def test_terminate_closes_every_per_directory_bus_for_sandbox(
-    mgr: KubernetesSandboxManager, monkeypatch: pytest.MonkeyPatch
+    mgr: SandboxManager, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The bug's mirror image: with the new keying, ``terminate`` must
     iterate every key whose first element is ``sandbox_id`` and close
@@ -159,7 +159,7 @@ def test_terminate_closes_every_per_directory_bus_for_sandbox(
     bus_other = mgr._get_or_create_event_bus(other_sandbox, _DIR_A)
 
     # Stub out the K8s teardown — we only care about the bus-close path.
-    monkeypatch.setattr(mgr, "_cleanup_kubernetes_resources", lambda _sandbox_str: None)
+    monkeypatch.setattr(mgr, "_runtime", MagicMock(), raising=False)
 
     mgr.terminate(sandbox_id)
 
@@ -187,7 +187,7 @@ def test_terminate_closes_every_per_directory_bus_for_sandbox(
 
 
 def test_list_subagents_finds_parent_in_any_per_directory_bus(
-    mgr: KubernetesSandboxManager,
+    mgr: SandboxManager,
 ) -> None:
     """Subagent parent-child mappings live on whichever bus the
     ``session.created`` event happened to land on (i.e. the bus for the
@@ -215,7 +215,7 @@ def test_list_subagents_finds_parent_in_any_per_directory_bus(
 
 
 def test_list_subagents_returns_empty_when_no_bus_holds_the_parent(
-    mgr: KubernetesSandboxManager,
+    mgr: SandboxManager,
 ) -> None:
     """Sanity: with buses present but no session.created seen, the
     method must return ``[]`` — not raise, not return some other
@@ -227,7 +227,7 @@ def test_list_subagents_returns_empty_when_no_bus_holds_the_parent(
 
 
 def test_list_subagents_does_not_create_a_bus_just_to_check(
-    mgr: KubernetesSandboxManager,
+    mgr: SandboxManager,
 ) -> None:
     """``list_subagents`` is called on hot paths (UI polling); it must
     not spin up a bus + reader thread for a sandbox that has none.
@@ -244,7 +244,7 @@ def test_list_subagents_does_not_create_a_bus_just_to_check(
 
 
 def test_self_closed_bus_is_replaced_for_same_directory(
-    mgr: KubernetesSandboxManager,
+    mgr: SandboxManager,
 ) -> None:
     """The existing self-close replacement path (see
     ``test_bus_closed_property.py``) must still work after the keying

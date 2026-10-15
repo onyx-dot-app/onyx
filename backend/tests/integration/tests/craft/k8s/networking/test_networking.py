@@ -5,13 +5,19 @@ import json
 import os
 import re
 import subprocess
+import time
 from collections.abc import Generator
-from typing import Any, NamedTuple
+from typing import Any, BinaryIO, NamedTuple
 from urllib.parse import SplitResult, urlsplit
 from uuid import UUID, uuid4
 
 import pytest
+from kubernetes import client as k8s_client
+from kubernetes import config as k8s_config
 
+from onyx.server.features.build.sandbox.exec import ExecClient, FramedStdin
+from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRuntime
+from onyx.server.features.build.sandbox.models import SandboxExecError
 from tests.common.craft.local_http_probe import LOCAL_HTTP_PROBE
 from tests.common.craft.proxy_probe import PROXY_PROBE
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -32,7 +38,9 @@ class Sandbox(NamedTuple):
     pod: str
 
 
-def kubectl(namespace: str, *args: str, timeout: int = 60) -> str:
+def kubectl(
+    namespace: str, *args: str, timeout: int = 60, stdin: str | None = None
+) -> str:
     return subprocess.run(
         [
             "kubectl",
@@ -43,6 +51,7 @@ def kubectl(namespace: str, *args: str, timeout: int = 60) -> str:
             *args,
         ],
         capture_output=True,
+        input=stdin,
         text=True,
         check=True,
         timeout=timeout,
@@ -83,16 +92,47 @@ def exec_proxy(*command: str) -> str:
     )
 
 
+def exec_guest(
+    sandbox: Sandbox,
+    operation: str,
+    metadata: dict[str, object],
+    *,
+    timeout: int = 60,
+) -> str:
+    return exec_guest_in_pod(sandbox.pod, operation, metadata, timeout=timeout)
+
+
+def exec_guest_in_pod(
+    pod: str,
+    operation: str,
+    metadata: dict[str, object],
+    *,
+    stdin: bytes | BinaryIO | None = None,
+    timeout: int = 60,
+) -> str:
+    configuration = k8s_client.Configuration()
+    k8s_config.load_kube_config(
+        context=os.environ["SANDBOX_TEST_KUBE_CONTEXT"],
+        client_configuration=configuration,
+    )
+    command = KubernetesRuntime.guest_command(operation, metadata)
+    try:
+        result = ExecClient(configuration, sandbox_namespace()).run(
+            pod, command, stdin=FramedStdin(stdin), timeout=timeout
+        )
+    except SandboxExecError as error:
+        raise subprocess.CalledProcessError(
+            error.returncode or 1, command, stderr=error.stderr or str(error)
+        ) from error
+    return result.stdout.decode("utf-8")
+
+
 def exec_sandbox(sandbox: Sandbox, *command: str, timeout: int = 60) -> str:
-    return kubectl(
-        sandbox_namespace(),
-        "exec",
-        sandbox.pod,
-        "-c",
-        "sandbox",
-        "--",
-        *command,
-        timeout=timeout,
+    return exec_guest(
+        sandbox,
+        "run",
+        {"argv": list(command), "timeout_seconds": timeout, "has_stdin": False},
+        timeout=timeout + 15,
     )
 
 
@@ -216,39 +256,72 @@ def test_ipv6_neighbor_discovery_after_cache_flush(sandbox: Sandbox) -> None:
     if os.environ["SANDBOX_TEST_IP_FAMILY"] != "ipv6":
         pytest.skip("Neighbor discovery applies to IPv6")
     if os.environ.get("SANDBOX_TEST_FLUSH_NEIGHBORS") != "true":
-        pytest.skip("Enable SANDBOX_TEST_FLUSH_NEIGHBORS=true on a local kind cluster")
-    assert os.environ["SANDBOX_TEST_KUBE_CONTEXT"].startswith("kind-"), (
-        "Cache flush requires kind"
-    )
+        pytest.skip("Enable SANDBOX_TEST_FLUSH_NEIGHBORS=true for the privileged probe")
     pod: dict[str, Any] = json.loads(
         kubectl(sandbox_namespace(), "get", "pod", sandbox.pod, "-o", "json")
     )
-    node: str = pod["spec"]["nodeName"]
-
-    def docker(*command: str) -> str:
-        return subprocess.run(
-            ["docker", *command], capture_output=True, text=True, check=True, timeout=30
-        ).stdout.strip()
-
-    runtime_ids: list[str] = docker(
-        "exec", node, "crictl", "pods", "--name", sandbox.pod, "-q"
-    ).splitlines()
-    assert len(runtime_ids) == 1, runtime_ids
-    runtime: dict[str, Any] = json.loads(
-        docker("exec", node, "crictl", "inspectp", runtime_ids[0])
+    assert pod["spec"]["runtimeClassName"] == "kata-fc"
+    assert all(
+        ipaddress.ip_address(item["ip"]).version == 6
+        for item in pod["status"]["podIPs"]
     )
-    pid: str = str(runtime["info"]["pid"])
-    prefix: list[str] = ["exec", "--privileged", node, "nsenter", "-t", pid, "-n"]
-    assert docker(*prefix, "ip", "-6", "neigh", "show", "dev", "eth0")
-    flushed: str = docker(
-        *prefix, "ip", "-6", "-statistics", "neigh", "flush", "dev", "eth0"
+    debugger = f"neighbor-probe-{uuid4().hex[:8]}"
+    namespace = sandbox_namespace()
+    kubectl(
+        namespace,
+        "debug",
+        f"pod/{sandbox.pod}",
+        f"--container={debugger}",
+        f"--image={pod['spec']['containers'][0]['image']}",
+        "--profile=netadmin",
+        "--",
+        "/bin/sh",
+        "-c",
+        "exec sleep 900",
     )
-    assert (
-        sum(int(count) for count in re.findall(r"deleting (\d+) entries", flushed)) > 0
-    ), flushed
-    # Health probes may restore neighbors before the next exec. Verify the flush itself.
-    test_exact_api_exception_and_pat_injection(sandbox)
-    assert docker(*prefix, "ip", "-6", "neigh", "show", "dev", "eth0")
+    prefix = ("exec", sandbox.pod, "-c", debugger, "--")
+    try:
+        deadline = time.monotonic() + 90
+        while True:
+            current = json.loads(
+                kubectl(namespace, "get", "pod", sandbox.pod, "-o", "json")
+            )
+            if any(
+                status["name"] == debugger and status["state"].get("running")
+                for status in current["status"].get("ephemeralContainerStatuses", [])
+            ):
+                break
+            assert time.monotonic() < deadline, "IPv6 debugger did not start"
+            time.sleep(1)
+        assert (
+            kubectl(
+                namespace, *prefix, "cat", "/proc/sys/kernel/random/boot_id"
+            ).strip()
+            == exec_sandbox(sandbox, "cat", "/proc/sys/kernel/random/boot_id").strip()
+        )
+        assert kubectl(namespace, *prefix, "ip", "-6", "neigh", "show", "dev", "eth0")
+        flushed = kubectl(
+            namespace,
+            *prefix,
+            "ip",
+            "-6",
+            "-statistics",
+            "neigh",
+            "flush",
+            "dev",
+            "eth0",
+        )
+        assert (
+            sum(int(count) for count in re.findall(r"deleting (\d+) entries", flushed))
+            > 0
+        ), flushed
+        test_exact_api_exception_and_pat_injection(sandbox)
+        assert kubectl(namespace, *prefix, "ip", "-6", "neigh", "show", "dev", "eth0")
+    finally:
+        try:
+            kubectl(namespace, *prefix, "kill", "-KILL", "1")
+        except subprocess.CalledProcessError:
+            pass
 
 
 @pytest.mark.parametrize("method", ["GET", "CONNECT"])
@@ -363,7 +436,7 @@ def test_unknown_client_rejected(sandbox: Sandbox, method: str) -> None:
     assert json.loads(response["body"])["error"] == "unidentified_sandbox"
 
 
-def test_upload_reaches_signed_sidecar(sandbox: Sandbox) -> None:
+def test_upload_reaches_guest_filesystem(sandbox: Sandbox) -> None:
     content: bytes = b"sandbox networking upload round trip\n"
     uploaded = BuildSessionManager.upload_file(
         sandbox.owner, sandbox.session_id, "networking.txt", content

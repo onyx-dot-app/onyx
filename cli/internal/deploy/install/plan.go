@@ -13,9 +13,6 @@ func (in *installer) printPlan(defaultTag string) {
 	in.infof("Dry run mode — showing what would happen:")
 	in.plainf("  • Install root: %s (%s)", in.root.Dir, in.root.Source)
 	in.plainf("  • Mode: %s", in.modeName())
-	if in.craft {
-		in.plainf("  • Include Craft: true")
-	}
 	if in.dev {
 		in.plainf("  • Dev overlay: true (service ports published on the host)")
 	}

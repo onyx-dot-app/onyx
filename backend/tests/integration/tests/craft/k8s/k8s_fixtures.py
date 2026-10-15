@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shlex
 import time
 from collections.abc import Callable, Generator, Sequence
@@ -29,9 +28,11 @@ from onyx.db.models import (
     User__UserGroup,
 )
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE, SANDBOX_PROXY_PORT
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.user_library import delete_user_file, list_user_files
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRuntime
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
 from onyx.server.features.build.sandbox.session_workspace import SESSIONS_ROOT
 from onyx.utils.logger import setup_logger
@@ -54,9 +55,20 @@ logger = setup_logger()
 _SUITE_SANDBOX_IDS: set[UUID] = set()
 
 
+def kubernetes_runtime(manager: SandboxManager) -> KubernetesRuntime:
+    runtime = manager._runtime
+    if not isinstance(runtime, KubernetesRuntime):
+        raise TypeError("Craft k8s tests require KubernetesRuntime")
+    return runtime
+
+
 def suite_sandbox_ids() -> set[UUID]:
     """Snapshot of sandbox IDs created by this suite (for the leaked-pod reaper)."""
     return set(_SUITE_SANDBOX_IDS)
+
+
+def register_suite_sandbox(sandbox_id: UUID) -> None:
+    _SUITE_SANDBOX_IDS.add(sandbox_id)
 
 
 class PoolSession(NamedTuple):
@@ -81,55 +93,6 @@ class PodExecResult(NamedTuple):
 
     status_code: int
     body: str
-
-
-_K8S_CRAFT_PATHS = (
-    "backend/tests/integration/tests/craft/k8s/",
-    "tests/integration/tests/craft/k8s/",
-)
-
-
-def _is_k8s_craft_request(request: pytest.FixtureRequest) -> bool:
-    path = str(request.node.path).replace("\\", "/")
-    return any(prefix in path for prefix in _K8S_CRAFT_PATHS)
-
-
-def _sandbox_push_private_key() -> str:
-    configured = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY")
-    if not configured:
-        pytest.fail(
-            "ONYX_SANDBOX_PUSH_PRIVATE_KEY must be set for the k8s Craft suite. "
-            "API-provisioned pods verify pushes against the deployed server's key, "
-            "so a generated fallback would silently mismatch (false-pass negative "
-            "skip tests, hard-fail positive push tests). CI provides this from the "
-            "deployed server's config."
-        )
-    return configured
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _sandbox_push_key(
-    request: pytest.FixtureRequest,
-) -> Generator[None, None, None]:
-    # sidecar_client imports the config as a module constant; patch both env and modules.
-    if not _is_k8s_craft_request(request):
-        yield
-        return
-
-    from onyx.server.features.build import configs as build_configs
-    from onyx.server.features.build.sandbox.kubernetes import sidecar_client
-
-    push_key = _sandbox_push_private_key()
-    mp = pytest.MonkeyPatch()
-    mp.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", push_key)
-    mp.setattr(build_configs, "SANDBOX_PUSH_PRIVATE_KEY", push_key)
-    mp.setattr(sidecar_client, "SANDBOX_PUSH_PRIVATE_KEY", push_key)
-    mp.setattr(sidecar_client, "_push_private_key", None)
-    mp.setattr(sidecar_client, "_push_public_key_b64", None)
-    try:
-        yield
-    finally:
-        mp.undo()
 
 
 @dataclass(frozen=True)
@@ -165,20 +128,7 @@ class WorkspaceProxy:
         )
 
     def _exec(self, command: str) -> str:
-        from kubernetes.stream import stream as k8s_stream
-
-        resp = k8s_stream(
-            self._k8s_client.connect_get_namespaced_pod_exec,
-            name=self._pod_name,
-            namespace=SANDBOX_NAMESPACE,
-            container="sandbox",
-            command=["/bin/sh", "-c", command],
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        return str(resp) if resp is not None else ""
+        return pod_exec(self._k8s_client, self._pod_name, SANDBOX_NAMESPACE, command)
 
     def exists(self) -> bool:
         quoted = shlex.quote(self._abs_posix)
@@ -324,7 +274,7 @@ class WorkspaceProxy:
 class SandboxHandle:
     """Handle returned by the ``running_sandbox`` factory."""
 
-    manager: KubernetesSandboxManager
+    manager: SandboxManager
     sandbox_id: UUID
     session_id: UUID | None
     _k8s_client: "k8s_client_module.CoreV1Api"
@@ -339,9 +289,10 @@ class SandboxHandle:
 
     @property
     def workspace_path(self) -> WorkspaceProxy:
+        runtime = kubernetes_runtime(self.manager)
         return WorkspaceProxy(
             _k8s_client=self._k8s_client,
-            _pod_name=self.manager._get_pod_name(self.sandbox_id),
+            _pod_name=runtime.pod_name(self.sandbox_id),
         )
 
     def provision_api_user(
@@ -359,9 +310,10 @@ class SandboxHandle:
         else:
             self._register_extra(sandbox_id, api_user)
 
+        runtime = kubernetes_runtime(self.manager)
         return WorkspaceProxy(
             _k8s_client=self._k8s_client,
-            _pod_name=self.manager._get_pod_name(sandbox_id),
+            _pod_name=runtime.pod_name(sandbox_id),
         )
 
     def provision_api_users(
@@ -417,40 +369,59 @@ def _delete_sandbox_row(sandbox_id: UUID) -> None:
         logger.warning("Failed to delete sandbox row %s", sandbox_id, exc_info=True)
 
 
+def _terminate_sandbox(
+    manager: SandboxManager,
+    k8s_client: "k8s_client_module.CoreV1Api",
+    sandbox_id: UUID,
+) -> None:
+    manager.terminate(sandbox_id)
+    wait_for_pod_deletion(
+        k8s_client,
+        kubernetes_runtime(manager).pod_name(sandbox_id),
+        SANDBOX_NAMESPACE,
+    )
+
+
+def cleanup_api_user_sandbox(
+    manager: SandboxManager,
+    k8s_client: "k8s_client_module.CoreV1Api",
+    user_id: UUID,
+    sandbox_id: UUID | None = None,
+) -> None:
+    """Delete test identity only after all its known pods are gone."""
+    sandbox_ids = {sandbox_id} if sandbox_id is not None else set()
+    with get_session_with_current_tenant() as session:
+        sandbox = get_sandbox_by_user_id(session, user_id)
+        if sandbox is not None:
+            sandbox_ids.add(sandbox.id)
+    _SUITE_SANDBOX_IDS.update(sandbox_ids)
+    for owned_id in sorted(sandbox_ids):
+        _terminate_sandbox(manager, k8s_client, owned_id)
+    cleanup_api_user_sandbox_rows(user_id)
+
+
 @contextmanager
 def _provisioned_sandbox(
-    manager: KubernetesSandboxManager,
+    manager: SandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
 ) -> Generator[OwnedLivePod, None, None]:
-    """API-provisioned sandbox with committed DB rows; tears down pod + rows on exit.
-
-    The proxy resolves identity via the DB (pod IP -> Sandbox.user_id), so a pod
-    without a committed Sandbox row fails closed.
-    """
+    """Keep committed proxy identity rows until the owned Pod is deleted."""
     api_user = UserManager.create(name=f"craft-k8s-{uuid4().hex[:8]}")
-    session_id, sandbox_id = BuildSessionManager.create_with_sandbox(api_user)
-    _SUITE_SANDBOX_IDS.add(sandbox_id)
     user_id = UUID(api_user.id)
+    sandbox_id: UUID | None = None
     try:
-        pod_name = manager._get_pod_name(str(sandbox_id))
-        try:
-            yield OwnedLivePod(
-                api_user=api_user,
-                sandbox_id=sandbox_id,
-                session_id=session_id,
-                pod_name=pod_name,
-            )
-        finally:
-            try:
-                manager.terminate(sandbox_id)
-            except Exception:
-                pass
-            try:
-                wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
-            except Exception:
-                pass
+        session_id, sandbox_id = BuildSessionManager.create_with_sandbox(api_user)
+        register_suite_sandbox(sandbox_id)
+        runtime = kubernetes_runtime(manager)
+        pod_name = runtime.pod_name(sandbox_id)
+        yield OwnedLivePod(
+            api_user=api_user,
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            pod_name=pod_name,
+        )
     finally:
-        cleanup_api_user_sandbox_rows(user_id)
+        cleanup_api_user_sandbox(manager, k8s_client, user_id, sandbox_id)
 
 
 @dataclass(frozen=True)
@@ -458,7 +429,7 @@ class _PoolPod:
     api_user: "DATestUser"
     sandbox_id: UUID
     pod_name: str
-    manager: KubernetesSandboxManager
+    manager: SandboxManager
     k8s_client: "k8s_client_module.CoreV1Api"
 
 
@@ -467,14 +438,14 @@ def _cleanup_pool_workspace(
     pod_name: str,
 ) -> None:
     """Wipe mutable trees on the pool pod before the next test runs."""
-    # managed/ is RO in the sandbox container; clean via sidecar.
+    # managed/ is root-owned; reset only the test pool.
     pod_exec(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
         "find /workspace/managed/skills /workspace/managed/user_library "
         "-mindepth 1 -delete 2>/dev/null; true",
-        container="sidecar",
+        root=True,
     )
     # Dev servers are nohup'd: without the kill they survive the delete and
     # accumulate on the module-scoped pool pod until something OOMs.
@@ -486,7 +457,7 @@ def _cleanup_pool_workspace(
         # cmdline, which would kill it before the find runs.
         "pkill -f 'bun run de[v]'; pkill -f 'next-serve[r]'; "
         "find /workspace/sessions -mindepth 1 -delete 2>/dev/null; true",
-        container="sandbox",
+        root=False,
     )
 
 
@@ -495,17 +466,10 @@ def _pool_pod(
     k8s_client: "k8s_client_module.CoreV1Api",
 ) -> Generator[_PoolPod, None, None]:
     """Module-scoped sandbox pod shared by all ``running_sandbox()`` calls."""
-    from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
-
-    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
-        pytest.skip(
-            "_pool_pod requires SANDBOX_BACKEND=kubernetes "
-            "(run via pr-craft-k8s-tests.yml or against a local kind cluster)"
-        )
 
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    manager = KubernetesSandboxManager()
+    manager = SandboxManager()
 
     try:
         with _provisioned_sandbox(manager, k8s_client) as (
@@ -535,13 +499,7 @@ def running_sandbox(
     clean slate. Extra user-owned pods come from
     ``SandboxHandle.provision_api_user``.
     """
-    from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 
-    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
-        pytest.skip(
-            "running_sandbox fixture requires SANDBOX_BACKEND=kubernetes "
-            "(run via pr-craft-k8s-tests.yml or against a local kind cluster)"
-        )
     pool: _PoolPod = request.getfixturevalue("_pool_pod")
 
     _cleanup_pool_workspace(pool.k8s_client, pool.pod_name)
@@ -571,25 +529,11 @@ def running_sandbox(
                 pool_extra_sandbox_ids.append(sandbox_id)
 
         def _cleanup() -> None:
-            def _terminate(extra_id: UUID) -> None:
-                try:
-                    pool.manager.terminate(extra_id)
-                except Exception:
-                    pass
-                try:
-                    wait_for_pod_deletion(
-                        pool.k8s_client,
-                        pool.manager._get_pod_name(extra_id),
-                        SANDBOX_NAMESPACE,
-                    )
-                except Exception:
-                    pass
-
             for extra_id, user_id in extra_sandbox_user_ids.items():
-                _terminate(extra_id)
+                _terminate_sandbox(pool.manager, pool.k8s_client, extra_id)
                 cleanup_api_user_sandbox_rows(user_id)
             for extra_id in pool_extra_sandbox_ids:
-                _terminate(extra_id)
+                _terminate_sandbox(pool.manager, pool.k8s_client, extra_id)
                 _delete_sandbox_row(extra_id)
 
         request.addfinalizer(_cleanup)
@@ -608,14 +552,7 @@ def running_sandbox(
 
 @pytest.fixture(scope="session")
 def k8s_client() -> "k8s_client_module.CoreV1Api":
-    from kubernetes import client as k8s_client_module
-
-    from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
-        load_kube_config,
-    )
-
-    load_kube_config()
-    return k8s_client_module.CoreV1Api()
+    return KubernetesRuntime().core_api
 
 
 def pod_exec(
@@ -623,32 +560,26 @@ def pod_exec(
     pod_name: str,
     namespace: str,
     command: str,
-    container: str = "sandbox",
+    root: bool = False,
     timeout_s: float | None = None,
 ) -> str:
-    """Run a one-shot ``/bin/sh -c`` command in a pod container; return combined output.
+    """Execute as the agent user. Root is reserved for explicit fixture setup."""
+    from onyx.server.features.build.sandbox.exec import ExecClient, FramedStdin
 
-    Pass ``container="sidecar"`` to write to ``/workspace/managed/`` (RO in the
-    sandbox container). A lapsed ``timeout_s`` returns buffered output rather
-    than raising, so callers must verify the command's effect.
-    """
-    from kubernetes.stream import stream as k8s_stream
-
+    timeout = timeout_s or 60.0
     argv = ["/bin/sh", "-c", command]
-    optional_kwargs = {} if timeout_s is None else {"_request_timeout": timeout_s}
-    resp = k8s_stream(
-        client.connect_get_namespaced_pod_exec,
-        name=pod_name,
-        namespace=namespace,
-        container=container,
-        command=argv,
-        stderr=True,
-        stdin=False,
-        stdout=True,
-        tty=False,
-        **optional_kwargs,
+    if not root:
+        argv = KubernetesRuntime.guest_command(
+            "run",
+            {"argv": argv, "timeout_seconds": timeout, "has_stdin": False},
+        )
+    result = ExecClient(client.api_client.configuration, namespace).run(
+        pod_name,
+        argv,
+        stdin=None if root else FramedStdin(None),
+        timeout=timeout + 15.0,
     )
-    return str(resp) if resp is not None else ""
+    return result.stdout.decode("utf-8") + result.stderr
 
 
 def pod_exec_async(
@@ -663,7 +594,6 @@ def pod_exec_async(
     body: str | None = None,
     body_file: str | None = None,
     max_time_s: int = 240,
-    container: str = "sandbox",
     proxy_session_id: str | None = None,
 ) -> None:
     """Kick off a background sandbox-side ``curl``; poll via ``wait_for_pod_exec_output``.
@@ -702,7 +632,7 @@ def pod_exec_async(
         f"> {output_path}"
         f"' > /dev/null 2>&1 &"
     )
-    pod_exec(client, pod_name, namespace, script, container=container)
+    pod_exec(client, pod_name, namespace, script)
 
 
 def wait_for_pod_deletion(
@@ -732,22 +662,16 @@ def wait_for_pod_deletion(
 
 
 def wait_until_healthy(
-    manager: KubernetesSandboxManager,
+    manager: SandboxManager,
     sandbox_id: UUID,
     max_attempts: int = 15,
 ) -> None:
-    """Poll the pod's ``Ready`` condition via the kube-API.
-
-    Uses a pod read (the apiserver path, reachable from the out-of-cluster
-    runner), NOT ``manager.health_check`` — which does a direct HTTP GET to the
-    pod IP that the runner cannot route to. The sidecar's own ``readinessProbe``
-    (``/health`` on the push-daemon port) gates pod readiness, so ``Ready=True``
-    already means the sidecar is healthy and the agent container is running.
-    """
-    pod_name = manager._get_pod_name(str(sandbox_id))
+    """Poll pod readiness after the guest releases its OpenCode history gate."""
+    runtime = kubernetes_runtime(manager)
+    pod_name = runtime.pod_name(str(sandbox_id))
     for _ in range(max_attempts):
-        pod = manager._core_api.read_namespaced_pod(
-            name=pod_name, namespace=manager._namespace
+        pod = runtime.core_api.read_namespaced_pod(
+            name=pod_name, namespace=runtime.namespace
         )
         conditions = pod.status.conditions or []
         if any(c.type == "Ready" and c.status == "True" for c in conditions):
@@ -762,7 +686,6 @@ def wait_for_pod_exec_output(
     output_path: str,
     timeout_s: float,
     namespace: str = SANDBOX_NAMESPACE,
-    container: str = "sandbox",
 ) -> PodExecResult:
     """Poll the ``pod_exec_async`` tempfile until it appears, returning
     ``(status_code, body)``. Raises on timeout."""
@@ -773,7 +696,6 @@ def wait_for_pod_exec_output(
             pod_name,
             namespace,
             f"cat {output_path} 2>/dev/null || true",
-            container=container,
         )
         if raw:
             head, _, rest = raw.partition("\n")
@@ -828,12 +750,12 @@ def wait_for_proxy_redeploy(
 
 
 @pytest.fixture(scope="function")
-def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
+def k8s_manager() -> Generator[SandboxManager, None, None]:
     """Initialise DB engine + tenant context and return the K8s manager."""
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
-        yield KubernetesSandboxManager()
+        yield SandboxManager()
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -965,7 +887,7 @@ def webapp_pool_session(_pool_pod: _PoolPod) -> PoolSession:
 
 @pytest.fixture(scope="function")
 def live_pod(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
 ) -> Generator[PoolSession, None, None]:
     """Provision a fresh sandbox + session pod, torn down on exit.
@@ -988,7 +910,7 @@ def live_pod(
 
 @pytest.fixture(scope="function")
 def owned_live_pod(
-    k8s_manager: KubernetesSandboxManager,
+    k8s_manager: SandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
 ) -> Generator[OwnedLivePod, None, None]:
     """Like ``live_pod`` but also yields the owning API user for API-driven calls.

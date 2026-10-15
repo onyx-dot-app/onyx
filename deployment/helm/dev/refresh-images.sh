@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Rebuild the backend + sandbox images from this worktree, load them into the
-# kind cluster, and restart the pods that run them (sandbox-proxy especially —
-# it is NOT telepresence-local and silently runs stale code otherwise).
+# Refresh the local backend and guest together. No sandbox pod is deleted.
+# Usage: refresh-images.sh [--check|--prepare|--skip-build|--skip-sandbox-image]
 #
-#   refresh-images.sh           rebuild, load, restart
-#   refresh-images.sh --check   report staleness only
+# Stop host Onyx API, Celery workers, and beat processes before refresh,
+# including VS Code "(k8s)" services. Restart them only after refresh succeeds.
+# In-cluster rollouts do not stop host processes.
 
 set -euo pipefail
 
@@ -12,57 +12,196 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 CLUSTER_NAME="${CLUSTER_NAME:-onyx-dev}"
-BACKEND_IMAGE="${BACKEND_IMAGE:-onyxdotapp/onyx-backend:dev}"
-SANDBOX_IMAGE="${SANDBOX_IMAGE:-onyxdotapp/sandbox:dev}"
-SANDBOX_IMAGE_DIR="$REPO_ROOT/backend/onyx/server/features/build/sandbox/image"
+NAMESPACE="${NAMESPACE:-onyx}"
+EXPECTED_CTX="kind-$CLUSTER_NAME"
+BACKEND_IMAGE="onyxdotapp/onyx-backend:dev"
+SANDBOX_IMAGE="onyxdotapp/sandbox:dev"
+CHECK=0
+PREPARE=0
+SKIP_BUILD=0
+SKIP_SANDBOX_IMAGE=0
 
-# docker's .Created is always UTC; strip Z + fractional seconds, then parse
-# with GNU date (-d) or BSD date (-j -f).
-utc_to_epoch() {
-  local ts="${1%Z}"
-  ts="${ts%%.*}"
-  date -u -d "$ts" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%S' "$ts" +%s
+for arg in "$@"; do
+  case "$arg" in
+    --check) CHECK=1 ;;
+    --prepare) PREPARE=1 ;;
+    --skip-build) SKIP_BUILD=1 ;;
+    --skip-sandbox-image) SKIP_SANDBOX_IMAGE=1 ;;
+    -h|--help) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    *) echo "unknown flag: $arg" >&2; exit 2 ;;
+  esac
+done
+
+kubectl_dev() {
+  kubectl --context "$EXPECTED_CTX" --namespace "$NAMESPACE" "$@"
 }
 
-check_staleness() {
-  local stale=0
-  local backend_created last_commit commit_epoch
-  backend_created=$(docker image inspect "$BACKEND_IMAGE" --format '{{.Created}}' 2>/dev/null || echo "missing")
-  last_commit=$(git -C "$REPO_ROOT" log -1 --format=%cI -- backend/)
-  commit_epoch=$(git -C "$REPO_ROOT" log -1 --format=%ct -- backend/)
-  echo "backend image built:        $backend_created"
-  echo "last backend/ commit:       $last_commit"
-  if [[ "$backend_created" == "missing" || "$(utc_to_epoch "$backend_created")" -lt "$commit_epoch" ]]; then
-    echo "WARNING: $BACKEND_IMAGE is older than the latest backend/ commit — the"
-    echo "         sandbox-proxy is running stale code. Run: $0"
-    stale=1
+require_empty_sandboxes() {
+  local namespace pods
+  namespace="$(kubectl --context "$EXPECTED_CTX" get namespace onyx-sandboxes --ignore-not-found -o name)"
+  if [[ -z "$namespace" ]]; then
+    return
   fi
-  local podtemplate_image
-  podtemplate_image=$(kubectl get podtemplate sandbox-pod -n onyx-sandboxes \
-    -o jsonpath='{.template.spec.containers[0].image}' 2>/dev/null || echo "unknown")
-  echo "sandbox PodTemplate image:  $podtemplate_image"
-  return "$stale"
+  pods="$(kubectl --context "$EXPECTED_CTX" --namespace onyx-sandboxes get pods -o name)"
+  if [[ -n "$pods" ]]; then
+    echo "refusing to update images while sandbox pods exist:" >&2
+    echo "$pods" >&2
+    echo "Stop traffic and snapshot sessions with the current release first." >&2
+    echo "Stop host Onyx API, Celery workers, and beat processes," >&2
+    echo 'including VS Code "(k8s)" services. Restart them only after refresh succeeds.' >&2
+    echo "No sandbox pods were deleted. See docs/craft/infra/firecracker.md." >&2
+    exit 1
+  fi
 }
 
-if [[ "${1:-}" == "--check" ]]; then
-  check_staleness
-  exit $?
+load_guest_image() {
+  local nodes node cluster_label platform expected_id actual_status
+  nodes="$(kind get nodes --name "$CLUSTER_NAME")"
+  if [[ -z "$nodes" ]]; then
+    echo "no kind nodes found for $CLUSTER_NAME" >&2
+    exit 1
+  fi
+  for node in $nodes; do
+    cluster_label="$(docker inspect -f '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' "$node")"
+    if [[ "$cluster_label" != "$CLUSTER_NAME" ]]; then
+      echo "refusing to load $node; expected kind cluster $CLUSTER_NAME, got $cluster_label" >&2
+      exit 1
+    fi
+  done
+  platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$SANDBOX_IMAGE")"
+  if [[ "$platform" != linux/amd64 && "$platform" != linux/arm64 ]]; then
+    echo "unsupported guest image platform: $platform" >&2
+    exit 1
+  fi
+  # Docker's image ID can identify an index or manifest instead of the CRI config.
+  expected_id="$(docker image save --platform "$platform" "$SANDBOX_IMAGE" \
+    | tar -xOf - manifest.json \
+    | uv run --project "$REPO_ROOT" --frozen --no-sync python -c '
+import json
+import re
+import sys
+
+manifest = json.load(sys.stdin)
+if not isinstance(manifest, list) or len(manifest) != 1 or not isinstance(manifest[0], dict):
+    raise SystemExit("expected exactly one saved guest image manifest")
+config = manifest[0].get("Config")
+if not isinstance(config, str):
+    raise SystemExit("invalid saved guest config digest")
+match = re.fullmatch(r"(?:([0-9a-f]{64})\.json|blobs/sha256/([0-9a-f]{64}))", config)
+if match is None:
+    raise SystemExit("invalid saved guest config digest")
+print("sha256:" + (match.group(1) or match.group(2)))
+')"
+  for node in $nodes; do
+    docker image save --platform "$platform" "$SANDBOX_IMAGE" \
+      | docker exec -i "$node" ctr --namespace k8s.io images import \
+        --local --snapshotter devmapper --label io.cri-containerd.pinned=pinned -
+    actual_status="$(docker exec "$node" crictl \
+      --runtime-endpoint unix:///run/containerd/containerd.sock \
+      --image-endpoint unix:///run/containerd/containerd.sock \
+      inspecti -o go-template --template '{{.status.id}} {{.status.pinned}}' \
+      "docker.io/$SANDBOX_IMAGE")"
+    if [[ "$actual_status" != "$expected_id true" ]]; then
+      echo "guest image identity or retention mismatch on $node" >&2
+      echo "expected $expected_id true; got $actual_status" >&2
+      exit 1
+    fi
+  done
+}
+
+"$SCRIPT_DIR/k8s-up.sh" --cluster-name "$CLUSTER_NAME" --check-runtime
+
+if [[ "$CHECK" -eq 1 ]]; then
+  docker image inspect "$BACKEND_IMAGE" "$SANDBOX_IMAGE" --format '{{.RepoTags}} {{.Id}}'
+  kubectl --context "$EXPECTED_CTX" --namespace onyx-sandboxes get podtemplate sandbox-pod \
+    -o 'jsonpath={.template.metadata.labels.onyx\.app/sandbox-protocol}{"\n"}{range .template.spec.initContainers[*]}{.name}{" "}{.image}{" "}{.imagePullPolicy}{"\n"}{end}{range .template.spec.containers[*]}{.name}{" "}{.image}{" "}{.imagePullPolicy}{"\n"}{end}'
+  echo "Image presence is not source freshness or Firecracker acceptance."
+  exit 0
 fi
 
-echo "==> building $BACKEND_IMAGE"
-docker build -t "$BACKEND_IMAGE" "$REPO_ROOT/backend"
+require_empty_sandboxes
+
+if [[ "$PREPARE" -eq 1 ]]; then
+  existing_template="$(kubectl --context "$EXPECTED_CTX" --namespace onyx-sandboxes get podtemplate sandbox-pod --ignore-not-found -o name)"
+else
+  template_file="$(mktemp -t onyx-sandbox-template.XXXXXX)"
+  trap 'rm -f "$template_file"' EXIT
+  helm template onyx "$SCRIPT_DIR/../charts/onyx" --namespace "$NAMESPACE" \
+    --kube-version 1.33.1 --values "$SCRIPT_DIR/values-localdev.yaml" \
+    --set auth.opensearch.existingSecret=onyx-opensearch \
+    --show-only templates/sandbox-podtemplate.yaml > "$template_file"
+fi
+
+if ! command -v uv >/dev/null 2>&1 || [[ ! -x "$REPO_ROOT/.venv/bin/python" ]]; then
+  echo "Image refresh requires uv and a synced development .venv. Run uv sync --frozen first." >&2
+  exit 1
+fi
+
+if [[ "$SKIP_BUILD" -eq 0 ]]; then
+  docker build -t "$BACKEND_IMAGE" "$REPO_ROOT/backend"
+  if [[ "$SKIP_SANDBOX_IMAGE" -eq 0 ]]; then
+    docker build -t "$SANDBOX_IMAGE" "$REPO_ROOT/backend/onyx/server/features/build/sandbox/image"
+  fi
+fi
+docker image inspect "$BACKEND_IMAGE" "$SANDBOX_IMAGE" >/dev/null
+
+if [[ "$PREPARE" -eq 1 ]]; then
+  if [[ -z "$existing_template" ]]; then
+    kind load docker-image "$BACKEND_IMAGE" --name "$CLUSTER_NAME"
+    load_guest_image
+  fi
+  exit 0
+fi
+
+require_empty_sandboxes
 kind load docker-image "$BACKEND_IMAGE" --name "$CLUSTER_NAME"
+pods="$(kubectl_dev get pods -l app.kubernetes.io/instance=onyx \
+  -o 'jsonpath={range .items[*]}{.metadata.name}{"\t"}{range .spec.containers[*]}{.image}{" "}{end}{"\n"}{end}')"
+old_backend_pods=()
+while IFS=$'\t' read -r pod images; do
+  for image in $images; do
+    case "$image" in
+      onyxdotapp/onyx-backend[:@]*|docker.io/onyxdotapp/onyx-backend[:@]*)
+        old_backend_pods+=("pod/$pod")
+        break
+        ;;
+    esac
+  done
+done <<< "$pods"
+deployments="$(kubectl_dev get deployments -l app.kubernetes.io/instance=onyx \
+  -o 'jsonpath={range .items[*]}{.metadata.name}{"\t"}{range .spec.template.spec.containers[*]}containers/{.name}{"="}{.image}{" "}{end}{range .spec.template.spec.initContainers[*]}initContainers/{.name}{"="}{.image}{" "}{end}{"\n"}{end}')"
+backend_deployments=()
+while IFS=$'\t' read -r deployment containers; do
+  matched=0
+  for container in $containers; do
+    case "${container#*=}" in
+      onyxdotapp/onyx-backend[:@]*|docker.io/onyxdotapp/onyx-backend[:@]*)
+        container_ref="${container%%=*}"
+        kubectl_dev patch deployment "$deployment" --type=strategic \
+          -p "{\"spec\":{\"template\":{\"spec\":{\"${container_ref%%/*}\":[{\"name\":\"${container_ref#*/}\",\"image\":\"$BACKEND_IMAGE\",\"imagePullPolicy\":\"IfNotPresent\"}]}}}}"
+        matched=1
+        ;;
+    esac
+  done
+  if [[ "$matched" -eq 1 ]]; then
+    backend_deployments+=("deployment/$deployment")
+  fi
+done <<< "$deployments"
+if [[ "${#backend_deployments[@]}" -eq 0 ]]; then
+  echo "no Onyx backend deployments found; run make craft-up first" >&2
+  exit 1
+fi
+kubectl_dev rollout restart "${backend_deployments[@]}"
+for deployment in "${backend_deployments[@]}"; do
+  kubectl_dev rollout status "$deployment" --timeout=300s
+done
+if [[ "${#old_backend_pods[@]}" -gt 0 ]]; then
+  kubectl_dev wait --for=delete "${old_backend_pods[@]}" --timeout=300s
+fi
 
-echo "==> building $SANDBOX_IMAGE"
-docker build -t "$SANDBOX_IMAGE" "$SANDBOX_IMAGE_DIR"
-kind load docker-image "$SANDBOX_IMAGE" --name "$CLUSTER_NAME"
-
-echo "==> pointing sandbox PodTemplate at $SANDBOX_IMAGE"
-kubectl patch podtemplate sandbox-pod -n onyx-sandboxes --type=json \
-  -p "[{\"op\":\"replace\",\"path\":\"/template/spec/containers/0/image\",\"value\":\"$SANDBOX_IMAGE\"}]"
-
-echo "==> restarting sandbox-proxy + api-server onto the new backend image"
-kubectl rollout restart deploy/onyx-sandbox-proxy deploy/onyx-api-server -n onyx
-kubectl rollout status deploy/onyx-sandbox-proxy -n onyx --timeout=180s
-
-echo "==> done. Existing sandbox pods keep their old image until recycled."
+# Old provisioners must stop before the protocol and both guest images change.
+require_empty_sandboxes
+load_guest_image
+kubectl --context "$EXPECTED_CTX" apply -f "$template_file"
+require_empty_sandboxes
+echo "Backend rollouts completed. The Helm guest template is updated."

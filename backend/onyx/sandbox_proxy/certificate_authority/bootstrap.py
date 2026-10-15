@@ -11,7 +11,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from pydantic import BaseModel, ConfigDict
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.utils.logger import setup_logger
 
 _CA_KEY_SIZE_BITS = 4096
@@ -207,13 +206,7 @@ class CABootstrap:
 
 
 def build_ca_store() -> CAStore:
-    """Build the configured backend without importing the other backend SDK."""
-    if SANDBOX_BACKEND is SandboxBackend.KUBERNETES:
-        from onyx.sandbox_proxy.certificate_authority.kubernetes import K8sSecretCAStore
+    """Build the Kubernetes Secret-backed CA store."""
+    from onyx.sandbox_proxy.certificate_authority.kubernetes import K8sSecretCAStore
 
-        return K8sSecretCAStore()
-    if SANDBOX_BACKEND is SandboxBackend.DOCKER:
-        from onyx.sandbox_proxy.certificate_authority.docker import FileCAStore
-
-        return FileCAStore()
-    raise RuntimeError(f"Unsupported SANDBOX_BACKEND={SANDBOX_BACKEND!r}.")
+    return K8sSecretCAStore()

@@ -18,15 +18,15 @@ from redis.exceptions import RedisError
 from onyx.cache import factory
 from onyx.cache.interface import CacheBackendType
 from onyx.server.features.build.sandbox import serve_transport
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
 
 
-def _make_replica() -> KubernetesSandboxManager:
+def _make_replica() -> SandboxManager:
     """A fresh manager (its own state, like a separate pod); skips
     ``__init__`` so no kube config is needed."""
-    m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
+    m: SandboxManager = object.__new__(SandboxManager)
     m._init_serve_state()
     return m
 

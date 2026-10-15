@@ -55,17 +55,16 @@ When a Craft sandbox starts, the application code creates a sandbox pod in
 `onyx-sandboxes`. That pod has:
 
 - a `sandbox` container, which runs the user-facing agent/code environment;
-- a `sidecar` container, which runs the push daemon and snapshot API;
-- a shared `emptyDir` workspace mounted at `/workspace/sessions`;
+- a `sandbox-firewall` init container, which owns firewall setup;
+- a Firecracker-backed Kata rootfs for writable workspace state;
 - a ConfigMap-backed proxy CA bundle;
 - `serviceAccountName: sandbox`;
 - `automountServiceAccountToken: false`;
 - `nodeSelector: onyx.app/workload=sandbox`;
 - a matching `workload=sandbox:NoSchedule` toleration.
 
-The sandbox manager also creates a per-sandbox ClusterIP Service for opencode,
-the push daemon, and Next.js dev-server ports, plus a per-sandbox Secret for
-opencode auth/config.
+The sandbox manager also creates a per-sandbox ClusterIP Service for opencode
+and Next.js dev-server ports, plus a per-sandbox Secret for opencode auth/config.
 
 ### AWS/Terraform additions
 
@@ -90,7 +89,7 @@ opencode auth/config.
 | Proxy CA `Role`/`RoleBinding` | release namespace | Yes for proxy CA | Lets the proxy read/create its CA Secret. |
 | Proxy sandbox `Role`/`RoleBinding` | `onyx-sandboxes` | Yes for proxy | Lets the proxy watch sandbox pods and write the CA ConfigMap. |
 | `NetworkPolicy/onyx-sandbox-proxy` | release namespace | Strongly recommended | Allows only the sandbox namespace to reach the proxy port. |
-| `NetworkPolicy/onyx-sandbox-push` | `onyx-sandboxes` | Strongly recommended | Allows only API server and scheduled-task worker pods to reach sandbox push/opencode/Next.js ports. |
+| `NetworkPolicy/onyx-sandbox-ingress` | `onyx-sandboxes` | Strongly recommended | Allows only API server and scheduled-task worker pods to reach sandbox opencode/Next.js ports. |
 | `PodDisruptionBudget/onyx-sandbox-proxy` | release namespace | Availability only | Keeps multi-replica proxy deployments from voluntary disruption all at once. |
 
 ### Helm values relevant to Craft
@@ -293,7 +292,7 @@ The chart now owns these Kubernetes objects when `ENABLE_CRAFT=true`:
 - `rolebinding/<release>-<release-namespace>-proxy-resolve`;
 - sandbox proxy ServiceAccount, Roles, RoleBindings, Deployment, Service, PDB,
   and NetworkPolicy;
-- sandbox push/proxy NetworkPolicies.
+- sandbox ingress/proxy NetworkPolicies.
 
 If those objects were created manually, Helm may refuse to install because they
 lack Helm ownership metadata. Prefer a maintenance window where no sandboxes are
@@ -327,9 +326,9 @@ The chart recreates/updates `sandbox` without an IRSA annotation:
 automountServiceAccountToken: false
 ```
 
-The sandbox pod does not need S3 credentials for snapshot storage. The sidecar
-only streams tarballs to and from API server/Celery, which persist them through
-the normal Onyx FileStore.
+The sandbox pod does not need S3 credentials for snapshot storage. The guest
+helper streams tarballs to and from API server/Celery, which persist them
+through the normal Onyx FileStore.
 
 ### Existing published-chart install
 

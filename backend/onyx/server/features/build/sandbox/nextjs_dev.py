@@ -115,7 +115,7 @@ fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
 # 9>&-: the server must not inherit the lock fd, or it would hold the
 # check-and-spawn lock for its entire lifetime.
-nohup bun run dev -- -H "${{SANDBOX_LISTEN_HOST:-0.0.0.0}}" $PORT_FLAG > {session_path}/nextjs.log 2>&1 9>&- &
+nohup /usr/bin/setsid bun run dev -- -H "${{SANDBOX_LISTEN_HOST:-0.0.0.0}}" $PORT_FLAG > {session_path}/nextjs.log 2>&1 9>&- &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
@@ -205,22 +205,19 @@ exit 1
 """
 
 
-# Restore-script sentinels: the k8s exec client returns buffered output
-# without raising on timeout or nonzero exit, so callers verify one of these
-# appeared instead of trusting a clean return.
+# Mark completed restore-script branches separately from exec transport success.
 WEBAPP_AUTOSTART_SENTINEL = "ONYX_WEBAPP_AUTOSTART"
 WEBAPP_ABSENT_SENTINEL = "ONYX_WEBAPP_ABSENT"
 
 
 def build_webapp_restore_script(session_path: str, nextjs_port: int) -> str:
-    """Builds the shell script both sandbox managers run after a snapshot
-    restore.
+    """Build the guest script that restores a session's preview launcher.
 
     Ports change across sleep/wake, so the script is always rewritten. Auto-starts the dev server only if the restored snapshot
     actually contains a webapp (``outputs/web/package.json``), and backgrounds
     it so wake isn't blocked on a cold bun install (node_modules is excluded
     from snapshots). Echoes exactly one of the sentinels above on completion;
-    they are diagnostics for Docker and the success signal for Kubernetes.
+    the manager checks this alongside the command exit status.
     """
     write_snippet = build_webapp_script_write_snippet(session_path, nextjs_port)
     return f"""
@@ -240,8 +237,6 @@ def build_webapp_script_write_snippet(session_path: str, nextjs_port: int) -> st
     ``chmod 444`` bootstrap script to the session root.
 
     Called from session setup and from restore (with the re-allocated port).
-    Pinned name/signature: both sandbox managers' restore paths call this
-    directly from ``onyx.server.features.build.sandbox.nextjs_dev``.
     """
     script = build_webapp_bootstrap_script(session_path, nextjs_port)
     escaped_script = script.replace("'", "'\\''")

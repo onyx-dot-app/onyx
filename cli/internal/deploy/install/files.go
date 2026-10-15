@@ -13,6 +13,8 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
 )
 
+const legacyCraftOverlayDestRel = "deployment/docker-compose.craft.yml"
+
 // managedFiles returns the files for the selected mode: the base set plus the
 // overlays that apply (callers settle the combinations — prod takes neither
 // the lite nor the dev overlay). Prod swaps in its own set — the standalone
@@ -20,7 +22,7 @@ import (
 // leaves out the README: prod installs are typically adopted in place
 // (sometimes inside a checked-out source tree), and dropping a README into
 // someone's root is not adoption.
-func managedFiles(prod, lite, craft, dev bool) []deployfiles.File {
+func managedFiles(prod, lite, dev bool) []deployfiles.File {
 	var files []deployfiles.File
 	if prod {
 		files = []deployfiles.File{
@@ -42,13 +44,37 @@ func managedFiles(prod, lite, craft, dev bool) []deployfiles.File {
 	if lite {
 		files = append(files, deployfiles.LiteOverlay)
 	}
-	if craft {
-		files = append(files, deployfiles.CraftOverlay)
-	}
 	if dev {
 		files = append(files, deployfiles.DevOverlay)
 	}
 	return files
+}
+
+func (in *installer) removeLegacyCraftOverlay(manifest *state.Manifest) error {
+	if manifest == nil {
+		return nil
+	}
+	if _, ok := manifest.Files[legacyCraftOverlayDestRel]; !ok {
+		return nil
+	}
+
+	path := filepath.Join(in.root.Dir, filepath.FromSlash(legacyCraftOverlayDestRel))
+	edited, err := manifest.UserEdited(in.root.Dir, legacyCraftOverlayDestRel)
+	if err != nil {
+		return err
+	}
+	if edited {
+		in.warnf("%s is from the retired docker-compose Craft install path and appears customized; leaving it on disk", legacyCraftOverlayDestRel)
+		return nil
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove retired Craft compose overlay %s: %w", legacyCraftOverlayDestRel, err)
+	}
+	if err := manifest.ForgetFile(in.root.Dir, legacyCraftOverlayDestRel); err != nil {
+		return err
+	}
+	in.successf("Removed retired Craft compose overlay %s", legacyCraftOverlayDestRel)
+	return nil
 }
 
 // fileFetcher sources managed-file content for a ref, falling back to the

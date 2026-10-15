@@ -1,52 +1,7 @@
-"""Test-double sandbox manager for craft tests.
+"""Configurable manager double for controlled failure tests.
 
-This module exposes ``StubSandboxManager`` — a controllable, in-memory
-implementation of ``SandboxManager``. It is intentionally **strict**: any
-abstract method on the ABC that is invoked without explicit configuration on
-the stub raises ``NotImplementedError`` with a message naming the method.
-
-Rationale
----------
-1. **Forces tests to declare their surface.** Each test states which slice of
-   the manager it exercises by setting an attribute (e.g.
-   ``stub.provision_returns``) or by opting a method into "silent no-op" mode
-   (``stub.terminate_silent = True``). Anything else raises loudly, so the
-   test cannot accidentally pass by virtue of a stub silently returning
-   ``None``/empty.
-2. **Surfaces ABC drift.** When ``SandboxManager`` gains a new abstract
-   method, every consuming test fails until it opts in or out. That is the
-   point: a new abstract method is a new contract the tests must reckon with.
-3. **Enables fault injection.** Several attributes
-   (``write_files_to_sandbox_raises_for``, ``send_message_events``, ...) let
-   tests inject the rare-but-load-bearing failures (RetriableWriteError,
-   FatalWriteError, sandbox event sequences) without reaching for ``MagicMock``.
-
-Observable state (P1: assert behaviour, not implementation)
-----------------------------------------------------------
-Instead of a free-form call log, the stub exposes scoped counters and last-
-payload snapshots so tests assert observable manager outcomes:
-
-- ``provision_count``, ``terminate_count``, ``setup_session_workspace_count``,
-  ``cleanup_session_workspace_count``, ``restore_snapshot_count``,
-  ``send_message_count``, ``write_sandbox_file_count``,
-  ``write_files_to_sandbox_count``.
-- ``last_provision_payload``, ``last_terminate_sandbox_id``,
-  ``last_setup_session_workspace_payload``,
-  ``last_cleanup_session_workspace_payload``,
-  ``last_restore_snapshot_payload``, ``last_send_message_payload``,
-  ``last_write_sandbox_file_payload``, ``last_write_files_to_sandbox_payload``.
-- ``session_runtime_call_order`` records config regeneration, instance disposal,
-  and session prewarming in invocation order.
-
-Usage
------
-::
-
-    stub = StubSandboxManager()
-    stub.send_message_events = [AgentMessageChunk(...), PromptResponse(...)]
-    list(stub.send_message(sandbox_id, session_id, "hi"))
-    assert stub.send_message_count == 1
-    assert stub.last_send_message_payload["message"] == "hi"
+Unconfigured operations raise NotImplementedError. The constructor initializes
+only shared serve state, so test doubles never create a Kubernetes runtime.
 """
 
 from __future__ import annotations
@@ -57,11 +12,12 @@ from contextlib import contextmanager
 from typing import Any, cast
 from uuid import UUID
 
-from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.event_schema import SandboxEvent
+from onyx.server.features.build.sandbox.image.guest.models import (
     FilesystemEntry,
     OutputsManifestResponse,
 )
+from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -357,7 +313,6 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         agent_provider: str | None,
         agent_model: str | None,
-        nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
         llm_config: CraftLLMProviderConfig | None = None,
@@ -370,7 +325,6 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "agent_provider": agent_provider,
             "agent_model": agent_model,
-            "nextjs_port": nextjs_port,
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
             "llm_config": llm_config,
@@ -729,7 +683,7 @@ class StubSandboxManager(SandboxManager):
         # URL + no password so any code path that touches the cache gets a
         # reasonable value.
         return ServeConnectionInfo(
-            base_url=f"http://stub-{str(sandbox_id)[:8]}:4096",
+            base_url=f"http://stub-{sandbox_id.hex}:4096",
             password=None,
         )
 

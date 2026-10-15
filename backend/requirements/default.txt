@@ -700,9 +700,6 @@ dnspython==2.8.0 \
     --hash=sha256:01d9bbc4a2d76bf0db7c1f729812ded6d912bd318d3b1cf81d30c0f845dbf3af \
     --hash=sha256:181d3c6996452cb1189c4046c61599b84a5a86e099562ffde77d26984ff26d0f
     # via email-validator
-docker==7.1.0 \
-    --hash=sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c \
-    --hash=sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0
 docstring-parser==0.17.0 \
     --hash=sha256:583de4a309722b3315439bb31d64ba3eebada841f2e2cee23b99df001434c912 \
     --hash=sha256:cf2569abd23dce8099b300f9b4fa8191e9582dda731fd533daf54c4551658708
@@ -2479,9 +2476,7 @@ pywin32==311 ; sys_platform == 'win32' \
     --hash=sha256:a508e2d9025764a8270f93111a970e1d0fbfc33f4153b388bb649b7eec4f9b42 \
     --hash=sha256:b7a2c10b93f8986666d0c803ee19b5990885872a7de910fc460f9b0c2fbf92ee \
     --hash=sha256:f95ba5a847cba10dd8c4d8fefa9f2a6cf283b8b88ed6178fa8a6c1ab16054d0d
-    # via
-    #   docker
-    #   mcp
+    # via mcp
 pywin32-ctypes==0.2.3 ; sys_platform == 'win32' \
     --hash=sha256:8a1513379d709975552d202d942d9837758905c8d01eb82b8bcc30918929e7b8 \
     --hash=sha256:d162dc04946d704503b2edc4d55f3dba5c1d539ead017afa00142c38b9885755
@@ -2657,7 +2652,6 @@ requests==2.33.0 \
     #   boxsdk
     #   braintrust
     #   cohere
-    #   docker
     #   dropbox
     #   exa-py
     #   google-api-core
@@ -3097,7 +3091,6 @@ urllib3==2.8.0 \
     #   botocore
     #   courlan
     #   distributed
-    #   docker
     #   htmldate
     #   hubspot-api-client
     #   kubernetes

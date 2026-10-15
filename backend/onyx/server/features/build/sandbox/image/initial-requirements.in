@@ -1,6 +1,4 @@
-cryptography
 defusedxml
-fastapi
 lxml
 matplotlib
 matplotlib-inline
@@ -14,4 +12,3 @@ pydantic
 python-docx
 python-pptx
 requests
-uvicorn[standard]

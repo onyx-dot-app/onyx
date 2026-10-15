@@ -7,8 +7,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.server.features.build.sandbox import serve_transport
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.manager import (
+    SandboxManager,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
@@ -62,7 +62,7 @@ def test_ensure_opencode_session_uses_unary_client_without_event_bus(
 ) -> None:
     sandbox_id = uuid4()
     build_session_id = uuid4()
-    manager: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
+    manager: SandboxManager = object.__new__(SandboxManager)
     manager._init_serve_state()
 
     def load_connection_info(_: UUID) -> ServeConnectionInfo:
@@ -90,7 +90,7 @@ def test_delete_opencode_session_uses_unary_client_without_event_bus(
 ) -> None:
     sandbox_id = uuid4()
     build_session_id = uuid4()
-    manager: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
+    manager: SandboxManager = object.__new__(SandboxManager)
     manager._init_serve_state()
 
     def load_connection_info(_: UUID) -> ServeConnectionInfo:

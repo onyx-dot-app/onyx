@@ -46,27 +46,24 @@ For detailed documentation, visit [our docs](https://docs.onyx.app/overview/core
 ### Requirements
 
 - Onyx deployment with an LLM provider configured (Anthropic, OpenAI, etc.)
+- Kubernetes sandbox infrastructure with Kata Firecracker enabled. The Craft
+  docker-compose sandbox backend has been removed.
 
 ### New Installations
 
-You can install Onyx Craft using our [quickstart script](https://docs.onyx.app/deployment/getting_started/quickstart):
+Deploy Onyx Craft with the Kubernetes deployment path. For local development,
+use [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md)
+for the one-shot setup via `make craft-up`.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh \
-  && chmod +x install.sh \
-  && ./install.sh --include-craft
-```
-
-This will:
-
-- Set `ENABLE_CRAFT=true` and `SANDBOX_BACKEND=docker` in the `.env` file
-- Pin `IMAGE_TAG` to the Craft-enabled backend image (Node.js + opencode CLI baked in)
-- Download and layer in the `docker-compose.craft.yml` overlay so api_server / background can talk to the Docker socket
-- Create the dedicated `onyx_craft_sandbox` bridge network used to isolate sandbox containers
+The docker-compose quickstart does not install Craft. It still runs the rest of
+Onyx, but it does not provision Craft sandboxes.
 
 ### Existing Deployments
 
-Re-run the installer with `--include-craft` on top of an existing deployment — it patches the `.env`, pulls down the craft overlay, and recreates the relevant containers. Setting `ENABLE_CRAFT=true` by hand without re-running the installer leaves the Docker socket unmounted and sandboxes will fail to provision.
+Migrate existing Craft deployments to the Kubernetes path before enabling Craft
+on the new release. The deprecated `--include-craft` docker-compose flag is
+rejected by the installer, and the old `docker-compose.craft.yml` overlay is no
+longer shipped.
 
 ## How It Works
 
@@ -78,25 +75,17 @@ Re-run the installer with `--include-craft` on top of an existing deployment —
 
 ## Technical Architecture
 
-### Sandbox Backends
+### Sandbox Runtime
 
-Craft supports two sandbox backends controlled by `SANDBOX_BACKEND`:
-
-**Kubernetes** (default — dev via kind, prod via EKS)
-
-- Pod-based isolation with ClusterIP services
+- Kata Firecracker VM isolation through Kubernetes `RuntimeClass`
+- ClusterIP services for sandbox traffic
 - S3-based snapshots for session persistence
 - Automatic cleanup of idle sandboxes (default: 1 hour timeout)
-- Two containers per pod:
-  - `sandbox` — Runs OpenCode agent and Next.js preview server
-  - `file-sync` — Sidecar for S3 file synchronization
+- One main sandbox container that runs opencode and the Next.js preview server
+- A firewall init container that prepares the network boundary before the main
+  container starts
 
 For local development, see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md) — one-shot setup via `make craft-up`.
-
-**Docker** (self-hosted docker-compose)
-
-- Container-per-sandbox driven by `api_server` via the Docker Engine API
-- Bridge network isolation; per-sandbox named volumes for `/workspace/sessions`
 
 ### Session Lifecycle
 
@@ -133,16 +122,15 @@ $SANDBOX_ROOT/
 Idle sandboxes are cleaned up by a Celery background task:
 
 - **Trigger**: Sandbox idle longer than `SANDBOX_IDLE_TIMEOUT_SECONDS` (default: 1 hour)
-- **Kubernetes**: Creates snapshots of all sessions, terminates the pod, marks sandbox as "sleeping"
-- **Local**: No automatic cleanup (sandboxes persist until manually removed)
+- Creates snapshots of all sessions, terminates the pod, marks sandbox as "sleeping"
 
 ## Configuration
 
 Key configuration categories (see source for full reference):
 
-- **Core** — `ENABLE_CRAFT`, `SANDBOX_BACKEND` (local vs kubernetes)
+- **Core** — `ENABLE_CRAFT`
 - **Lifecycle** — Idle timeout (default 1 hour)
-- **Kubernetes** — Namespace, container image, S3 bucket for snapshots
+- **Kubernetes** — Namespace, sandbox image, RuntimeClass, S3 bucket for snapshots
 - **File uploads** — Size limits (50MB per file, 20 files per session, 200MB total)
 - **Rate limits** — Free users: 5 messages total; Paid users: 25 messages/week
 
@@ -184,7 +172,7 @@ See the main [CONTRIBUTING.md](../../../../CONTRIBUTING.md) for guidelines.
 For Craft-specific development:
 
 1. Set `ENABLE_CRAFT=true` in your environment
-2. Choose a sandbox backend via `SANDBOX_BACKEND` (`kubernetes` or `docker`); see the backend sandbox README for setup
+2. Use the Kubernetes/Firecracker sandbox path; see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md) for setup
 
 ## License
 

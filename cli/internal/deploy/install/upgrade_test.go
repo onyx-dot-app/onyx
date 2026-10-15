@@ -294,7 +294,14 @@ func TestUpgradeRecoversUnrecordedPortFromContainers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := strings.ReplaceAll(string(env), "HOST_PORT=3000\n", "")
+	var legacyLines []string
+	for _, line := range strings.Split(string(env), "\n") {
+		if strings.HasPrefix(line, "HOST_PORT=") {
+			continue
+		}
+		legacyLines = append(legacyLines, line)
+	}
+	legacy := strings.Join(legacyLines, "\n")
 	if err := os.WriteFile(envPath, []byte(legacy), 0600); err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,7 @@
+# Install Kata's kata-fc runtime and devmapper on Linux KVM nodes first.
+# This file exists for clusters that want the historical amd64 node selector;
+# values.yaml already defaults Craft sandbox pods to RuntimeClass kata-fc.
+sandboxPod:
+  runtimeClassName: kata-fc
+  nodeSelector:
+    kubernetes.io/arch: amd64

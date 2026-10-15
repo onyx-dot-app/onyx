@@ -18,8 +18,8 @@ func newDeployUpgradeCmdWithDeps(ios *iostreams.IOStreams, deps *install.Deps) *
 		Short: "Upgrade an existing Onyx deployment to a newer version",
 		Long: `Upgrade an existing Onyx deployment to a newer version.
 
-Only the IMAGE_TAG line (plus SANDBOX_BACKEND when Craft is enabled) is
-rewritten in .env — every other setting, including your edits, is preserved.
+Only the IMAGE_TAG line is rewritten in .env — every other setting, including
+your edits, is preserved.
 Managed files (compose, overlays, nginx config) are refreshed to match the
 target version; a -dev image tag (v4.4.6-dev) takes them from the release it
 was built from (v4.4.6). Files you hand-edited are kept unless you confirm the

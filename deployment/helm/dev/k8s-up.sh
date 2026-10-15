@@ -13,8 +13,9 @@
 #   --namespace <ns>               k8s namespace (default: onyx)
 #   --opensearch-password <pw>     admin password on first install
 #                                  (default: generated, printed at the end)
-#   --skip-cluster-create          skip kind create (use an existing cluster)
-#   --skip-helm                    only create the cluster, don't install Onyx
+#   --skip-cluster-create          use an existing cluster
+#   --skip-helm                    non-Craft cluster-only setup; no runtime install
+#   --check-runtime                check an existing Craft runtime without changes
 #
 
 set -euo pipefail
@@ -24,6 +25,7 @@ NAMESPACE="onyx"
 OPENSEARCH_PASSWORD=""
 SKIP_CLUSTER_CREATE=0
 SKIP_HELM=0
+CHECK_RUNTIME=0
 KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.33.1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,11 +43,21 @@ require() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --cluster-name)         CLUSTER_NAME="$2"; shift 2 ;;
-    --namespace)            NAMESPACE="$2"; shift 2 ;;
-    --opensearch-password)  OPENSEARCH_PASSWORD="$2"; shift 2 ;;
+    --cluster-name|--namespace|--opensearch-password)
+      if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+        echo "error: $1 requires a value" >&2
+        exit 2
+      fi
+      case "$1" in
+        --cluster-name) CLUSTER_NAME="$2" ;;
+        --namespace) NAMESPACE="$2" ;;
+        --opensearch-password) OPENSEARCH_PASSWORD="$2" ;;
+      esac
+      shift 2
+      ;;
     --skip-cluster-create)  SKIP_CLUSTER_CREATE=1; shift ;;
     --skip-helm)            SKIP_HELM=1; shift ;;
+    --check-runtime)        CHECK_RUNTIME=1; shift ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -58,12 +70,56 @@ while [[ $# -gt 0 ]]; do
 done
 
 require kind
-require helm
 require kubectl
+EXPECTED_CTX="kind-$CLUSTER_NAME"
+
+kubectl_dev() {
+  kubectl --context "$EXPECTED_CTX" "$@"
+}
+
+check_runtime() {
+  require docker
+  if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
+    echo "Craft requires an existing Linux KVM kind cluster with kata-fc." >&2
+    echo "See docs/craft/dev/local-kubernetes.md before creating the cluster." >&2
+    exit 1
+  fi
+  if [[ "$(kubectl_dev get runtimeclass kata-fc -o jsonpath='{.handler}')" != kata-fc ]]; then
+    echo "Craft requires the kata-fc RuntimeClass handler." >&2
+    echo "See docs/craft/dev/local-kubernetes.md for the pinned runtime setup." >&2
+    exit 1
+  fi
+  local nodes node
+  nodes="$(kind get nodes --name "$CLUSTER_NAME")"
+  for node in $nodes; do
+    if ! docker exec "$node" sh -ec \
+      'test -c /dev/kvm && test -r /dev/kvm && test -w /dev/kvm && test -c /dev/vhost-vsock && ctr plugins ls | awk '\''$1 ~ /snapshotter/ && $2 == "devmapper" && $4 == "ok" { found = 1 } END { exit !found }'\'''; then
+      echo "Node $node needs usable KVM, vhost-vsock, and healthy containerd devmapper." >&2
+      echo "See docs/craft/dev/local-kubernetes.md. No runtime was installed or changed." >&2
+      exit 1
+    fi
+    docker exec -i "$node" bash -s -- verify-installed-version \
+      < "$SCRIPT_DIR/../../firecracker/install-pinned-firecracker.sh"
+  done
+  if [[ -z "$nodes" ]]; then
+    echo "no kind nodes found for $CLUSTER_NAME" >&2
+    exit 1
+  fi
+}
+
+if [[ "$CHECK_RUNTIME" -eq 1 ]]; then
+  check_runtime
+  exit 0
+fi
+
+if [[ "$SKIP_HELM" -eq 0 ]]; then
+  require helm
+  check_runtime
+fi
 
 # ---- 1. kind cluster ----
 
-if [[ "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
+if [[ "$SKIP_HELM" -eq 1 && "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
   if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
     echo "kind cluster '$CLUSTER_NAME' already exists; skipping create"
   else
@@ -72,45 +128,11 @@ if [[ "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
   fi
 fi
 
-kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null
-
-# Refuse to operate unless the current context is exactly the expected kind
-# cluster: the 'onyx' namespace exists in prod EKS too, and other kind clusters
-# may also be present.
-EXPECTED_CTX="kind-$CLUSTER_NAME"
-CURRENT_CTX="$(kubectl config current-context)"
-if [[ "$CURRENT_CTX" != "$EXPECTED_CTX" ]]; then
-  echo "refusing to operate: current kubectl context is '$CURRENT_CTX'" >&2
-  echo "expected '$EXPECTED_CTX' — pass --cluster-name to target a different kind cluster" >&2
-  exit 1
-fi
-
-# Kindnet handles network-policy packets; a CPU cap can stall sandbox egress.
-echo "removing the kindnet CPU limit ..."
-kubectl --context "$EXPECTED_CTX" -n kube-system patch daemonset kindnet \
-  --type=strategic \
-  -p '{"spec":{"template":{"spec":{"containers":[{"name":"kindnet-cni","resources":{"limits":{"cpu":null}}}]}}}}'
-kubectl --context "$EXPECTED_CTX" -n kube-system rollout status daemonset/kindnet --timeout=120s
-
-# ---- 2. helm install / upgrade ----
-
 if [[ "$SKIP_HELM" -eq 1 ]]; then
-  echo "skipping helm install (--skip-helm)"
+  kubectl_dev get nodes
+  echo "Cluster-only setup complete. Craft runtime and Onyx were not installed."
   exit 0
 fi
-
-kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 \
-  || kubectl create namespace "$NAMESPACE"
-# The chart also templates the onyx-sandboxes namespace (see
-# templates/sandbox-namespace.yaml). We pre-create it here so local setup can
-# label nodes before helm install runs, but we must stamp Helm ownership
-# metadata or `helm install` refuses to adopt the namespace.
-kubectl get namespace onyx-sandboxes >/dev/null 2>&1 \
-  || kubectl create namespace onyx-sandboxes
-kubectl label   namespace onyx-sandboxes app.kubernetes.io/managed-by=Helm --overwrite >/dev/null
-kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-name=onyx --overwrite >/dev/null
-kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-namespace="$NAMESPACE" --overwrite >/dev/null
-kubectl label node --all onyx.app/workload=sandbox --overwrite >/dev/null 2>&1
 
 # Use an isolated helm repo config: helm matches chart deps by repo NAME, so a
 # stale dev-global repo with a colliding name (we've seen this with
@@ -134,9 +156,36 @@ helm repo update >/dev/null
 echo "updating chart dependencies ..."
 helm dependency update "$CHART_DIR" >/dev/null
 
+# Refresh waits for every old backend pod before changing the guest protocol.
+existing_deployments="$(kubectl_dev -n "$NAMESPACE" get deployments -l app.kubernetes.io/instance=onyx --ignore-not-found -o name)"
+existing_template="$(kubectl_dev -n onyx-sandboxes get podtemplate sandbox-pod --ignore-not-found -o name)"
+if [[ -n "$existing_deployments" || -n "$existing_template" ]]; then
+  CLUSTER_NAME="$CLUSTER_NAME" NAMESPACE="$NAMESPACE" "$SCRIPT_DIR/refresh-images.sh" --skip-build
+else
+  CLUSTER_NAME="$CLUSTER_NAME" "$SCRIPT_DIR/refresh-images.sh" --prepare --skip-build
+fi
+
+kindnet="$(kubectl_dev -n kube-system get daemonset kindnet --ignore-not-found -o name)"
+if [[ -n "$kindnet" ]]; then
+  echo "removing the kindnet CPU limit ..."
+  kubectl_dev -n kube-system patch daemonset kindnet --type=strategic \
+    -p '{"spec":{"template":{"spec":{"containers":[{"name":"kindnet-cni","resources":{"limits":{"cpu":null}}}]}}}}'
+  kubectl_dev -n kube-system rollout status daemonset/kindnet --timeout=120s
+fi
+
+kubectl_dev get namespace "$NAMESPACE" >/dev/null 2>&1 \
+  || kubectl_dev create namespace "$NAMESPACE"
+# Pre-created namespaces need ownership metadata for Helm adoption.
+kubectl_dev get namespace onyx-sandboxes >/dev/null 2>&1 \
+  || kubectl_dev create namespace onyx-sandboxes
+kubectl_dev label namespace onyx-sandboxes app.kubernetes.io/managed-by=Helm --overwrite >/dev/null
+kubectl_dev annotate namespace onyx-sandboxes meta.helm.sh/release-name=onyx --overwrite >/dev/null
+kubectl_dev annotate namespace onyx-sandboxes meta.helm.sh/release-namespace="$NAMESPACE" --overwrite >/dev/null
+kubectl_dev label node --all onyx.app/workload=sandbox --overwrite >/dev/null
+
 # Generate a password on first install only; upgrades reuse the existing Secret.
 PW_FLAG=()
-if ! kubectl -n "$NAMESPACE" get secret onyx-opensearch >/dev/null 2>&1; then
+if ! kubectl_dev -n "$NAMESPACE" get secret onyx-opensearch >/dev/null 2>&1; then
   if [[ -z "$OPENSEARCH_PASSWORD" ]]; then
     # Prefix 'Aa1!' satisfies OpenSearch's complexity rule (upper/lower/digit/symbol).
     OPENSEARCH_PASSWORD="Aa1!$(openssl rand -hex 12)"
@@ -159,6 +208,7 @@ echo "helm upgrade --install onyx ..."
 HELM_ATTEMPTS=3
 for attempt in $(seq 1 "$HELM_ATTEMPTS"); do
   if helm upgrade --install onyx "$CHART_DIR" \
+      --kube-context "$EXPECTED_CTX" \
       -n "$NAMESPACE" \
       -f "$VALUES_OVERLAY" \
       ${PW_FLAG[@]+"${PW_FLAG[@]}"}; then
@@ -180,7 +230,7 @@ done
 # cluster-scoped and idempotent — re-running on a cluster that already has
 # it installed is a no-op.
 if command -v telepresence >/dev/null 2>&1; then
-  if ! kubectl -n ambassador get deployment traffic-manager >/dev/null 2>&1; then
+  if ! kubectl_dev -n ambassador get deployment traffic-manager >/dev/null 2>&1; then
     echo "installing telepresence traffic-manager (one-time per cluster) ..."
     # On a freshly-installed cluster the default 30s helm timeout inside
     # telepresence is often too tight (CRD webhook bootstraps, image pulls).
@@ -217,11 +267,11 @@ cat <<EOF
 
 cluster: kind-$CLUSTER_NAME
 namespace: $NAMESPACE
-context: $(kubectl config current-context)
+context: $EXPECTED_CTX
 
 next steps:
   1. watch pods come up:
-       kubectl -n $NAMESPACE get pods -w
+       kubectl --context $EXPECTED_CTX -n $NAMESPACE get pods -w
 
   2. (optional) connect your host to cluster DNS so you can run api_server
      locally and have it reach in-cluster services. Traffic-manager was

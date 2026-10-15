@@ -53,7 +53,6 @@ from onyx.server.features.build.packets import (
     ErrorPacket,
     SubagentStartedPacket,
 )
-from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentPlanUpdate,
@@ -64,6 +63,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallStart,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot

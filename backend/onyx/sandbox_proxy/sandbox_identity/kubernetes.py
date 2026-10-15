@@ -15,7 +15,7 @@ from urllib3.exceptions import ProtocolError, ReadTimeoutError
 from onyx.sandbox_proxy.sandbox_identity.models import SandboxIdentity
 from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIPLookup
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.sandbox.kubernetes.k8s_client import build_core_v1_api
+from onyx.server.features.build.sandbox.k8s_client import build_core_v1_api
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_COMPONENT,
     LABEL_K8S_COMPONENT_SANDBOX,

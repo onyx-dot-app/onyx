@@ -56,7 +56,7 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_hashes__no_commit,
     sleep_running_sandbox__no_commit,
 )
-from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.server.features.build.sandbox.models import (
     FileSet,
     SandboxProvisionContentionError,
@@ -154,9 +154,6 @@ def snapshot_opencode_history_before_recovery(
     tenant_id: str,
 ) -> None:
     """Best-effort history capture before terminating an unhealthy sandbox."""
-    if not sandbox_manager.supports_opencode_history_persistence:
-        return
-
     try:
         sandbox_manager.create_opencode_history_snapshot(
             sandbox_id,
@@ -827,26 +824,25 @@ def sleep_sandbox(
 
     # Chat history lives outside session workspaces; capture it before the
     # pod dies.
-    if sandbox_manager.supports_opencode_history_persistence:
-        try:
-            sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
-        except Exception as e:
-            if sandbox_manager.health_check(
-                sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
-            ):
-                logger.error(
-                    "opencode history snapshot failed for sandbox "
-                    "%s; leaving it RUNNING: %s",
-                    sandbox_id,
-                    e,
-                )
-                return
-            logger.warning(
-                "Sandbox %s pod unreachable; sleeping "
-                "without a fresh opencode history snapshot: %s",
+    try:
+        sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
+    except Exception as e:
+        if sandbox_manager.health_check(
+            sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
+        ):
+            logger.error(
+                "opencode history snapshot failed for sandbox "
+                "%s; leaving it RUNNING: %s",
                 sandbox_id,
                 e,
             )
+            return
+        logger.warning(
+            "Sandbox %s pod unreachable; sleeping "
+            "without a fresh opencode history snapshot: %s",
+            sandbox_id,
+            e,
+        )
 
     if not session_creation_lock.acquire(blocking=False):
         logger.info(
