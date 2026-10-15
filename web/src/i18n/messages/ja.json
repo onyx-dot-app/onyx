@@ -2320,7 +2320,8 @@
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
-          "loadError": "グラフを読み込めませんでした。"
+          "loadError": "グラフを読み込めませんでした。",
+          "rangeFilter": "Runs created in this slice of the chart"
         },
         "hold": {
           "checks_running": "インデックス前チェックを実行中",

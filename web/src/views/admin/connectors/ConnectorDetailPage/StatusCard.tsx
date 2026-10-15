@@ -71,6 +71,8 @@ export interface StatusCardProps {
   /** The page's time window, shared with the runs card. */
   timeWindow: PickerWindow;
   onTimeWindowChange: (window: PickerWindow) => void;
+  /** Picks a chart slice to narrow the page's run lists to. */
+  onSliceClick?: (start: Date, end: Date) => void;
 }
 
 /** The pair at a glance: status, latest and total documents, its last run, and documents indexed over time. */
@@ -80,6 +82,7 @@ export default function StatusCard({
   onViewChecks,
   timeWindow,
   onTimeWindowChange,
+  onSliceClick,
 }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
@@ -251,7 +254,11 @@ export default function StatusCard({
                 height="fit"
                 className="mx-1"
               >
-                <ThroughputChart ccPairId={ccPair.id} range={range} />
+                <ThroughputChart
+                  ccPairId={ccPair.id}
+                  range={range}
+                  onSliceClick={onSliceClick}
+                />
               </Section>
             )}
           </Section>

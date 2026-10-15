@@ -2320,7 +2320,8 @@
         "throughput": {
           "ariaLabel": "Documents indexed over time",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
-          "loadError": "The chart could not load."
+          "loadError": "The chart could not load.",
+          "rangeFilter": "Runs created in this slice of the chart"
         },
         "hold": {
           "checks_running": "Running pre-index checks",

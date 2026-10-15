@@ -271,6 +271,7 @@ def get_cc_pair_runs(
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=_RUNS_MAX_PAGE_SIZE),
     since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
     status_groups: list[CCPairRunStatusGroup] | None = Query(None),
     q: str | None = Query(None, max_length=200),
@@ -281,9 +282,10 @@ def get_cc_pair_runs(
     db_session: Session = Depends(get_session),
 ) -> CCPairRunsResponse:
     """The pair's index attempts and permission syncs as one feed, newest
-    first. ``since`` windows on creation time, ``q`` matches error messages,
-    including an index attempt's document errors, and ``errors`` keeps only
-    runs with document errors, open or resolved."""
+    first. ``since`` and ``until`` window on creation time, ``until``
+    exclusive, ``q`` matches error messages, including an index attempt's
+    document errors, and ``errors`` keeps only runs with document errors, open
+    or resolved."""
     # Called directly: the route contract reaches the scope gate three calls deep.
     cc_pair = get_readable_connector_credential_pair_for_user(
         cc_pair_id, db_session, user
@@ -301,6 +303,7 @@ def get_cc_pair_runs(
         source=cc_pair.connector.source,
         shared_sources=set(),
         since=since,
+        until=until,
         error_query=(q or "").strip() or None,
         status_groups=groups,
         errors=errors,

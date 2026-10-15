@@ -288,6 +288,8 @@ export interface CCPairRunsQuery {
   pageSize: number;
   /** ISO time. Runs created before it are left out. */
   since: string | null;
+  /** ISO time. Runs created at or after it are left out. */
+  until: string | null;
   kinds: CCPairRunKind[] | null;
   statusGroups: CCPairRunStatusGroup[] | null;
   /** Matched against error messages. */

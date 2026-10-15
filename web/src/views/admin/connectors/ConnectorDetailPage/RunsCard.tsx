@@ -33,6 +33,11 @@ import type {
   CCPairRunStatusGroup,
 } from "@/lib/connectors/types";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
+import {
+  SliceRangeFilter,
+  rangeWithin,
+  type SliceRange,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import RunRow, {
   RUN_KIND_ICONS,
   runErrorText,
@@ -65,6 +70,9 @@ export interface RunsCardProps {
   embedded?: boolean;
   /** The start of the page's time window. `null` is all time. */
   since?: string | null;
+  /** A chart slice that narrows the list inside the window, shown as a filter `onClearRange` removes. */
+  range?: SliceRange | null;
+  onClearRange?: () => void;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
@@ -72,15 +80,18 @@ export default function RunsCard({
   ccPairId,
   canOperate,
   embedded = false,
-  since = null,
+  since: windowSince = null,
+  range = null,
+  onClearRange,
 }: RunsCardProps) {
+  const { since, until } = rangeWithin(windowSince, range);
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const [page, setPage] = useState(1);
-  // A new window starts the list over at its first page.
-  const [pagedSince, setPagedSince] = useState(since);
-  if (pagedSince !== since) {
-    setPagedSince(since);
+  // A new window or slice starts the list over at its first page.
+  const [pagedRange, setPagedRange] = useState({ since, until });
+  if (pagedRange.since !== since || pagedRange.until !== until) {
+    setPagedRange({ since, until });
     setPage(1);
   }
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
@@ -95,6 +106,7 @@ export default function RunsCard({
     pageNum: page - 1,
     pageSize: PAGE_SIZE,
     since,
+    until,
     kinds: kind === null ? null : [kind],
     statusGroups: statusGroup === null ? null : [statusGroup],
     q: search,
@@ -183,6 +195,9 @@ export default function RunsCard({
             width="fit"
             height="fit"
           >
+            {range !== null && onClearRange !== undefined && (
+              <SliceRangeFilter range={range} onClear={onClearRange} />
+            )}
             {kinds.length > 1 && (
               <Dropdown>
                 <Dropdown.Trigger asChild>

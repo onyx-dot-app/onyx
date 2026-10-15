@@ -57,6 +57,7 @@ import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/Activity
 import {
   pickWindow,
   type PickedWindow,
+  type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const CC_PAIR_POLL_MS = 5000;
@@ -93,6 +94,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
     pickWindow("all")
   );
+  // A clicked chart slice narrows the runs and activity inside the window.
+  const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
   const isSchedulingConnectorDeletionRef = useRef(false);
 
   const refresh = useCallback(() => {
@@ -384,7 +387,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
               canOperate={canOperate}
               onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
               timeWindow={timeWindow.window}
-              onTimeWindowChange={(picked) => setTimeWindow(pickWindow(picked))}
+              onTimeWindowChange={(picked) => {
+                setTimeWindow(pickWindow(picked));
+                // The slice belongs to the old chart, so a new window drops it.
+                setSliceRange(null);
+              }}
+              onSliceClick={(start, end) =>
+                setSliceRange({
+                  since: start.toISOString(),
+                  until: end.toISOString(),
+                })
+              }
             />
             <PairChecksCard
               source={source}
@@ -407,6 +420,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
               ccPairId={ccPair.id}
               canOperate={canOperate}
               since={timeWindow.since}
+              range={sliceRange}
+              onClearRange={() => setSliceRange(null)}
             />
           </Section>
           <ActivityPanel
@@ -414,6 +429,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
               ccPairId: ccPair.id,
               canResolve: canOperate && ccPair.supports_targeted_reindex,
             }}
+            range={sliceRange}
+            onClearRange={() => setSliceRange(null)}
           />
         </Section>
       </SettingsLayouts.Body>

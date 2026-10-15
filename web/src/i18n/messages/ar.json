@@ -2320,7 +2320,8 @@
         "throughput": {
           "ariaLabel": "المستندات المفهرسة بمرور الوقت",
           "tooltip": "{count, plural, one {# مستند} other {# مستندات}}",
-          "loadError": "تعذر تحميل الرسم البياني."
+          "loadError": "تعذر تحميل الرسم البياني.",
+          "rangeFilter": "Runs created in this slice of the chart"
         },
         "hold": {
           "checks_running": "جارٍ تشغيل فحوصات ما قبل الفهرسة",

@@ -2320,7 +2320,8 @@
         "throughput": {
           "ariaLabel": "Documentos indexados a lo largo del tiempo",
           "tooltip": "{count, plural, one {# documento} other {# documentos}}",
-          "loadError": "No se pudo cargar el gráfico."
+          "loadError": "No se pudo cargar el gráfico.",
+          "rangeFilter": "Runs created in this slice of the chart"
         },
         "hold": {
           "checks_running": "Ejecutando comprobaciones previas a la indexación",

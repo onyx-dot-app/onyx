@@ -2320,7 +2320,8 @@
         "throughput": {
           "ariaLabel": "随时间索引的文档",
           "tooltip": "{count, plural, one {# 个文档} other {# 个文档}}",
-          "loadError": "无法加载图表。"
+          "loadError": "无法加载图表。",
+          "rangeFilter": "Runs created in this slice of the chart"
         },
         "hold": {
           "checks_running": "正在运行索引前检查",

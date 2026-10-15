@@ -70,8 +70,13 @@ function RatioStat({ part, whole, caption, label }: RatioStatProps) {
   );
 }
 
+export interface OverviewCardProps {
+  /** Picks a chart slice, with its start and end. */
+  onSliceClick?: (start: Date, end: Date) => void;
+}
+
 /** Every readable connector at a glance: how many index now, the documents they hold, and documents indexed over time. */
-export default function OverviewCard() {
+export default function OverviewCard({ onSliceClick }: OverviewCardProps) {
   const t = useTranslations("admin.indexing.overview");
   const [range, setRange] = useState<CCPairThroughputWindow>("1h");
   const { data, error } = useSWR<IndexingOverviewResponse>(
@@ -133,6 +138,7 @@ export default function OverviewCard() {
             data={data.throughput}
             range={range}
             height={BARS_HEIGHT}
+            onSliceClick={onSliceClick}
           />
         </Section>
       </Section>

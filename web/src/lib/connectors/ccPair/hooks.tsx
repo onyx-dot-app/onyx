@@ -176,14 +176,24 @@ function itemOf(
   };
 }
 
-/** One activity group of the scope, polled while `enabled`. `more` loads the next page and a new search starts over. */
+/** The creation times an activity feed keeps, as ISO times. `until` is exclusive. */
+export interface ActivityTimeRange {
+  since: string | null;
+  until: string | null;
+}
+
+const ALL_TIME: ActivityTimeRange = { since: null, until: null };
+
+/** One activity group of the scope, polled while `enabled`. `more` loads the next page and a new search or range starts over. */
 export function useActivityItems(
   scope: ActivityScope,
   group: ActivityGroup,
   q: string,
   enabled: boolean,
-  pollMs: number
+  pollMs: number,
+  range: ActivityTimeRange = ALL_TIME
 ): ActivityGroupState {
+  const { since, until } = range;
   const ccPairId = scope === "fleet" ? null : scope.ccPairId;
   const canResolve = scope === "fleet" ? null : scope.canResolve;
   const { data, error, isLoading, size, setSize } = useSWRInfinite<FeedPage>(
@@ -195,7 +205,8 @@ export function useActivityItems(
       const query: CCPairRunsQuery = {
         pageNum: pageIndex,
         pageSize: ACTIVITY_PAGE_SIZE,
-        since: null,
+        since,
+        until,
         kinds: null,
         q,
         ...ACTIVITY_GROUP_QUERY[group],
@@ -209,7 +220,7 @@ export function useActivityItems(
   );
   useEffect(() => {
     void setSize(1);
-  }, [q, setSize]);
+  }, [q, since, until, setSize]);
   // Polling shifts the offsets, so a run can land on two pages.
   const runs = useMemo(() => {
     const itemScope: ActivityScope =

@@ -32,6 +32,7 @@ import {
   type ActivityGroupState,
   type ActivityItem,
   type ActivityScope,
+  type ActivityTimeRange,
 } from "@/lib/connectors/ccPair/hooks";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
 import {
@@ -39,6 +40,10 @@ import {
   SEARCH_DELAY_MS,
   SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import {
+  SliceRangeFilter,
+  type SliceRange,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const LOADER_ROWS = 2;
 
@@ -115,6 +120,9 @@ export interface ActivityPanelProps {
   title?: string | RichStr;
   /** Shows a close button beside the title. */
   onClose?: () => void;
+  /** A chart slice that narrows every group, shown as a filter its `onClearRange` removes. */
+  range?: SliceRange | null;
+  onClearRange?: () => void;
   className?: string;
 }
 
@@ -123,6 +131,8 @@ export default function ActivityPanel({
   scope,
   title,
   onClose,
+  range = null,
+  onClearRange,
   className,
 }: ActivityPanelProps) {
   const t = useTranslations("admin.connector.activity");
@@ -144,28 +154,42 @@ export default function ActivityPanel({
         shownOptions.includes(group) &&
         (shown === "all" || shown === group);
 
+  const timeRange: ActivityTimeRange = {
+    since: range?.since ?? null,
+    until: range?.until ?? null,
+  };
   // The failures and errors totals head the panel, so both always poll.
   const failures = useActivityItems(
     scope,
     "failures",
     search,
     true,
-    RUNS_POLL_MS
+    RUNS_POLL_MS,
+    timeRange
   );
-  const errors = useActivityItems(scope, "errors", search, true, RUNS_POLL_MS);
+  const errors = useActivityItems(
+    scope,
+    "errors",
+    search,
+    true,
+    RUNS_POLL_MS,
+    timeRange
+  );
   const other = useActivityItems(
     scope,
     "other",
     search,
     isShown("other"),
-    RUNS_POLL_MS
+    RUNS_POLL_MS,
+    timeRange
   );
   const resolvedRuns = useActivityItems(
     scope,
     "resolved",
     search,
     isShown("resolved"),
-    RUNS_POLL_MS
+    RUNS_POLL_MS,
+    timeRange
   );
   const groups = [failures, errors, other, resolvedRuns].filter((group) =>
     isShown(group.group)
@@ -176,7 +200,7 @@ export default function ActivityPanel({
     (group) => group.loaded && group.runs.length === 0
   );
   const emptyTitle =
-    search !== ""
+    search !== "" || range !== null
       ? t("empty.filtered")
       : resolved
         ? t("empty.resolved")
@@ -294,6 +318,9 @@ export default function ActivityPanel({
               >
                 {t("resolved.label")}
               </SelectButton>
+              {range !== null && onClearRange !== undefined && (
+                <SliceRangeFilter range={range} onClear={onClearRange} />
+              )}
             </Section>
           </Section>
 
