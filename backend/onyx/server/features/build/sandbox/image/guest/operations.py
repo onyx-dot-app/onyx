@@ -38,6 +38,7 @@ from .snapshot import (
 
 MAX_INPUT_BYTES = 100 * 1024 * 1024
 MAX_STDERR_BYTES = 16 * 1024
+PIDFD_SIGNAL_PROCESS_GROUP = 4
 
 
 def spool_stdin(
@@ -217,14 +218,43 @@ def stop_session_preview(root: Path) -> None:
         except (FileNotFoundError, PermissionError, ProcessLookupError):
             return
         try:
-            signal.pidfd_send_signal(pid_fd, signal.SIGTERM)
-            if not select.select([pid_fd], [], [], 5)[0]:
-                if owns_process_group:
-                    os.killpg(pid, signal.SIGKILL)
-                else:
-                    signal.pidfd_send_signal(pid_fd, signal.SIGKILL)
+            flags = PIDFD_SIGNAL_PROCESS_GROUP if owns_process_group else 0
+            signal.pidfd_send_signal(pid_fd, signal.SIGTERM, None, flags)
+            select.select([pid_fd], [], [], 5)
+            signal.pidfd_send_signal(pid_fd, signal.SIGKILL, None, flags)
+            if not owns_process_group:
                 if not select.select([pid_fd], [], [], 2)[0]:
                     raise RuntimeError("session preview did not stop")
+                return
+
+            deadline = time.monotonic() + 2
+            while True:
+                signal.pidfd_send_signal(pid_fd, 0, None, flags)
+                live_members = False
+                for process in Path("/proc").iterdir():
+                    if not process.name.isdecimal():
+                        continue
+                    try:
+                        fields = (
+                            (process / "stat").read_text().rpartition(")")[2].split()
+                        )
+                        if int(fields[2]) != pid:
+                            continue
+                        member_fd = os.pidfd_open(int(process.name))
+                    except (FileNotFoundError, ProcessLookupError):
+                        continue
+                    try:
+                        if not select.select([member_fd], [], [], 0)[0]:
+                            live_members = True
+                            break
+                    finally:
+                        os.close(member_fd)
+                signal.pidfd_send_signal(pid_fd, 0, None, flags)
+                if not live_members:
+                    return
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("session preview process group did not stop")
+                time.sleep(0.05)
         except ProcessLookupError:
             pass
     finally:

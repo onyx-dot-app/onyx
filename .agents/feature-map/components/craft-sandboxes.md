@@ -132,6 +132,9 @@ receive ordinary EOF from a completed temporary input file.
 
 Readiness polls the Pod within the provisioning deadline. A Kubernetes watch
 must not inherit the client's shorter REST read timeout.
+OpenCode readiness counts metadata reads, retries, and password refresh in one
+deadline. Each HTTP probe uses the remaining budget. Late success is rejected.
+Synchronous metadata reads and HTTPX I/O phases are not hard wall-clock cancellation.
 
 The manager rejects legacy short-name or sidecar-shaped pods before recovery.
 That protects unsnapshotted work during cutover from the old implementation.
@@ -160,7 +163,9 @@ Boot and internal history-child operations are not public runtime helper calls.
 
 Command failures kill and reap the command's process group, including outer
 timeouts. Preview launches own a process group. Cleanup verifies the recorded
-PID and workspace before signaling. Forced cleanup kills that owned group.
+PID and workspace before signaling. It uses the original pidfd for group signals,
+then verifies that no live member remains if the leader exits during cleanup.
+This requires Linux guest kernel 6.9 or later. The pinned Kata 4.2 guest is 6.18.35.
 Run budgets include request imports and input preparation. Command expiry
 returns 124 with bounded stderr. The watchdog reserves 11 seconds for cleanup.
 History timeout cleanup signals the owned child as UID1000, restores root identity,

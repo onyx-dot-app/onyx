@@ -41,6 +41,7 @@ Each sandbox node must provide:
   exactly `kata-fc`.
 - containerd configured for the Kata Firecracker runtime.
 - containerd devmapper rootfs storage sized for Craft workspaces.
+- A Linux guest kernel 6.9 or later for safe preview process-group cleanup.
 - enough CPU and memory for each Firecracker VM plus the pod overhead.
 
 Firecracker itself requires KVM access. Kata's Kubernetes installation guide

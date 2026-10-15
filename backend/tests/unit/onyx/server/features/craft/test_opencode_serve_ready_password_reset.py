@@ -43,9 +43,11 @@ class _FakeProbeClient:
         self.password = password
         self.timeouts = timeouts
         self.closed = False
+        self.probe_timeouts: list[float] = []
         _FakeProbeClient.created.append(self)
 
-    def health_check_status(self) -> int:
+    def health_check_status(self, *, timeout: float) -> int:
+        self.probe_timeouts.append(timeout)
         return 200 if self.password == _FRESH_PW else 401
 
     def close(self) -> None:
@@ -87,5 +89,8 @@ def test_wait_for_opencode_serve_ready_resets_password_on_401() -> None:
     assert _FakeProbeClient.created[0].closed is True
     assert _FakeProbeClient.created[1].closed is True
     assert all(c.timeouts.connect_timeout == 5.0 for c in _FakeProbeClient.created)
+    stale_timeout = _FakeProbeClient.created[0].probe_timeouts[0]
+    fresh_timeout = _FakeProbeClient.created[1].probe_timeouts[0]
+    assert 0 < fresh_timeout <= stale_timeout <= 5.0
     # Cache was reloaded from the backend exactly once after invalidation.
     assert load_mock.call_count == 2

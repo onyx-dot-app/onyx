@@ -1041,13 +1041,15 @@ class OpencodeServeClient:
 
     # ----- session lifecycle ----------------------------------------
 
-    def health_check_status(self) -> int | None:
+    def health_check_status(self, *, timeout: float | None = None) -> int | None:
         """HTTP status from ``GET /doc``, or ``None`` on transport error — lets
         the readiness probe tell a 401 (stale password) from a not-yet-listening
         pod (transport error)."""
         try:
             with self._http.stream(
-                "GET", "/doc", timeout=self._timeouts.connect_timeout
+                "GET",
+                "/doc",
+                timeout=self._timeouts.connect_timeout if timeout is None else timeout,
             ) as response:
                 return response.status_code
         except httpx.HTTPError:

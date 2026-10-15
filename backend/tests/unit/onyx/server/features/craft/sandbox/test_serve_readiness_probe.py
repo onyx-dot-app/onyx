@@ -47,7 +47,11 @@ def test_ready_via_service_dns(monkeypatch: pytest.MonkeyPatch) -> None:
     """FQDN answers, pod IP would refuse → ready via the preferred candidate."""
     probed: list[str] = []
 
-    def fake_status(self: OpencodeServeClient) -> int | None:
+    def fake_status(
+        self: OpencodeServeClient,
+        *,
+        timeout: float | None = None,  # noqa: ARG001
+    ) -> int | None:
         probed.append(self._base_url)
         return None if self._base_url == _POD_IP_URL else 200
 
@@ -64,7 +68,11 @@ def test_ready_via_pod_ip_when_dns_unresolvable(
     """FQDN unresolvable, pod IP answers → ready via the fallback candidate."""
     probed: list[str] = []
 
-    def fake_status(self: OpencodeServeClient) -> int | None:
+    def fake_status(
+        self: OpencodeServeClient,
+        *,
+        timeout: float | None = None,  # noqa: ARG001
+    ) -> int | None:
         probed.append(self._base_url)
         return None if self._base_url == _SERVICE_URL else 200
 
@@ -81,7 +89,11 @@ def test_not_ready_when_no_candidate_answers(
 ) -> None:
     """Both candidates refuse for the whole window → not ready."""
 
-    def fake_status(self: OpencodeServeClient) -> int | None:  # noqa: ARG001
+    def fake_status(
+        _self: OpencodeServeClient,
+        *,
+        timeout: float | None = None,  # noqa: ARG001
+    ) -> int | None:
         return None
 
     monkeypatch.setattr(OpencodeServeClient, "health_check_status", fake_status)

@@ -348,6 +348,7 @@ class _ServeMixin:
         Secret); reload it and rebuild the probe clients once. Provision-time
         counterpart to the per-request heal in ``_request`` /
         ``PodEventBus._refresh_auth_on_401``, which run only after readiness."""
+        deadline = time.monotonic() + timeout
         info = self._serve_connection_info(sandbox_id)
 
         def _build_clients(
@@ -373,12 +374,17 @@ class _ServeMixin:
         clients = _build_clients(info)
         password_reset_done = False
         try:
-            deadline = time.monotonic() + timeout
             last_err = "no probe completed"
             while time.monotonic() < deadline:
                 for url, client in clients:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
                     try:
-                        status = client.health_check_status()
+                        status = client.health_check_status(timeout=remaining)
+                        if time.monotonic() >= deadline:
+                            last_err = f"deadline expired while probing {url}"
+                            break
                         if status == 200:
                             logger.info(
                                 "[SANDBOX-SERVE] opencode-serve ready for sandbox %s "
@@ -390,6 +396,11 @@ class _ServeMixin:
                         if status == 401 and not password_reset_done:
                             password_reset_done = True
                             refreshed = self._reload_serve_connection_info(sandbox_id)
+                            if time.monotonic() >= deadline:
+                                last_err = (
+                                    "deadline expired while reloading credentials"
+                                )
+                                break
                             if refreshed.password != info.password:
                                 logger.warning(
                                     "[SANDBOX-SERVE] opencode-serve returned 401 for "
@@ -405,7 +416,9 @@ class _ServeMixin:
                         last_err = f"health_check returned status={status} for {url}"
                     except Exception as e:
                         last_err = f"{url}: {type(e).__name__}: {e}"
-                time.sleep(POLL_INTERVAL_SECONDS)
+                remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    time.sleep(min(POLL_INTERVAL_SECONDS, remaining))
         finally:
             for _, client in clients:
                 client.close()
