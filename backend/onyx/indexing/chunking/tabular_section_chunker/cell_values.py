@@ -277,21 +277,27 @@ def _looks_like_a_label(value: str) -> bool:
 def _looks_like_data_pair(row: list[str], next_row: list[str]) -> bool:
     """True when the row has the same shape as the next row in the columns
     that hold digits (for example ``PAY-001`` above ``PAY-002``)."""
-    compared = 0
-    same = 0
-    for cell, below in zip(row, next_row, strict=False):
-        if not cell.strip() or not below.strip():
-            continue
-        if not any(ch.isdigit() for ch in cell + below):
-            continue
-        # A year over a plain number is a heading above its data, not the
-        # next record in a sequence.
-        if bool(_YEAR_RE.match(cell.strip())) != bool(_YEAR_RE.match(below.strip())):
-            continue
-        compared += 1
-        if _cell_shape(cell) == _cell_shape(below):
-            same += 1
-    return compared > 0 and same * 2 >= compared
+    pairs = [
+        (cell.strip(), below.strip())
+        for cell, below in zip(row, next_row, strict=False)
+        if cell.strip() and below.strip() and any(ch.isdigit() for ch in cell + below)
+    ]
+    if not pairs:
+        return False
+    numeric_above = [cell for cell, _ in pairs if parse_number(cell) is not None]
+    years_above = sum(1 for cell in numeric_above if _YEAR_RE.match(cell))
+    years_below = sum(1 for _, below in pairs if _YEAR_RE.match(below))
+    # Several year columns over no years is a heading, as in Region,2023,2024.
+    # One number that happens to fall in that range is just a number, so it
+    # does not get the exemption.
+    if (
+        len(numeric_above) >= 2
+        and years_above == len(numeric_above)
+        and not years_below
+    ):
+        return False
+    same = sum(1 for cell, below in pairs if _cell_shape(cell) == _cell_shape(below))
+    return same * 2 >= len(pairs)
 
 
 def detect_header_row(rows: list[list[str]]) -> int | None:

@@ -772,3 +772,29 @@ def test_currency_comes_from_unicode_not_a_list(value: str) -> None:
     # Unicode classifies currency symbols, so a symbol nobody listed still works.
     assert parse_number(value) == 10.0
     assert unit_marker(value) == value[0]
+
+
+@pytest.mark.parametrize(
+    "rows,has_header",
+    [
+        # Several year columns over no years is a heading.
+        ([["Region", "2023", "2024"]] + [["r", "100", "200"]] * 40, True),
+        # One amount that lands in the year range is just an amount.
+        ([["West", "1999"], ["East", "2200"], ["North", "2500"]] * 16, False),
+        # Sequential ids that cross a digit width are still records.
+        ([[f"PAY-{idx}", f"note {idx}"] for idx in range(9, 60)], False),
+        ([["Name", "Age", "City"]] + [["p", "20", "c"]] * 40, True),
+    ],
+)
+def test_header_detection_on_numeric_first_rows(
+    rows: list[list[str]], has_header: bool
+) -> None:
+    profile = profile_sheet(
+        name="S",
+        rows=iter(rows),
+        tokenizer=CharTokenizer(),
+        full_rows_token_budget=1536,
+    )
+
+    assert (not profile.synthetic_header) is has_header
+    assert profile.row_count == len(rows) - (1 if has_header else 0)

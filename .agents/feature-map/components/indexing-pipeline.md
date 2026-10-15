@@ -341,7 +341,8 @@ type to one of three `SectionChunker` implementations
     `(N of M shown)` to a clipped breakdown, so a truncated list is never read as
     the whole truth.
   - **Percentages are never summed**; a `%` column reports average, min and max
-    only (`_ColumnStats.is_percent`), and a `$` column keeps its unit.
+    only (`ColumnStats.summable`, which also refuses a column that mixes
+    currencies), and a `$` column keeps its unit.
   - **Sheets merge only when merging costs nothing.** `_can_merge` refuses to
     pool same-header tabs whose combined category values would pass
     `_CATEGORY_MAX_DISTINCT`, since that would delete a breakdown each tab had
