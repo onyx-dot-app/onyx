@@ -1,4 +1,4 @@
-"""Bounded chunks for spreadsheets (TABULAR_CHUNKING_STRATEGY=sketch).
+"""Bounded chunks for spreadsheets and CSVs.
 
 A workbook (or a CSV file) becomes these blocks:
 
@@ -19,10 +19,11 @@ import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
 from itertools import chain
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.natural_language_processing.utils import (
     BaseTokenizer,
@@ -33,20 +34,17 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Rows examined to find the header row, counted from the first row wide
-# enough to be one.
+# Rows examined for the header, from the first row wide enough to be one.
 _HEADER_SCAN_ROWS = 20
-# Narrow rows skipped while looking for that first wide row. Spreadsheets
-# often open with a title block; without this the table below it is never
-# found. A sheet with nothing wider than one column in this many rows is
-# genuinely text, not a table.
+# Narrow rows skipped to get past a title block. A sheet with nothing wider
+# than one column in this many rows is text, not a table.
 _MAX_PREAMBLE_ROWS = 200
 # Rows examined before the profiler picks breakdown columns.
 _PROBE_ROWS = 200
 # A text column with at most this many distinct values is a category.
 _CATEGORY_MAX_DISTINCT = 50
-# Distinct values tracked per column. Values first seen after the cap is
-# reached are not counted, which keeps memory flat for very large sheets.
+# Distinct values tracked per column; later ones are not counted, which keeps
+# memory flat on very large sheets.
 _MAX_TRACKED_VALUES = 20_000
 # Breakdown limits: category columns, numeric columns, emitted lines, months.
 _MAX_BREAKDOWN_CATEGORY_COLUMNS = 3
@@ -60,19 +58,18 @@ _PROFILE_SAMPLE_ROWS = 2
 _PROFILE_MAX_CHUNKS = 2
 # Tokens of text-only sheets copied into the overview.
 _OVERVIEW_ABOUT_TOKENS = 150
-# The overview is the workbook's index -- the one place every sheet is named.
-# It gets more than one chunk so a many-sheet workbook does not lose its tail.
+# The overview is the one place every sheet is named, so it gets more than one
+# chunk and a many-sheet workbook does not lose its tail.
 _OVERVIEW_MAX_CHUNKS = 3
 _VALUE_SEPARATOR = "; "
 
 _ISO_DATE_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$"
 )
-# Year-first and written month names are unambiguous. ``5/3/2024`` and
-# ``5.3.2024`` are not: they are 5 March to most of the world and May 3 in the
-# US, and the separator does not settle it. Neither order is assumed. A column
-# is read only once one of its own values rules an order out -- a part above 12
-# cannot be a month -- and a column that never does is left as text and logged.
+# ``5/3/2024`` is 5 March to most of the world and May 3 in the US, and the
+# separator does not settle it. Neither order is assumed: a column is read only
+# once one of its values rules an order out, since a part above 12 cannot be a
+# month. A column that never settles is left as text and logged.
 _YMD_SLASH_RE = re.compile(r"^(\d{4})/(\d{1,2})/(\d{1,2})$")
 _NUMERIC_DMY_RE = re.compile(r"^(\d{1,2})([/.])(\d{1,2})\2(\d{4})$")
 _DAY_MONTH_YEAR_RE = re.compile(r"^(\d{1,2})[ -]([A-Za-z]{3,9})\.?,?[ -](\d{4})$")
@@ -153,9 +150,10 @@ class ColumnRole(str, Enum):
     EMPTY = "empty"
 
 
-@dataclass(frozen=True)
-class SheetSource:
+class SheetSource(BaseModel):
     """One sheet (or CSV file). ``open_rows`` yields the raw CSV rows."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str
     open_rows: Callable[[], Iterator[list[str]]]
@@ -679,8 +677,9 @@ def _max_opt[T: (float, str)](a: T | None, b: T | None) -> T | None:
     return max(a, b)
 
 
-@dataclass
-class _Sums:
+class _Sums(BaseModel):
+    """Running sum and count of each numeric column within one group."""
+
     sums: list[float]
     counts: list[int]
 
@@ -699,27 +698,23 @@ class _Sums:
             self.sums[idx] += other.sums[idx]
             self.counts[idx] += other.counts[idx]
 
-    def copy(self) -> "_Sums":
-        return _Sums(sums=list(self.sums), counts=list(self.counts))
-
     def average(self, idx: int) -> float:
         return self.sums[idx] / self.counts[idx] if self.counts[idx] else 0.0
 
 
-@dataclass
-class _Breakdowns:
+class _Breakdowns(BaseModel):
     """Sums of numeric columns grouped by category values and by month."""
 
-    category_columns: list[int] = field(default_factory=list)
-    numeric_columns: list[int] = field(default_factory=list)
+    category_columns: list[int] = Field(default_factory=list)
+    numeric_columns: list[int] = Field(default_factory=list)
     date_column: int | None = None
     # How to read the date column's values; see DateOrder.
     date_order: DateOrder | None = None
     # category column -> category value -> (sums, counts) aligned with
     # numeric_columns
-    by_category: dict[int, dict[str, "_Sums"]] = field(default_factory=dict)
+    by_category: dict[int, dict[str, "_Sums"]] = Field(default_factory=dict)
     # month (YYYY-MM) -> sums aligned with numeric_columns
-    by_month: dict[str, "_Sums"] = field(default_factory=dict)
+    by_month: dict[str, "_Sums"] = Field(default_factory=dict)
     months_complete: bool = True
 
     def add(self, cells: list[str]) -> None:
@@ -765,12 +760,12 @@ class _Breakdowns:
                 if key in mine:
                     mine[key].merge(sums)
                 elif len(mine) < _CATEGORY_MAX_DISTINCT:
-                    mine[key] = sums.copy()
+                    mine[key] = sums.model_copy(deep=True)
         for month, sums in other.by_month.items():
             if month in self.by_month:
                 self.by_month[month].merge(sums)
             elif len(self.by_month) < _MAX_TRACKED_MONTHS:
-                self.by_month[month] = sums.copy()
+                self.by_month[month] = sums.model_copy(deep=True)
             else:
                 self.months_complete = False
         self.months_complete = self.months_complete and other.months_complete
@@ -782,24 +777,27 @@ class SheetKind(str, Enum):
     EMPTY = "empty"
 
 
-@dataclass
-class SheetProfile:
+class SheetProfile(BaseModel):
+    """What one streaming pass over a sheet learned about it."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     names: list[str]
     kind: SheetKind
-    header: list[str] = field(default_factory=list)
+    header: list[str] = Field(default_factory=list)
     # True when the sheet has no header row and the names are made up.
     synthetic_header: bool = False
-    preamble: list[str] = field(default_factory=list)
-    text_lines: list[str] = field(default_factory=list)
+    preamble: list[str] = Field(default_factory=list)
+    text_lines: list[str] = Field(default_factory=list)
     row_count: int = 0
-    columns: list[_ColumnStats] = field(default_factory=list)
-    breakdowns: _Breakdowns = field(default_factory=_Breakdowns)
-    samples: list[list[str]] = field(default_factory=list)
+    columns: list[_ColumnStats] = Field(default_factory=list)
+    breakdowns: _Breakdowns = Field(default_factory=_Breakdowns)
+    samples: list[list[str]] = Field(default_factory=list)
     # Formatted rows while they fit the full-rows budget; None once they do not.
-    full_rows: list[str] | None = field(default_factory=list)
-    # Text columns whose values repeat inside another column (for example a
-    # first name inside a full name). They get no value lists.
-    redundant_columns: set[int] = field(default_factory=set)
+    full_rows: list[str] | None = Field(default_factory=list)
+    # Values repeat inside another column (a first name inside a full name),
+    # so these get no value lists.
+    redundant_columns: set[int] = Field(default_factory=set)
 
     @property
     def is_small(self) -> bool:
@@ -825,8 +823,7 @@ def _pick_breakdowns(columns: list[_ColumnStats]) -> _Breakdowns:
     for idx, col in enumerate(columns):
         if col.non_empty == 0:
             continue
-        # Only a column whose day/month order is settled can be grouped by
-        # month; an unresolved one would file rows under the wrong month.
+        # An unresolved order would file rows under the wrong month.
         if col.is_date and col.date_min is not None and date_column is None:
             date_column = idx
             date_order = col.date_order
@@ -978,8 +975,7 @@ def profile_sheet(
     """One streaming pass over a sheet. Memory stays bounded: formatted rows
     are kept only while they fit ``full_rows_token_budget``."""
     row_iter = _non_empty_rows(rows)
-    # Skip a narrow title block to reach the table, keeping those rows as
-    # preamble for the overview.
+    # Skip a narrow title block to reach the table, keeping it as preamble.
     title_rows: list[list[str]] = []
     head: list[list[str]] = []
     for row in row_iter:
@@ -1042,8 +1038,7 @@ def profile_sheet(
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _Block:
+class _Block(BaseModel):
     """Lines that stay together. When a block needs several chunks, its first
     ``repeat`` lines start every one of them."""
 
@@ -1064,6 +1059,7 @@ class _Packer:
         self.chunks: list[str] = []
         self._lines: list[str] = []
         self._tokens = 0
+        self._buffered: list[str] = []
         self._dropped: list[str] = []
 
     def _count(self, line: str) -> int:
@@ -1078,9 +1074,13 @@ class _Packer:
         return trimmed, self._count(trimmed)
 
     def _flush(self) -> None:
-        if self._lines and len(self.chunks) < self._max_chunks:
-            self.chunks.append("\n".join(self._lines))
+        if self._lines:
+            if self.full:
+                self._dropped.extend(self._buffered)
+            else:
+                self.chunks.append("\n".join(self._lines))
         self._lines = []
+        self._buffered = []
         self._tokens = 0
 
     @property
@@ -1088,10 +1088,11 @@ class _Packer:
         return len(self.chunks) >= self._max_chunks
 
     def add(self, block: _Block) -> None:
+        label = block.label or "(unnamed block)"
         if not block.lines:
             return
         if self.full:
-            self._dropped.append(block.label or "(unnamed block)")
+            self._dropped.append(label)
             return
         fitted = [self._fit_line(line, self._max_tokens) for line in block.lines]
         block_tokens = sum(tokens for _, tokens in fitted) + len(fitted) - 1
@@ -1099,11 +1100,17 @@ class _Packer:
         if self._tokens + separator + block_tokens <= self._max_tokens:
             self._lines.extend(line for line, _ in fitted)
             self._tokens += separator + block_tokens
+            self._buffered.append(label)
             return
         self._flush()
+        # The flush can have filled the budget, so check again before writing.
+        if self.full:
+            self._dropped.append(label)
+            return
         if block_tokens <= self._max_tokens:
             self._lines = [line for line, _ in fitted]
             self._tokens = block_tokens
+            self._buffered = [label]
             return
 
         head = fitted[: block.repeat]
@@ -1115,10 +1122,13 @@ class _Packer:
         for line, _ in fitted[block.repeat :]:
             line, tokens = self._fit_line(line, body_budget)
             if piece_tokens + 1 + tokens > self._max_tokens:
+                if self.full:
+                    self._dropped.append(label)
+                    return
                 self.chunks.append("\n".join(piece))
                 used += 1
-                if used >= block.max_chunks or self.full:
-                    self._dropped.append(block.label or "(unnamed block)")
+                if used >= block.max_chunks:
+                    self._dropped.append(label)
                     return
                 piece = [entry for entry, _ in head]
                 piece_tokens = head_tokens
@@ -1126,13 +1136,14 @@ class _Packer:
             piece_tokens += 1 + tokens
         self._lines = piece
         self._tokens = piece_tokens
+        self._buffered = [label]
 
     def finish(self) -> list[str]:
         self._flush()
         if self._dropped:
             logger.warning(
                 "Chunk budget of %s reached; these were dropped or cut short: "
-                "%s. Raise TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK to keep them.",
+                "%s. Raise TABULAR_MAX_CHUNKS_PER_WORKBOOK to keep them.",
                 self._max_chunks,
                 ", ".join(dict.fromkeys(self._dropped)),
             )
@@ -1210,16 +1221,28 @@ def _overview_block(
 
 
 def _full_rows_block(
-    file_name: str, profile: SheetProfile, max_chunks: int
+    file_name: str,
+    profile: SheetProfile,
+    tokenizer: BaseTokenizer,
+    max_tokens: int,
+    max_chunks: int,
 ) -> _Block | None:
     if not profile.full_rows:
         return None
+    repeat = 2
     lines = [
         f"{_sheet_title(file_name, profile)} (all {profile.row_count} rows)",
         _columns_line(profile),
         *profile.full_rows,
     ]
-    return _Block(lines=lines, repeat=2, max_chunks=max_chunks)
+    # The first `repeat` lines start every chunk, so the rows have less room
+    # than the budget that made this sheet "small". Ask for the chunks they
+    # need, or the heading's "all N rows" is a lie.
+    header_tokens = sum(count_tokens(line, tokenizer) + 1 for line in lines[:repeat])
+    row_tokens = sum(count_tokens(line, tokenizer) + 1 for line in lines[repeat:])
+    per_chunk = max(1, max_tokens - header_tokens)
+    needed = math.ceil(row_tokens / per_chunk)
+    return _Block(lines=lines, repeat=repeat, max_chunks=max(max_chunks, needed))
 
 
 def _text_block(file_name: str, profile: SheetProfile, max_chunks: int) -> _Block:
@@ -1373,7 +1396,14 @@ def _breakdown_lines(
                 f"(highest first): {text}"
                 f"{_shown_suffix(used, len(items), True, 'values')}"
             )
-    if breakdowns.date_column is not None and len(breakdowns.by_month) >= 2:
+    date_column = breakdowns.date_column
+    date_settled = (
+        date_column is not None
+        and date_column < len(roles)
+        and roles[date_column] == ColumnRole.DATE
+        and profile.columns[date_column].date_order == breakdowns.date_order
+    )
+    if date_settled and len(breakdowns.by_month) >= 2:
         months = sorted(breakdowns.by_month.items())
         for pos, numeric_col in numeric_columns[:_MAX_MONTHLY_NUMERIC_COLUMNS]:
             items = [
@@ -1511,17 +1541,17 @@ def build_workbook_chunks(
     about_tokens = sum(
         count_tokens(line, tokenizer) for p in profiles for line in p.text_lines
     )
-    # One block per sheet first, in sheet order, so that running out of chunks
-    # costs every sheet its extras rather than costing the last sheets
-    # everything. Verbatim rows rank with profiles: they are the only place a
-    # small sheet's data appears at all.
+    # One block per sheet first, so running out of chunks costs every sheet its
+    # extras rather than costing the last sheets everything.
     for profile in profiles:
         label = _sheet_title(file_name, profile)
         if profile.kind == SheetKind.TEXT:
             if about_tokens > _OVERVIEW_ABOUT_TOKENS:
                 blocks.append(_text_block(file_name, profile, full_rows_max_chunks))
         elif profile.is_small:
-            block = _full_rows_block(file_name, profile, full_rows_max_chunks)
+            block = _full_rows_block(
+                file_name, profile, tokenizer, max_tokens, full_rows_max_chunks
+            )
             if block is not None:
                 blocks.append(block)
         else:

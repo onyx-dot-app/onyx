@@ -1642,16 +1642,16 @@ MAX_XLSX_CELLS_PER_SHEET = max(
 
 # A sheet whose rows fit in this many chunks keeps all its rows verbatim;
 # bigger sheets get a profile instead.
-TABULAR_SKETCH_FULL_ROWS_MAX_CHUNKS = max(
-    0, int(os.environ.get("TABULAR_SKETCH_FULL_ROWS_MAX_CHUNKS") or 3)
+TABULAR_FULL_ROWS_MAX_CHUNKS = max(
+    0, int(os.environ.get("TABULAR_FULL_ROWS_MAX_CHUNKS") or 3)
 )
 # Chunks of frequent text values added for each large sheet.
-TABULAR_SKETCH_VALUE_CHUNKS_PER_SHEET = max(
-    0, int(os.environ.get("TABULAR_SKETCH_VALUE_CHUNKS_PER_SHEET") or 2)
+TABULAR_VALUE_CHUNKS_PER_SHEET = max(
+    0, int(os.environ.get("TABULAR_VALUE_CHUNKS_PER_SHEET") or 2)
 )
 # Upper bound on the chunks of one workbook or CSV file.
-TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK = max(
-    1, int(os.environ.get("TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK") or 24)
+TABULAR_MAX_CHUNKS_PER_WORKBOOK = max(
+    1, int(os.environ.get("TABULAR_MAX_CHUNKS_PER_WORKBOOK") or 24)
 )
 
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort

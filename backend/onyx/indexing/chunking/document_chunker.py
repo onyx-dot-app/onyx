@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from chonkie import SentenceChunker
 
 from onyx.connectors.models import (
@@ -87,22 +89,28 @@ class DocumentChunker:
     ) -> list[ChunkPayload]:
         accumulator = AccumulatorState()
         payloads: list[ChunkPayload] = []
-        # All sheets of a workbook are chunked once, at the first sheet.
-        workbook_sections = [s for s in sections if isinstance(s, TabularSection)]
-        workbook_done = False
+        # Sheets of one file are chunked together, at the first of them. A
+        # document can carry more than one file, so group by link rather than
+        # merging unrelated workbooks into one.
+        workbooks: dict[str, list[TabularSection]] = defaultdict(list)
+        for section in sections:
+            if isinstance(section, TabularSection):
+                workbooks[section.link or ""].append(section)
+        chunked_workbooks: set[str] = set()
 
         for section_idx, section in enumerate(sections):
-            if workbook_sections and isinstance(section, TabularSection):
-                if not workbook_done:
+            if isinstance(section, TabularSection):
+                link = section.link or ""
+                if link not in chunked_workbooks:
+                    chunked_workbooks.add(link)
                     result = self._tabular_chunker.chunk_workbook(
-                        sections=workbook_sections,
+                        sections=workbooks[link],
                         accumulator=accumulator,
                         content_token_limit=content_token_limit,
                         file_name=document.semantic_identifier,
                     )
                     payloads.extend(result.payloads)
                     accumulator = result.accumulator
-                    workbook_done = True
                 continue
 
             section_text = clean_text(str(section.text or ""))

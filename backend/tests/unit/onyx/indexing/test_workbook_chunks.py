@@ -1,4 +1,4 @@
-"""Tests for the bounded "sketch" chunking of spreadsheets.
+"""Tests for the bounded chunking of spreadsheets.
 
 A character-level tokenizer (1 char == 1 token) keeps token budgets exact.
 """
@@ -15,9 +15,12 @@ from onyx.connectors.models import IndexingDocument, Section, TabularSection
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
-from onyx.indexing.chunking.tabular_section_chunker.sketch import (
+from onyx.indexing.chunking.tabular_section_chunker.workbook_chunks import (
     DateOrder,
     SheetSource,
+    _Block,
+    _ColumnStats,
+    _Packer,
     _parse_number,
     _unit_marker,
     build_workbook_chunks,
@@ -333,7 +336,7 @@ def test_date_key_will_not_guess_the_order() -> None:
     assert date_key("5/3/2024", DateOrder.MONTH_FIRST) == "2024-05-03"
 
 
-def _date_column(values: list[str]):
+def _date_column(values: list[str]) -> _ColumnStats:
     rows = [["id", "day"]] + [[f"R{idx}", value] for idx, value in enumerate(values)]
     profile = profile_sheet(
         name="S", rows=iter(rows), tokenizer=CharTokenizer(), full_rows_token_budget=10
@@ -517,3 +520,118 @@ def test_euro_column_keeps_its_total_and_unit() -> None:
 
     price = next(line for line in text.split("\n") if line.startswith("price:"))
     assert "total" in price and "€" in price
+
+
+# --- Review follow-ups: claims the chunks must not make falsely -------------
+
+
+@pytest.mark.parametrize("cap", [1, 2, 3, 5])
+def test_packer_never_exceeds_its_chunk_cap(cap: int) -> None:
+    # A flush can fill the budget, so the cap has to be rechecked after it.
+    packer = _Packer(tokenizer=CharTokenizer(), max_tokens=40, max_chunks=cap)
+    packer.add(_Block(lines=["a" * 35], label="first"))
+    packer.add(_Block(lines=["b" * 35], label="second"))
+    packer.add(
+        _Block(
+            lines=["H" * 10] + ["c" * 30 for _ in range(6)],
+            repeat=1,
+            max_chunks=5,
+            label="oversized",
+        )
+    )
+
+    assert len(packer.finish()) <= cap
+
+
+def test_contradicted_date_order_gets_no_monthly_totals() -> None:
+    # The probe proves month-first; later rows prove day-first. The column can
+    # no longer be read, so grouping by the probe's order would file rows under
+    # the wrong month.
+    rows = [["id", "day", "amt"]]
+    rows += [
+        [f"R{idx}", "3/25/2024" if idx % 5 == 0 else "5/3/2024", "10"]
+        for idx in range(200)
+    ]
+    rows += [
+        [f"R{idx}", "25/3/2024" if idx % 5 == 0 else "5/3/2024", "10"]
+        for idx in range(200, 1200)
+    ]
+
+    text = "\n".join(_chunks([_sheet("S", rows)]))
+
+    assert "by month" not in text
+    assert "Time range" not in text
+
+
+@pytest.mark.parametrize("row_count", [3, 4, 5, 9])
+def test_all_rows_heading_is_true(row_count: int) -> None:
+    # The block repeats two header lines per chunk, so the rows have less room
+    # than the budget that made the sheet "small".
+    header = [f"dimension_column_{idx}" for idx in range(8)]
+    rows = [header] + [[f"value_{r}_{c}" for c in range(8)] for r in range(row_count)]
+
+    text = "\n".join(
+        build_workbook_chunks(
+            file_name="quarterly_regional_operations_consolidation_v7.xlsx",
+            sheets=[_sheet("RegionalOperationsDetail", rows)],
+            tokenizer=CharTokenizer(),
+            max_tokens=MAX_TOKENS,
+            full_rows_max_chunks=3,
+            value_chunks_per_sheet=2,
+            max_chunks=24,
+        )
+    )
+
+    if f"(all {row_count} rows)" in text:
+        assert all(f"value_{r}_0" in text for r in range(row_count))
+
+
+def test_two_attachments_in_one_document_are_chunked_separately(
+    staged_csvs: dict[str, bytes],
+) -> None:
+    # One document can carry more than one spreadsheet. Merging them would
+    # describe a workbook that does not exist and misattribute the links.
+    staged_csvs["a"] = b"Region,Total\nWest,10\n"
+    staged_csvs["b"] = b"Animal,Count\nOtter,3\n"
+
+    def token_counter(text: str) -> int:
+        return len(text)
+
+    splitter = SentenceChunker(
+        tokenizer_or_token_counter=token_counter,
+        chunk_size=MAX_TOKENS,
+        chunk_overlap=0,
+        return_type="texts",
+    )
+    document_chunker = DocumentChunker(
+        tokenizer=CharTokenizer(),
+        blurb_splitter=splitter,
+        chunk_splitter=splitter,
+    )
+    sections: list[Section] = [
+        TabularSection(link="first.xlsx", csv_file_id="a", heading="first.xlsx :: S"),
+        TabularSection(link="second.xlsx", csv_file_id="b", heading="second.xlsx :: S"),
+    ]
+    document = IndexingDocument(
+        id="doc",
+        source=DocumentSource.FILE,
+        semantic_identifier="doc",
+        title="doc",
+        metadata={},
+        sections=[],
+        processed_sections=sections,
+    )
+
+    chunks = document_chunker.chunk(
+        document=document,
+        sections=sections,
+        title_prefix="",
+        metadata_suffix_semantic="",
+        metadata_suffix_keyword="",
+        content_token_limit=MAX_TOKENS,
+    )
+
+    links = {link for chunk in chunks for link in (chunk.source_links or {}).values()}
+    assert links == {"first.xlsx", "second.xlsx"}
+    joined = "\n".join(c.content for c in chunks)
+    assert "Region=West" in joined and "Animal=Otter" in joined

@@ -1,7 +1,7 @@
 """Chunking for spreadsheets and CSVs.
 
 Every sheet of a workbook is chunked together, once, so the chunks can describe
-the whole file and stay bounded in number. See `sketch.py` for what they hold.
+the whole file and stay bounded in number. See `workbook_chunks.py` for what they hold.
 """
 
 import io
@@ -9,9 +9,9 @@ from collections.abc import Iterator
 from functools import partial
 
 from onyx.configs.app_configs import (
-    TABULAR_SKETCH_FULL_ROWS_MAX_CHUNKS,
-    TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK,
-    TABULAR_SKETCH_VALUE_CHUNKS_PER_SHEET,
+    TABULAR_FULL_ROWS_MAX_CHUNKS,
+    TABULAR_MAX_CHUNKS_PER_WORKBOOK,
+    TABULAR_VALUE_CHUNKS_PER_SHEET,
 )
 from onyx.connectors.models import Section, TabularSection
 from onyx.file_store.file_store import get_default_file_store
@@ -21,7 +21,7 @@ from onyx.indexing.chunking.section_chunker import (
     SectionChunker,
     SectionChunkerOutput,
 )
-from onyx.indexing.chunking.tabular_section_chunker.sketch import (
+from onyx.indexing.chunking.tabular_section_chunker.workbook_chunks import (
     SheetSource,
     build_workbook_chunks,
 )
@@ -84,9 +84,9 @@ class TabularChunker(SectionChunker):
             sheets=sheets,
             tokenizer=self.tokenizer,
             max_tokens=content_token_limit,
-            full_rows_max_chunks=TABULAR_SKETCH_FULL_ROWS_MAX_CHUNKS,
-            value_chunks_per_sheet=TABULAR_SKETCH_VALUE_CHUNKS_PER_SHEET,
-            max_chunks=TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK,
+            full_rows_max_chunks=TABULAR_FULL_ROWS_MAX_CHUNKS,
+            value_chunks_per_sheet=TABULAR_VALUE_CHUNKS_PER_SHEET,
+            max_chunks=TABULAR_MAX_CHUNKS_PER_WORKBOOK,
         )
         if not chunk_texts:
             # The only path a spreadsheet has, so silence here means the file

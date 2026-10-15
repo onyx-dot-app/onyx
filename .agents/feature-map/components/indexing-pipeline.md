@@ -306,10 +306,10 @@ type to one of three `SectionChunker` implementations
   path for spreadsheets and CSVs. `DocumentChunker` sends every `TabularSection`
   of a document to `TabularChunker.chunk_workbook` in a single call, at the first
   such section, so the chunks can describe the whole file.
-  `sketch.py:build_workbook_chunks` emits one workbook overview, the full rows of
+  `workbook_chunks.py:build_workbook_chunks` emits one workbook overview, the full rows of
   small sheets, and a bounded profile (column roles, identifier ranges, totals,
   breakdowns by category and by month, frequent values, sample rows) of large
-  sheets. `TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file,
+  sheets. `TABULAR_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file,
   so chunk count does not grow with row count. Each sheet is streamed once and
   never materialized in memory. A file that yields no chunks is logged: with no
   second strategy to fall back on, that means it is absent from the index.
@@ -319,7 +319,7 @@ type to one of three `SectionChunker` implementations
   of a large sheet has little to match. The chunks make a file findable and say
   what it holds; the file itself remains the record.
 
-  What the sketch will and will not claim:
+  What the chunks will and will not claim:
 
   - **Dates carry no locale assumption.** `date_key` reads ISO, `YYYY/MM/DD` and
     written months outright. For `5/3/2024` or `5.3.2024` the separator settles
