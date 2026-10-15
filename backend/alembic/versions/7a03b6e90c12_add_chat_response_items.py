@@ -1,7 +1,7 @@
 """Store ordered model generations.
 
 Revision ID: 7a03b6e90c12
-Revises: a27d64f7b810
+Revises: e7a3c1f5b2d4
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "7a03b6e90c12"
-down_revision = "a27d64f7b810"
+down_revision = "e7a3c1f5b2d4"
 branch_labels = None
 depends_on = None
 
