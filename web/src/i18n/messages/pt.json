@@ -7417,6 +7417,16 @@
           "error": "Falha ao carregar os modelos de roteamento.",
           "retry": "Tentar novamente"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Modelos personalizados",
+          "companyName": "Provedores compatíveis com LiteLLM"
+        },
+        "openAICompatible": {
+          "productName": "Modelos personalizados",
+          "companyName": "Endpoints compatíveis com OpenAI"
+        }
       }
     },
     "mcpActions": {

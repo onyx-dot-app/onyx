@@ -1,5 +1,6 @@
 "use client";
 
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect } from "@opal/components";
@@ -101,8 +102,12 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   modelPaging,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
+  const providerNames = useProviderNames();
   const options = useMemo((): SelectOptions => {
-    const models = buildModelSelectOptions(providers, { grouped });
+    const models = buildModelSelectOptions(providers, {
+      grouped,
+      providerNames,
+    });
     if (!globalDefault) return models;
     return [
       {
@@ -113,7 +118,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       },
       ...models,
     ];
-  }, [providers, grouped, globalDefault, t]);
+  }, [providers, grouped, globalDefault, t, providerNames]);
 
   // Server search only when nothing loaded matches. The query is remembered
   // so a merged page, which changes `modelPaging`, does not re-run it.

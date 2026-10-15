@@ -7417,6 +7417,16 @@
           "error": "Impossible de charger les modèles de routage.",
           "retry": "Réessayer"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Modèles personnalisés",
+          "companyName": "Fournisseurs compatibles LiteLLM"
+        },
+        "openAICompatible": {
+          "productName": "Modèles personnalisés",
+          "companyName": "Points de terminaison compatibles OpenAI"
+        }
       }
     },
     "mcpActions": {

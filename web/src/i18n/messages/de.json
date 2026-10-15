@@ -7417,6 +7417,16 @@
           "error": "Router-Modelle konnten nicht geladen werden.",
           "retry": "Erneut versuchen"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Benutzerdefinierte Modelle",
+          "companyName": "LiteLLM-kompatible Anbieter"
+        },
+        "openAICompatible": {
+          "productName": "Benutzerdefinierte Modelle",
+          "companyName": "OpenAI-kompatible Endpunkte"
+        }
       }
     },
     "mcpActions": {

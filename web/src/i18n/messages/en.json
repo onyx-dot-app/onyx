@@ -7417,6 +7417,16 @@
           "error": "Failed to load router models.",
           "retry": "Retry"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Custom Models",
+          "companyName": "LiteLLM-compatible providers"
+        },
+        "openAICompatible": {
+          "productName": "Custom Models",
+          "companyName": "OpenAI-compatible endpoints"
+        }
       }
     },
     "mcpActions": {

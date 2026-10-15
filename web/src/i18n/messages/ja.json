@@ -7417,6 +7417,16 @@
           "error": "ルーターモデルを読み込めませんでした。",
           "retry": "再試行"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "カスタムモデル",
+          "companyName": "LiteLLM 互換プロバイダー"
+        },
+        "openAICompatible": {
+          "productName": "カスタムモデル",
+          "companyName": "OpenAI 互換エンドポイント"
+        }
       }
     },
     "mcpActions": {

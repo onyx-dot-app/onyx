@@ -7417,6 +7417,16 @@
           "error": "تعذر تحميل نماذج التوجيه.",
           "retry": "إعادة المحاولة"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "نماذج مخصصة",
+          "companyName": "مزوّدون متوافقون مع LiteLLM"
+        },
+        "openAICompatible": {
+          "productName": "نماذج مخصصة",
+          "companyName": "نقاط نهاية متوافقة مع OpenAI"
+        }
       }
     },
     "mcpActions": {

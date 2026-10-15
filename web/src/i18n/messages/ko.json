@@ -7417,6 +7417,16 @@
           "error": "라우터 모델을 불러오지 못했습니다.",
           "retry": "다시 시도"
         }
+      },
+      "providers": {
+        "custom": {
+          "productName": "사용자 지정 모델",
+          "companyName": "LiteLLM 호환 공급자"
+        },
+        "openAICompatible": {
+          "productName": "사용자 지정 모델",
+          "companyName": "OpenAI 호환 엔드포인트"
+        }
       }
     },
     "mcpActions": {
