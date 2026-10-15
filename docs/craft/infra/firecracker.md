@@ -40,7 +40,7 @@ Each sandbox node must provide:
 - A Kata Containers install that registers a Firecracker RuntimeClass named
   exactly `kata-fc`.
 - containerd configured for the Kata Firecracker runtime.
-- containerd devmapper rootfs storage sized for Craft workspaces.
+- containerd with the devmapper snapshotter built in and storage sized for Craft workspaces.
 - A Linux guest kernel 6.9 or later for safe preview process-group cleanup.
 - enough CPU and memory for each Firecracker VM plus the pod overhead.
 
@@ -179,6 +179,11 @@ vhost-vsock, configures devmapper, installs `kata-fc`, replaces Kata's bundled
 Firecracker and jailer with the paired v1.17.0 binaries from
 `deployment/firecracker/install-pinned-firecracker.sh`, and validates with a
 smoke pod that checks boot IDs and the live Firecracker executable.
+
+The stock kind daemon excludes devmapper. Node setup installs the checksum-pinned
+official containerd 2.1.1 daemon at the same source revision. It leaves `ctr` and
+the runc shim unchanged. Existing pools and backing files prevent replacement.
+This helper targets fresh Linux/amd64 kind nodes, not existing production nodes.
 
 The installer verifies architecture-specific SHA-256 checksums. This verifies
 the binary pin. Runtime compatibility and Craft readiness need separate live

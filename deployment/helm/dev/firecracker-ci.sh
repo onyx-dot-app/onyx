@@ -113,7 +113,12 @@ configure_kind_node() {
     "${KIND_NODE_NAME}" bash -s <<'NODE'
 set -euo pipefail
 
-for bin in dmsetup losetup blockdev containerd ctr systemctl awk sed truncate; do
+CONTAINERD_VERSION="v2.1.1"
+CONTAINERD_REVISION="cb1076646aa3740577fafbf3d914198b7fe8e3f7"
+CONTAINERD_X86_64_TGZ_SHA256="918e88fd393c28c89424e6535df0546ca36c1dfa7d8a5d685dee70b449380a9b"
+CONTAINERD_URL="https://github.com/containerd/containerd/releases/download/${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION#v}-linux-amd64.tar.gz"
+
+for bin in dmsetup losetup blockdev containerd ctr systemctl awk sed truncate curl sha256sum tar install mktemp mv rm; do
   if ! command -v "${bin}" >/dev/null 2>&1; then
     echo "::error::${bin} is required inside the kind node" >&2
     exit 1
@@ -126,10 +131,16 @@ for dev in /dev/kvm /dev/vhost-vsock; do
   fi
 done
 
+expected_version="containerd github.com/containerd/containerd/v2 ${CONTAINERD_VERSION} ${CONTAINERD_REVISION}"
+installed_version="$(/usr/local/bin/containerd --version)"
+if [ "${installed_version}" != "${expected_version}" ]; then
+  echo "::error::installed containerd reported '${installed_version}', expected '${expected_version}'" >&2
+  exit 1
+fi
+
 modprobe dm_thin_pool || true
 modprobe loop || true
 
-mkdir -p "${DEVMAPPER_DATA_DIR}"
 data_file="${DEVMAPPER_DATA_DIR}/data"
 meta_file="${DEVMAPPER_DATA_DIR}/metadata"
 if dmsetup info "${DEVMAPPER_POOL_NAME}" >/dev/null 2>&1; then
@@ -140,6 +151,30 @@ if [ -e "${data_file}" ] || [ -e "${meta_file}" ]; then
   echo "::error::devmapper backing files already exist in ${DEVMAPPER_DATA_DIR}; refusing to truncate them" >&2
   exit 1
 fi
+
+containerd_staging="$(mktemp -d /usr/local/bin/.onyx-containerd.XXXXXX)"
+trap 'rm -rf "${containerd_staging}"' EXIT
+containerd_archive="${containerd_staging}/containerd.tar.gz"
+curl --fail --location --silent --show-error \
+  --retry 5 --retry-delay 2 --retry-all-errors \
+  --output "${containerd_archive}" "${CONTAINERD_URL}"
+echo "${CONTAINERD_X86_64_TGZ_SHA256}  ${containerd_archive}" | sha256sum --check -
+tar -xzf "${containerd_archive}" --no-same-owner --no-same-permissions \
+  -C "${containerd_staging}" bin/containerd
+staged_containerd="${containerd_staging}/bin/containerd"
+if [ ! -f "${staged_containerd}" ] || [ ! -x "${staged_containerd}" ] || [ -L "${staged_containerd}" ]; then
+  echo "::error::verified archive must contain a regular executable bin/containerd" >&2
+  exit 1
+fi
+staged_version="$("${staged_containerd}" --version)"
+if [ "${staged_version}" != "${expected_version}" ]; then
+  echo "::error::staged containerd reported '${staged_version}', expected '${expected_version}'" >&2
+  exit 1
+fi
+install -m 0755 "${staged_containerd}" "${containerd_staging}/containerd"
+mv "${containerd_staging}/containerd" /usr/local/bin/containerd
+
+mkdir -p "${DEVMAPPER_DATA_DIR}"
 truncate -s "${DEVMAPPER_DATA_SIZE}" "${data_file}"
 truncate -s "${DEVMAPPER_META_SIZE}" "${meta_file}"
 

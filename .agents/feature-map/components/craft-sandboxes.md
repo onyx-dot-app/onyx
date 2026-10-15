@@ -22,6 +22,7 @@
 `deployment/helm/charts/onyx/templates/network-policy-sandbox*.yaml`,
 `deployment/firecracker/install-pinned-firecracker.sh`,
 `deployment/helm/dev/refresh-images.sh`,
+`deployment/helm/dev/firecracker-ci.sh`,
 `deployment/helm/dev/craft-up.sh`, `deployment/helm/dev/k8s-up.sh`,
 `deployment/helm/dev/values-localdev.yaml`,
 `docs/craft/dev/local-kubernetes.md`,
@@ -306,6 +307,9 @@ Run only the gates that match the change:
   repeated restore, cleanup, unsafe targets, duplicates, and expanded limits.
   Normal application-dependent fixtures remain the full integration gate.
 - Firecracker CI uses linux/amd64 nested virtualization and requires KVM.
+  Fresh kind nodes need the checksum-pinned official containerd 2.1.1 daemon
+  because the stock kind build excludes devmapper. Setup preserves the same
+  source revision, `ctr`, and runc shim, and refuses existing pools/backing files.
   Its disposable kind cluster installs checksum-pinned Calico 3.31.7 before
   Kata, with the default kind CNI disabled. Network tests must still prove
   direct traffic is denied; CNI readiness alone does not prove isolation.
