@@ -19,28 +19,25 @@ const (
 	// rather than extending it, and Codex skills cannot be always-on. So the
 	// committed AGENTS.md carries a pointer to this untracked file.
 	agentsLocalFile = ".agents-local.md"
-	// Codex's native skill directory: SKILL.md-format skills, symlinks
-	// followed, invoked as $skill-name.
-	agentsSkillsDir = ".agents/skills"
 )
 
 // installCodexSkills compiles the enforced skills into a git-excluded
 // .agents-local.md at the repo root (the committed AGENTS.md tells agents to
-// read it) and symlinks each on-demand skill into Codex's native skill
-// directory, the way the claude-code installer does with ~/.claude/skills.
+// read it) and symlinks each on-demand skill into .agents/skills, Codex's
+// native skill directory, the way the claude-code installer does.
 func installCodexSkills(
 	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, copyMode bool,
 ) error {
 	// The exclusion comes first: a file written before a failed exclusion
 	// would sit unignored, one `git add .` away from publishing the private
 	// guidance the exclusion exists to protect.
-	if err := excludeAgentsLocal(repoRoot); err != nil {
+	if err := excludeFromGit(repoRoot, agentsLocalFile); err != nil {
 		return err
 	}
 	if err := writeAgentsLocal(cmd, ui, skills, repoRoot); err != nil {
 		return err
 	}
-	return linkManualSkills(cmd, ui, skills, "Agent skills", agentsSkillsDir, copyMode)
+	return linkManualSkills(cmd, ui, skills, repoRoot, copyMode)
 }
 
 func writeAgentsLocal(
@@ -109,9 +106,9 @@ func removeStaleAgentsLocal(cmd *cobra.Command, repoRoot string) error {
 	return nil
 }
 
-// excludeAgentsLocal keeps the compiled file out of accidental commits via
-// .git/info/exclude, which unlike .gitignore never appears in a public diff.
-func excludeAgentsLocal(repoRoot string) error {
+// excludeFromGit adds patterns to .git/info/exclude, which unlike .gitignore
+// never appears in a public diff, so generated files stay out of commits.
+func excludeFromGit(repoRoot string, patterns ...string) error {
 	gitCmd := exec.Command("git", "rev-parse", "--git-path", "info/exclude")
 	gitCmd.Dir = repoRoot
 	out, err := gitCmd.Output()
@@ -127,20 +124,29 @@ func excludeAgentsLocal(repoRoot string) error {
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("could not read %s: %w", excludePath, err)
 	}
+	present := make(map[string]bool)
 	for _, line := range strings.Split(string(existing), "\n") {
-		if strings.TrimSpace(line) == agentsLocalFile {
-			return nil
+		present[strings.TrimSpace(line)] = true
+	}
+	content := string(existing)
+	changed := false
+	for _, pattern := range patterns {
+		if present[pattern] {
+			continue
 		}
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		content += pattern + "\n"
+		changed = true
+	}
+	if !changed {
+		return nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
 		return fmt.Errorf("could not create %s: %w", filepath.Dir(excludePath), err)
 	}
-	content := string(existing)
-	if content != "" && !strings.HasSuffix(content, "\n") {
-		content += "\n"
-	}
-	content += agentsLocalFile + "\n"
 	if err := os.WriteFile(excludePath, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("could not write %s: %w", excludePath, err)
 	}

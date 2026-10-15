@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -19,8 +20,10 @@ const (
 	// Checkout location used before the skills moved into onyx-infra, still
 	// honored when it is the only checkout on disk.
 	legacySkillSource = ".claude/skills/onyx-llm-context"
-	claudeSkillsDir   = ".claude/skills"
 	claudeMDFile      = ".claude/CLAUDE.md"
+	// Repo-relative home of on-demand skills. Claude, Codex and Cursor read
+	// it through the .claude/skills, .codex/skills and .cursor/skills symlinks.
+	projectSkillsDir = ".agents/skills"
 	// The skills live in the agent-context/ subdirectory of onyx-infra, a
 	// private repo that is large, so --clone fetches only that subdirectory.
 	agentContextCloneURL = "https://github.com/onyx-dot-app/onyx-infra.git"
@@ -63,7 +66,8 @@ coding agents.
 claude-code (default):
   Enforced skills (enforced/) are added as @imports in .claude/CLAUDE.md
   (project-scoped, git-ignored). Manual skills (skills/) are symlinked into
-  ~/.claude/skills/ and invoked via /skill-name.
+  .agents/skills/ of the repo (git-excluded; .claude/skills points there) and
+  invoked via /skill-name.
 
 cursor:
   Every skill is rendered as a rule in .cursor/rules/ (git-ignored).
@@ -74,7 +78,8 @@ codex:
   Enforced skills are compiled into .agents-local.md at the repo root
   (git-excluded; the committed AGENTS.md points agents at it), since Codex
   skills cannot be always-on. Manual skills are symlinked into
-  ~/.agents/skills/, Codex's native skill directory, invoked via $skill-name.
+  .agents/skills/ of the repo (git-excluded; .codex/skills points there),
+  invoked via $skill-name. A skill named like a committed one is skipped.
 
 The checkout is fast-forwarded before installing, so a plain rerun picks up
 new skills; --no-pull installs from the checkout as it is.
@@ -250,7 +255,7 @@ func installClaudeSkills(
 	if err := installEnforcedSkills(cmd, skills, repoRoot); err != nil {
 		return err
 	}
-	return linkManualSkills(cmd, ui, skills, "Claude skills", claudeSkillsDir, copyMode)
+	return linkManualSkills(cmd, ui, skills, repoRoot, copyMode)
 }
 
 // installEnforcedSkills writes @imports for all enforced skills into .claude/CLAUDE.md at the repo root.
@@ -284,37 +289,59 @@ func installEnforcedSkills(
 	return nil
 }
 
-// linkManualSkills symlinks each on-demand skill directory into the given
-// skills directory under the home directory (~/.claude/skills for Claude,
-// ~/.agents/skills for agents that read the universal layout, such as Codex).
+// linkManualSkills symlinks each on-demand skill directory into the repo's
+// .agents/skills, which .claude/skills, .codex/skills and .cursor/skills point
+// at. The links are git-excluded, and a skill named like a committed one is
+// skipped, so an install never dirties the tree or replaces a repo skill.
 func linkManualSkills(
-	cmd *cobra.Command, ui *installUI, skills []agentContextSkill,
-	kind, homeRelativeDir string, copyMode bool,
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, copyMode bool,
 ) error {
 	if len(skills) == 0 {
 		return nil
 	}
+	skillsDir := filepath.Join(repoRoot, projectSkillsDir)
+	// Claude and Codex share this directory; one pass is enough.
+	if ui.linkedSkillDirs[skillsDir] {
+		return nil
+	}
+	if ui.linkedSkillDirs == nil {
+		ui.linkedSkillDirs = make(map[string]bool)
+	}
+	ui.linkedSkillDirs[skillsDir] = true
+
 	var manual []agentContextSkill
 	for _, skill := range skills {
-		if !skill.Enforced {
-			manual = append(manual, skill)
+		if skill.Enforced {
+			continue
 		}
+		rel := path.Join(projectSkillsDir, skill.Name)
+		if isTrackedByGit(repoRoot, rel) {
+			_, _ = fmt.Fprintf(
+				cmd.ErrOrStderr(),
+				"Warning: skipping skill %q: %s is committed in this repo.\n", skill.Name, rel,
+			)
+			continue
+		}
+		manual = append(manual, skill)
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("could not determine home directory: %w", err)
-	}
-
-	skillsDir := filepath.Join(home, homeRelativeDir)
 	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
 		// Nothing installed here before, so nothing to clean up either.
 		if len(manual) == 0 {
 			return nil
 		}
-		if skillsDir, err = ui.resolveTargetDir(kind, skillsDir); err != nil {
+		if skillsDir, err = ui.resolveTargetDir("Agent skills", skillsDir); err != nil {
 			return err
 		}
+	}
+
+	// The exclusion comes first, so a failure leaves nothing untracked behind.
+	patterns := make([]string, 0, len(manual))
+	for _, skill := range manual {
+		patterns = append(patterns, "/"+path.Join(projectSkillsDir, skill.Name))
+	}
+	if err := excludeFromGit(repoRoot, patterns...); err != nil {
+		return err
 	}
 
 	// Every skill sits at <source>/<tier>/<name>, so any of them names the
@@ -399,6 +426,14 @@ func removeStaleSkillLinks(
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", path)
 	}
 	return nil
+}
+
+// isTrackedByGit reports whether git tracks anything at the repo-relative path.
+func isTrackedByGit(repoRoot, rel string) bool {
+	gitCmd := exec.Command("git", "ls-files", "--", rel)
+	gitCmd.Dir = repoRoot
+	out, err := gitCmd.Output()
+	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 
 func copySkill(srcDir, dstDir string) error {
