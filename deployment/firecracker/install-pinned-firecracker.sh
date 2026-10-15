@@ -123,9 +123,6 @@ install_binaries() {
   firecracker_src="$(source_firecracker_path "${extract_dir}")"
   jailer_src="$(source_jailer_path "${extract_dir}")"
 
-  if [ ! -d "${INSTALL_DIR}" ]; then
-    error "Kata binary directory ${INSTALL_DIR} does not exist; install Kata before pinning Firecracker"
-  fi
   install -m 0755 "${firecracker_src}" "${FIRECRACKER_BIN}"
   install -m 0755 "${jailer_src}" "${JAILER_BIN}"
 }
@@ -150,11 +147,12 @@ assert_installed_checksums() {
 }
 
 with_verified_archive() {
-  local action
+  local action staging_parent
   action="$1"
+  staging_parent="${2:-${TMPDIR:-/tmp}}"
   (
     local tmp_dir archive_path
-    tmp_dir="$(mktemp -d)"
+    tmp_dir="$(mktemp -d "${staging_parent%/}/.firecracker.XXXXXXXXXX")"
     trap 'rm -rf "${tmp_dir}"' EXIT
     archive_path="${tmp_dir}/firecracker-${FIRECRACKER_VERSION}-${INSTALL_ARCH}.tgz"
 
@@ -165,7 +163,10 @@ with_verified_archive() {
 }
 
 install_pinned() {
-  with_verified_archive install_verified_binaries
+  if [ ! -d "${INSTALL_DIR}" ]; then
+    error "Kata binary directory ${INSTALL_DIR} does not exist; install Kata before pinning Firecracker"
+  fi
+  with_verified_archive install_verified_binaries "${INSTALL_DIR}"
   verify_installed
 }
 
