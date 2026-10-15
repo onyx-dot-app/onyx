@@ -172,6 +172,8 @@ interface CollapsibleRootProps {
   defaultOpen?: boolean;
   /** Locks the current open state: the trigger does not toggle. */
   disabled?: boolean;
+  /** Classes for the root `div`, which wraps the trigger and content. */
+  className?: string;
   children?: React.ReactNode;
 }
 
@@ -185,6 +187,7 @@ function CollapsibleRoot({
   onOpenChange,
   defaultOpen = false,
   disabled = false,
+  className,
   children,
 }: CollapsibleRootProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
@@ -200,7 +203,9 @@ function CollapsibleRoot({
 
   return (
     <CollapsibleContext.Provider value={{ open, toggle, contentId }}>
-      <div data-state={open ? "open" : "closed"}>{children}</div>
+      <div className={className} data-state={open ? "open" : "closed"}>
+        {children}
+      </div>
     </CollapsibleContext.Provider>
   );
 }
