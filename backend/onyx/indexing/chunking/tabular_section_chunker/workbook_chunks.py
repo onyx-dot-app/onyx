@@ -401,7 +401,7 @@ def detect_header_row(rows: list[list[str]]) -> int | None:
     return None
 
 
-def _looks_like_a_label(value: str) -> str | bool:
+def _looks_like_a_label(value: str) -> bool:
     """Whether a cell reads as a column name. Years count: ``Region,2023,2024``
     is a header, and rejecting it feeds the real names into the data."""
     text = value.strip()
