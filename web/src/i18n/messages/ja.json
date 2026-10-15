@@ -2238,29 +2238,6 @@
           "description": "ソースの全ドキュメントを再インデックスします。規模によっては数時間から数日かかります。"
         }
       },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "キャンセル済み"
-        },
-        "completedWithErrors": {
-          "label": "エラーありで完了"
-        },
-        "failed": {
-          "label": "失敗"
-        },
-        "fallback": {
-          "label": "未開始"
-        },
-        "inProgress": {
-          "label": "実行中"
-        },
-        "notStarted": {
-          "label": "スケジュール済み"
-        },
-        "success": {
-          "label": "成功"
-        }
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "再有効化"

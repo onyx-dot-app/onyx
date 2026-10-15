@@ -2238,29 +2238,6 @@
           "description": "Reindexar todos os documentos da fonte. Pode levar horas ou dias dependendo do tamanho."
         }
       },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "Cancelada"
-        },
-        "completedWithErrors": {
-          "label": "Concluída com erros"
-        },
-        "failed": {
-          "label": "Falhou"
-        },
-        "fallback": {
-          "label": "Não iniciada"
-        },
-        "inProgress": {
-          "label": "Em andamento"
-        },
-        "notStarted": {
-          "label": "Agendada"
-        },
-        "success": {
-          "label": "Concluída com sucesso"
-        }
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Reativar"

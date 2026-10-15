@@ -2238,29 +2238,6 @@
           "description": "소스의 모든 문서를 다시 인덱싱합니다. 규모에 따라 몇 시간 또는 며칠이 걸릴 수 있습니다."
         }
       },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "취소됨"
-        },
-        "completedWithErrors": {
-          "label": "오류와 함께 완료됨"
-        },
-        "failed": {
-          "label": "실패"
-        },
-        "fallback": {
-          "label": "시작 안 됨"
-        },
-        "inProgress": {
-          "label": "진행 중"
-        },
-        "notStarted": {
-          "label": "예약됨"
-        },
-        "success": {
-          "label": "성공"
-        }
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "다시 활성화"

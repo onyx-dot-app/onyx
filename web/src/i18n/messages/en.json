@@ -2238,29 +2238,6 @@
           "description": "Re-index all docs from the source. This may take hours or days depending on corpus size."
         }
       },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "Canceled"
-        },
-        "completedWithErrors": {
-          "label": "Completed with errors"
-        },
-        "failed": {
-          "label": "Failed"
-        },
-        "fallback": {
-          "label": "Not Started"
-        },
-        "inProgress": {
-          "label": "In Progress"
-        },
-        "notStarted": {
-          "label": "Scheduled"
-        },
-        "success": {
-          "label": "Succeeded"
-        }
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Re-Enable"

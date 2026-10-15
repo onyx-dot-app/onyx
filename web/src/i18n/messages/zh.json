@@ -2238,29 +2238,6 @@
           "description": "重新索引来源中的所有文档。视语料规模可能需要数小时或数天。"
         }
       },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "已取消"
-        },
-        "completedWithErrors": {
-          "label": "已完成，但有错误"
-        },
-        "failed": {
-          "label": "失败"
-        },
-        "fallback": {
-          "label": "未开始"
-        },
-        "inProgress": {
-          "label": "进行中"
-        },
-        "notStarted": {
-          "label": "已安排"
-        },
-        "success": {
-          "label": "成功"
-        }
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "重新启用"
