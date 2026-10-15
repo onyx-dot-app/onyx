@@ -289,6 +289,23 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^web/src/i18n/messages/.*\.json$
+      # `lint.py check` also fails on a stale calibration seal, so a rule edit
+      # lands with a rerun of `lint.py eval --write`.
+      - id: semantic-lint-check
+        name: semantic lint rule registry
+        description: "Fail when a semantic-lint rule file is invalid or its calibration is stale"
+        language: system
+        entry: python3 tools/semantic-lint/lint.py check
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^tools/semantic-lint/
+      - id: semantic-lint-tests
+        name: semantic lint tests
+        language: system
+        entry: python3 -m unittest discover -s tools/semantic-lint/tests -t tools/semantic-lint
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(tools/semantic-lint/|backend/scripts/openai_agent\.py$)
       # `uv pip compile` cannot read `[build-system] requires`, so the pins are
       # duplicated in tools/requirements/build-constraints.in. Catch a mismatch
       # here rather than as an unsatisfiable resolution when a release builds wheels.

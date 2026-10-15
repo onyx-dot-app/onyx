@@ -1,0 +1,103 @@
+name: PR Semantic Lint
+concurrency:
+  group: PR-Semantic-Lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Advisory. The check run concludes `success` or `neutral`, and the job passes on
+# findings, missing secrets and linter errors alike. The semantic-lint-check
+# pre-commit hook fails Quality Checks PR on an invalid rule file instead.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  semantic-lint:
+    # Fork PRs get no secrets, so they skip with the drafts and Dependabot.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    env:
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      # Full history, because the repo search greps the PR's base and head commits.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # 3.13 for PurePath.full_match, which the rule scopes use.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # ratchet:actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+
+      # Without TYPESAFE_API_KEY or OPENAI_API_KEY the tool posts a neutral
+      # "Skipped" check run. Any other failure inside the review becomes a
+      # neutral check run too, so this step fails only on a crash before publish.
+      - name: Run semantic lint
+        id: lint
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          python3 tools/semantic-lint/lint.py pr "${PR_NUMBER}" --repo "${REPO}" \
+            --publish --comment-out "${RUNNER_TEMP}/semantic-lint.md" \
+            | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - name: Post a neutral check run after a crash
+        if: steps.lint.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          TITLE="Linter error. The job log has the details."
+          gh api --method POST "repos/${REPO}/check-runs" \
+            -f name=semantic-lint -f head_sha="${HEAD_SHA}" \
+            -f status=completed -f conclusion=neutral \
+            -f "output[title]=${TITLE}" -f "output[summary]=${TITLE}" >/dev/null
+
+      # The marker upsert from pr-golang-tests.yml. One comment per PR, edited in
+      # place. A run without findings edits an earlier comment and never posts a
+      # new one.
+      - name: Upsert the summary comment
+        if: steps.lint.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SUMMARY_FILE="${RUNNER_TEMP}/semantic-lint.md"
+          if [ ! -s "${SUMMARY_FILE}" ]; then
+            echo "The linter wrote no summary. Skipping the PR comment."
+            exit 0
+          fi
+          MARKER="<!-- semantic-lint:summary"
+          BODY="$(cat "${SUMMARY_FILE}")"
+
+          # --paginate: on a long PR the marker can sit past the first page.
+          EXISTING_COMMENT_ID=$(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
+
+          if head -1 "${SUMMARY_FILE}" | grep -q 'findings=0 -->' && [ -z "${EXISTING_COMMENT_ID}" ]; then
+            echo "No findings and no earlier comment. Skipping the PR comment."
+            exit 0
+          fi
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" -f body="${BODY}" >/dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="${BODY}" >/dev/null
+          fi
