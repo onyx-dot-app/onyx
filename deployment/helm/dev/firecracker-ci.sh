@@ -113,6 +113,8 @@ configure_kind_node() {
     "${KIND_NODE_NAME}" bash -s <<'NODE'
 set -euo pipefail
 
+export DM_DISABLE_UDEV=1
+
 CONTAINERD_VERSION="v2.1.1"
 CONTAINERD_REVISION="cb1076646aa3740577fafbf3d914198b7fe8e3f7"
 CONTAINERD_X86_64_TGZ_SHA256="918e88fd393c28c89424e6535df0546ca36c1dfa7d8a5d685dee70b449380a9b"
@@ -185,6 +187,19 @@ data_sectors="$((data_bytes / 512))"
 dmsetup create "${DEVMAPPER_POOL_NAME}" \
   --table "0 ${data_sectors} thin-pool ${meta_loop} ${data_loop} 128 32768"
 
+pool_path="/dev/mapper/${DEVMAPPER_POOL_NAME}"
+dmsetup info "${DEVMAPPER_POOL_NAME}"
+if [ ! -b "${pool_path}" ]; then
+  echo "::error::devmapper pool ${pool_path} is not a block device" >&2
+  dmsetup info "${pool_path}" >&2 || true
+  exit 1
+fi
+dmsetup info "${pool_path}"
+echo "Verified devmapper block device ${pool_path}"
+dmsetup table "${DEVMAPPER_POOL_NAME}"
+dmsetup status "${DEVMAPPER_POOL_NAME}"
+dmsetup deps "${DEVMAPPER_POOL_NAME}"
+
 config_version="$(containerd config dump | awk '$1 == "version" { print $3; exit }' || true)"
 if [ -z "${config_version}" ]; then
   config_version="2"
@@ -211,6 +226,10 @@ mv "${tmp}" "${config}"
   echo '# END ONYX KATA FIRECRACKER CI DEVMAPPER'
 } >> "${config}"
 
+mkdir -p /etc/systemd/system/containerd.service.d
+printf '[Service]\nEnvironment=DM_DISABLE_UDEV=1\n' \
+  > /etc/systemd/system/containerd.service.d/20-onyx-devmapper.conf
+systemctl daemon-reload
 systemctl restart containerd
 ctr plugins ls | awk '
   $1 ~ /snapshotter/ && $2 == "devmapper" && $4 == "ok" { found = 1 }

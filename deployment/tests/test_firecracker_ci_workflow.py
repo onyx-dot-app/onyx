@@ -93,6 +93,10 @@ class NodeSetup:
     config: Path
     data_dir: Path
     calls: Path
+    service_dropin: Path
+    service_environment: Path
+    mappings: Path
+    mapper_dir: Path
     candidate: bytes
     original_daemon: bytes
     original_config: bytes
@@ -149,6 +153,15 @@ def _node_setup(
     devices.mkdir()
     for name in ("kvm", "vhost-vsock"):
         (devices / name).touch()
+    mapper_dir = devices / "mapper"
+    mapper_dir.mkdir()
+    mappings = tmp_path / "kernel-mappings"
+    mappings.mkdir()
+    service_dir = tmp_path / "node/etc/systemd/system/containerd.service.d"
+    service_dir.mkdir(parents=True)
+    (service_dir / "10-preserve.conf").write_text("[Service]\nEnvironment=KEEP=1\n")
+    service_dropin = service_dir / "20-onyx-devmapper.conf"
+    service_environment = tmp_path / "service-environment"
 
     release = tmp_path / "release"
     release.mkdir()
@@ -174,21 +187,79 @@ def _node_setup(
     double = (
         f"#!{sys.executable}\n"
         "import os\n"
+        "import subprocess\n"
         "import sys\n"
         "from pathlib import Path\n"
         "name = Path(sys.argv[0]).name\n"
         "arguments = sys.argv[1:]\n"
         "with Path(os.environ['ONYX_TEST_CALLS']).open('a') as output:\n"
         "    output.write(' '.join([name, *arguments]) + '\\n')\n"
-        "if name == 'dmsetup' and arguments[0] == 'info':\n"
-        "    sys.exit(0 if os.environ.get('ONYX_TEST_POOL_EXISTS') == '1' else 1)\n"
+        "mapper_dir = Path(os.environ['ONYX_TEST_MAPPER_DIR'])\n"
+        "mappings = Path(os.environ['ONYX_TEST_MAPPINGS'])\n"
+        "service_environment = Path(os.environ['ONYX_TEST_SERVICE_ENVIRONMENT'])\n"
+        "if name == 'dmsetup':\n"
+        "    target = arguments[1]\n"
+        "    mapping = mappings / Path(target).name\n"
+        "    node = mapper_dir / Path(target).name\n"
+        "    if arguments[0] == 'create':\n"
+        "        setting = 'DM_DISABLE_UDEV=' + os.environ.get('DM_DISABLE_UDEV', '')\n"
+        "        mapping.write_text(setting + '\\n')\n"
+        "        if 'DM_DISABLE_UDEV' in os.environ and not os.environ.get('ONYX_TEST_MISSING_NODE'):\n"
+        "            if os.environ.get('ONYX_TEST_NODE_KIND') == 'directory':\n"
+        "                node.mkdir()\n"
+        "            else:\n"
+        "                node.touch()\n"
+        "        sys.exit(0)\n"
+        "    if arguments[0] == 'info':\n"
+        "        exists = mapping.exists() or os.environ.get('ONYX_TEST_POOL_EXISTS') == '1'\n"
+        "        lookup = 'path' if Path(target).is_absolute() else 'name'\n"
+        "        exists = exists and (lookup == 'name' or node.exists())\n"
+        "        if os.environ.get('ONYX_TEST_INFO_FAILURE') == lookup:\n"
+        "            exists = False\n"
+        "        if not exists:\n"
+        "            print('Device ' + target + ' not found', file=sys.stderr)\n"
+        "            sys.exit(1)\n"
+        "        print('Name: ' + mapping.name + '\\nState: ACTIVE')\n"
+        "    elif arguments[0] in ('table', 'status', 'deps'):\n"
+        "        if not mapping.exists():\n"
+        "            sys.exit(1)\n"
+        "        print({'table': '0 8 thin-pool 7:11 7:10 128 32768',\n"
+        "               'status': '0 8 thin-pool 0 1/8 1/8 - rw',\n"
+        "               'deps': '2 dependencies : (7, 11) (7, 10)'}[arguments[0]])\n"
+        "if name == 'systemctl':\n"
+        "    loaded_environment = service_environment.with_suffix('.loaded')\n"
+        "    if arguments == ['daemon-reload']:\n"
+        "        dropin = Path(os.environ['ONYX_TEST_SERVICE_DROPIN']).read_text()\n"
+        "        loaded_environment.write_text(''.join(\n"
+        "            line.removeprefix('Environment=') + '\\n'\n"
+        "            for line in dropin.splitlines() if line.startswith('Environment=')\n"
+        "        ))\n"
+        "    elif arguments == ['restart', 'containerd']:\n"
+        "        service_environment.write_text(\n"
+        "            loaded_environment.read_text() if loaded_environment.exists() else ''\n"
+        "        )\n"
         "if name == 'losetup':\n"
         "    print('/dev/loop10' if arguments[-1].endswith('/data') else '/dev/loop11')\n"
         "if name == 'blockdev':\n"
         "    print('4096')\n"
         "if name == 'ctr':\n"
-        "    print('io.containerd.snapshotter.v1 devmapper linux/amd64 ' +\n"
-        "          os.environ.get('ONYX_TEST_PLUGIN_STATUS', 'ok'))\n"
+        "    if arguments == ['plugins', 'ls']:\n"
+        "        status = os.environ.get('ONYX_TEST_PLUGIN_STATUS', 'ok')\n"
+        "        if not (mapper_dir / 'kata_ci_devpool').is_file():\n"
+        "            status = 'error'\n"
+        "        print('io.containerd.snapshotter.v1 devmapper linux/amd64 ' + status)\n"
+        "    elif arguments[:2] == ['snapshots', 'prepare']:\n"
+        "        environment = os.environ.copy()\n"
+        "        environment.pop('DM_DISABLE_UDEV', None)\n"
+        "        for setting in service_environment.read_text().splitlines():\n"
+        "            key, value = setting.split('=', 1)\n"
+        "            environment[key] = value\n"
+        "        subprocess.run(['dmsetup', 'create', arguments[2], '--table',\n"
+        "                        '0 8 thin ' + str(mapper_dir / 'kata_ci_devpool') + ' 1'],\n"
+        "                       env=environment, check=True)\n"
+        "        sys.exit(subprocess.run(\n"
+        "            ['dmsetup', 'info', str(mapper_dir / arguments[2])],\n"
+        "            env=environment, check=False).returncode)\n"
     )
     for name in ("dmsetup", "losetup", "blockdev", "systemctl", "modprobe", "ctr"):
         _write_executable(node_bin / name, double)
@@ -202,8 +273,13 @@ def _node_setup(
         "DEVMAPPER_BASE_IMAGE_SIZE": "4GB",
         "ONYX_TEST_CALLS": str(calls),
         "ONYX_TEST_EXECUTABLE_DIR": str(daemon_dir),
+        "ONYX_TEST_MAPPER_DIR": str(mapper_dir),
+        "ONYX_TEST_MAPPINGS": str(mappings),
+        "ONYX_TEST_SERVICE_DROPIN": str(service_dropin),
+        "ONYX_TEST_SERVICE_ENVIRONMENT": str(service_environment),
         "TMPDIR": str(tmp_path),
     }
+    environment.pop("DM_DISABLE_UDEV", None)
     source = SCRIPT.read_text()
     assert ARCHIVE_SHA256 in source
     assert ARCHIVE_URL in source
@@ -212,6 +288,9 @@ def _node_setup(
         .replace("/etc/containerd/config.toml", str(config))
         .replace("/dev/kvm", str(devices / "kvm"))
         .replace("/dev/vhost-vsock", str(devices / "vhost-vsock"))
+        .replace("/dev/mapper/", f"{mapper_dir}/")
+        .replace("/etc/systemd/system/containerd.service.d", str(service_dir))
+        .replace('[ ! -b "${pool_path}" ]', '[ ! -f "${pool_path}" ]')
         .replace(ARCHIVE_SHA256, checksum)
         .replace(ARCHIVE_URL, archive.as_uri())
     )
@@ -224,6 +303,10 @@ def _node_setup(
         config,
         data_dir,
         calls,
+        service_dropin,
+        service_environment,
+        mappings,
+        mapper_dir,
         candidate.read_bytes(),
         daemon.read_bytes(),
         config.read_bytes(),
@@ -244,6 +327,12 @@ def _assert_staging_cleanup(node: NodeSetup) -> None:
 def _assert_no_install_or_storage_mutation(node: NodeSetup) -> None:
     assert node.daemon.read_bytes() == node.original_daemon
     assert node.config.read_bytes() == node.original_config
+    assert not node.service_dropin.exists()
+    assert not node.service_environment.exists()
+    assert not node.service_environment.with_suffix(".loaded").exists()
+    assert (node.service_dropin.parent / "10-preserve.conf").read_text() == (
+        "[Service]\nEnvironment=KEEP=1\n"
+    )
     assert node.calls.read_text().splitlines() == [
         "modprobe dm_thin_pool",
         "modprobe loop",
@@ -273,7 +362,22 @@ def test_node_setup_installs_verified_daemon_atomically(tmp_path: Path) -> None:
     )
     assert (node.data_dir / "data").stat().st_size == 4096
     assert (node.data_dir / "metadata").stat().st_size == 4096
-    assert node.calls.read_text().splitlines()[-2:] == [
+    assert (node.mappings / "kata_ci_devpool").read_text() == "DM_DISABLE_UDEV=1\n"
+    assert (node.mapper_dir / "kata_ci_devpool").is_file()
+    assert (
+        node.service_dropin.read_text() == "[Service]\nEnvironment=DM_DISABLE_UDEV=1\n"
+    )
+    assert node.service_environment.read_text() == "DM_DISABLE_UDEV=1\n"
+    assert (node.service_dropin.parent / "10-preserve.conf").read_text() == (
+        "[Service]\nEnvironment=KEEP=1\n"
+    )
+    assert node.calls.read_text().splitlines()[-8:] == [
+        "dmsetup info kata_ci_devpool",
+        f"dmsetup info {node.mapper_dir}/kata_ci_devpool",
+        "dmsetup table kata_ci_devpool",
+        "dmsetup status kata_ci_devpool",
+        "dmsetup deps kata_ci_devpool",
+        "systemctl daemon-reload",
         "systemctl restart containerd",
         "ctr plugins ls",
     ]
@@ -312,8 +416,79 @@ def test_node_setup_rejects_installed_revision_before_mutation(tmp_path: Path) -
     assert VERSION_OUTPUT in result.stderr
     assert node.daemon.read_bytes() == node.original_daemon
     assert node.config.read_bytes() == node.original_config
+    assert not node.service_dropin.exists()
+    assert not node.service_environment.exists()
+    assert not node.service_environment.with_suffix(".loaded").exists()
+    assert (node.service_dropin.parent / "10-preserve.conf").read_text() == (
+        "[Service]\nEnvironment=KEEP=1\n"
+    )
     assert node.calls.read_text() == ""
     assert not node.data_dir.exists()
+    _assert_staging_cleanup(node)
+
+
+def test_node_setup_service_passes_environment_to_later_thin_creation(
+    tmp_path: Path,
+) -> None:
+    node = _node_setup(tmp_path)
+    result = node.run()
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    service_environment = node.environment | {
+        "PATH": node.environment["ONYX_TEST_NODE_PATH"]
+    }
+    assert "DM_DISABLE_UDEV" not in service_environment
+    result = subprocess.run(
+        [str(tmp_path / "node-bin/systemctl"), "restart", "containerd"],
+        env=service_environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = subprocess.run(
+        [str(tmp_path / "node-bin/ctr"), "snapshots", "prepare", "kata_ci_thin"],
+        env=service_environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (node.mappings / "kata_ci_thin").read_text() == "DM_DISABLE_UDEV=1\n"
+    assert (node.mapper_dir / "kata_ci_thin").is_file()
+    assert node.calls.read_text().splitlines()[-3:] == [
+        "ctr snapshots prepare kata_ci_thin",
+        f"dmsetup create kata_ci_thin --table 0 8 thin {node.mapper_dir}/kata_ci_devpool 1",
+        f"dmsetup info {node.mapper_dir}/kata_ci_thin",
+    ]
+
+
+@pytest.mark.parametrize("failure", ["name", "path", "missing-node", "node-type"])
+def test_node_setup_checks_created_pool_before_service_mutation(
+    tmp_path: Path, failure: str
+) -> None:
+    node = _node_setup(tmp_path)
+    if failure in ("name", "path"):
+        node.environment["ONYX_TEST_INFO_FAILURE"] = failure
+    elif failure == "missing-node":
+        node.environment["ONYX_TEST_MISSING_NODE"] = "1"
+    else:
+        node.environment["ONYX_TEST_NODE_KIND"] = "directory"
+
+    result = node.run()
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert node.daemon.read_bytes() == node.candidate
+    assert node.config.read_bytes() == node.original_config
+    assert not node.service_dropin.exists()
+    assert not node.service_environment.exists()
+    assert not node.service_environment.with_suffix(".loaded").exists()
+    assert (node.mappings / "kata_ci_devpool").read_text() == "DM_DISABLE_UDEV=1\n"
+    if failure == "node-type":
+        assert "is not a block device" in result.stderr
+    else:
+        assert "not found" in result.stderr
     _assert_staging_cleanup(node)
 
 

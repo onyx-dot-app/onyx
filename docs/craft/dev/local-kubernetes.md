@@ -68,6 +68,7 @@ deployment/helm/dev/firecracker-ci.sh install-kata
 `configure-kind-node` creates the devmapper pool once. It refuses existing backing files and pools.
 The stock kind daemon excludes devmapper. Setup replaces only that daemon with
 the checksum-pinned official containerd 2.1.1 build at the same source revision.
+It sets `DM_DISABLE_UDEV=1` for setup and containerd because kind does not run udev.
 Do not run it as a daily setup command. The Kata install invokes the checksum-pinned
 `deployment/firecracker/install-pinned-firecracker.sh` for Firecracker `v1.17.0` and its jailer.
 

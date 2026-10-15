@@ -310,6 +310,8 @@ Run only the gates that match the change:
   Fresh kind nodes need the checksum-pinned official containerd 2.1.1 daemon
   because the stock kind build excludes devmapper. Setup preserves the same
   source revision, `ctr`, and runc shim, and refuses existing pools/backing files.
+  Setup and containerd use `DM_DISABLE_UDEV=1` for pool and thin-device nodes
+  because the pinned kind node does not run udev.
   Its disposable kind cluster installs checksum-pinned Calico 3.31.7 before
   Kata, with the default kind CNI disabled. Network tests must still prove
   direct traffic is denied; CNI readiness alone does not prove isolation.

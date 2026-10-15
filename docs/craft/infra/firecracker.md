@@ -184,6 +184,9 @@ The stock kind daemon excludes devmapper. Node setup installs the checksum-pinne
 official containerd 2.1.1 daemon at the same source revision. It leaves `ctr` and
 the runc shim unchanged. Existing pools and backing files prevent replacement.
 This helper targets fresh Linux/amd64 kind nodes, not existing production nodes.
+The pinned kind node does not run udev. Setup and containerd use
+`DM_DISABLE_UDEV=1` so libdm creates pool and thin-device nodes directly.
+Setup verifies the owned pool by name, path, and block-device type before restart.
 
 The installer verifies architecture-specific SHA-256 checksums. This verifies
 the binary pin. Runtime compatibility and Craft readiness need separate live
