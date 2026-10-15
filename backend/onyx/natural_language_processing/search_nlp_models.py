@@ -457,6 +457,74 @@ def _is_gemini_embedding_2_model(model: str) -> bool:
     )
 
 
+# Vertex rejects a request on the SUM of tokens across every input, not on the
+# number of inputs, and `auto_truncate` only clamps each input on its own. A
+# batch of legally-sized inputs can still blow the request cap.
+# https://cloud.google.com/vertex-ai/generative-ai/docs/quotas
+_VERTEX_MAX_REQUEST_TOKENS = 20_000
+# 10% headroom under the cap, because the count below is an estimate, not
+# Vertex's tokenizer.
+_VERTEX_BATCH_TOKEN_BUDGET = (_VERTEX_MAX_REQUEST_TOKENS * 9) // 10
+# Low on purpose, so the estimate runs high: Latin text averages ~4 UTF-8 bytes
+# per token and CJK ~3. Over-counting costs an extra request; under-counting
+# costs a rejected one.
+_VERTEX_BYTES_PER_TOKEN = 3
+
+
+def _estimate_vertex_tokens(text: str) -> int:
+    """Upper-bound the tokens Vertex will charge for ``text``.
+
+    Vertex exposes no local tokenizer, and `count_tokens` is a network call per
+    text. A byte ratio is cheap and biased high, which is what the budget needs.
+    """
+    byte_length = len(text.encode("utf-8"))
+    # Ceiling division, so no text ever counts as zero tokens.
+    return max(1, -(-byte_length // _VERTEX_BYTES_PER_TOKEN))
+
+
+def _batch_texts_for_vertex(
+    texts: list[str],
+    max_inputs: int,
+    max_tokens: int = _VERTEX_BATCH_TOKEN_BUDGET,
+) -> list[list[str]]:
+    """Group ``texts`` so each request stays under both Vertex caps.
+
+    A text that exceeds the whole budget on its own goes out alone, where
+    `auto_truncate` clamps it server-side.
+    """
+    batches: list[list[str]] = []
+    current_batch: list[str] = []
+    current_tokens = 0
+
+    for text in texts:
+        text_tokens = _estimate_vertex_tokens(text)
+        if current_batch and (
+            len(current_batch) >= max_inputs
+            or current_tokens + text_tokens > max_tokens
+        ):
+            batches.append(current_batch)
+            current_batch = []
+            current_tokens = 0
+
+        current_batch.append(text)
+        current_tokens += text_tokens
+
+    if current_batch:
+        batches.append(current_batch)
+
+    return batches
+
+
+def _is_vertex_token_limit_error(error: BaseException) -> bool:
+    """Match only Vertex's per-request token rejection.
+
+    The message reads "the input token count is 26720 but the model supports up
+    to 20000". Both fragments together keep this off unrelated 400s.
+    """
+    message = str(error).lower()
+    return "input token count" in message and "supports up to" in message
+
+
 def _format_vertex_embedding_text(text: str, model: str, embedding_type: str) -> str:
     if not _is_gemini_embedding_2_model(model):
         return text
@@ -707,17 +775,7 @@ class CloudEmbedding:
 
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
             content_requests: list[Any] = [
-                genai_types.Content(
-                    parts=[
-                        genai_types.Part(
-                            text=_format_vertex_embedding_text(
-                                text=text,
-                                model=resolved_model,
-                                embedding_type=embedding_type,
-                            )
-                        )
-                    ]
-                )
+                genai_types.Content(parts=[genai_types.Part(text=text)])
                 for text in batch_texts
             ]
             response = await self.policy.send_async(
@@ -740,27 +798,67 @@ class CloudEmbedding:
                 embeddings.append(embedding.values)
             return embeddings
 
+        async def _embed_batch_splitting_on_overflow(
+            batch_texts: list[str],
+        ) -> list[Embedding]:
+            """Send a batch, halving it if Vertex still reports a token overflow.
+
+            The budget above is an estimate, so it can under-count. Only the
+            token-limit rejection is retried; every other error propagates.
+            """
+            try:
+                return await _embed_batch(batch_texts)
+            except Exception as e:
+                if len(batch_texts) == 1 or not _is_vertex_token_limit_error(e):
+                    raise
+
+                midpoint = len(batch_texts) // 2
+                logger.warning(
+                    "VertexAI rejected a batch of %s inputs on token count; "
+                    "splitting and retrying: %s",
+                    len(batch_texts),
+                    e,
+                )
+                first_half = await _embed_batch_splitting_on_overflow(
+                    batch_texts[:midpoint]
+                )
+                second_half = await _embed_batch_splitting_on_overflow(
+                    batch_texts[midpoint:]
+                )
+                return first_half + second_half
+
+        # Format up front so the token budget below measures what is actually
+        # sent: gemini-embedding-2 carries an instruction prefix.
+        formatted_texts = [
+            _format_vertex_embedding_text(
+                text=text,
+                model=resolved_model,
+                embedding_type=embedding_type,
+            )
+            for text in texts
+        ]
+
         # Process VertexAI batches sequentially to avoid additional intra-task fanout.
         # The higher-level thread pool already provides concurrency; running these
         # requests in parallel here was causing excessive memory usage.
-        batch_size = (
+        max_inputs = (
             1
             if _is_gemini_embedding_2_model(resolved_model)
             else VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
         )
-        batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
+        batches = _batch_texts_for_vertex(formatted_texts, max_inputs=max_inputs)
         all_embeddings: list[Embedding] = []
 
         logger.debug(
-            "VertexAI embedding: processing %s texts in %s batches (batch_size=%s)",
+            "VertexAI embedding: processing %s texts in %s batches (max_inputs=%s)",
             len(texts),
             len(batches),
-            batch_size,
+            max_inputs,
         )
 
         try:
             for batch_idx, batch in enumerate(batches):
-                batch_embeddings = await _embed_batch(batch)
+                batch_embeddings = await _embed_batch_splitting_on_overflow(batch)
                 all_embeddings.extend(batch_embeddings)
 
                 # Log progress for large batches to track memory usage patterns
