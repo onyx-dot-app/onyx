@@ -493,6 +493,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
 def log_http_error(request: Request, exc: Exception) -> JSONResponse:
     status_code = getattr(exc, "status_code", 500)  # ods: ignore[getattr]
+    # Not every status_code is an HTTP status: opensearch-py's ConnectionTimeout
+    # sets "TIMEOUT" and its ConnectionError sets "N/A".
+    if not isinstance(status_code, int):
+        status_code = 500
 
     if isinstance(exc, BasicAuthenticationError):
         # For BasicAuthenticationError, just log a brief message without stack trace
