@@ -4,6 +4,7 @@ per-account provider (Zendesk) tells the agent which account it is on."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
@@ -14,7 +15,12 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import Skill
 from onyx.external_apps.providers.zendesk import ZendeskProvider
-from onyx.skills.built_in import BUILT_IN_SKILLS, BUILTIN_SKILLS_PATH
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    BUILTIN_SKILLS_PATH,
+    BuiltInSkillDefinition,
+)
+from onyx.skills.push import _add_static_builtin
 from onyx.skills.rendering import (
     render_external_app_files,
     render_external_app_skill,
@@ -59,11 +65,10 @@ def test_zendesk_skill_renders_with_the_configured_account() -> None:
     assert "https://acme.zendesk.com" in rendered
 
 
-def test_the_push_and_preview_paths_render_the_same_markdown(
+def test_file_renderer_substitutes_the_configured_account(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """One renderer for both push and preview, so a user previewing a skill
-    reads the connected account rather than the template's markers."""
+    """The file renderer resolves account markers in the skill instructions."""
 
     class _App:
         id = 1
@@ -143,6 +148,49 @@ def test_a_helper_template_is_rendered_beside_the_skill(
     assert "SKILL.md" in rendered
     # The raw templates never ship; only their rendered names do.
     assert not any(name.endswith(".template") for name in rendered)
+
+
+def test_static_and_rendered_files_share_source_exclusions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_dir = tmp_path / "zendesk"
+    source_dir.mkdir()
+    sources = {
+        "SKILL.md.template": _TEMPLATE,
+        "account.txt.template": "{{APP:base_url}}",
+        "helper.py": "print('ready')",
+        ".private/hidden.txt.template": "hidden",
+        "__pycache__/cached.txt.template": "cached",
+        ".hidden.template": "hidden",
+        ".private/hidden.py": "hidden",
+        "__pycache__/cached.py": "cached",
+        "directory.template/visible.txt.template": "visible",
+    }
+    for name, content in sources.items():
+        path = source_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    monkeypatch.setattr("onyx.skills.built_in.BUILTIN_SKILLS_PATH", tmp_path)
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: None
+    )
+    skill = cast(Skill, SimpleNamespace(id=uuid4(), name="zendesk"))
+    definition = BuiltInSkillDefinition(built_in_skill_id="zendesk")
+
+    static: dict[str, bytes] = {}
+    _add_static_builtin(static, skill, definition)
+    assert static == {"zendesk/helper.py": b"print('ready')"}
+
+    rendered = render_external_app_files(
+        cast(Session, None), skill, ExternalAppType.ZENDESK, definition.source_dir
+    )
+    assert set(rendered) == {
+        "SKILL.md",
+        "account.txt",
+        "directory.template/visible.txt",
+    }
+    assert rendered["directory.template/visible.txt"] == "visible"
 
 
 def test_rendered_files_withhold_secret_credential_fields(

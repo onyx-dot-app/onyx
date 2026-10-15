@@ -445,7 +445,8 @@ The authorize and token URLs come from
 spec: a provider whose endpoints live on the customer's own host (Zendesk's
 `<subdomain>.zendesk.com`) resolves them from the app's organization
 credentials. Both OAuth routes and the refresh path resolve them the same
-way, so a rotated subdomain moves all three together.
+way, so a rotated subdomain moves all three together. Refresh requires this
+resolved token URL; it cannot fall back to an unresolved spec template.
 
 Refresh is lazy and happens at the credential-injection seam, not on a
 schedule: `ExternalAppResolver.resolve` calls `ensure_fresh_credentials`

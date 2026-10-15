@@ -34,6 +34,7 @@ _ACCOUNT_FILE = Path(__file__).with_name("account.txt")
 # Zendesk returns ~40 fields per ticket; the rest are nulls and internal ids.
 _TICKET_FIELDS = (
     "id",
+    "result_type",
     "subject",
     "description",
     "status",
@@ -101,25 +102,14 @@ def _prune(value: Any) -> Any:
 
 
 def _slim(ticket: Any, full: bool) -> Any:
-    """A ticket cut down to the fields worth reading, unless ``--full``."""
-    if full or not isinstance(ticket, dict):
+    """Keep readable ticket fields and leave non-ticket search hits intact."""
+    if (
+        full
+        or not isinstance(ticket, dict)
+        or ticket.get("result_type") not in (None, "ticket")
+    ):
         return ticket
     return {key: ticket[key] for key in _TICKET_FIELDS if key in ticket}
-
-
-def _slim_result(result: Any, full: bool) -> Any:
-    """One search hit. Search spans tickets, users and organizations, so only a
-    ticket is cut down — slimming a user would drop its `name` and `email`.
-    `result_type` survives either way; it tells a mixed result set apart."""
-    if not isinstance(result, dict):
-        return result
-    result_type = result.get("result_type")
-    if result_type not in (None, "ticket"):
-        return result
-    slimmed = _slim(result, full)
-    if result_type is not None and isinstance(slimmed, dict):
-        slimmed["result_type"] = result_type
-    return slimmed
 
 
 def _request(
@@ -376,7 +366,7 @@ def _dispatch_read(a: argparse.Namespace, site: str) -> dict[str, Any] | None:
             "sort_order": a.sort_order,
         }
         result = _paginate(site, "/api/v2/search.json", "results", limit, params)
-        result["results"] = [_slim_result(r, a.full) for r in result["results"]]
+        result["results"] = [_slim(r, a.full) for r in result["results"]]
         return result
 
     if a.cmd == "ticket":

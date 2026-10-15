@@ -238,17 +238,19 @@ Zendesk account's base URL), and fills `{{ACTION_AVAILABILITY_SECTION}}` with a 
 actions are unavailable and should not be attempted" list built from
 `build_action_availability_section`: cloud-withheld actions plus the admin's
 stored `DENY` overrides (`external_apps/providers/registry.py:action_policy_views`).
-Any other `*.template` sibling in the directory is rendered the same way and
-shipped under its de-suffixed name (`rendering.py:render_external_app_files`),
-which is how a bundled helper gets per-app config baked in; `_is_excluded`
-keeps the raw templates out of the sandbox either way. The library preview
+Other `*.template` files substitute only `{{APP:<key>}}` values and ship without
+the `.template` suffix (`rendering.py:render_external_app_files`). They do not
+process cloud or action markers, or reject unresolved markers. This gives bundled
+helpers their account configuration. Both static and template traversal use
+`content.py:iter_builtin_skill_files`, which excludes hidden paths, Python cache
+paths, and directories. The static-file loader skips raw template sources. The library preview
 calls the same renderer
-(`server/features/skill/response_helpers.py:_builtin_instructions`), so what a
+(`server/features/skill/response_helpers.py:skill_preview_response`), so what a
 user reads in the preview is what the agent gets — not the raw markers.
 Only `DENY` is surfaced; `ALWAYS` and `ASK` actions are left undocumented
 here because the skill body already covers them and `ASK` is handled at call
 time by the sandbox proxy (`[[craft-external-apps]]`). An unresolved
-`{{...}}` placeholder after rendering raises rather than shipping broken
+`{{...}}` placeholder in rendered `SKILL.md` raises rather than shipping broken
 markup to the agent (`rendering.py:render_external_app_skill`, the trailing
 `if "{{" in rendered` check). This whole mechanism matches
 `docs/craft/features/external-apps/external-app-skill-action-availability.md`
@@ -430,7 +432,7 @@ for content that never landed.
 
 | If your change… | Also check |
 |---|---|
-| adds a built-in skill | `built_in.py:_REGISTRY` entry, its `builtin/<id>/` directory and `SKILL.md`, whether it needs `is_available`, and whether a new template needs a renderer branch in `push.py:_render_template` (and, with it, the preview path in `response_helpers.py:_builtin_instructions`) |
+| adds a built-in skill | `built_in.py:_REGISTRY` entry, its `builtin/<id>/` directory and `SKILL.md`, whether it needs `is_available`, and whether a new template needs a renderer branch in `push.py:_render_template` (and, with it, the preview path in `response_helpers.py:skill_preview_response`) |
 | changes the bundle format (zip layout, `SKILL.md` frontmatter shape) | `bundle.py` (`normalize_custom_bundle`, `_validated_bundle_path`), `metadata.py` (`SkillMetadata`), `validation.py`, and every existing stored custom skill's bundle (a schema tightening can retroactively invalidate real rows) |
 | changes the hash inputs (`compute_skill_runtime_hash`, `_assemble_fileset`, `build_connectable_apps_list`) | confirm the new input is actually folded into the hash bytes, or a real content change won't mark sandboxes/sessions stale; also check `[[craft-sessions]]`'s `session_runtime_stale` still reads the right fields |
 | changes app coupling (`ExternalApp__Skill`, `EXTERNAL_APP_SKILL_ID_TO_APP_TYPE`, `get_skill_external_app_dependencies`) | `[[craft-external-apps]]`'s action-policy views, `db/skill.py:list_runtime_skills_for_user`'s readiness filter, and `response_helpers.py`'s dependency response shown in the UI |

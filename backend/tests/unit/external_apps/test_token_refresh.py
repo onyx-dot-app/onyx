@@ -9,12 +9,16 @@ import requests
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.exc import SQLAlchemyError
 
+from onyx.db.enums import ExternalAppType
 from onyx.external_apps import token_refresh as tr
 from onyx.external_apps.providers.base import (
     TokenRefreshTerminalError,
     TokenRefreshTransientError,
 )
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
+from onyx.external_apps.providers.zendesk import ZendeskProvider
+
+_GOOGLE_TOKEN_URL = GoogleCalendarProvider().resolve_oauth_endpoints({}).token_url
 
 # ---------------------------------------------------------------------------
 # Provider.refresh_credentials (RFC-6749 default on OAuthExternalAppProvider)
@@ -45,7 +49,10 @@ def test_refresh_maps_response_and_carries_refresh_token(
         _response(200, {"access_token": "new", "expires_in": 3600}),
     )
     result = GoogleCalendarProvider().refresh_credentials(
-        {"access_token": "old", "refresh_token": "rt"}, "cid", "secret"
+        {"access_token": "old", "refresh_token": "rt"},
+        "cid",
+        "secret",
+        token_url=_GOOGLE_TOKEN_URL,
     )
     assert result["access_token"] == "new"
     assert result["expires_in"] == 3600
@@ -61,7 +68,7 @@ def test_refresh_uses_rotated_refresh_token(monkeypatch: pytest.MonkeyPatch) -> 
         _response(200, {"access_token": "new", "refresh_token": "rt2"}),
     )
     result = GoogleCalendarProvider().refresh_credentials(
-        {"refresh_token": "rt"}, "cid", "secret"
+        {"refresh_token": "rt"}, "cid", "secret", token_url=_GOOGLE_TOKEN_URL
     )
     assert result["refresh_token"] == "rt2"
 
@@ -75,7 +82,9 @@ def test_refresh_preserves_connect_time_metadata(
         monkeypatch, _response(200, {"access_token": "new", "expires_in": 3600})
     )
     stored = {"access_token": "old", "refresh_token": "rt", "team_id": "T1"}
-    result = GoogleCalendarProvider().refresh_credentials(stored, "cid", "secret")
+    result = GoogleCalendarProvider().refresh_credentials(
+        stored, "cid", "secret", token_url=_GOOGLE_TOKEN_URL
+    )
     assert result["access_token"] == "new"  # response wins
     assert result["team_id"] == "T1"  # connect-time-only field preserved
     assert result["refresh_token"] == "rt"  # carried forward via the merge
@@ -87,14 +96,18 @@ def test_refresh_missing_refresh_token_is_terminal(
     called = MagicMock()
     monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", called)
     with pytest.raises(TokenRefreshTerminalError):
-        GoogleCalendarProvider().refresh_credentials({"access_token": "a"}, "c", "s")
+        GoogleCalendarProvider().refresh_credentials(
+            {"access_token": "a"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
     called.assert_not_called()
 
 
 def test_refresh_invalid_grant_is_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_post(monkeypatch, _response(400, {"error": "invalid_grant"}))
     with pytest.raises(TokenRefreshTerminalError):
-        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+        GoogleCalendarProvider().refresh_credentials(
+            {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
 
 
 @pytest.mark.parametrize(
@@ -109,7 +122,9 @@ def test_refresh_client_and_request_errors_are_transient(
     misconfigured client, and clearing would force every affected user to reconnect."""
     _patch_post(monkeypatch, _response(400, {"error": error_code}))
     with pytest.raises(TokenRefreshTransientError):
-        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+        GoogleCalendarProvider().refresh_credentials(
+            {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
 
 
 def test_refresh_invalid_grant_with_description_is_terminal(
@@ -129,13 +144,17 @@ def test_refresh_invalid_grant_with_description_is_terminal(
         ),
     )
     with pytest.raises(TokenRefreshTerminalError):
-        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+        GoogleCalendarProvider().refresh_credentials(
+            {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
 
 
 def test_refresh_5xx_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_post(monkeypatch, _response(503, {"error": "server_error"}))
     with pytest.raises(TokenRefreshTransientError):
-        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+        GoogleCalendarProvider().refresh_credentials(
+            {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
 
 
 def test_refresh_network_error_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,7 +163,9 @@ def test_refresh_network_error_is_transient(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _boom)
     with pytest.raises(TokenRefreshTransientError):
-        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+        GoogleCalendarProvider().refresh_credentials(
+            {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
 
 
 def _raw_response(status_code: int, raw_body: Any) -> requests.Response:
@@ -165,7 +186,9 @@ def test_refresh_non_object_error_body_is_transient(
     terminal/transient handling."""
     _patch_post(monkeypatch, _raw_response(502, raw_body))
     with pytest.raises(TokenRefreshTransientError):
-        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+        GoogleCalendarProvider().refresh_credentials(
+            {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +229,7 @@ def test_provider_overrides_only_the_refresh_request(
 
     captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
     result = _ResourceProvider().refresh_credentials(
-        {"refresh_token": "rt"}, "cid", "secret"
+        {"refresh_token": "rt"}, "cid", "secret", token_url=_GOOGLE_TOKEN_URL
     )
     assert captured["data"]["resource"] == "r"  # the override took effect
     assert captured["data"]["grant_type"] == "refresh_token"  # inherited default
@@ -216,19 +239,21 @@ def test_provider_overrides_only_the_refresh_request(
 def test_refresh_posts_to_a_per_account_token_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The caller resolves a per-account token endpoint; the spec's URL is
-    only the default."""
+    """Refresh uses the endpoint resolved for the configured Zendesk account."""
     captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
-    GoogleCalendarProvider().refresh_credentials(
+    provider = ZendeskProvider()
+    provider.refresh_credentials(
         {"refresh_token": "rt"},
         "cid",
         "secret",
-        token_url="https://acme.zendesk.com/oauth/tokens",
+        token_url=provider.resolve_oauth_endpoints({"subdomain": "acme"}).token_url,
     )
     assert captured["url"] == "https://acme.zendesk.com/oauth/tokens"
 
     captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
-    GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+    GoogleCalendarProvider().refresh_credentials(
+        {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+    )
     assert captured["url"] == GoogleCalendarProvider.spec.oauth.token_url
 
 
@@ -242,13 +267,17 @@ def test_refresh_json_encoded_sends_exactly_one_body(
         refresh_json_encoded = True
 
     captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
-    _JsonProvider().refresh_credentials({"refresh_token": "rt"}, "cid", "secret")
+    _JsonProvider().refresh_credentials(
+        {"refresh_token": "rt"}, "cid", "secret", token_url=_GOOGLE_TOKEN_URL
+    )
     assert captured["data"] is None
     assert captured["json"]["grant_type"] == "refresh_token"
     assert captured["headers"]["Content-Type"] == "application/json"
 
     captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
-    GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+    GoogleCalendarProvider().refresh_credentials(
+        {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+    )
     assert captured["json"] is None
     assert captured["data"]["grant_type"] == "refresh_token"
 
@@ -264,12 +293,16 @@ def test_provider_overrides_only_the_terminal_error_set(
 
     _patch_post(monkeypatch, _response(400, {"error": "consent_required"}))
     with pytest.raises(TokenRefreshTerminalError):
-        _StrictProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+        _StrictProvider().refresh_credentials(
+            {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
 
     # `invalid_grant` is no longer terminal for this provider → transient.
     _patch_post(monkeypatch, _response(400, {"error": "invalid_grant"}))
     with pytest.raises(TokenRefreshTransientError):
-        _StrictProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+        _StrictProvider().refresh_credentials(
+            {"refresh_token": "rt"}, "c", "s", token_url=_GOOGLE_TOKEN_URL
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +358,10 @@ def _setup(
         "get_external_app_user_credential",
         MagicMock(side_effect=[_cred(c) for c in creds_sequence]),
     )
-    monkeypatch.setattr(tr, "_client_credentials", lambda _app: ("cid", "secret"))
+    app.organization_credentials.get_value.return_value = {
+        "client_id": "cid",
+        "client_secret": "secret",
+    }
     upsert = MagicMock()
     disconnect = MagicMock()
     push = MagicMock()
@@ -456,3 +492,53 @@ def test_ensure_fresh_noop_for_non_oauth_app(monkeypatch: pytest.MonkeyPatch) ->
     _run()
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "org_credentials, expected_url",
+    [
+        (
+            {
+                "subdomain": "https://ACME.zendesk.com/agent",
+                "client_id": "cid",
+                "client_secret": "secret",
+            },
+            "https://acme.zendesk.com/oauth/tokens",
+        ),
+        (
+            {
+                "subdomain": "acme.example.com",
+                "client_id": "cid",
+                "client_secret": "secret",
+            },
+            None,
+        ),
+        ({"client_id": "cid", "client_secret": "secret"}, None),
+        ({"subdomain": "acme", "client_id": "cid"}, None),
+    ],
+)
+def test_load_refresh_inputs_resolves_zendesk_account(
+    monkeypatch: pytest.MonkeyPatch,
+    org_credentials: dict[str, str],
+    expected_url: str | None,
+) -> None:
+    app = MagicMock()
+    app.app_type = ExternalAppType.ZENDESK
+    app.organization_credentials.get_value.return_value = org_credentials
+    stored = _stale_creds()
+    monkeypatch.setattr(tr, "get_external_app_by_id", lambda *_a, **_k: app)
+    monkeypatch.setattr(
+        tr, "get_external_app_user_credential", lambda *_a, **_k: _cred(stored)
+    )
+
+    inputs = tr._load_refresh_inputs(MagicMock(), 1, uuid4())
+
+    if expected_url is None:
+        assert inputs is None
+    else:
+        assert inputs is not None
+        provider, loaded_stored, client_id, client_secret, token_url = inputs
+        assert isinstance(provider, ZendeskProvider)
+        assert loaded_stored == stored
+        assert (client_id, client_secret) == ("cid", "secret")
+        assert token_url == expected_url

@@ -4,7 +4,6 @@ import hashlib
 import io
 import zipfile
 from collections.abc import Iterable
-from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -36,6 +35,8 @@ from onyx.skills.built_in import (
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
 )
+from onyx.skills.bundle import TEMPLATE_SUFFIX
+from onyx.skills.content import iter_builtin_skill_files
 from onyx.skills.rendering import (
     render_company_search_skill,
     render_external_app_files,
@@ -49,8 +50,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 SKILLS_MOUNT_PATH = "/workspace/managed/skills"
-
-_EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
 
 
 def compute_skill_runtime_hash(
@@ -74,23 +73,13 @@ def compute_skill_runtime_hash(
     return digest.hexdigest()
 
 
-def _is_excluded(path: Path, source_dir: Path) -> bool:
-    rel = path.relative_to(source_dir)
-    for part in rel.parts:
-        if part in _EXCLUDED_DIR_NAMES or part.startswith("."):
-            return True
-    # Template sources are rendered separately; never ship them raw.
-    if path.suffix == ".template":
-        return True
-    return False
-
-
 def _add_static_builtin(
     files: FileSet, skill: Skill, definition: BuiltInSkillDefinition
 ) -> None:
     source_dir = definition.source_dir
-    for path in source_dir.rglob("*"):
-        if not path.is_file() or _is_excluded(path, source_dir):
+    for path in iter_builtin_skill_files(source_dir):
+        # Template sources are rendered separately; never ship them raw.
+        if path.suffix == TEMPLATE_SUFFIX:
             continue
         rel = path.relative_to(source_dir)
         files[f"{skill.name}/{rel.as_posix()}"] = path.read_bytes()

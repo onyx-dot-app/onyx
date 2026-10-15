@@ -21,7 +21,6 @@ from onyx.db.external_app import (
     get_external_app_user_credential,
     upsert_external_app_user_credential,
 )
-from onyx.db.models import ExternalApp
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import (
     OAuthExternalAppProvider,
@@ -165,17 +164,16 @@ def _load_refresh_inputs(
     if stored is None or not needs_refresh(stored, datetime.now(timezone.utc)):
         return None
 
-    client = _client_credentials(app)
-    if client is None:
+    org_credentials = app.organization_credentials.get_value(apply_mask=False)
+    client_id = org_credentials.get("client_id")
+    client_secret = org_credentials.get("client_secret")
+    if not client_id or not client_secret:
         logger.warning(
             "ea_token_refresh.missing_client_creds external_app_id=%s", external_app_id
         )
         return None
-    client_id, client_secret = client
     try:
-        token_url = provider.resolve_oauth_endpoints(
-            app.organization_credentials.get_value(apply_mask=False)
-        ).token_url
+        token_url = provider.resolve_oauth_endpoints(org_credentials).token_url
     except OnyxError as exc:
         # Nothing to POST to, so keep the existing token rather than clear it.
         logger.warning(
@@ -197,13 +195,3 @@ def _read_stored_credentials(
     if user_cred is None:
         return None
     return user_cred.user_credentials.get_value(apply_mask=False)
-
-
-def _client_credentials(app: ExternalApp) -> tuple[str, str] | None:
-    """The app's OAuth client_id/client_secret, or None if an admin hasn't set them."""
-    org_credentials = app.organization_credentials.get_value(apply_mask=False)
-    client_id = org_credentials.get("client_id")
-    client_secret = org_credentials.get("client_secret")
-    if not client_id or not client_secret:
-        return None
-    return client_id, client_secret

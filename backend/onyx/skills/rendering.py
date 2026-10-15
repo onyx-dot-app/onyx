@@ -24,6 +24,7 @@ from onyx.external_apps.providers.registry import (
     withheld_on_cloud,
 )
 from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
+from onyx.skills.content import iter_builtin_skill_files
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -235,8 +236,8 @@ def render_external_app_files(
             (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, stored, values
         )
     }
-    for path in sorted(source_dir.rglob(f"*{TEMPLATE_SUFFIX}")):
-        if path.name == _SKILL_TEMPLATE_NAME:
+    for path in iter_builtin_skill_files(source_dir):
+        if path.suffix != TEMPLATE_SUFFIX or path == source_dir / _SKILL_TEMPLATE_NAME:
             continue
         name = path.relative_to(source_dir).with_suffix("").as_posix()
         rendered[name] = substitute_app_values(path.read_text(), values)

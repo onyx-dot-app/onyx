@@ -372,7 +372,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         client_id: str,
         client_secret: str,
         *,
-        token_url: str | None = None,
+        token_url: str,
     ) -> dict[str, Any]:
         """Exchange the stored refresh token for a fresh access token (RFC-6749).
 
@@ -395,7 +395,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         json_encoded = self.refresh_json_encoded
         try:
             response = requests.post(
-                token_url or self.spec.oauth.token_url,
+                token_url,
                 # Ask for JSON so providers that default to form-encoded
                 # refresh responses (e.g. GitHub) still parse via response.json().
                 headers={

@@ -264,27 +264,18 @@ def test_prune_keeps_false_and_zero() -> None:
 def test_search_only_slims_ticket_hits() -> None:
     """Cutting a user to the ticket field list drops its `name` and `email`."""
     user = {"result_type": "user", "id": 7, "name": "Ada", "email": "a@b.co"}
-    assert zendesk._slim_result(user, full=False) == user
+    assert zendesk._slim(user, full=False) == user
+    organization = {"result_type": "organization", "id": 8, "name": "Acme"}
+    assert zendesk._slim(organization, full=False) == organization
 
     ticket = {"result_type": "ticket", "id": 1, "subject": "s", "ticket_form_id": 9}
-    assert zendesk._slim_result(ticket, full=False) == {
+    assert zendesk._slim(ticket, full=False) == {
         "id": 1,
         "subject": "s",
         "result_type": "ticket",
     }
 
-    # A payload with no result_type (a plain ticket list) still slims.
-    assert zendesk._slim_result({"id": 1, "ticket_form_id": 9}, full=False) == {"id": 1}
-
-
-def test_search_keeps_result_type_on_a_slimmed_ticket() -> None:
-    """`result_type` tells a mixed result set apart, so it survives."""
-    hit = {"result_type": "ticket", "id": 1, "subject": "s", "ticket_form_id": 9}
-    assert zendesk._slim_result(hit, full=False) == {
-        "id": 1,
-        "subject": "s",
-        "result_type": "ticket",
-    }
+    assert zendesk._slim(ticket, full=True) == ticket
 
 
 def test_slim_keeps_the_readable_subset_unless_full() -> None:
