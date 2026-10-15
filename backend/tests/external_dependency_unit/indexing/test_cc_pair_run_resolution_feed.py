@@ -3,6 +3,7 @@ failed permission sync leave the failures feed and show under resolved with
 their status kept, a resolved run with open document errors moves the same way
 within the errors level, and only a caller who operates the pair resolves."""
 
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -38,7 +39,8 @@ from onyx.server.documents.models import (
     CCPairRunsResolveRequest,
     CCPairRunsResponse,
 )
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 
 # The perm sync kinds come from the EE-only sync_params helpers.
 pytestmark = pytest.mark.usefixtures("enable_ee")
@@ -47,7 +49,17 @@ _T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _FAILED = [CCPairRunStatusGroup.FAILED]
 
 
-def _create_cc_pair(db_session: Session) -> ConnectorCredentialPair:
+@pytest.fixture
+def admin(db_session: Session) -> Generator[User, None, None]:
+    user = create_test_user(db_session, "resolution_admin", is_admin=True)
+    yield user
+    db_session.rollback()
+    delete_test_user(db_session, user)
+    db_session.commit()
+
+
+@pytest.fixture
+def cc_pair(db_session: Session) -> Generator[ConnectorCredentialPair, None, None]:
     owner = create_test_user(db_session, "resolution_owner")
     connector = Connector(
         name="Resolution Test Connector",
@@ -61,16 +73,26 @@ def _create_cc_pair(db_session: Session) -> ConnectorCredentialPair:
     credential = Credential(credential_json={}, user_id=owner.id, admin_public=True)
     db_session.add(credential)
     db_session.flush()
-    cc_pair = ConnectorCredentialPair(
+    pair = ConnectorCredentialPair(
         connector_id=connector.id,
         credential_id=credential.id,
         name="Resolution Test Pair",
         status=ConnectorCredentialPairStatus.ACTIVE,
         access_type=AccessType.SYNC,
     )
-    db_session.add(cc_pair)
+    db_session.add(pair)
     db_session.commit()
-    return cc_pair
+    yield pair
+    db_session.rollback()
+    # IndexAttemptError has no FK cascade, so its rows go first.
+    for model in (IndexAttemptError, IndexAttempt, DocPermissionSyncAttempt):
+        db_session.query(model).filter(
+            model.connector_credential_pair_id == pair.id
+        ).delete(synchronize_session="fetch")
+    db_session.commit()
+    cleanup_cc_pair(db_session, pair)
+    delete_test_user(db_session, owner)
+    db_session.commit()
 
 
 def _index_attempt(
@@ -151,10 +173,8 @@ def _resolve(
 
 
 def test_resolved_failures_leave_the_failures_feed_and_keep_their_status(
-    db_session: Session,
+    db_session: Session, admin: User, cc_pair: ConnectorCredentialPair
 ) -> None:
-    admin = create_test_user(db_session, "resolution_admin", is_admin=True)
-    cc_pair = _create_cc_pair(db_session)
     index = _index_attempt(db_session, cc_pair, 0, IndexingStatus.FAILED)
     doc_sync = _doc_sync(db_session, cc_pair, 1)
     both = [
@@ -180,10 +200,8 @@ def test_resolved_failures_leave_the_failures_feed_and_keep_their_status(
 
 
 def test_a_resolved_run_with_open_doc_errors_stays_in_the_errors_level(
-    db_session: Session,
+    db_session: Session, admin: User, cc_pair: ConnectorCredentialPair
 ) -> None:
-    admin = create_test_user(db_session, "resolution_admin", is_admin=True)
-    cc_pair = _create_cc_pair(db_session)
     attempt = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     db_session.add(
         IndexAttemptError(
@@ -208,9 +226,9 @@ def test_a_resolved_run_with_open_doc_errors_stays_in_the_errors_level(
     assert run.attempt.open_doc_error_count == 1
 
 
-def test_resolve_refuses_a_run_with_nothing_open(db_session: Session) -> None:
-    admin = create_test_user(db_session, "resolution_admin", is_admin=True)
-    cc_pair = _create_cc_pair(db_session)
+def test_resolve_refuses_a_run_with_nothing_open(
+    db_session: Session, admin: User, cc_pair: ConnectorCredentialPair
+) -> None:
     attempt = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
 
     with pytest.raises(OnyxError) as refused:
@@ -220,11 +238,9 @@ def test_resolve_refuses_a_run_with_nothing_open(db_session: Session) -> None:
 
 
 def test_resolve_refuses_a_caller_who_cannot_operate_the_pair(
-    db_session: Session,
+    db_session: Session, admin: User, cc_pair: ConnectorCredentialPair
 ) -> None:
-    admin = create_test_user(db_session, "resolution_admin", is_admin=True)
     reader = create_test_user(db_session, "resolution_reader")
-    cc_pair = _create_cc_pair(db_session)
     attempt = _index_attempt(db_session, cc_pair, 0, IndexingStatus.FAILED)
     key = (CCPairRunKind.INDEXING, attempt.id)
 
@@ -234,3 +250,5 @@ def test_resolve_refuses_a_caller_who_cannot_operate_the_pair(
     assert refused.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     live = _runs(db_session, admin, cc_pair, _FAILED, None, False)
     assert _keys(live) == [key]
+    delete_test_user(db_session, reader)
+    db_session.commit()
