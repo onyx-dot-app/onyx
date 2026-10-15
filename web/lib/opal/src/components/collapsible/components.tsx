@@ -3,7 +3,8 @@
 import "@opal/components/collapsible/styles.css";
 import { createContext, useContext, useId, useState } from "react";
 import { Slot } from "@radix-ui/react-slot";
-import type { RichStr } from "@opal/types";
+import type { RichStr, Spacing } from "@opal/types";
+import { spacingToRem } from "@opal/shared";
 import { ContentAction, Section } from "@opal/layouts";
 import { Button, type TagProps } from "@opal/components";
 import { Fold } from "@opal/components/fold/components";
@@ -28,34 +29,53 @@ interface CollapsibleProps {
   children?: React.ReactNode;
 }
 
+/**
+ * A titled section: a header with a title, description and fold button, over
+ * a body that opens and closes. It is a preset of the composable parts below:
+ * `Collapsible.Root` holds the state, and the body is a `Collapsible.Content`
+ * with `paddingTop={3}`.
+ */
 function CollapsibleSection({
+  defaultOpen = true,
+  open,
+  onOpenChange,
+  disabled = false,
+  ...props
+}: CollapsibleProps) {
+  return (
+    <CollapsibleRoot
+      open={open}
+      onOpenChange={onOpenChange}
+      defaultOpen={defaultOpen}
+      disabled={disabled}
+    >
+      <CollapsibleSectionLayout disabled={disabled} {...props} />
+    </CollapsibleRoot>
+  );
+}
+
+type CollapsibleSectionLayoutProps = Omit<
+  CollapsibleProps,
+  "open" | "onOpenChange" | "defaultOpen"
+>;
+
+/** The section's header and body, reading the state from its root. */
+function CollapsibleSectionLayout({
   title,
   description,
   tag,
-  open: openProp,
-  onOpenChange,
-  defaultOpen = true,
   disabled = false,
   rightChildren,
   children,
-}: CollapsibleProps) {
+}: CollapsibleSectionLayoutProps) {
   const strings = useOpalStrings();
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const { open, toggle, contentId } = useCollapsibleContext("Section");
   const [hovered, setHovered] = useState(false);
   const [focusVisible, setFocusVisible] = useState(false);
-  const open = openProp ?? uncontrolledOpen;
   // The body renders from the first open and then stays mounted, so a closed
   // section does no work until it is opened and later closes still animate.
   const [hasOpened, setHasOpened] = useState(open);
   if (open && !hasOpened) setHasOpened(true);
-  const bodyId = useId();
-
-  function toggle() {
-    if (disabled) return;
-    const next = !open;
-    if (openProp === undefined) setUncontrolledOpen(next);
-    onOpenChange?.(next);
-  }
 
   const label = open ? strings.collapsibleFold : strings.collapsibleExpand;
   const plainTitle = toPlainString(title);
@@ -123,7 +143,7 @@ function CollapsibleSection({
                   tooltip={label}
                   aria-label={accessibleLabel}
                   aria-expanded={open}
-                  aria-controls={bodyId}
+                  aria-controls={contentId}
                   onClick={toggle}
                   onFocus={(e) =>
                     setFocusVisible(e.currentTarget.matches(":focus-visible"))
@@ -135,11 +155,9 @@ function CollapsibleSection({
           }
         />
       </div>
-      <Fold open={open} keepMounted id={bodyId}>
-        <div className="opal-collapsible-body-content">
-          {hasOpened && children}
-        </div>
-      </Fold>
+      <CollapsibleContent paddingTop={3} keepMounted>
+        {hasOpened && children}
+      </CollapsibleContent>
     </div>
   );
 }
@@ -172,8 +190,6 @@ interface CollapsibleRootProps {
   defaultOpen?: boolean;
   /** Locks the current open state: the trigger does not toggle. */
   disabled?: boolean;
-  /** Classes for the root `div`, which wraps the trigger and content. */
-  className?: string;
   children?: React.ReactNode;
 }
 
@@ -187,7 +203,6 @@ function CollapsibleRoot({
   onOpenChange,
   defaultOpen = false,
   disabled = false,
-  className,
   children,
 }: CollapsibleRootProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
@@ -203,9 +218,7 @@ function CollapsibleRoot({
 
   return (
     <CollapsibleContext.Provider value={{ open, toggle, contentId }}>
-      <div className={className} data-state={open ? "open" : "closed"}>
-        {children}
-      </div>
+      <div data-state={open ? "open" : "closed"}>{children}</div>
     </CollapsibleContext.Provider>
   );
 }
@@ -239,6 +252,12 @@ function CollapsibleTrigger({
 }
 
 interface CollapsibleContentProps {
+  /**
+   * Space above the content, as a spacing step (`N / 4` rem). It is inside
+   * the part that animates, so it opens and closes with the content.
+   * @default 0
+   */
+  paddingTop?: Spacing;
   /** Keep the children while closed. Off, they drop once it closes. */
   keepMounted?: boolean;
   children?: React.ReactNode;
@@ -246,13 +265,14 @@ interface CollapsibleContentProps {
 
 /** The part that opens and closes, with Opal's fold animation. */
 function CollapsibleContent({
+  paddingTop = 0,
   keepMounted,
   children,
 }: CollapsibleContentProps) {
   const { open, contentId } = useCollapsibleContext("Content");
   return (
     <Fold open={open} keepMounted={keepMounted} id={contentId}>
-      {children}
+      <div style={{ paddingTop: spacingToRem(paddingTop) }}>{children}</div>
     </Fold>
   );
 }

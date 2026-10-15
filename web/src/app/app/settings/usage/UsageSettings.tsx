@@ -297,9 +297,8 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                   key={provider}
                   open={open}
                   onOpenChange={() => toggle(provider)}
-                  className="flex flex-col"
                 >
-                  <Collapsible.Trigger className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
+                  <Collapsible.Trigger className="flex w-full flex-row items-center justify-between cursor-pointer select-none py-1.5">
                     <Text font="main-ui-action" color="text-03">
                       {provider}
                     </Text>

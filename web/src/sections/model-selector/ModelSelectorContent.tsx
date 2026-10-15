@@ -739,7 +739,6 @@ export default function ModelSelectorContent({
                         key={group.key}
                         open={open}
                         onOpenChange={() => toggleGroup(group.key)}
-                        className="flex flex-col gap-1"
                       >
                         <Collapsible.Trigger asChild>
                           <Interactive.Stateless prominence="tertiary">
@@ -781,7 +780,7 @@ export default function ModelSelectorContent({
                           </Interactive.Stateless>
                         </Collapsible.Trigger>
 
-                        <Collapsible.Content>
+                        <Collapsible.Content paddingTop={1}>
                           <Section gap={1} alignItems="stretch">
                             {group.options.map(renderModelItem)}
                           </Section>
