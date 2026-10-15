@@ -1,7 +1,7 @@
 """add heartbeat_at to permission sync attempts
 
 Revision ID: aac91dfef2c7
-Revises: e7a3c1f5b2d4
+Revises: c92b67e56ec4
 Create Date: 2026-10-13 13:10:38.273867
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "aac91dfef2c7"
-down_revision = "e7a3c1f5b2d4"
+down_revision = "c92b67e56ec4"
 branch_labels = None
 depends_on = None
 
