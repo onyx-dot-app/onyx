@@ -247,6 +247,19 @@ def test_reindex_raises_on_credential_error() -> None:
         list(connector.reindex(_failures([f"{ID_PREFIX}{ACCOUNT_ID}"])))
 
 
+def test_reindex_never_fetches_out_of_scope_type() -> None:
+    # the crawl only indexes configured parent types; a Contact id on an
+    # Account-only connector must fail without any record query
+    fake = _FakeSalesforce()
+    target = f"{ID_PREFIX}{CONTACT_ID}"
+
+    results = list(_connector(fake).reindex(_failures([target])))
+
+    assert _failed_ids(results) == {target}
+    assert not any(isinstance(r, Document) for r in results)
+    assert fake.queries == []
+
+
 def test_reindex_no_document_targets_makes_no_calls() -> None:
     fake = _FakeSalesforce()
     entity = ConnectorFailure(
