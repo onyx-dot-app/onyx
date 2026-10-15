@@ -353,8 +353,9 @@ thread takes no new Celery task. Self-hosted retries about once a minute
 (jittered) for up to six hours; cloud (`MULTI_TENANT`), whose workers all
 tenants share, backs off exponentially for up to one minute. When the wait runs
 out the request fails, and every remaining document of the batch fails without
-per-document retries. The Celery broker's `visibility_timeout` is the maximum
-wait plus an hour, so a waiting batch is not redelivered to another worker. The wait time is
+per-document retries. `docprocessing_task` acks on receipt (`acks_late=False`),
+so the broker never redelivers a waiting or slow batch to another worker; a
+duplicate delivery would count the batch twice in `completed_batches`. The wait time is
 recorded as the `EMBEDDING_RATE_LIMIT_WAIT` and `EMBEDDING_PROVIDER_THROTTLE_WAIT`
 stage metrics, which are parts of `EMBEDDING`. `encode` reads the limit once
 per call, so a change applies to the next batch. Query embeddings are never
@@ -402,7 +403,9 @@ writer of the attempt's aggregate counters:
   TTL), acquired with a bounded `CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300`
   timeout rather than an unbounded wait, specifically to avoid every docprocessing
   thread across the fleet wedging behind a lock left by a worker killed
-  mid-section. A failed acquire raises and the task is redelivered.
+  mid-section. A failed acquire raises and fails the task. Celery does not
+  redeliver a failed task: the batch file stays in storage, the heartbeat check
+  fails the attempt, and the next attempt re-issues the batch.
 - `check_cancellation_requested` / `request_cancellation` implement admin-triggered
   cancellation without Redis fencing: a boolean column on `IndexAttempt`, polled by
   both docfetching (`_check_connector_and_attempt_status`) and
@@ -717,7 +720,8 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
   caught, converted into a generic `ConnectorFailure` per document (or one
   `EntityFailure` if the batch never loaded), and the batch is marked "complete"
   with zero counts so the attempt can still reach `COMPLETED_WITH_ERRORS`. Without
-  it, the same exception fails the task outright and Celery redelivers it.
+  it, the same exception fails the task outright. Celery does not redeliver it;
+  the batch stays in storage for the next attempt's `reissue_old_batches`.
 - **The cross-batch coordination lock has a bounded acquire on purpose.**
   `CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300` exists because an earlier unbounded
   `acquire()` let one killed worker's fossil lock (held for up to

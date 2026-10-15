@@ -1,7 +1,7 @@
 """Record which failed runs of a pair an admin resolved.
 
 Revision ID: c3d9a1f4b7e2
-Revises: 6b4e821c0a93
+Revises: 9d8f310ac672
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "c3d9a1f4b7e2"
-down_revision = "6b4e821c0a93"
+down_revision = "9d8f310ac672"
 branch_labels = None
 depends_on = None
 
