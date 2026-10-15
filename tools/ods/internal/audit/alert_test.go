@@ -171,7 +171,7 @@ func writeResultFile(t *testing.T, dir, name string, blocking ...Finding) string
 	return writeResult(t, dir, name, Result{Findings: blocking, Blocking: blocking})
 }
 
-func TestSyncAlerts_opensUpdatesAndClosesIssues(t *testing.T) {
+func TestSync_opensUpdatesAndClosesIssues(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	grew := Alert{Key: "npm/next", Advisories: []Advisory{{ID: "GHSA-old"}}}
@@ -196,9 +196,10 @@ func TestSyncAlerts_opensUpdatesAndClosesIssues(t *testing.T) {
 		Finding{ID: "DEBIAN-CVE-1", Ecosystem: "Debian:13", Package: "libc6", Version: "2.41-12", Severity: SeverityCritical, Manifest: "docker.io/onyxdotapp/onyx-backend:edge"},
 	)
 
-	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps, image}, Scope: "main"})
+	res, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps, image}, Scope: "main"})
+	alerts := res.Announce
 	if err != nil {
-		t.Fatalf("SyncAlerts: %v", err)
+		t.Fatalf("Sync: %v", err)
 	}
 
 	var keys []string
@@ -245,7 +246,7 @@ func TestSyncAlerts_opensUpdatesAndClosesIssues(t *testing.T) {
 	}
 }
 
-func TestSyncAlerts_returnsRecordedAlertsAfterAFailedChange(t *testing.T) {
+func TestSync_returnsRecordedAlertsAfterAFailedChange(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	writeFixture(t, bin, "issues.json", "[]")
@@ -261,7 +262,8 @@ esac`)
 		Finding{ID: "GHSA-2", Ecosystem: "npm", Package: "next", Severity: SeverityCritical},
 	)
 
-	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}})
+	res, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}})
+	alerts := res.Announce
 
 	if err == nil || !strings.Contains(err.Error(), "HTTP 502") {
 		t.Fatalf("expected the failed create in the error, got %v", err)
@@ -271,9 +273,9 @@ esac`)
 	}
 }
 
-// TestSyncAlerts_reportsEachFailedGhCall makes one gh subcommand fail per case
+// TestSync_reportsEachFailedGhCall makes one gh subcommand fail per case
 // and checks the sync names it, keeps going, and still returns what it recorded.
-func TestSyncAlerts_reportsEachFailedGhCall(t *testing.T) {
+func TestSync_reportsEachFailedGhCall(t *testing.T) {
 	open := []map[string]any{
 		{"number": 7, "url": "u7", "body": renderAlertBody(Alert{Key: "npm/next", Advisories: []Advisory{{ID: "GHSA-old"}}})},
 		{"number": 8, "url": "u8", "body": renderAlertBody(Alert{Key: "PyPI/requests", Advisories: []Advisory{{ID: "GHSA-req"}}})},
@@ -318,7 +320,7 @@ exit 0`)
 				},
 			})
 
-			_, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}})
+			_, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("expected an error containing %q, got %v", tc.want, err)
 			}
@@ -326,36 +328,36 @@ exit 0`)
 	}
 }
 
-func TestSyncAlerts_inputErrors(t *testing.T) {
+func TestSync_inputErrors(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	dir := t.TempDir()
 	allowlist := writeFixture(t, dir, "ignores.json", `{"ignores":[]}`)
 	deps := writeResultFile(t, dir, "deps.json", Finding{ID: "GHSA-1", Ecosystem: "npm", Package: "next", Severity: SeverityCritical})
 
-	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{filepath.Join(dir, "missing.json")}, IgnoreURL: allowlist}); err == nil {
+	if _, err := Sync(SyncAlertsOptions{ResultFiles: []string{filepath.Join(dir, "missing.json")}, IgnoreURL: allowlist}); err == nil {
 		t.Fatal("expected a missing result file to fail")
 	}
 	bad := writeFixture(t, dir, "bad.json", "{not json")
-	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{bad}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to parse audit result") {
+	if _, err := Sync(SyncAlertsOptions{ResultFiles: []string{bad}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to parse audit result") {
 		t.Fatalf("expected a parse error, got %v", err)
 	}
 
 	writeFakeCommand(t, bin, "gh", "echo 'not json'")
-	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to parse cve-alert issues") {
+	if _, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to parse cve-alert issues") {
 		t.Fatalf("expected an issue list parse error, got %v", err)
 	}
 	writeFakeCommand(t, bin, "gh", "echo 'HTTP 500' >&2; exit 1")
-	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to list cve-alert issues") {
+	if _, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to list cve-alert issues") {
 		t.Fatalf("expected an issue list error, got %v", err)
 	}
 	writeFakeCommand(t, bin, "gh", `case "$1 $2" in "issue list") echo '[]' ;; "issue create") cat > /dev/null; echo "not a url" ;; esac; exit 0`)
-	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "unexpected gh issue create output") {
+	if _, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "unexpected gh issue create output") {
 		t.Fatalf("expected a bad create output error, got %v", err)
 	}
 }
 
-func TestSyncAlerts_dryRunLogsEveryPlannedChange(t *testing.T) {
+func TestSync_dryRunLogsEveryPlannedChange(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	grown := renderAlertBody(Alert{Key: "npm/next", Advisories: []Advisory{{ID: "GHSA-old"}}})
@@ -372,9 +374,10 @@ func TestSyncAlerts_dryRunLogsEveryPlannedChange(t *testing.T) {
 		Finding{ID: "GHSA-r", Ecosystem: "npm", Package: "react", Severity: SeverityCritical},
 	)
 
-	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, DryRun: true})
+	res, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}, DryRun: true})
+	alerts := res.Announce
 	if err != nil {
-		t.Fatalf("SyncAlerts: %v", err)
+		t.Fatalf("Sync: %v", err)
 	}
 	var reasons []AlertReason
 	for _, a := range alerts {
@@ -385,7 +388,7 @@ func TestSyncAlerts_dryRunLogsEveryPlannedChange(t *testing.T) {
 	}
 }
 
-func TestSyncAlerts_keepOpenClosesNothing(t *testing.T) {
+func TestSync_keepOpenClosesNothing(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	gone := Alert{Key: "npm/left-pad", Advisories: []Advisory{{ID: "GHSA-gone"}}}
@@ -397,9 +400,10 @@ func TestSyncAlerts_keepOpenClosesNothing(t *testing.T) {
 		Finding{ID: "GHSA-new", Ecosystem: "npm", Package: "next", Severity: SeverityCritical},
 	)
 
-	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, KeepOpen: true})
+	res, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}, KeepOpen: true})
+	alerts := res.Announce
 	if err != nil {
-		t.Fatalf("SyncAlerts: %v", err)
+		t.Fatalf("Sync: %v", err)
 	}
 	if len(alerts) != 1 || alerts[0].Key != "npm/next" {
 		t.Fatalf("expected the new alert, got %+v", alerts)
@@ -411,7 +415,7 @@ func TestSyncAlerts_keepOpenClosesNothing(t *testing.T) {
 	}
 }
 
-func TestSyncAlerts_appliesTheAllowlist(t *testing.T) {
+func TestSync_appliesTheAllowlist(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	ghArgs := fakeIssueGH(t, bin, []map[string]any{
@@ -430,9 +434,10 @@ func TestSyncAlerts_appliesTheAllowlist(t *testing.T) {
 	})
 	allowlist := writeFixture(t, t.TempDir(), "ignores.json", `{"ignores":[{"id":"GHSA-next","reason":"not reachable"},{"id":"PYSEC-flask","reason":"not reachable"}]}`)
 
-	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist})
+	res, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist})
+	alerts := res.Announce
 	if err != nil {
-		t.Fatalf("SyncAlerts: %v", err)
+		t.Fatalf("Sync: %v", err)
 	}
 	if len(alerts) != 0 {
 		t.Fatalf("expected no alerts for a suppressed advisory, got %+v", alerts)
@@ -442,13 +447,13 @@ func TestSyncAlerts_appliesTheAllowlist(t *testing.T) {
 		t.Fatalf("expected the suppressed package's issue closed, got %q", calls)
 	}
 
-	_, err = SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: filepath.Join(t.TempDir(), "missing.json")})
+	_, err = Sync(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: filepath.Join(t.TempDir(), "missing.json")})
 	if err == nil || !strings.Contains(err.Error(), "failed to fetch the allowlist") {
 		t.Fatalf("expected an unreadable allowlist to fail the sync, got %v", err)
 	}
 }
 
-func TestSyncAlerts_failsAtTheIssueLimit(t *testing.T) {
+func TestSync_failsAtTheIssueLimit(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	open := make([]map[string]any, alertIssueLimit)
@@ -458,7 +463,7 @@ func TestSyncAlerts_failsAtTheIssueLimit(t *testing.T) {
 	ghArgs := fakeIssueGH(t, bin, open)
 	deps := writeResultFile(t, t.TempDir(), "deps.json", Finding{ID: "GHSA-1", Ecosystem: "npm", Package: "next", Severity: SeverityCritical})
 
-	_, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}})
+	_, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}})
 
 	if err == nil || !strings.Contains(err.Error(), "the most a sync reads") {
 		t.Fatalf("expected the sync to refuse a possibly truncated issue list, got %v", err)
@@ -468,7 +473,7 @@ func TestSyncAlerts_failsAtTheIssueLimit(t *testing.T) {
 	}
 }
 
-func TestSyncAlerts_dryRunChangesNothing(t *testing.T) {
+func TestSync_dryRunChangesNothing(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)
 	ghArgs := fakeIssueGH(t, bin, []map[string]any{
@@ -478,9 +483,10 @@ func TestSyncAlerts_dryRunChangesNothing(t *testing.T) {
 		Finding{ID: "GHSA-new", Ecosystem: "npm", Package: "next", Severity: SeverityCritical},
 	)
 
-	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, DryRun: true})
+	res, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps}, DryRun: true})
+	alerts := res.Announce
 	if err != nil {
-		t.Fatalf("SyncAlerts: %v", err)
+		t.Fatalf("Sync: %v", err)
 	}
 	if len(alerts) != 1 || alerts[0].Key != "npm/next" || alerts[0].Issue != 0 {
 		t.Fatalf("expected one unopened alert for npm/next, got %+v", alerts)
