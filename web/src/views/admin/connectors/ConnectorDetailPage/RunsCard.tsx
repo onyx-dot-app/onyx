@@ -16,7 +16,12 @@ import { useDebouncedValue } from "@opal/hooks";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { CardLoader, IconLoader } from "@opal/loaders";
-import { SvgCheckCircle, SvgSlowMotion, SvgXOctagon } from "@opal/icons";
+import {
+  SvgCheckCircle,
+  SvgClock,
+  SvgSlowMotion,
+  SvgXOctagon,
+} from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -42,11 +47,12 @@ export const SEARCH_MAX_LENGTH = 200;
 
 const LOADER_ROWS = 3;
 
-// The header counts, each a toggle for its status group. Canceled runs get none.
+// The header counts, each a toggle for its status group.
 const COUNT_TAGS = [
   { group: "succeeded", icon: SvgCheckCircle, color: "green" },
   { group: "running", icon: IconLoader, color: "blue" },
   { group: "failed", icon: SvgXOctagon, color: "red" },
+  { group: "canceled", icon: SvgClock, color: "gray" },
 ] as const;
 
 const ALL = "all";

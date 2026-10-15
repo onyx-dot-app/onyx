@@ -2481,6 +2481,7 @@
           "running": "{count, plural, one {# Lauf aktiv} other {# Läufe aktiv}}",
           "succeeded": "{count, plural, one {# Lauf erfolgreich} other {# Läufe erfolgreich}}",
           "failed": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}",
+          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"

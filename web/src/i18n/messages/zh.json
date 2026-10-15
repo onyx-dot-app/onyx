@@ -2481,6 +2481,7 @@
           "running": "{count, plural, other {# 个运行进行中}}",
           "succeeded": "{count, plural, other {# 个运行成功}}",
           "failed": "{count, plural, other {# 个运行失败}}",
+          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# 项检查通过} other {# 项检查通过}}",
           "failedChecks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}"

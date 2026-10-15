@@ -2481,6 +2481,7 @@
           "running": "{count, plural, one {# ejecución en curso} other {# ejecuciones en curso}}",
           "succeeded": "{count, plural, one {# ejecución correcta} other {# ejecuciones correctas}}",
           "failed": "{count, plural, one {# ejecución fallida} other {# ejecuciones fallidas}}",
+          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# comprobación superada} other {# comprobaciones superadas}}",
           "failedChecks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
           "skippedChecks": "{count, plural, one {# comprobación omitida} other {# comprobaciones omitidas}}"

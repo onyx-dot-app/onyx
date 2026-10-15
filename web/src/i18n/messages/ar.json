@@ -2481,6 +2481,7 @@
           "running": "{count, plural, one {تشغيل واحد قيد التنفيذ} other {# عمليات تشغيل قيد التنفيذ}}",
           "succeeded": "{count, plural, one {نجح تشغيل واحد} other {نجحت # عمليات تشغيل}}",
           "failed": "{count, plural, one {فشل تشغيل واحد} other {فشلت # عمليات تشغيل}}",
+          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {نجح فحص واحد} other {نجح # فحوصات}}",
           "failedChecks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
           "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}"
