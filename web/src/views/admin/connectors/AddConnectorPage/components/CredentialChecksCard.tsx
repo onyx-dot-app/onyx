@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import type { CredentialRef } from "@/lib/credentials/types";
+import { CHECKS_CARD_ID } from "@/lib/connectors/checks/constants";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import { ContentAction, Section } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
@@ -27,9 +29,9 @@ import {
   SvgMinusCircle,
   SvgPlay,
   SvgRefreshCw,
-  SvgXCircle,
+  SvgXOctagon,
 } from "@opal/icons";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import type {
   CapabilityCheckResult,
@@ -43,6 +45,7 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import {
   useConnectorChecks,
   useConnectorChecksAutoRun,
+  useResetChecksOnCredentialChange,
   useConnectorChecksProgress,
 } from "@/lib/connectors/checks/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -54,7 +57,7 @@ import { useSettings } from "@/lib/settings/hooks";
 type CheckLineState = Exclude<DraftCheckStateKind, "not_applicable">;
 
 /** One check as a line of the card, finished or not. */
-type CheckLine = Pick<
+export type CheckLine = Pick<
   DraftCheckState,
   | "capability"
   | "check_id"
@@ -81,7 +84,7 @@ const CHECK_LOGS = {
   // A failed required check blocks, so `CheckLog` makes it heavy.
   failed: {
     variant: "error-light",
-    icon: SvgXCircle,
+    icon: SvgXOctagon,
     detail: "status.failed",
     font: OUTCOME_FONT,
     color: "status-error-05",
@@ -203,7 +206,7 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
     <Divider title={t(label, { count: checks.length })} foldable defaultOpen>
-      <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
+      <Section justifyContent="start" alignItems="stretch" height="fit" gap={1}>
         {checks.map((check) => (
           // The backend repeats some checks across capabilities under the
           // same ID, so the capability keeps the key unique.
@@ -217,11 +220,52 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
   );
 }
 
+export interface CheckLineGroupsProps {
+  lines: CheckLine[];
+}
+/** The lines grouped by outcome, blocking failures first. Empty groups are left out. */
+export function CheckLineGroups({ lines }: CheckLineGroupsProps) {
+  const groups = useMemo(
+    () =>
+      GROUPS.map((group) => ({
+        label: group.label,
+        checks: lines.filter((line) =>
+          (group.states as readonly CheckLineState[]).includes(line.state)
+        ),
+      })).filter((group) => group.checks.length > 0),
+    [lines]
+  );
+  return (
+    <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
+      {groups.map((group) => (
+        <CheckGroup
+          key={group.label}
+          label={group.label}
+          checks={group.checks}
+        />
+      ))}
+    </Section>
+  );
+}
+
 /**
  * The results card, grouped by outcome like a pull request's checks panel.
  * The ring and the title count every check, so a run fills them in as checks
  * finish.
  */
+/**
+ * A red stop sign, for a run that broke. Content colors its icon from its own
+ * stylesheet, so the red is an inline style; Content's sizing stays.
+ */
+function FailedToRunIcon({ style, ...props }: IconProps) {
+  return (
+    <SvgXOctagon
+      {...props}
+      style={{ ...style, color: "var(--status-error-05)" }}
+    />
+  );
+}
+
 interface CheckCardViewProps {
   status: ConnectorChecksStatus;
   /** The finished checks, in any order. */
@@ -232,11 +276,15 @@ interface CheckCardViewProps {
   inProgressCount: number;
   /** Checks waiting on a form field before they can run. */
   expectedCount: number;
+  /** Starts folded, showing only the summary line. */
+  defaultCollapsed?: boolean;
   /** The run's checks, counted per state. */
   stateCounts: Record<DraftCheckStateKind, number>;
   onRerun: () => void;
+  /** Each increment opens the card and scrolls it into view. */
+  expandRequest?: number;
 }
-function CheckCardView({
+export function CheckCardView({
   status,
   results,
   openChecks,
@@ -244,10 +292,21 @@ function CheckCardView({
   expectedCount,
   stateCounts,
   onRerun,
+  defaultCollapsed = false,
+  expandRequest = 0,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
+  // The same "Re-run Checks" label the saved account cards use.
+  const tAccount = useTranslations("admin.connectorsList.add.account");
   const format = useFormatter();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const cardRef = useRef<HTMLDivElement>(null);
+  // The card can outgrow the viewport. Centered, its failed rows still show.
+  useEffect(() => {
+    if (expandRequest === 0) return;
+    setCollapsed(false);
+    cardRef.current?.scrollIntoView({ block: "center" });
+  }, [expandRequest]);
 
   const lines: CheckLine[] = useMemo(
     () => [
@@ -259,16 +318,6 @@ function CheckCardView({
       ),
     ],
     [results, openChecks]
-  );
-  const groups = useMemo(
-    () =>
-      GROUPS.map((group) => ({
-        label: group.label,
-        checks: lines.filter((line) =>
-          (group.states as readonly CheckLineState[]).includes(line.state)
-        ),
-      })).filter((group) => group.checks.length > 0),
-    [lines]
   );
   // Failed required checks block the form or Create.
   const requiredFailed: number = lines.filter(
@@ -284,6 +333,9 @@ function CheckCardView({
   const notice: string | undefined =
     status === "failedToRun" ? t("failedToRun") : undefined;
   const hasResults: boolean = results.length > 0;
+  // A run that broke can still list checks: some finished first, or an
+  // earlier run's results stay after a failed re-run.
+  const hasRows: boolean = hasResults || openChecks.length > 0;
   const total: number = results.length + inProgressCount + expectedCount;
   const hasChecks: boolean = total > 0;
 
@@ -291,7 +343,7 @@ function CheckCardView({
   // "2 failed, 1 skipped, 5 successful". Zero counts are left out.
   const summary = useMemo(() => {
     if (notice) return notice;
-    if (!hasChecks) return isRunning ? t("running.label") : t("empty.label");
+    if (!hasChecks) return isRunning ? t("state.inProgress") : t("empty.label");
     const parts: Array<[string, number]> = [
       [t("summary.failed", { count: count("failed") }), count("failed")],
       [
@@ -322,53 +374,77 @@ function CheckCardView({
 
   const header = (
     <ContentAction
-      icon={progress.icon}
+      // A run that broke has no counts, so the ring would read as complete;
+      // a red X stands in, without dimming the title.
+      icon={notice ? FailedToRunIcon : progress.icon}
       title={t("title")}
       suffix={progress.suffix}
       // Expanded, a short state line keeps the header's height steady while
-      // the rows fold.
+      // the rows fold. A run that broke reads the same either way. Checks
+      // that wait for settings have not run, so the run is not complete.
       description={
-        collapsed
+        notice ??
+        (collapsed
           ? summary
           : isRunning || inProgressCount > 0
             ? t("state.inProgress")
-            : t("state.completed")
+            : expectedCount > 0
+              ? t("state.waiting")
+              : t("state.completed"))
       }
       sizePreset="main-content"
       variant="section"
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
-          {!collapsed && (
+          {notice ? (
+            // The way to try again, so it says what it does.
             <Button
-              icon={SvgRefreshCw}
+              rightIcon={SvgRefreshCw}
               prominence="internal"
-              tooltip={t("rerunButton.label")}
-              aria-label={t("rerunButton.label")}
               disabled={isRunning}
               onClick={onRerun}
-            />
+            >
+              {tAccount("rerunButton.label")}
+            </Button>
+          ) : (
+            !collapsed && (
+              <Button
+                icon={SvgRefreshCw}
+                prominence="internal"
+                tooltip={tAccount("rerunButton.label")}
+                aria-label={tAccount("rerunButton.label")}
+                disabled={isRunning}
+                onClick={onRerun}
+              />
+            )
           )}
           {collapsed && requiredFailed > 0 && (
             <Tag
+              icon={SvgXOctagon}
               title={t("requiredFailed", { count: requiredFailed })}
               color="red"
             />
           )}
-          <Button
-            icon={collapsed ? SvgExpand : SvgFold}
-            // Folded, the card hovers grey itself; tertiary matches that
-            // grey, where internal would paint a white square on it.
-            prominence={collapsed ? "tertiary" : "internal"}
-            tooltip={collapsed ? t("foldButton.expand") : t("foldButton.fold")}
-            aria-label={
-              collapsed ? t("foldButton.expand") : t("foldButton.fold")
-            }
-            aria-expanded={!collapsed}
-            // Folded, it repeats the card's own action.
-            tabIndex={collapsed ? -1 : undefined}
-            onClick={() => setCollapsed((value) => !value)}
-          />
+          {/* Shown unless a run that broke left no rows to fold. */}
+          {(!notice || hasRows) && (
+            <Button
+              icon={collapsed ? SvgExpand : SvgFold}
+              // Folded, the card hovers grey itself; tertiary matches that
+              // grey, where internal would paint a white square on it.
+              prominence={collapsed ? "tertiary" : "internal"}
+              tooltip={
+                collapsed ? t("foldButton.expand") : t("foldButton.fold")
+              }
+              aria-label={
+                collapsed ? t("foldButton.expand") : t("foldButton.fold")
+              }
+              aria-expanded={!collapsed}
+              // Folded, it repeats the card's own action.
+              tabIndex={collapsed ? -1 : undefined}
+              onClick={() => setCollapsed((value) => !value)}
+            />
+          )}
         </Section>
       }
     />
@@ -386,9 +462,17 @@ function CheckCardView({
       padding={2}
       passive={!collapsed}
       onClick={collapsed ? () => setCollapsed(false) : undefined}
+      ref={cardRef}
+      data-testid={CHECKS_CARD_ID}
     >
       <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
         {header}
+        {/* The header shows the failure; this announces it. */}
+        {notice && (
+          <span role="alert" className="sr-only">
+            {notice}
+          </span>
+        )}
 
         <Fold open={!collapsed}>
           {/* The space below the header lives inside the fold, so a closed
@@ -400,31 +484,12 @@ function CheckCardView({
             gap={1}
             className="pt-1"
           >
-            {notice && (
-              <Text font="main-ui-body" color="status-error-05" role="alert">
-                {notice}
-              </Text>
-            )}
-
-            {hasResults || openChecks.length > 0 ? (
-              <Section
-                justifyContent="start"
-                alignItems="stretch"
-                height="fit"
-                gap={0}
-              >
-                {groups.map((group) => (
-                  <CheckGroup
-                    key={group.label}
-                    label={group.label}
-                    checks={group.checks}
-                  />
-                ))}
-              </Section>
+            {hasRows ? (
+              <CheckLineGroups lines={lines} />
             ) : (
               !notice && (
                 <Text font="main-ui-body" color="text-03">
-                  {isRunning ? t("running.label") : t("empty.label")}
+                  {isRunning ? t("state.inProgress") : t("empty.label")}
                 </Text>
               )
             )}
@@ -447,19 +512,29 @@ function CheckCardView({
  */
 export interface CredentialChecksCardProps {
   source: ConfigurableSources;
-  /** The credential the checks run with; `null` until one is usable. */
-  credentialId: number | null;
+  /** The saved credential or draft the checks run with; `null` until one is usable. */
+  credential: CredentialRef | null;
   /** Locks the Start Checks prompt until the credential section is valid. */
   locked: boolean;
+  /** Called when Start Checks starts the first run. */
+  onStart?: () => void;
+  /** Set when the form edits this pair: the checks are dry runs of it. */
+  ccPairId?: number | null;
+  /** Each increment opens the results card and scrolls it into view. */
+  expandRequest?: number;
 }
 export default function CredentialChecksCard({
   source,
-  credentialId,
+  credential,
   locked,
+  onStart,
+  ccPairId = null,
+  expandRequest = 0,
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
-  const checks = useConnectorChecks({ source, credentialId });
+  useResetChecksOnCredentialChange({ source, credential });
+  const checks = useConnectorChecks({ source, credential, ccPairId });
   useConnectorChecksAutoRun(checks);
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {
@@ -476,7 +551,14 @@ export default function CredentialChecksCard({
           center
           padding={0}
           rightChildren={
-            <Button icon={SvgPlay} disabled={locked} onClick={checks.begin}>
+            <Button
+              icon={SvgPlay}
+              disabled={locked}
+              onClick={() => {
+                checks.begin();
+                onStart?.();
+              }}
+            >
               {promptT("startButton.label")}
             </Button>
           }
@@ -493,6 +575,7 @@ export default function CredentialChecksCard({
       expectedCount={checks.expectedCount}
       stateCounts={checks.stateCounts}
       onRerun={checks.rerun}
+      expandRequest={expandRequest}
     />
   );
 }

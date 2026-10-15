@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -22,6 +24,12 @@ type ComposeOptions struct {
 	Wait          bool
 	ForceRecreate bool
 	Infra         bool
+	// Ports, when set, are the compose host port variables to write instead
+	// of scanning for free ports.
+	Ports map[string]string
+	// ExcludeServices are infra services left out of an --infra start.
+	ExcludeServices []string
+	Output          io.Writer
 }
 
 // NewComposeCommand creates a new compose command for launching docker
@@ -149,6 +157,10 @@ func profileLabel(profile string) string {
 // execDockerCompose runs a docker compose command in the correct directory with
 // optional extra environment variables.
 func execDockerCompose(args []string, extraEnv []string) error {
+	return execDockerComposeOutput(args, extraEnv, os.Stdout)
+}
+
+func execDockerComposeOutput(args []string, extraEnv []string, output io.Writer) error {
 	log.Debugf("Running: docker %v", args)
 
 	dir, err := composeDir()
@@ -157,7 +169,7 @@ func execDockerCompose(args []string, extraEnv []string) error {
 	}
 	dockerCmd := exec.Command("docker", args...)
 	dockerCmd.Dir = dir
-	dockerCmd.Stdout = os.Stdout
+	dockerCmd.Stdout = output
 	dockerCmd.Stderr = os.Stderr
 	dockerCmd.Stdin = os.Stdin
 	if len(extraEnv) > 0 {
@@ -285,11 +297,15 @@ func runCompose(profile string, opts *ComposeOptions) error {
 					return err
 				}
 			}
-			ports, err := docker.FindAvailablePorts()
-			if err != nil {
-				return fatalErrorf("Failed to find available ports: %w", err)
+			composeEnv := opts.Ports
+			if composeEnv == nil {
+				ports, err := docker.FindAvailablePorts()
+				if err != nil {
+					return fatalErrorf("Failed to find available ports: %w", err)
+				}
+				composeEnv = ports.ComposeEnv()
 			}
-			for k, v := range ports.ComposeEnv() {
+			for k, v := range composeEnv {
 				if err := setEnvValue(k, v); err != nil {
 					return err
 				}
@@ -314,7 +330,11 @@ func runCompose(profile string, opts *ComposeOptions) error {
 			args = append(args, "--force-recreate")
 		}
 		if opts.Infra {
-			args = append(args, docker.InfraServiceNames()...)
+			for _, name := range docker.InfraServiceNames() {
+				if !slices.Contains(opts.ExcludeServices, name) {
+					args = append(args, name)
+				}
+			}
 		}
 	}
 
@@ -324,7 +344,11 @@ func runCompose(profile string, opts *ComposeOptions) error {
 		action = "Stopping"
 	}
 	log.Infof("%s containers for project %q with %s configuration...", action, projName, profileLabel(profile))
-	if err := execDockerCompose(args, envForTag(opts.Tag)); err != nil {
+	output := opts.Output
+	if output == nil {
+		output = os.Stdout
+	}
+	if err := execDockerComposeOutput(args, envForTag(opts.Tag), output); err != nil {
 		return err
 	}
 

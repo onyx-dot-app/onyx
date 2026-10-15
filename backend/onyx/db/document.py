@@ -847,6 +847,55 @@ def get_document_counts_for_cc_pairs(
     ]
 
 
+def count_documents_by_cc_pair_ids(
+    db_session: Session, cc_pair_ids: list[int]
+) -> dict[int, int]:
+    """Number of documents of each cc-pair, indexed or not. cc-pairs with no
+    documents are left out."""
+    if not cc_pair_ids:
+        return {}
+    stmt = (
+        select(ConnectorCredentialPair.id, func.count())
+        .join(
+            DocumentByConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+        .group_by(ConnectorCredentialPair.id)
+    )
+    return dict(db_session.execute(stmt).tuples().all())
+
+
+def count_documents_for_cc_pair_up_to(
+    db_session: Session, cc_pair_id: int, up_to_doc_id: str
+) -> int:
+    """Number of documents of the cc-pair whose ID is <= up_to_doc_id: the
+    documents a cursor scan in ID order has passed."""
+    stmt = (
+        select(func.count())
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            ConnectorCredentialPair.id == cc_pair_id,
+            DocumentByConnectorCredentialPair.id <= up_to_doc_id,
+        )
+    )
+    return db_session.scalar(stmt) or 0
+
+
 def get_document_counts_for_all_cc_pairs(
     db_session: Session,
 ) -> Sequence[tuple[int, int, int]]:
@@ -1817,6 +1866,35 @@ def get_document_sources(
     return {doc_id: source for doc_id, source in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
+def get_document_access_types(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, set[AccessType]]:
+    """Access types of every cc_pair each document is indexed under, except
+    ones being deleted."""
+    stmt: Select[tuple[str, AccessType]] = (
+        select(
+            DocumentByConnectorCredentialPair.id,
+            ConnectorCredentialPair.access_type,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
+    )
+    access_types: dict[str, set[AccessType]] = defaultdict(set)
+    for doc_id, access_type in db_session.execute(stmt).all():
+        access_types[doc_id].add(access_type)
+    return dict(access_types)
+
+
 def fetch_chunk_counts_for_documents(
     document_ids: list[str],
     db_session: Session,
@@ -1921,3 +1999,27 @@ def delete_document_by_id__no_commit(
     cc pair associations, feedback, tags).
     """
     delete_documents_complete__no_commit(db_session, [document_id])
+
+
+def get_indexed_documents_for_cc_pair_with_id_containing(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    id_substring: str,
+) -> list[DbDocument]:
+    """The cc-pair's indexed documents whose id contains ``id_substring``
+    (matched as a literal, not as a pattern)."""
+    stmt = (
+        select(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+            DbDocument.id.contains(id_substring, autoescape=True),
+        )
+    )
+    return list(db_session.execute(stmt).scalars().all())

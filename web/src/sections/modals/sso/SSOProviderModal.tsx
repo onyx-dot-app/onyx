@@ -228,7 +228,7 @@ function ConfigInput({
   const name = `config.${field.name}`;
   const placeholder = field.placeholderKey
     ? t(field.placeholderKey)
-    : field.placeholder;
+    : undefined;
   if (field.kind === "switch") {
     return <SwitchField name={name} />;
   }
@@ -389,7 +389,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   >
                     <InputTypeInField
                       name="name"
-                      placeholder="company-a"
+                      placeholder={t("modals.provider.nameField.placeholder")}
                       variant={isEditing ? "disabled" : undefined}
                     />
                   </InputVertical>

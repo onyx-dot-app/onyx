@@ -1,11 +1,17 @@
 import type {
   Credential,
   CredentialBase,
+  CredentialCheckReport,
+  CredentialFieldValues,
+  CredentialFormValues,
+  CredentialRequest,
+  CredentialSharing,
   CredentialWithPrivateKey,
 } from "@/lib/credentials/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import type { ManageAccessEntry } from "@/lib/connectors/accessType";
+import type { ConnectorBase } from "@/lib/connectors/types";
 import {
   CREDENTIAL_NAME,
   CREDENTIAL_SOURCE,
@@ -88,6 +94,31 @@ export async function forceDeleteCredential<T>(credentialId: number) {
   });
 }
 
+/** The settings of a new connector-credential pair, as the backend reads them. */
+export function credentialPairMetadata(
+  name: string,
+  accessType?: AccessType,
+  groups?: number[],
+  autoSyncOptions?: Record<string, any>,
+  processingMode?: ProcessingMode,
+  dataAccess?: number[],
+  /** The manage groups with their roles. Given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
+): Record<string, unknown> {
+  return {
+    name,
+    access_type: accessType !== undefined ? accessType : "public",
+    // The backend takes one or the other: plain `groups` are Editors.
+    ...(manageAccess !== undefined
+      ? { groups: [], manage_access: manageAccess }
+      : { groups: groups || null }),
+    auto_sync_options: autoSyncOptions || null,
+    processing_mode: processingMode || "REGULAR",
+    // Left out, a private connector gives data access to its groups.
+    ...(dataAccess !== undefined && { data_access: dataAccess }),
+  };
+}
+
 export function linkCredential(
   connectorId: number,
   credentialId: number,
@@ -107,55 +138,52 @@ export function linkCredential(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        name,
-        access_type: accessType !== undefined ? accessType : "public",
-        // The backend takes one or the other: plain `groups` are Editors.
-        ...(manageAccess !== undefined
-          ? { groups: [], manage_access: manageAccess }
-          : { groups: groups || null }),
-        auto_sync_options: autoSyncOptions || null,
-        processing_mode: processingMode || "REGULAR",
-        // Left out, a private connector gives data access to its groups.
-        ...(dataAccess !== undefined && { data_access: dataAccess }),
-      }),
+      body: JSON.stringify(
+        credentialPairMetadata(
+          name,
+          accessType,
+          groups,
+          autoSyncOptions,
+          processingMode,
+          dataAccess,
+          manageAccess
+        )
+      ),
     }
   );
 }
 
-export function updateCredential(credentialId: number, newDetails: any) {
-  const name = newDetails.name;
-  const details = Object.fromEntries(
-    Object.entries(newDetails).filter(
+/** The stored fields a form submits, without blanks, so an untouched secret keeps its value. */
+function changedFields(values: CredentialFormValues): CredentialFieldValues {
+  return Object.fromEntries(
+    Object.entries(values).filter(
       ([key, value]) => key !== CREDENTIAL_NAME && value !== ""
     )
   );
+}
+
+export function updateCredential(
+  credentialId: number,
+  values: CredentialFormValues
+): Promise<Response> {
   return fetch(`/api/manage/admin/credential/${credentialId}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: name,
-      credential_json: details,
+      name: values.name,
+      credential_json: changedFields(values),
     }),
   });
 }
 
 export function updateCredentialWithPrivateKey(
   credentialId: number,
-  newDetails: any,
+  values: CredentialFormValues,
   privateKey: TypedFile
-) {
-  const name = newDetails.name;
-  const details = Object.fromEntries(
-    Object.entries(newDetails).filter(
-      ([key, value]) => key !== CREDENTIAL_NAME && value !== ""
-    )
-  );
+): Promise<Response> {
   const formData = new FormData();
-  formData.append(CREDENTIAL_NAME, name);
-  formData.append(CREDENTIAL_JSON, JSON.stringify(details));
+  formData.append(CREDENTIAL_NAME, values.name);
+  formData.append(CREDENTIAL_JSON, JSON.stringify(changedFields(values)));
   formData.append(CREDENTIAL_UPLOADED_FILE, privateKey.file);
   formData.append(CREDENTIAL_FIELD_KEY, privateKey.fieldKey);
   formData.append(
@@ -168,21 +196,18 @@ export function updateCredentialWithPrivateKey(
   });
 }
 
-export function swapCredential(
-  newCredentialId: number,
-  connectorId: number,
-  accessType: AccessType
-) {
-  return fetch(`/api/manage/admin/credential/swap`, {
+/**
+ * Changes who may reuse a saved credential, and its name when given: its
+ * owner or an admin who can edit it.
+ */
+export function updateCredentialSharing(
+  credentialId: number,
+  sharing: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+): Promise<Response> {
+  return fetch(`/api/manage/admin/credential/${credentialId}/sharing`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      new_credential_id: newCredentialId,
-      connector_id: connectorId,
-      access_type: accessType,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sharing),
   });
 }
 
@@ -231,4 +256,61 @@ export async function submitCredential<T>(
   } catch (error) {
     return { message: buildError(String(error)), isSuccess: false };
   }
+}
+
+/**
+ * Runs the credential's checks, or those of its pairing with `connectorId`.
+ * The run happens on a worker. Poll `SWR_KEYS.credentialCheckReports` for it.
+ */
+export async function startCredentialCheckRun(
+  credentialId: number,
+  connectorId: number | null = null
+): Promise<CredentialCheckReport> {
+  const response = await fetch(
+    `/api/manage/admin/credential/${credentialId}/capability-check`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        connectorId === null ? {} : { connector_id: connectorId }
+      ),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Credential check run request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export interface ConnectorWithCredentialRequest {
+  connector: ConnectorBase<unknown>;
+  pairing: Record<string, unknown>;
+  credential: CredentialRequest;
+  /** How a new (typed) credential is shared. */
+  credentialSharing?: CredentialSharing;
+}
+
+/**
+ * Creates a connector and pairs it with a saved credential or a new one,
+ * which this saves. A failure leaves nothing behind. The response's `data` is the
+ * new pair's id.
+ */
+export async function createConnectorWithCredential({
+  connector,
+  pairing,
+  credential,
+  credentialSharing,
+}: ConnectorWithCredentialRequest): Promise<Response> {
+  return fetch("/api/manage/admin/connector-with-credential", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      connector,
+      pairing,
+      ...credential,
+      ...(credentialSharing !== undefined && {
+        credential_sharing: credentialSharing,
+      }),
+    }),
+  });
 }

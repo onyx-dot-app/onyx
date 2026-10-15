@@ -800,12 +800,13 @@ def set_preferred_response(
         user_message_id: Primary key of the ``USER``-type ``ChatMessage`` whose
             preferred response is being set.
         preferred_assistant_message_id: Primary key of the ``ASSISTANT``-type
-            ``ChatMessage`` to prefer. Must be a direct child of ``user_message_id``.
+            ``ChatMessage`` to prefer. Must be a direct child of ``user_message_id``
+            in the same chat session.
 
     Raises:
         ValueError: If either message is not found, if ``user_message_id`` does not
-            refer to a USER message, or if the assistant message is not a direct child
-            of the user message.
+            refer to a USER message, or if the preferred response is not an
+            ASSISTANT child in the same chat session.
     """
     user_msg = db_session.get(ChatMessage, user_message_id)
     if user_msg is None:
@@ -817,6 +818,14 @@ def set_preferred_response(
     if assistant_msg is None:
         raise ValueError(
             f"Assistant message {preferred_assistant_message_id} not found"
+        )
+    if assistant_msg.message_type != MessageType.ASSISTANT:
+        raise ValueError(
+            f"Message {preferred_assistant_message_id} is not an assistant message"
+        )
+    if assistant_msg.chat_session_id != user_msg.chat_session_id:
+        raise ValueError(
+            f"Assistant message {preferred_assistant_message_id} is not in the same chat session as user message {user_message_id}"
         )
     if assistant_msg.parent_message_id != user_message_id:
         raise ValueError(

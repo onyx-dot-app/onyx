@@ -692,6 +692,7 @@ def pod_exec_async(
         if proxy_session_id is not None
         else ""
     )
+    # Publish atomically so polling cannot read a status without its body.
     script = (
         f"nohup sh -c '"
         f"curl -s -X {method}{header_args}{body_arg}{proxy_arg} "
@@ -699,7 +700,7 @@ def pod_exec_async(
         f'-o {output_path}.body -w "%{{http_code}}" {json.dumps(url)} '
         f"> {output_path}.code 2>&1; "
         f'{{ cat {output_path}.code; printf "\\n"; cat {output_path}.body; }} '
-        f"> {output_path}"
+        f"> {output_path}.tmp; mv {output_path}.tmp {output_path}"
         f"' > /dev/null 2>&1 &"
     )
     pod_exec(client, pod_name, namespace, script, container=container)

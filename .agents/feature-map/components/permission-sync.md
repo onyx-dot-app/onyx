@@ -93,7 +93,9 @@ only added to `beat_task_templates` when the build ships the EE code
 | OneDrive | `ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
 | Gmail | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
 | Zoom | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY`, but `doc_sync_func=mock_doc_sync` (a no-op; see §4.3) | no group sync |
+| Linear | `LINEAR_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` because `ConnectorRunner` passes `include_permissions` only to checkpointed connectors, so an issue stays private until the first doc sync lists it | `LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min); one group per team the token can see plus `workspace_members:<organization id>`; a public team's issues name both, a restricted sub-team's its private parent too |
 | Salesforce | none (`doc_sync_config=None`) | none; `censoring_config` only (§4.5) |
+| HubSpot | `HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` (indexing never fetches viewers, so only the doc sync grants access) | no group sync; stores the viewer emails HubSpot's permitted-users API returns |
 
 Every value is env-overridable and is additionally multiplied by
 `OnyxRuntime.get_doc_permission_sync_multiplier()` in
@@ -219,8 +221,8 @@ in every connector SDK.
 
 Perm-sync capability checks (`validate_perm_sync` probes and named checks) are
 dispatched from `ee/onyx/connectors/capability_checks.py` and `perm_sync_valid.py`. The
-check implementations live in the connector modules. Confluence, OneDrive, Outlook, and
-Slack have named perm-sync checks. See [[connectors]] §4.8.
+check implementations live in the connector modules. Confluence, Google Drive, OneDrive,
+Outlook, SharePoint, GitHub, Slack, and HubSpot have named perm-sync checks. See [[connectors]] §4.8.
 
 ### 4.2 Doc sync flow
 
@@ -234,6 +236,7 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
   CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK
     connector_permission_sync_generator_task
       create_doc_permission_sync_attempt          onyx/db/permission_sync_attempt.py
+      fails the attempt if the cc_pair is no longer perm-synced
       mark_doc_permission_sync_attempt_in_progress
       doc_sync_func(cc_pair, fetch_existing_docs_fn, fetch_existing_doc_ids_fn, callback)
         -> Generator[ElementExternalAccess]
@@ -245,6 +248,12 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
       complete_doc_permission_sync_attempt (SUCCESS or COMPLETED_WITH_ERRORS)
       on exception: _fail_doc_permission_sync_attempt, fence cleared, re-raised
 ```
+
+The manual triggers `POST /manage/admin/cc-pair/{id}/sync-permissions` and
+`/sync-groups` (`ee/onyx/server/documents/cc_pair.py`) return `INVALID_INPUT`
+for a cc_pair that is not perm-synced. The indexing pipeline
+(`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
+`external_access` unless the writing cc_pair is perm-synced.
 
 Most doc-sync implementations funnel through
 `ee/onyx/external_permissions/utils.py:generic_doc_sync`, which:
@@ -264,12 +273,15 @@ Most doc-sync implementations funnel through
    reporting it, so Onyx makes it private. This is the fail-closed default for
    the "document disappeared or the user lost access" case.
 
-Confluence, Jira, Canvas, Box, SharePoint, OneDrive, Teams, and Outlook doc_sync
-(`ee/onyx/external_permissions/{confluence,jira,canvas,box,sharepoint,onedrive,teams,outlook}/doc_sync.py`)
+Confluence, Jira, Canvas, Box, SharePoint, OneDrive, Teams, Outlook, and HubSpot doc_sync
+(`ee/onyx/external_permissions/{confluence,jira,canvas,box,sharepoint,onedrive,teams,outlook,hubspot}/doc_sync.py`)
 are thin wrappers around `generic_doc_sync`, differing only in which connector
 class and `DocumentSource` they pass. Four sources have a different
 shape: Slack and Google Drive (below), and Gmail and GitHub (own `doc_sync.py`, no
 `generic_doc_sync`; GitHub uses `fetch_all_existing_docs_fn` to re-check repository visibility).
+GitHub group sync reads the collaborators of private repositories and the members of
+the organization of internal ones, and maps each user by the public email of the
+profile. The `github_user_emails` check warns when no sampled user has one.
 
 - **Slack** (`ee/onyx/external_permissions/slack/doc_sync.py:slack_doc_sync`)
   does not use `generic_doc_sync` at all. Slack has no document-level ACL
@@ -342,8 +354,14 @@ sync safe to lag doc sync.
 ```
 beat: CHECK_FOR_EXTERNAL_GROUP_SYNC (every 20s)
   check_for_external_group_sync                  external_group_syncing/tasks.py
-    get_all_auto_sync_cc_pairs
-    _is_external_group_sync_due(cc_pair)           per cc_pair, per §2 frequency table
+    get_all_auto_sync_cc_pairs                     every perm-synced cc_pair
+    (filter in check_for_external_group_sync)      keeps only active statuses (not PAUSED,
+                                                   INVALID, DELETING); for agnostic sources
+                                                   keeps the lowest-id active cc_pair
+    is_external_group_sync_due(cc_pair)            per cc_pair, per §2 frequency table
+    get_external_group_sync_retry_after            backs off after consecutive FAILED attempts
+                                                   (request_retry_delay: 5 min doubling to 6 h);
+                                                   the manual sync endpoint ignores it
     try_creating_external_group_sync_task          fences, inserts SyncRecord, dispatches:
   CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK
     connector_external_group_sync_generator_task -> _perform_external_group_sync
@@ -380,8 +398,9 @@ access via a synced group.
 (`source_group_sync_is_cc_pair_agnostic` returns `True` for these sources in
 `sync_params.py`). `group_sync_utils.py:mark_all_relevant_cc_pairs_as_external_group_synced`
 looks up every cc_pair for that source and marks all of them synced after one
-successful run, and `permission_sync_attempt.py:get_relevant_external_group_sync_attempts_for_cc_pair`
-widens its query to the whole source for these two, with a documented caveat:
+successful run, and `permission_sync_attempt.py:relevant_external_group_sync_attempts_filter`
+(used by the run feed in `db/cc_pair_runs.py`) widens the attempt filter to
+the whole source for these two, with a documented caveat:
 two independent Confluence sites in the same deployment share one merged
 attempt history.
 
@@ -403,9 +422,15 @@ makes a domain-wide share resolvable at read time; see §5.2 and §9.
 
 Salesforce has `doc_sync_config=None` and `censoring_config` set
 (`sync_params.py:_SOURCE_TO_SYNC_CONFIG[DocumentSource.SALESFORCE]`). Per
-[[access-control]] §4.5, this makes every Salesforce document pass the ACL
-filter for everyone (`ee/onyx/access/access.py:_get_access_for_documents`,
-`is_only_censored` branch), and access is narrowed **after** retrieval instead:
+[[access-control]] §4.5, this makes every Salesforce document indexed under a
+perm-synced cc_pair pass the ACL filter for everyone
+(`ee/onyx/access/access.py:_get_access_for_documents`, `is_only_censored`
+branch, keyed on `db/document.py:get_document_access_types`), and access is
+narrowed **after** retrieval instead. Documents under only private or public
+Salesforce connectors keep those ACLs. Documents under a public connector are
+never censored, while private-only ones still are
+(`CensoringConfig.censors_private_connectors`), since older indexes hold the
+open ACL for them:
 `ee/onyx/external_permissions/salesforce/postprocessing.py:censor_salesforce_chunks`
 is invoked per user, per chunk, by
 `ee/onyx/external_permissions/post_query_censoring.py:_post_query_chunk_censoring`,

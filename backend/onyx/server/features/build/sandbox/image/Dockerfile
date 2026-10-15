@@ -17,7 +17,7 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb
 
 # Node.js source. The final image is Python-based, but the sandbox still needs
 # Node/npm/npx for MCP commands and skill-runtime packages.
-FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66 AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315 AS node_source
 ARG NPM_VERSION=11.17.0
 RUN npm install -g "npm@${NPM_VERSION}" && \
     npm cache clean --force && \
@@ -182,6 +182,15 @@ USER sandbox
 RUN curl -fsSL -o /tmp/opencode-install.sh https://opencode.ai/install && \
     bash /tmp/opencode-install.sh --version "${OPENCODE_VERSION}" --no-modify-path && \
     rm /tmp/opencode-install.sh
+# OpenCode installs this SDK in each config directory during cold initialization.
+RUN npm install --prefix /workspace/templates/opencode --ignore-scripts --no-audit --no-fund \
+    --save-exact "@opencode-ai/plugin@${OPENCODE_VERSION}" && \
+    for config_dir in /home/sandbox/.config/opencode /home/sandbox/.opencode; do \
+        mkdir -p "$config_dir" && \
+        cp -al /workspace/templates/opencode/node_modules "$config_dir/" && \
+        cp -a /workspace/templates/opencode/package.json \
+            /workspace/templates/opencode/package-lock.json "$config_dir/" || exit 1; \
+    done
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \
@@ -213,6 +222,8 @@ RUN chmod +x /workspace/firewall-init.sh
 # Per-session egress tagging plugin. Path must match
 # kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
 COPY opencode-plugins/ /workspace/opencode-plugins/
+
+COPY --chmod=0755 seed-opencode-dependencies.sh /usr/local/bin/seed-opencode-dependencies
 
 COPY browser-cli.sh /usr/local/bin/browser
 RUN chmod 0755 /usr/local/bin/browser

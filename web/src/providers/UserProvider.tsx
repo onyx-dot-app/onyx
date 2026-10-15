@@ -16,7 +16,7 @@ import {
   ThemePreference,
   Permission,
 } from "@/lib/types";
-import { hasAnyAdminPermission } from "@/lib/permissions";
+import { hasAnyAdminPermission } from "@/lib/permissions/utils";
 import { usePostHog } from "posthog-js/react";
 import { isAuthStatusError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";

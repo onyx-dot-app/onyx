@@ -2,11 +2,11 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { getSourceMetadata } from "@/lib/sources";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,

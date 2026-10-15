@@ -1,97 +1,74 @@
 "use client";
 
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageLoader } from "@opal/loaders";
-import { SourceIcon } from "@/components/SourceIcon";
-import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
-import { toast } from "@opal/layouts";
-import CredentialSection from "@/lib/credentials/components/CredentialSection";
-import Text from "@/refresh-components/texts/Text";
-import {
-  updateConnectorCredentialPairName,
-  updateConnectorCredentialPairProperty,
-} from "@/lib/connector";
-import { getCredentialSpec } from "@/lib/credentials/utils";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import Title from "@/components/ui/title";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState, use } from "react";
+import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
-  AdvancedConfigDisplay,
-  buildConfigEntries,
-  ConfigDisplay,
-} from "./ConfigDisplay";
-import DeletionErrorStatus from "./DeletionErrorStatus";
-import { IndexAttemptsTable } from "./IndexAttemptsTable";
-import InlineFileManagement from "./InlineFileManagement";
-import { SyncAttemptsTabs } from "./SyncAttemptsTabs";
-import { Section } from "@/layouts/general-layouts";
-import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
-import { triggerIndexing } from "@/lib/connectors/svc";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
-import type { CCPairFullInfo, IndexAttemptError } from "@/lib/connectors/types";
-import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
-import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
-import EditPropertyModal from "@/sections/modals/EditPropertyModal";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import { deleteCCPair } from "@/lib/documentDeletion";
-import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
-import * as Yup from "yup";
-import { AlertCircle } from "lucide-react";
-import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
-import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import { IndexAttemptSnapshot } from "@/lib/types";
-import { Spinner } from "@/components/Spinner";
-import { Callout } from "@/components/ui/callout";
-import { Card } from "@/components/ui/card";
-import { timeAgo } from "@opal/time";
-import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
-import { useReIndexModal } from "./ReIndexModal";
-import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
+  Button,
+  Divider,
+  Dropdown,
+  MessageCard,
+  Text,
+  type DropdownMenuItem,
+} from "@opal/components";
 import {
+  Content,
+  IllustrationContent,
+  PageCenter,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { IconLoader, PageLoader } from "@opal/loaders";
+import { SvgPlugBroken } from "@opal/illustrations";
+import {
+  SvgArrowLeft,
+  SvgEdit,
   SvgPauseCircle,
   SvgPlayCircle,
   SvgRefreshCw,
   SvgSettings,
   SvgTrash,
 } from "@opal/icons";
-import { useUser } from "@/providers/UserProvider";
+import { isEditableSource } from "@/lib/connectors/edit/editable";
+import { updateConnectorCredentialPairName } from "@/lib/connector";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
+import { triggerIndexing } from "@/lib/connectors/svc";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
+import type {
+  CCPairFullInfo,
+  IndexAttemptError,
+  PaginatedIndexAttempts,
+} from "@/lib/connectors/types";
+import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
+import { deleteCCPair } from "@/lib/documentDeletion";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import usePaginatedFetch from "@/hooks/usePaginatedFetch";
+import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
-import { isPermSynced } from "@/lib/connectors/accessType";
-// synchronize these validations with the SQLAlchemy connector class until we have a
-// centralized schema for both frontend and backend
-const RefreshFrequencySchema = Yup.object().shape({
-  propertyValue: Yup.number()
-    .typeError("Property value must be a valid number")
-    .integer("Property value must be an integer")
-    .min(1, "Property value must be greater than or equal to 1 minute")
-    .required("Property value is required"),
-});
+import { getSourceMetadata } from "@/lib/connectors/utils";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import IndexAttemptErrorsModal from "@/views/admin/connectors/ConnectorDetailPage/IndexAttemptErrorsModal";
+import PendingBackfills from "@/views/admin/connectors/ConnectorDetailPage/PendingBackfills";
+import StatusCard from "@/views/admin/connectors/ConnectorDetailPage/StatusCard";
+import PairChecksCard from "@/views/admin/connectors/ConnectorDetailPage/PairChecksCard";
+import AuthenticationAccountSection from "@/views/admin/connectors/ConnectorDetailPage/AuthenticationAccountSection";
+import IndexConfigurationsSection from "@/views/admin/connectors/ConnectorDetailPage/IndexConfigurationsSection";
+import SharingSettingsSection from "@/views/admin/connectors/ConnectorDetailPage/SharingSettingsSection";
+import ScheduleSection from "@/views/admin/connectors/ConnectorDetailPage/ScheduleSection";
+import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
 
-const PruneFrequencySchema = Yup.object().shape({
-  propertyValue: Yup.number()
-    .typeError("Property value must be a valid number")
-    .min(
-      0.083,
-      "Property value must be greater than or equal to 0.083 hours (5 minutes)"
-    )
-    .required("Property value is required"),
-});
-
-const ITEMS_PER_PAGE = 8;
-const PAGES_PER_BATCH = 8;
+const CC_PAIR_POLL_MS = 5000;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
-  const locale = useLocale();
+  const editT = useTranslations("admin.connectorEdit");
   const router = useRouter();
-  const { user } = useUser();
 
   const {
     data: ccPair,
@@ -100,20 +77,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = useSWR<CCPairFullInfo>(
     buildCCPairInfoUrl(ccPairId),
     errorHandlingFetcher,
-    { refreshInterval: 5000 } // 5 seconds
+    { refreshInterval: CC_PAIR_POLL_MS }
   );
 
-  const {
-    currentPageData: indexAttempts,
-    isLoading: isLoadingIndexAttempts,
-    currentPage,
-    totalPages,
-    goToPage,
-  } = usePaginatedFetch<IndexAttemptSnapshot>({
-    itemsPerPage: ITEMS_PER_PAGE,
-    pagesPerBatch: PAGES_PER_BATCH,
-    endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
-  });
+  // The error notice reads the latest attempt. The status card shares this key.
+  const { data: latestIndexAttempts } = useSWR<PaginatedIndexAttempts>(
+    SWR_KEYS.ccPairLatestIndexAttempt(ccPairId),
+    errorHandlingFetcher,
+    { refreshInterval: CC_PAIR_POLL_MS }
+  );
 
   const {
     currentPageData: indexAttemptErrorsPage,
@@ -124,16 +96,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = usePaginatedFetch<IndexAttemptError>({
     itemsPerPage: 10,
     pagesPerBatch: 1,
-    endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+    endpoint: SWR_KEYS.ccPairIndexingErrors(ccPairId),
     disableUrlSync: true,
   });
-
-  // Initialize hooks at top level to avoid conditional hook calls
-  const { showReIndexModal, ReIndexModal } = useReIndexModal(
-    ccPair?.connector?.id ?? null,
-    ccPair?.credential?.id ?? null,
-    ccPairId
-  );
 
   const {
     handleStatusChange,
@@ -146,15 +111,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
     : null;
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [editingRefreshFrequency, setEditingRefreshFrequency] = useState(false);
-  const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
-
-  const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
-    useState(false);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  // A re-index or error resolve in flight: the Manage button spins meanwhile.
+  const [busy, setBusy] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
     useState(false);
+  // Counts the status card's asks to open the checks card.
+  const [checksExpandRequest, setChecksExpandRequest] = useState(0);
   const isSchedulingConnectorDeletionRef = useRef(false);
 
   const refresh = useCallback(() => {
@@ -162,7 +125,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }, [ccPairId]);
 
   const finishConnectorDeletion = useCallback(() => {
-    router.push("/admin/indexing-status");
+    router.push(ADMIN_ROUTES.INDEXING_STATUS.path);
   }, [router]);
 
   const scheduleConnectorDeletion = useCallback(() => {
@@ -178,32 +141,19 @@ function Main({ ccPairId }: { ccPairId: number }) {
     finishConnectorDeletion();
   }, [ccPair, finishConnectorDeletion, t]);
 
-  const latestIndexAttempt = indexAttempts?.[0];
-  const canManageInlineFileConnectorFiles =
-    ccPair?.connector.source === "file" && can(ccPair, "edit");
-
+  const latestIndexAttempt = latestIndexAttempts?.items[0];
   const isResolvingErrors =
     (latestIndexAttempt?.status === "in_progress" ||
       latestIndexAttempt?.status === "not_started") &&
     latestIndexAttempt?.from_beginning &&
-    // if there are errors in the latest index attempt, we don't want to show the loader
+    // Errors in the latest attempt mean it is not the resolving run.
     !indexAttemptErrors?.items?.some(
       (error) => error.index_attempt_id === latestIndexAttempt?.id
     );
 
-  const handleStatusUpdate = async (
-    newStatus: ConnectorCredentialPairStatus
-  ) => {
-    setShowIsResolvingKickoffLoader(true); // Show fullscreen spinner
-    await handleStatusChange(newStatus);
-    setShowIsResolvingKickoffLoader(false); // Hide fullscreen spinner
-  };
-
   const triggerReIndex = async (fromBeginning: boolean) => {
     if (!ccPair) return;
-
-    setShowIsResolvingKickoffLoader(true);
-
+    setBusy(true);
     try {
       const result = await triggerIndexing(
         fromBeginning,
@@ -211,7 +161,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
         ccPair.credential.id,
         ccPair.id
       );
-
       if (result.success) {
         toast.success(
           fromBeginning
@@ -225,20 +174,16 @@ function Main({ ccPairId }: { ccPairId: number }) {
       console.error("Failed to trigger indexing:", error);
       toast.error(t("toasts.indexingStartUnexpectedError"));
     } finally {
-      setShowIsResolvingKickoffLoader(false);
+      setBusy(false);
     }
   };
 
   useEffect(() => {
-    if (isLoadingCCPair) {
-      return;
-    }
-    if (ccPair && !ccPairError) {
-      setHasLoadedOnce(true);
-    }
+    if (isLoadingCCPair) return;
+    if (ccPair && !ccPairError) setHasLoadedOnce(true);
 
-    // Redirect only when the cc-pair is genuinely gone — a real 404 (deleted)
-    // or DELETING state — never on a transient poll error.
+    // Redirect only when the cc-pair is genuinely gone, a real 404 (deleted)
+    // or DELETING state, never on a transient poll error.
     if (
       (hasLoadedOnce && ccPairError?.status === 404) ||
       (ccPair?.status === ConnectorCredentialPairStatus.DELETING &&
@@ -255,113 +200,56 @@ function Main({ ccPairId }: { ccPairId: number }) {
   ]);
 
   const handleUpdateName = async (newName: string) => {
+    if (!ccPair) return;
     try {
       const response = await updateConnectorCredentialPairName(
-        ccPair!.id,
+        ccPair.id,
         newName
       );
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+      if (!response.ok) throw new Error(await response.text());
       mutate(buildCCPairInfoUrl(ccPairId));
       toast.success(t("toasts.nameUpdated"));
-    } catch (error) {
+    } catch {
       toast.error(t("toasts.nameUpdateFailed"));
     }
   };
 
-  const handleRefreshEdit = async () => {
-    setEditingRefreshFrequency(true);
-  };
-
-  const handlePruningEdit = async () => {
-    setEditingPruningFrequency(true);
-  };
-
-  const handleRefreshSubmit = async (
-    propertyName: string,
-    propertyValue: string
-  ) => {
-    const parsedRefreshFreqMinutes = parseInt(propertyValue, 10);
-
-    if (isNaN(parsedRefreshFreqMinutes)) {
-      toast.error(t("toasts.invalidRefreshFrequency"));
-      return;
-    }
-
-    // Convert minutes to seconds
-    const parsedRefreshFreqSeconds = parsedRefreshFreqMinutes * 60;
-
-    try {
-      const response = await updateConnectorCredentialPairProperty(
-        ccPairId,
-        propertyName,
-        String(parsedRefreshFreqSeconds)
-      );
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      mutate(buildCCPairInfoUrl(ccPairId));
-      toast.success(t("toasts.refreshFrequencyUpdated"));
-    } catch (error) {
-      toast.error(t("toasts.refreshFrequencyUpdateFailed"));
-    }
-  };
-
-  const handlePruningSubmit = async (
-    propertyName: string,
-    propertyValue: string
-  ) => {
-    const parsedFreqHours = parseFloat(propertyValue);
-
-    if (isNaN(parsedFreqHours)) {
-      toast.error(t("toasts.invalidPruningFrequency"));
-      return;
-    }
-
-    // Convert hours to seconds
-    const parsedFreqSeconds = parsedFreqHours * 3600;
-
-    try {
-      const response = await updateConnectorCredentialPairProperty(
-        ccPairId,
-        propertyName,
-        String(parsedFreqSeconds)
-      );
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      mutate(buildCCPairInfoUrl(ccPairId));
-      toast.success(t("toasts.pruningFrequencyUpdated"));
-    } catch (error) {
-      toast.error(t("toasts.pruningFrequencyUpdateFailed"));
-    }
-  };
-
-  if (isLoadingCCPair || isLoadingIndexAttempts) {
+  if (isLoadingCCPair) {
     return <PageLoader />;
   }
 
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {
+    const title = t("loadError.title", { ccPairId: String(ccPairId) });
     return (
-      <ErrorCallout
-        errorTitle={t("loadError.title", { ccPairId: String(ccPairId) })}
-        errorMsg={
-          ccPairError?.info?.detail ||
-          ccPairError?.toString() ||
-          t("loadError.unknownMessage")
-        }
-      />
+      <SettingsLayouts.Root width="sm">
+        <BackToConnectors />
+        <SettingsLayouts.Body>
+          <PageCenter>
+            <IllustrationContent
+              illustration={SvgPlugBroken}
+              title={title}
+              description={
+                ccPairError?.info?.detail ||
+                ccPairError?.toString() ||
+                t("loadError.unknownMessage")
+              }
+            />
+          </PageCenter>
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
     );
   }
 
   const isDeleting = ccPair.status === ConnectorCredentialPairStatus.DELETING;
-
-  const {
-    prune_freq: pruneFreq,
-    refresh_freq: refreshFreq,
-    indexing_start: indexingStart,
-  } = ccPair.connector;
+  const source = ccPair.connector.source;
+  const canOperate = can(ccPair, "operate");
+  const paused = statusIsNotCurrentlyActive(ccPair.status);
+  const canOpenEditForm =
+    !isDeleting && can(ccPair, "edit") && isEditableSource(source);
+  const openEditForm = () =>
+    router.push(`/admin/connectors/${source}/edit/${ccPair.id}`);
+  const onEdit = canOpenEditForm ? openEditForm : null;
+  const canManageInlineFiles = source === "file" && can(ccPair, "edit");
 
   // The reason a row is disabled is its tooltip.
   const reIndexBlocked = ccPair.indexing
@@ -374,31 +262,43 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const manageItems: DropdownMenuItem[] = [
     {
       kind: "action",
-      id: "re-index",
+      id: "update-index",
       icon: SvgRefreshCw,
-      title: t("manageMenu.reIndex.label"),
+      title: t("manageMenu.updateIndex.label"),
+      description: t("manageMenu.updateIndex.description"),
       tooltip: reIndexBlocked,
       disabled: reIndexBlocked !== undefined,
-      onSelect: showReIndexModal,
+      onSelect: () => void triggerReIndex(false),
+    },
+    {
+      kind: "action",
+      id: "full-reindex",
+      icon: SvgRefreshCw,
+      title: t("manageMenu.fullReindex.label"),
+      description: t("manageMenu.fullReindex.description"),
+      tooltip: reIndexBlocked,
+      disabled: reIndexBlocked !== undefined,
+      onSelect: () => void triggerReIndex(true),
     },
     ...(!isDeleting
       ? [
           {
             kind: "action" as const,
             id: "toggle-status",
-            icon: statusIsNotCurrentlyActive(ccPair.status)
-              ? SvgPlayCircle
-              : SvgPauseCircle,
-            title: statusIsNotCurrentlyActive(ccPair.status)
+            icon: paused ? SvgPlayCircle : SvgPauseCircle,
+            title: paused
               ? t("manageMenu.toggleStatus.resume.label")
               : t("manageMenu.toggleStatus.pause.label"),
+            description: paused
+              ? t("manageMenu.toggleStatus.resume.description")
+              : t("manageMenu.toggleStatus.pause.description"),
             tooltip: isStatusUpdating
               ? t("manageMenu.toggleStatus.tooltip.updating")
               : undefined,
             disabled: isStatusUpdating,
             onSelect: () =>
-              handleStatusUpdate(
-                statusIsNotCurrentlyActive(ccPair.status)
+              handleStatusChange(
+                paused
                   ? ConnectorCredentialPairStatus.ACTIVE
                   : ConnectorCredentialPairStatus.PAUSED
               ),
@@ -413,395 +313,222 @@ function Main({ ccPairId }: { ccPairId: number }) {
             icon: SvgTrash,
             danger: true,
             title: t("manageMenu.delete.label"),
-            tooltip: !statusIsNotCurrentlyActive(ccPair.status)
-              ? t("manageMenu.delete.tooltip.active")
-              : undefined,
-            disabled: !statusIsNotCurrentlyActive(ccPair.status),
+            tooltip: paused ? undefined : t("manageMenu.delete.tooltip.active"),
+            disabled: !paused,
             onSelect: () => setShowDeleteConnectorConfirmModal(true),
           },
         ]
       : []),
   ];
 
-  return (
-    <>
-      {showIsResolvingKickoffLoader && !isResolvingErrors && <Spinner />}
-      {ReIndexModal}
-      {ConfirmModal}
+  const resolveAllErrors = async () => {
+    setShowIndexAttemptErrors(false);
+    if (!ccPair.supports_targeted_reindex) {
+      await triggerReIndex(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await resolveAllErrorsForCCPair(ccPairId);
+      if (result.total_error_ids === 0) {
+        toast.success(t("toasts.noUnresolvedErrors"));
+      } else {
+        toast.success(
+          t("toasts.targetedReindexSubmitted", {
+            count: result.total_error_ids,
+          })
+        );
+      }
+      mutate(
+        (key) =>
+          typeof key === "string" &&
+          key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId))
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(t("toasts.targetedReindexFailed", { message }));
+    } finally {
+      setBusy(false);
+    }
+  };
 
+  return (
+    <SettingsLayouts.Root width="xl">
+      {ConfirmModal}
       {showDeleteConnectorConfirmModal && (
         <ConfirmEntityModal
           danger
           entityType={t("deleteModal.entityType")}
           entityName={ccPair.name}
           additionalDetails={t("deleteModal.additionalDetails")}
-          onClose={() => {
-            setShowDeleteConnectorConfirmModal(false);
-          }}
+          onClose={() => setShowDeleteConnectorConfirmModal(false)}
           onSubmit={scheduleConnectorDeletion}
         />
       )}
-
-      {editingRefreshFrequency && (
-        <EditPropertyModal
-          propertyTitle={t("refreshFrequencyModal.title")}
-          propertyDetails={t("refreshFrequencyModal.description")}
-          propertyName="refresh_frequency"
-          propertyValue={String(Math.round((refreshFreq || 0) / 60))}
-          validationSchema={RefreshFrequencySchema}
-          onSubmit={handleRefreshSubmit}
-          onClose={() => setEditingRefreshFrequency(false)}
-        />
-      )}
-
-      {editingPruningFrequency && (
-        <EditPropertyModal
-          propertyTitle={t("pruningFrequencyModal.title")}
-          propertyDetails={t("pruningFrequencyModal.description")}
-          propertyName="pruning_frequency"
-          propertyValue={String(
-            ((pruneFreq || 0) / 3600).toFixed(3).replace(/\.?0+$/, "")
-          )}
-          validationSchema={PruneFrequencySchema}
-          onSubmit={handlePruningSubmit}
-          onClose={() => setEditingPruningFrequency(false)}
-        />
-      )}
-
-      {showIndexAttemptErrors && indexAttemptErrors && ccPair && (
+      {showIndexAttemptErrors && indexAttemptErrors && (
         <IndexAttemptErrorsModal
           errors={indexAttemptErrors}
           totalPages={indexAttemptErrorsTotalPages}
           currentPage={indexAttemptErrorsCurrentPage}
           onPageChange={goToIndexAttemptErrorsPage}
           onClose={() => setShowIndexAttemptErrors(false)}
-          onResolveAll={async () => {
-            setShowIndexAttemptErrors(false);
-            if (!ccPair.supports_targeted_reindex) {
-              setShowIsResolvingKickoffLoader(true);
-              await triggerReIndex(true);
-              return;
-            }
-            setShowIsResolvingKickoffLoader(true);
-            try {
-              const result = await resolveAllErrorsForCCPair(ccPairId);
-              if (result.total_error_ids === 0) {
-                toast.success(t("toasts.noUnresolvedErrors"));
-              } else {
-                toast.success(
-                  t("toasts.targetedReindexSubmitted", {
-                    count: result.total_error_ids,
-                  })
-                );
-              }
-              mutate(
-                (key) =>
-                  typeof key === "string" &&
-                  key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId))
-              );
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              toast.error(t("toasts.targetedReindexFailed", { message }));
-            } finally {
-              setShowIsResolvingKickoffLoader(false);
-            }
-          }}
+          onResolveAll={resolveAllErrors}
           supportsTargetedReindex={ccPair.supports_targeted_reindex}
         />
       )}
 
-      <BackButton />
-      <div
-        className="flex
-        items-center
-        justify-between
-        h-16
-        pb-2
-        border-b
-        border-neutral-200
-        dark:border-neutral-600"
-      >
-        <div className="my-auto">
-          <SourceIcon iconSize={32} sourceType={ccPair.connector.source} />
-        </div>
-
-        <div className="ms-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 me-4">
-          <EditableStringFieldDisplay
-            value={ccPair.name}
-            isEditable={can(ccPair, "operate")}
-            onUpdate={handleUpdateName}
-            scale={2.1}
-          />
-        </div>
-
-        <div className="ms-auto flex gap-x-2">
-          {can(ccPair, "operate") && (
-            <Dropdown>
-              <Dropdown.Trigger asChild>
-                <Button prominence="secondary" icon={SvgSettings}>
-                  {t("manageMenu.trigger.label")}
-                </Button>
-              </Dropdown.Trigger>
-              <Dropdown.Data
-                label={t("manageMenu.trigger.label")}
-                items={manageItems}
-              />
-            </Dropdown>
-          )}
-        </div>
-      </div>
-
-      {ccPair.deletion_failure_message &&
-        ccPair.status === ConnectorCredentialPairStatus.DELETING && (
-          <>
-            <div className="mt-6" />
-            <DeletionErrorStatus
-              deletion_failure_message={ccPair.deletion_failure_message}
-            />
-          </>
-        )}
-
-      {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
-        <div className="mt-6">
-          <Callout type="warning" title={t("invalidState.title")}>
-            {t("invalidState.description")}
-          </Callout>
-        </div>
-      )}
-
-      {indexAttemptErrors && indexAttemptErrorsTotalItems > 0 && (
-        <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2 mt-6">
-          <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
-          <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
-            {t("indexErrorsAlert.title")}
-          </AlertTitle>
-          <AlertDescription className="text-yellow-900 dark:text-yellow-300">
-            {isResolvingErrors ? (
-              <span>
-                <span className="text-sm text-yellow-700 dark:text-yellow-400 da animate-pulse">
-                  {t("indexErrorsAlert.resolvingStatus")}
-                </span>
-              </span>
-            ) : (
-              t.rich("indexErrorsAlert.description", {
-                details: (chunks) => (
-                  <button
-                    type="button"
-                    className="text-link cursor-pointer dark:text-blue-300 font-bold"
-                    onClick={() => setShowIndexAttemptErrors(true)}
-                  >
-                    {chunks}
-                  </button>
-                ),
-              })
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Title className="mb-2 mt-6" size="md">
-        {t("sections.indexing.title")}
-      </Title>
-
-      <Card className="px-8 py-12">
-        <div className="flex">
-          <div className="w-[200px]">
-            <div className="text-sm font-medium mb-1">
-              {t("statusCard.status.label")}
-            </div>
-            <CCPairStatus
-              ccPairStatus={ccPair.status}
-              inRepeatedErrorState={ccPair.in_repeated_error_state}
-              lastIndexAttemptStatus={latestIndexAttempt?.status}
-            />
-          </div>
-
-          <div className="w-[200px]">
-            <div className="text-sm font-medium mb-1">
-              {t("statusCard.documentsIndexed.label")}
-            </div>
-            <div className="text-sm text-text-default flex items-center gap-x-1">
-              {ccPair.num_docs_indexed.toLocaleString(locale)}
-              {ccPair.status ===
-                ConnectorCredentialPairStatus.INITIAL_INDEXING &&
-                ccPair.overall_indexing_speed !== null &&
-                ccPair.num_docs_indexed > 0 && (
-                  <div className="ms-0.5 text-xs font-medium">
-                    {t("statusCard.indexingSpeed", {
-                      speed: ccPair.overall_indexing_speed.toLocaleString(
-                        locale,
-                        { minimumFractionDigits: 1, maximumFractionDigits: 1 }
-                      ),
-                    })}
-                  </div>
-                )}
-            </div>
-          </div>
-
-          <div className="w-[200px]">
-            <div className="text-sm font-medium mb-1">
-              {t("statusCard.lastIndexed.label")}
-            </div>
-            <div className="text-sm text-text-default">
-              {timeAgo(ccPair?.last_indexed, locale) ?? "-"}
-            </div>
-          </div>
-
-          {isPermSynced(ccPair.access_type) && (
-            <>
-              <div className="w-[200px]">
-                {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
-                <Text as="p" className="text-sm font-medium mb-1">
-                  {t("statusCard.permissionSyncing.label")}
-                </Text>
-                {ccPair.permission_syncing ||
-                ccPair.last_permission_sync_attempt_status ? (
-                  <PermissionSyncStatus
-                    status={ccPair.last_permission_sync_attempt_status}
-                    errorMsg={ccPair.last_permission_sync_attempt_error_message}
+      <BackToConnectors />
+      <SettingsLayouts.Header
+        icon={getSourceMetadata(source).icon}
+        title={ccPair.name}
+        editable={canOperate}
+        onTitleChange={(name) => void handleUpdateName(name)}
+        divider
+        actions={
+          canOperate
+            ? [
+                ...(canOpenEditForm
+                  ? [
+                      <Button
+                        key="edit"
+                        prominence="secondary"
+                        icon={SvgEdit}
+                        onClick={openEditForm}
+                      >
+                        {editT("editButton.label")}
+                      </Button>,
+                    ]
+                  : []),
+                <Dropdown key="manage">
+                  <Dropdown.Trigger asChild>
+                    <Button
+                      prominence="secondary"
+                      icon={busy || isStatusUpdating ? IconLoader : SvgSettings}
+                    >
+                      {t("manageMenu.trigger.label")}
+                    </Button>
+                  </Dropdown.Trigger>
+                  <Dropdown.Data
+                    label={t("manageMenu.trigger.label")}
+                    items={manageItems}
                   />
-                ) : (
-                  <PermissionSyncStatus status={null} />
-                )}
-              </div>
+                </Dropdown>,
+              ]
+            : undefined
+        }
+      />
 
-              <div className="w-[200px]">
-                {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
-                <Text as="p" className="text-sm font-medium mb-1">
-                  {t("statusCard.lastSynced.label")}
-                </Text>
-                <Text as="p" className="text-sm text-text-default">
-                  {ccPair.last_permission_sync_attempt_finished
-                    ? timeAgo(
-                        ccPair.last_permission_sync_attempt_finished,
-                        locale
-                      )
-                    : (timeAgo(ccPair.last_full_permission_sync, locale) ??
-                      "-")}
-                </Text>
-              </div>
-            </>
-          )}
-        </div>
-      </Card>
+      <SettingsLayouts.Body>
+        {/* The panel sits beside the column on wide screens and under it elsewhere. min-w-0 lets the column shrink under long content. */}
+        <Section
+          flexDirection="row"
+          alignItems="start"
+          gap={4}
+          height="fit"
+          className="max-lg:flex-col"
+        >
+          <Section
+            alignItems="stretch"
+            gap={6}
+            height="fit"
+            className="min-w-0 flex-1"
+          >
+            {ccPair.deletion_failure_message && isDeleting && (
+              <MessageCard
+                variant="error"
+                title={t("deletionError.title")}
+                description={t("deletionError.description")}
+                bottomChildren={
+                  <Text font="secondary-body" color="text-04">
+                    {ccPair.deletion_failure_message}
+                  </Text>
+                }
+              />
+            )}
+            {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
+              <MessageCard
+                variant="warning"
+                title={t("invalidState.title")}
+                description={t("invalidState.description")}
+              />
+            )}
+            {indexAttemptErrors && indexAttemptErrorsTotalItems > 0 && (
+              <MessageCard
+                variant="warning"
+                title={t("indexErrorsAlert.title")}
+                description={
+                  isResolvingErrors
+                    ? t("indexErrorsAlert.resolvingStatus")
+                    : t("indexErrorsAlert.description")
+                }
+                rightChildren={
+                  !isResolvingErrors && (
+                    <Button
+                      prominence="secondary"
+                      onClick={() => setShowIndexAttemptErrors(true)}
+                    >
+                      {t("indexErrorsAlert.detailsButton.label")}
+                    </Button>
+                  )
+                }
+              />
+            )}
+            {ccPair.pending_backfills.length > 0 && (
+              <PendingBackfills backfills={ccPair.pending_backfills} />
+            )}
 
-      {getCredentialSpec(ccPair.connector.source) && can(ccPair, "edit") && (
-        <>
-          <Title size="md" className="mt-10 mb-2">
-            {t("sections.credential.title")}
-          </Title>
-
-          <div className="mt-2">
-            <CredentialSection
+            <StatusCard
               ccPair={ccPair}
-              sourceType={ccPair.connector.source}
-              refresh={() => refresh()}
+              canOperate={canOperate}
+              onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
             />
-          </div>
-        </>
-      )}
+            <PairChecksCard
+              source={source}
+              credentialId={ccPair.credential.id}
+              connectorId={ccPair.connector.id}
+              expandRequest={checksExpandRequest}
+            />
+            <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
+            <IndexConfigurationsSection
+              ccPair={ccPair}
+              onEdit={onEdit}
+              manageFiles={canManageInlineFiles}
+              onRefresh={refresh}
+            />
+            <SharingSettingsSection ccPair={ccPair} onEdit={onEdit} />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
+            <ScheduleSection ccPair={ccPair} editable={canOperate} />
 
-      {ccPair.connector.connector_specific_config &&
-        Object.keys(ccPair.connector.connector_specific_config).length > 0 && (
-          <>
-            <Title size="md" className="mt-10 mb-2">
-              {t("sections.connectorConfiguration.title")}
-            </Title>
-
-            <Card className="px-8 py-4">
-              <ConfigDisplay
-                configEntries={buildConfigEntries(
-                  ccPair.connector.connector_specific_config,
-                  ccPair.connector.source
-                )}
-              />
-
-              {/* Inline file management for file connectors */}
-              {canManageInlineFileConnectorFiles && (
-                <div className="mt-6">
-                  <InlineFileManagement
-                    connectorId={ccPair.connector.id}
-                    onRefresh={refresh}
-                  />
-                </div>
-              )}
-            </Card>
-          </>
-        )}
-
-      <div className="mt-6">
-        <div className="flex">
-          <AdvancedOptionsToggle
-            showAdvancedOptions={showAdvancedOptions}
-            setShowAdvancedOptions={setShowAdvancedOptions}
-            title={t("sections.advanced.title")}
+            <RunsCard ccPairId={ccPair.id} canOperate={canOperate} />
+          </Section>
+          <ActivityPanel
+            scope={{
+              ccPairId: ccPair.id,
+              canResolve: canOperate && ccPair.supports_targeted_reindex,
+            }}
           />
-        </div>
-        {showAdvancedOptions && (
-          <div className="pb-16">
-            {(pruneFreq || indexingStart || refreshFreq) && (
-              <>
-                <Title size="md" className="mt-3 mb-2">
-                  {t("sections.advancedConfiguration.title")}
-                </Title>
-                <Card className="px-8 py-4">
-                  <div>
-                    <AdvancedConfigDisplay
-                      pruneFreq={pruneFreq}
-                      indexingStart={indexingStart}
-                      refreshFreq={refreshFreq}
-                      // No handler => no pencil, matching the rest of this page's edits.
-                      onRefreshEdit={
-                        can(ccPair, "operate") ? handleRefreshEdit : undefined
-                      }
-                      onPruningEdit={
-                        can(ccPair, "operate") ? handlePruningEdit : undefined
-                      }
-                    />
-                  </div>
-                </Card>
-              </>
-            )}
+        </Section>
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
+}
 
-            {indexAttempts &&
-              (isPermSynced(ccPair.access_type) ? (
-                <Section height="auto" alignItems="stretch" className="mt-6">
-                  <SyncAttemptsTabs
-                    ccPair={ccPair}
-                    indexAttempts={indexAttempts}
-                    indexCurrentPage={currentPage}
-                    indexTotalPages={totalPages}
-                    onIndexPageChange={goToPage}
-                  />
-                </Section>
-              ) : (
-                <>
-                  <Title size="md" className="mt-6 mb-2">
-                    {t("sections.indexingAttempts.title")}
-                  </Title>
-                  <IndexAttemptsTable
-                    ccPair={ccPair}
-                    indexAttempts={indexAttempts}
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={goToPage}
-                  />
-                </>
-              ))}
-          </div>
-        )}
-      </div>
-    </>
+function BackToConnectors() {
+  const t = useTranslations("admin.connector");
+  return (
+    <Section alignItems="start" height="fit" padding={4}>
+      <Button
+        icon={SvgArrowLeft}
+        prominence="tertiary"
+        href={ADMIN_ROUTES.INDEXING_STATUS.path}
+      >
+        {t("backButton.label")}
+      </Button>
+    </Section>
   );
 }
 
 export default function Page(props: { params: Promise<{ ccPairId: string }> }) {
   const params = use(props.params);
-  const ccPairId = parseInt(params.ccPairId);
-
-  return (
-    <div className="mx-auto w-[800px]">
-      <Main ccPairId={ccPairId} />
-    </div>
-  );
+  return <Main ccPairId={parseInt(params.ccPairId)} />;
 }

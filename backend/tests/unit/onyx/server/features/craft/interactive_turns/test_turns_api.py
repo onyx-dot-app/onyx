@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 import time as real_time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import cast
@@ -15,8 +16,10 @@ from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.interactive_turns import api as turns_api
 from onyx.server.features.build.interactive_turns.state import (
+    TURN_STATUS_CANCELLED,
     TURN_STATUS_FAILED,
     TURN_STATUS_SUCCEEDED,
+    InteractiveTurnStatus,
     claim_turn_for_runner,
     create_interactive_turn,
     finish_turn,
@@ -47,6 +50,13 @@ class _FakeDbSession:
 @contextmanager
 def _fake_db_session_scope() -> Iterator[_FakeDbSession]:
     yield _FakeDbSession()
+
+
+@pytest.fixture(autouse=True)
+def _short_database_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        turns_api, "get_session_with_current_tenant", _fake_db_session_scope
+    )
 
 
 def _running_sandbox(*_args: object, **_kwargs: object) -> SimpleNamespace:
@@ -93,7 +103,7 @@ def test_get_active_interactive_turn_returns_cache_marker(
     response = turns_api.get_active_interactive_turn(
         session_id=session_id,
         user=cast(User, SimpleNamespace(id=user_id)),
-        db_session=cast(Session, SimpleNamespace()),
+        db_session=cast(Session, _FakeDbSession()),
     )
 
     assert response is not None
@@ -102,8 +112,16 @@ def test_get_active_interactive_turn_returns_cache_marker(
     assert response.turn_index == 3
 
 
-def test_get_interactive_turn_events_waits_then_forwards_live_stream(
+@pytest.mark.parametrize(
+    "next_chunk",
+    [
+        'event: message\ndata: {"type":"text_chunk","text":"successor"}\n\n',
+        turns_api.SSE_KEEPALIVE,
+    ],
+)
+def test_stream_stops_before_forwarding_events_after_committed_completion(
     monkeypatch: pytest.MonkeyPatch,
+    next_chunk: str,
 ) -> None:
     cache = FakeCache()
     session_id = uuid4()
@@ -130,14 +148,14 @@ def test_get_interactive_turn_events_waits_then_forwards_live_stream(
         ) -> Iterator[str]:
             assert session_id_arg == session_id
             assert user_id_arg == user_id
-            assert keepalive_seconds == turns_api.SSE_KEEPALIVE_INTERVAL
+            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,
                 status=TURN_STATUS_SUCCEEDED,
             )
-            yield 'event: message\ndata: {"type":"text_chunk","text":"hi"}\n\n'
-            yield 'event: message\ndata: {"type":"text_chunk","text":"bye"}\n\n'
+            yield next_chunk
+            pytest.fail("A terminal turn must stop before successor output")
 
     monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
     monkeypatch.setattr(
@@ -166,23 +184,25 @@ def test_get_interactive_turn_events_waits_then_forwards_live_stream(
             session_id=session_id,
             turn_id=turn_id,
             user=cast(User, SimpleNamespace(id=user_id)),
-            db_session=cast(Session, SimpleNamespace()),
         ),
     )
     monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     chunks = list(response.body)
 
-    assert chunks == [
+    assert json.loads(chunks[-1].split("data: ", 1)[1])["type"] == "turn_completed"
+    assert chunks[:-1] == [
         turns_api.SSE_KEEPALIVE,
-        'event: message\ndata: {"type":"text_chunk","text":"hi"}\n\n',
-        'event: message\ndata: {"type":"text_chunk","text":"bye"}\n\n',
     ]
     assert started == [turn_id]
 
 
-def test_get_interactive_turn_events_streams_retained_failure(
+@pytest.mark.parametrize(
+    "status", [TURN_STATUS_SUCCEEDED, TURN_STATUS_CANCELLED, TURN_STATUS_FAILED]
+)
+def test_get_interactive_turn_events_streams_retained_completion(
     monkeypatch: pytest.MonkeyPatch,
+    status: InteractiveTurnStatus,
 ) -> None:
     cache = FakeCache()
     session_id = uuid4()
@@ -191,7 +211,7 @@ def test_get_interactive_turn_events_streams_retained_failure(
     finish_turn(
         cache=cache,
         turn_id=turn_id,
-        status=TURN_STATUS_FAILED,
+        status=status,
         error_detail="provider model not found",
     )
 
@@ -211,15 +231,17 @@ def test_get_interactive_turn_events_streams_retained_failure(
             session_id=session_id,
             turn_id=turn_id,
             user=cast(User, SimpleNamespace(id=user_id)),
-            db_session=cast(Session, SimpleNamespace()),
         ),
     )
 
     chunks = list(response.body)
 
     assert len(chunks) == 1
-    assert '"type": "error"' in chunks[0]
-    assert '"message": "provider model not found"' in chunks[0]
+    packet = json.loads(chunks[0].split("data: ", 1)[1])
+    assert packet["type"] == "turn_completed"
+    assert packet["status"] == status
+    assert packet["turn_id"] == str(turn_id)
+    assert packet["error_detail"] == "provider model not found"
 
 
 def test_get_interactive_turn_events_yields_failed_turn_error_before_ready(
@@ -256,7 +278,6 @@ def test_get_interactive_turn_events_yields_failed_turn_error_before_ready(
             session_id=session_id,
             turn_id=turn_id,
             user=cast(User, SimpleNamespace(id=user_id)),
-            db_session=cast(Session, SimpleNamespace()),
         ),
     )
 
@@ -271,8 +292,10 @@ def test_get_interactive_turn_events_yields_failed_turn_error_before_ready(
     )
 
     error_chunk = next(chunks)
-    assert '"type": "error"' in error_chunk
-    assert '"message": "provider model not found"' in error_chunk
+    packet = json.loads(error_chunk.split("data: ", 1)[1])
+    assert packet["type"] == "turn_completed"
+    assert packet["status"] == "FAILED"
+    assert packet["error_detail"] == "provider model not found"
 
     with pytest.raises(StopIteration):
         next(chunks)
@@ -298,14 +321,14 @@ def test_get_interactive_turn_events_yields_failed_turn_error_after_stream_chunk
         ) -> Iterator[str]:
             assert session_id_arg == session_id
             assert user_id_arg == user_id
-            assert keepalive_seconds == turns_api.SSE_KEEPALIVE_INTERVAL
+            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
+            yield 'event: message\ndata: {"type":"text_chunk","text":"partial"}\n\n'
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,
                 status=TURN_STATUS_FAILED,
                 error_detail="provider model not found",
             )
-            yield 'event: message\ndata: {"type":"text_chunk","text":"partial"}\n\n'
 
     monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
     monkeypatch.setattr(turns_api, "start_interactive_turn_runner", lambda _: False)
@@ -327,7 +350,6 @@ def test_get_interactive_turn_events_yields_failed_turn_error_after_stream_chunk
         session_id=session_id,
         turn_id=turn_id,
         user=cast(User, SimpleNamespace(id=user_id)),
-        db_session=cast(Session, SimpleNamespace()),
     )
 
     chunks = list(response.body)
@@ -335,8 +357,10 @@ def test_get_interactive_turn_events_yields_failed_turn_error_after_stream_chunk
     assert chunks[0] == (
         'event: message\ndata: {"type":"text_chunk","text":"partial"}\n\n'
     )
-    assert '"type": "error"' in chunks[1]
-    assert '"message": "provider model not found"' in chunks[1]
+    packet = json.loads(chunks[1].split("data: ", 1)[1])
+    assert packet["type"] == "turn_completed"
+    assert packet["status"] == "FAILED"
+    assert packet["error_detail"] == "provider model not found"
     assert len(chunks) == 2
 
 
@@ -367,7 +391,7 @@ def test_get_interactive_turn_events_retries_runner_start_mid_stream(
         ) -> Iterator[str]:
             assert session_id_arg == session_id
             assert user_id_arg == user_id
-            assert keepalive_seconds == turns_api.SSE_KEEPALIVE_INTERVAL
+            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
             for i in range(3):
                 yield (
                     "event: message\n"
@@ -405,7 +429,6 @@ def test_get_interactive_turn_events_retries_runner_start_mid_stream(
             session_id=session_id,
             turn_id=turn_id,
             user=cast(User, SimpleNamespace(id=user_id)),
-            db_session=cast(Session, SimpleNamespace()),
         ),
     )
 
@@ -443,7 +466,7 @@ def test_get_interactive_turn_events_rate_limits_runner_retry_within_window(
         ) -> Iterator[str]:
             assert session_id_arg == session_id
             assert user_id_arg == user_id
-            assert keepalive_seconds == turns_api.SSE_KEEPALIVE_INTERVAL
+            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
             for i in range(3):
                 yield (
                     "event: message\n"
@@ -481,7 +504,6 @@ def test_get_interactive_turn_events_rate_limits_runner_retry_within_window(
             session_id=session_id,
             turn_id=turn_id,
             user=cast(User, SimpleNamespace(id=user_id)),
-            db_session=cast(Session, SimpleNamespace()),
         ),
     )
 
@@ -512,7 +534,6 @@ def test_get_interactive_turn_events_requires_active_turn(
             session_id=session_id,
             turn_id=uuid4(),
             user=cast(User, SimpleNamespace(id=user_id)),
-            db_session=cast(Session, SimpleNamespace()),
         )
 
 
@@ -553,8 +574,8 @@ def test_get_interactive_turn_events_waits_out_a_reclaimed_sandbox(
             keepalive_seconds: float,
         ) -> Iterator[str]:
             _ = (session_id_arg, user_id_arg, keepalive_seconds)
-            finish_turn(cache=cache, turn_id=turn_id, status=TURN_STATUS_SUCCEEDED)
             yield 'event: message\ndata: {"type":"text_chunk","text":"awake"}\n\n'
+            finish_turn(cache=cache, turn_id=turn_id, status=TURN_STATUS_SUCCEEDED)
 
     monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
     monkeypatch.setattr(turns_api, "start_interactive_turn_runner", lambda _: False)
@@ -579,7 +600,6 @@ def test_get_interactive_turn_events_waits_out_a_reclaimed_sandbox(
             session_id=session_id,
             turn_id=turn_id,
             user=cast(User, SimpleNamespace(id=user_id)),
-            db_session=cast(Session, SimpleNamespace()),
         ),
     )
 
@@ -587,8 +607,159 @@ def test_get_interactive_turn_events_waits_out_a_reclaimed_sandbox(
 
     # Two keepalives while the sandbox came back, then the turn's output — and
     # no error packet anywhere.
-    assert chunks == [
+    assert json.loads(chunks[-1].split("data: ", 1)[1])["type"] == "turn_completed"
+    assert chunks[:-1] == [
         turns_api.SSE_KEEPALIVE,
         turns_api.SSE_KEEPALIVE,
         'event: message\ndata: {"type":"text_chunk","text":"awake"}\n\n',
     ]
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_known_turn_returns_terminal_outcome_after_active_marker_clears(
+    monkeypatch: pytest.MonkeyPatch, failed: bool
+) -> None:
+    cache = FakeCache()
+    session_id, user_id = uuid4(), uuid4()
+    turn_id = _create_running_turn(cache, session_id=session_id, user_id=user_id)
+    finish_turn(
+        cache=cache,
+        turn_id=turn_id,
+        status=TURN_STATUS_FAILED if failed else TURN_STATUS_SUCCEEDED,
+        error_detail="provider failed" if failed else None,
+    )
+    monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        turns_api, "get_build_session", lambda *_: SimpleNamespace(id=session_id)
+    )
+    user = cast(User, SimpleNamespace(id=user_id))
+    db = cast(Session, _FakeDbSession())
+    assert turns_api.get_active_interactive_turn(session_id, user, db) is None
+    outcome = turns_api.get_interactive_turn(session_id, turn_id, user, db)
+    assert outcome is not None
+    assert outcome.status == ("FAILED" if failed else "SUCCEEDED")
+    assert outcome.error_detail == ("provider failed" if failed else None)
+    assert turns_api.get_interactive_turn(uuid4(), turn_id, user, db) is None
+    assert (
+        turns_api.get_interactive_turn(
+            session_id, turn_id, cast(User, SimpleNamespace(id=uuid4())), db
+        )
+        is None
+    )
+    assert turns_api.get_interactive_turn(session_id, uuid4(), user, db) is None
+
+
+@pytest.mark.parametrize("terminal_type", ["prompt_response", "error"])
+@pytest.mark.parametrize("outcome", ["complete", "timeout", "disconnect"])
+def test_completion_waits_for_persistence_and_closes_live_subscription(
+    monkeypatch: pytest.MonkeyPatch, terminal_type: str, outcome: str
+) -> None:
+    cache = FakeCache()
+    session_id, user_id = uuid4(), uuid4()
+    turn_id = _create_running_turn(cache, session_id=session_id, user_id=user_id)
+    live_closed: list[bool] = []
+    open_db_scopes: list[bool] = []
+
+    @contextmanager
+    def database_scope() -> Iterator[_FakeDbSession]:
+        open_db_scopes.append(True)
+        try:
+            yield _FakeDbSession()
+        finally:
+            open_db_scopes.pop()
+
+    class FakeSessionManager:
+        def __init__(self, db_session: object) -> None:
+            pass
+
+        def subscribe_to_existing_session_events(
+            self, *_: object, **__: object
+        ) -> Iterator[str]:
+            try:
+                yield 'event: message\ndata: {"type":"text_chunk","text":"answer"}\n\n'
+                yield f'event: message\ndata: {{"type":"{terminal_type}"}}\n\n'
+                pytest.fail("A completed stream must not consume a successor's events")
+            finally:
+                live_closed.append(True)
+
+    sleeps: list[float] = []
+    clock = [0.0]
+
+    def complete_after_wait(seconds: float) -> None:
+        assert live_closed
+        assert not open_db_scopes
+        sleeps.append(seconds)
+        clock[0] += turns_api.TURN_COMPLETION_WAIT_SECONDS
+        if outcome == "complete":
+            finish_turn(cache=cache, turn_id=turn_id, status=TURN_STATUS_SUCCEEDED)
+
+    monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(turns_api, "start_interactive_turn_runner", lambda _: False)
+    monkeypatch.setattr(turns_api, "StreamingResponse", _FakeStreamingResponse)
+    monkeypatch.setattr(turns_api, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(turns_api, "get_session_with_current_tenant", database_scope)
+    monkeypatch.setattr(
+        turns_api,
+        "get_build_session",
+        lambda *_: SimpleNamespace(id=session_id, opencode_session_id="opencode-1"),
+    )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
+    monkeypatch.setattr(
+        turns_api,
+        "time",
+        SimpleNamespace(sleep=complete_after_wait, monotonic=lambda: clock[0]),
+    )
+    response = cast(
+        _FakeStreamingResponse,
+        turns_api.get_interactive_turn_events(
+            session_id, turn_id, cast(User, SimpleNamespace(id=user_id))
+        ),
+    )
+    if outcome == "disconnect":
+        stream = cast(Generator[str, None, None], response.body)
+        next(stream)
+        assert next(stream) == turns_api.SSE_KEEPALIVE
+        stream.close()
+        assert live_closed
+        assert not open_db_scopes
+        assert not sleeps
+        return
+    chunks = list(response.body)
+    if outcome == "timeout":
+        assert len(chunks) == 2
+        assert chunks[-1] == turns_api.SSE_KEEPALIVE
+        assert live_closed
+        assert not open_db_scopes
+        return
+    assert len(chunks) == 3
+    assert chunks[1] == turns_api.SSE_KEEPALIVE
+    assert sleeps == [turns_api.TURN_COMPLETION_CHECK_SECONDS]
+    packet = json.loads(chunks[-1].split("data: ", 1)[1])
+    assert packet == {
+        "type": "turn_completed",
+        "session_id": str(session_id),
+        "turn_id": str(turn_id),
+        "turn_index": 3,
+        "status": "SUCCEEDED",
+        "error_detail": None,
+    }
+
+
+@pytest.mark.parametrize("mismatch", ["session", "user"])
+def test_terminal_stream_replay_checks_turn_ownership(
+    monkeypatch: pytest.MonkeyPatch, mismatch: str
+) -> None:
+    cache = FakeCache()
+    session_id, user_id = uuid4(), uuid4()
+    turn_id = _create_running_turn(cache, session_id=session_id, user_id=user_id)
+    finish_turn(cache=cache, turn_id=turn_id, status=TURN_STATUS_SUCCEEDED)
+    monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        turns_api, "get_build_session", lambda *_: SimpleNamespace(id=session_id)
+    )
+    with pytest.raises(OnyxError):
+        turns_api.get_interactive_turn_events(
+            uuid4() if mismatch == "session" else session_id,
+            turn_id,
+            cast(User, SimpleNamespace(id=uuid4() if mismatch == "user" else user_id)),
+        )

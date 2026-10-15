@@ -3,7 +3,7 @@
 import "@opal/components/collapsible/styles.css";
 import { useId, useState } from "react";
 import type { RichStr } from "@opal/types";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { Button, type TagProps } from "@opal/components";
 import { Fold } from "@opal/components/fold/components";
 import { SvgExpand, SvgFold } from "@opal/icons";
@@ -22,6 +22,8 @@ interface CollapsibleProps {
   defaultOpen?: boolean;
   /** Locks the current open state: clicks and keys do not toggle. */
   disabled?: boolean;
+  /** Controls before the fold button, such as an edit action. Clicks there do not toggle. */
+  rightChildren?: React.ReactNode;
   children?: React.ReactNode;
 }
 
@@ -33,6 +35,7 @@ function Collapsible({
   onOpenChange,
   defaultOpen = true,
   disabled = false,
+  rightChildren,
   children,
 }: CollapsibleProps) {
   const strings = useOpalStrings();
@@ -66,7 +69,7 @@ function Collapsible({
       data-disabled={disabled || undefined}
     >
       {/* Pointer convenience only: the whole row toggles. The Button is the
-          keyboard control, and its click (Enter or Space) bubbles up here. */}
+          keyboard control and toggles itself, as its wrapper stops clicks. */}
       <div
         role="presentation"
         className="opal-collapsible-header"
@@ -83,22 +86,51 @@ function Collapsible({
           padding={0}
           center
           rightChildren={
-            <Button
-              icon={open ? SvgFold : SvgExpand}
-              prominence="tertiary"
-              interaction={
-                !disabled && (hovered || focusVisible) ? "hover" : "rest"
-              }
-              disabled={disabled}
-              tooltip={label}
-              aria-label={accessibleLabel}
-              aria-expanded={open}
-              aria-controls={bodyId}
-              onFocus={(e) =>
-                setFocusVisible(e.currentTarget.matches(":focus-visible"))
-              }
-              onBlur={() => setFocusVisible(false)}
-            />
+            <Section
+              flexDirection="row"
+              width="fit"
+              height="fit"
+              gap={1}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Its own controls, so the fold button does not light up. */}
+              {rightChildren !== undefined && rightChildren !== false && (
+                <Section
+                  flexDirection="row"
+                  width="fit"
+                  height="fit"
+                  gap={1}
+                  onPointerEnter={() => setHovered(false)}
+                  onPointerLeave={() => setHovered(true)}
+                >
+                  {rightChildren}
+                </Section>
+              )}
+              {/* The one control whose keyboard focus shows as hover. */}
+              <Section
+                width="fit"
+                height="fit"
+                className="opal-collapsible-fold"
+              >
+                <Button
+                  icon={open ? SvgFold : SvgExpand}
+                  prominence="tertiary"
+                  interaction={
+                    !disabled && (hovered || focusVisible) ? "hover" : "rest"
+                  }
+                  disabled={disabled}
+                  tooltip={label}
+                  aria-label={accessibleLabel}
+                  aria-expanded={open}
+                  aria-controls={bodyId}
+                  onClick={toggle}
+                  onFocus={(e) =>
+                    setFocusVisible(e.currentTarget.matches(":focus-visible"))
+                  }
+                  onBlur={() => setFocusVisible(false)}
+                />
+              </Section>
+            </Section>
           }
         />
       </div>

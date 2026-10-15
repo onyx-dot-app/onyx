@@ -17,10 +17,18 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.auth.scoped_permissions import (
+    assert_within_scope,
+    get_visible_user_group_ids,
+    scope_data_access_group_ids,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.attempt_restart import revoke_restarted_attempt_tasks
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.configs.constants import (
+    CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+)
 from onyx.connectors.capability_checks.draft_runs import DraftCheckRunSnapshot
 from onyx.connectors.edit_plan.apply import (
     apply_connector_edit,
@@ -78,9 +86,6 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
-
-# The indexing beat runs every 15 s, so a late kick has no value.
-_CHECK_FOR_INDEXING_EXPIRES_SECONDS = 60
 
 
 def _authorize_pair_edit(db_session: Session, user: User, cc_pair_id: int) -> None:
@@ -161,14 +166,29 @@ def _authorize_proposed_state(
 
 
 def _proposed_state(
-    current: CurrentPairState, proposal: ConnectorEditProposal
+    current: CurrentPairState,
+    proposal: ConnectorEditProposal,
+    visible_group_ids: set[int] | None,
 ) -> ProposedPairState:
+    """The proposal as a full state. The proposed data-access groups only
+    touch the groups the editor can see (``visible_group_ids``; None: every
+    group); None in the proposal keeps the pair's groups."""
     return ProposedPairState(
         source=current.source,
         input_type=current.input_type,
         connector_specific_config=proposal.connector_specific_config,
         access_type=proposal.access_type,
-        data_access_group_ids=proposal.data_access_group_ids,
+        data_access_group_ids=(
+            sorted(
+                scope_data_access_group_ids(
+                    proposal.data_access_group_ids,
+                    current.data_access_group_ids,
+                    visible_group_ids,
+                )
+            )
+            if proposal.data_access_group_ids is not None
+            else current.data_access_group_ids
+        ),
         credential_id=proposal.credential_id,
         indexing_start=proposal.indexing_start,
         name=proposal.name,
@@ -192,7 +212,7 @@ def _kick_off_applied_edit(
             OnyxCeleryTask.CHECK_FOR_INDEXING,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
-            expires=_CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+            expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
         )
     except Exception:
         logger.exception(
@@ -214,7 +234,9 @@ def plan_cc_pair_edit(
     the config, credential or access type changes."""
     _authorize_pair_edit(db_session, user, cc_pair_id)
     current = fetch_current_pair_state(db_session, cc_pair_id)
-    proposed = _proposed_state(current, proposal)
+    proposed = _proposed_state(
+        current, proposal, get_visible_user_group_ids(user, db_session)
+    )
     _authorize_proposed_state(db_session, user, current, proposed)
     stored = plan_connector_edit(
         db_session, cc_pair_id=cc_pair_id, proposed=proposed, user=user
@@ -310,7 +332,7 @@ def start_cc_pair_edit_checks(
     try:
         return start_cc_pair_draft_check_run(
             db_session,
-            user_id=user.id,
+            user=user,
             cc_pair_id=cc_pair_id,
             proposed_credential=credential,
             access_type=request.access_type,

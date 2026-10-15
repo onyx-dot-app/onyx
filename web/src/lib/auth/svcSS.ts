@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
 import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 import { User } from "@/lib/types";
-import { hasAnyAdminPermission } from "@/lib/permissions";
+import { hasAnyAdminPermission } from "@/lib/permissions/utils";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {

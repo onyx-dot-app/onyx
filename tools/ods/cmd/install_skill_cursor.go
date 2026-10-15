@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/safefs"
 )
 
 // generatedRuleMarker identifies rule files this command wrote, so a rerun can
@@ -26,6 +28,11 @@ func installCursorSkills(
 	cmd *cobra.Command, ui *installUI, skills []llmContextSkill, repoRoot string,
 ) error {
 	rulesDir := filepath.Join(repoRoot, ".cursor", "rules")
+	// Cleanup and directory creation below follow links, so a symlinked
+	// .cursor or .cursor/rules is refused first.
+	if err := safefs.CheckNoSymlinks(repoRoot, rulesDir); err != nil {
+		return err
+	}
 	if _, err := os.Stat(rulesDir); os.IsNotExist(err) {
 		// Nothing installed here before, so nothing to clean up either.
 		if len(skills) == 0 {
@@ -40,6 +47,10 @@ func installCursorSkills(
 		return err
 	}
 
+	base := rulesDir
+	if rel, err := filepath.Rel(repoRoot, rulesDir); err == nil && filepath.IsLocal(rel) {
+		base = repoRoot
+	}
 	for _, skill := range skills {
 		dest := filepath.Join(rulesDir, skill.Name+".mdc")
 		content, err := renderCursorRule(skill)
@@ -60,7 +71,7 @@ func installCursorSkills(
 				}
 			}
 		}
-		if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
+		if err := safefs.WriteFileNoFollow(base, dest, []byte(content), 0o644); err != nil {
 			return fmt.Errorf("could not write %s: %w", dest, err)
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %s\n", dest)

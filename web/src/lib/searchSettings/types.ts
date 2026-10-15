@@ -205,7 +205,7 @@ export interface LLMContextualCost {
   cost: number;
 }
 
-/** Mirrors backend `ReindexProgressCounts`; buckets partition `total`. */
+/** Mirrors backend `ReindexProgress`; buckets partition `total`. */
 export interface ReindexProgress {
   total: number;
   waiting: number;
@@ -213,6 +213,33 @@ export interface ReindexProgress {
   completed: number;
   failed: number;
   paused: number;
+  /** False when the port copies the stored vectors instead of re-embedding. */
+  reembeds: boolean;
+}
+
+/** Mirrors backend `CCPairAccessMode`. */
+export type CCPairAccessMode = "off" | "shadow" | "enforce";
+
+/**
+ * Mirrors backend `CCPairIdsBackfillStatus`. Counts are null when the backfill
+ * has not started or is complete; totals are also null for progress stored
+ * before the backend kept a snapshot.
+ */
+export interface CCPairIdsBackfillStatus {
+  index_name: string;
+  started: boolean;
+  completed: boolean;
+  total_cc_pairs: number | null;
+  pending_cc_pairs: number | null;
+  total_documents: number | null;
+  completed_documents: number | null;
+  remaining_documents: number | null;
+  current_cc_pair_name: string | null;
+  access_mode: CCPairAccessMode;
+  filter_enabled: boolean;
+  enforce_requested: boolean;
+  /** False in multi-tenant deployments, where operators own the mode. */
+  mode_editable: boolean;
 }
 
 /** Mirrors backend `ReindexErrorRow`; exactly one of cc_pair_id / user_id set. */

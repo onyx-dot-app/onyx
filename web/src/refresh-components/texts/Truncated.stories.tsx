@@ -64,7 +64,7 @@ export const CustomTooltipSide: Story = {
       "Hover to see the tooltip appear on the right side instead of the default top.",
     mainUiBody: true,
     text04: true,
-    side: "right",
+    side: "end",
   },
   decorators: [
     (Story) => (

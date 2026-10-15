@@ -153,6 +153,34 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        # Runs monthly (x8 in cloud, with the beat multiplier) because it rarely
+        # has work. It selects by age, so the cadence does not decide what is stale.
+        "name": "cleanup-stale-draft-credentials",
+        "task": OnyxCeleryTask.CLEANUP_STALE_DRAFT_CREDENTIALS,
+        "schedule": timedelta(days=30),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
+        # Daily: the retention window selects by age, so the cadence only bounds
+        # how far past the window a run can live.
+        "name": "cleanup-old-capability-check-runs",
+        "task": OnyxCeleryTask.CLEANUP_OLD_CAPABILITY_CHECK_RUNS,
+        "schedule": timedelta(days=1),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-stale-capability-runs",
         "task": OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
         "schedule": timedelta(minutes=10),
@@ -161,6 +189,16 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
             # Gated tenants may still hold dead RUNNING marks to retire.
             "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
+        "name": "check-for-scheduled-capability-checks",
+        "task": OnyxCeleryTask.CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS,
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
             "work_gated": True,
         },
     },

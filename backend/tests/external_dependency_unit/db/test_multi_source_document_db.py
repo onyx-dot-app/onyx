@@ -146,6 +146,7 @@ def _assert_document_group(
 
 def _index_sharepoint_document(
     db_session: Session,
+    cc_pair: ConnectorCredentialPair,
     document_id: str,
     semantic_identifier: str,
     group_id: str,
@@ -166,7 +167,9 @@ def _index_sharepoint_document(
                 doc_metadata={TEST_METADATA_KEY: semantic_identifier},
             )
         ],
-        IndexAttemptMetadata(connector_id=0, credential_id=0),
+        IndexAttemptMetadata(
+            connector_id=cc_pair.connector_id, credential_id=cc_pair.credential_id
+        ),
         db_session,
     )
 
@@ -467,6 +470,13 @@ def test_sharepoint_indexing_preserves_owned_onedrive_permissions(
 ) -> None:
     unique = uuid4().hex
     document_id = f"indexed-permission-owner-{unique}"
+    sharepoint = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
     onedrive = _add_cc_pair(
         db_session,
         DocumentSource.ONEDRIVE,
@@ -486,6 +496,7 @@ def test_sharepoint_indexing_preserves_owned_onedrive_permissions(
 
         _index_sharepoint_document(
             db_session,
+            sharepoint,
             document_id,
             "updated-by-sharepoint",
             "sharepoint",
@@ -502,7 +513,7 @@ def test_sharepoint_indexing_preserves_owned_onedrive_permissions(
         ]
         assert document.is_public is False
     finally:
-        _delete_test_data(db_session, [document_id], [onedrive])
+        _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
 
 
 @pytest.mark.parametrize(
@@ -520,6 +531,13 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
 ) -> None:
     unique = uuid4().hex
     document_id = f"index-non-owner-{unique}"
+    sharepoint = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
     onedrive = _add_cc_pair(
         db_session,
         DocumentSource.ONEDRIVE,
@@ -539,6 +557,7 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
 
         _index_sharepoint_document(
             db_session,
+            sharepoint,
             document_id,
             "updated-by-sharepoint",
             "sharepoint",
@@ -551,7 +570,7 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
         assert document.external_user_group_ids == ["sharepoint"]
         assert document.is_public is True
     finally:
-        _delete_test_data(db_session, [document_id], [onedrive])
+        _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
 
 
 @pytest.mark.parametrize(

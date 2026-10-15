@@ -29,10 +29,13 @@ from onyx.connectors.capability_checks.draft_runs import (
     StoredDraftRun,
     apply_cached_result,
     cc_pair_draft_key,
+    clear_latest_draft_run,
     decide_draft_check_state,
     draft_result_cache_key,
     draft_run_start_lock,
     get_cached_draft_result,
+    is_superseded,
+    load_draft_run,
     save_draft_run,
     set_latest_draft_run,
 )
@@ -52,14 +55,20 @@ from onyx.connectors.capability_checks.runner import (
     capability_check_run_stale_after,
 )
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.factory import assert_user_can_use_credential
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair,
+    get_connector_credential_pair_from_id,
+)
 from onyx.db.credential_capability import (
     mark_capability_report_running,
     mark_capability_run_failed,
 )
+from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
-from onyx.db.models import Credential, CredentialCapabilityReportRow
+from onyx.db.models import Credential, CredentialCapabilityReportRow, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -77,9 +86,52 @@ class CapabilityRunEnqueueError(Exception):
     so an immediate re-trigger is not blocked."""
 
 
+def _assert_user_can_run_stored_checks(
+    db_session: Session,
+    *,
+    user: User,
+    credential_id: int,
+    connector_id: int | None,
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any] | None,
+) -> None:
+    """``assert_user_can_use_credential`` for a stored-report run. A
+    connector-scoped run without an override uses the connector's stored config,
+    so the existing pair counts as the user's own use."""
+    credential = fetch_credential_by_id(credential_id, db_session)
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or is not accessible.",
+        )
+    config = connector_specific_config
+    current_pair = None
+    if connector_id is not None:
+        connector = fetch_connector_by_id(connector_id, db_session)
+        if connector is None:
+            raise OnyxError(
+                OnyxErrorCode.CONNECTOR_NOT_FOUND,
+                f"Connector {connector_id} does not exist or is not accessible.",
+            )
+        if config is None:
+            config = connector.connector_specific_config
+            current_pair = get_connector_credential_pair(
+                db_session, connector_id, credential_id
+            )
+    assert_user_can_use_credential(
+        db_session,
+        user=user,
+        credential=credential,
+        source=source,
+        connector_specific_config=config,
+        current_pair=current_pair,
+    )
+
+
 def start_capability_check_run(
     db_session: Session,
     *,
+    user: User | None,
     credential_id: int,
     connector_id: int | None,
     source: DocumentSource,
@@ -88,13 +140,27 @@ def start_capability_check_run(
 ) -> CredentialCapabilityReportRow | None:
     """Marks the scope RUNNING and enqueues the run task.
 
+    ``user`` is who asks for the run, held to ``assert_user_can_use_credential``
+    with the config the run uses; None only for system triggers. The caller
+    authorizes the user for the connector's pair.
+
     Returns the RUNNING row, or None when an unexpired run is already in flight
     (nothing is enqueued then). Commits before enqueueing, so the worker can
     only observe the RUNNING mark.
 
     Raises:
+        OnyxError: The user may not use the credential with this config.
         CapabilityRunEnqueueError: The broker did not accept the task.
     """
+    if user is not None:
+        _assert_user_can_run_stored_checks(
+            db_session,
+            user=user,
+            credential_id=credential_id,
+            connector_id=connector_id,
+            source=source,
+            connector_specific_config=connector_specific_config,
+        )
     row = mark_capability_report_running(
         db_session,
         credential_id=credential_id,
@@ -130,6 +196,7 @@ def start_capability_check_run(
             credential_id=credential_id,
             connector_id=connector_id,
             run_id=run_id,
+            error_message=str(e),
         )
         db_session.commit()
         raise CapabilityRunEnqueueError(str(e)) from e
@@ -151,6 +218,7 @@ def start_capability_checks_for_new_credential(
             return
         start_capability_check_run(
             db_session,
+            user=None,
             credential_id=credential_id,
             connector_id=None,
             source=source,
@@ -242,8 +310,9 @@ def plan_draft_capability_checks(
 
 
 def start_draft_capability_check_run(
+    db_session: Session,
     *,
-    user_id: UUID,
+    user: User,
     credential: Credential,
     source: DocumentSource,
     config_class: type[ConnectorConfig],
@@ -256,7 +325,9 @@ def start_draft_capability_check_run(
     """Decides every check's draft state, fills results from the cache, and
     enqueues one task for the checks that are left. Does no I/O to the source.
     The run replaces any earlier run of the same user and draft key.
-    ``pair_scope`` makes the run a dry run of an existing pair.
+    ``pair_scope`` makes the run a dry run of an existing pair. The user must
+    pass ``assert_user_can_use_credential`` with the form's config; the pair
+    of ``pair_scope`` counts as their own use.
 
     ``rerun`` picks the cached results to ignore: with FAILED, a cached FAILED
     result is run again, so a fix made at the source since the last run shows;
@@ -265,9 +336,11 @@ def start_draft_capability_check_run(
     Raises:
         CapabilityRunEnqueueError: The broker did not accept the task. The run
             is stored as FAILED_TO_RUN.
-        OnyxError: A concurrent start of the same draft key held the start
-            lock for too long.
+        OnyxError: The user may not use the credential with this config, or a
+            concurrent start of the same draft key held the start lock for too
+            long.
     """
+    user_id = user.id
     plan = _plan_draft(
         config_is_complete=pair_scope is not None,
         source=source,
@@ -277,6 +350,23 @@ def start_draft_capability_check_run(
     )
     form_state = plan.form_state
     connector_specific_config = plan.connector_specific_config
+    assert_user_can_use_credential(
+        db_session,
+        user=user,
+        credential=credential,
+        source=source,
+        # The values the task runs on.
+        connector_specific_config=(
+            form_state.values if connector_specific_config is not None else None
+        ),
+        current_pair=(
+            get_connector_credential_pair_from_id(
+                db_session, pair_scope.cc_pair_id, eager_load_connector=True
+            )
+            if pair_scope is not None
+            else None
+        ),
+    )
     checks: list[DraftCheckState] = []
     result_cache_keys: dict[str, str] = {}
     for check, check_state in plan.checks:
@@ -371,7 +461,7 @@ def start_draft_capability_check_run(
 def start_cc_pair_draft_check_run(
     db_session: Session,
     *,
-    user_id: UUID,
+    user: User,
     cc_pair_id: int,
     proposed_credential: Credential | None,
     access_type: AccessType,
@@ -405,7 +495,8 @@ def start_cc_pair_draft_check_run(
             f"{connector.source.value} has no connector configuration.",
         )
     return start_draft_capability_check_run(
-        user_id=user_id,
+        db_session,
+        user=user,
         credential=proposed_credential or cc_pair.credential,
         source=connector.source,
         config_class=mapping.config_class,
@@ -419,3 +510,27 @@ def start_cc_pair_draft_check_run(
             input_type=connector.input_type,
         ),
     )
+
+
+def cancel_draft_capability_check_run(*, run_id: UUID, user_id: UUID) -> bool:
+    """Stops a draft run the user started: it reads as SUPERSEDED, and its task
+    stops before its next check. A check already running still finishes.
+
+    Returns False when the run expired or another user started it. A run a
+    newer run already replaced is left alone, so the newer one keeps going.
+    """
+    run = load_draft_run(run_id)
+    if run is None or run.user_id != user_id:
+        return False
+    start_lock = draft_run_start_lock(user_id, run.snapshot.draft_key)
+    if not start_lock.acquire(blocking_timeout=_DRAFT_START_LOCK_WAIT_SECONDS):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "A check run for this form is starting; try again shortly.",
+        )
+    try:
+        if not is_superseded(run):
+            clear_latest_draft_run(run)
+    finally:
+        start_lock.release()
+    return True

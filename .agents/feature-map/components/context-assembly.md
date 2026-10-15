@@ -165,19 +165,15 @@ under system-prompt handling).
 
 Resolved once per turn by `chat_utils.py:get_custom_agent_prompt(persona, chat_session)`,
 before `run_llm_loop` starts (`process_message.py:build_chat_turn`), because the
-loop should not need DB access mid-turn. Precedence:
+loop should not need DB access mid-turn. Project and custom-agent instructions
+are combined; agent instructions take precedence on conflicts. A default agent
+uses project instructions alone. When `replace_base_system_prompt` is set, the
+agent instructions form the system message and project instructions remain a
+separate context message.
 
-- A non-default persona (`persona.id != DEFAULT_PERSONA_ID`) always wins, even
-  inside a project. Its `system_prompt` is the custom agent prompt, unless
-  `replace_base_system_prompt` is set, in which case there is no separate
-  custom agent prompt (it *is* the system prompt).
-- The default persona inside a project falls back to `chat_session.project.instructions`.
-- Otherwise there is none.
-
-**A custom persona fully supersedes the project.** This is stated twice in the
-source, once in `get_custom_agent_prompt`'s docstring and once in
-`process_message.py:resolve_context_user_files`'s: when a custom persona is
-active, project files are never loaded, even if the chat is nested in a project.
+Project files and custom-agent files are combined and deduplicated before
+context budgeting. Prompt loading, file-reading tools, and overflow retrieval
+must retain both sources. See [[projects]] §4.4-4.5.
 
 Inside `run_llm_loop`, unless it has been promoted into the system message
 (§4.1), the custom agent prompt is rebuilt every cycle as a
@@ -193,6 +189,13 @@ code preserves it. Project files (and persona-attached files) load through
 `process_message.py:extract_context_files`. User uploads do not. Attached files
 become history messages in `chat_utils.py:convert_chat_history`, one message per
 text file, tagged with `file_id`.
+
+`chat_utils.py:load_all_chat_files` reads attachment token counts and processing
+status on the caller thread before starting content workers. Workers receive
+scalar values, so they cannot share the caller's database session. Plaintext
+loading stays parallel, with at most 16 workers; raw bytes stay lazy. While a
+file is processing or indexing, inline extraction does not replace the worker's
+canonical plaintext.
 
 - **User-uploaded files** (attached to a single message) are a "point in time"
   inclusion. They stay where they were uploaded in the message history and, as
@@ -444,8 +447,8 @@ Cycle 2 (another tool call): S, U1, TC, TR, TC, TR, R, A1
 2. **The custom agent prompt is a `MessageType.USER` message, not part of the
    system prompt, unless it has replaced the system prompt outright.** It moves
    every cycle to sit directly above the last user message. If
-   `persona.replace_base_system_prompt` is set, it becomes the system message
-   and stops moving.
+   `persona.replace_base_system_prompt` is set, the agent instructions become
+   the system message. Project instructions remain a separate moving message.
 3. **Project files are never dropped from context.** Only user-uploaded files
    drift out under truncation pressure.
 4. **User-uploaded files do not move.** They stay attached to the point in the

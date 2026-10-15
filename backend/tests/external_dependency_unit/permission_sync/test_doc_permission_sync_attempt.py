@@ -8,7 +8,6 @@ including creation, status updates, progress tracking, and querying.
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
 from onyx.db.enums import (
     PermissionSyncStatus,
 )
@@ -16,7 +15,6 @@ from onyx.db.permission_sync_attempt import (
     complete_doc_permission_sync_attempt,
     create_doc_permission_sync_attempt,
     get_doc_permission_sync_attempt,
-    get_recent_doc_permission_sync_attempts_for_cc_pair,
     mark_doc_permission_sync_attempt_failed,
     mark_doc_permission_sync_attempt_in_progress,
 )
@@ -173,48 +171,6 @@ class TestDocPermissionSyncAttempt:
         assert attempt.status == PermissionSyncStatus.FAILED
         assert attempt.total_docs_synced == 5
         assert attempt.docs_with_permission_errors == 1
-
-    def test_get_recent_doc_permission_sync_attempts_for_cc_pair(
-        self, db_session: Session
-    ) -> None:
-        """Test retrieving recent doc permission sync attempts for a connector credential pair."""
-        cc_pair = create_test_connector_credential_pair(db_session)
-
-        # Create multiple attempts
-        attempt_ids = []
-        for _ in range(5):
-            attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
-            attempt_ids.append(attempt_id)
-
-        # Get recent attempts
-        recent_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
-            cc_pair_id=cc_pair.id,
-            limit=3,
-            db_session=db_session,
-        )
-
-        assert len(recent_attempts) == 3
-
-        # Verify they are ordered by time_created descending (most recent first)
-        for i in range(len(recent_attempts) - 1):
-            assert (
-                recent_attempts[i].time_created >= recent_attempts[i + 1].time_created
-            )
-
-        # Verify they all belong to the correct cc_pair
-        for attempt in recent_attempts:
-            assert attempt.connector_credential_pair_id == cc_pair.id
-
-        # Test with different cc_pair (should return empty)
-        other_cc_pair = create_test_connector_credential_pair(
-            db_session, source=DocumentSource.SLACK
-        )
-        other_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
-            cc_pair_id=other_cc_pair.id,
-            limit=10,
-            db_session=db_session,
-        )
-        assert len(other_attempts) == 0
 
     def test_status_enum_methods(self, db_session: Session) -> None:
         """Test the status enum helper methods."""

@@ -198,9 +198,7 @@ class McpRequestEvaluator(RequestEvaluator):
             # resolver claims by host — the request would forward with injected
             # credentials, ungated.
             try:
-                classification = classify_mcp_request(
-                    request.method or "", request.raw_content
-                )
+                classification = classify_mcp_request(request)
                 if classification.kind is McpRpcKind.PLUMBING:
                     return None
                 actions = _mcp_tool_actions(classification, server, request, db)

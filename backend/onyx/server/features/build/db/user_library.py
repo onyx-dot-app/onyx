@@ -303,7 +303,8 @@ def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int,
     credential = None
     for cred in existing_credentials:
         if (
-            cred.source == DocumentSource.CRAFT_FILE
+            cred.user_id == user.id
+            and cred.source == DocumentSource.CRAFT_FILE
             and cred.name == USER_LIBRARY_CREDENTIAL_NAME
         ):
             credential = cred

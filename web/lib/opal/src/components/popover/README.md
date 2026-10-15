@@ -24,7 +24,7 @@ Forwarded to `@radix-ui/react-popover` `Root`. Most common:
 
 | Prop         | Type                                                          | Default    | Description                                     |
 | ------------ | ------------------------------------------------------------- | ---------- | ----------------------------------------------- |
-| `width`      | `"fit" \| "sm" \| "md" \| "lg" \| "xl" \| "2xl" \| "trigger"` | `"fit"`    | Popover width preset                            |
+| `width`      | `"fit" \| "sm" \| "md" \| "lg" \| "xl" \| "2xl" \| "3xl" \| "trigger"` | `"fit"`    | Popover width preset                            |
 | `container`  | `HTMLElement \| null`                                         | —          | Portal container (use to render inside a modal) |
 | `align`      | `"start" \| "center" \| "end"`                                | `"center"` | Alignment along the side axis                   |
 | `sideOffset` | `number`                                                      | `4`        | Distance in pixels between trigger and popover  |

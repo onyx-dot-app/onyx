@@ -2,7 +2,8 @@
 
 import json
 import re
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from typing import Any, NoReturn
 
 import requests
@@ -127,6 +128,18 @@ def microsoft_error_from_exception(error: Exception) -> MicrosoftGraphError:
         else parse_msal_error(error)
     )
     return MicrosoftGraphError(details.status, details.code, details.message)
+
+
+@contextmanager
+def raise_microsoft_errors() -> Iterator[None]:
+    """Raises a Graph or SharePoint refusal as ``MicrosoftGraphError``, which
+    carries the status without the SDK. The office365 SDK's
+    ``ClientRequestException`` is a ``RequestException``. A decode error is
+    the empty or non-JSON body Graph answers under load."""
+    try:
+        yield
+    except (requests.RequestException, json.JSONDecodeError) as error:
+        raise microsoft_error_from_exception(error) from error
 
 
 def raise_for_auth_error(error: MicrosoftAuthError) -> NoReturn:

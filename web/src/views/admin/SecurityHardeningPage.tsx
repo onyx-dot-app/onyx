@@ -29,8 +29,9 @@ import {
 } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Settings, Tier, toSettings } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Settings, toSettings } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import type { RichStr } from "@opal/types";
 import type {
@@ -574,7 +575,7 @@ export default function SecurityHardeningPage() {
                   title={t("jwt.publicKeyUrl.title")}
                   description={t("jwt.publicKeyUrl.description")}
                   value={draft.jwt_public_key_url ?? ""}
-                  placeholder="https://idp.example.com/.well-known/jwks.json"
+                  placeholder={t("placeholders.jwksUrl")}
                   pinned={pinnedFields.includes("jwt_public_key_url")}
                   onCommit={(value) =>
                     saveSettings({ jwt_public_key_url: value || null })
@@ -585,7 +586,7 @@ export default function SecurityHardeningPage() {
                   title={t("jwt.expectedAudience.title")}
                   description={t("jwt.expectedAudience.description")}
                   value={draft.jwt_expected_audience ?? ""}
-                  placeholder="onyx"
+                  placeholder={t("placeholders.audience")}
                   pinned={pinnedFields.includes("jwt_expected_audience")}
                   onCommit={(value) =>
                     saveSettings({ jwt_expected_audience: value || null })
@@ -596,7 +597,7 @@ export default function SecurityHardeningPage() {
                   title={t("jwt.expectedIssuer.title")}
                   description={t("jwt.expectedIssuer.description")}
                   value={draft.jwt_expected_issuer ?? ""}
-                  placeholder="https://idp.example.com"
+                  placeholder={t("placeholders.issuer")}
                   pinned={pinnedFields.includes("jwt_expected_issuer")}
                   onCommit={(value) =>
                     saveSettings({ jwt_expected_issuer: value || null })

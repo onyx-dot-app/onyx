@@ -65,6 +65,7 @@ Everything above, **plus**:
 | `expanded`                | `boolean`         | `false` | Controlled expanded state. SelectCard never mutates this.      |
 | `expandedContent`         | `React.ReactNode` | —       | The body that animates open and closed below the header        |
 | `expandableContentHeight` | `80 \| "full"`    | `80`    | `80` caps the body at 20rem with scroll; `"full"` does not cap |
+| `expandableKeepMounted`   | `boolean`         | `false` | Keeps the body mounted while folded, e.g. so a form keeps what was typed |
 
 ### Expandable behaviour
 

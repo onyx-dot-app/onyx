@@ -2,13 +2,21 @@ from typing import IO, Any
 
 from pydantic import BaseModel
 
-from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.extract_file_text import (
+    XLSX_TRUNCATION_MARKER,
+    xlsx_sheet_extraction,
+)
 from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPES, OnyxMimeTypes
+from onyx.file_processing.zip_limits import ZipSizeLimitError
 from onyx.file_store.models import ChatFileType
 
 # Per-sheet cap on CSV text returned for in-chat spreadsheet previews. Sheets are
 # truncated (at a row boundary) beyond this to keep preview payloads bounded.
 MAX_PREVIEW_CHARS_PER_SHEET = 500_000
+# Previews parse inside the request, so they get a tighter decompression budget.
+MAX_PREVIEW_DECOMPRESSED_BYTES = 100 * 1024 * 1024
 
 
 class SpreadsheetSheetPreview(BaseModel):
@@ -57,8 +65,16 @@ def parse_spreadsheet_for_preview(
     a preview table in the frontend. Sheets larger than
     MAX_PREVIEW_CHARS_PER_SHEET are truncated at a row boundary."""
     sheet_previews: list[SpreadsheetSheetPreview] = []
-    for csv_text, title in xlsx_sheet_extraction(file, file_name):
-        truncated = False
+    try:
+        sheets = xlsx_sheet_extraction(
+            file, file_name, max_decompressed_bytes=MAX_PREVIEW_DECOMPRESSED_BYTES
+        )
+    except ZipSizeLimitError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    for csv_text, title in sheets:
+        truncated = csv_text.endswith(XLSX_TRUNCATION_MARKER)
+        if truncated:
+            csv_text = csv_text.removesuffix(XLSX_TRUNCATION_MARKER).rstrip("\n")
         if len(csv_text) > MAX_PREVIEW_CHARS_PER_SHEET:
             csv_text = _truncate_csv_at_row_boundary(
                 csv_text, MAX_PREVIEW_CHARS_PER_SHEET

@@ -412,7 +412,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "9"
+      onyx.app/nginx-config-version: "10"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1156,7 +1156,7 @@ slackbot:
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
   extraEnv: []
-  enabled: false  # Disabled by default
+  enabled: true  # Set to false to disable the MCP server and its routes
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
@@ -1790,6 +1790,9 @@ configMap:
   ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS: ""
   ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   ZOOM_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  LINEAR_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
   # HTTP endpoint (failures never fail indexing). Intended for non-EE
@@ -1874,6 +1877,15 @@ craft:
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
 sandboxPod:
+  # Onyx tests the default runtime with NET_ADMIN and iptables enabled.
+  # If you change either setting, verify sandbox isolation and network restrictions.
+  # Allow proxy traffic; block direct internet, DNS, internal services, nodes,
+  # and cloud metadata over IPv4 and IPv6.
+  # Optional, cluster-provided RuntimeClass (for example gvisor or kata).
+  runtimeClassName: ""
+  # Install firewall rules using NET_ADMIN. If false, the cluster must enforce
+  # proxy-only access from pod creation. Runtime isolation alone is not enough.
+  netAdminLockdown: true
   # Shared OpenCode, sidecar, and preview listener. Set to "::" for IPv6-only pods.
   listenHost: "0.0.0.0"
   nodeSelector:

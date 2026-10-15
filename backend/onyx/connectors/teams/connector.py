@@ -1,13 +1,12 @@
 import copy
 import os
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from datetime import datetime, timezone
 from itertools import chain
 from typing import Any, cast
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
-from office365.sharepoint.client_context import ClientContext
 
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -19,6 +18,7 @@ from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     GenerateSlimDocumentOutput,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -27,11 +27,14 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
+from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
+    HierarchyNode,
     SlimDocument,
 )
 from onyx.connectors.teams import groups, listing, threads
@@ -57,6 +60,7 @@ from onyx.connectors.teams.organizers import (
     OrganizerStage,
 )
 from onyx.connectors.teams.refusals import (
+    REFUSALS,
     ExportProbe,
     channel_failure,
     is_permanent,
@@ -127,6 +131,7 @@ class TeamsConnector(
     CheckpointedConnectorWithPermSync[TeamsCheckpoint],
     SlimConnector,
     SlimConnectorWithPermSync,
+    Resolver,
 ):
     """Walks the teams, then each team's channels a page at a time. What a
     channel holds is read by one source per content type: its threads, and its
@@ -182,11 +187,14 @@ class TeamsConnector(
             if include_attachments
             else None
         )
+        self._transcripts: TranscriptSource | None = (
+            TranscriptSource(self, covers_every_user=not self.meeting_organizers)
+            if include_meeting_transcripts
+            else None
+        )
         organizer_sources: list[OrganizerSource] = []
-        if include_meeting_transcripts:
-            organizer_sources.append(
-                TranscriptSource(self, covers_every_user=not self.meeting_organizers)
-            )
+        if self._transcripts is not None:
+            organizer_sources.append(self._transcripts)
         if include_meeting_chats:
             organizer_sources.append(ChatSource(self, include_inline_images))
         self._organizers: OrganizerStage | None = (
@@ -208,6 +216,29 @@ class TeamsConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.open(credentials)
         return None
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,  # noqa: ARG002
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Reads failed transcripts again from the errors list. A transcript
+        always carries its readers, so the permissions flag changes nothing.
+        Other Teams documents are read again by a full re-index."""
+        failed: list[DocumentFailure] = [
+            error.failed_document for error in errors if error.failed_document
+        ]
+        if self._transcripts is None:
+            for failure in failed:
+                yield ConnectorFailure(
+                    failed_document=failure,
+                    failure_message=(
+                        "Include Meeting Transcripts is off, so this transcript is "
+                        "not read again."
+                    ),
+                )
+            return
+        yield from self._transcripts.reindex(failed)
 
     def validate_connector_settings(self) -> None:
         if self.graph_client is None:
@@ -551,13 +582,13 @@ class TeamsConnector(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
         """A channel's files once its library is open. A refused folder listing
-        on Graph or a refused site on SharePoint REST (the SDK's own exception)
-        is one recorded failure for the channel, anything else fails the attempt."""
+        on Graph or a refused site on SharePoint REST is one recorded failure
+        for the channel, anything else fails the attempt."""
         if self._files is None:
             raise RuntimeError("Channel files are read only when attachments are on")
         try:
             yield from self._files.index(channel, start)
-        except (requests.HTTPError, ClientRequestException) as e:
+        except REFUSALS as e:
             if not is_permanent(e):
                 raise
             yield channel_failure(channel, "files", e)
@@ -614,10 +645,10 @@ class TeamsConnector(
             yield channel
         self._group_sync_channel_refs = refs
 
-    def rest_context(self, site_url: str) -> ClientContext:
+    def permission_reader(self) -> SharepointRestReads:
         if self._files is None:
             raise RuntimeError("Channel files are not part of this connector")
-        return self._files.rest_context(site_url)
+        return self._files.permission_reader()
 
     def load_from_checkpoint_with_perm_sync(
         self,

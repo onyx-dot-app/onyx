@@ -10,7 +10,7 @@ package cmd
 //	R3 --rerun while on the CI branch       -> reset to the fork head, stash
 //	                                           restored, no new PR             TestRunCI_rerunOnCIBranchUpdatesExistingPR
 //	R4 --dry-run with a stale local branch  -> branch recreated locally only   TestRunCI_dryRunRecreatesLocalBranchOnly
-//	R5 --no-verify with a failing hook      -> push bypasses the hook          TestRunCI_noVerifySkipsPrePushHook
+//	R5 a failing pre-push hook              -> push skips the hook             TestRunCI_pushSkipsPrePushHook
 //	R6 gh, fork, or push failures           -> errors, back on the original    TestRunCI_failures
 
 import (
@@ -238,14 +238,15 @@ func TestRunCI_dryRunRecreatesLocalBranchOnly(t *testing.T) {
 	}
 }
 
-func TestRunCI_noVerifySkipsPrePushHook(t *testing.T) {
-	// Precondition.
+func TestRunCI_pushSkipsPrePushHook(t *testing.T) {
+	// Precondition: a pre-push hook that records it ran and fails.
 	repo := gitrelSetupRunCIRepo(t)
 	gitrelFakeGH(t, gitrelPRViewArm+"\n"+gitrelNoCIPRArm+"\n"+gitrelCIPRCreate)
-	gitrelHooks(t, repo.Work, map[string]string{"pre-push": "#!/bin/sh\nexit 1\n"})
+	marker := filepath.Join(t.TempDir(), "pre-push-ran")
+	gitrelHooks(t, repo.Work, map[string]string{"pre-push": "#!/bin/sh\ntouch '" + marker + "'\nexit 1\n"})
 
 	// Under test.
-	err := runCI("7353", &RunCIOptions{Yes: true, NoVerify: true})
+	err := runCI("7353", &RunCIOptions{Yes: true})
 
 	// Postcondition.
 	if err != nil {
@@ -253,6 +254,9 @@ func TestRunCI_noVerifySkipsPrePushHook(t *testing.T) {
 	}
 	if !gitrelRefExists(repo.Origin, "refs/heads/run-ci/7353") {
 		t.Error("expected the push to bypass the failing hook")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("pre-push hook ran during run-ci")
 	}
 }
 
@@ -317,6 +321,14 @@ func TestRunCI_failures(t *testing.T) {
 			wantErr: "Failed to fetch fork branch: exit status 1",
 		},
 		{
+			name:   "CI branch held by another worktree",
+			ghArms: gitrelPRViewArm + "\n" + gitrelNoCIPRArm,
+			setup: func(t *testing.T, repo gitrelRunCIRepo) {
+				gittest.Git(t, repo.Work, "worktree", "add", "--quiet", "-b", "run-ci/7353", filepath.Join(t.TempDir(), "wt"))
+			},
+			wantErr: "Failed to create CI branch: exit status 128",
+		},
+		{
 			name:   "push rejected",
 			ghArms: gitrelPRViewArm + "\n" + gitrelNoCIPRArm,
 			setup: func(t *testing.T, repo gitrelRunCIRepo) {
@@ -329,7 +341,10 @@ func TestRunCI_failures(t *testing.T) {
 			ghArms: gitrelPRViewArm + "\n" + gitrelNoCIPRArm + "\n" + gitrelCIPRCreate,
 			setup: func(t *testing.T, repo gitrelRunCIRepo) {
 				// A held config lock makes the post-push tracking write fail.
-				gitrelHooks(t, repo.Work, map[string]string{"pre-push": "#!/bin/sh\ntouch \"$(git rev-parse --git-dir)/config.lock\"\n"})
+				lock := filepath.Join(gittest.Git(t, repo.Work, "rev-parse", "--absolute-git-dir"), "config.lock")
+				if err := os.WriteFile(lock, nil, 0o644); err != nil {
+					t.Fatal(err)
+				}
 			},
 			wantErr: "Failed to set CI branch upstream remote: ",
 		},
@@ -386,14 +401,30 @@ func TestRunCI_rejectsChangedForkHead(t *testing.T) {
 	}
 }
 
-func TestRunCI_pushesConfirmedCommitAfterLocalBranchMoves(t *testing.T) {
+func TestRunCI_neverChecksOutForkCode(t *testing.T) {
+	// Precondition: a post-checkout hook that records it ran, as a fork's
+	// pre-commit config would.
 	repo := gitrelSetupRunCIRepo(t)
 	gitrelFakeGH(t, gitrelPRViewArm+"\n"+gitrelNoCIPRArm+"\n"+gitrelCIPRCreate)
-	gitrelHooks(t, repo.Work, map[string]string{"post-checkout": "#!/bin/sh\nif [ \"$(git branch --show-current)\" = run-ci/7353 ]; then git reset --hard main; fi\n"})
+	marker := filepath.Join(t.TempDir(), "post-checkout-ran")
+	gitrelHooks(t, repo.Work, map[string]string{"post-checkout": "#!/bin/sh\ntouch '" + marker + "'\n"})
+
+	// Under test.
 	if err := runCI("7353", &RunCIOptions{Yes: true}); err != nil {
 		t.Fatal(err)
 	}
+
+	// Postcondition.
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("post-checkout hook ran: run-ci checked out the fork's tree")
+	}
 	if tip := gittest.Git(t, repo.Origin, "rev-parse", "refs/heads/run-ci/7353"); tip != repo.ForkSHA {
-		t.Fatalf("pushed mutable branch instead of confirmed commit: got %s, want %s", tip, repo.ForkSHA)
+		t.Errorf("expected origin run-ci/7353 at the confirmed commit %s, got %s", repo.ForkSHA, tip)
+	}
+	if tip := gittest.Git(t, repo.Work, "rev-parse", "refs/heads/run-ci/7353"); tip != repo.ForkSHA {
+		t.Errorf("expected local run-ci/7353 at %s, got %s", repo.ForkSHA, tip)
+	}
+	if branch := gittest.Git(t, repo.Work, "branch", "--show-current"); branch != "main" {
+		t.Errorf("expected to stay on main, got %q", branch)
 	}
 }

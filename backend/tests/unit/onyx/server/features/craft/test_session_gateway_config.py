@@ -633,7 +633,9 @@ def test_empty_gateway_session_skips_unchanged_catalog() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -658,7 +660,9 @@ def test_unchanged_catalog_retries_pending_dispose() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -814,7 +818,9 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
     config = _gateway_config()
     manager, sandbox_manager, _ = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     # Exactly the post-rebuild state: file already correct on disk.
     sandbox_manager.read_file.return_value = expected.encode()

@@ -305,7 +305,7 @@ export default function CreateCustomAppModal({
                   <InputList
                     values={upstreamPatterns}
                     onChange={setUpstreamPatterns}
-                    placeholder="https://api.example.com/*"
+                    placeholder={t("placeholders.allowedUrl")}
                   />
                 </div>
 

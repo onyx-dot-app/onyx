@@ -221,6 +221,11 @@ the currently displayed conversation. `set_as_latest_chat_message`
 (`db/chat.py`) is what a branch switch calls: it repoints the parent's
 pointer to the selected child, nothing else moves.
 
+`set_preferred_response` accepts only an assistant child in the user message's
+chat session. It validates the type, session, and parent before changing either
+`preferred_response_id` or `latest_child_message_id`. Invalid selections leave
+both pointers unchanged. The endpoint checks ownership of the user message first.
+
 ---
 
 ## 4. How it works

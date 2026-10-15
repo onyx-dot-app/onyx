@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from mitmproxy import http
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
@@ -196,6 +197,35 @@ def test_get_stream_is_not_gated(
     server = craft_server()
     req = _request(_server_host(server), method="GET", body=b"")
     assert _evaluate(req, user.id) is None
+
+
+@pytest.mark.parametrize("method", ["GET", "POST"])
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Upgrade": "websocket", "Connection": "keep-alive, Upgrade"},
+        {"Upgrade": "custom-protocol"},
+        {"Connection": "uPgRaDe"},
+    ],
+)
+def test_protocol_upgrade_is_denied(
+    db_session: Session,
+    craft_server: CraftServerFactory,
+    method: str,
+    headers: dict[str, str],
+) -> None:
+    user = create_test_user(db_session, "mcp_eval_upgrade")
+    server = craft_server()
+    request = http.Request.make(
+        method,
+        server.server_url,
+        b'{"jsonrpc":"2.0","id":1,"method":"initialize"}' if method == "POST" else b"",
+        [(key.encode(), value.encode()) for key, value in headers.items()],
+    )
+    matched = McpRequestEvaluator().evaluate(request, POSTGRES_DEFAULT_SCHEMA, user.id)
+    assert matched is not None
+    assert matched.governing_action.policy is EndpointPolicy.DENY
+    assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
 
 
 def test_unclassifiable_body_on_matched_host_is_denied(

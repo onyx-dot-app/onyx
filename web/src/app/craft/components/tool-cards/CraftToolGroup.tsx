@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgCheckAll, SvgChevronDown } from "@opal/icons";
+import { SvgCheckAll, SvgChevronDown, SvgLoader } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,10 +12,7 @@ import {
 } from "@/refresh-components/Collapsible";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CometEdge from "@/app/craft/components/CometEdge";
-import {
-  isSkillCall,
-  SvgLoader,
-} from "@/app/craft/components/tool-cards/helpers";
+import { isSkillCall } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
 interface CraftToolGroupProps {
