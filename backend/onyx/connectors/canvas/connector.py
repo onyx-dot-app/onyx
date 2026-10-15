@@ -1,4 +1,6 @@
+import re
 import time
+from collections.abc import Generator
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, NoReturn, cast
@@ -26,6 +28,7 @@ from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     GenerateSlimDocumentOutput,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnectorWithPermSync,
 )
@@ -51,6 +54,8 @@ logger = setup_logger()
 
 _SLIM_DOC_SYNC_LABEL = "canvas_retrieve_all_slim_docs_perm_sync"
 _ACTIVE_ENROLLMENT_STATES = {"active", "invited"}
+# Matches the ids the crawl writes: canvas-<page|assignment|announcement>-<course id>-<object id>
+_DOC_ID_PATTERN = re.compile(r"^canvas-(page|assignment|announcement)-(\d+)-(\d+)$")
 
 
 CANVAS_COURSE_GROUP_ID_PREFIX = "canvas-course"
@@ -342,9 +347,13 @@ class CanvasConnectorCheckpoint(ConnectorCheckpoint):
             self.advance_course()
 
 
+CanvasItem = CanvasPage | CanvasAssignment | CanvasAnnouncement
+
+
 class CanvasConnector(
     CheckpointedConnectorWithPermSync[CanvasConnectorCheckpoint],
     SlimConnectorWithPermSync,
+    Resolver,
 ):
     # The slim listings of pages and assignments ignore `start`.
     slim_listing_honors_indexing_start = False
@@ -636,15 +645,7 @@ class CanvasConnector(
                             break
                         # ts > end: page is newer than our window, skip it
                         continue
-                    doc = self._convert_page_to_document(page)
-                    results.append(
-                        self._maybe_attach_permissions(
-                            doc=doc,
-                            course_id=course_id,
-                            include_permissions=include_permissions,
-                            item=page,
-                        )
-                    )
+                    results.append(self._item_to_document(page, include_permissions))
 
                 elif stage == CanvasStage.ASSIGNMENTS:
                     assignment = CanvasAssignment.from_api(item, course_id=course_id)
@@ -652,14 +653,8 @@ class CanvasConnector(
                         assignment.updated_at, start, end
                     ):
                         continue
-                    doc = self._convert_assignment_to_document(assignment)
                     results.append(
-                        self._maybe_attach_permissions(
-                            doc=doc,
-                            course_id=course_id,
-                            include_permissions=include_permissions,
-                            item=assignment,
-                        )
+                        self._item_to_document(assignment, include_permissions)
                     )
 
                 elif stage == CanvasStage.ANNOUNCEMENTS:
@@ -675,14 +670,8 @@ class CanvasConnector(
                         continue
                     if not _in_time_window(announcement.posted_at, start, end):
                         continue
-                    doc = self._convert_announcement_to_document(announcement)
                     results.append(
-                        self._maybe_attach_permissions(
-                            doc=doc,
-                            course_id=course_id,
-                            include_permissions=include_permissions,
-                            item=announcement,
-                        )
+                        self._item_to_document(announcement, include_permissions)
                     )
 
             except Exception as e:
@@ -710,7 +699,7 @@ class CanvasConnector(
     def _get_item_permissions(
         self,
         course_id: int,
-        item: CanvasPage | CanvasAssignment | CanvasAnnouncement,
+        item: CanvasItem,
     ) -> ExternalAccess | None:
         course_context = self._get_course_permission_context(course_id)
         if course_context is None:
@@ -726,13 +715,29 @@ class CanvasConnector(
         doc: Document,
         course_id: int,
         include_permissions: bool,
-        item: CanvasPage | CanvasAssignment | CanvasAnnouncement,
+        item: CanvasItem,
     ) -> Document:
         if not include_permissions:
             return doc
 
         doc.external_access = self._get_item_permissions(course_id, item)
         return doc
+
+    def _item_to_document(
+        self, item: CanvasItem, include_permissions: bool
+    ) -> Document:
+        if isinstance(item, CanvasPage):
+            doc = self._convert_page_to_document(item)
+        elif isinstance(item, CanvasAssignment):
+            doc = self._convert_assignment_to_document(item)
+        else:
+            doc = self._convert_announcement_to_document(item)
+        return self._maybe_attach_permissions(
+            doc=doc,
+            course_id=item.course_id,
+            include_permissions=include_permissions,
+            item=item,
+        )
 
     def _load_from_checkpoint(
         self,
@@ -920,6 +925,112 @@ class CanvasConnector(
         self, checkpoint_json: str
     ) -> CanvasConnectorCheckpoint:
         return CanvasConnectorCheckpoint.model_validate_json(checkpoint_json)
+
+    def _fetch_item(
+        self, stage: CanvasStage, course_id: int, item_id: int
+    ) -> CanvasItem:
+        """Fetch one item by id. Raises ValueError if the crawl would not index it."""
+        if stage == CanvasStage.PAGES:
+            payload, _ = self.canvas_client.get(f"courses/{course_id}/pages/{item_id}")
+            if not payload.get("published"):
+                raise ValueError(f"Canvas page {item_id} is not published")
+            return CanvasPage.from_api(payload, course_id=course_id)
+
+        if stage == CanvasStage.ASSIGNMENTS:
+            config = _STAGE_CONFIG[CanvasStage.ASSIGNMENTS]
+            payload, _ = self.canvas_client.get(
+                f"courses/{course_id}/assignments/{item_id}",
+                params={"include[]": config["params"]["include[]"]},
+            )
+            if not payload.get("published"):
+                raise ValueError(f"Canvas assignment {item_id} is not published")
+            return CanvasAssignment.from_api(payload, course_id=course_id)
+
+        # Announcements are discussion topics with is_announcement set.
+        payload, _ = self.canvas_client.get(
+            f"courses/{course_id}/discussion_topics/{item_id}",
+            params={"include[]": "sections"},
+        )
+        if not payload.get("is_announcement"):
+            raise ValueError(
+                f"Canvas discussion topic {item_id} is not an announcement"
+            )
+        if not payload.get("posted_at"):
+            raise ValueError(f"Canvas announcement {item_id} is not posted")
+        return CanvasAnnouncement.from_api(payload, course_id=course_id)
+
+    @override
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        targets: list[tuple[str, CanvasStage, int, int]] = []
+        for failure in errors:
+            # Entity failures name a whole course or stage, not a document.
+            if failure.failed_document is None:
+                continue
+            doc_id = failure.failed_document.document_id
+            match = _DOC_ID_PATTERN.match(doc_id)
+            if match is None:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=doc_id),
+                    failure_message=(
+                        f"'{doc_id}' is not a Canvas document id; expected "
+                        "canvas-<page|assignment|announcement>-<course id>-<item id>"
+                    ),
+                )
+                continue
+            targets.append(
+                (
+                    doc_id,
+                    CanvasStage(f"{match.group(1)}s"),
+                    int(match.group(2)),
+                    int(match.group(3)),
+                )
+            )
+
+        if not targets:
+            return
+
+        try:
+            course_ids = {course.id for course in self._list_courses()}
+        except OnyxError as e:
+            if e.status_code in (401, 403):
+                _handle_canvas_api_error(e)  # NoReturn — always raises
+            raise
+
+        for doc_id, stage, course_id, item_id in targets:
+            if course_id not in course_ids:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=doc_id),
+                    failure_message=(
+                        f"Canvas course {course_id} is not available to this connector"
+                    ),
+                )
+                continue
+            try:
+                item = self._fetch_item(stage, course_id, item_id)
+                yield self._item_to_document(item, include_permissions)
+            except OnyxError as e:
+                # Same rules as the crawl: host/scheme errors and auth
+                # errors stop the whole run.
+                if e._status_code_override is None:
+                    raise
+                if e.status_code in (401, 403):
+                    _handle_canvas_api_error(e)  # NoReturn — always raises
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=doc_id),
+                    failure_message=f"Failed to reindex Canvas document {doc_id}: {e}",
+                    exception=e,
+                )
+            except Exception as e:
+                logger.exception("Failed to reindex Canvas document %s", doc_id)
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=doc_id),
+                    failure_message=f"Failed to reindex Canvas document {doc_id}: {e}",
+                    exception=e,
+                )
 
     @override
     def validate_connector_settings(self) -> None:
