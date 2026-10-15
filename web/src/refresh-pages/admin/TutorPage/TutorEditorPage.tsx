@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import useSWR from "swr";
@@ -49,6 +49,10 @@ import {
   detectTeachingStyle,
   type TeachingStyle,
 } from "./constants";
+import {
+  getLtiTutorScopeError,
+  includeLtiCourseRoot,
+} from "@/refresh-pages/admin/TutorPage/utils";
 import {
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
@@ -171,8 +175,13 @@ export default function TutorEditorPage({
   const launchCanvasCourseNodeIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID
   );
-  const launchCanvasCourseNodeId = launchCanvasCourseNodeIdRaw
-    ? parseInt(launchCanvasCourseNodeIdRaw)
+  const parsedLaunchCanvasCourseNodeId = launchCanvasCourseNodeIdRaw
+    ? Number(launchCanvasCourseNodeIdRaw)
+    : null;
+  const launchCanvasCourseNodeId = Number.isInteger(
+    parsedLaunchCanvasCourseNodeId
+  )
+    ? parsedLaunchCanvasCourseNodeId
     : null;
   // Live course connector status. Its `canvas_course_node_id` is the
   // authoritative scope for the Canvas knowledge picker: null means the
@@ -201,11 +210,16 @@ export default function TutorEditorPage({
   const embeddedRaw = searchParams?.get(SEARCH_PARAM_NAMES.EMBEDDED) ?? null;
   const isCreating = !existingTutor;
   const missingLtiContextOnCreate = isCreating && !ltiContextId;
+  const [isKnowledgeSelectionPending, setIsKnowledgeSelectionPending] =
+    useState(false);
 
   // Build the /tutor return URL, preserving the LTI launch context (course
   // node, project, embedded mode) so the picker and instructor tabs render
   // correctly without needing a refresh.
-  function buildCourseReturnUrl(courseLabelName: string): Route {
+  function buildCourseReturnUrl(
+    courseLabelName: string,
+    tab?: "knowledge"
+  ): Route {
     const params = new URLSearchParams({
       [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
     });
@@ -220,6 +234,9 @@ export default function TutorEditorPage({
     }
     if (embeddedRaw) {
       params.set(SEARCH_PARAM_NAMES.EMBEDDED, embeddedRaw);
+    }
+    if (tab) {
+      params.set(SEARCH_PARAM_NAMES.TUTOR_TAB, tab);
     }
     return `/tutor?${params.toString()}` as Route;
   }
@@ -261,6 +278,10 @@ export default function TutorEditorPage({
   const existingCourseLabel = existingTutor?.labels?.find(
     (l) => l.name !== VIRTUAL_TUTOR_LABEL_NAME
   );
+  const knowledgeUrl =
+    existingTutor && projectIdRaw && embeddedRaw === "true" && ltiContextId
+      ? buildCourseReturnUrl(ltiContextId, "knowledge")
+      : undefined;
 
   const detectedStyle = detectTeachingStyle(
     existingTutor?.system_prompt ?? null
@@ -286,11 +307,12 @@ export default function TutorEditorPage({
         ""
     ),
 
-    // Tutor knowledge. The user picks which folders / documents / pages to
-    // scope the tutor to (none means "all available course knowledge").
+    // Only new tutors default to the full course. Existing tutors must keep
+    // their saved scope, including partial selections and empty knowledge.
     document_ids: existingTutor?.attached_documents?.map((doc) => doc.id) ?? [],
-    hierarchy_node_ids:
-      existingTutor?.hierarchy_nodes?.map((node) => node.id) ?? [],
+    hierarchy_node_ids: existingTutor
+      ? existingTutor.hierarchy_nodes?.map((node) => node.id) ?? []
+      : includeLtiCourseRoot([], ltiCanvasCourseNodeId),
   };
 
   const validationSchema = Yup.object().shape({
@@ -313,7 +335,17 @@ export default function TutorEditorPage({
   });
 
   async function handleSubmit(values: typeof initialValues) {
+    if (isKnowledgeSelectionPending) return;
     try {
+      const ltiTutorScopeError = getLtiTutorScopeError(
+        ltiContextId,
+        ltiCanvasCourseNodeId
+      );
+      if (ltiTutorScopeError) {
+        toast.error(ltiTutorScopeError);
+        return;
+      }
+
       const starterMessages = values.starter_messages
         .filter((message: string) => message.trim() !== "")
         .map((message: string) => ({ message, name: message }));
@@ -322,7 +354,9 @@ export default function TutorEditorPage({
         starterMessages.length > 0 ? starterMessages : null;
 
       const toolIds: number[] = [];
-      if (vectorDbEnabled && searchTool) {
+      const hasKnowledge =
+        values.hierarchy_node_ids.length > 0 || values.document_ids.length > 0;
+      if (vectorDbEnabled && searchTool && hasKnowledge) {
         toolIds.push(searchTool.id);
       }
 
@@ -376,6 +410,7 @@ export default function TutorEditorPage({
         user_file_ids: [],
         hierarchy_node_ids: values.hierarchy_node_ids,
         document_ids: values.document_ids,
+        lti_context_id: ltiContextId,
       };
 
       let personaResponse;
@@ -508,25 +543,31 @@ export default function TutorEditorPage({
                             tooltip={
                               isSubmitting
                                 ? "Saving..."
-                                : missingLtiContextOnCreate
-                                  ? "Launch the Onyx tool from Canvas to bind this tutor to a course."
-                                  : !isValid
-                                    ? "Please fix the errors before saving."
-                                    : !dirty
-                                      ? "No changes have been made."
-                                      : undefined
+                                : isKnowledgeSelectionPending
+                                  ? "Updating knowledge selection..."
+                                  : missingLtiContextOnCreate
+                                    ? "Launch the Onyx tool from Canvas to bind this tutor to a course."
+                                    : !isValid
+                                      ? "Please fix the errors before saving."
+                                      : !dirty
+                                        ? "No changes have been made."
+                                        : undefined
                             }
                             side="bottom"
                           >
                             <Disabled
                               disabled={
                                 isSubmitting ||
+                                isKnowledgeSelectionPending ||
                                 !isValid ||
                                 !dirty ||
                                 missingLtiContextOnCreate
                               }
                             >
-                              <Button type="submit">
+                              <Button
+                                type="submit"
+                                disabled={isKnowledgeSelectionPending}
+                              >
                                 {existingTutor ? "Save" : "Deploy"}
                               </Button>
                             </Disabled>
@@ -590,6 +631,9 @@ export default function TutorEditorPage({
 
                       {/* Section 3: Knowledge */}
                       <TutorKnowledgePane
+                        onSelectionPendingChange={
+                          setIsKnowledgeSelectionPending
+                        }
                         selectedDocumentIds={values.document_ids}
                         onDocumentIdsChange={(ids) =>
                           setFieldValue("document_ids", ids)
@@ -603,6 +647,8 @@ export default function TutorEditorPage({
                         }
                         initialHierarchyNodes={existingTutor?.hierarchy_nodes}
                         canvasCourseNodeId={ltiCanvasCourseNodeId}
+                        ltiContextId={ltiContextId}
+                        knowledgeUrl={knowledgeUrl}
                       />
 
                       <Separator noPadding />

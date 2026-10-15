@@ -1,8 +1,4 @@
 import json
-from typing import cast
-from urllib.parse import parse_qs
-from urllib.parse import ParseResult
-from urllib.parse import urlparse
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
@@ -41,7 +37,7 @@ from onyx.connectors.google_utils.shared_constants import (
 from onyx.connectors.google_utils.shared_constants import (
     ONYX_SCOPE_INSTRUCTIONS,
 )
-from onyx.db.credentials import update_credential_json
+from onyx.db.credentials import update_owned_credential_json
 from onyx.db.models import User
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import unwrap_str
@@ -130,7 +126,12 @@ def update_credential_access_tokens(
         DB_CREDENTIALS_AUTHENTICATION_METHOD: auth_method.value,
     }
 
-    if not update_credential_json(credential_id, new_creds_dict, user, db_session):
+    if not update_owned_credential_json(
+        credential_id,
+        new_creds_dict,
+        user,
+        db_session,
+    ):
         return None
     return creds
 
@@ -160,7 +161,9 @@ def build_service_account_creds(
     )
 
 
-def get_auth_url(credential_id: int, source: DocumentSource) -> str:
+def get_auth_url(
+    credential_id: int, source: DocumentSource, *, state: str | None = None
+) -> str:
     if source == DocumentSource.GOOGLE_DRIVE:
         creds_str = str(get_kv_store().load(KV_GOOGLE_DRIVE_CRED_KEY))
     elif source == DocumentSource.GMAIL:
@@ -173,16 +176,21 @@ def get_auth_url(credential_id: int, source: DocumentSource) -> str:
         scopes=GOOGLE_SCOPES[source],
         redirect_uri=_build_frontend_google_drive_redirect(source),
     )
-    auth_url, _ = flow.authorization_url(prompt="consent")
+    authorization_params = {"prompt": "consent"}
+    if state is not None:
+        authorization_params["state"] = state
+    auth_url, generated_state = flow.authorization_url(**authorization_params)
+    if state is not None and generated_state != state:
+        raise ValueError("Google OAuth did not preserve the supplied state")
 
-    parsed_url = cast(ParseResult, urlparse(auth_url))
-    params = parse_qs(parsed_url.query)
-
-    get_kv_store().store(
-        KV_CRED_KEY.format(credential_id),
-        {"value": params.get("state", [None])[0]},
-        encrypt=True,
-    )
+    # The LTI popup authenticates with a one-time state record rather than the
+    # normal credential cookie. Keep the existing KV state for regular OAuth.
+    if state is None:
+        get_kv_store().store(
+            KV_CRED_KEY.format(credential_id),
+            {"value": generated_state},
+            encrypt=True,
+        )
     return str(auth_url)
 
 

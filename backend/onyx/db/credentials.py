@@ -252,6 +252,8 @@ def create_credential(
     credential_data: CredentialBase,
     user: User,
     db_session: Session,
+    *,
+    is_lti_credential: bool = False,
 ) -> Credential:
     credential = Credential(
         credential_json=credential_data.credential_json,
@@ -260,6 +262,7 @@ def create_credential(
         source=credential_data.source,
         name=credential_data.name,
         curator_public=credential_data.curator_public,
+        is_lti_credential=is_lti_credential,
     )
     db_session.add(credential)
     db_session.flush()  # This ensures the credential gets an ID
@@ -349,6 +352,32 @@ def update_credential_json(
     credential.credential_json = credential_json  # type: ignore[assignment]
     db_session.commit()
     # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
+    return credential
+
+
+def update_owned_credential_json(
+    credential_id: int,
+    credential_json: dict[str, Any],
+    user: User,
+    db_session: Session,
+) -> Credential | None:
+    """Update a credential only when the current user is its explicit owner.
+
+    OAuth callbacks use this narrower boundary because role-based visibility
+    must never grant permission to replace another user's refresh token.
+    """
+    credential = db_session.scalar(
+        select(Credential).where(
+            Credential.id == credential_id,
+            Credential.user_id == user.id,
+        )
+    )
+    if credential is None:
+        return None
+
+    credential.credential_json = credential_json  # type: ignore[assignment]
+    db_session.commit()
     db_session.expire(credential)
     return credential
 
