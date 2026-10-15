@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from http import HTTPStatus
 
 from fastapi import APIRouter, Depends, Query
@@ -32,7 +32,6 @@ from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.cc_pair_runs import (
     count_cc_pair_runs_by_status_group,
     get_cc_pair_run_page,
-    get_index_runs_since,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.connector import fetch_connector_by_id, set_connector_check_frequency
@@ -97,10 +96,7 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.documents.cc_pair_throughput import (
-    docs_indexed_per_slice,
-    run_ended_at,
-)
+from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.credential import credential_ids_to_mask
 from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
@@ -114,7 +110,6 @@ from onyx.server.documents.models import (
     CCPairRun,
     CCPairRunsResponse,
     CCPairThroughputResponse,
-    CCPairThroughputRun,
     CCPairThroughputWindow,
     CCPropertyUpdateRequest,
     CCStatusUpdateRequest,
@@ -363,9 +358,7 @@ def get_cc_pair_runs(
     wanted = [kind for kind in pair_kinds if kinds is None or kind in kinds]
     groups = None if status_groups is None else set(status_groups)
     run_filter = CCPairRunFilter(
-        cc_pair_id=cc_pair_id,
-        credential_id=cc_pair.credential_id,
-        connector_id=cc_pair.connector_id,
+        cc_pair_ids=[cc_pair_id],
         source=cc_pair.connector.source,
         since=since,
         error_query=(q or "").strip() or None,
@@ -401,10 +394,6 @@ def get_cc_pair_runs(
     )
 
 
-# 10 minute bars over the default 12 hour window. Longer windows get wider bars.
-_THROUGHPUT_SLICES = 72
-
-
 @router.get("/admin/cc-pair/{cc_pair_id}/throughput")
 def get_cc_pair_throughput(
     cc_pair_id: int,
@@ -426,28 +415,7 @@ def get_cc_pair_throughput(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "CC Pair not found for current user permissions",
         )
-    window_end = datetime.now(timezone.utc)
-    window_start = window_end - window.duration()
-    attempts = get_index_runs_since(db_session, cc_pair_id, window_start)
-    return CCPairThroughputResponse(
-        window_start=window_start,
-        window_end=window_end,
-        docs_indexed=docs_indexed_per_slice(
-            attempts, window_start, window_end, _THROUGHPUT_SLICES
-        ),
-        # Every run the query gives overlaps the window, also one that began
-        # before it. A queued run has no start yet, so it starts at its creation.
-        runs=[
-            CCPairThroughputRun(
-                started=attempt.time_started or attempt.time_created,
-                ended=run_ended_at(
-                    attempt, attempt.time_started or attempt.time_created
-                ),
-                status=attempt.status,
-            )
-            for attempt in attempts
-        ],
-    )
+    return throughput_of(db_session, [cc_pair_id], window)
 
 
 def _cancel_index_attempt(

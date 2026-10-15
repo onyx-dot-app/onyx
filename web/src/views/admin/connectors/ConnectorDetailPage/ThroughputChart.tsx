@@ -3,8 +3,15 @@
 import useSWR from "swr";
 import { useFormatter, useTranslations } from "next-intl";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { Card, MessageCard, Text } from "@opal/components";
+import {
+  Card,
+  Dropdown,
+  MessageCard,
+  OpenButton,
+  Text,
+} from "@opal/components";
 import { Section } from "@opal/layouts";
+import { SvgClock } from "@opal/icons";
 import { LineLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -15,16 +22,27 @@ import type {
 } from "@/lib/connectors/types";
 import type { ValidStatuses } from "@/lib/types";
 
-const POLL_MS = 30_000;
+export const THROUGHPUT_POLL_MS = 30_000;
 const BARS_HEIGHT = 48;
 const AXIS_HEIGHT = 16;
+const DAY_MINUTES = 1440;
+const HOUR_MINUTES = 60;
 
-// Labels sit on local hours divisible by this. At 24 they fall on midnight and show the date.
-const TICK_HOURS: Record<CCPairThroughputWindow, number> = {
-  "12h": 2,
-  "24h": 4,
-  "7d": 24,
-};
+// Labels sit on local times divisible by this. At a day they fall on midnight and show the date.
+const TICK_MINUTES = {
+  "1h": 10,
+  "12h": 2 * HOUR_MINUTES,
+  "24h": 4 * HOUR_MINUTES,
+  "7d": DAY_MINUTES,
+} satisfies Record<CCPairThroughputWindow, number>;
+
+/** Each window's label under `admin.connector.runs.window`. */
+export const WINDOW_LABEL_KEYS = {
+  "1h": "h1",
+  "12h": "h12",
+  "24h": "h24",
+  "7d": "d7",
+} as const satisfies Record<CCPairThroughputWindow, string>;
 
 // The status strip's cell color for a slice a run of that status covered.
 const RUN_CELL_CLASS: Record<ValidStatuses, string> = {
@@ -44,13 +62,17 @@ interface Slice {
   docs: number;
 }
 
-/** The local hours inside the window that are a multiple of `hours`. */
-function axisTicks(start: number, end: number, hours: number): number[] {
+/** The local times inside the window that are a whole multiple of `minutes` past local midnight. */
+function axisTicks(start: number, end: number, minutes: number): number[] {
+  // Ticks within an hour step by their own spacing, longer ones hour by hour so a day's ticks still land on midnight across a clock change.
+  const step = Math.min(minutes, HOUR_MINUTES);
   const tick = new Date(start);
-  tick.setMinutes(0, 0, 0);
+  tick.setSeconds(0, 0);
+  tick.setMinutes(tick.getMinutes() - (tick.getMinutes() % step));
   const ticks: number[] = [];
-  for (; tick.getTime() <= end; tick.setHours(tick.getHours() + 1)) {
-    if (tick.getTime() >= start && tick.getHours() % hours === 0) {
+  for (; tick.getTime() <= end; tick.setMinutes(tick.getMinutes() + step)) {
+    const sinceMidnight = tick.getHours() * HOUR_MINUTES + tick.getMinutes();
+    if (tick.getTime() >= start && sinceMidnight % minutes === 0) {
       ticks.push(tick.getTime());
     }
   }
@@ -100,6 +122,43 @@ function sliceStatus(
   return shown?.status ?? null;
 }
 
+export interface ThroughputWindowPickerProps {
+  windows: readonly CCPairThroughputWindow[];
+  value: CCPairThroughputWindow;
+  onChange: (window: CCPairThroughputWindow) => void;
+}
+
+/** Picks how far back a throughput chart reaches. */
+export function ThroughputWindowPicker({
+  windows,
+  value,
+  onChange,
+}: ThroughputWindowPickerProps) {
+  const tWindow = useTranslations("admin.connector.runs.window");
+  return (
+    <Dropdown>
+      <Dropdown.Trigger asChild>
+        <OpenButton icon={SvgClock} state="empty">
+          {tWindow(WINDOW_LABEL_KEYS[value])}
+        </OpenButton>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={tWindow("label")}
+        value={value}
+        onSelect={(option) => {
+          const picked = windows.find((window) => window === option.value);
+          if (picked !== undefined) onChange(picked);
+        }}
+        items={windows.map((window) => ({
+          kind: "option" as const,
+          value: window,
+          title: tWindow(WINDOW_LABEL_KEYS[window]),
+        }))}
+      />
+    </Dropdown>
+  );
+}
+
 interface SliceTooltipProps {
   active?: boolean;
   payload?: { payload: Slice }[];
@@ -130,28 +189,21 @@ function SliceTooltip({ active, payload, sliceMs }: SliceTooltipProps) {
   );
 }
 
-export interface ThroughputChartProps {
-  ccPairId: number;
+export interface ThroughputBarsProps {
+  data: CCPairThroughputResponse;
   range: CCPairThroughputWindow;
+  /** The bars' height in pixels, above the axis. */
+  height?: number;
 }
 
-/** Documents indexed in each slice of the window, over a strip that colors each slice by the run that covered it. */
-export default function ThroughputChart({
-  ccPairId,
+/** Documents indexed in each slice of a window, over a strip that colors each slice by the run that covered it. */
+export function ThroughputBars({
+  data,
   range,
-}: ThroughputChartProps) {
+  height = BARS_HEIGHT,
+}: ThroughputBarsProps) {
   const t = useTranslations("admin.connector.statusCard.throughput");
   const format = useFormatter();
-  const { data, error } = useSWR<CCPairThroughputResponse>(
-    SWR_KEYS.ccPairThroughput(ccPairId, range),
-    errorHandlingFetcher,
-    { refreshInterval: POLL_MS, keepPreviousData: true }
-  );
-  if (error !== undefined) {
-    return <MessageCard variant="error" title={t("loadError")} />;
-  }
-  if (data === undefined) return <LineLoader lines={3} />;
-
   const start = Date.parse(data.window_start);
   const end = Date.parse(data.window_end);
   const sliceMs = (end - start) / data.docs_indexed.length;
@@ -159,7 +211,8 @@ export default function ThroughputChart({
     at: start + sliceMs * (index + 0.5),
     docs,
   }));
-  const tickHours = TICK_HOURS[range];
+  const tickMinutes = TICK_MINUTES[range];
+  const ticks = axisTicks(start, end, tickMinutes);
   // A run still going covers up to the window's end.
   const runs: Run[] = data.runs.map((run) => ({
     start: Date.parse(run.started),
@@ -172,7 +225,7 @@ export default function ThroughputChart({
     <Section alignItems="stretch" gap={0.5} height="fit" dir="ltr">
       {/* raw-ok: the chart is an SVG image, Section has no img role */}
       <div role="img" aria-label={t("ariaLabel")} className="w-full">
-        <ResponsiveContainer width="100%" height={BARS_HEIGHT + AXIS_HEIGHT}>
+        <ResponsiveContainer width="100%" height={height + AXIS_HEIGHT}>
           <BarChart
             data={slices}
             margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
@@ -183,9 +236,9 @@ export default function ThroughputChart({
               type="number"
               scale="time"
               domain={[start, end]}
-              ticks={axisTicks(start, end, tickHours)}
+              ticks={ticks}
               tickFormatter={(value: number) =>
-                tickHours >= 24
+                tickMinutes >= DAY_MINUTES
                   ? format.dateTime(new Date(value), {
                       month: "short",
                       day: "numeric",
@@ -240,4 +293,27 @@ export default function ThroughputChart({
       </div>
     </Section>
   );
+}
+
+export interface ThroughputChartProps {
+  ccPairId: number;
+  range: CCPairThroughputWindow;
+}
+
+/** One pair's throughput over the window, polled. */
+export default function ThroughputChart({
+  ccPairId,
+  range,
+}: ThroughputChartProps) {
+  const t = useTranslations("admin.connector.statusCard.throughput");
+  const { data, error } = useSWR<CCPairThroughputResponse>(
+    SWR_KEYS.ccPairThroughput(ccPairId, range),
+    errorHandlingFetcher,
+    { refreshInterval: THROUGHPUT_POLL_MS, keepPreviousData: true }
+  );
+  if (error !== undefined) {
+    return <MessageCard variant="error" title={t("loadError")} />;
+  }
+  if (data === undefined) return <LineLoader lines={3} />;
+  return <ThroughputBars data={data} range={range} />;
 }

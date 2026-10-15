@@ -2521,6 +2521,7 @@
         "window": {
           "label": "Time range",
           "all": "All time",
+          "h1": "Last hour",
           "h12": "Last 12 hours",
           "h24": "Last 24 hours",
           "d7": "Last 7 days",
@@ -6948,6 +6949,20 @@
             "label": "Expand All"
           }
         }
+      },
+      "overview": {
+        "connectors": {
+          "caption": "Indexing / active",
+          "label": "Connectors"
+        },
+        "documents": {
+          "caption": "Recently indexed / total",
+          "label": "Documents"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "The overview could not load."
       }
     },
     "languageModels": {

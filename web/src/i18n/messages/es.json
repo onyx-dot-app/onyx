@@ -2521,6 +2521,7 @@
         "window": {
           "label": "Intervalo",
           "all": "Todo el tiempo",
+          "h1": "Última hora",
           "h12": "Últimas 12 horas",
           "h24": "Últimas 24 horas",
           "d7": "Últimos 7 días",
@@ -6948,6 +6949,20 @@
             "label": "Expandir todo"
           }
         }
+      },
+      "overview": {
+        "connectors": {
+          "caption": "Indexando / activos",
+          "label": "Conectores"
+        },
+        "documents": {
+          "caption": "Indexados recientemente / total",
+          "label": "Documentos"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "No se pudo cargar el resumen."
       }
     },
     "languageModels": {

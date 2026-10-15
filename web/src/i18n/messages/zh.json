@@ -2521,6 +2521,7 @@
         "window": {
           "label": "时间范围",
           "all": "全部时间",
+          "h1": "过去 1 小时",
           "h12": "过去 12 小时",
           "h24": "过去 24 小时",
           "d7": "过去 7 天",
@@ -6948,6 +6949,20 @@
             "label": "全部展开"
           }
         }
+      },
+      "overview": {
+        "connectors": {
+          "caption": "索引中 / 活跃",
+          "label": "连接器"
+        },
+        "documents": {
+          "caption": "最近索引 / 总计",
+          "label": "文档"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "无法加载概览。"
       }
     },
     "languageModels": {

@@ -4,7 +4,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
-import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
+import { Section, SettingsLayouts, useToastFromQuery } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
@@ -17,6 +17,7 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
+import OverviewCard from "@/views/admin/connectors/IndexingStatusPage/OverviewCard";
 import { IndexingStatusRequest } from "@/lib/types";
 
 const route = ADMIN_ROUTES.INDEXING_STATUS;
@@ -163,7 +164,8 @@ function Main() {
   }
 
   return (
-    <div>
+    <Section alignItems="stretch" gap={4} height="fit">
+      <OverviewCard />
       {/* Search bar and controls */}
       <SearchAndFilterControls
         searchQuery={searchQuery}
@@ -200,7 +202,7 @@ function Main() {
           sourceLoadingStates={sourceLoadingStates}
         />
       )}
-    </div>
+    </Section>
   );
 }
 
@@ -216,7 +218,7 @@ export default function IndexingStatusPage() {
   });
 
   return (
-    <SettingsLayouts.Root width="full">
+    <SettingsLayouts.Root width="md">
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}

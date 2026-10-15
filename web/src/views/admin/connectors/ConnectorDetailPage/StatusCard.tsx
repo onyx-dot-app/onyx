@@ -3,17 +3,9 @@
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
-import {
-  Button,
-  Card,
-  Dropdown,
-  OpenButton,
-  Popover,
-  Tag,
-  Text,
-} from "@opal/components";
+import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { SvgClock, SvgListCheck, SvgPlayCircle } from "@opal/icons";
+import { SvgListCheck, SvgPlayCircle } from "@opal/icons";
 import { CardLoader } from "@opal/loaders";
 import { timeAgo } from "@opal/time";
 import {
@@ -30,15 +22,12 @@ import { ccPairStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/st
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
-import ThroughputChart from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import ThroughputChart, {
+  ThroughputWindowPicker,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
-/** The chart's windows. Their labels reuse the run list's time ranges. */
-const WINDOW_LABEL_KEYS = {
-  "12h": "h12",
-  "24h": "h24",
-  "7d": "d7",
-} as const satisfies Record<CCPairThroughputWindow, string>;
-const WINDOWS = Object.keys(WINDOW_LABEL_KEYS) as CCPairThroughputWindow[];
+// The pair chart offers no last-hour window. A pair's runs are too sparse for it.
+const WINDOWS: readonly CCPairThroughputWindow[] = ["12h", "24h", "7d"];
 
 // The chart waits for the pair's first successful run.
 const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
@@ -86,7 +75,6 @@ export default function StatusCard({
 }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
-  const tWindow = useTranslations("admin.connector.runs.window");
   const locale = useLocale();
   const [range, setRange] = useState<CCPairThroughputWindow>("12h");
   const [releasing, setReleasing] = useState(false);
@@ -239,26 +227,11 @@ export default function StatusCard({
                   height="fit"
                   className="grow basis-0"
                 >
-                  <Dropdown>
-                    <Dropdown.Trigger asChild>
-                      <OpenButton icon={SvgClock} state="empty">
-                        {tWindow(WINDOW_LABEL_KEYS[range])}
-                      </OpenButton>
-                    </Dropdown.Trigger>
-                    <Dropdown.Data
-                      label={tWindow("label")}
-                      value={range}
-                      onSelect={(option) => {
-                        const picked = WINDOWS.find((w) => w === option.value);
-                        if (picked !== undefined) setRange(picked);
-                      }}
-                      items={WINDOWS.map((window) => ({
-                        kind: "option" as const,
-                        value: window,
-                        title: tWindow(WINDOW_LABEL_KEYS[window]),
-                      }))}
-                    />
-                  </Dropdown>
+                  <ThroughputWindowPicker
+                    windows={WINDOWS}
+                    value={range}
+                    onChange={setRange}
+                  />
                 </Section>
               )}
             </Section>

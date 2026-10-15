@@ -2521,6 +2521,7 @@
         "window": {
           "label": "Período",
           "all": "Todo o período",
+          "h1": "Última hora",
           "h12": "Últimas 12 horas",
           "h24": "Últimas 24 horas",
           "d7": "Últimos 7 dias",
@@ -6948,6 +6949,20 @@
             "label": "Expandir tudo"
           }
         }
+      },
+      "overview": {
+        "connectors": {
+          "caption": "Indexando / ativos",
+          "label": "Conectores"
+        },
+        "documents": {
+          "caption": "Indexados recentemente / total",
+          "label": "Documentos"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "Não foi possível carregar a visão geral."
       }
     },
     "languageModels": {
