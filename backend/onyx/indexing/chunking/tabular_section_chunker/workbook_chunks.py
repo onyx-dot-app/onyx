@@ -329,17 +329,14 @@ class Packer:
         self._buffered: list[str] = []
         self._dropped: list[str] = []
 
-    def _count(self, line: str) -> int:
-        return count_tokens(line, self._tokenizer)
-
     def _fit_line(self, line: str, budget: int) -> tuple[str, int]:
-        tokens = self._count(line)
+        tokens = count_tokens(line, self._tokenizer)
         budget = max(1, budget)
         if tokens <= budget:
             return line, tokens
         pieces = split_text_by_tokens(line, self._tokenizer, budget)
         trimmed = pieces[0] if pieces else ""
-        return trimmed, self._count(trimmed)
+        return trimmed, count_tokens(trimmed, self._tokenizer)
 
     def _flush(self) -> None:
         if self._lines:
