@@ -22,7 +22,7 @@ from onyx.auth.oauth_token_manager import (
 )
 from onyx.db.models import OAuthConfig
 from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
-from onyx.oauth.protocol import OAuthFlowParams, build_oauth_authorization_url
+from onyx.oauth.protocol import OAuthFlowParams, build_authorization_url
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -445,8 +445,12 @@ class TestOAuthTokenManagerURLBuilding:
         """Test building basic authorization URL"""
         oauth_config = _create_test_oauth_config(db_session)
 
-        url = build_oauth_authorization_url(
-            oauth_flow_params_from_config(oauth_config),
+        params = oauth_flow_params_from_config(oauth_config)
+        url = build_authorization_url(
+            authorization_url=params.authorization_url,
+            client_id=params.client_id,
+            scope=" ".join(params.scopes) if params.scopes else None,
+            additional_params=params.additional_params,
             redirect_uri="https://example.com/callback",
             state="random_state_123",
         )
@@ -474,8 +478,12 @@ class TestOAuthTokenManagerURLBuilding:
             db_session=db_session,
         )
 
-        url = build_oauth_authorization_url(
-            oauth_flow_params_from_config(oauth_config),
+        params = oauth_flow_params_from_config(oauth_config)
+        url = build_authorization_url(
+            authorization_url=params.authorization_url,
+            client_id=params.client_id,
+            scope=" ".join(params.scopes) if params.scopes else None,
+            additional_params=params.additional_params,
             redirect_uri="https://example.com/callback",
             state="state_456",
         )
@@ -497,8 +505,12 @@ class TestOAuthTokenManagerURLBuilding:
             db_session=db_session,
         )
 
-        url = build_oauth_authorization_url(
-            oauth_flow_params_from_config(oauth_config),
+        params = oauth_flow_params_from_config(oauth_config)
+        url = build_authorization_url(
+            authorization_url=params.authorization_url,
+            client_id=params.client_id,
+            scope=" ".join(params.scopes) if params.scopes else None,
+            additional_params=params.additional_params,
             redirect_uri="https://example.com/callback",
             state="state_789",
         )
@@ -522,8 +534,12 @@ class TestOAuthTokenManagerURLBuilding:
             db_session=db_session,
         )
 
-        url = build_oauth_authorization_url(
-            oauth_flow_params_from_config(oauth_config),
+        params = oauth_flow_params_from_config(oauth_config)
+        url = build_authorization_url(
+            authorization_url=params.authorization_url,
+            client_id=params.client_id,
+            scope=" ".join(params.scopes) if params.scopes else None,
+            additional_params=params.additional_params,
             redirect_uri="https://example.com/callback",
             state="state_xyz",
         )
@@ -550,8 +566,12 @@ class TestSharedOAuthPrimitives:
     not appear unless requested."""
 
     def test_build_authorization_url_includes_pkce_and_resource(self) -> None:
-        url = build_oauth_authorization_url(
-            _known_flow_params(),
+        params = _known_flow_params()
+        url = build_authorization_url(
+            authorization_url=params.authorization_url,
+            client_id=params.client_id,
+            scope=" ".join(params.scopes) if params.scopes else None,
+            additional_params=params.additional_params,
             redirect_uri="https://onyx.example.com/mcp/oauth/callback",
             state="state_abc",
             code_challenge="challenge_xyz",
@@ -568,8 +588,12 @@ class TestSharedOAuthPrimitives:
         assert query["prompt"] == ["consent"]
 
     def test_build_authorization_url_omits_pkce_and_resource_by_default(self) -> None:
-        url = build_oauth_authorization_url(
-            _known_flow_params(),
+        params = _known_flow_params()
+        url = build_authorization_url(
+            authorization_url=params.authorization_url,
+            client_id=params.client_id,
+            scope=" ".join(params.scopes) if params.scopes else None,
+            additional_params=params.additional_params,
             redirect_uri="https://onyx.example.com/callback",
             state="state_abc",
         )

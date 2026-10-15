@@ -2,7 +2,6 @@ import {
   oauthConfigRequest,
   MASKED_OAUTH_CREDENTIAL,
 } from "@/lib/oauth/config";
-import { oauthTestRequest } from "@/lib/oauth/testConnection";
 
 const fields = {
   authorizationUrl: " https://provider.example/authorize ",
@@ -13,7 +12,7 @@ const fields = {
   supportsPkce: true,
 };
 
-test("save and test use identical normalized settings", () => {
+test("normalizes settings shared by save and test", () => {
   const saved = oauthConfigRequest(fields, false);
   expect(saved).toEqual({
     authorization_url: "https://provider.example/authorize",
@@ -23,7 +22,6 @@ test("save and test use identical normalized settings", () => {
     scopes: ["read", "write"],
     supports_pkce: true,
   });
-  expect(oauthTestRequest(fields)).toEqual(saved);
 });
 
 test("only edits treat masked credentials as unchanged", () => {
@@ -33,6 +31,7 @@ test("only edits treat masked credentials as unchanged", () => {
     clientSecret: MASKED_OAUTH_CREDENTIAL,
   };
   expect(oauthConfigRequest(masked, true).client_secret).toBe("");
-  expect(oauthTestRequest(masked, 17).client_secret).toBeUndefined();
-  expect(oauthTestRequest(masked).client_secret).toBe(MASKED_OAUTH_CREDENTIAL);
+  expect(oauthConfigRequest(masked, false).client_secret).toBe(
+    MASKED_OAUTH_CREDENTIAL
+  );
 });

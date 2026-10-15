@@ -554,9 +554,6 @@
       "loading": {
         "label": "既存の設定を読み込み中..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth パススルーには、OAuth に対応したログイン方法 (Google または OIDC) が必要です。"
-      },
       "passThroughNotice": {
         "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
         "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"

@@ -554,9 +554,6 @@
       "loading": {
         "label": "Vorhandene Konfiguration wird geladen..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth Pass-through erfordert eine OAuth-fähige Anmeldemethode (Google oder OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} leitet das OAuth-Zugriffstoken des Benutzers direkt als Authorization-Header an den Server weiter. Stellen Sie sicher, dass der Server die Authentifizierung mit demselben Anbieter unterstützt.",
         "title": "Verwenden Sie Pass-through für Dienste mit gemeinsamem Identitätsanbieter."

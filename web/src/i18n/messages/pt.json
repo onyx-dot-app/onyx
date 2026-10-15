@@ -554,9 +554,6 @@
       "loading": {
         "label": "Carregando a configuração existente..."
       },
-      "oauthLoginNotice": {
-        "description": "O repasse de OAuth exige um método de login compatível com OAuth (Google ou OIDC)."
-      },
       "passThroughNotice": {
         "description": "O {appName} vai encaminhar o token de acesso OAuth do usuário diretamente ao servidor como um cabeçalho Authorization. Verifique se o servidor é compatível com a autenticação pelo mesmo provedor.",
         "title": "Use o repasse para serviços com provedor de identidade compartilhado."

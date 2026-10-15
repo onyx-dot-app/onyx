@@ -554,9 +554,6 @@
       "loading": {
         "label": "正在加载现有配置..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth 透传需要支持 OAuth 的登录方式（Google 或 OIDC）。"
-      },
       "passThroughNotice": {
         "description": "{appName} 会将用户的 OAuth 访问 token 作为 Authorization 请求头直接转发给服务器。请确保该服务器支持使用同一提供方进行身份验证。",
         "title": "对使用同一身份提供方的服务，请使用透传方式。"

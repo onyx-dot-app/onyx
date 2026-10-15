@@ -554,9 +554,6 @@
       "loading": {
         "label": "Chargement de la configuration existante..."
       },
-      "oauthLoginNotice": {
-        "description": "Le transfert OAuth exige une méthode de connexion compatible OAuth (Google ou OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} transférera le jeton d'accès OAuth de l'utilisateur directement au serveur, dans un en-tête Authorization. Assurez-vous que le serveur prend en charge l'authentification avec le même fournisseur.",
         "title": "Utilisez le transfert pour les services qui partagent le même fournisseur d'identité."

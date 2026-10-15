@@ -554,9 +554,6 @@
       "loading": {
         "label": "Loading existing configuration..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth pass-through requires an OAuth-capable login method (Google or OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
         "title": "Use pass-through for services with shared identity provider."

@@ -554,9 +554,6 @@
       "loading": {
         "label": "جارٍ تحميل الإعدادات الحالية..."
       },
-      "oauthLoginNotice": {
-        "description": "يتطلب تمرير OAuth المباشر طريقة تسجيل دخول تدعم OAuth (Google أو OIDC)."
-      },
       "passThroughNotice": {
         "description": "سيمرر {appName} رمز وصول OAuth الخاص بالمستخدم مباشرة إلى الخادم كترويسة Authorization. تأكد من أن الخادم يدعم المصادقة عبر نفس الموفر.",
         "title": "استخدم التمرير المباشر للخدمات ذات موفر الهوية المشترك."

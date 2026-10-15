@@ -21,19 +21,6 @@ _MAX_METADATA_BYTES = 64 * 1024
 _MAX_ISSUER_PARENTS = 3
 
 
-def _issuer_candidates(authorization_url: str) -> list[str]:
-    parsed = urlsplit(authorization_url)
-    origin = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
-    path = parsed.path.rstrip("/")
-    issuers: list[str] = []
-    for _ in range(_MAX_ISSUER_PARENTS):
-        path = path.rpartition("/")[0]
-        if not path:
-            break
-        issuers.append(origin + path)
-    return [*issuers, origin]
-
-
 def _metadata_support(
     body: bytes,
     issuer: str,
@@ -66,7 +53,16 @@ def detect_pkce_support(authorization_url: str, token_url: str) -> PKCESupport:
     try:
         validate_oauth_endpoint_url(authorization_url, resolve_dns=False)
         validate_oauth_endpoint_url(token_url, resolve_dns=False)
-        issuers = _issuer_candidates(authorization_url)
+        parsed = urlsplit(authorization_url)
+        origin = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+        path = parsed.path.rstrip("/")
+        issuers: list[str] = []
+        for _ in range(_MAX_ISSUER_PARENTS):
+            path = path.rpartition("/")[0]
+            if not path:
+                break
+            issuers.append(origin + path)
+        issuers.append(origin)
     except (ValueError, SSRFException):
         return "unknown"
 

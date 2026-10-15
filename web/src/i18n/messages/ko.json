@@ -554,9 +554,6 @@
       "loading": {
         "label": "기존 구성을 불러오는 중..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth 패스스루에는 OAuth를 지원하는 로그인 방법(Google 또는 OIDC)이 필요합니다."
-      },
       "passThroughNotice": {
         "description": "{appName}는 사용자의 OAuth 액세스 token을 Authorization 헤더로 서버에 직접 전달합니다. 서버가 동일한 공급자로 인증을 지원하는지 확인하세요.",
         "title": "ID 공급자를 공유하는 서비스에는 패스스루를 사용하세요."

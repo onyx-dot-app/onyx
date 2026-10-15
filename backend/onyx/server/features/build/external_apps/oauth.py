@@ -55,7 +55,7 @@ class _ExternalAppOAuthAttemptPayload(BaseModel):
 
 
 _AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
-    cache_backend_provider=lambda: get_cache_backend(),
+    cache_backend_provider=get_cache_backend,
     namespace="external-app",
     payload_type=_ExternalAppOAuthAttemptPayload,
 )

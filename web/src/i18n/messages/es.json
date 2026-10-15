@@ -554,9 +554,6 @@
       "loading": {
         "label": "Cargando la configuración existente..."
       },
-      "oauthLoginNotice": {
-        "description": "El paso directo de OAuth requiere un método de inicio de sesión compatible con OAuth (Google u OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} reenviará el token de acceso de OAuth del usuario directamente al servidor como cabecera Authorization. Asegúrate de que el servidor admite la autenticación con el mismo proveedor.",
         "title": "Usa el paso directo para servicios que comparten el proveedor de identidad."

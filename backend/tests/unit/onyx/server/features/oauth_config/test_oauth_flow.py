@@ -70,7 +70,11 @@ def _configure_flow(
     db_session = MagicMock(spec=Session)
     token_post = MagicMock(return_value=_successful_token_response())
 
-    monkeypatch.setattr(oauth_config_api, "get_cache_backend", lambda: cache)
+    for store in (
+        oauth_config_api._AUTHORIZATION_ATTEMPTS,
+        oauth_config_api._TEST_AUTHORIZATION_ATTEMPTS,
+    ):
+        monkeypatch.setattr(store, "_cache_backend_provider", lambda: cache)
     monkeypatch.setattr(oauth_config_api, "get_oauth_config", lambda *_: oauth_config)
     monkeypatch.setattr(oauth_config_api, "upsert_user_oauth_token", MagicMock())
     monkeypatch.setattr(

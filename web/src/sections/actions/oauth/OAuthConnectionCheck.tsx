@@ -3,8 +3,7 @@
 import { useTranslations } from "next-intl";
 import { Button, MessageCard, Text } from "@opal/components";
 import { useOAuthConnectionTest } from "@/lib/oauth/hooks";
-import { oauthTestRequest } from "@/lib/oauth/testConnection";
-import type { OAuthConfigFields } from "@/lib/oauth/config";
+import { oauthConfigRequest, type OAuthConfigFields } from "@/lib/oauth/config";
 
 interface OAuthConnectionCheckProps {
   values: OAuthConfigFields;
@@ -18,9 +17,13 @@ export default function OAuthConnectionCheck({
   disabled,
 }: OAuthConnectionCheckProps) {
   const t = useTranslations("actions.openApiAuthModal.connectionCheck");
-  const { result, start } = useOAuthConnectionTest(
-    oauthTestRequest(values, configId)
-  );
+  const config = oauthConfigRequest(values, Boolean(configId));
+  const { result, start } = useOAuthConnectionTest({
+    ...config,
+    oauth_config_id: configId ?? undefined,
+    client_id: config.client_id || undefined,
+    client_secret: config.client_secret || undefined,
+  });
   return (
     <div className="flex flex-col gap-3">
       <Text as="p" font="secondary-body" color="text-03">

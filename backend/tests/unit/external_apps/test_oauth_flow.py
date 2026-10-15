@@ -85,7 +85,9 @@ def _configure_route(
     token_post = MagicMock(return_value=_successful_token_response())
     persist_credentials = MagicMock()
 
-    monkeypatch.setattr(oauth_route, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        oauth_route._AUTHORIZATION_ATTEMPTS, "_cache_backend_provider", lambda: cache
+    )
     monkeypatch.setattr(oauth_route, "get_external_app_by_id", lambda *_: app)
     monkeypatch.setattr(oauth_route.requests, "post", token_post)
     monkeypatch.setattr(

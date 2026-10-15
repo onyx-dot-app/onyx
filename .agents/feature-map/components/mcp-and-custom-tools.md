@@ -359,7 +359,7 @@ choice at server-creation time is what decides this, and it is visible on the
 2. **Attempt tracking.** The pending flow's state (server id, connection
    config id, a fingerprint of the OAuth client info, the return path) is
    stored keyed by an opaque `state` value in
-   `mcp_oauth_attempt_store()` (`oauth_flow.py`, backed by
+   `MCP_OAUTH_ATTEMPTS` (`oauth_flow.py`, backed by
    `onyx/oauth/authorization_attempt.py`), scoped to the initiating user id.
 3. **Callback.** `POST /mcp/oauth/callback` (`process_oauth_callback`,
    `mcp/api.py`) consumes the attempt by `(user_id, state)`, re-checks the
@@ -667,7 +667,7 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
   reusing this factory would silently reopen the SSRF hole.
 - **The MCP OAuth callback trusts the state store, not the query string
   alone.** `process_oauth_callback` re-derives everything it needs from the
-  server-side `mcp_oauth_attempt_store()` entry keyed by `(user_id, state)`;
+  server-side `MCP_OAUTH_ATTEMPTS` entry keyed by `(user_id, state)`;
   a client that tries to shortcut the flow by POSTing arbitrary
   `code`/`server_id` values without a matching stored attempt gets rejected
   at the fingerprint/connection-config-id checks (§4.4 step 3).

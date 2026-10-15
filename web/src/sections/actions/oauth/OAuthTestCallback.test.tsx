@@ -1,6 +1,10 @@
 import { StrictMode } from "react";
 import { render, screen, waitFor } from "@tests/setup/test-utils";
-import OAuthConfigCallbackRouter from "@/sections/actions/oauth/OAuthConfigCallbackRouter";
+import OAuthConfigCallbackPage from "@/app/oauth-config/callback/page";
+jest.mock("@/components/oauth/OAuthCallbackPage", () => ({
+  __esModule: true,
+  default: () => <div>Normal callback</div>,
+}));
 import {
   OAUTH_TEST_ACTIVE_KEY,
   oauthTestStorageKey,
@@ -35,9 +39,7 @@ test("completes once in StrictMode without running the normal callback", async (
     .mockResolvedValue(new Response(JSON.stringify({ supports_pkce: true })));
   render(
     <StrictMode>
-      <OAuthConfigCallbackRouter>
-        <div>Normal callback</div>
-      </OAuthConfigCallbackRouter>
+      <OAuthConfigCallbackPage />
     </StrictMode>
   );
   expect(
@@ -63,11 +65,7 @@ test("reports provider denial without exchanging a code", async () => {
   const postMessage = preparePopup();
   query.set("error", "access_denied");
   const fetchSpy = jest.spyOn(global, "fetch");
-  render(
-    <OAuthConfigCallbackRouter>
-      <div>Normal callback</div>
-    </OAuthConfigCallbackRouter>
-  );
+  render(<OAuthConfigCallbackPage />);
   expect(
     await screen.findByText("Provider authorization was declined or canceled.")
   ).toBeInTheDocument();
@@ -81,11 +79,7 @@ test("does not redeem again after a reload interrupts an exchange", async () => 
   preparePopup();
   sessionStorage.setItem(oauthTestStorageKey("test-state"), "exchanging");
   const fetchSpy = jest.spyOn(global, "fetch");
-  render(
-    <OAuthConfigCallbackRouter>
-      <div>Normal callback</div>
-    </OAuthConfigCallbackRouter>
-  );
+  render(<OAuthConfigCallbackPage />);
   expect(
     await screen.findByText(
       "The test expired or was interrupted. Start a new test."
@@ -94,11 +88,7 @@ test("does not redeem again after a reload interrupts an exchange", async () => 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 test("ordinary callbacks keep their original component", async () => {
-  render(
-    <OAuthConfigCallbackRouter>
-      <div>Normal callback</div>
-    </OAuthConfigCallbackRouter>
-  );
+  render(<OAuthConfigCallbackPage />);
   await waitFor(() =>
     expect(screen.getByText("Normal callback")).toBeInTheDocument()
   );

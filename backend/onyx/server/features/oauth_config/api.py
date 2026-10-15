@@ -47,7 +47,7 @@ from onyx.oauth.models import (
 )
 from onyx.oauth.protocol import (
     OAuthFlowParams,
-    build_oauth_authorization_url,
+    build_authorization_url,
     validate_authorization_params,
 )
 from onyx.server.features.oauth_config.models import (
@@ -84,7 +84,7 @@ class _OAuthConfigAttemptPayload(BaseModel):
 
 
 _AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
-    cache_backend_provider=lambda: get_cache_backend(),
+    cache_backend_provider=get_cache_backend,
     namespace="oauth-config",
     payload_type=_OAuthConfigAttemptPayload,
 )
@@ -100,7 +100,7 @@ class _OAuthTestAttemptPayload(BaseModel):
 
 
 _TEST_AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
-    cache_backend_provider=lambda: get_cache_backend(),
+    cache_backend_provider=get_cache_backend,
     namespace="oauth-config-test",
     payload_type=_OAuthTestAttemptPayload,
 )
@@ -114,8 +114,14 @@ def _build_authorization_request(
     if supports_pkce:
         code_verifier, code_challenge = generate_pkce_pair()
     state = generate_authorization_state()
-    authorization_url = build_oauth_authorization_url(
-        params, _OAUTH_CALLBACK_URL, state, code_challenge=code_challenge
+    authorization_url = build_authorization_url(
+        authorization_url=params.authorization_url,
+        client_id=params.client_id,
+        redirect_uri=_OAUTH_CALLBACK_URL,
+        state=state,
+        scope=" ".join(params.scopes) if params.scopes else None,
+        additional_params=params.additional_params,
+        code_challenge=code_challenge,
     )
     return OAuthInitiateResponse(
         authorization_url=authorization_url, state=state

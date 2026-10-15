@@ -17,7 +17,7 @@ import {
   type OAuthTestResult,
 } from "@/lib/oauth/testConnection";
 
-export function isHttpsEndpoint(value: string): boolean {
+function isHttpsEndpoint(value: string): boolean {
   try {
     return new URL(value).protocol === "https:";
   } catch {
