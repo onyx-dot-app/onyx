@@ -454,6 +454,24 @@ def create_external_group_sync_attempt(
     return attempt.id
 
 
+def get_not_started_external_group_sync_attempts_older_than(
+    db_session: Session, older_than: timedelta
+) -> dict[int, str | None]:
+    """celery_task_id by attempt ID, for NOT_STARTED attempts older than this."""
+    return _get_not_started_attempts_older_than(
+        ExternalGroupPermissionSyncAttempt, db_session, older_than
+    )
+
+
+def fail_not_started_external_group_sync_attempts(
+    db_session: Session, attempt_ids: list[int], reason: str
+) -> list[int]:
+    """Fails those of these attempts that are still NOT_STARTED. Returns their IDs."""
+    return _fail_not_started_attempts(
+        ExternalGroupPermissionSyncAttempt, db_session, attempt_ids, reason
+    )
+
+
 def try_create_external_group_sync_attempt(
     connector_credential_pair_id: int,
     celery_task_id: str,

@@ -4,9 +4,11 @@ lock: dispatch creates it, the task claims it, and nothing in Redis is needed.
 """
 
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.external_group_syncing import (
@@ -15,7 +17,7 @@ from ee.onyx.background.celery.tasks.external_group_syncing import (
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.configs.constants import PERMISSION_SYNC_TASK_EXPIRES, DocumentSource
 from onyx.db.enums import AccessType, PermissionSyncStatus
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, ExternalGroupPermissionSyncAttempt
 from onyx.db.permission_sync_attempt import (
     cancel_open_external_group_sync_attempt,
     get_cc_pair_ids_with_open_external_group_sync_attempt,
@@ -152,3 +154,37 @@ def test_failure_before_the_crawl_fails_the_attempt(
         ).get()
 
     assert get_open_external_group_sync_attempt(cc_pair.id, db_session) is None
+
+
+def test_attempt_whose_queued_task_was_lost_is_failed(
+    cc_pair: ConnectorCredentialPair, db_session: Session
+) -> None:
+    other_cc_pair = create_test_connector_credential_pair(
+        db_session, source=DocumentSource.GOOGLE_DRIVE, access_type=AccessType.SYNC
+    )
+    lost_id = try_create_external_group_sync_attempt(
+        cc_pair.id, "task-lost", db_session
+    )
+    queued_id = try_create_external_group_sync_attempt(
+        other_cc_pair.id, "task-queued", db_session
+    )
+    assert lost_id is not None and queued_id is not None
+    db_session.execute(
+        update(ExternalGroupPermissionSyncAttempt)
+        .where(ExternalGroupPermissionSyncAttempt.id.in_([lost_id, queued_id]))
+        .values(time_created=datetime.now(timezone.utc) - timedelta(hours=1))
+    )
+    db_session.commit()
+
+    with (
+        patch.object(group_tasks, "celery_get_broker_client"),
+        patch.object(
+            group_tasks, "celery_get_queued_task_ids", return_value={"task-queued"}
+        ),
+        patch.object(group_tasks, "celery_get_unacked_task_ids", return_value=set()),
+    ):
+        group_tasks.fail_lost_queued_external_group_sync_attempts(MagicMock())
+
+    assert get_open_external_group_sync_attempt(cc_pair.id, db_session) is None
+    queued = get_open_external_group_sync_attempt(other_cc_pair.id, db_session)
+    assert queued is not None and queued.id == queued_id
