@@ -168,6 +168,8 @@ function CollapsibleSectionLayout({
 
 interface CollapsibleContextValue {
   open: boolean;
+  /** The trigger cannot toggle, and says so. */
+  disabled: boolean;
   toggle: () => void;
   contentId: string;
 }
@@ -217,8 +219,13 @@ function CollapsibleRoot({
   }
 
   return (
-    <CollapsibleContext.Provider value={{ open, toggle, contentId }}>
-      <div data-state={open ? "open" : "closed"}>{children}</div>
+    <CollapsibleContext.Provider value={{ open, disabled, toggle, contentId }}>
+      <div
+        data-state={open ? "open" : "closed"}
+        data-disabled={disabled || undefined}
+      >
+        {children}
+      </div>
     </CollapsibleContext.Provider>
   );
 }
@@ -234,15 +241,21 @@ function CollapsibleTrigger({
   onClick,
   ...props
 }: CollapsibleTriggerProps) {
-  const { open, toggle, contentId } = useCollapsibleContext("Trigger");
+  const { open, disabled, toggle, contentId } =
+    useCollapsibleContext("Trigger");
   const Component = asChild ? Slot : "button";
   return (
     <Component
-      {...(asChild ? {} : { type: "button" as const })}
+      // A native trigger is disabled; another element says so, since it
+      // has no `disabled` of its own.
+      {...(asChild
+        ? { "aria-disabled": disabled || undefined }
+        : { type: "button" as const, disabled })}
       {...props}
       aria-expanded={open}
       aria-controls={contentId}
       data-state={open ? "open" : "closed"}
+      data-disabled={disabled || undefined}
       onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (!event.defaultPrevented) toggle();
