@@ -15,19 +15,23 @@ from onyx.connectors.models import IndexingDocument, Section, TabularSection
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
-from onyx.indexing.chunking.tabular_section_chunker.workbook_chunks import (
+from onyx.indexing.chunking.tabular_section_chunker.cell_values import (
     DateOrder,
+    _parse_number,
+    _unit_marker,
+    column_label,
+    date_key,
+    detect_header_row,
+)
+from onyx.indexing.chunking.tabular_section_chunker.models import (
     SheetKind,
     SheetSource,
     _Block,
     _ColumnStats,
+)
+from onyx.indexing.chunking.tabular_section_chunker.workbook_chunks import (
     _Packer,
-    _parse_number,
-    _unit_marker,
     build_workbook_chunks,
-    column_label,
-    date_key,
-    detect_header_row,
     profile_sheet,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer, count_tokens

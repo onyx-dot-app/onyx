@@ -303,10 +303,14 @@ type to one of three `SectionChunker` implementations
   its own one-section chunk carrying `image_file_id`; images never share a chunk
   with text.
 - `TabularChunker` (`tabular_section_chunker/tabular_section_chunker.py`): the one
-  path for spreadsheets and CSVs. `DocumentChunker` sends every `TabularSection`
-  of a document to `TabularChunker.chunk_workbook` in a single call, at the first
-  such section, so the chunks can describe the whole file.
-  `workbook_chunks.py:build_workbook_chunks` emits one workbook overview, the full rows of
+  path for spreadsheets and CSVs. `DocumentChunker` groups a document's
+  `TabularSection`s by `link` and sends each group to
+  `TabularChunker.chunk_workbook` in one call, at the first section of that
+  group, so the chunks describe one file. A document carrying two attachments
+  therefore yields two sets of chunks, not one merged workbook.
+  `workbook_chunks.py:build_workbook_chunks` (with the cell-level parsing in
+  `tabular_section_chunker/cell_values.py` and the data shapes in
+  `tabular_section_chunker/models.py`) emits one workbook overview, the full rows of
   small sheets, and a bounded profile (column roles, identifier ranges, totals,
   breakdowns by category and by month, frequent values, sample rows) of large
   sheets. `TABULAR_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file,

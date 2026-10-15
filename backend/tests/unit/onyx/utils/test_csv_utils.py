@@ -1,5 +1,8 @@
 import csv
 import io
+import os
+import subprocess
+import sys
 from collections.abc import Iterator
 
 import pytest
@@ -107,10 +110,21 @@ def test_parse_csv_stream_survives_a_long_field() -> None:
 
 
 def test_importing_the_module_does_not_raise_the_limit() -> None:
-    # The limit belongs at the point of use. If importing set it, a caller
-    # reaching csv.reader another way would silently get the default.
-    previous = csv.field_size_limit(131_072)
-    try:
-        assert csv.field_size_limit() == 131_072
-    finally:
-        csv.field_size_limit(previous)
+    # The limit belongs at the point of use. Checking that needs a process
+    # where the import has not happened yet, so run one.
+    source = (
+        "import csv;"
+        "before = csv.field_size_limit();"
+        "import onyx.utils.csv_utils;"
+        "print(before, csv.field_size_limit())"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
+    )
+    before, after = result.stdout.split()
+
+    assert before == after
