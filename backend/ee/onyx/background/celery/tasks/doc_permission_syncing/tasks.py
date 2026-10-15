@@ -25,6 +25,11 @@ from ee.onyx.db.document import upsert_document_external_perms
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.models import DocExternalAccess, ElementExternalAccess
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.celery_redis import (
+    celery_get_broker_client,
+    celery_get_queued_task_ids,
+    celery_get_unacked_task_ids,
+)
 from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
 from onyx.configs.app_configs import JOB_TIMEOUT, PERMISSION_SYNC_TIMEOUT
 from onyx.configs.constants import (
@@ -33,6 +38,7 @@ from onyx.configs.constants import (
     PERMISSION_SYNC_LEASE_OVERRUN,
     PERMISSION_SYNC_LEASE_SELF_EXPIRY,
     PERMISSION_SYNC_LEASE_TIMEOUT,
+    PERMISSION_SYNC_LOST_TASK_GRACE,
     PERMISSION_SYNC_TASK_EXPIRES,
     DocumentSource,
     OnyxCeleryPriority,
@@ -65,7 +71,9 @@ from onyx.db.permission_sync_attempt import (
     PermissionSyncAttemptLostError,
     complete_doc_permission_sync_attempt,
     fail_expired_doc_permission_sync_attempts,
+    fail_not_started_doc_permission_sync_attempts,
     get_cc_pair_ids_with_open_doc_permission_sync_attempt,
+    get_not_started_doc_permission_sync_attempts_older_than,
     lock_doc_permission_sync_attempt_if_owned,
     mark_doc_permission_sync_attempt_failed,
     mark_doc_permission_sync_attempt_in_progress,
@@ -165,6 +173,44 @@ def _stop_reason_for_failure(callback: "PermissionSyncCallback | None") -> str |
         return None
 
 
+def fail_lost_queued_doc_permission_sync_attempts(app: Celery) -> None:
+    """Fails NOT_STARTED attempts whose task is no longer in the broker, so a
+    lost task (e.g. a Redis restart without persistence) does not hold the
+    pair's lock until the task would have expired. A task that a worker has
+    already taken also looks lost here; its claim then fails and the beat
+    dispatches the pair again, so the check errs only toward a redispatch."""
+    with get_session_with_current_tenant() as db_session:
+        candidates = get_not_started_doc_permission_sync_attempts_older_than(
+            db_session, timedelta(seconds=PERMISSION_SYNC_LOST_TASK_GRACE)
+        )
+    if not candidates:
+        return
+
+    queue = OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC
+    r_celery = celery_get_broker_client(app)
+    live_task_ids = celery_get_queued_task_ids(
+        queue, r_celery
+    ) | celery_get_unacked_task_ids(queue, r_celery)
+    lost_ids = [
+        attempt_id
+        for attempt_id, celery_task_id in candidates.items()
+        if celery_task_id not in live_task_ids
+    ]
+    if not lost_ids:
+        return
+
+    with get_session_with_current_tenant() as db_session:
+        failed_ids = fail_not_started_doc_permission_sync_attempts(
+            db_session,
+            lost_ids,
+            reason="The queued permission sync task was lost before a worker started it",
+        )
+    if failed_ids:
+        task_logger.warning(
+            f"Failed doc permission sync attempts whose queued task was lost: {failed_ids}"
+        )
+
+
 def is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external doc permissions sync is due."""
 
@@ -235,6 +281,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
     try:
         # Fail abandoned attempts first, so their cc_pairs can be dispatched again
         fail_expired_doc_permission_sync_attempts_for_tenant()
+        fail_lost_queued_doc_permission_sync_attempts(self.app)
 
         # get all cc pairs that need to be synced
         cc_pair_ids_to_sync: list[int] = []

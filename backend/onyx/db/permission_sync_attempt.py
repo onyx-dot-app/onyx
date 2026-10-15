@@ -92,6 +92,62 @@ def create_doc_permission_sync_attempt(
     return attempt.id
 
 
+def _get_not_started_attempts_older_than(
+    model: type[DocPermissionSyncAttempt],
+    db_session: Session,
+    older_than: timedelta,
+) -> dict[int, str | None]:
+    return dict(
+        db_session.execute(
+            select(model.id, model.celery_task_id)
+            .where(model.status == PermissionSyncStatus.NOT_STARTED)
+            .where(model.time_created < func.now() - older_than)
+        )
+        .tuples()
+        .all()
+    )
+
+
+def _fail_not_started_attempts(
+    model: _AttemptModel, db_session: Session, attempt_ids: list[int], reason: str
+) -> list[int]:
+    failed_ids = list(
+        db_session.execute(
+            update(model)
+            .where(model.id.in_(attempt_ids))
+            # A task that started meanwhile keeps its attempt
+            .where(model.status == PermissionSyncStatus.NOT_STARTED)
+            .values(
+                status=PermissionSyncStatus.FAILED,
+                time_started=func.now(),
+                time_finished=func.now(),
+                error_message=reason,
+            )
+            .returning(model.id)
+        ).scalars()
+    )
+    db_session.commit()
+    return failed_ids
+
+
+def get_not_started_doc_permission_sync_attempts_older_than(
+    db_session: Session, older_than: timedelta
+) -> dict[int, str | None]:
+    """celery_task_id by attempt ID, for NOT_STARTED attempts older than this."""
+    return _get_not_started_attempts_older_than(
+        DocPermissionSyncAttempt, db_session, older_than
+    )
+
+
+def fail_not_started_doc_permission_sync_attempts(
+    db_session: Session, attempt_ids: list[int], reason: str
+) -> list[int]:
+    """Fails those of these attempts that are still NOT_STARTED. Returns their IDs."""
+    return _fail_not_started_attempts(
+        DocPermissionSyncAttempt, db_session, attempt_ids, reason
+    )
+
+
 def try_create_doc_permission_sync_attempt(
     connector_credential_pair_id: int,
     celery_task_id: str,

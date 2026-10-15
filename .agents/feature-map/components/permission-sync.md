@@ -604,9 +604,13 @@ document to the wrong person.
    `get_open_doc_permission_sync_attempt`. Deletion revokes the row's
    `celery_task_id`, and after its stop timeout it cancels the row
    (`cancel_open_doc_permission_sync_attempt`), which makes the worker lose
-   its lease. The reaper fails a `NOT_STARTED` row only after
-   `PERMISSION_SYNC_TASK_EXPIRES` plus the lease timeout, because Celery may
-   still deliver the task until it expires. Doc sync writes no `SyncRecord`.
+   its lease. A `NOT_STARTED` attempt older than
+   `PERMISSION_SYNC_LOST_TASK_GRACE` whose `celery_task_id` is in neither the
+   broker queue nor the unacked set lost its task, and the beat fails it
+   (`fail_lost_queued_doc_permission_sync_attempts`). A task a worker already
+   took looks lost too; its claim then fails and the beat dispatches again. As
+   a backstop, the reaper fails any `NOT_STARTED` row after
+   `PERMISSION_SYNC_TASK_EXPIRES` plus the lease timeout. Doc sync writes no `SyncRecord`.
 
 ---
 

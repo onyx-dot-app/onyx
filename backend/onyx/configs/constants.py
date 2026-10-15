@@ -205,6 +205,9 @@ PERMISSION_SYNC_LEASE_SELF_EXPIRY = (
 # Celery drops a doc permission sync task that waited longer than this in the
 # queue. The reaper fails its NOT_STARTED attempt once the task can no longer run.
 PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
+# A NOT_STARTED attempt this old whose task is not in the broker queue lost its
+# task (e.g. a Redis restart without persistence), so the reaper fails it.
+PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
 
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min

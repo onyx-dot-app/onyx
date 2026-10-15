@@ -4,10 +4,12 @@ lock: dispatch creates it, the task claims it, and nothing in Redis is needed.
 """
 
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.doc_permission_syncing import tasks as perm_tasks
@@ -23,7 +25,7 @@ from onyx.access.models import (
 )
 from onyx.configs.constants import PERMISSION_SYNC_TASK_EXPIRES, DocumentSource
 from onyx.db.enums import AccessType, PermissionSyncStatus
-from onyx.db.models import ConnectorCredentialPair, Document
+from onyx.db.models import ConnectorCredentialPair, DocPermissionSyncAttempt, Document
 from onyx.db.permission_sync_attempt import (
     PermissionSyncAttemptLostError,
     cancel_open_doc_permission_sync_attempt,
@@ -217,3 +219,38 @@ def test_writes_are_refused_after_the_attempt_is_lost(
     with pytest.raises(PermissionSyncAttemptLostError):
         write(f"{doc_id}-late")
     assert db_session.get(Document, f"{doc_id}-late") is None
+
+
+def test_attempt_whose_queued_task_was_lost_is_failed(
+    cc_pair: ConnectorCredentialPair, db_session: Session
+) -> None:
+    """A task lost from the broker (e.g. a Redis restart without persistence)
+    must not hold the pair's lock until the task would have expired."""
+    other_cc_pair = create_test_connector_credential_pair(
+        db_session, source=DocumentSource.JIRA, access_type=AccessType.SYNC
+    )
+    lost_task, queued_task = _task_id(), _task_id()
+    lost_id = try_create_doc_permission_sync_attempt(cc_pair.id, lost_task, db_session)
+    queued_id = try_create_doc_permission_sync_attempt(
+        other_cc_pair.id, queued_task, db_session
+    )
+    assert lost_id is not None and queued_id is not None
+    db_session.execute(
+        update(DocPermissionSyncAttempt)
+        .where(DocPermissionSyncAttempt.id.in_([lost_id, queued_id]))
+        .values(time_created=datetime.now(timezone.utc) - timedelta(hours=1))
+    )
+    db_session.commit()
+
+    with (
+        patch.object(perm_tasks, "celery_get_broker_client"),
+        patch.object(
+            perm_tasks, "celery_get_queued_task_ids", return_value={queued_task}
+        ),
+        patch.object(perm_tasks, "celery_get_unacked_task_ids", return_value=set()),
+    ):
+        perm_tasks.fail_lost_queued_doc_permission_sync_attempts(MagicMock())
+
+    assert get_open_doc_permission_sync_attempt(cc_pair.id, db_session) is None
+    queued = get_open_doc_permission_sync_attempt(other_cc_pair.id, db_session)
+    assert queued is not None and queued.id == queued_id
