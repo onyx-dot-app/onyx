@@ -102,19 +102,27 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
 export type ActivityGroup = "failures" | "errors" | "other" | "resolved";
 
 /** How each group narrows the runs feed. Resolved errors can sit on a run of any status. */
+// A newer run of the same kind closes a failure, so only the latest failure
+// per pair and kind stays live and the older ones join the resolved group.
 const ACTIVITY_GROUP_QUERY = {
-  failures: { statusGroups: ["failed"], errors: null },
+  failures: { statusGroups: ["failed"], errors: null, superseded: false },
   errors: {
     statusGroups: ["running", "succeeded", "canceled"],
     errors: "unresolved",
+    superseded: null,
   },
-  other: { statusGroups: ["running", "succeeded", "canceled"], errors: "none" },
-  resolved: { statusGroups: null, errors: "resolved" },
+  other: {
+    statusGroups: ["running", "succeeded", "canceled"],
+    errors: "none",
+    superseded: null,
+  },
+  resolved: { statusGroups: null, errors: "resolved", superseded: true },
 } satisfies Record<
   ActivityGroup,
   {
     statusGroups: CCPairRunStatusGroup[] | null;
     errors: CCPairRunErrors | null;
+    superseded: boolean | null;
   }
 >;
 
@@ -192,13 +200,16 @@ export function useActivityItems(
       if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
         return null;
       }
+      const groupQuery = ACTIVITY_GROUP_QUERY[group];
       const query: CCPairRunsQuery = {
         pageNum: pageIndex,
         pageSize: ACTIVITY_PAGE_SIZE,
         since: null,
         kinds: null,
         q,
-        ...ACTIVITY_GROUP_QUERY[group],
+        ...groupQuery,
+        // A search finds old failures too, under the failures group.
+        superseded: q ? null : groupQuery.superseded,
       };
       return ccPairId === null
         ? SWR_KEYS.indexMonitoringRuns(query)

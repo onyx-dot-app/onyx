@@ -133,6 +133,13 @@ export function isActive(run: CCPairRun): boolean {
   }
 }
 
+/** Whether the run ended in failure, as the feed's failed status group counts it. */
+export function isFailed(run: CCPairRun): boolean {
+  return (
+    run.attempt.status === "failed" || run.attempt.status === "failed_to_run"
+  );
+}
+
 /** When the run finished, or `null` while it has not. */
 export function finishedAt(run: CCPairRun): string | null {
   if (isActive(run)) return null;

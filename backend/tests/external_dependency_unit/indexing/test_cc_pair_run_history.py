@@ -204,6 +204,7 @@ def _runs(
     kinds: list[CCPairRunKind] | None = None,
     q: str | None = None,
     errors: CCPairRunErrors | None = None,
+    superseded: bool | None = None,
 ) -> CCPairRunsResponse:
     return get_cc_pair_runs(
         cc_pair_id=cc_pair.id,
@@ -214,6 +215,7 @@ def _runs(
         status_groups=None,
         q=q,
         errors=errors,
+        superseded=superseded,
         user=user,
         db_session=db_session,
     )

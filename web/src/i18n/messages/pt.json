@@ -2562,6 +2562,7 @@
             "stopped": "Indexação interrompida com erros",
             "errors": "Indexação concluída com erros",
             "resolved": "Erros de indexação resolvidos",
+            "superseded": "Indexing failed, a newer run followed",
             "succeeded": "Indexação concluída com sucesso",
             "inProgress": "Indexação em andamento",
             "canceled": "Indexação interrompida"
@@ -2572,6 +2573,7 @@
             "stopped": "Sincronização de permissões interrompida com erros",
             "errors": "Permissões sincronizadas com erros",
             "resolved": "Erros de sincronização de permissões resolvidos",
+            "superseded": "Permissions sync failed, a newer run followed",
             "succeeded": "Permissões sincronizadas com sucesso",
             "inProgress": "Sincronizando permissões",
             "canceled": "Sincronização de permissões interrompida"
@@ -2582,6 +2584,7 @@
             "stopped": "Sincronização de membros de grupos interrompida com erros",
             "errors": "Membros de grupos sincronizados com erros",
             "resolved": "Erros de sincronização de membros de grupos resolvidos",
+            "superseded": "Group membership sync failed, a newer run followed",
             "succeeded": "Associações de grupo sincronizadas com sucesso",
             "inProgress": "Sincronizando associações de grupo",
             "canceled": "Sincronização de grupos interrompida"
@@ -2592,6 +2595,7 @@
             "stopped": "Limpeza interrompida com erros",
             "errors": "Limpeza concluída com erros",
             "resolved": "Erros de limpeza resolvidos",
+            "superseded": "Pruning failed, a newer run followed",
             "succeeded": "Limpeza concluída com sucesso",
             "inProgress": "Limpeza em andamento",
             "canceled": "Limpeza interrompida"
@@ -2602,6 +2606,7 @@
             "stopped": "Verificações do conector interrompidas com erros",
             "errors": "Verificações do conector concluídas com erros",
             "resolved": "Erros das verificações do conector resolvidos",
+            "superseded": "Connector checks failed, a newer run followed",
             "succeeded": "Verificações do conector aprovadas",
             "inProgress": "Verificações do conector em andamento",
             "canceled": "Verificações do conector interrompidas"

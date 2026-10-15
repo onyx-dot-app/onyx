@@ -21,7 +21,7 @@ from sqlalchemy import (
     select,
     union_all,
 )
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import (
@@ -48,6 +48,7 @@ from onyx.db.models import (
 )
 from onyx.db.permission_sync_attempt import (
     relevant_external_group_sync_attempts_filter,
+    source_group_sync_is_cc_pair_agnostic,
 )
 
 # Keyed by value, so a value two status enums share must group the same way.
@@ -82,6 +83,25 @@ _RunT = TypeVar(
 )
 
 
+def _later(
+    newer_time: InstrumentedAttribute[datetime],
+    newer_id: InstrumentedAttribute[int],
+    time_created: InstrumentedAttribute[datetime],
+    run_id: InstrumentedAttribute[int],
+) -> ColumnElement[bool]:
+    """Whether a run comes after another in the feed's newest-first order."""
+    return or_(
+        newer_time > time_created, and_(newer_time == time_created, newer_id > run_id)
+    )
+
+
+def _no_item_errors(run_filter: CCPairRunFilter) -> ColumnElement[bool] | None:
+    """The ``errors`` filter for a kind that records no per-item errors."""
+    if run_filter.errors in (None, CCPairRunErrors.NONE):
+        return None
+    return false()
+
+
 def _narrowed(
     stmt: Select,
     run_filter: CCPairRunFilter,
@@ -90,7 +110,26 @@ def _narrowed(
     status: InstrumentedAttribute[_StatusT],
     statuses: type[_StatusT],
     with_status_filter: bool,
+    matches_errors: ColumnElement[bool] | None,
+    has_newer_run: ColumnElement[bool],
 ) -> Select:
+    """Applies the filter's shared axes. ``matches_errors`` is the kind's
+    ``errors`` filter, and ``has_newer_run`` says a newer run of the kind
+    follows the run on the same history."""
+    failed = [
+        s for s in statuses if _STATUS_GROUPS[s.value] is CCPairRunStatusGroup.FAILED
+    ]
+    superseded = and_(status.in_(failed), has_newer_run)
+    kept = matches_errors
+    match run_filter.superseded:
+        case True:
+            kept = superseded if kept is None else or_(kept, superseded)
+        case False:
+            kept = ~superseded if kept is None else and_(kept, ~superseded)
+        case None:
+            pass
+    if kept is not None:
+        stmt = stmt.where(kept)
     if run_filter.since is not None:
         stmt = stmt.where(time_created >= run_filter.since)
     if run_filter.error_query:
@@ -141,6 +180,45 @@ def _group_sync_scope(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
     )
 
 
+def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
+    """A newer group sync on the run's history: its pair's, or its source's when
+    the source logs one sync for all its pairs, as ``_group_sync_scope`` reads."""
+    ids = run_filter.cc_pair_ids
+    if len(ids) == 1 and run_filter.source is not None:
+        shared = (
+            {run_filter.source}
+            if source_group_sync_is_cc_pair_agnostic(run_filter.source)
+            else set()
+        )
+    else:
+        shared = run_filter.shared_sources
+    run = ExternalGroupPermissionSyncAttempt
+    newer = aliased(ExternalGroupPermissionSyncAttempt)
+    later = _later(newer.time_created, newer.id, run.time_created, run.id)
+    same_pair = newer.connector_credential_pair_id == run.connector_credential_pair_id
+    if not shared:
+        return exists().where(same_pair, later)
+    # Flat joins, since a nested subquery would not correlate to the run.
+    run_pair = aliased(ConnectorCredentialPair)
+    run_connector = aliased(Connector)
+    newer_pair = aliased(ConnectorCredentialPair)
+    newer_connector = aliased(Connector)
+    return exists().where(
+        run_pair.id == run.connector_credential_pair_id,
+        run_connector.id == run_pair.connector_id,
+        newer_pair.id == newer.connector_credential_pair_id,
+        newer_connector.id == newer_pair.connector_id,
+        later,
+        or_(
+            same_pair,
+            and_(
+                run_connector.source.in_(shared),
+                newer_connector.source == run_connector.source,
+            ),
+        ),
+    )
+
+
 def _index_attempt_runs(
     run_filter: CCPairRunFilter, with_status_filter: bool
 ) -> Select:
@@ -152,15 +230,27 @@ def _index_attempt_runs(
     )
     own_errors = exists().where(IndexAttemptError.index_attempt_id == IndexAttempt.id)
     unresolved = own_errors.where(IndexAttemptError.is_resolved.is_(False))
+    matches_errors: ColumnElement[bool] | None
     match run_filter.errors:
         case CCPairRunErrors.UNRESOLVED:
-            stmt = stmt.where(unresolved)
+            matches_errors = unresolved
         case CCPairRunErrors.RESOLVED:
-            stmt = stmt.where(own_errors, ~unresolved)
+            matches_errors = and_(own_errors, ~unresolved)
         case CCPairRunErrors.NONE:
-            stmt = stmt.where(~own_errors)
+            matches_errors = ~own_errors
         case None:
-            pass
+            matches_errors = None
+    # A run under another model or a targeted reindex leaves this model's
+    # failure open.
+    newer = aliased(IndexAttempt)
+    has_newer_run = exists().where(
+        newer.connector_credential_pair_id == IndexAttempt.connector_credential_pair_id,
+        newer.search_settings_id == IndexAttempt.search_settings_id,
+        newer.targeted_reindex_job_id.is_(None),
+        _later(
+            newer.time_created, newer.id, IndexAttempt.time_created, IndexAttempt.id
+        ),
+    )
 
     # A search also reads the attempt's document errors, which carry the
     # message when the attempt itself finished without one.
@@ -180,6 +270,8 @@ def _index_attempt_runs(
         IndexAttempt.status,
         IndexingStatus,
         with_status_filter,
+        matches_errors,
+        has_newer_run,
     )
 
 
@@ -193,15 +285,27 @@ def _doc_permission_sync_runs(
     )
     # A sync counts the documents it could not read, and nothing resolves them.
     unreadable = func.coalesce(DocPermissionSyncAttempt.docs_with_permission_errors, 0)
+    matches_errors: ColumnElement[bool] | None
     match run_filter.errors:
         case CCPairRunErrors.UNRESOLVED:
-            stmt = stmt.where(unreadable > 0)
+            matches_errors = unreadable > 0
         case CCPairRunErrors.RESOLVED:
-            stmt = stmt.where(false())
+            matches_errors = false()
         case CCPairRunErrors.NONE:
-            stmt = stmt.where(unreadable == 0)
+            matches_errors = unreadable == 0
         case None:
-            pass
+            matches_errors = None
+    newer = aliased(DocPermissionSyncAttempt)
+    has_newer_run = exists().where(
+        newer.connector_credential_pair_id
+        == DocPermissionSyncAttempt.connector_credential_pair_id,
+        _later(
+            newer.time_created,
+            newer.id,
+            DocPermissionSyncAttempt.time_created,
+            DocPermissionSyncAttempt.id,
+        ),
+    )
     return _narrowed(
         stmt,
         run_filter,
@@ -212,6 +316,8 @@ def _doc_permission_sync_runs(
         DocPermissionSyncAttempt.status,
         PermissionSyncStatus,
         with_status_filter,
+        matches_errors,
+        has_newer_run,
     )
 
 
@@ -220,8 +326,6 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
         _group_sync_scope(run_filter)
     )
     # A group sync records no per-item errors, so it either fails or succeeds.
-    if run_filter.errors not in (None, CCPairRunErrors.NONE):
-        stmt = stmt.where(false())
     return _narrowed(
         stmt,
         run_filter,
@@ -232,6 +336,8 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
         ExternalGroupPermissionSyncAttempt.status,
         PermissionSyncStatus,
         with_status_filter,
+        _no_item_errors(run_filter),
+        _group_sync_has_newer_run(run_filter),
     )
 
 
@@ -240,9 +346,15 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.entity_id.in_(run_filter.cc_pair_ids),
         SyncRecord.sync_type == SyncType.PRUNING,
     )
+    newer = aliased(SyncRecord)
+    has_newer_run = exists().where(
+        newer.entity_id == SyncRecord.entity_id,
+        newer.sync_type == SyncType.PRUNING,
+        _later(
+            newer.sync_start_time, newer.id, SyncRecord.sync_start_time, SyncRecord.id
+        ),
+    )
     # A prune records no per-document errors, so it either fails or succeeds.
-    if run_filter.errors not in (None, CCPairRunErrors.NONE):
-        stmt = stmt.where(false())
     return _narrowed(
         stmt,
         run_filter,
@@ -251,6 +363,8 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.sync_status,
         SyncStatus,
         with_status_filter,
+        _no_item_errors(run_filter),
+        has_newer_run,
     )
 
 
@@ -275,8 +389,17 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         )
         .where(ConnectorCredentialPair.id.in_(run_filter.cc_pair_ids))
     )
-    if run_filter.errors not in (None, CCPairRunErrors.NONE):
-        stmt = stmt.where(false())
+    newer = aliased(CapabilityCheckRun)
+    has_newer_run = exists().where(
+        newer.credential_id == CapabilityCheckRun.credential_id,
+        newer.connector_id == CapabilityCheckRun.connector_id,
+        _later(
+            newer.time_created,
+            newer.id,
+            CapabilityCheckRun.time_created,
+            CapabilityCheckRun.id,
+        ),
+    )
     return _narrowed(
         stmt,
         run_filter,
@@ -296,6 +419,8 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         CapabilityCheckRun.status,
         CapabilityCheckRunStatus,
         with_status_filter,
+        _no_item_errors(run_filter),
+        has_newer_run,
     )
 
 

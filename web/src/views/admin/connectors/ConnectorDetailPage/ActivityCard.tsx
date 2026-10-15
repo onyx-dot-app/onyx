@@ -30,6 +30,7 @@ import {
   RUN_KIND_ICONS,
   RUN_TIME_FORMAT,
   isActive,
+  isFailed,
   runErrorMessage,
   runMinutes,
   runMoved,
@@ -78,6 +79,7 @@ type CardState =
   | "stopped"
   | "errors"
   | "resolved"
+  | "superseded"
   | "inProgress"
   | "canceled"
   | "succeeded";
@@ -90,7 +92,8 @@ function cardState(run: CCPairRun, group: ActivityGroup): CardState {
     case "failures":
       return "failed";
     case "resolved":
-      return "resolved";
+      // A failed run is here because a newer run of its kind followed it.
+      return isFailed(run) ? "superseded" : "resolved";
     case "errors":
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
@@ -146,10 +149,11 @@ export default function ActivityCard({
   const resolvable = canResolve && listsDocs;
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
+  const state = cardState(run, group);
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
-  if (group === "failures") {
+  if (state === "failed" || state === "superseded") {
     description =
       runErrorMessage(run) ??
       (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
@@ -160,7 +164,7 @@ export default function ActivityCard({
     });
   }
   const docsLabel =
-    group === "resolved"
+    state === "resolved"
       ? t("tags.resolvedDocs", { count: warnings })
       : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
@@ -222,7 +226,7 @@ export default function ActivityCard({
             </Section>
             <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
               <Text font="main-ui-body" color="text-04">
-                {t(`title.${run.kind}.${cardState(run, group)}`)}
+                {t(`title.${run.kind}.${state}`)}
               </Text>
               {description !== null && (
                 <Text font="secondary-body" color="text-03" maxLines={3}>

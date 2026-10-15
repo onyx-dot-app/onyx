@@ -406,6 +406,7 @@ def get_indexing_runs(
     status_groups: list[CCPairRunStatusGroup] | None = Query(None),
     q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
     errors: CCPairRunErrors | None = Query(None),
+    superseded: bool | None = Query(None),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -429,6 +430,7 @@ def get_indexing_runs(
         error_query=(q or "").strip() or None,
         status_groups=groups,
         errors=errors,
+        superseded=superseded,
     )
     feed = fetch_run_feed(db_session, wanted, run_filter, page_num, page_size)
     page = feed.page

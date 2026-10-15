@@ -294,6 +294,8 @@ export interface CCPairRunsQuery {
   q: string;
   /** Keeps only runs with document errors, open or resolved, or only runs without any. */
   errors: CCPairRunErrors | null;
+  /** Leaves out (`false`) or keeps only (`true`) the failed runs a newer run of their kind followed. With `errors`, `true` keeps the runs either matches. */
+  superseded: boolean | null;
 }
 
 export interface IndexAttemptError {
