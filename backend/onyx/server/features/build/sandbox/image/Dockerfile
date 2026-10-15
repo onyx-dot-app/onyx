@@ -17,7 +17,7 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb
 
 # Node.js source. The final image is Python-based, but the sandbox still needs
 # Node/npm/npx for MCP commands and skill-runtime packages.
-FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66 AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315 AS node_source
 ARG NPM_VERSION=11.17.0
 RUN npm install -g "npm@${NPM_VERSION}" && \
     npm cache clean --force && \
