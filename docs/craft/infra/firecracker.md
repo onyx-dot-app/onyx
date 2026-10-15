@@ -183,6 +183,7 @@ smoke pod that checks boot IDs and the live Firecracker executable.
 The stock kind daemon excludes devmapper. Node setup installs the checksum-pinned
 official containerd 2.1.1 daemon at the same source revision. It leaves `ctr` and
 the runc shim unchanged. Existing pools and backing files prevent replacement.
+The kind config retains compressed layers for devmapper unpack after overlayfs pulls, using disk on the disposable node.
 This helper targets dedicated, disposable Linux/amd64 test hosts or VMs, never shared workstations or production nodes.
 It requires `ONYX_FIRECRACKER_DEDICATED_HOST=true` as an explicit acknowledgement.
 The privileged node shares writable host `/dev` with private mount propagation.

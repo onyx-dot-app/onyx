@@ -55,7 +55,14 @@ nodes:
       - hostPath: /lib/modules
         containerPath: /lib/modules
         readOnly: true
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".containerd]
+      discard_unpacked_layers = false
 ```
+
+The config retains compressed image layers so overlayfs pulls can later unpack into devmapper.
+Retained layers consume disk on the disposable kind node.
 
 Run these commands on the Linux host.
 

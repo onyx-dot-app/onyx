@@ -7,6 +7,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -757,6 +758,11 @@ def test_ci_kind_config_shares_only_the_dedicated_host_devices(tmp_path: Path) -
 
     assert result.returncode == 0, result.stdout + result.stderr
     config = yaml.safe_load((tmp_path / "kind-config.yaml").read_text())
+    cri = tomllib.loads("\n".join(config["containerdConfigPatches"]))["plugins"][
+        "io.containerd.grpc.v1.cri"
+    ]
+    assert cri.get("containerd", {}).get("discard_unpacked_layers") is False
+    assert cri["registry"]["config_path"] == "/etc/containerd/certs.d"
     assert config["nodes"] == [
         {
             "role": "control-plane",

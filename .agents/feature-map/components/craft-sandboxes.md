@@ -310,6 +310,8 @@ Run only the gates that match the change:
   Fresh kind nodes need the checksum-pinned official containerd 2.1.1 daemon
   because the stock kind build excludes devmapper. Setup preserves the same
   source revision, `ctr`, and runc shim, and refuses existing pools/backing files.
+  The kind config retains compressed image layers so default overlayfs pulls
+  can later unpack into devmapper. Retained layers consume disk on the disposable kind node.
   Setup and containerd use `DM_DISABLE_UDEV=1` for pool and thin-device nodes
   because the pinned kind node does not run udev.
   The dedicated disposable test-host profile shares writable host `/dev` with
