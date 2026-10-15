@@ -190,10 +190,11 @@ function SettingsHeader({
       {/* The header paints the body's top gap (its -mb-6 pulls the body up under it), so a pinned header leaves no unpainted band where scrolled content can show. */}
       <Spacer rem={1.5} />
 
+      {/* No fade: an opacity transition here makes Chrome paint stale page content in this band. */}
       {isSticky && (
         <div
           className={cn(
-            "absolute start-0 end-0 h-2 pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
+            "absolute start-0 end-0 h-2 pointer-events-none rounded-b-08 opacity-0",
             showShadow && "opacity-100"
           )}
           style={{
