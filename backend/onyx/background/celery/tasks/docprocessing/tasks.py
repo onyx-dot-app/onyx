@@ -1685,9 +1685,15 @@ def _resolve_indexing_document_errors(
         db_session_temp.commit()
 
 
+# Acknowledged on receipt, like docfetching. With acks_late, the broker
+# redelivers a batch that runs past visibility_timeout while the first worker is
+# still processing it, and the duplicate completion can count one batch twice and
+# end the attempt early. A batch lost to a worker crash keeps its file in batch
+# storage: the heartbeat check fails the attempt and the next attempt re-issues it.
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.DOCPROCESSING_TASK,
     bind=True,
+    acks_late=False,
 )
 def docprocessing_task(
     self: Task,  # noqa: ARG001
@@ -2113,7 +2119,8 @@ def _docprocessing_task(
         # OOM) leaves the key for its full CELERY_INDEXING_LOCK_TIMEOUT (3h15m).
         # An unbounded acquire() then wedges every docprocessing thread across
         # all workers until the fossil expires — observed in production. Fail
-        # the task instead; it redelivers and retries against a fresh lock.
+        # the task instead. A failed task is not redelivered: its batch stays in
+        # storage, and the next attempt re-issues it.
         if not cross_batch_db_lock.acquire(
             blocking_timeout=CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S
         ):
@@ -2121,7 +2128,7 @@ def _docprocessing_task(
                 f"Could not acquire cross-batch DB lock for index attempt "
                 f"{index_attempt_id} within "
                 f"{CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S}s — likely a fossil "
-                f"lock from a killed worker; task will be retried."
+                f"lock from a killed worker; the next attempt re-issues this batch."
             )
         lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
         try:
