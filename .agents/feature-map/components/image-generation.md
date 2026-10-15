@@ -44,7 +44,7 @@ never sees an image generation tool it cannot use, and a user is never told
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | POST | `/admin/image-generation/test` | `test_image_generation` (`server/manage/image_generation/api.py`) | Validates a candidate provider/credentials pair by generating a test image. |
-| POST | `/admin/image-generation/config` | `create_config` | Creates a config; clone mode (reuse an existing LLM provider's credentials) or new-credentials mode. |
+| POST | `/admin/image-generation/config` | `create_config` | Creates a config from a provider and its credentials. |
 | GET | `/admin/image-generation/config` | `get_all_configs` | Lists configs for the admin table. |
 | GET | `/admin/image-generation/config/{image_provider_id}/credentials` | `get_config_credentials` | Returns credentials with the API key masked (`models.py:_mask_api_key`). |
 | PUT | `/admin/image-generation/config/{image_provider_id}` | `update_config` | |
@@ -112,14 +112,14 @@ All provider calls are wrapped in
 ### Admin configuration
 
 `create_config` / `update_config` (`server/manage/image_generation/api.py`)
-accept either a "clone" mode (reuse credentials from an existing
-`LLMProvider` via `source_llm_provider_id`) or a "new credentials" mode (raw
-`api_key`/`api_base`/etc). Either way the backend creates a fresh `LLMProvider`
-row and `ModelConfiguration` row, then an `ImageGenerationConfig` pointing at
-them (`db/image_generation.py:create_image_generation_config__no_commit`).
-In new-credentials mode, `_build_llm_provider_request` calls
-`validate_credentials` (`image_gen/factory.py`) before persisting. Clone mode
-copies the API key from the source provider and skips that check.
+take a provider and its credentials (`api_key`/`api_base`/etc). The backend
+creates a fresh `LLMProvider` row and `ModelConfiguration` row, then an
+`ImageGenerationConfig` pointing at them
+(`db/image_generation.py:create_image_generation_config__no_commit`).
+`_build_llm_provider_request` calls `validate_credentials`
+(`image_gen/factory.py`) before persisting. An update with an unchanged (masked)
+key keeps the old provider's key. These `LLMProvider` rows never appear in the
+admin LLM provider list (`db/llm.py:fetch_existing_llm_providers`).
 `test_image_generation` is a separate, optional step: it lets an admin
 generate a throwaway test image before saving.
 
@@ -234,8 +234,7 @@ the returned base64 data.
   registered/gated the same way every other tool is; `is_available` is the
   hook this component uses.
 - [[llm-providers]]: image generation credentials are `LLMProvider` rows,
-  reusing that encrypted-credential storage and the clone-from-existing-provider
-  admin flow.
+  reusing that encrypted-credential storage.
 - [[file-store-and-user-files]]: generated and reference images are saved and
   loaded through the shared file store (`save_files`, `load_chat_file_by_id`).
 - [[streaming-protocol]]: `ImageGenerationToolStart`, `ImageGenerationToolHeartbeat`,
