@@ -121,10 +121,6 @@ class SheetSource(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _is_number(value: str) -> bool:
-    return _parse_number(value) is not None
-
-
 def _parse_number(value: str) -> float | None:
     text = value.strip().replace(",", "").removesuffix("%").strip()
     if not text:
@@ -188,10 +184,6 @@ def _natural_key(value: str) -> tuple[tuple[int, int, str], ...]:
         for part in _DIGITS_RE.split(value)
         if part
     )
-
-
-def _is_iso_date(value: str) -> bool:
-    return bool(_ISO_DATE_RE.match(value.strip()))
 
 
 def _month_number(name: str) -> int | None:
@@ -283,7 +275,7 @@ def clean_cell(value: str) -> str:
     dates and long decimals are rounded."""
     text = value.strip()
     if (
-        _is_iso_date(text)
+        _ISO_DATE_RE.match(text)
         and len(text) > 10
         and text[10:].strip("T ")
         in (
@@ -368,7 +360,7 @@ def _looks_like_a_label(value: str) -> bool:
     text = value.strip()
     if _YEAR_RE.match(text):
         return True
-    return not _is_number(text) and date_key(text) is None
+    return _parse_number(text) is None and date_key(text) is None
 
 
 def _looks_like_data_pair(row: list[str], next_row: list[str]) -> bool:
@@ -389,12 +381,6 @@ def _looks_like_data_pair(row: list[str], next_row: list[str]) -> bool:
 
 def _row_width(row: list[str]) -> int:
     return sum(1 for cell in row if cell.strip())
-
-
-def _non_empty_rows(rows: Iterable[list[str]]) -> Iterator[list[str]]:
-    for row in rows:
-        if any(cell.strip() for cell in row):
-            yield row
 
 
 def format_row(header: list[str], row: list[str]) -> str:
@@ -579,15 +565,10 @@ class _ColumnStats:
                 self.id_max = candidate
 
     @property
-    def is_percent(self) -> bool:
-        """Every number carried a % sign, so a sum of them means nothing."""
-        return self.unit == "%"
-
-    @property
     def summable(self) -> bool:
         """Whether adding this column's numbers gives a real figure. Percentages
         do not add up, and dollars plus euros are not a total."""
-        return not self.is_percent and not self.units_mixed
+        return self.unit != "%" and not self.units_mixed
 
     @property
     def date_order(self) -> DateOrder | None:
@@ -789,9 +770,6 @@ class SheetProfile(BaseModel):
     def is_small(self) -> bool:
         return self.full_rows is not None
 
-    def header_key(self) -> tuple[str, ...]:
-        return tuple(name.strip().lower() for name in self.header)
-
     def merge(self, other: "SheetProfile") -> None:
         self.names.extend(other.names)
         self.row_count += other.row_count
@@ -967,7 +945,7 @@ def profile_sheet(
 ) -> SheetProfile:
     """One streaming pass over a sheet. Memory stays bounded: formatted rows
     are kept only while they fit ``full_rows_token_budget``."""
-    row_iter = _non_empty_rows(rows)
+    row_iter = (row for row in rows if any(cell.strip() for cell in row))
     # Skip a narrow title block to reach the table, keeping it as preamble.
     title_rows: list[list[str]] = []
     head: list[list[str]] = []
@@ -1255,14 +1233,6 @@ def _full_rows_block(
     return _Block(lines=lines, repeat=repeat, max_chunks=max(max_chunks, needed))
 
 
-def _text_block(file_name: str, profile: SheetProfile, max_chunks: int) -> _Block:
-    return _Block(
-        lines=[_sheet_title(file_name, profile), *profile.text_lines],
-        repeat=1,
-        max_chunks=max_chunks,
-    )
-
-
 def _profile_block(
     file_name: str,
     profile: SheetProfile,
@@ -1530,7 +1500,7 @@ def _group_same_header(profiles: list[SheetProfile]) -> list[SheetProfile]:
         if profile.kind != SheetKind.TABLE or profile.is_small:
             merged.append(profile)
             continue
-        key = profile.header_key()
+        key = tuple(name.strip().lower() for name in profile.header)
         target = by_header.get(key)
         if target is not None and _can_merge(target, profile):
             target.merge(profile)
@@ -1580,7 +1550,13 @@ def build_workbook_chunks(
             # Only skip the block when every line of this sheet reached the
             # overview; otherwise its text appears nowhere.
             if any(line not in in_overview for line in profile.text_lines):
-                blocks.append(_text_block(file_name, profile, full_rows_max_chunks))
+                blocks.append(
+                    _Block(
+                        lines=[_sheet_title(file_name, profile), *profile.text_lines],
+                        repeat=1,
+                        max_chunks=full_rows_max_chunks,
+                    )
+                )
         elif profile.is_small:
             block = _full_rows_block(
                 file_name, profile, tokenizer, max_tokens, full_rows_max_chunks
