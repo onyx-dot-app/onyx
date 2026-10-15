@@ -87,3 +87,14 @@ code = '''
 +        # The caller states the key is unchanged, so nothing it sent is read.
 +        return stored
 '''
+
+[calibration]
+threshold = 0.6900
+precision = 0.0090
+recall = 0.5000
+positives = 8
+negatives = 16501
+tune_precision_lower = 0.0088
+jev_model = "jev-1.13.0"
+evaluated_on = 2026-10-15
+seal = "sha256:5aadca5d6caef019e12f91343f9bd87c007e1c3bc0445c58748b26f4c96b76b1"
