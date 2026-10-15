@@ -3,8 +3,10 @@ import os
 from collections.abc import Callable, Generator, Iterator
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from functools import partial
 from io import BytesIO
 from typing import Any, TypeVar
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 from typing_extensions import override
@@ -48,6 +50,7 @@ from onyx.connectors.interfaces import (
     ConnectorFailure,
     GenerateSlimDocumentOutput,
     IndexingHeartbeatInterface,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -149,6 +152,77 @@ def is_indexable_path(path: str, size: int | None) -> bool:
     return False
 
 
+class GitHubDocKind(str, Enum):
+    """The document types the connector writes, by their URL segment."""
+
+    PULL_REQUEST = "pull"
+    ISSUE = "issues"
+    FILE = "blob"
+
+
+class ParsedGitHubDocId(BaseModel):
+    owner: str
+    repo: str
+    kind: GitHubDocKind
+    # Pull request or issue number. None for a file.
+    number: int | None = None
+
+
+def parse_github_document_id(doc_id: str) -> ParsedGitHubDocId | None:
+    """Parse a document id (an html URL) the connector writes. None when the
+    id has none of the shapes ``/<owner>/<repo>/pull/<n>``,
+    ``/<owner>/<repo>/issues/<n>`` or ``/<owner>/<repo>/blob/<branch>/<path>``.
+    """
+    parsed = urlparse(doc_id)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None
+    if parsed.query or parsed.fragment:
+        return None
+    segments = parsed.path.split("/")[1:]
+    if len(segments) < 4 or not segments[0] or not segments[1]:
+        return None
+    owner, repo, kind_segment = segments[0], segments[1], segments[2]
+    if kind_segment == GitHubDocKind.FILE.value:
+        # A branch and at least one path segment follow /blob/.
+        if len(segments) < 5 or not all(segments[3:]):
+            return None
+        return ParsedGitHubDocId(owner=owner, repo=repo, kind=GitHubDocKind.FILE)
+    if kind_segment not in (
+        GitHubDocKind.PULL_REQUEST.value,
+        GitHubDocKind.ISSUE.value,
+    ):
+        return None
+    if len(segments) != 4 or not segments[3].isdigit():
+        return None
+    return ParsedGitHubDocId(
+        owner=owner,
+        repo=repo,
+        kind=GitHubDocKind(kind_segment),
+        number=int(segments[3]),
+    )
+
+
+def _fails_the_whole_run(error: Exception) -> bool:
+    """Errors that every later target would hit too: a missing or rejected
+    credential, an organization that has not authorized the token, or a rate
+    limit that outlasted the retries."""
+    if isinstance(error, (ConnectorMissingCredentialError, GitHubRateLimitError)):
+        return True
+    return isinstance(error, GitHubApiError) and (
+        error.status_code == 401 or error.sso_required
+    )
+
+
+def _reindex_failure(
+    doc_id: str, message: str, exception: Exception | None = None
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=DocumentFailure(document_id=doc_id, document_link=doc_id),
+        failure_message=message,
+        exception=exception,
+    )
+
+
 # Cases
 # X (from start) standard run, no fallback to cursor-based pagination
 # X (from start) standard run errors, fallback to cursor-based pagination
@@ -169,6 +243,7 @@ class DocMetadata(BaseModel):
 
 
 _ItemT = TypeVar("_ItemT", GitHubPullRequest, GitHubIssue)
+_T = TypeVar("_T")
 
 
 def _paginate_until_error(
@@ -574,6 +649,7 @@ class GithubConnector(
     CheckpointedConnectorWithPermSync[GithubConnectorCheckpoint],
     SlimConnector,
     SlimConnectorWithPermSync,
+    Resolver,
 ):
     def __init__(
         self,
@@ -867,6 +943,51 @@ class GithubConnector(
             sleep_after_rate_limit_exception(self.source_operations)
             return self._fetch_file_content(repo, path, attempt_num + 1)
 
+    def _file_to_document(
+        self,
+        repo: GitHubRepository,
+        path: str,
+        branch: str,
+        repo_external_access: ExternalAccess | None,
+    ) -> Document | ConnectorFailure:
+        """Fetch one repo file and convert it, or describe why it failed."""
+        html_url = f"{repo.html_url}/blob/{branch}/{path}"
+        try:
+            raw = self._fetch_file_content(repo, path)
+            # The crawl filters on the tree size; a fetch by id has only the
+            # content to check.
+            if not is_indexable_path(path, len(raw)):
+                return ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=html_url,
+                        document_link=html_url,
+                    ),
+                    failure_message=f"Skipping file excluded from indexing: {path}",
+                )
+            content_text = _decode_file_content(raw)
+            if content_text is None:
+                return ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=html_url,
+                        document_link=html_url,
+                    ),
+                    failure_message=f"Skipping non-text/undecodable file: {path}",
+                )
+            return _convert_file_to_document(
+                repo, path, content_text, repo_external_access, branch
+            )
+        except Exception as e:
+            error_msg = f"Error converting file {path} to document: {e}"
+            logger.exception(error_msg)
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=html_url,
+                    document_link=html_url,
+                ),
+                failure_message=error_msg,
+                exception=e,
+            )
+
     def _fetch_repo_files(
         self,
         repo: GitHubRepository,
@@ -938,10 +1059,9 @@ class GithubConnector(
         checkpoint.curr_page += 1
 
         for path in batch:
-            html_url = f"{repo.html_url}/blob/{branch}/{path}"
             if is_slim:
                 yield Document(
-                    id=html_url,
+                    id=f"{repo.html_url}/blob/{branch}/{path}",
                     sections=[],
                     external_access=repo_external_access,
                     source=DocumentSource.GITHUB,
@@ -949,33 +1069,7 @@ class GithubConnector(
                     metadata={},
                 )
                 continue
-            try:
-                raw = self._fetch_file_content(repo, path)
-                content_text = _decode_file_content(raw)
-                if content_text is None:
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=html_url,
-                            document_link=html_url,
-                        ),
-                        failure_message=f"Skipping non-text/undecodable file: {path}",
-                    )
-                    continue
-                yield _convert_file_to_document(
-                    repo, path, content_text, repo_external_access, branch
-                )
-            except Exception as e:
-                error_msg = f"Error converting file {path} to document: {e}"
-                logger.exception(error_msg)
-                yield ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=html_url,
-                        document_link=html_url,
-                    ),
-                    failure_message=error_msg,
-                    exception=e,
-                )
-                continue
+            yield self._file_to_document(repo, path, branch, repo_external_access)
 
         # True if more file batches remain for this repo.
         return (page + 1) * FILE_BATCH_SIZE < len(file_paths)
@@ -1348,6 +1442,211 @@ class GithubConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         return self._retrieve_slim_docs(include_permissions=True, callback=callback)
+
+    def _call_rate_limited(self, operation: Callable[[], _T]) -> _T:
+        """Run one read, sleeping through rate limits as the crawl does."""
+        attempt_num = 0
+        while True:
+            try:
+                return operation()
+            except GitHubRateLimitError:
+                if attempt_num >= _MAX_NUM_RATE_LIMIT_RETRIES:
+                    raise
+                attempt_num += 1
+                sleep_after_rate_limit_exception(self.source_operations)
+
+    def _reindex_scope_error(self, parsed: ParsedGitHubDocId) -> str | None:
+        """Why the connector's settings exclude a document, or None."""
+        if parsed.owner.lower() != self.repo_owner.lower():
+            return (
+                f"owner '{parsed.owner}' is not the configured owner "
+                f"'{self.repo_owner}'"
+            )
+        repo_names = {
+            name.lower() for name in parse_repository_names(self.repositories)
+        }
+        if repo_names and parsed.repo.lower() not in repo_names:
+            return f"repository '{parsed.repo}' is not a configured repository"
+        if parsed.kind == GitHubDocKind.PULL_REQUEST and not self.include_prs:
+            return "pull requests are not indexed by this connector"
+        if parsed.kind == GitHubDocKind.ISSUE and not self.include_issues:
+            return "issues are not indexed by this connector"
+        if parsed.kind == GitHubDocKind.FILE and not self.include_files:
+            return "files are not indexed by this connector"
+        return None
+
+    def _repo_scope_error(self, repo: GitHubRepository) -> str | None:
+        """Without a repository list, the crawl lists a user owner's
+        repositories through ``GET /users/{login}/repos``, which returns only
+        public ones."""
+        if not self.repositories and repo.organization is None and repo.private:
+            return (
+                f"repository {repo.full_name} is a private repository of a user, "
+                "which the crawl does not list"
+            )
+        return None
+
+    def _state_scope_error(self, state: str) -> str | None:
+        if self.state_filter != "all" and state != self.state_filter:
+            return (
+                f"state '{state}' does not match the state filter '{self.state_filter}'"
+            )
+        return None
+
+    def _reindex_target(
+        self,
+        repo: GitHubRepository,
+        doc_id: str,
+        parsed: ParsedGitHubDocId,
+        repo_external_access: ExternalAccess | None,
+    ) -> Document | ConnectorFailure:
+        """Fetch one target, applying every filter the crawl applies (except
+        the time window), so reindex writes no document the crawl skips."""
+        if parsed.kind == GitHubDocKind.FILE:
+            branch = self._resolve_branch(repo)
+            prefix = f"{repo.html_url}/blob/{branch}/"
+            if not doc_id.startswith(prefix):
+                return _reindex_failure(
+                    doc_id,
+                    f"File '{doc_id}' is not on the indexed branch '{branch}' "
+                    f"of {repo.full_name}.",
+                )
+            path = doc_id[len(prefix) :]
+            if not is_indexable_path(path, None):
+                return _reindex_failure(
+                    doc_id, f"File '{path}' is not a file type the connector indexes."
+                )
+            return self._file_to_document(repo, path, branch, repo_external_access)
+
+        if parsed.number is None:
+            raise ValueError(f"No number parsed from '{doc_id}'")
+        document: Document
+        if parsed.kind == GitHubDocKind.PULL_REQUEST:
+            pull_request = self._call_rate_limited(
+                partial(
+                    self.source_operations.get_pull_request,
+                    repo_full_name=repo.full_name,
+                    number=parsed.number,
+                )
+            )
+            state_error = self._state_scope_error(pull_request.state)
+            if state_error:
+                return _reindex_failure(doc_id, f"Pull request {state_error}.")
+            document = _convert_pr_to_document(
+                pull_request, repo_external_access, self._lookup_user
+            )
+        else:
+            issue = self._call_rate_limited(
+                partial(
+                    self.source_operations.get_issue,
+                    repo_full_name=repo.full_name,
+                    number=parsed.number,
+                )
+            )
+            if issue.is_pull_request:
+                return _reindex_failure(
+                    doc_id, f"'{doc_id}' is a pull request, not an issue."
+                )
+            state_error = self._state_scope_error(issue.state)
+            if state_error:
+                return _reindex_failure(doc_id, f"Issue {state_error}.")
+            document = _convert_issue_to_document(
+                issue, repo_external_access, self._lookup_user
+            )
+
+        if document.id != doc_id:
+            # The repository was renamed or transferred; the crawl writes the
+            # new URL as a new document.
+            return _reindex_failure(
+                doc_id, f"GitHub now serves '{doc_id}' at '{document.id}'."
+            )
+        return document
+
+    @override
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        # Targets by repository, so that each repository is read once.
+        targets_by_repo: dict[str, list[tuple[str, ParsedGitHubDocId]]] = {}
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            doc_id = failure.failed_document.document_id
+            parsed = parse_github_document_id(doc_id)
+            if parsed is None:
+                yield _reindex_failure(
+                    doc_id,
+                    f"Cannot parse GitHub document id '{doc_id}'; targeted "
+                    "reindex supports pull request, issue and file URLs.",
+                )
+                continue
+            scope_error = self._reindex_scope_error(parsed)
+            if scope_error:
+                yield _reindex_failure(
+                    doc_id,
+                    f"'{doc_id}' is out of the connector's scope: {scope_error}.",
+                )
+                continue
+            repo_key = f"{parsed.owner}/{parsed.repo}".lower()
+            targets_by_repo.setdefault(repo_key, []).append((doc_id, parsed))
+
+        for targets in targets_by_repo.values():
+            first = targets[0][1]
+            try:
+                repo = self._call_rate_limited(
+                    partial(
+                        self.source_operations.get_repository,
+                        owner=first.owner,
+                        name=first.repo,
+                    )
+                )
+                repo_scope_error = self._repo_scope_error(repo)
+                if repo_scope_error:
+                    for doc_id, _ in targets:
+                        yield _reindex_failure(
+                            doc_id,
+                            f"'{doc_id}' is out of the connector's scope: "
+                            f"{repo_scope_error}.",
+                        )
+                    continue
+                repo_external_access = (
+                    get_external_access_permission(repo)
+                    if include_permissions
+                    else None
+                )
+            except Exception as e:
+                if _fails_the_whole_run(e):
+                    raise
+                logger.exception(
+                    "Failed to read GitHub repository %s/%s", first.owner, first.repo
+                )
+                for doc_id, _ in targets:
+                    yield _reindex_failure(
+                        doc_id,
+                        f"Failed to read repository {first.owner}/{first.repo} "
+                        f"(deleted, renamed or no longer accessible): {e}",
+                        e,
+                    )
+                continue
+
+            for doc_id, parsed in targets:
+                try:
+                    yield self._reindex_target(
+                        repo, doc_id, parsed, repo_external_access
+                    )
+                except Exception as e:
+                    # One bad target must not cost the rest their retry.
+                    if _fails_the_whole_run(e):
+                        raise
+                    logger.exception("Failed to reindex GitHub document %s", doc_id)
+                    yield _reindex_failure(
+                        doc_id,
+                        f"Failed to reindex GitHub document {doc_id} (deleted or "
+                        f"no longer accessible): {e}",
+                        e,
+                    )
 
     def validate_connector_settings(self) -> None:
         if self._source_operations is None:
