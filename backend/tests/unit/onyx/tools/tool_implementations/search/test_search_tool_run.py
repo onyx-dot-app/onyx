@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.agents.tools import ToolExecutionMode, ToolInvocation, ToolProgress
-from onyx.configs.constants import DocumentSource, MessageType
+from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import (
     BaseFilters,
     InferenceChunk,
@@ -13,13 +13,12 @@ from onyx.context.search.models import (
     UserAccessFilters,
 )
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import UserMessage
 from onyx.tools.interface import ToolContext
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 MODULE = "onyx.tools.tool_implementations.search.search_tool"
@@ -514,7 +513,9 @@ def test_inferred_scope_retains_context_files_within_explicit_selection(
 
 
 def test_agent_search_state_does_not_inherit_another_conversation() -> None:
-    original = _make_tool()
+    selection = MagicMock()
+    resolver = MagicMock(return_value=selection)
+    original = _make_tool(selection_llm_factory=resolver)
     original._cached_expansion = ("first question", ["first"])
     original._scope_decision_settled = True
     original._time_filter_computed = True
@@ -522,6 +523,9 @@ def test_agent_search_state_does_not_inherit_another_conversation() -> None:
     separate = original.for_agent()
     assert separate.document_index is original.document_index
     assert separate.llm is original.llm
+    resolver.assert_not_called()
+    assert separate.selection_llm is selection
+    assert separate.enforce_selection_input_budget
     assert separate._cached_expansion is None
     assert not separate._scope_decision_settled
     assert not separate._time_filter_computed
@@ -580,6 +584,7 @@ def test_selected_documents_are_published_before_context_expansion() -> None:
         llm: LLM,  # noqa: ARG001
         document_index: DocumentIndex,  # noqa: ARG001
         expand_override: bool,  # noqa: ARG001
+        enforce_llm_input_budget: bool = False,  # noqa: ARG001
     ) -> InferenceSection:
         details = updates[-1].details
         assert isinstance(details, SearchDocsResponse)
