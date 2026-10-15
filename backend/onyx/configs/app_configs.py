@@ -7,7 +7,7 @@ from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import QueryHistoryType
+from onyx.configs.constants import QueryHistoryType, TabularChunkingStrategy
 from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import (
@@ -1626,6 +1626,37 @@ MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
 # Peak Memory ~= 100 B * MAX_CELLS
 MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
+)
+
+
+def _load_tabular_chunking_strategy() -> TabularChunkingStrategy:
+    raw = (os.environ.get("TABULAR_CHUNKING_STRATEGY") or "").strip().lower()
+    if not raw:
+        return TabularChunkingStrategy.ROWS
+    try:
+        return TabularChunkingStrategy(raw)
+    except ValueError:
+        logger.warning(
+            "Invalid TABULAR_CHUNKING_STRATEGY %r; using %r",
+            raw,
+            TabularChunkingStrategy.ROWS.value,
+        )
+        return TabularChunkingStrategy.ROWS
+
+
+# How spreadsheets and CSVs become chunks. See TabularChunkingStrategy.
+TABULAR_CHUNKING_STRATEGY = _load_tabular_chunking_strategy()
+# SKETCH only: a sheet whose rows fit in this many chunks keeps all its rows.
+TABULAR_SKETCH_FULL_ROWS_MAX_CHUNKS = max(
+    0, int(os.environ.get("TABULAR_SKETCH_FULL_ROWS_MAX_CHUNKS") or 3)
+)
+# SKETCH only: chunks of frequent text values added for each large sheet.
+TABULAR_SKETCH_VALUE_CHUNKS_PER_SHEET = max(
+    0, int(os.environ.get("TABULAR_SKETCH_VALUE_CHUNKS_PER_SHEET") or 2)
+)
+# SKETCH only: upper bound on the chunks of one workbook or CSV file.
+TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK = max(
+    1, int(os.environ.get("TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK") or 24)
 )
 
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort

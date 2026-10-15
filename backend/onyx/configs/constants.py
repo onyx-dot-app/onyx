@@ -375,6 +375,14 @@ class QueryHistoryType(str, Enum):
     NORMAL = "normal"
 
 
+class TabularChunkingStrategy(str, Enum):
+    # Every row becomes chunk text, plus per-sheet descriptor chunks.
+    ROWS = "rows"
+    # Small sheets keep their rows. Large sheets get a bounded profile, and
+    # each workbook gets one overview, so the chunk count stays bounded.
+    SKETCH = "sketch"
+
+
 # Special characters for password validation
 PASSWORD_SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;:,.<>?"
 

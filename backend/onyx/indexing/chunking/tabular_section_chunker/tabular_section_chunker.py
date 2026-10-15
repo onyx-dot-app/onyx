@@ -1,9 +1,18 @@
+import csv
 import io
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from functools import partial
 from itertools import chain
 
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import (
+    TABULAR_CHUNKING_STRATEGY,
+    TABULAR_SKETCH_FULL_ROWS_MAX_CHUNKS,
+    TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK,
+    TABULAR_SKETCH_VALUE_CHUNKS_PER_SHEET,
+)
+from onyx.configs.constants import TabularChunkingStrategy
 from onyx.connectors.models import Section, TabularSection
 from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.chunking.section_chunker import (
@@ -18,6 +27,10 @@ from onyx.indexing.chunking.tabular_section_chunker.analysis import (
 )
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
+)
+from onyx.indexing.chunking.tabular_section_chunker.sketch import (
+    SheetSource,
+    build_workbook_chunks,
 )
 from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
     build_total_descriptor_chunks,
@@ -228,14 +241,77 @@ def parse_to_chunks(
     return chunks
 
 
+_HEADING_SHEET_SEPARATOR = " :: "
+
+
+def _open_staged_csv_rows(csv_file_id: str) -> Iterator[list[str]]:
+    file_store = get_default_file_store()
+    with file_store.read_file(csv_file_id, use_tempfile=True) as raw:
+        yield from csv.reader(io.TextIOWrapper(raw, encoding="utf-8", newline=""))
+
+
+def _sheet_name(section: TabularSection) -> str:
+    heading = section.heading or ""
+    if _HEADING_SHEET_SEPARATOR in heading:
+        return heading.split(_HEADING_SHEET_SEPARATOR, 1)[1]
+    return heading
+
+
+def _file_name(section: TabularSection) -> str:
+    heading = section.heading or ""
+    if _HEADING_SHEET_SEPARATOR in heading:
+        return heading.split(_HEADING_SHEET_SEPARATOR, 1)[0]
+    return section.link or heading or "Table"
+
+
 class TabularChunker(SectionChunker):
     def __init__(
         self,
         tokenizer: BaseTokenizer,
         ignore_metadata_chunks: bool = False,
+        strategy: TabularChunkingStrategy | None = None,
     ) -> None:
         self.tokenizer = tokenizer
         self.ignore_metadata_chunks = ignore_metadata_chunks
+        self.strategy = strategy or TABULAR_CHUNKING_STRATEGY
+
+    @property
+    def chunks_workbooks(self) -> bool:
+        """True when all tabular sections of a document must be chunked
+        together through `chunk_workbook`."""
+        return self.strategy == TabularChunkingStrategy.SKETCH
+
+    def chunk_workbook(
+        self,
+        sections: list[TabularSection],
+        accumulator: AccumulatorState,
+        content_token_limit: int,
+        file_name: str | None = None,
+    ) -> SectionChunkerOutput:
+        """Chunk every sheet of one workbook (or one CSV file) together, so
+        the chunks can describe the whole file and stay bounded in number."""
+        payloads = accumulator.flush_to_list()
+        if not sections:
+            return SectionChunkerOutput(
+                payloads=payloads, accumulator=AccumulatorState()
+            )
+        sheets = [
+            SheetSource(
+                name=_sheet_name(section),
+                open_rows=partial(_open_staged_csv_rows, section.csv_file_id),
+            )
+            for section in sections
+        ]
+        chunk_texts = build_workbook_chunks(
+            file_name=file_name or _file_name(sections[0]),
+            sheets=sheets,
+            tokenizer=self.tokenizer,
+            max_tokens=content_token_limit,
+            full_rows_max_chunks=TABULAR_SKETCH_FULL_ROWS_MAX_CHUNKS,
+            value_chunks_per_sheet=TABULAR_SKETCH_VALUE_CHUNKS_PER_SHEET,
+            max_chunks=TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK,
+        )
+        return self._build_output(chunk_texts, sections[0], payloads)
 
     def chunk_section(
         self,
@@ -243,14 +319,16 @@ class TabularChunker(SectionChunker):
         accumulator: AccumulatorState,
         content_token_limit: int,
     ) -> SectionChunkerOutput:
-        payloads = accumulator.flush_to_list()
-        heading = section.heading or ""
-
         if not isinstance(section, TabularSection):
             raise ValueError(
                 "TabularChunker received a non-tabular section: "
                 f"{type(section).__name__}"
             )
+        if self.chunks_workbooks:
+            return self.chunk_workbook([section], accumulator, content_token_limit)
+
+        payloads = accumulator.flush_to_list()
+        heading = section.heading or ""
 
         # The CSV is always staged. One streaming pass over it yields the row
         # chunks; a second bounded pass through analyze_sheet yields descriptor

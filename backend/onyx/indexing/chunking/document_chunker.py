@@ -38,13 +38,14 @@ class DocumentChunker:
         self.blurb_splitter = blurb_splitter
         self.mini_chunk_splitter = mini_chunk_splitter
 
+        self._tabular_chunker = TabularChunker(tokenizer=tokenizer)
         self._dispatch: dict[SectionType, SectionChunker] = {
             SectionType.TEXT: TextChunker(
                 tokenizer=tokenizer,
                 chunk_splitter=chunk_splitter,
             ),
             SectionType.IMAGE: ImageChunker(),
-            SectionType.TABULAR: TabularChunker(tokenizer=tokenizer),
+            SectionType.TABULAR: self._tabular_chunker,
         }
 
     def chunk(
@@ -86,8 +87,28 @@ class DocumentChunker:
     ) -> list[ChunkPayload]:
         accumulator = AccumulatorState()
         payloads: list[ChunkPayload] = []
+        # All sheets of a workbook are chunked once, at the first sheet.
+        workbook_sections = (
+            [s for s in sections if isinstance(s, TabularSection)]
+            if self._tabular_chunker.chunks_workbooks
+            else []
+        )
+        workbook_done = False
 
         for section_idx, section in enumerate(sections):
+            if workbook_sections and isinstance(section, TabularSection):
+                if not workbook_done:
+                    result = self._tabular_chunker.chunk_workbook(
+                        sections=workbook_sections,
+                        accumulator=accumulator,
+                        content_token_limit=content_token_limit,
+                        file_name=document.semantic_identifier,
+                    )
+                    payloads.extend(result.payloads)
+                    accumulator = result.accumulator
+                    workbook_done = True
+                continue
+
             section_text = clean_text(str(section.text or ""))
             # File-backed tabular sections hold their content in csv_file_id, not
             # text, so they look empty here — keep them for the tabular chunker.

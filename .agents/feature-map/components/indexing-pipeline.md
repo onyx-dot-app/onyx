@@ -300,7 +300,13 @@ type to one of three `SectionChunker` implementations
   staged CSV twice (`file_store.read_file(csv_file_id)`), once to pack rows into
   token-bounded chunks (`parse_to_chunks`) and once through `analyze_sheet` to build
   descriptor/total summary chunks (`sheet_descriptor.py`, `total_descriptor.py`).
-  The full sheet is never materialized in memory.
+  The full sheet is never materialized in memory. With
+  `TABULAR_CHUNKING_STRATEGY=sketch` (default `rows`), `DocumentChunker` sends all
+  `TabularSection`s of a document to `TabularChunker.chunk_workbook` in one call.
+  `sketch.py:build_workbook_chunks` then emits one workbook overview, the full
+  rows of small sheets, and a bounded profile (column roles, totals, breakdowns,
+  frequent values) of large sheets. `TABULAR_SKETCH_MAX_CHUNKS_PER_WORKBOOK` caps
+  the chunk count of each file.
 
 `DocumentChunker.chunk` assigns `chunk_id` sequentially over the section-ordered
 payload stream, then `ChunkPayload.to_doc_aware_chunk` attaches the per-document
