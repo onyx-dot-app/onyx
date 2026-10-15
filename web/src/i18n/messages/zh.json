@@ -6127,8 +6127,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "输入新的 API 密钥或选择现有提供商",
-          "idle": "输入新的 API 密钥或选择现有提供商。",
+          "idle": "输入您的 API 密钥。",
           "label": "API 密钥",
           "placeholder": "输入您的 API 密钥",
           "required": "API 密钥为必填项"
@@ -6173,9 +6172,6 @@
         },
         "editHeader": {
           "title": "编辑 {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "提供商选择无效"
         },
         "loading": {
           "placeholder": "正在加载..."

@@ -6,7 +6,6 @@ import { InputPasswordTypeIn } from "@opal/components";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
-import { InputSingleComboBox } from "@opal/components";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -33,7 +32,6 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
     errorMessage,
     disabled,
     isLoadingCredentials,
-    apiKeyOptions,
     resetApiState,
     imageProvider,
   } = props;
@@ -41,7 +39,7 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
   return (
     <FormikField<string>
       name="api_key"
-      render={(field, helper, meta, state) => (
+      render={(field, _helper, meta, state) => (
         <FormField
           name="api_key"
           state={apiStatus === "error" ? "error" : state}
@@ -49,44 +47,20 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
         >
           <FormField.Label>{t("form.apiKey.label")}</FormField.Label>
           <FormField.Control>
-            {apiKeyOptions.length > 0 ? (
-              <InputSingleComboBox
-                mode="open"
-                value={field.value}
-                onChange={(e) => {
-                  helper.setValue(e.target.value);
-                  resetApiState();
-                }}
-                onValueChange={(value) => {
-                  helper.setValue(value);
-                  resetApiState();
-                }}
-                onBlur={field.onBlur}
-                options={apiKeyOptions}
-                placeholder={
-                  isLoadingCredentials
-                    ? t("form.loading.placeholder")
-                    : t("form.apiKey.comboPlaceholder")
-                }
-                disabled={disabled}
-                isError={apiStatus === "error"}
-              />
-            ) : (
-              <InputPasswordTypeIn
-                {...field}
-                onChange={(e) => {
-                  field.onChange(e);
-                  resetApiState();
-                }}
-                placeholder={
-                  isLoadingCredentials
-                    ? t("form.loading.placeholder")
-                    : t("form.apiKey.placeholder")
-                }
-                disabled={disabled}
-                error={apiStatus === "error"}
-              />
-            )}
+            <InputPasswordTypeIn
+              {...field}
+              onChange={(e) => {
+                field.onChange(e);
+                resetApiState();
+              }}
+              placeholder={
+                isLoadingCredentials
+                  ? t("form.loading.placeholder")
+                  : t("form.apiKey.placeholder")
+              }
+              disabled={disabled}
+              error={apiStatus === "error"}
+            />
           </FormField.Control>
           {showApiMessage ? (
             <FormField.APIMessage

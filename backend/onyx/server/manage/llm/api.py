@@ -539,7 +539,6 @@ def test_default_provider(
 
 @admin_router.get("/provider")
 def list_llm_providers(
-    include_image_gen: bool = Query(False),
     page_models: bool = Query(
         False,
         description="Return each provider's first page of models plus the "
@@ -555,7 +554,6 @@ def list_llm_providers(
     providers = fetch_existing_llm_providers(
         db_session=db_session,
         flow_type_filter=[],
-        exclude_image_generation_providers=not include_image_gen,
         include_model_configurations=not page_models,
         include_model_flows=not page_models,
     )

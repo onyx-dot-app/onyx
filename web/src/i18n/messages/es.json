@@ -6127,8 +6127,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Introduce una nueva clave de API o selecciona un proveedor existente",
-          "idle": "Introduce una nueva clave de API o selecciona un proveedor existente.",
+          "idle": "Introduce tu clave de API.",
           "label": "Clave de API",
           "placeholder": "Introduce tu clave de API",
           "required": "La clave de API es obligatoria"
@@ -6173,9 +6172,6 @@
         },
         "editHeader": {
           "title": "Editar {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "Selección de proveedor no válida"
         },
         "loading": {
           "placeholder": "Cargando..."
