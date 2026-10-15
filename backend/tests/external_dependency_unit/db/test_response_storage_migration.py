@@ -77,24 +77,44 @@ def test_response_items_upgrade_downgrade_upgrade(db_session: Session) -> None:
                     text("""
                     INSERT INTO chat_response_item (id, chat_message_id, step_index, generation_status, message, is_answer)
                     VALUES ('message', 1, 0, 'complete', '{}', true);
-                    INSERT INTO chat_response_item (id, chat_message_id, step_index, tool_call_id)
-                    VALUES ('result', 1, 0, 1);
                 """)
                 )
+                columns = {
+                    column["name"]: column
+                    for column in inspect(connection).get_columns(
+                        "chat_response_item", schema=schema
+                    )
+                }
+                assert "tool_call_id" not in columns
+                assert not columns["message"]["nullable"]
+                assert not columns["generation_status"]["nullable"]
+                indexes = {
+                    index["name"]: index
+                    for index in inspect(connection).get_indexes(
+                        "chat_response_item", schema=schema
+                    )
+                }
+                assert set(indexes) == {
+                    "uq_response_item_step",
+                    "uq_response_item_answer",
+                }
+                assert indexes["uq_response_item_step"]["unique"]
+                assert not indexes["uq_response_item_step"]["dialect_options"].get(
+                    "postgresql_where"
+                )
                 invalid_items = (
-                    "('duplicate-step', 1, 0, 'complete', '{}', NULL, false)",
-                    "('negative-step', 1, -1, 'complete', '{}', NULL, false)",
-                    "('two-kinds', 1, 1, 'complete', '{}', 1, false)",
-                    "('missing-kind', 1, 1, NULL, NULL, NULL, false)",
-                    "('second-answer', 1, 1, 'complete', '{}', NULL, true)",
-                    "('duplicate-result', 1, 0, NULL, NULL, 1, false)",
+                    "('duplicate-step', 1, 0, 'complete', '{}', false)",
+                    "('negative-step', 1, -1, 'complete', '{}', false)",
+                    "('missing-message', 1, 1, 'complete', NULL, false)",
+                    "('missing-status', 1, 1, NULL, '{}', false)",
+                    "('second-answer', 1, 1, 'complete', '{}', true)",
                 )
                 for values in invalid_items:
                     with pytest.raises(IntegrityError), connection.begin_nested():
                         connection.execute(
                             text(
                                 "INSERT INTO chat_response_item "
-                                "(id, chat_message_id, step_index, generation_status, message, tool_call_id, is_answer) "
+                                "(id, chat_message_id, step_index, generation_status, message, is_answer) "
                                 f"VALUES {values}"
                             )
                         )
