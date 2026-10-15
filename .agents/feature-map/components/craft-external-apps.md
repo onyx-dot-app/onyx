@@ -432,7 +432,7 @@ Connect: `GET /api/build/apps/{id}/oauth/start` builds the provider's
 authorize URL through the shared OAuth builder (`server/features/build/external_apps/oauth.py`).
 Each attempt is bound to the user, tenant, app, and OAuth configuration.
 `AuthorizationAttemptStore` keeps attempts for ten minutes through `CacheBackend`.
-GitHub and Linear use S256 PKCE. Other providers keep their existing exchange format.
+GitHub, Linear, and Zendesk use S256 PKCE. Other providers keep their existing exchange format.
 The callback consumes the attempt before token exchange and rejects changed configuration.
 A failed exchange requires a new connection attempt; retries cannot reuse state.
 The callback rejects malformed provider data and non-string access tokens before storage.
@@ -440,7 +440,8 @@ Providers own scope parameters, client authentication, and token and grant extra
 The callback stamps an absolute `expires_at`
 (`external_apps/token_utils.py:stamp_expires_at`), stores the granted scopes, and refreshes the user's sandbox skills.
 
-Zendesk uses a Confidential OAuth client with `read`, `tickets:write`, `hc:write`,
+Zendesk uses a Confidential OAuth client with S256 PKCE and a client secret.
+It requests `read`, `tickets:write`, `hc:write`,
 `side_conversations:write`, and `macros:write` scopes. All five are requested.
 Help Center, side conversations, and macros have separate read and write action policies.
 Reads default to `ALWAYS`; writes default to `ASK`, including nested and bulk resource routes.
@@ -455,7 +456,8 @@ The authorize and token URLs come from
 spec: a provider whose endpoints live on the customer's own host (Zendesk's
 `<subdomain>.zendesk.com`) resolves them from the app's organization
 credentials. Both OAuth routes and the refresh path resolve them the same
-way, so a rotated subdomain moves all three together. Refresh requires this
+way. The attempt fingerprint includes these resolved endpoints, so an account
+change rejects pending callbacks before any token exchange. Refresh requires this
 resolved token URL; it cannot fall back to an unresolved spec template.
 
 Refresh is lazy and happens at the credential-injection seam, not on a

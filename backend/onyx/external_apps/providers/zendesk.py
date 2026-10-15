@@ -19,6 +19,7 @@ from onyx.external_apps.providers.base import (
     OrgCredentialField,
     TokenExchangeRequest,
 )
+from onyx.oauth.protocol import build_authorization_code_token_body
 
 # Every Zendesk account lives on its own `<subdomain>.zendesk.com` host, so the
 # OAuth endpoints and the skill's base URL both come from this field.
@@ -347,7 +348,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
             token_url="https://{subdomain}.zendesk.com/oauth/tokens",
             scope=" ".join(_SCOPES),
             scope_param="scope",
-            extra_authorize_params={"response_type": "code"},
+            supports_pkce=True,
         ),
         descriptor=AdminDescriptorSpec(
             # The write path resolves this template from restored credentials.
@@ -382,7 +383,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
             ],
             setup_instructions=(
                 "In Zendesk, open Admin Center → APIs → OAuth clients and add a client. "
-                "Set Client kind to Confidential. "
+                "Set Client kind to Confidential. Onyx uses PKCE together with the client secret. "
                 "Add these allowed scopes to the client: "
                 f"{', '.join(_SCOPES)}. "
                 "The read scope allows reading all Zendesk data and is required for search and ticket audits. "
@@ -433,7 +434,13 @@ class ZendeskProvider(OAuthExternalAppProvider):
         )
 
     def build_token_exchange_request(
-        self, code: str, client_id: str, client_secret: str, redirect_uri: str
+        self,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        *,
+        code_verifier: str | None = None,
     ) -> TokenExchangeRequest:
         return TokenExchangeRequest(
             headers={
@@ -441,11 +448,13 @@ class ZendeskProvider(OAuthExternalAppProvider):
                 "Accept": "application/json",
             },
             body={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": code,
-                "redirect_uri": redirect_uri,
+                **build_authorization_code_token_body(
+                    code=code,
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    redirect_uri=redirect_uri,
+                    code_verifier=code_verifier,
+                ),
                 "scope": self.spec.oauth.scope,
                 # Without an explicit expiry, an older client issues no refresh
                 # token at all.
