@@ -17,20 +17,20 @@ from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
 from onyx.indexing.chunking.tabular_section_chunker.cell_values import (
     DateOrder,
-    _parse_number,
-    _unit_marker,
     column_label,
     date_key,
     detect_header_row,
+    parse_number,
+    unit_marker,
 )
 from onyx.indexing.chunking.tabular_section_chunker.models import (
+    Block,
+    ColumnStats,
     SheetKind,
     SheetSource,
-    _Block,
-    _ColumnStats,
 )
 from onyx.indexing.chunking.tabular_section_chunker.workbook_chunks import (
-    _Packer,
+    Packer,
     build_workbook_chunks,
     profile_sheet,
 )
@@ -341,7 +341,7 @@ def test_date_key_will_not_guess_the_order() -> None:
     assert date_key("5/3/2024", DateOrder.MONTH_FIRST) == "2024-05-03"
 
 
-def _date_column(values: list[str]) -> _ColumnStats:
+def _date_column(values: list[str]) -> ColumnStats:
     rows = [["id", "day"]] + [[f"R{idx}", value] for idx, value in enumerate(values)]
     profile = profile_sheet(
         name="S", rows=iter(rows), tokenizer=CharTokenizer(), full_rows_token_budget=10
@@ -515,8 +515,8 @@ def test_every_sheet_is_named_even_when_the_chunk_budget_runs_out() -> None:
 def test_currency_and_percent_are_read_with_their_unit(
     value: str, number: float | None, unit: str
 ) -> None:
-    assert _parse_number(value) == number
-    assert _unit_marker(value) == unit
+    assert parse_number(value) == number
+    assert unit_marker(value) == unit
 
 
 def test_euro_column_keeps_its_total_and_unit() -> None:
@@ -533,11 +533,11 @@ def test_euro_column_keeps_its_total_and_unit() -> None:
 @pytest.mark.parametrize("cap", [1, 2, 3, 5])
 def test_packer_never_exceeds_its_chunk_cap(cap: int) -> None:
     # A flush can fill the budget, so the cap has to be rechecked after it.
-    packer = _Packer(tokenizer=CharTokenizer(), max_tokens=40, max_chunks=cap)
-    packer.add(_Block(lines=["a" * 35], label="first"))
-    packer.add(_Block(lines=["b" * 35], label="second"))
+    packer = Packer(tokenizer=CharTokenizer(), max_tokens=40, max_chunks=cap)
+    packer.add(Block(lines=["a" * 35], label="first"))
+    packer.add(Block(lines=["b" * 35], label="second"))
     packer.add(
-        _Block(
+        Block(
             lines=["H" * 10] + ["c" * 30 for _ in range(6)],
             repeat=1,
             max_chunks=5,
@@ -770,5 +770,5 @@ def test_month_names_resolve_by_prefix_not_by_table() -> None:
 @pytest.mark.parametrize("value", ["$10", "€10", "£10", "₫10", "₴10", "¥10"])
 def test_currency_comes_from_unicode_not_a_list(value: str) -> None:
     # Unicode classifies currency symbols, so a symbol nobody listed still works.
-    assert _parse_number(value) == 10.0
-    assert _unit_marker(value) == value[0]
+    assert parse_number(value) == 10.0
+    assert unit_marker(value) == value[0]

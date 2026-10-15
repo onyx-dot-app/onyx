@@ -30,7 +30,7 @@ _MONTH_DAY_YEAR_RE = re.compile(r"^([A-Za-z]{3,9})\.?[ -](\d{1,2}),?[ -](\d{4})$
 _YEAR_RE = re.compile(r"^(?:19|20|21)\d{2}$")
 
 
-_ID_VALUE_RE = re.compile(r"^[A-Za-z]{1,10}[-_ #]?\d+[A-Za-z]?$")
+ID_VALUE_RE = re.compile(r"^[A-Za-z]{1,10}[-_ #]?\d+[A-Za-z]?$")
 
 
 _WORD_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
@@ -48,7 +48,7 @@ _LONG_DECIMAL_RE = re.compile(r"^-?\d+\.\d{7,}$")
 _ID_NAME_TOKENS = ("id", "uuid", "uid", "guid", "key")
 
 
-_VALUE_SEPARATOR = "; "
+VALUE_SEPARATOR = "; "
 
 
 class DateOrder(str, Enum):
@@ -59,7 +59,7 @@ class DateOrder(str, Enum):
     MONTH_FIRST = "month_first"
 
 
-def _parse_number(value: str) -> float | None:
+def parse_number(value: str) -> float | None:
     text = value.strip().replace(",", "").removesuffix("%").strip()
     if not text:
         return None
@@ -83,7 +83,7 @@ def _parse_number(value: str) -> float | None:
     return number
 
 
-def _natural_key(value: str) -> tuple[tuple[int, int, str], ...]:
+def natural_key(value: str) -> tuple[tuple[int, int, str], ...]:
     """Sort key that orders "Project 2" before "Project 10"."""
     return tuple(
         (1, int(part), "") if part.isdigit() else (0, 0, part)
@@ -173,7 +173,7 @@ def _is_currency_symbol(char: str) -> bool:
     return unicodedata.category(char) == "Sc"
 
 
-def _unit_marker(value: str) -> str:
+def unit_marker(value: str) -> str:
     """The unit a number carries, so totals keep it and percentages are never
     summed. Empty when the number is bare."""
     text = value.strip()
@@ -271,7 +271,7 @@ def _looks_like_a_label(value: str) -> bool:
     text = value.strip()
     if _YEAR_RE.match(text):
         return True
-    return _parse_number(text) is None and date_key(text) is None
+    return parse_number(text) is None and date_key(text) is None
 
 
 def _looks_like_data_pair(row: list[str], next_row: list[str]) -> bool:
@@ -298,7 +298,7 @@ def detect_header_row(rows: list[list[str]]) -> int | None:
     """Index of the header row among the first rows of a sheet, or None when
     the sheet has no header (one column of text, or data from the first row).
     """
-    widths = [_row_width(row) for row in rows]
+    widths = [row_width(row) for row in rows]
     max_width = max(widths, default=0)
     if max_width <= 1:
         return None
@@ -320,7 +320,7 @@ def detect_header_row(rows: list[list[str]]) -> int | None:
     return None
 
 
-def _row_width(row: list[str]) -> int:
+def row_width(row: list[str]) -> int:
     return sum(1 for cell in row if cell.strip())
 
 
@@ -336,11 +336,11 @@ def format_row(header: list[str], row: list[str]) -> str:
     return ", ".join(parts)
 
 
-def _text_line(row: list[str]) -> str:
+def text_line(row: list[str]) -> str:
     return " | ".join(clean_cell(cell) for cell in row if cell.strip())
 
 
-def _min_opt[T: (float, str)](a: T | None, b: T | None) -> T | None:
+def min_opt[T: (float, str)](a: T | None, b: T | None) -> T | None:
     if a is None:
         return b
     if b is None:
@@ -348,7 +348,7 @@ def _min_opt[T: (float, str)](a: T | None, b: T | None) -> T | None:
     return min(a, b)
 
 
-def _max_opt[T: (float, str)](a: T | None, b: T | None) -> T | None:
+def max_opt[T: (float, str)](a: T | None, b: T | None) -> T | None:
     if a is None:
         return b
     if b is None:

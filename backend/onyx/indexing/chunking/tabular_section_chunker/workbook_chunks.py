@@ -20,26 +20,26 @@ from collections.abc import Iterable
 from itertools import chain
 
 from onyx.indexing.chunking.tabular_section_chunker.cell_values import (
-    _VALUE_SEPARATOR,
-    _row_width,
-    _text_line,
+    VALUE_SEPARATOR,
     clean_cell,
     column_label,
     detect_header_row,
     format_number,
     format_row,
     is_id_name,
+    row_width,
+    text_line,
 )
 from onyx.indexing.chunking.tabular_section_chunker.models import (
-    _CATEGORY_MAX_DISTINCT,
+    CATEGORY_MAX_DISTINCT,
+    Block,
+    Breakdowns,
     ColumnRole,
+    ColumnStats,
     DateOrder,
     SheetKind,
     SheetProfile,
     SheetSource,
-    _Block,
-    _Breakdowns,
-    _ColumnStats,
 )
 from onyx.natural_language_processing.utils import (
     BaseTokenizer,
@@ -86,7 +86,7 @@ _OVERVIEW_MAX_CHUNKS = 3
 # ---------------------------------------------------------------------------
 
 
-def _pick_breakdowns(columns: list[_ColumnStats]) -> _Breakdowns:
+def _pick_breakdowns(columns: list[ColumnStats]) -> Breakdowns:
     categories: list[int] = []
     numerics: list[int] = []
     date_column: int | None = None
@@ -104,12 +104,12 @@ def _pick_breakdowns(columns: list[_ColumnStats]) -> _Breakdowns:
         elif (
             not col.is_numeric
             and not col.is_date
-            and 1 < col.distinct <= _CATEGORY_MAX_DISTINCT // 2
+            and 1 < col.distinct <= CATEGORY_MAX_DISTINCT // 2
             and col.contact_hits == 0
             and len(categories) < _MAX_BREAKDOWN_CATEGORY_COLUMNS
         ):
             categories.append(idx)
-    return _Breakdowns(
+    return Breakdowns(
         category_columns=categories,
         numeric_columns=numerics,
         date_column=date_column,
@@ -117,7 +117,7 @@ def _pick_breakdowns(columns: list[_ColumnStats]) -> _Breakdowns:
     )
 
 
-def _redundant_columns(columns: list[_ColumnStats], probe: list[list[str]]) -> set[int]:
+def _redundant_columns(columns: list[ColumnStats], probe: list[list[str]]) -> set[int]:
     text_columns = [
         idx for idx, col in enumerate(columns) if col.non_empty and not col.is_numeric
     ][:_MAX_REDUNDANCY_COLUMNS]
@@ -229,7 +229,7 @@ def _text_profile(
     lines: list[str] = []
     used = 0
     for row in rows:
-        line = _text_line(row)
+        line = text_line(row)
         cost = count_tokens(line, tokenizer) + 1
         if used + cost > token_budget:
             # Keep the start of an overlong cell rather than nothing at all.
@@ -257,7 +257,7 @@ def profile_sheet(
     title_rows: list[list[str]] = []
     head: list[list[str]] = []
     for row in row_iter:
-        if not head and _row_width(row) < 2 and len(title_rows) < _MAX_PREAMBLE_ROWS:
+        if not head and row_width(row) < 2 and len(title_rows) < _MAX_PREAMBLE_ROWS:
             title_rows.append(row)
             continue
         head.append(row)
@@ -271,7 +271,7 @@ def profile_sheet(
         )
 
     header_idx = detect_header_row(head)
-    widest = max(_row_width(row) for row in head)
+    widest = max(row_width(row) for row in head)
     if header_idx is None and widest <= 1:
         return _text_profile(
             name,
@@ -287,11 +287,11 @@ def profile_sheet(
             _HEADER_SCAN_ROWS,
         )
         header = [f"Column {idx + 1}" for idx in range(max(len(r) for r in head))]
-        preamble = [_text_line(r) for r in title_rows]
+        preamble = [text_line(r) for r in title_rows]
         data_head = head
     else:
         header = [cell.strip() for cell in head[header_idx]]
-        preamble = [_text_line(r) for r in chain(title_rows, head[:header_idx])]
+        preamble = [text_line(r) for r in chain(title_rows, head[:header_idx])]
         data_head = head[header_idx + 1 :]
 
     profiler = _TableProfiler(
@@ -301,7 +301,7 @@ def profile_sheet(
             header=header,
             synthetic_header=header_idx is None,
             preamble=preamble,
-            columns=[_ColumnStats(col) for col in header],
+            columns=[ColumnStats(col) for col in header],
         ),
         tokenizer=tokenizer,
         full_rows_token_budget=full_rows_token_budget,
@@ -316,7 +316,7 @@ def profile_sheet(
 # ---------------------------------------------------------------------------
 
 
-class _Packer:
+class Packer:
     def __init__(
         self, tokenizer: BaseTokenizer, max_tokens: int, max_chunks: int
     ) -> None:
@@ -355,7 +355,7 @@ class _Packer:
     def full(self) -> bool:
         return len(self.chunks) >= self._max_chunks
 
-    def add(self, block: _Block) -> None:
+    def add(self, block: Block) -> None:
         label = block.label or "(unnamed block)"
         if not block.lines:
             return
@@ -433,7 +433,7 @@ def _join_limited(
 ) -> tuple[str, int]:
     """Join items with the value separator until ``budget`` tokens are used.
     Returns the text and the number of items it holds."""
-    separator_tokens = count_tokens(_VALUE_SEPARATOR, tokenizer)
+    separator_tokens = count_tokens(VALUE_SEPARATOR, tokenizer)
     text = ""
     used = 0
     tokens = 0
@@ -441,7 +441,7 @@ def _join_limited(
         item_tokens = count_tokens(item, tokenizer) + (separator_tokens if used else 0)
         if tokens + item_tokens > budget and used > 0:
             break
-        text = f"{text}{_VALUE_SEPARATOR}{item}" if text else item
+        text = f"{text}{VALUE_SEPARATOR}{item}" if text else item
         tokens += item_tokens
         used += 1
     return text, used
@@ -484,7 +484,7 @@ def _overview_block(
     file_name: str,
     profiles: list[SheetProfile],
     tokenizer: BaseTokenizer,
-) -> _Block:
+) -> Block:
     sheet_names = [name for p in profiles for name in p.names if name]
     if sheet_names:
         lines = [
@@ -503,7 +503,7 @@ def _overview_block(
         lines.append(
             f"Sheet {label}: {profile.row_count} rows; " + _columns_line(profile)
         )
-    return _Block(lines=lines, repeat=1, max_chunks=_OVERVIEW_MAX_CHUNKS)
+    return Block(lines=lines, repeat=1, max_chunks=_OVERVIEW_MAX_CHUNKS)
 
 
 def _full_rows_block(
@@ -512,7 +512,7 @@ def _full_rows_block(
     tokenizer: BaseTokenizer,
     max_tokens: int,
     max_chunks: int,
-) -> _Block | None:
+) -> Block | None:
     if not profile.full_rows:
         return None
     repeat = 2
@@ -528,7 +528,7 @@ def _full_rows_block(
     row_tokens = sum(count_tokens(line, tokenizer) + 1 for line in lines[repeat:])
     per_chunk = max(1, max_tokens - header_tokens)
     needed = math.ceil(row_tokens / per_chunk)
-    return _Block(lines=lines, repeat=repeat, max_chunks=max(max_chunks, needed))
+    return Block(lines=lines, repeat=repeat, max_chunks=max(max_chunks, needed))
 
 
 def _profile_block(
@@ -536,7 +536,7 @@ def _profile_block(
     profile: SheetProfile,
     tokenizer: BaseTokenizer,
     line_budget: int,
-) -> _Block:
+) -> Block:
     header = profile.header
     roles = [col.role() for col in profile.columns]
     lines = [
@@ -553,7 +553,7 @@ def _profile_block(
     if dated:
         lines.append(
             "Time range: "
-            + _VALUE_SEPARATOR.join(f"{name} {lo} to {hi}" for name, lo, hi in dated)
+            + VALUE_SEPARATOR.join(f"{name} {lo} to {hi}" for name, lo, hi in dated)
         )
 
     identifiers = [
@@ -563,7 +563,7 @@ def _profile_block(
         if role == ColumnRole.IDENTIFIER
     ]
     if identifiers:
-        lines.append("Identifiers: " + _VALUE_SEPARATOR.join(identifiers))
+        lines.append("Identifiers: " + VALUE_SEPARATOR.join(identifiers))
 
     for col, role in zip(profile.columns, roles, strict=True):
         if role != ColumnRole.CATEGORY:
@@ -617,10 +617,10 @@ def _profile_block(
     if profile.samples:
         names = [""] * len(header) if profile.synthetic_header else header
         lines.extend(f"Sample row: {format_row(names, row)}" for row in profile.samples)
-    return _Block(lines=lines, repeat=1, max_chunks=_PROFILE_MAX_CHUNKS)
+    return Block(lines=lines, repeat=1, max_chunks=_PROFILE_MAX_CHUNKS)
 
 
-def _value_range(col: _ColumnStats) -> str:
+def _value_range(col: ColumnStats) -> str:
     if col.is_numeric and col.minimum is not None and col.maximum is not None:
         return f"{format_number(col.minimum)} ... {format_number(col.maximum)}"
     if col.id_min is not None and col.id_max is not None:
@@ -720,7 +720,7 @@ def _value_blocks(
     tokenizer: BaseTokenizer,
     max_tokens: int,
     max_chunks: int,
-) -> list[_Block]:
+) -> list[Block]:
     """Round-robin the frequent values of the free-text columns that the
     profile could only sample, so each chunk covers every such column."""
     columns = [
@@ -742,7 +742,7 @@ def _value_blocks(
         1,
         (max_tokens - count_tokens(heading, tokenizer) - len(columns)) // len(columns),
     )
-    blocks: list[_Block] = []
+    blocks: list[Block] = []
     for _ in range(max_chunks):
         lines = [heading]
         for col, queue in zip(columns, queues, strict=True):
@@ -757,7 +757,7 @@ def _value_blocks(
             lines.append(f"{label}: {text}")
         if len(lines) == 1:
             break
-        blocks.append(_Block(lines=lines, repeat=1, max_chunks=1))
+        blocks.append(Block(lines=lines, repeat=1, max_chunks=1))
     return blocks
 
 
@@ -765,7 +765,7 @@ def _can_merge(into: SheetProfile, other: SheetProfile) -> bool:
     """Whether merging keeps the breakdowns both sides already have.
 
     Merging two tabs pools their values, which can push a category column past
-    ``_CATEGORY_MAX_DISTINCT`` and silently cost the merged profile a breakdown
+    ``CATEGORY_MAX_DISTINCT`` and silently cost the merged profile a breakdown
     that each tab had on its own. Better two profiles than one that says less.
     """
     mine, theirs = into.breakdowns, other.breakdowns
@@ -780,7 +780,7 @@ def _can_merge(into: SheetProfile, other: SheetProfile) -> bool:
         if idx >= len(into.columns) or idx >= len(other.columns):
             return False
         pooled = set(into.columns[idx].counts) | set(other.columns[idx].counts)
-        if len(pooled) > _CATEGORY_MAX_DISTINCT:
+        if len(pooled) > CATEGORY_MAX_DISTINCT:
             return False
     # Dollars on one tab and euros on the other do not add up to a total.
     for mine_col, other_col in zip(into.columns, other.columns, strict=False):
@@ -838,7 +838,7 @@ def build_workbook_chunks(
         return []
 
     line_budget = max(1, max_tokens // 2)
-    blocks: list[_Block] = [_overview_block(file_name, profiles, tokenizer)]
+    blocks: list[Block] = [_overview_block(file_name, profiles, tokenizer)]
     in_overview = set(about_lines(profiles, tokenizer))
     # One block per sheet first, so running out of chunks costs every sheet its
     # extras rather than costing the last sheets everything.
@@ -849,7 +849,7 @@ def build_workbook_chunks(
             # overview; otherwise its text appears nowhere.
             if any(line not in in_overview for line in profile.text_lines):
                 blocks.append(
-                    _Block(
+                    Block(
                         lines=[_sheet_title(file_name, profile), *profile.text_lines],
                         repeat=1,
                         max_chunks=full_rows_max_chunks,
@@ -873,7 +873,7 @@ def build_workbook_chunks(
                 )
             )
 
-    packer = _Packer(tokenizer=tokenizer, max_tokens=max_tokens, max_chunks=max_chunks)
+    packer = Packer(tokenizer=tokenizer, max_tokens=max_tokens, max_chunks=max_chunks)
     for block in blocks:
         packer.add(block)
     return packer.finish()
