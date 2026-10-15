@@ -138,6 +138,7 @@ module.exports = {
       ...sharedConfig,
       testEnvironment: "node",
       testMatch: [
+        "**/src/proxy.test.ts",
         // Pure unit tests that don't need DOM
         "**/src/**/codeUtils.test.ts",
         "**/src/lib/**/*.test.ts",
@@ -163,6 +164,7 @@ module.exports = {
         "**/src/lib/**/*.test.tsx",
         "**/src/providers/**/*.test.tsx",
         "**/src/refresh-components/**/*.test.tsx",
+        "**/src/refresh-pages/**/*.test.tsx",
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
         // Add more patterns here as you add more integration tests

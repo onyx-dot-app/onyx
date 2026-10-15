@@ -7,7 +7,7 @@ import * as AppLayouts from "@/layouts/app-layouts";
 import { Persona } from "@/app/admin/agents/interfaces";
 
 // This is used for rendering a persona in the shared chat display
-export function constructMiniFiedPersona(name: string, id: number): Persona {
+function constructMiniFiedPersona(name: string, id: number): Persona {
   return {
     id,
     name,

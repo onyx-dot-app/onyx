@@ -21,6 +21,7 @@ _CANVAS_CALL_TIMEOUT: int = 30
 # abandoned before it is fully buffered.
 _DOWNLOAD_CHUNK_SIZE: int = 64 * 1024
 _CANVAS_API_VERSION: str = "/api/v1"
+_CANVAS_NEW_QUIZZES_API_VERSION: str = "/api/quiz/v1"
 # Matches the "next" URL in a Canvas Link header, e.g.:
 #   <https://canvas.example.com/api/v1/courses?page=2>; rel="next"
 # Captures the URL inside the angle brackets.
@@ -68,8 +69,8 @@ class CanvasApiClient:
         parsed_base = urlparse(canvas_base_url)
         if not parsed_base.hostname:
             raise ValueError("canvas_base_url must include a valid host")
-        # if parsed_base.scheme != "https":
-        #     raise ValueError("canvas_base_url must use https")
+        if parsed_base.scheme != "https":
+            raise ValueError("canvas_base_url must use https")
 
         self._bearer_token = bearer_token
         self._token_refresher = token_refresher
@@ -86,6 +87,7 @@ class CanvasApiClient:
         endpoint: str = "",
         params: dict[str, Any] | None = None,
         full_url: str | None = None,
+        api_version: str = _CANVAS_API_VERSION,
     ) -> tuple[Any, str | None]:
         """Make a GET request to the Canvas API.
 
@@ -100,7 +102,7 @@ class CanvasApiClient:
         # full_url is used when following pagination (Canvas returns the
         # next-page URL in the Link header).  For the first request we build
         # the URL from the endpoint name instead.
-        url = full_url if full_url else self._build_url(endpoint)
+        url = full_url if full_url else self._build_url(endpoint, api_version)
         response = self._request(url, params if not full_url else None)
 
         # OAuth access tokens expire hourly. On a 401, ask the refresher for a
@@ -279,14 +281,14 @@ class CanvasApiClient:
                         f"({parsed_url.hostname}); expected {expected_host}"
                     ),
                 )
-            # if parsed_url.scheme != "https":
-            #     raise OnyxError(
-            #         OnyxErrorCode.BAD_GATEWAY,
-            #         detail=(
-            #             "Canvas pagination link must use https, "
-            #             f"got {parsed_url.scheme!r}"
-            #         ),
-            #     )
+            if parsed_url.scheme != "https":
+                raise OnyxError(
+                    OnyxErrorCode.BAD_GATEWAY,
+                    detail=(
+                        "Canvas pagination link must use https, "
+                        f"got {parsed_url.scheme!r}"
+                    ),
+                )
             return url
         return None
 
@@ -306,16 +308,19 @@ class CanvasApiClient:
         """Return the Authorization header with the bearer token."""
         return {"Authorization": f"Bearer {self._bearer_token}"}
 
-    def _build_url(self, endpoint: str) -> str:
+    def _build_url(self, endpoint: str, api_version: str = _CANVAS_API_VERSION) -> str:
         """Build a full Canvas API URL from an endpoint path.
 
         Assumes endpoint is non-empty (e.g. ``"courses"``, ``"announcements"``).
         Only called on a first request, endpoint must be set for first request.
-        Verify endpoint exists in case of future changes where endpoint might be optional.
+        Verify endpoint exists in case of future changes where endpoint might be
+        optional.
         Leading slashes are stripped to avoid double-slash in the result.
         self.base_url is already normalized with no trailing slash.
         """
-        final_url = self.base_url
+        if api_version not in {_CANVAS_API_VERSION, _CANVAS_NEW_QUIZZES_API_VERSION}:
+            raise ValueError(f"Unsupported Canvas API version: {api_version}")
+        final_url = self.base_url.removesuffix(_CANVAS_API_VERSION) + api_version
         clean_endpoint = endpoint.lstrip("/")
         if clean_endpoint:
             final_url += "/" + clean_endpoint
@@ -325,13 +330,14 @@ class CanvasApiClient:
         self,
         endpoint: str,
         params: dict[str, Any] | None = None,
+        api_version: str = _CANVAS_API_VERSION,
     ) -> Iterator[list[Any]]:
         """Yield each page of results, following Link-header pagination.
 
         Makes the first request with endpoint + params, then follows
         next_url from Link headers for subsequent pages.
         """
-        response, next_url = self.get(endpoint, params=params)
+        response, next_url = self.get(endpoint, params=params, api_version=api_version)
         while True:
             if not response:
                 break

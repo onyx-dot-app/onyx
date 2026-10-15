@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import LTI_CANVAS_COURSE_PROJECT_DESCRIPTION_PREFIX
+from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.enums import IndexingStatus
@@ -17,6 +18,7 @@ from onyx.db.hierarchy import get_hierarchy_node_by_raw_id
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import HierarchyNode
 from onyx.db.models import HierarchyNodeByConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import UserProject
@@ -75,6 +77,26 @@ def fetch_canvas_course_node_id_for_cc_pair(
     if node is None or node.node_type != HierarchyNodeType.COURSE:
         return None
     return node.id
+
+
+async def find_canvas_course_node_id(canvas_course_id: int) -> int | None:
+    """Resolve the indexed Canvas course HierarchyNode that matches an LTI launch.
+
+    Canvas course hierarchy nodes use a stable raw ID derived from the numeric
+    Canvas course ID. Resolve by that ID rather than the mutable, non-unique
+    course title so the tutor editor cannot be scoped to another course.
+    """
+    async with get_async_session_context_manager() as session:
+        result = await session.execute(
+            select(HierarchyNode.id)
+            .where(
+                HierarchyNode.source == DocumentSource.CANVAS,
+                HierarchyNode.node_type == HierarchyNodeType.COURSE,
+                HierarchyNode.raw_node_id == f"canvas-course-{canvas_course_id}",
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
 
 def swap_lti_canvas_cc_pair_credential(

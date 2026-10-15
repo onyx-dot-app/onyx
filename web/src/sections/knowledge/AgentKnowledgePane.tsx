@@ -376,6 +376,7 @@ interface SourcesTableContentProps {
   onDeselectAllFolders: () => void;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
+  onSelectionPendingChange?: (pending: boolean) => void;
 }
 
 function SourcesTableContent({
@@ -390,6 +391,7 @@ function SourcesTableContent({
   onDeselectAllFolders,
   initialAttachedDocuments,
   onSelectionCountChange,
+  onSelectionPendingChange,
 }: SourcesTableContentProps) {
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch">
@@ -406,6 +408,7 @@ function SourcesTableContent({
         onDeselectAllDocuments={onDeselectAllDocuments}
         onDeselectAllFolders={onDeselectAllFolders}
         onSelectionCountChange={onSelectionCountChange}
+        onSelectionPendingChange={onSelectionPendingChange}
       />
     </GeneralLayouts.Section>
   );
@@ -543,6 +546,7 @@ interface KnowledgeTwoColumnViewProps {
   hasProcessingFiles: boolean;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   onSelectionCountChange: (source: ValidSources, count: number) => void;
+  onSelectionPendingChange?: (pending: boolean) => void;
   vectorDbEnabled: boolean;
 }
 
@@ -574,6 +578,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   hasProcessingFiles,
   initialAttachedDocuments,
   onSelectionCountChange,
+  onSelectionPendingChange,
   vectorDbEnabled,
 }: KnowledgeTwoColumnViewProps) {
   return (
@@ -613,6 +618,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
             onDeselectAllFolders={onDeselectAllFolders}
             initialAttachedDocuments={initialAttachedDocuments}
             onSelectionCountChange={onSelectionCountChange}
+            onSelectionPendingChange={onSelectionPendingChange}
           />
         )}
         {activeView === "recent" && (
@@ -852,6 +858,7 @@ interface AgentKnowledgePaneProps {
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   // Initial hierarchy nodes for existing agents (to calculate per-source counts)
   initialHierarchyNodes?: HierarchyNodeSnapshot[];
+  onSelectionPendingChange?: (pending: boolean) => void;
   // When false, hides document sets, connected sources, and hierarchy nodes
   // (these require a vector DB). User files are still shown.
   vectorDbEnabled?: boolean;
@@ -877,6 +884,7 @@ export default function AgentKnowledgePane({
   hasProcessingFiles,
   initialAttachedDocuments,
   initialHierarchyNodes,
+  onSelectionPendingChange,
   vectorDbEnabled = true,
 }: AgentKnowledgePaneProps) {
   // View state
@@ -1094,6 +1102,7 @@ export default function AgentKnowledgePane({
             hasProcessingFiles={hasProcessingFiles}
             initialAttachedDocuments={initialAttachedDocuments}
             onSelectionCountChange={handleSelectionCountChange}
+            onSelectionPendingChange={onSelectionPendingChange}
             vectorDbEnabled={vectorDbEnabled}
           />
         );
@@ -1121,6 +1130,7 @@ export default function AgentKnowledgePane({
     onUploadChange,
     onDocumentIdsChange,
     onFolderIdsChange,
+    onSelectionPendingChange,
     handleNavigateToAdd,
     handleNavigateToDocumentSets,
     handleNavigateToRecent,

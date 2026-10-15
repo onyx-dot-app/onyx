@@ -207,19 +207,22 @@ def _check_connector_and_attempt_status(
         raise RuntimeError(f"Index attempt {index_attempt_id} has no celery task id")
 
 
-# TODO: delete from here if ends up unused
-def _check_failure_threshold(
+def _count_failure_and_check_threshold(
     total_failures: int,
     document_count: int,
     batch_num: int,
-    last_failure: ConnectorFailure | None,
-) -> None:
-    """Check if we've hit the failure threshold and raise an appropriate exception if so.
+    failure: ConnectorFailure,
+) -> int:
+    """Count a failure and abort if the run exceeds its failure threshold.
 
     We consider the threshold hit if:
     1. We have more than 3 failures AND
     2. Failures account for more than 10% of processed documents
     """
+    if not failure.counts_toward_failure_threshold:
+        return total_failures
+
+    total_failures += 1
     failure_ratio = total_failures / (document_count or 1)
 
     FAILURE_THRESHOLD = 3
@@ -228,12 +231,14 @@ def _check_failure_threshold(
         logger.error(
             f"Connector run failed with '{total_failures}' errors after '{batch_num}' batches."
         )
-        if last_failure and last_failure.exception:
-            raise last_failure.exception from last_failure.exception
+        if failure.exception:
+            raise failure.exception from failure.exception
 
         raise RuntimeError(
-            f"Connector run encountered too many errors, aborting. Last error: {last_failure}"
+            f"Connector run encountered too many errors, aborting. Last error: {failure}"
         )
+
+    return total_failures
 
 
 def run_docfetching_entrypoint(
@@ -556,7 +561,6 @@ def connector_document_extraction(
 
                 # save record of any failures at the connector level
                 if failure is not None:
-                    total_failures += 1
                     with get_session_with_current_tenant() as db_session:
                         create_index_attempt_error(
                             index_attempt_id,
@@ -564,7 +568,7 @@ def connector_document_extraction(
                             failure,
                             db_session,
                         )
-                    _check_failure_threshold(
+                    total_failures = _count_failure_and_check_threshold(
                         total_failures, document_count, batch_num, failure
                     )
 

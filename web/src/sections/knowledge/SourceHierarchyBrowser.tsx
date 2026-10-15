@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Button } from "@opal/components";
+import { Button, Text as OpalText } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Separator from "@/refresh-components/Separator";
@@ -39,7 +39,13 @@ import {
   DocumentSortField,
   DocumentSortDirection,
   FolderPosition,
+  HierarchyFolderDocuments,
 } from "@/lib/hierarchy/interfaces";
+import {
+  getHierarchySelectionStates,
+  compactHierarchySelection,
+  updateHierarchySelection,
+} from "@/lib/hierarchy/selection";
 import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,
@@ -155,6 +161,7 @@ export interface SourceHierarchyBrowserProps {
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   // Callback to report selection count changes for this source
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
+  onSelectionPendingChange?: (pending: boolean) => void;
   // When true and the source has exactly one root hierarchy node, the
   // browser auto-enters it on load and hides it from the breadcrumb. Useful
   // for sources like Canvas where the single top-level node ("Canvas") adds
@@ -165,23 +172,26 @@ export interface SourceHierarchyBrowserProps {
   // sibling roots out of the navigation. Used by the Virtual Tutor editor
   // to scope to the Canvas course resolved at LTI launch time.
   restrictToRootNodeId?: number | null;
+  // When set, hierarchy/document requests go through the LTI course-scoped
+  // knowledge endpoints instead of the generic source hierarchy endpoints.
+  ltiCourseId?: string | null;
 }
 
 export default function SourceHierarchyBrowser({
   source,
   selectedDocumentIds,
-  onToggleDocument,
   onSetDocumentIds,
   selectedFolderIds,
-  onToggleFolder,
   onSetFolderIds,
   onDeselectAllDocuments,
   onDeselectAllFolders,
   onDeselectSourceItems,
   initialAttachedDocuments,
   onSelectionCountChange,
+  onSelectionPendingChange,
   hideRootNode = false,
   restrictToRootNodeId = null,
+  ltiCourseId = null,
 }: SourceHierarchyBrowserProps) {
   // State for hierarchy nodes (loaded once per source)
   const [allNodes, setAllNodes] = useState<HierarchyNodeSummary[]>([]);
@@ -196,6 +206,8 @@ export default function SourceHierarchyBrowser({
   const [nextCursor, setNextCursor] = useState<DocumentPageCursor | null>(null);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [hasMoreDocuments, setHasMoreDocuments] = useState(true);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentReloadAttempt, setDocumentReloadAttempt] = useState(0);
 
   // Search state
   const [searchValue, setSearchValue] = useState("");
@@ -219,6 +231,17 @@ export default function SourceHierarchyBrowser({
   const [selectedDocumentDetails, setSelectedDocumentDetails] = useState<
     Map<string, DocumentSummary>
   >(() => new Map(initialAttachedDocuments?.map((doc) => [doc.id, doc]) ?? []));
+  const [folderDocuments, setFolderDocuments] = useState<
+    Map<number, HierarchyFolderDocuments>
+  >(() => new Map());
+  const [isUpdatingSelection, setIsUpdatingSelection] = useState(false);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const selectionRequestId = useRef(0);
+
+  useEffect(() => {
+    onSelectionPendingChange?.(isUpdatingSelection);
+    return () => onSelectionPendingChange?.(false);
+  }, [isUpdatingSelection, onSelectionPendingChange]);
 
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -227,19 +250,62 @@ export default function SourceHierarchyBrowser({
   const lastPathNode = path[path.length - 1];
   const currentParentId = lastPathNode ? lastPathNode.id : null;
 
+  const selectionContext = useMemo(() => {
+    const documentDetails = new Map(selectedDocumentDetails);
+    folderDocuments.forEach((page) => {
+      page.documents.forEach((document) =>
+        documentDetails.set(document.id, document)
+      );
+    });
+    return {
+      nodes: allNodes,
+      selection: {
+        folderIds: selectedFolderIds,
+        documentIds: selectedDocumentIds,
+      },
+      documentDetails,
+      folderDocuments,
+    };
+  }, [
+    allNodes,
+    selectedFolderIds,
+    selectedDocumentIds,
+    selectedDocumentDetails,
+    folderDocuments,
+  ]);
+  const folderSelectionStates = useMemo(
+    () => getHierarchySelectionStates(selectionContext),
+    [selectionContext]
+  );
+
+  const isItemSelected = useCallback(
+    (item: HierarchyItem) =>
+      item.type === "folder"
+        ? folderSelectionStates.get(item.data.id) === "checked"
+        : selectedDocumentIds.includes(item.data.id) ||
+          (item.data.parent_id !== null &&
+            folderSelectionStates.get(item.data.parent_id) === "checked"),
+    [folderSelectionStates, selectedDocumentIds]
+  );
+
   // Load hierarchy nodes when source changes
   useEffect(() => {
     const loadNodes = async () => {
       setIsLoadingNodes(true);
       setNodesError(null);
       setAllNodes([]);
+      setFolderDocuments(new Map());
+      selectionRequestId.current += 1;
+      setIsUpdatingSelection(false);
+      setSelectionError(null);
       setPath([]);
       setDocuments([]);
+      setDocumentsError(null);
       setNextCursor(null);
       setHasMoreDocuments(true);
 
       try {
-        const response = await fetchHierarchyNodes(source);
+        const response = await fetchHierarchyNodes(source, ltiCourseId);
 
         // When scoped to a specific root, prune `allNodes` to just that
         // root and its descendants and auto-enter it so the rest of the
@@ -270,6 +336,10 @@ export default function SourceHierarchyBrowser({
             subtree.find((n) => n.id === restrictToRootNodeId) ?? null;
           if (rootNode) {
             setPath([rootNode]);
+          } else {
+            setNodesError(
+              "Course content is not accessible yet. Check the Canvas connection and sync status in the Knowledge tab, then reopen this editor."
+            );
           }
         } else {
           setAllNodes(response.nodes);
@@ -297,7 +367,11 @@ export default function SourceHierarchyBrowser({
     };
 
     loadNodes();
-  }, [source, hideRootNode, restrictToRootNodeId]);
+    return () => {
+      // Navigation can unmount the browser while ancestor files are loading.
+      selectionRequestId.current += 1;
+    };
+  }, [source, hideRootNode, restrictToRootNodeId, ltiCourseId]);
 
   // Load documents when current path or sort options change
   useEffect(() => {
@@ -306,6 +380,7 @@ export default function SourceHierarchyBrowser({
       if (allNodes.length === 0 && !nodesError) return;
 
       setIsLoadingDocuments(true);
+      setDocumentsError(null);
       setDocuments([]);
       setNextCursor(null);
       setHasMoreDocuments(true);
@@ -327,19 +402,30 @@ export default function SourceHierarchyBrowser({
           return;
         }
 
-        const response = await fetchHierarchyNodeDocuments({
-          parent_hierarchy_node_id: parentNodeId,
-          cursor: null,
-          sort_field: sortField,
-          sort_direction: sortDirection,
-          folder_position: folderPosition,
-        });
+        const response = await fetchHierarchyNodeDocuments(
+          {
+            parent_hierarchy_node_id: parentNodeId,
+            cursor: null,
+            sort_field: sortField,
+            sort_direction: sortDirection,
+            folder_position: folderPosition,
+          },
+          ltiCourseId
+        );
 
         setDocuments(response.documents);
+        setFolderDocuments((previous) =>
+          new Map(previous).set(parentNodeId, {
+            documents: response.documents,
+            complete: response.next_cursor === null,
+          })
+        );
         setNextCursor(response.next_cursor);
         setHasMoreDocuments(response.next_cursor !== null);
       } catch (error) {
         console.error("Failed to load documents:", error);
+        setDocumentsError("Unable to load files in this folder.");
+        setHasMoreDocuments(false);
       } finally {
         setIsLoadingDocuments(false);
       }
@@ -353,6 +439,8 @@ export default function SourceHierarchyBrowser({
     sortField,
     sortDirection,
     folderPosition,
+    ltiCourseId,
+    documentReloadAttempt,
   ]);
 
   // Load more documents (for infinite scroll)
@@ -361,21 +449,35 @@ export default function SourceHierarchyBrowser({
     if (currentParentId === null) return;
 
     setIsLoadingDocuments(true);
+    setDocumentsError(null);
 
     try {
-      const response = await fetchHierarchyNodeDocuments({
-        parent_hierarchy_node_id: currentParentId,
-        cursor: nextCursor,
-        sort_field: sortField,
-        sort_direction: sortDirection,
-        folder_position: folderPosition,
-      });
+      const response = await fetchHierarchyNodeDocuments(
+        {
+          parent_hierarchy_node_id: currentParentId,
+          cursor: nextCursor,
+          sort_field: sortField,
+          sort_direction: sortDirection,
+          folder_position: folderPosition,
+        },
+        ltiCourseId
+      );
 
       setDocuments((prev) => [...prev, ...response.documents]);
+      setFolderDocuments((previous) =>
+        new Map(previous).set(currentParentId, {
+          documents: [
+            ...(previous.get(currentParentId)?.documents ?? []),
+            ...response.documents,
+          ],
+          complete: response.next_cursor === null,
+        })
+      );
       setNextCursor(response.next_cursor);
       setHasMoreDocuments(response.next_cursor !== null);
     } catch (error) {
       console.error("Failed to load more documents:", error);
+      setDocumentsError("Unable to load more files in this folder.");
     } finally {
       setIsLoadingDocuments(false);
     }
@@ -387,10 +489,12 @@ export default function SourceHierarchyBrowser({
     sortField,
     sortDirection,
     folderPosition,
+    ltiCourseId,
   ]);
 
   // Infinite scroll handler
   const handleScroll = useCallback(() => {
+    if (documentsError) return;
     const container = scrollContainerRef.current;
     if (!container) return;
 
@@ -400,7 +504,15 @@ export default function SourceHierarchyBrowser({
     if (scrollHeight - scrollTop - clientHeight < scrollThreshold) {
       loadMoreDocuments();
     }
-  }, [loadMoreDocuments]);
+  }, [loadMoreDocuments, documentsError]);
+
+  const handleRetryDocuments = () => {
+    if (nextCursor) {
+      loadMoreDocuments();
+    } else {
+      setDocumentReloadAttempt((attempt) => attempt + 1);
+    }
+  };
 
   // Populate selectedDocumentDetails for any documents that are already selected
   // but don't have their details stored (e.g., when editing an existing agent)
@@ -551,82 +663,94 @@ export default function SourceHierarchyBrowser({
 
   // Header checkbox state: count how many visible items are selected
   const visibleSelectedCount = useMemo(() => {
-    return filteredItems.filter((item) => {
-      const isFolder = item.type === "folder";
-      if (isFolder) {
-        return selectedFolderIds.includes(item.data.id as number);
-      }
-      return selectedDocumentIds.includes(item.data.id as string);
-    }).length;
-  }, [filteredItems, selectedFolderIds, selectedDocumentIds]);
+    return filteredItems.filter(isItemSelected).length;
+  }, [filteredItems, isItemSelected]);
 
   const allVisibleSelected =
     filteredItems.length > 0 && visibleSelectedCount === filteredItems.length;
   const someVisibleSelected =
-    visibleSelectedCount > 0 && visibleSelectedCount < filteredItems.length;
-
-  // Handler for header checkbox click
-  const handleHeaderCheckboxClick = () => {
-    // Get visible folders and documents
-    const visibleFolders = filteredItems.filter(
-      (item) => item.type === "folder"
-    );
-    const visibleDocs = filteredItems.filter(
-      (item) => item.type === "document"
-    );
-    const visibleFolderIds = visibleFolders.map(
-      (item) => item.data.id as number
-    );
-    const visibleDocumentIds = visibleDocs.map(
-      (item) => item.data.id as string
+    !allVisibleSelected &&
+    filteredItems.some(
+      (item) =>
+        isItemSelected(item) ||
+        (item.type === "folder" &&
+          folderSelectionStates.get(item.data.id) === "mixed")
     );
 
-    if (allVisibleSelected) {
-      // Deselect all visible items by removing them from the selected arrays
-      const newFolderIds = selectedFolderIds.filter(
-        (id) => !visibleFolderIds.includes(id)
+  const handleSelectionChange = async (
+    changedItems: HierarchyItem[],
+    selected: boolean
+  ) => {
+    if (isUpdatingSelection) return;
+    const requestId = ++selectionRequestId.current;
+    setIsUpdatingSelection(true);
+    setSelectionError(null);
+    const loadedFolders = new Map<number, HierarchyFolderDocuments>();
+    const documentDetails = new Map(selectionContext.documentDetails);
+    changedItems.forEach((item) => {
+      if (item.type === "document")
+        documentDetails.set(item.data.id, item.data);
+    });
+    const loadAllDocuments = async (
+      folderId: number
+    ): Promise<DocumentSummary[]> => {
+      const cached =
+        loadedFolders.get(folderId) ?? folderDocuments.get(folderId);
+      if (cached?.complete) return cached.documents;
+      const files: DocumentSummary[] = [];
+      let cursor: DocumentPageCursor | null = null;
+      do {
+        const page = await fetchHierarchyNodeDocuments(
+          {
+            parent_hierarchy_node_id: folderId,
+            cursor,
+            sort_field: "name",
+            sort_direction: "asc",
+          },
+          ltiCourseId
+        );
+        files.push(...page.documents);
+        cursor = page.next_cursor;
+      } while (cursor !== null);
+      loadedFolders.set(folderId, { documents: files, complete: true });
+      files.forEach((document) => documentDetails.set(document.id, document));
+      return files;
+    };
+    try {
+      const updatedSelection = await updateHierarchySelection(
+        { ...selectionContext, documentDetails },
+        changedItems,
+        selected,
+        loadAllDocuments
       );
-      const newDocumentIds = selectedDocumentIds.filter(
-        (id) => !visibleDocumentIds.includes(id)
-      );
-      onSetFolderIds(newFolderIds);
-      onSetDocumentIds(newDocumentIds);
-
-      // Remove deselected documents from details map
-      setSelectedDocumentDetails((prev) => {
-        const updated = new Map(prev);
-        visibleDocumentIds.forEach((id) => updated.delete(id));
+      if (requestId !== selectionRequestId.current) return;
+      const updatedFolders = new Map(folderDocuments);
+      loadedFolders.forEach((page, id) => updatedFolders.set(id, page));
+      const next = compactHierarchySelection({
+        ...selectionContext,
+        selection: updatedSelection,
+        documentDetails,
+        folderDocuments: updatedFolders,
+      });
+      setSelectedDocumentDetails(documentDetails);
+      setFolderDocuments((previous) => {
+        const updated = new Map(previous);
+        loadedFolders.forEach((page, id) => updated.set(id, page));
         return updated;
       });
-
-      // If we deselected everything, exit view selected mode
-      if (newFolderIds.length === 0 && newDocumentIds.length === 0) {
+      onSetFolderIds(next.folderIds);
+      onSetDocumentIds(next.documentIds);
+      if (next.folderIds.length === 0 && next.documentIds.length === 0)
         setViewSelectedOnly(false);
-      }
-    } else {
-      // Select all visible items by adding them to the selected arrays
-      const newFolderIds = [
-        ...selectedFolderIds,
-        ...visibleFolderIds.filter((id) => !selectedFolderIds.includes(id)),
-      ];
-      const newDocumentIds = [
-        ...selectedDocumentIds,
-        ...visibleDocumentIds.filter((id) => !selectedDocumentIds.includes(id)),
-      ];
-      onSetFolderIds(newFolderIds);
-      onSetDocumentIds(newDocumentIds);
-
-      // Store details for newly selected documents
-      setSelectedDocumentDetails((prev) => {
-        const updated = new Map(prev);
-        visibleDocs.forEach((item) => {
-          const docId = item.data.id as string;
-          if (!prev.has(docId)) {
-            updated.set(docId, item.data as DocumentSummary);
-          }
-        });
-        return updated;
-      });
+    } catch (error) {
+      if (requestId !== selectionRequestId.current) return;
+      console.error("Failed to update knowledge selection:", error);
+      setSelectionError(
+        "Unable to update selection. Your previous selection was kept. Try again."
+      );
+    } finally {
+      if (requestId === selectionRequestId.current)
+        setIsUpdatingSelection(false);
     }
   };
 
@@ -685,6 +809,8 @@ export default function SourceHierarchyBrowser({
 
   // Handler for deselecting all items
   const handleDeselectAll = () => {
+    if (isUpdatingSelection) return;
+    setSelectionError(null);
     if (onDeselectSourceItems) {
       onDeselectSourceItems(
         source,
@@ -716,30 +842,6 @@ export default function SourceHierarchyBrowser({
       }
       return !prev;
     });
-  };
-
-  // Handler for clicking a row (folder or document)
-  const handleItemClick = (item: HierarchyItem) => {
-    if (item.type === "folder") {
-      onToggleFolder(item.data.id);
-      return;
-    }
-    const docId = item.data.id;
-    const isCurrentlySelected = selectedDocumentIds.includes(docId);
-    if (isCurrentlySelected) {
-      setSelectedDocumentDetails((prev) => {
-        const updated = new Map(prev);
-        updated.delete(docId);
-        return updated;
-      });
-    } else {
-      setSelectedDocumentDetails((prev) => {
-        const updated = new Map(prev);
-        updated.set(docId, item.data);
-        return updated;
-      });
-    }
-    onToggleDocument(docId);
   };
 
   // Get the type icon for a hierarchy item row
@@ -829,7 +931,11 @@ export default function SourceHierarchyBrowser({
             <Checkbox
               checked={allVisibleSelected}
               indeterminate={someVisibleSelected}
-              onCheckedChange={handleHeaderCheckboxClick}
+              disabled={isUpdatingSelection}
+              aria-label="Select all items"
+              onCheckedChange={() =>
+                handleSelectionChange(filteredItems, !allVisibleSelected)
+              }
             />
           )}
         </TableLayouts.CheckboxCell>
@@ -935,11 +1041,30 @@ export default function SourceHierarchyBrowser({
         onScroll={handleScroll}
         className="overflow-y-auto max-h-[20rem]"
       >
-        {filteredItems.length === 0 && !isLoadingDocuments ? (
+        {documentsError && !viewSelectedOnly && (
+          <div role="alert">
+            <GeneralLayouts.Section height="auto" padding={1} gap={0.5}>
+              <OpalText font="secondary-body" color="text-03">
+                {documentsError}
+              </OpalText>
+              <Button
+                prominence="secondary"
+                size="sm"
+                disabled={isLoadingDocuments}
+                onClick={handleRetryDocuments}
+              >
+                Retry files
+              </Button>
+            </GeneralLayouts.Section>
+          </div>
+        )}
+        {filteredItems.length === 0 &&
+        !isLoadingDocuments &&
+        (!documentsError || viewSelectedOnly) ? (
           <GeneralLayouts.Section height="auto" padding={1}>
             <Text text03 secondaryBody>
               {path.length === 0
-                ? "Select a folder to browse documents."
+                ? "Open a folder to browse documents."
                 : "No items in this folder."}
             </Text>
           </GeneralLayouts.Section>
@@ -948,19 +1073,31 @@ export default function SourceHierarchyBrowser({
             {filteredItems.map((item) => {
               const isFolder = item.type === "folder";
               const id = isFolder ? `folder-${item.data.id}` : item.data.id;
-              const isSelected = isFolder
-                ? selectedFolderIds.includes(item.data.id as number)
-                : selectedDocumentIds.includes(item.data.id as string);
+              const isSelected = isItemSelected(item);
+              const isPartial =
+                item.type === "folder" &&
+                folderSelectionStates.get(item.data.id) === "mixed";
 
               return (
                 <TableLayouts.TableRow
                   key={id}
-                  selected={isSelected}
-                  onClick={() => handleItemClick(item)}
+                  selected={isSelected || isPartial}
+                  onClick={() =>
+                    item.type === "folder"
+                      ? handleClickIntoFolder(item.data)
+                      : handleSelectionChange([item], !isSelected)
+                  }
                 >
-                  <TableLayouts.CheckboxCell>
+                  <TableLayouts.CheckboxCell
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     <Checkbox
                       checked={isSelected}
+                      indeterminate={isPartial}
+                      disabled={isUpdatingSelection}
+                      onCheckedChange={() =>
+                        handleSelectionChange([item], !isSelected)
+                      }
                       aria-label={`Select ${isFolder ? "folder" : "document"} ${
                         item.data.title
                       }`}
@@ -982,6 +1119,7 @@ export default function SourceHierarchyBrowser({
                           icon={SvgChevronRight}
                           prominence="tertiary"
                           size="sm"
+                          aria-label={`Open ${item.data.title}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleClickIntoFolder(
@@ -1017,6 +1155,17 @@ export default function SourceHierarchyBrowser({
         )}
       </div>
 
+      {isUpdatingSelection && (
+        <OpalText font="secondary-body" color="text-03" as="p" role="status">
+          Updating selection…
+        </OpalText>
+      )}
+      {selectionError && (
+        <OpalText font="secondary-body" color="text-03" as="p" role="alert">
+          {selectionError}
+        </OpalText>
+      )}
+
       {/* Table footer - only show when items are selected for this source */}
       {currentSourceSelectedCount > 0 && (
         <>
@@ -1044,6 +1193,7 @@ export default function SourceHierarchyBrowser({
               prominence="tertiary"
               size="sm"
               onClick={handleDeselectAll}
+              disabled={isUpdatingSelection}
             />
           </GeneralLayouts.Section>
         </>

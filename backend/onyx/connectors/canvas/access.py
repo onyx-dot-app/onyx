@@ -14,6 +14,7 @@ from onyx.utils.variable_functionality import global_version
 def get_course_permissions(
     canvas_client: CanvasApiClient,
     course_id: int,
+    lti_context_id: str | None = None,
 ) -> ExternalAccess | None:
     """
     Fetch course-level permissions based on enrollment.
@@ -32,7 +33,7 @@ def get_course_permissions(
 
     ee_get_course_permissions = cast(
         Callable[
-            [CanvasApiClient, int],
+            [CanvasApiClient, int, str | None],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
@@ -43,4 +44,5 @@ def get_course_permissions(
     return ee_get_course_permissions(
         canvas_client,
         course_id,
+        lti_context_id,
     )
