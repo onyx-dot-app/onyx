@@ -130,3 +130,22 @@ export type MCPServersFormValues = Record<
   `mcp_server_${number}`,
   MCPServerFormValues | undefined
 >;
+
+export type MCPAuthenticationServer = Pick<
+  MCPServer,
+  | "id"
+  | "name"
+  | "auth_type"
+  | "auth_performer"
+  | "auth_template"
+  | "user_can_authenticate"
+  | "user_credentials"
+  | "transport"
+>;
+
+export type MCPAuthenticationFlow = "credentials" | "oauth";
+
+export interface MCPCredentialRequest {
+  server: MCPAuthenticationServer;
+  forceReauthentication: boolean;
+}

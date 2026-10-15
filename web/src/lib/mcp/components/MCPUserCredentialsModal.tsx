@@ -6,7 +6,7 @@ import { Button, InputPasswordTypeIn, Modal, Text } from "@opal/components";
 import { SvgArrowLeft, SvgKey } from "@opal/icons";
 import { FormField } from "@/refresh-components/form/FormField";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
-import type { MCPAuthenticationServer } from "@/lib/mcp/auth";
+import type { MCPAuthenticationServer } from "@/lib/mcp/types";
 
 export interface MCPUserCredentialsModalProps {
   server: MCPAuthenticationServer;

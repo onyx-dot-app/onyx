@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
-import { useMcpAuthentication } from "@/lib/mcp/authentication";
+import { useMcpAuthentication } from "@/lib/mcp/hooks";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -67,7 +67,7 @@ describe("useMcpAuthentication", () => {
       mcp_servers: [{ ...server, user_can_authenticate: true }],
     });
     await act(async () => {
-      await result.current.first.credentialModalProps?.onSubmit({
+      await result.current.first.submitCredentials({
         api_key: "test",
       });
     });
@@ -79,7 +79,7 @@ describe("useMcpAuthentication", () => {
     await waitFor(() =>
       expect(result.current.second.servers[0]?.user_can_authenticate).toBe(true)
     );
-    expect(result.current.first.credentialModalProps).toBeNull();
+    expect(result.current.first.credentialRequest).toBeNull();
   });
   it.each([
     MCPAuthenticationPerformer.ADMIN,
@@ -98,9 +98,9 @@ describe("useMcpAuthentication", () => {
           auth_template: { headers: {}, required_fields: ["workspace"] },
         })
       );
-      expect(result.current.credentialModalProps).not.toBeNull();
+      expect(result.current.credentialRequest).not.toBeNull();
       await act(async () => {
-        await result.current.credentialModalProps?.onSubmit({
+        await result.current.submitCredentials({
           workspace: "example",
         });
       });
@@ -110,7 +110,7 @@ describe("useMcpAuthentication", () => {
         undefined
       );
       expect(startMCPUserOAuth).not.toHaveBeenCalled();
-      expect(result.current.credentialModalProps).toBeNull();
+      expect(result.current.credentialRequest).toBeNull();
     }
   );
   it("surfaces OAuth failure and clears the pending state", async () => {
@@ -137,7 +137,7 @@ describe("useMcpAuthentication", () => {
     expect(startMCPUserOAuth).not.toHaveBeenCalled();
     await act(async () => {
       await expect(
-        result.current.credentialModalProps?.onSubmit({ workspace: "example" })
+        result.current.submitCredentials({ workspace: "example" })
       ).rejects.toThrow("Try again");
     });
     expect(saveMCPUserCredentials).toHaveBeenCalledWith(
@@ -146,6 +146,6 @@ describe("useMcpAuthentication", () => {
       undefined
     );
     expect(startMCPUserOAuth).toHaveBeenCalled();
-    expect(result.current.credentialModalProps).not.toBeNull();
+    expect(result.current.credentialRequest).not.toBeNull();
   });
 });

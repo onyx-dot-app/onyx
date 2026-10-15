@@ -16,7 +16,7 @@ import { SvgActions, SvgKey, SvgSliders } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { MinimalAgent } from "@/lib/agents/types";
 import MCPUserCredentialsModal from "@/lib/mcp/components/MCPUserCredentialsModal";
-import { useMcpAuthentication } from "@/lib/mcp/authentication";
+import { useMcpAuthentication } from "@/lib/mcp/hooks";
 import { canAuthenticateMcpServer } from "@/lib/mcp/auth";
 import { toast } from "@opal/layouts";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -82,7 +82,9 @@ export default function ToolsPopover({
     authenticate: handleServerAuthentication,
     loadingServerId,
     authenticationError,
-    credentialModalProps,
+    credentialRequest,
+    cancelCredentialRequest,
+    submitCredentials,
   } = useMcpAuthentication(agent.id, hasAnyProvider);
 
   useEffect(() => {
@@ -358,10 +360,12 @@ export default function ToolsPopover({
         </Popover.Content>
       </Popover>
 
-      {credentialModalProps && (
+      {credentialRequest && (
         <MCPUserCredentialsModal
-          key={credentialModalProps.server.id}
-          {...credentialModalProps}
+          key={credentialRequest.server.id}
+          server={credentialRequest.server}
+          onClose={cancelCredentialRequest}
+          onSubmit={submitCredentials}
         />
       )}
     </ToolsPopoverProvider>

@@ -1,16 +1,25 @@
 "use client";
 
 import useSWR, { KeyedMutator, mutate } from "swr";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { getActionIcon } from "@/lib/tools/utils";
 import type {
   AgentEditorMCPServer,
+  MCPAuthenticationServer,
+  MCPCredentialRequest,
   MCPServer,
   MCPServersResponse,
   MCPTool,
 } from "@/lib/mcp/types";
+import { MCPAuthenticationType } from "@/lib/mcp/types";
+import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
+import {
+  getMCPUserOAuthNavigationUrl,
+  saveMCPUserCredentials,
+  startMCPUserOAuth,
+} from "@/lib/mcp/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
 
 /**
@@ -229,5 +238,81 @@ export function useServerTools(
     isLoading: isLoading && shouldFetch,
     error,
     mutate,
+  };
+}
+
+export function useMcpAuthentication(
+  agentId: number | undefined,
+  enabled = true
+) {
+  const listing = useChatMcpServers(agentId, enabled);
+  const [loadingServerId, setLoadingServerId] = useState<number | null>(null);
+  const [authenticationError, setAuthenticationError] = useState<Error | null>(
+    null
+  );
+  const [credentialRequest, setCredentialRequest] =
+    useState<MCPCredentialRequest | null>(null);
+
+  async function startOAuth(
+    server: MCPAuthenticationServer,
+    forceReauthentication: boolean
+  ) {
+    setLoadingServerId(server.id);
+    try {
+      const result = await startMCPUserOAuth(
+        server.id,
+        window.location.pathname + window.location.search,
+        { forceReauthentication }
+      );
+      window.location.href = getMCPUserOAuthNavigationUrl(result);
+    } finally {
+      setLoadingServerId(null);
+    }
+  }
+
+  async function authenticate(
+    server: MCPAuthenticationServer,
+    forceReauthentication = false
+  ) {
+    const flow = getMcpAuthenticationFlow(server);
+    if (!flow) return;
+    setAuthenticationError(null);
+    if (flow === "credentials") {
+      setCredentialRequest({ server, forceReauthentication });
+      return;
+    }
+    try {
+      await startOAuth(server, forceReauthentication);
+    } catch (error) {
+      setAuthenticationError(
+        error instanceof Error ? error : new Error(String(error))
+      );
+    }
+  }
+
+  function cancelCredentialRequest() {
+    setCredentialRequest(null);
+  }
+
+  async function submitCredentials(credentials: Record<string, string>) {
+    if (!credentialRequest) return;
+    const { server, forceReauthentication } = credentialRequest;
+    await saveMCPUserCredentials(server.id, credentials, server.transport);
+    if (server.auth_type === MCPAuthenticationType.OAUTH) {
+      await startOAuth(server, forceReauthentication);
+    } else {
+      await listing.refresh();
+    }
+    setCredentialRequest(null);
+  }
+
+  return {
+    ...listing,
+    authenticate,
+    loadingServerId,
+    authenticationError,
+    credentialRequest,
+    cancelCredentialRequest,
+    submitCredentials,
   };
 }

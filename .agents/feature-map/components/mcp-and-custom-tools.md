@@ -49,11 +49,16 @@ Shared admin credentials and pass-through OAuth without user header fields do no
 Servers with required user header values can prompt with `NONE` or `PT_OAUTH`.
 
 The prompt and Actions menu share persona-scoped SWR data through
-`useChatMcpServers` and connection handling through `useMcpAuthentication`.
+`useChatMcpServers` and connection handling through `useMcpAuthentication` in
+`web/src/lib/mcp/hooks.ts`. The hook exposes credential requests and submit/cancel
+actions; each UI owns its modal props. Shared authentication types live in
+`web/src/lib/mcp/types.ts`.
 Credential submission refreshes this data; window focus also revalidates it.
 `user_can_authenticate` reports whether credentials resolve, not whether a
 Connect button should appear. The client checks supported authentication flows
-separately with `canAuthenticateMcpServer`.
+separately with `canAuthenticateMcpServer`. It delegates to
+`getMcpAuthenticationFlow` in `web/src/lib/mcp/auth.ts`, which also determines
+whether navigation opens credential entry or starts OAuth.
 
 Credential entry replaces the connection list within the same dialog.
 A shared backdrop stays mounted across screens to prevent transition flashes.

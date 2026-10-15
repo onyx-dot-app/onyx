@@ -1,8 +1,9 @@
 import {
   canAuthenticateMcpServer,
-  type MCPAuthenticationServer,
+  getMcpAuthenticationFlow,
 } from "@/lib/mcp/auth";
 import {
+  type MCPAuthenticationServer,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
 } from "@/lib/mcp/types";
@@ -71,4 +72,45 @@ describe("chat MCP authentication affordances", () => {
       })
     ).toBe(false);
   });
+});
+
+describe("MCP authentication flow selection", () => {
+  it("starts OAuth directly when no credential fields are required", () => {
+    expect(getMcpAuthenticationFlow(server)).toBe("oauth");
+  });
+  it.each([
+    MCPAuthenticationType.API_TOKEN,
+    MCPAuthenticationType.OAUTH,
+    MCPAuthenticationType.NONE,
+    MCPAuthenticationType.PT_OAUTH,
+  ])("collects required fields before %s authentication", (auth_type) => {
+    expect(
+      getMcpAuthenticationFlow({
+        ...server,
+        auth_type,
+        auth_template: { headers: {}, required_fields: ["workspace"] },
+      })
+    ).toBe("credentials");
+  });
+  it("collects an API key without a header template", () => {
+    expect(
+      getMcpAuthenticationFlow({
+        ...server,
+        auth_type: MCPAuthenticationType.API_TOKEN,
+      })
+    ).toBe("credentials");
+  });
+  it.each([MCPAuthenticationType.API_TOKEN, MCPAuthenticationType.OAUTH])(
+    "does not select a flow for shared %s credentials",
+    (auth_type) => {
+      expect(
+        getMcpAuthenticationFlow({
+          ...server,
+          auth_type,
+          auth_performer: MCPAuthenticationPerformer.ADMIN,
+          auth_template: { headers: {}, required_fields: ["workspace"] },
+        })
+      ).toBeNull();
+    }
+  );
 });

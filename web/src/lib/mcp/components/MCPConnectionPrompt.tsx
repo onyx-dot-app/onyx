@@ -10,9 +10,11 @@ import type { IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { useMcpAuthentication } from "@/lib/mcp/authentication";
-import { MCPAuthenticationType } from "@/lib/mcp/types";
-import { canAuthenticateMcpServer } from "@/lib/mcp/auth";
+import { useMcpAuthentication } from "@/lib/mcp/hooks";
+import {
+  canAuthenticateMcpServer,
+  getMcpAuthenticationFlow,
+} from "@/lib/mcp/auth";
 import { MCPUserCredentialsContent } from "@/lib/mcp/components/MCPUserCredentialsModal";
 
 interface MCPConnectionPromptProps {
@@ -44,7 +46,9 @@ export default function MCPConnectionPrompt({
     authenticate,
     loadingServerId,
     authenticationError,
-    credentialModalProps,
+    credentialRequest,
+    cancelCredentialRequest,
+    submitCredentials,
   } = useMcpAuthentication(agent.id);
 
   const pendingServers = servers.filter(
@@ -99,22 +103,22 @@ export default function MCPConnectionPrompt({
         open={open}
         onOpenChange={(nextOpen) => {
           // The credential page guards every close, including Dialog.Close.
-          if (!credentialModalProps) setOpen(nextOpen);
+          if (!credentialRequest) setOpen(nextOpen);
         }}
       >
         <Modal.Backdrop />
-        {credentialModalProps ? (
+        {credentialRequest ? (
           <MCPUserCredentialsContent
-            key={credentialModalProps.server.id}
-            {...credentialModalProps}
+            key={credentialRequest.server.id}
+            server={credentialRequest.server}
             skipOverlay
             onSubmit={async (credentials) => {
-              await credentialModalProps.onSubmit(credentials);
+              await submitCredentials(credentials);
               navigatingToCredentials.current = false;
             }}
             onBack={() => {
               navigatingToCredentials.current = false;
-              credentialModalProps.onClose();
+              cancelCredentialRequest();
             }}
             onDismissFocus={() => {
               if (triggerRef.current) triggerRef.current.focus();
@@ -122,7 +126,7 @@ export default function MCPConnectionPrompt({
             }}
             onClose={() => {
               navigatingToCredentials.current = false;
-              credentialModalProps.onClose();
+              cancelCredentialRequest();
               setOpen(false);
             }}
           />
@@ -183,10 +187,8 @@ export default function MCPConnectionPrompt({
                                 })}
                                 onClick={() => {
                                   navigatingToCredentials.current =
-                                    (server.auth_template?.required_fields
-                                      .length ?? 0) > 0 ||
-                                    server.auth_type ===
-                                      MCPAuthenticationType.API_TOKEN;
+                                    getMcpAuthenticationFlow(server) ===
+                                    "credentials";
                                   void authenticate(server);
                                 }}
                               >

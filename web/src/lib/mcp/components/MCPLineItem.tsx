@@ -16,26 +16,15 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { ToolSnapshot } from "@/lib/tools/types";
 import {
+  type MCPAuthenticationServer,
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
 } from "@/lib/mcp/types";
 import { canAuthenticateMcpServer } from "@/lib/mcp/auth";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 
-export type MCPServer = Pick<
-  import("@/lib/mcp/types").MCPServer,
-  | "id"
-  | "name"
-  | "server_url"
-  | "auth_type"
-  | "auth_performer"
-  | "user_can_authenticate"
-  | "auth_template"
-  | "user_credentials"
-> & { owner_email?: string };
-
 export interface MCPLineItemProps {
-  server: MCPServer;
+  server: MCPAuthenticationServer;
   isActive: boolean;
   onSelect: () => void;
   onAuthenticate: () => void;

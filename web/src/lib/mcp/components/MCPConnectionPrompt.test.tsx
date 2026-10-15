@@ -1,6 +1,6 @@
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
-import { useMcpAuthentication } from "@/lib/mcp/authentication";
+import { useMcpAuthentication } from "@/lib/mcp/hooks";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -9,7 +9,7 @@ import {
 } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 
-jest.mock("@/lib/mcp/authentication");
+jest.mock("@/lib/mcp/hooks");
 const server: MCPServer = {
   id: 1,
   name: "Calendar",
@@ -52,7 +52,9 @@ function setServers(servers: MCPServer[]) {
     loadingServerId: null,
     authenticationError: null,
     authenticate,
-    credentialModalProps: null,
+    credentialRequest: null,
+    cancelCredentialRequest: jest.fn(),
+    submitCredentials: jest.fn(),
   });
 }
 beforeEach(() => {
@@ -100,7 +102,9 @@ describe("MCPConnectionPrompt", () => {
       loadingServerId: null,
       authenticationError: null,
       authenticate,
-      credentialModalProps: { server, onClose, onSubmit: jest.fn() },
+      credentialRequest: { server, forceReauthentication: false },
+      cancelCredentialRequest: onClose,
+      submitCredentials: jest.fn(),
     });
     view.rerender(
       <MCPConnectionPrompt

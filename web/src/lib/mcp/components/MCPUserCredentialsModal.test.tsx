@@ -5,7 +5,7 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
 } from "@/lib/mcp/types";
-import type { MCPAuthenticationServer } from "@/lib/mcp/auth";
+import type { MCPAuthenticationServer } from "@/lib/mcp/types";
 
 const server: MCPAuthenticationServer = {
   id: 1,
