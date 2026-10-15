@@ -2544,10 +2544,8 @@
           "all": "كل المستويات",
           "failures": "الإخفاقات",
           "errors": "الأخطاء",
-          "other": "أخرى"
-        },
-        "resolved": {
-          "label": "تم حلها"
+          "other": "أخرى",
+          "resolved": "تم حلها"
         },
         "groups": {
           "failures": "{count, plural, zero {لا إخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",

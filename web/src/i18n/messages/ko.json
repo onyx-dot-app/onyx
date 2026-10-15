@@ -2544,10 +2544,8 @@
           "all": "모든 수준",
           "failures": "실패",
           "errors": "오류",
-          "other": "기타"
-        },
-        "resolved": {
-          "label": "해결됨"
+          "other": "기타",
+          "resolved": "해결됨"
         },
         "groups": {
           "failures": "{count, plural, other {실패 #개}}",

@@ -2544,10 +2544,8 @@
           "all": "Tous les niveaux",
           "failures": "Échecs",
           "errors": "Erreurs",
-          "other": "Autres"
-        },
-        "resolved": {
-          "label": "Résolues"
+          "other": "Autres",
+          "resolved": "Résolues"
         },
         "groups": {
           "failures": "{count, plural, one {# échec} other {# échecs}}",

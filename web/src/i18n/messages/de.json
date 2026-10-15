@@ -2544,10 +2544,8 @@
           "all": "Alle Stufen",
           "failures": "Fehlschläge",
           "errors": "Fehler",
-          "other": "Sonstige"
-        },
-        "resolved": {
-          "label": "Behoben"
+          "other": "Sonstige",
+          "resolved": "Behoben"
         },
         "groups": {
           "failures": "{count, plural, one {# Fehlschlag} other {# Fehlschläge}}",

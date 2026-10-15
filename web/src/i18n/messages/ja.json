@@ -2544,10 +2544,8 @@
           "all": "すべてのレベル",
           "failures": "失敗",
           "errors": "エラー",
-          "other": "その他"
-        },
-        "resolved": {
-          "label": "解決済み"
+          "other": "その他",
+          "resolved": "解決済み"
         },
         "groups": {
           "failures": "{count, plural, other {失敗 # 件}}",
