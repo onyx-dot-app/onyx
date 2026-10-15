@@ -46,6 +46,9 @@ _CATEGORY_MAX_DISTINCT = 50
 # Distinct values tracked per column; later ones are not counted, which keeps
 # memory flat on very large sheets.
 _MAX_TRACKED_VALUES = 20_000
+# Columns compared for redundancy. The check is quadratic, so a very wide
+# sheet would otherwise spend longer deduplicating than chunking.
+_MAX_REDUNDANCY_COLUMNS = 40
 # Breakdown limits: category columns, numeric columns, emitted lines, months.
 _MAX_BREAKDOWN_CATEGORY_COLUMNS = 3
 _MAX_BREAKDOWN_NUMERIC_COLUMNS = 4
@@ -97,6 +100,7 @@ _MONTH_NAMES = {
 }
 _LONG_DECIMAL_RE = re.compile(r"^-?\d+\.\d{7,}$")
 _ID_VALUE_RE = re.compile(r"^[A-Za-z]{1,10}[-_ #]?\d+[A-Za-z]?$")
+_YEAR_RE = re.compile(r"^(?:19|20|21)\d{2}$")
 _WORD_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
 _NAME_SPLIT_RE = re.compile(r"[\s_\-./]+")
 _DIGITS_RE = re.compile(r"(\d+)")
@@ -364,7 +368,10 @@ def column_label(name: str) -> str:
 
 
 def _cell_shape(value: str) -> str:
-    shape = re.sub(r"\d+", "9", value.strip())
+    """A cell's pattern, digit for digit. Keeping the digit count apart tells
+    a year heading (``2023``) from the figures under it (``100``), while
+    ``PAY-001`` and ``PAY-002`` still share a shape."""
+    shape = re.sub(r"\d", "9", value.strip())
     return re.sub(r"[A-Za-z]+", "a", shape)
 
 
@@ -381,7 +388,7 @@ def detect_header_row(rows: list[list[str]]) -> int | None:
         filled = [cell.strip() for cell in row if cell.strip()]
         if len(filled) < min_width:
             continue
-        labels = [c for c in filled if not _is_number(c) and date_key(c) is None]
+        labels = [c for c in filled if _looks_like_a_label(c)]
         if len(labels) < 0.6 * len(filled):
             continue
         if len(set(filled)) < 0.6 * len(filled):
@@ -392,6 +399,15 @@ def detect_header_row(rows: list[list[str]]) -> int | None:
             continue
         return idx
     return None
+
+
+def _looks_like_a_label(value: str) -> str | bool:
+    """Whether a cell reads as a column name. Years count: ``Region,2023,2024``
+    is a header, and rejecting it feeds the real names into the data."""
+    text = value.strip()
+    if _YEAR_RE.match(text):
+        return True
+    return not _is_number(text) and date_key(text) is None
 
 
 def _looks_like_data_pair(row: list[str], next_row: list[str]) -> bool:
@@ -447,6 +463,7 @@ class _ColumnStats:
         "non_empty",
         "is_numeric",
         "unit",
+        "units_mixed",
         "total",
         "minimum",
         "maximum",
@@ -473,8 +490,9 @@ class _ColumnStats:
         self.name = name
         self.non_empty = 0
         self.is_numeric = True
-        # "%", "$" or "" once seen; None until the first number. Mixed -> "".
+        # "%", "$" or "" once seen; None until the first number.
         self.unit: str | None = None
+        self.units_mixed = False
         self.total = 0.0
         self.minimum: float | None = None
         self.maximum: float | None = None
@@ -503,11 +521,11 @@ class _ColumnStats:
                 self.is_numeric = False
             else:
                 marker = _unit_marker(value)
-                self.unit = (
-                    marker
-                    if self.unit is None
-                    else (self.unit if self.unit == marker else "")
-                )
+                if self.unit is None:
+                    self.unit = marker
+                elif self.unit != marker:
+                    self.unit = ""
+                    self.units_mixed = True
                 self.total += number
                 self.minimum = (
                     number if self.minimum is None else min(self.minimum, number)
@@ -556,10 +574,12 @@ class _ColumnStats:
             return
         self.non_empty += other.non_empty
         self.is_numeric = self.is_numeric and other.is_numeric
+        self.units_mixed = self.units_mixed or other.units_mixed
         if self.unit is None:
             self.unit = other.unit
         elif other.unit is not None and other.unit != self.unit:
             self.unit = ""
+            self.units_mixed = True
         self.total += other.total
         self.minimum = _min_opt(self.minimum, other.minimum)
         self.maximum = _max_opt(self.maximum, other.maximum)
@@ -599,9 +619,14 @@ class _ColumnStats:
 
     @property
     def is_percent(self) -> bool:
-        """Every number in the column carried a % sign, so a sum of them is
-        meaningless and only the average, min and max are reported."""
+        """Every number carried a % sign, so a sum of them means nothing."""
         return self.unit == "%"
+
+    @property
+    def summable(self) -> bool:
+        """Whether adding this column's numbers gives a real figure. Percentages
+        do not add up, and dollars plus euros are not a total."""
+        return not self.is_percent and not self.units_mixed
 
     @property
     def date_order(self) -> DateOrder | None:
@@ -849,7 +874,7 @@ def _pick_breakdowns(columns: list[_ColumnStats]) -> _Breakdowns:
 def _redundant_columns(columns: list[_ColumnStats], probe: list[list[str]]) -> set[int]:
     text_columns = [
         idx for idx, col in enumerate(columns) if col.non_empty and not col.is_numeric
-    ]
+    ][:_MAX_REDUNDANCY_COLUMNS]
     redundant: set[int] = set()
     for idx in text_columns:
         for other in text_columns:
@@ -959,9 +984,16 @@ def _text_profile(
     used = 0
     for row in rows:
         line = _text_line(row)
-        used += count_tokens(line, tokenizer) + 1
-        if used > token_budget:
+        cost = count_tokens(line, tokenizer) + 1
+        if used + cost > token_budget:
+            # Keep the start of an overlong cell rather than nothing at all.
+            remaining = token_budget - used - 1
+            if not lines and remaining > 0:
+                pieces = split_text_by_tokens(line, tokenizer, remaining)
+                if pieces and pieces[0]:
+                    lines.append(pieces[0])
             break
+        used += cost
         lines.append(line)
     return SheetProfile(names=[name], kind=SheetKind.TEXT, text_lines=lines)
 
@@ -1067,7 +1099,8 @@ class _Packer:
 
     def _fit_line(self, line: str, budget: int) -> tuple[str, int]:
         tokens = self._count(line)
-        if tokens <= budget or budget <= 0:
+        budget = max(1, budget)
+        if tokens <= budget:
             return line, tokens
         pieces = split_text_by_tokens(line, self._tokenizer, budget)
         trimmed = pieces[0] if pieces else ""
@@ -1113,13 +1146,21 @@ class _Packer:
             self._buffered = [label]
             return
 
+        # The head starts every chunk of this block, so it has to leave room
+        # for a body; lines fitted one by one can together fill the budget.
+        # When it cannot, stop repeating it rather than trimming it: the head
+        # is the content of some blocks, the overview's sheet list above all.
         head = fitted[: block.repeat]
         head_tokens = sum(tokens for _, tokens in head) + len(head) - 1
+        if head and head_tokens > self._max_tokens // 2:
+            head = []
+            head_tokens = 0
+        body_start = len(head)
         body_budget = self._max_tokens - head_tokens - 1
         used = 0
         piece = [line for line, _ in head]
         piece_tokens = head_tokens
-        for line, _ in fitted[block.repeat :]:
+        for line, _ in fitted[body_start:]:
             line, tokens = self._fit_line(line, body_budget)
             if piece_tokens + 1 + tokens > self._max_tokens:
                 if self.full:
@@ -1185,6 +1226,23 @@ def _columns_line(profile: SheetProfile) -> str:
     return "Columns: " + ", ".join(labels)
 
 
+def about_lines(profiles: list[SheetProfile], tokenizer: BaseTokenizer) -> list[str]:
+    """The text the overview has room to carry. A table's title block competes
+    with a Readme for this space, so the caller checks what survived before
+    deciding a text sheet needs no block of its own."""
+    about: list[str] = []
+    for profile in profiles:
+        about.extend(line for line in profile.text_lines + profile.preamble if line)
+    kept: list[str] = []
+    used = 0
+    for line in about:
+        used += count_tokens(line, tokenizer) + 1
+        if used > _OVERVIEW_ABOUT_TOKENS and kept:
+            break
+        kept.append(line)
+    return kept
+
+
 def _overview_block(
     file_name: str,
     profiles: list[SheetProfile],
@@ -1198,16 +1256,7 @@ def _overview_block(
         ]
     else:
         lines = [f"Spreadsheet {file_name}"]
-    about: list[str] = []
-    for profile in profiles:
-        about.extend(line for line in profile.text_lines + profile.preamble if line)
-    kept: list[str] = []
-    used = 0
-    for line in about:
-        used += count_tokens(line, tokenizer) + 1
-        if used > _OVERVIEW_ABOUT_TOKENS and kept:
-            break
-        kept.append(line)
+    kept = about_lines(profiles, tokenizer)
     if kept:
         lines.append("About: " + " ".join(kept))
     for profile in profiles:
@@ -1311,8 +1360,7 @@ def _profile_block(
             average = col.total / col.non_empty if col.non_empty else 0.0
             unit = col.unit or ""
             figures = (
-                # Percentages do not add up to anything, so no total is given.
-                [] if col.is_percent else [f"total {format_number(col.total)}{unit}"]
+                [f"total {format_number(col.total)}{unit}"] if col.summable else []
             )
             figures += [
                 f"average {format_number(average)}{unit}",
@@ -1382,17 +1430,30 @@ def _breakdown_lines(
         for pos, numeric_col in numeric_columns:
             if len(lines) >= _MAX_BREAKDOWN_LINES:
                 return lines
+            stats = profile.columns[numeric_col]
+            unit = stats.unit or ""
+            summable = stats.summable
             ranked = sorted(
-                groups.items(), key=lambda kv: kv[1].sums[pos], reverse=True
+                groups.items(),
+                key=lambda kv: kv[1].sums[pos] if summable else kv[1].average(pos),
+                reverse=True,
             )
-            items = [
-                f"{key} {format_number(sums.sums[pos])} "
-                f"(avg {format_number(sums.average(pos))})"
-                for key, sums in ranked
-            ]
+            if summable:
+                items = [
+                    f"{key} {format_number(sums.sums[pos])}{unit} "
+                    f"(avg {format_number(sums.average(pos))}{unit})"
+                    for key, sums in ranked
+                ]
+                measure = "Total"
+            else:
+                items = [
+                    f"{key} {format_number(sums.average(pos))}{unit}"
+                    for key, sums in ranked
+                ]
+                measure = "Average"
             text, used = _join_limited(items, tokenizer, line_budget)
             lines.append(
-                f"Total {profile.header[numeric_col]} by {category_name} "
+                f"{measure} {profile.header[numeric_col]} by {category_name} "
                 f"(highest first): {text}"
                 f"{_shown_suffix(used, len(items), True, 'values')}"
             )
@@ -1406,12 +1467,19 @@ def _breakdown_lines(
     if date_settled and len(breakdowns.by_month) >= 2:
         months = sorted(breakdowns.by_month.items())
         for pos, numeric_col in numeric_columns[:_MAX_MONTHLY_NUMERIC_COLUMNS]:
+            stats = profile.columns[numeric_col]
+            unit = stats.unit or ""
+            summable = stats.summable
             items = [
-                f"{month} {format_number(sums.sums[pos])}" for month, sums in months
+                f"{month} "
+                f"{format_number(sums.sums[pos] if summable else sums.average(pos))}"
+                f"{unit}"
+                for month, sums in months
             ]
             text, used = _join_limited(items, tokenizer, line_budget)
+            measure = "Total" if summable else "Average"
             lines.append(
-                f"Total {profile.header[numeric_col]} by month: {text}"
+                f"{measure} {profile.header[numeric_col]} by month: {text}"
                 f"{_shown_suffix(used, len(items), breakdowns.months_complete, 'months')}"
             )
     return lines
@@ -1485,6 +1553,10 @@ def _can_merge(into: SheetProfile, other: SheetProfile) -> bool:
         pooled = set(into.columns[idx].counts) | set(other.columns[idx].counts)
         if len(pooled) > _CATEGORY_MAX_DISTINCT:
             return False
+    # Dollars on one tab and euros on the other do not add up to a total.
+    for mine_col, other_col in zip(into.columns, other.columns, strict=False):
+        if mine_col.unit and other_col.unit and mine_col.unit != other_col.unit:
+            return False
     return True
 
 
@@ -1538,15 +1610,15 @@ def build_workbook_chunks(
 
     line_budget = max(1, max_tokens // 2)
     blocks: list[_Block] = [_overview_block(file_name, profiles, tokenizer)]
-    about_tokens = sum(
-        count_tokens(line, tokenizer) for p in profiles for line in p.text_lines
-    )
+    in_overview = set(about_lines(profiles, tokenizer))
     # One block per sheet first, so running out of chunks costs every sheet its
     # extras rather than costing the last sheets everything.
     for profile in profiles:
         label = _sheet_title(file_name, profile)
         if profile.kind == SheetKind.TEXT:
-            if about_tokens > _OVERVIEW_ABOUT_TOKENS:
+            # Only skip the block when every line of this sheet reached the
+            # overview; otherwise its text appears nowhere.
+            if any(line not in in_overview for line in profile.text_lines):
                 blocks.append(_text_block(file_name, profile, full_rows_max_chunks))
         elif profile.is_small:
             block = _full_rows_block(

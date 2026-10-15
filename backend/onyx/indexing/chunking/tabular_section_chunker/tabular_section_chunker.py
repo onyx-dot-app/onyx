@@ -89,11 +89,11 @@ class TabularChunker(SectionChunker):
             max_chunks=TABULAR_MAX_CHUNKS_PER_WORKBOOK,
         )
         if not chunk_texts:
-            # The only path a spreadsheet has, so silence here means the file
-            # is absent from the index entirely.
+            # DocumentChunker still emits an empty payload, so the document is
+            # findable by title and metadata -- but none of its sheets are.
             logger.warning(
-                "Tabular file %r (%s sheet(s)) produced no chunks; it will not "
-                "be searchable.",
+                "Tabular file %r (%s sheet(s)) produced no chunks; none of its "
+                "contents will be searchable.",
                 resolved_name,
                 len(sections),
             )

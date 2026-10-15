@@ -311,8 +311,10 @@ type to one of three `SectionChunker` implementations
   breakdowns by category and by month, frequent values, sample rows) of large
   sheets. `TABULAR_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file,
   so chunk count does not grow with row count. Each sheet is streamed once and
-  never materialized in memory. A file that yields no chunks is logged: with no
-  second strategy to fall back on, that means it is absent from the index.
+  never materialized in memory. A file that yields no chunks is logged. The
+  document still reaches the index through the empty payload
+  `DocumentChunker.chunk` adds, so it stays findable by title and metadata, but
+  none of its sheet contents are.
 
   There is no per-row chunking. Rows reach the index only through a small
   sheet's verbatim block or a profile's sample rows, so a query naming one row

@@ -17,6 +17,7 @@ from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
 from onyx.indexing.chunking.tabular_section_chunker.workbook_chunks import (
     DateOrder,
+    SheetKind,
     SheetSource,
     _Block,
     _ColumnStats,
@@ -29,7 +30,7 @@ from onyx.indexing.chunking.tabular_section_chunker.workbook_chunks import (
     detect_header_row,
     profile_sheet,
 )
-from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.natural_language_processing.utils import BaseTokenizer, count_tokens
 
 
 class CharTokenizer(BaseTokenizer):
@@ -563,7 +564,7 @@ def test_contradicted_date_order_gets_no_monthly_totals() -> None:
     assert "Time range" not in text
 
 
-@pytest.mark.parametrize("row_count", [3, 4, 5, 9])
+@pytest.mark.parametrize("row_count", [3, 4, 5, 6])
 def test_all_rows_heading_is_true(row_count: int) -> None:
     # The block repeats two header lines per chunk, so the rows have less room
     # than the budget that made the sheet "small".
@@ -582,8 +583,8 @@ def test_all_rows_heading_is_true(row_count: int) -> None:
         )
     )
 
-    if f"(all {row_count} rows)" in text:
-        assert all(f"value_{r}_0" in text for r in range(row_count))
+    assert f"(all {row_count} rows)" in text
+    assert all(f"value_{r}_0" in text for r in range(row_count))
 
 
 def test_two_attachments_in_one_document_are_chunked_separately(
@@ -635,3 +636,118 @@ def test_two_attachments_in_one_document_are_chunked_separately(
     assert links == {"first.xlsx", "second.xlsx"}
     joined = "\n".join(c.content for c in chunks)
     assert "Region=West" in joined and "Animal=Otter" in joined
+
+
+def test_percentages_are_averaged_in_breakdowns_too() -> None:
+    # The overall line already refuses to sum percentages; a grouped line that
+    # sums them contradicts it in the same chunk.
+    rows = [["region", "margin_pct"]] + [
+        ["East" if idx % 2 else "West", f"{40 + idx % 10}%"] for idx in range(900)
+    ]
+    text = "\n".join(_chunks([_sheet("S", rows)]))
+
+    line = next(ln for ln in text.split("\n") if "by region" in ln)
+    assert line.startswith("Average margin_pct by region")
+    assert "%" in line
+
+
+def test_breakdown_figures_keep_their_currency() -> None:
+    rows = [["region", "amount"]] + [
+        ["East" if idx % 2 else "West", f"€{100 + idx % 5}"] for idx in range(900)
+    ]
+    text = "\n".join(_chunks([_sheet("S", rows)]))
+
+    line = next(ln for ln in text.split("\n") if "by region" in ln)
+    assert line.startswith("Total amount by region")
+    assert "€" in line
+
+
+def test_a_year_heading_is_a_header_not_data() -> None:
+    # "Region,2023,2024" was rejected as a header, so the real names were lost
+    # and the years were counted as figures.
+    rows = [["Region", "2023", "2024"]] + [
+        [f"r{idx % 5}", str(100 + idx), str(200 + idx)] for idx in range(800)
+    ]
+
+    profile = profile_sheet(
+        name="S",
+        rows=iter(rows),
+        tokenizer=CharTokenizer(),
+        full_rows_token_budget=1536,
+    )
+
+    assert profile.header == ["Region", "2023", "2024"]
+    assert not profile.synthetic_header
+    assert profile.row_count == 800
+
+
+def test_tabs_in_different_currencies_are_not_pooled() -> None:
+    header = ["region", "amount"]
+    usd = [header] + [
+        ["East" if idx % 2 else "West", f"${100 + idx % 5}"] for idx in range(900)
+    ]
+    eur = [header] + [
+        ["East" if idx % 2 else "West", f"€{100 + idx % 5}"] for idx in range(900)
+    ]
+
+    text = "\n".join(_chunks([_sheet("Jan", usd), _sheet("Feb", eur)]))
+
+    assert "sheets Jan, Feb" not in text
+    totals = [ln for ln in text.split("\n") if ln.startswith("amount:")]
+    assert totals and all("count 900" in ln for ln in totals)
+
+
+def test_a_column_mixing_currencies_is_not_summed() -> None:
+    rows = [["id", "amount"]] + [
+        [f"R{idx}", f"${100}" if idx % 2 else f"€{100}"] for idx in range(900)
+    ]
+    text = "\n".join(_chunks([_sheet("S", rows)]))
+
+    line = next(ln for ln in text.split("\n") if ln.startswith("amount:"))
+    assert "total" not in line
+    assert "average" in line
+
+
+def test_an_oversized_text_cell_keeps_its_start() -> None:
+    profile = profile_sheet(
+        name="Notes",
+        rows=iter([["x" * 20000]]),
+        tokenizer=CharTokenizer(),
+        full_rows_token_budget=1536,
+    )
+
+    assert profile.kind is SheetKind.TEXT
+    assert profile.text_lines and profile.text_lines[0].startswith("x" * 100)
+
+
+def test_a_readme_crowded_out_of_the_overview_gets_its_own_block() -> None:
+    table = [
+        [f"Report metadata line {idx} with plenty of words to fill the budget", "", ""]
+        for idx in range(40)
+    ]
+    table.append(["OrderID", "Region", "Amount"])
+    table += [[f"ORD-{idx:04d}", f"r{idx % 4}", str(idx)] for idx in range(900)]
+    readme = [["Internal sales workbook kept by the revenue operations team."]]
+
+    text = "\n".join(_chunks([_sheet("Orders", table), _sheet("Readme", readme)]))
+
+    assert "revenue operations team" in text
+
+
+def test_no_chunk_exceeds_the_token_budget() -> None:
+    # Both repeated heading lines can be near the cap on their own.
+    header = [f"column_name_number_{idx}_with_padding" for idx in range(30)]
+    rows = [header] + [[f"v{r}_{c}" for c in range(30)] for r in range(3)]
+
+    chunks = build_workbook_chunks(
+        file_name="a_" * 200 + "workbook.xlsx",
+        sheets=[_sheet("S" * 120, rows)],
+        tokenizer=CharTokenizer(),
+        max_tokens=MAX_TOKENS,
+        full_rows_max_chunks=3,
+        value_chunks_per_sheet=2,
+        max_chunks=24,
+    )
+
+    tokenizer = CharTokenizer()
+    assert all(count_tokens(chunk, tokenizer) <= MAX_TOKENS for chunk in chunks)
