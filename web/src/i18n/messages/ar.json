@@ -1779,6 +1779,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "النموذج المستخدم لتسمية جلسات المحادثة. يستخدم نموذج كل جلسة افتراضيًا.",
+        "resetButton": {
+          "label": "إعادة تعيين"
+        },
+        "sessionModel": {
+          "label": "استخدام النموذج الافتراضي"
+        },
+        "title": "نموذج تسمية المحادثة"
+      },
+      "searchSelectionModel": {
+        "description": "يختار المستندات المسترجعة ويتحقق منها. يمكن لنموذج أقل تكلفة تقليل تكاليف البحث، لكنه قد يؤثر في جودة الإجابات.",
+        "resetButton": {
+          "label": "إعادة تعيين"
+        },
+        "sessionModel": {
+          "label": "استخدام النموذج الافتراضي"
+        },
+        "title": "نموذج اختيار مستندات البحث"
+      },
+      "taskModels": {
+        "title": "اختيار النماذج",
+        "loadFailed": "تعذر تحميل نماذج المهام",
+        "retry": {
+          "label": "إعادة المحاولة"
+        },
+        "noProviders": {
+          "title": "اربط موفر نماذج لغوية"
+        },
+        "addProvider": {
+          "label": "إضافة موفر"
+        }
+      },
       "advanced": {
         "title": "خيارات متقدمة"
       },
@@ -1796,13 +1829,6 @@
       },
       "betaTag": {
         "label": "تجريبي"
-      },
-      "chatNaming": {
-        "description": "النموذج المستخدم لتسمية جلسات المحادثة تلقائيًا. يستخدم افتراضيًا نموذج كل جلسة. ثبّت نموذجًا صغيرًا وسريعًا هنا إذا كان نموذجك الرئيسي لا يدعم الطلبات المتزامنة.",
-        "resetButton": {
-          "label": "إعادة تعيين"
-        },
-        "title": "نموذج تسمية المحادثات"
       },
       "connectors": {
         "empty": {
@@ -1961,11 +1987,15 @@
         "title": "التحكم في درجة الحرارة"
       },
       "toasts": {
-        "chatNamingReset": "أُعيد تعيين تسمية المحادثات إلى نموذج الجلسة",
-        "chatNamingResetFailed": "فشلت إعادة تعيين نموذج تسمية المحادثات",
-        "chatNamingUpdateFailed": "فشل تحديث نموذج تسمية المحادثات",
-        "chatNamingUpdated": "تم تحديث نموذج تسمية المحادثات",
+        "chatNamingUpdated": "تم تحديث نموذج تسمية المحادثة",
+        "chatNamingReset": "أُعيد تعيين نموذج تسمية المحادثة إلى النموذج الافتراضي",
+        "chatNamingUpdateFailed": "تعذر تحديث نموذج تسمية المحادثة",
+        "chatNamingResetFailed": "تعذرت إعادة تعيين نموذج تسمية المحادثة",
         "providerResolveFailed": "تعذّر تحديد الموفر",
+        "searchSelectionReset": "أُعيد تعيين نموذج اختيار مستندات البحث إلى النموذج الافتراضي",
+        "searchSelectionResetFailed": "تعذرت إعادة تعيين نموذج اختيار مستندات البحث",
+        "searchSelectionUpdateFailed": "تعذر تحديث نموذج اختيار مستندات البحث",
+        "searchSelectionUpdated": "تم تحديث نموذج اختيار مستندات البحث",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "settingsUpdated": "تم تحديث الإعدادات",
         "systemPromptUpdateFailed": "فشل تحديث مطالبة النظام",
@@ -7401,6 +7431,7 @@
         "providerDeleteFailed": "فشل حذف الموفر: {message}",
         "providerDeleted": "تم حذف الموفر بنجاح!",
         "providerLoadFailed": "تعذر تحميل المزود: {message}",
+        "providerResolveFailed": "تعذّر تحديد الموفر",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "settingsUpdated": "تم تحديث الإعدادات",
         "unknownError": "خطأ غير معروف"

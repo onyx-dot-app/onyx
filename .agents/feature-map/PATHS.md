@@ -189,6 +189,8 @@ so verify the callers rather than a single component.
 | `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
 | `web/src/app/admin/agents/` | agents-personas |
 | `web/src/app/admin/language-models/` | llm-providers |
+| `web/src/views/admin/LanguageModelsPage.tsx` | llm-providers |
+| `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
 | `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
 | `web/src/app/admin/bots/`, `admin/discord-bot/` | slack-bot, discord-bot |
 | `web/src/app/admin/sso-providers/`, `admin/security/`, `admin/oauth-test/` | auth-and-identity |

@@ -14,6 +14,7 @@
 `backend/onyx/db/memory.py`, `backend/onyx/server/features/input_prompt/`,
 `backend/onyx/server/features/default_assistant/`, `backend/onyx/server/settings/`,
 `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/SettingsPage.tsx`,
+`web/src/views/admin/ChatTaskModelSettings.tsx`,
 `web/src/hooks/useUserPersonalization.ts`
 
 **Read first:** [[context-assembly]] §4.1, which names
@@ -59,7 +60,6 @@ controls.
 | PATCH | `/admin/settings` | `backend/onyx/server/settings/api.py` | Admin. Workspace `Settings` blob (company name/description, `auto_detect_search_filters`, `multi_model_chat_enabled`, `deep_research_enabled`, `search_ui_enabled`, retention, query-history policy, file limits, `anonymous_user_enabled`, `disable_default_assistant`, `default_language`). |
 | GET | `/settings` | `backend/onyx/server/settings/api.py` | Public read of the same blob, consumed by both admin and app UI. |
 | GET `/admin/default-assistant/configuration`, PATCH `/admin/default-assistant` | `backend/onyx/server/features/default_assistant/api.py:get_default_assistant_configuration`, `update_default_assistant` | Admin. Default persona's `tool_ids` and `system_prompt`. |
-| POST/DELETE | `/admin/llm/default-chat-naming` | `backend/onyx/server/manage/llm/api.py` | Admin. Sets or clears the model used to auto-name new chats; unrelated to prompt content but lives on this page. |
 | PATCH | `/user/personalization` | `backend/onyx/server/manage/users.py:update_user_personalization_api` | User. `personal_name`, `personal_role`, `use_memories`, `enable_memory_tool`, `memories`, `user_preferences` in one call. |
 | PATCH | `/user/language` | `backend/onyx/server/manage/users.py:update_user_language_api` | User. `null` clears the preference so the user follows `Settings.default_language`. Also sets the `NEXT_LOCALE` cookie to the effective language (`settings/store.py:resolve_user_language`) via `set_locale_cookie`. `GET /me` reconciles the same cookie. |
 | PATCH | `/shortcut-enabled`, `/temperature-override-enabled`, `/temperature-default`, `/reasoning-effort-default`, `/auto-scroll`, `/paste-as-tile`, `/user/theme-preference`, `/user/chat-background`, `/user/default-app-mode`, `/user/default-model` | `backend/onyx/server/manage/users.py` | User. One column each, all in `backend/onyx/db/user_preferences.py`. |
@@ -136,6 +136,18 @@ A schema change here is a KV-blob field addition, not a migration; see root
 ---
 
 ## 4. How it works
+
+Chat Preferences includes an always-visible Model selection section beneath the
+general chat behavior controls. It uses a smaller static header, without a
+disclosure control. `ChatTaskModelSettings` owns its model-provider fetch and
+shows Chat naming model and Search selection model immediately on page load.
+Both optional selectors show Use Default model
+when unset and save/reset independently from the page's workspace settings.
+CHAT_NAMING controls naming; SEARCH_SELECTION controls document selection and
+relevance checks. Neither changes query rewrites, and neither falls back to
+the other. Language Models retains provider configuration and the default chat
+model, with no task-model controls.
+See [[llm-providers]] for configuration, resolution, and policy.
 
 ### 4.1 Setting-to-prompt map
 

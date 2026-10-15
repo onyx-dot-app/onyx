@@ -1779,6 +1779,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Modèle utilisé pour nommer les discussions. Utilise par défaut le modèle de chaque session.",
+        "resetButton": {
+          "label": "Réinitialiser"
+        },
+        "sessionModel": {
+          "label": "Utiliser le modèle par défaut"
+        },
+        "title": "Modèle pour nommer les discussions"
+      },
+      "searchSelectionModel": {
+        "description": "Sélectionne et vérifie les documents récupérés. Un modèle moins coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
+        "resetButton": {
+          "label": "Réinitialiser"
+        },
+        "sessionModel": {
+          "label": "Utiliser le modèle par défaut"
+        },
+        "title": "Modèle de sélection pour la recherche"
+      },
+      "taskModels": {
+        "title": "Sélection des modèles",
+        "loadFailed": "Impossible de charger les modèles de tâches",
+        "retry": {
+          "label": "Réessayer"
+        },
+        "noProviders": {
+          "title": "Connectez un fournisseur de modèles de langage"
+        },
+        "addProvider": {
+          "label": "Ajouter un fournisseur"
+        }
+      },
       "advanced": {
         "title": "Options avancées"
       },
@@ -1796,13 +1829,6 @@
       },
       "betaTag": {
         "label": "bêta"
-      },
-      "chatNaming": {
-        "description": "Modèle utilisé pour nommer automatiquement les sessions de discussion. Par défaut, chaque session utilise son propre modèle. Fixez ici un petit modèle rapide si votre modèle principal ne peut pas traiter des requêtes simultanées.",
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
-        "title": "Modèle de nommage des discussions"
       },
       "connectors": {
         "empty": {
@@ -1961,11 +1987,15 @@
         "title": "Contrôle de la température"
       },
       "toasts": {
-        "chatNamingReset": "Nommage des discussions réinitialisé sur le modèle de la session",
-        "chatNamingResetFailed": "Échec de la réinitialisation du modèle de nommage des discussions",
-        "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
         "chatNamingUpdated": "Modèle de nommage des discussions mis à jour",
+        "chatNamingReset": "Modèle de nommage des discussions réinitialisé sur le modèle par défaut",
+        "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
+        "chatNamingResetFailed": "Échec de la réinitialisation du modèle de nommage des discussions",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
+        "searchSelectionReset": "Modèle de sélection pour la recherche réinitialisé sur le modèle par défaut",
+        "searchSelectionResetFailed": "Échec de la réinitialisation du modèle de sélection pour la recherche",
+        "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection pour la recherche",
+        "searchSelectionUpdated": "Modèle de sélection pour la recherche mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour",
         "systemPromptUpdateFailed": "Échec de la mise à jour du prompt système",
@@ -7401,6 +7431,7 @@
         "providerDeleteFailed": "Échec de la suppression du fournisseur : {message}",
         "providerDeleted": "Fournisseur supprimé avec succès !",
         "providerLoadFailed": "Impossible de charger le fournisseur : {message}",
+        "providerResolveFailed": "Impossible de résoudre le fournisseur",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"

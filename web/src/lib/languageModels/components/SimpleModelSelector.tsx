@@ -3,7 +3,10 @@
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { InputSingleSelect } from "@opal/components";
+import {
+  InputSingleSelect,
+  type InputSingleSelectProps,
+} from "@opal/components";
 import type {
   SelectOption,
   SelectOptions,
@@ -79,6 +82,7 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
    */
   globalDefault?: Nullable extends true ? GlobalDefaultRow : never;
   disabled?: boolean;
+  placeholder?: InputSingleSelectProps["placeholder"];
   /** Pages a truncated listing in: the end of the list loads more models,
    *  and a search no loaded model matches asks the server. */
   modelPaging?: ModelPaging;
@@ -99,6 +103,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   grouped = true,
   globalDefault,
   disabled,
+  placeholder,
   modelPaging,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
@@ -212,7 +217,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         // its own value is the default option.
         onChange(id as EmittedModelConfigurationId<Nullable>);
       }}
-      placeholder={t("placeholder")}
+      placeholder={placeholder ?? t("placeholder")}
       options={options}
       onSearchChange={modelPaging ? setQuery : undefined}
       onReachEnd={modelPaging ? loadNextWindow : undefined}

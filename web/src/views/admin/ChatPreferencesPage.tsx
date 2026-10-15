@@ -31,13 +31,6 @@ import {
   InputTypeIn,
   type SelectOption,
 } from "@opal/components";
-import { SimpleModelSelector } from "@/lib/languageModels/components";
-import {
-  filterModelConfigurations,
-  findLlmOptionById,
-} from "@/lib/languageModels/options";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
-import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   SvgAddLines,
   SvgActions,
@@ -89,6 +82,7 @@ import useFilter from "@/hooks/useFilter";
 import { MCPConnectionStatus, MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
 import { Tier } from "@/lib/tiers/types";
+import ChatTaskModelSettings from "@/views/admin/ChatTaskModelSettings";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -761,89 +755,6 @@ export default function ChatPreferencesPage() {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
-  // Dedicated chat-naming model. Auto-naming reads this designation via
-  // fetch_default_chat_naming_model; when unset it uses the session's model.
-  const {
-    llmProviders,
-    defaultChatNaming,
-    modelPaging,
-    refetch: refetchLlmProviders,
-  } = useAdminLanguageModels();
-
-  // Resolve defaultChatNaming (id + name based) to a model_configuration_id
-  // for the select.
-  const chatNamingModelConfigId = useMemo(() => {
-    if (!defaultChatNaming || !llmProviders) return null;
-    for (const p of llmProviders) {
-      if (p.id !== defaultChatNaming.provider_id) continue;
-      const mc = p.model_configurations.find(
-        (m) => m.name === defaultChatNaming.model_name
-      );
-      if (mc?.id != null) return mc.id;
-    }
-    return null;
-  }, [llmProviders, defaultChatNaming]);
-
-  const handleChatNamingModelChange = useCallback(
-    async ({
-      modelName,
-      modelConfigurationId,
-    }: {
-      modelName: string;
-      modelConfigurationId: number | null | undefined;
-    }) => {
-      const provider = findProviderOwningModelConfig(
-        llmProviders,
-        modelConfigurationId
-      );
-      if (!provider) {
-        toast.error(t("toasts.providerResolveFailed"));
-        return;
-      }
-      try {
-        const response = await fetch("/api/admin/llm/default-chat-naming", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider_id: provider.id,
-            model_name: modelName,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(
-            (await response.json()).detail ?? t("toasts.chatNamingUpdateFailed")
-          );
-        }
-        await refetchLlmProviders();
-        toast.success(t("toasts.chatNamingUpdated"));
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("toasts.unknownError")
-        );
-      }
-    },
-    [llmProviders, refetchLlmProviders, t]
-  );
-
-  const handleClearChatNamingModel = useCallback(async () => {
-    try {
-      const response = await fetch("/api/admin/llm/default-chat-naming", {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error(
-          (await response.json()).detail ?? t("toasts.chatNamingResetFailed")
-        );
-      }
-      await refetchLlmProviders();
-      toast.success(t("toasts.chatNamingReset"));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("toasts.unknownError")
-      );
-    }
-  }, [refetchLlmProviders, t]);
-
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
   const [companyDescription, setCompanyDescription] = useState(
@@ -1143,46 +1054,15 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
-              <InputHorizontal
-                title={t("chatNaming.title")}
-                description={t("chatNaming.description")}
-                withLabel
-              >
-                <div className="flex items-center gap-2">
-                  {chatNamingModelConfigId !== null && (
-                    <Button
-                      prominence="tertiary"
-                      size="sm"
-                      onClick={() => void handleClearChatNamingModel()}
-                    >
-                      {t("chatNaming.resetButton.label")}
-                    </Button>
-                  )}
-                  <SimpleModelSelector
-                    providers={filterModelConfigurations(llmProviders ?? [], {
-                      keep: chatNamingModelConfigId,
-                    })}
-                    value={chatNamingModelConfigId}
-                    grouped={!settings.hide_provider_grouping}
-                    modelPaging={modelPaging}
-                    onChange={(modelConfigurationId) => {
-                      const opt = findLlmOptionById(
-                        llmProviders,
-                        modelConfigurationId
-                      );
-                      if (!opt) return;
-                      void handleChatNamingModelChange({
-                        modelName: opt.modelName,
-                        modelConfigurationId,
-                      });
-                    }}
-                  />
-                </div>
-              </InputHorizontal>
             </Section>
           </Card>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+          <Section alignItems="stretch" gap={3}>
+            <Content title={t("taskModels.title")} sizePreset="main-ui" />
+            <ChatTaskModelSettings />
+          </Section>
 
           {/* Workspace language and team context */}
           <Section gap={4}>

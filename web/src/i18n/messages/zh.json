@@ -1779,6 +1779,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "用于为对话会话命名的模型。默认使用各会话自身的模型。",
+        "resetButton": {
+          "label": "重置"
+        },
+        "sessionModel": {
+          "label": "使用默认模型"
+        },
+        "title": "会话命名模型"
+      },
+      "searchSelectionModel": {
+        "description": "筛选并检查检索到的文档。低成本模型可以降低搜索费用，但可能影响回答质量。",
+        "resetButton": {
+          "label": "重置"
+        },
+        "sessionModel": {
+          "label": "使用默认模型"
+        },
+        "title": "搜索筛选模型"
+      },
+      "taskModels": {
+        "title": "模型选择",
+        "loadFailed": "无法加载任务模型",
+        "retry": {
+          "label": "重试"
+        },
+        "noProviders": {
+          "title": "连接语言模型提供商"
+        },
+        "addProvider": {
+          "label": "添加提供商"
+        }
+      },
       "advanced": {
         "title": "高级选项"
       },
@@ -1796,13 +1829,6 @@
       },
       "betaTag": {
         "label": "测试版"
-      },
-      "chatNaming": {
-        "description": "用于自动命名对话会话的模型。默认使用每个会话自身的模型——如果主模型无法处理并发请求，请在此固定一个小而快的模型。",
-        "resetButton": {
-          "label": "重置"
-        },
-        "title": "对话命名模型"
       },
       "connectors": {
         "empty": {
@@ -1961,11 +1987,15 @@
         "title": "温度控制"
       },
       "toasts": {
-        "chatNamingReset": "对话命名已重置为会话自身的模型",
-        "chatNamingResetFailed": "重置对话命名模型失败",
-        "chatNamingUpdateFailed": "更新对话命名模型失败",
-        "chatNamingUpdated": "对话命名模型已更新",
+        "chatNamingUpdated": "会话命名模型已更新",
+        "chatNamingReset": "会话命名模型已重置为默认模型",
+        "chatNamingUpdateFailed": "更新会话命名模型失败",
+        "chatNamingResetFailed": "重置会话命名模型失败",
         "providerResolveFailed": "无法解析提供商",
+        "searchSelectionReset": "搜索筛选模型已重置为默认模型",
+        "searchSelectionResetFailed": "重置搜索筛选模型失败",
+        "searchSelectionUpdateFailed": "更新搜索筛选模型失败",
+        "searchSelectionUpdated": "搜索筛选模型已更新",
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新",
         "systemPromptUpdateFailed": "更新系统提示词失败",
@@ -7401,6 +7431,7 @@
         "providerDeleteFailed": "删除提供商失败：{message}",
         "providerDeleted": "提供商已成功删除！",
         "providerLoadFailed": "无法加载提供商：{message}",
+        "providerResolveFailed": "无法解析提供商",
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"

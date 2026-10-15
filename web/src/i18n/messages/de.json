@@ -1779,6 +1779,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Modell zum Benennen von Chats. Standardmäßig wird das Modell der jeweiligen Sitzung verwendet.",
+        "resetButton": {
+          "label": "Zurücksetzen"
+        },
+        "sessionModel": {
+          "label": "Standardmodell verwenden"
+        },
+        "title": "Modell zur Chat-Benennung"
+      },
+      "searchSelectionModel": {
+        "description": "Wählt abgerufene Dokumente aus und prüft sie. Ein günstigeres Modell kann Suchkosten senken, aber die Antwortqualität beeinträchtigen.",
+        "resetButton": {
+          "label": "Zurücksetzen"
+        },
+        "sessionModel": {
+          "label": "Standardmodell verwenden"
+        },
+        "title": "Modell für die Dokumentauswahl"
+      },
+      "taskModels": {
+        "title": "Modellauswahl",
+        "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
+        "retry": {
+          "label": "Erneut versuchen"
+        },
+        "noProviders": {
+          "title": "Verbinden Sie einen Sprachmodellanbieter"
+        },
+        "addProvider": {
+          "label": "Anbieter hinzufügen"
+        }
+      },
       "advanced": {
         "title": "Erweiterte Optionen"
       },
@@ -1796,13 +1829,6 @@
       },
       "betaTag": {
         "label": "Beta"
-      },
-      "chatNaming": {
-        "description": "Modell, das Chat-Sitzungen automatisch benennt. Standardmäßig wird das Modell der jeweiligen Sitzung verwendet — legen Sie hier ein kleines, schnelles Modell fest, wenn Ihr Hauptmodell keine gleichzeitigen Anfragen bedienen kann.",
-        "resetButton": {
-          "label": "Zurücksetzen"
-        },
-        "title": "Modell für die Chat-Benennung"
       },
       "connectors": {
         "empty": {
@@ -1961,11 +1987,15 @@
         "title": "Temperatursteuerung"
       },
       "toasts": {
-        "chatNamingReset": "Die Chat-Benennung wurde auf das Modell der Sitzung zurückgesetzt",
-        "chatNamingResetFailed": "Das Modell für die Chat-Benennung konnte nicht zurückgesetzt werden",
-        "chatNamingUpdateFailed": "Das Modell für die Chat-Benennung konnte nicht aktualisiert werden",
-        "chatNamingUpdated": "Modell für die Chat-Benennung aktualisiert",
+        "chatNamingUpdated": "Modell zur Chat-Benennung aktualisiert",
+        "chatNamingReset": "Modell zur Chat-Benennung auf das Standardmodell zurückgesetzt",
+        "chatNamingUpdateFailed": "Modell zur Chat-Benennung konnte nicht aktualisiert werden",
+        "chatNamingResetFailed": "Modell zur Chat-Benennung konnte nicht zurückgesetzt werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
+        "searchSelectionReset": "Modell für die Dokumentauswahl auf das Standardmodell zurückgesetzt",
+        "searchSelectionResetFailed": "Modell für die Dokumentauswahl konnte nicht zurückgesetzt werden",
+        "searchSelectionUpdateFailed": "Modell für die Dokumentauswahl konnte nicht aktualisiert werden",
+        "searchSelectionUpdated": "Modell für die Dokumentauswahl aktualisiert",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "settingsUpdated": "Einstellungen aktualisiert",
         "systemPromptUpdateFailed": "Der System-Prompt konnte nicht aktualisiert werden",
@@ -7401,6 +7431,7 @@
         "providerDeleteFailed": "Der Anbieter konnte nicht gelöscht werden: {message}",
         "providerDeleted": "Anbieter erfolgreich gelöscht!",
         "providerLoadFailed": "Der Anbieter konnte nicht geladen werden: {message}",
+        "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "settingsUpdated": "Einstellungen aktualisiert",
         "unknownError": "Unbekannter Fehler"

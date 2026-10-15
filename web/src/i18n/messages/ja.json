@@ -1779,6 +1779,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "チャットセッションの名前を付けるモデルです。既定では各セッションのモデルを使用します。",
+        "resetButton": {
+          "label": "リセット"
+        },
+        "sessionModel": {
+          "label": "デフォルトモデルを使用"
+        },
+        "title": "チャット名の生成モデル"
+      },
+      "searchSelectionModel": {
+        "description": "取得したドキュメントを選択して確認します。低コストのモデルは検索コストを削減できますが、回答の品質に影響する可能性があります。",
+        "resetButton": {
+          "label": "リセット"
+        },
+        "sessionModel": {
+          "label": "デフォルトモデルを使用"
+        },
+        "title": "検索選択モデル"
+      },
+      "taskModels": {
+        "title": "モデルの選択",
+        "loadFailed": "タスクモデルを読み込めませんでした",
+        "retry": {
+          "label": "再試行"
+        },
+        "noProviders": {
+          "title": "言語モデルのプロバイダーを接続"
+        },
+        "addProvider": {
+          "label": "プロバイダーを追加"
+        }
+      },
       "advanced": {
         "title": "詳細オプション"
       },
@@ -1796,13 +1829,6 @@
       },
       "betaTag": {
         "label": "ベータ"
-      },
-      "chatNaming": {
-        "description": "チャットセッションに自動で名前を付けるモデルです。既定では各セッションのモデルを使用します。メインのモデルが同時リクエストを処理できない場合は、小さく高速なモデルをここで指定してください。",
-        "resetButton": {
-          "label": "リセット"
-        },
-        "title": "チャット命名モデル"
       },
       "connectors": {
         "empty": {
@@ -1961,11 +1987,15 @@
         "title": "Temperature の制御"
       },
       "toasts": {
-        "chatNamingReset": "チャット命名をセッションのモデルにリセットしました",
-        "chatNamingResetFailed": "チャット命名モデルのリセットに失敗しました",
-        "chatNamingUpdateFailed": "チャット命名モデルの更新に失敗しました",
-        "chatNamingUpdated": "チャット命名モデルを更新しました",
+        "chatNamingUpdated": "チャット名の生成モデルを更新しました",
+        "chatNamingReset": "チャット名の生成モデルをデフォルトモデルにリセットしました",
+        "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
+        "chatNamingResetFailed": "チャット名の生成モデルのリセットに失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
+        "searchSelectionReset": "検索選択モデルをデフォルトモデルにリセットしました",
+        "searchSelectionResetFailed": "検索選択モデルのリセットに失敗しました",
+        "searchSelectionUpdateFailed": "検索選択モデルの更新に失敗しました",
+        "searchSelectionUpdated": "検索選択モデルを更新しました",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "settingsUpdated": "設定を更新しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
@@ -7401,6 +7431,7 @@
         "providerDeleteFailed": "プロバイダーを削除できませんでした：{message}",
         "providerDeleted": "プロバイダーを削除しました。",
         "providerLoadFailed": "プロバイダーを読み込めませんでした: {message}",
+        "providerResolveFailed": "プロバイダーを解決できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
