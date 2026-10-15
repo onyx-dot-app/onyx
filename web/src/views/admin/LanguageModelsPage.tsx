@@ -201,6 +201,8 @@ function ExistingProviderCard({
             icon={icon}
             title={providerDisplayName(provider)}
             description={companyName}
+            titleMaxLines={1}
+            descriptionMaxLines={1}
             sizePreset="main-ui"
             variant="section"
             padding={2}
@@ -282,6 +284,8 @@ function NewProviderCard({
         icon={icon}
         title={productName}
         description={companyName}
+        titleMaxLines={1}
+        descriptionMaxLines={1}
         sizePreset="main-ui"
         variant="section"
         padding={2}
@@ -336,6 +340,8 @@ function NewCustomProviderCard({
           icon={icon}
           title={productName}
           description={companyName}
+          titleMaxLines={1}
+          descriptionMaxLines={1}
           sizePreset="main-ui"
           variant="section"
           padding={2}
