@@ -23,7 +23,8 @@ export class AdminConnectorDetailPage {
   readonly activityPanel: Locator;
   /** Opens the action menu. Present only when the caller may operate. */
   readonly manageButton: Locator;
-  readonly deleteMenuItem: Locator;
+  /** Opens the delete confirmation. Present only when the caller may delete. */
+  readonly deleteButton: Locator;
   /** Enters the inline file editor of a file connector, inside Index Configurations. */
   readonly filesEditButton: Locator;
   /** Opens the connector in the creation form in edit mode. */
@@ -44,7 +45,10 @@ export class AdminConnectorDetailPage {
       name: "Manage Index",
       exact: true,
     });
-    this.deleteMenuItem = page.getByRole("menuitem", { name: /Delete/i });
+    this.deleteButton = page.getByRole("button", {
+      name: "Delete",
+      exact: true,
+    });
     // By id: the header's title pencil is also a button named "Edit".
     this.filesEditButton = page.getByTestId("file-manager-edit");
     this.editConnectorButton = page.getByRole("button", {
@@ -141,9 +145,9 @@ export class AdminConnectorDetailPage {
 
   async expectDeleteOffered(offered: boolean): Promise<void> {
     if (offered) {
-      await expect(this.deleteMenuItem).toBeVisible();
+      await expect(this.deleteButton).toBeVisible({ timeout: 30000 });
     } else {
-      await expect(this.deleteMenuItem).toHaveCount(0);
+      await expect(this.deleteButton).toHaveCount(0);
     }
   }
 

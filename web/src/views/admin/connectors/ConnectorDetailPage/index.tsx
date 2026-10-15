@@ -262,20 +262,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
           },
         ]
       : []),
-    ...(!isDeleting && can(ccPair, "delete")
-      ? [
-          {
-            kind: "action" as const,
-            id: "delete",
-            icon: SvgTrash,
-            danger: true,
-            title: t("manageMenu.delete.label"),
-            tooltip: paused ? undefined : t("manageMenu.delete.tooltip.active"),
-            disabled: !paused,
-            onSelect: () => setShowDeleteConnectorConfirmModal(true),
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -328,6 +314,25 @@ function Main({ ccPairId }: { ccPairId: number }) {
                     items={manageItems}
                   />
                 </Dropdown>,
+                ...(!isDeleting && can(ccPair, "delete")
+                  ? [
+                      <Button
+                        key="delete"
+                        variant="danger"
+                        prominence="secondary"
+                        icon={SvgTrash}
+                        tooltip={
+                          paused
+                            ? undefined
+                            : t("manageMenu.delete.tooltip.active")
+                        }
+                        disabled={!paused}
+                        onClick={() => setShowDeleteConnectorConfirmModal(true)}
+                      >
+                        {t("manageMenu.delete.label")}
+                      </Button>,
+                    ]
+                  : []),
               ]
             : undefined
         }

@@ -38,11 +38,9 @@ test.describe("scoped manager affordances", () => {
 
     // the managed group is an Editor on this connector, and Editors may delete
     await detail.goto(world.managedCcPairId);
-    await detail.openManageMenu();
     await detail.expectDeleteOffered(true);
 
     await detail.goto(world.grouplessCcPairId);
-    await detail.openManageMenu();
     await detail.expectDeleteOffered(true);
   });
 
