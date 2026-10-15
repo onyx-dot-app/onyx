@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "Es können nicht alle Dateien aus einem Konnektor entfernt werden. Löschen Sie den Konnektor, wenn Sie das möchten.",
           "filesUpdated": "Dateien erfolgreich aktualisiert! Der Dokumentenindex wird im Hintergrund aktualisiert. Neue Dateien werden indiziert und entfernte Dateien werden aus den Suchergebnissen bereinigt.",
           "updateFailed": "Die Dateien konnten nicht aktualisiert werden"
-        }
+        },
+        "units": "{count, plural, one {Datei} other {Dateien}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "Die Dateien konnten nicht hochgeladen werden: {detail}"
-        }
+        },
+        "units": "{count, plural, one {Datei} other {Dateien}}"
       },
       "planFailed": {
         "toast": "Der Plan konnte nicht berechnet werden: {detail}"

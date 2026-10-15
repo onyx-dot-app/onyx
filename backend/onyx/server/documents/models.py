@@ -1329,6 +1329,8 @@ class ConnectorFileInfo(BaseModel):
 
 class ConnectorFilesResponse(BaseModel):
     files: list[ConnectorFileInfo]
+    # Every file of the connector, not just the ones in `files`.
+    total_items: int
 
 
 class ObjectCreationIdResponse(BaseModel):

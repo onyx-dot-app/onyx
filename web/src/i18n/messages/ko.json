@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "커넥터에서 모든 파일을 제거할 수는 없습니다. 필요하면 커넥터를 삭제하세요.",
           "filesUpdated": "파일을 업데이트했습니다! 문서 인덱스는 백그라운드에서 업데이트됩니다. 새 파일은 인덱싱되고 제거된 파일은 검색 결과에서 삭제됩니다.",
           "updateFailed": "파일을 업데이트하지 못했습니다"
-        }
+        },
+        "units": "{count, plural, other {파일}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "파일을 업로드할 수 없습니다: {detail}"
-        }
+        },
+        "units": "{count, plural, other {파일}}"
       },
       "planFailed": {
         "toast": "계획을 계산할 수 없습니다: {detail}"

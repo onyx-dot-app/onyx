@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "Não é possível remover todos os arquivos de um conector. Exclua o conector se for isso que você quer.",
           "filesUpdated": "Arquivos atualizados com sucesso! O índice de documentos está sendo atualizado em segundo plano. Os novos arquivos estão sendo indexados e os arquivos removidos serão retirados dos resultados de pesquisa.",
           "updateFailed": "Falha ao atualizar os arquivos"
-        }
+        },
+        "units": "{count, plural, one {arquivo} other {arquivos}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "Não foi possível enviar os arquivos: {detail}"
-        }
+        },
+        "units": "{count, plural, one {arquivo} other {arquivos}}"
       },
       "planFailed": {
         "toast": "Não foi possível calcular o plano: {detail}"

@@ -309,6 +309,11 @@ export const SWR_KEYS = {
   // Every stored capability report of one source's credentials.
   credentialCheckReports: (source: string) =>
     `/api/manage/admin/credential/capability-reports?source=${source}`,
+  // Every file-list page of one connector starts with this, so `mutate` can match them all.
+  connectorFilesPrefix: (connectorId: number) =>
+    `/api/manage/admin/connector/${connectorId}/files?`,
+  connectorFiles: (connectorId: number, pageNum: number, pageSize: number) =>
+    `${SWR_KEYS.connectorFilesPrefix(connectorId)}page_num=${pageNum}&page_size=${pageSize}`,
 
   // ── CC-Pairs ──────────────────────────────────────────────────────────────
   ccPair: (ccPairId: string | number) =>

@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "لا يمكن إزالة جميع الملفات من موصل. احذف الموصل إذا كان هذا مطلوبًا.",
           "filesUpdated": "تم تحديث الملفات بنجاح! يجري تحديث فهرس المستندات في الخلفية. تجري فهرسة الملفات الجديدة وستُقلَّم الملفات المزالة من نتائج البحث.",
           "updateFailed": "فشل تحديث الملفات"
-        }
+        },
+        "units": "{count, plural, one {ملف} other {ملفات}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "تعذّر رفع الملفات: {detail}"
-        }
+        },
+        "units": "{count, plural, one {ملف} other {ملفات}}"
       },
       "planFailed": {
         "toast": "تعذّر حساب الخطة: {detail}"
