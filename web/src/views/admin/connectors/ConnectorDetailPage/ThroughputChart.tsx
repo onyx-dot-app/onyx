@@ -309,7 +309,12 @@ export function ThroughputBars({
     // The SVG never flips for right-to-left text, so the strip must not either.
     <Section alignItems="stretch" gap={0.5} height="fit" dir="ltr">
       {/* raw-ok: the chart is an SVG image, Section has no img role */}
-      <div role="img" aria-label={t("ariaLabel")} className="w-full">
+      <div
+        role="img"
+        aria-label={t("ariaLabel")}
+        // Recharts focuses its surface on click; only keyboard focus gets a ring.
+        className="w-full [&_:focus:not(:focus-visible)]:outline-none"
+      >
         <ResponsiveContainer width="100%" height={height + AXIS_HEIGHT}>
           <BarChart
             data={slices}
