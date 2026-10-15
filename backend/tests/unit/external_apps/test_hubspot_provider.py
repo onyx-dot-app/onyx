@@ -70,7 +70,10 @@ def test_authorize_url_carries_optional_scope(monkeypatch: pytest.MonkeyPatch) -
         ),
     )
     monkeypatch.setattr(oauth_route, "get_external_app_by_id", lambda *_: app)
-    monkeypatch.setattr(oauth_route, "get_cache_backend", lambda: FakeCache())
+    cache = FakeCache()
+    monkeypatch.setattr(
+        oauth_route._AUTHORIZATION_ATTEMPTS, "_cache_backend_provider", lambda: cache
+    )
 
     response = oauth_route.start_external_app_oauth(
         external_app_id=app.id,

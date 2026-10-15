@@ -554,9 +554,6 @@
       "loading": {
         "label": "Vorhandene Konfiguration wird geladen..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth Pass-through erfordert eine OAuth-fähige Anmeldemethode (Google oder OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} leitet das OAuth-Zugriffstoken des Benutzers direkt als Authorization-Header an den Server weiter. Stellen Sie sicher, dass der Server die Authentifizierung mit demselben Anbieter unterstützt.",
         "title": "Verwenden Sie Pass-through für Dienste mit gemeinsamem Identitätsanbieter."
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "Token-URL",
         "required": "Die Token-URL ist erforderlich"
+      },
+      "pkce": {
+        "label": "PKCE verwenden",
+        "description": "Nur aktivieren, wenn der OAuth-Anbieter PKCE mit der Challenge-Methode S256 unterstützt."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Geben Sie gültige HTTPS-Endpunkte ein, um die PKCE-Unterstützung zu prüfen.",
+          "checking": "Angegebene PKCE-Unterstützung wird geprüft…",
+          "supported": "Der Anbieter gibt Unterstützung für S256 PKCE an.",
+          "unsupported": "Der Anbieter gibt keine Unterstützung für S256 PKCE an.",
+          "unknown": "PKCE-Unterstützung konnte nicht geprüft werden. Sie können die Einstellung weiterhin manuell wählen."
+        },
+        "description": "Testet diese ungespeicherten Einstellungen, ohne Konfiguration oder Tokens zu speichern. Die Zustimmung kann dieser App Zugriff auf Ihr Konto gewähren.",
+        "testing": "Verbindung wird getestet…",
+        "test": "Verbindung testen",
+        "successPkce": "Autorisierung mit PKCE-Parametern erfolgreich. Dies beweist nicht, dass der Anbieter PKCE erzwingt.",
+        "success": "Autorisierung ohne PKCE erfolgreich.",
+        "result": {
+          "blocked": "Erlauben Sie Pop-ups und versuchen Sie es erneut.",
+          "closed": "Das Testfenster wurde geschlossen oder getrennt. Schließen Sie einen noch offenen Test ab oder versuchen Sie es erneut.",
+          "stale": "Einstellungen geändert. Testen Sie die aktuellen Einstellungen erneut.",
+          "failed": "Autorisierungstest fehlgeschlagen. Prüfen Sie die Einstellungen und versuchen Sie es erneut.",
+          "denied": "Die Autorisierung beim Anbieter wurde abgelehnt oder abgebrochen.",
+          "interrupted": "Der Test ist abgelaufen oder wurde unterbrochen. Starten Sie einen neuen Test."
+        },
+        "returnToSettings": "Kehren Sie zum Einstellungsfenster zurück, um das Ergebnis zu sehen.",
+        "close": "Fenster schließen"
       }
     },
     "openApiCard": {

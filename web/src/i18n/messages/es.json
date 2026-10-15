@@ -554,9 +554,6 @@
       "loading": {
         "label": "Cargando la configuración existente..."
       },
-      "oauthLoginNotice": {
-        "description": "El paso directo de OAuth requiere un método de inicio de sesión compatible con OAuth (Google u OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} reenviará el token de acceso de OAuth del usuario directamente al servidor como cabecera Authorization. Asegúrate de que el servidor admite la autenticación con el mismo proveedor.",
         "title": "Usa el paso directo para servicios que comparten el proveedor de identidad."
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "URL del token",
         "required": "La URL del token es obligatoria"
+      },
+      "pkce": {
+        "label": "Usar PKCE",
+        "description": "Activa esta opción solo si el proveedor de OAuth admite PKCE con el método de desafío S256."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Introduce direcciones HTTPS válidas para comprobar la compatibilidad con PKCE.",
+          "checking": "Comprobando la compatibilidad anunciada con PKCE…",
+          "supported": "El proveedor anuncia compatibilidad con S256 PKCE.",
+          "unsupported": "El proveedor no anuncia compatibilidad con S256 PKCE.",
+          "unknown": "No se pudo verificar la compatibilidad con PKCE. Puedes elegir la opción manualmente."
+        },
+        "description": "Prueba estos ajustes sin guardar la configuración ni los tokens. El consentimiento del proveedor puede dar a esta aplicación acceso a tu cuenta.",
+        "testing": "Probando conexión…",
+        "test": "Probar conexión",
+        "successPkce": "Autorización correcta con parámetros PKCE. Esto no demuestra que el proveedor exija PKCE.",
+        "success": "Autorización correcta sin PKCE.",
+        "result": {
+          "blocked": "Permite las ventanas emergentes e inténtalo de nuevo.",
+          "closed": "La ventana de prueba se cerró o se desconectó. Finaliza cualquier prueba abierta o inténtalo de nuevo.",
+          "stale": "Los ajustes cambiaron. Vuelve a probar los ajustes actuales.",
+          "failed": "La prueba de autorización falló. Comprueba los ajustes e inténtalo de nuevo.",
+          "denied": "La autorización del proveedor fue rechazada o cancelada.",
+          "interrupted": "La prueba caducó o se interrumpió. Inicia una nueva prueba."
+        },
+        "returnToSettings": "Vuelve a la ventana de ajustes para ver el resultado.",
+        "close": "Cerrar ventana"
       }
     },
     "openApiCard": {

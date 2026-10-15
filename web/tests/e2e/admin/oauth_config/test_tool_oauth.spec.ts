@@ -13,7 +13,7 @@ const getClientSecretInput = (page: Page) =>
   page.locator('input[name="clientSecret"]');
 const getScopesInput = (page: Page) => page.locator('input[name="scopes"]');
 const getConnectButton = (page: Page) =>
-  page.getByRole("button", { name: "Connect" });
+  page.getByRole("button", { name: "Connect", exact: true });
 const getDefinitionTextarea = (page: Page) =>
   page.locator('textarea[name="definition"]');
 const getAddActionButton = (page: Page) =>

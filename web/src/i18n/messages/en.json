@@ -554,9 +554,6 @@
       "loading": {
         "label": "Loading existing configuration..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth pass-through requires an OAuth-capable login method (Google or OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
         "title": "Use pass-through for services with shared identity provider."
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "Token URL",
         "required": "Token URL is required"
+      },
+      "pkce": {
+        "label": "Use PKCE",
+        "description": "Enable only when the OAuth provider supports PKCE with the S256 challenge method."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Enter valid HTTPS endpoints to check PKCE support.",
+          "checking": "Checking advertised PKCE support…",
+          "supported": "Provider advertises S256 PKCE support.",
+          "unsupported": "Provider does not advertise S256 PKCE support.",
+          "unknown": "Could not verify PKCE support. You can still choose the setting manually."
+        },
+        "description": "Tests these unsaved settings without saving configuration or tokens. Provider consent may grant this app access to your account.",
+        "testing": "Testing connection…",
+        "test": "Test connection",
+        "successPkce": "Authorization succeeded with PKCE parameters. This does not prove the provider enforces PKCE.",
+        "success": "Authorization succeeded without PKCE.",
+        "result": {
+          "blocked": "Allow popups and try again.",
+          "closed": "Test window closed or disconnected. Finish any open test, or try again.",
+          "stale": "Settings changed. Test the current settings again.",
+          "failed": "Authorization test failed. Check the settings and try again.",
+          "denied": "Provider authorization was declined or canceled.",
+          "interrupted": "The test expired or was interrupted. Start a new test."
+        },
+        "returnToSettings": "Return to the settings window to see the result.",
+        "close": "Close window"
       }
     },
     "openApiCard": {
