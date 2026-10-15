@@ -1,32 +1,45 @@
 "use client";
 
+import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
   Divider,
+  Fold,
   IconTooltip,
   Popover,
   ShadowDiv,
+  Spacer,
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
+import { useOpalStrings } from "@opal/strings";
 import { formatDurationMs } from "@opal/time";
-import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
+import {
+  SvgAlertTriangle,
+  SvgChevronDown,
+  SvgChevronUp,
+  SvgStackLine,
+  SvgX,
+} from "@opal/icons";
 import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
 import type { IndexAttemptStageMetric } from "@/lib/types";
 import {
-  PIPELINE_ORDER,
+  PHASE_LABEL_KEYS,
   STAGE_LABEL_KEYS,
 } from "@/lib/connectors/stageMetrics/constants";
+import {
+  isUneven,
+  phaseScale,
+  summarizePhases,
+  type PhaseStage,
+  type PhaseSummary,
+} from "@/lib/connectors/stageMetrics/phases";
 
-// BATCH_TOTAL feeds the header. BATCH_UNACCOUNTED is a computed residual, not a stage, so neither gets a row.
+// BATCH_TOTAL feeds the header; the phase rows hold the other batch-level stages.
 const SUMMARY_STAGE = "BATCH_TOTAL";
-const HIDDEN_STAGES = new Set<IndexAttemptStageMetric["stage"]>([
-  SUMMARY_STAGE,
-  "BATCH_UNACCOUNTED",
-]);
 
 // Column widths from the mock, in rem: the stage name, the batch count, the
 // average with its spread, the bar and the max. The actions take the rest.
@@ -35,6 +48,8 @@ const BATCHES_WIDTH = 3.5;
 const AVERAGE_WIDTH = 8.5;
 const BAR_WIDTH = 5.75;
 const MAX_WIDTH = 4;
+// Stage rows sit under their phase row, indented by this much, in rem.
+const STAGE_INDENT = 0.75;
 
 function formatMs(ms: number | null | undefined): string {
   return ms == null ? "-" : formatDurationMs(ms);
@@ -83,11 +98,12 @@ function Cell({ width, align = "start", children }: CellProps) {
 }
 
 interface AverageProps {
-  stage: IndexAttemptStageMetric | undefined;
+  avgMs: number | null | undefined;
+  stdDevMs?: number | null;
 }
 /** The average in emphasis with its spread muted beside it. */
-function Average({ stage }: AverageProps) {
-  if (stage?.avg_duration_ms == null) {
+function Average({ avgMs, stdDevMs = null }: AverageProps) {
+  if (avgMs == null) {
     return (
       <Text font="secondary-mono" color="text-03">
         -
@@ -104,11 +120,11 @@ function Average({ stage }: AverageProps) {
       height="fit"
     >
       <Text font="secondary-mono-label" color="text-04">
-        {formatDurationMs(stage.avg_duration_ms)}
+        {formatDurationMs(avgMs)}
       </Text>
-      {stage.std_dev_duration_ms !== null && (
+      {stdDevMs !== null && (
         <Text font="secondary-mono" color="text-03">
-          {`± ${formatDurationMs(stage.std_dev_duration_ms)}`}
+          {`± ${formatDurationMs(stdDevMs)}`}
         </Text>
       )}
     </Section>
@@ -126,22 +142,37 @@ function ColumnTitle({ children }: ColumnTitleProps) {
   );
 }
 
-interface StageRowProps {
-  stage: IndexAttemptStageMetric;
-  /** The longest max across the listed stages, which the bars scale to. */
+interface TimingRowProps {
+  label: string;
+  /** Stage rows sit indented under their phase row. */
+  indented?: boolean;
+  /** `undefined` when the attempt never reached this stage or phase. */
+  timing:
+    | {
+        batchCount: number;
+        avgMs: number | null;
+        stdDevMs: number | null;
+        minMs: number | null;
+        maxMs: number | null;
+        uneven: boolean;
+      }
+    | undefined;
+  /** The longest max across the listed rows, which the bars scale to. */
   scale: number;
+  action?: React.ReactNode;
 }
-/** One stage: batch count, average, a min-to-max bar with the average marked, and max. */
-function StageRow({ stage, scale }: StageRowProps) {
+/** One row: batch count, average, a min-to-max bar with the average marked, and max. */
+function TimingRow({
+  label,
+  indented = false,
+  timing,
+  scale,
+  action,
+}: TimingRowProps) {
   const t = useTranslations("admin.connector");
   const format = useFormatter();
-  const min = stage.min_duration_ms ?? 0;
-  const max = stage.max_duration_ms ?? 0;
-  // A std dev above the mean means batch times vary wildly, so flag the row.
-  const uneven =
-    stage.std_dev_duration_ms !== null &&
-    stage.avg_duration_ms !== null &&
-    stage.std_dev_duration_ms > stage.avg_duration_ms;
+  const min = timing?.minMs ?? 0;
+  const max = timing?.maxMs ?? 0;
 
   return (
     <Section
@@ -152,51 +183,76 @@ function StageRow({ stage, scale }: StageRowProps) {
       height="fit"
     >
       <Cell width={NAME_WIDTH}>
-        <Text font="secondary-action" color="text-03">
-          {t(STAGE_LABEL_KEYS[stage.stage])}
-        </Text>
+        <Section
+          flexDirection="row"
+          alignItems="center"
+          justifyContent="start"
+          gap={0}
+          height="fit"
+        >
+          {indented && <Spacer orientation="horizontal" rem={STAGE_INDENT} />}
+          <Text
+            font="secondary-action"
+            color={
+              timing === undefined
+                ? "text-02"
+                : indented
+                  ? "text-03"
+                  : "text-04"
+            }
+          >
+            {label}
+          </Text>
+        </Section>
       </Cell>
       <Cell width={BATCHES_WIDTH} align="end">
         <Text font="secondary-mono" color="text-03">
-          {format.number(stage.event_count)}
+          {timing === undefined ? "-" : format.number(timing.batchCount)}
         </Text>
       </Cell>
       <Cell width={AVERAGE_WIDTH}>
-        <Average stage={stage} />
+        <Average avgMs={timing?.avgMs} stdDevMs={timing?.stdDevMs} />
       </Cell>
       <Cell width={BAR_WIDTH}>
-        <div className="relative my-1.5 h-1 w-full rounded-sm bg-background-tint-01">
-          <div
-            className="absolute top-0 h-1 rounded-sm bg-theme-blue-02"
-            style={{
-              insetInlineStart: percent(min, scale),
-              width: percent(max - min, scale),
-            }}
-          />
-          {stage.avg_duration_ms !== null && (
+        {timing === undefined ? (
+          <Text font="secondary-body" color="text-02">
+            {t("stageMetrics.notReached.label")}
+          </Text>
+        ) : (
+          <div className="relative my-1.5 h-1 w-full rounded-sm bg-background-tint-01">
             <div
-              className="absolute top-0 h-1 w-1 -ms-0.5 rounded-sm bg-theme-blue-05"
+              className="absolute top-0 h-1 rounded-sm bg-theme-blue-02"
               style={{
-                insetInlineStart: percent(stage.avg_duration_ms, scale),
+                insetInlineStart: percent(min, scale),
+                width: percent(max - min, scale),
               }}
             />
-          )}
-        </div>
+            {timing.avgMs !== null && (
+              <div
+                className="absolute top-0 h-1 w-1 -ms-0.5 rounded-sm bg-theme-blue-05"
+                style={{
+                  insetInlineStart: percent(timing.avgMs, scale),
+                }}
+              />
+            )}
+          </div>
+        )}
       </Cell>
       <Cell width={MAX_WIDTH} align="end">
         <Text font="secondary-mono" color="text-03">
-          {formatMs(stage.max_duration_ms)}
+          {formatMs(timing?.maxMs)}
         </Text>
       </Cell>
       <Section
         flexDirection="row"
         alignItems="center"
         justifyContent="end"
+        gap={0}
         width="auto"
         height="fit"
         className="min-w-0 flex-1"
       >
-        {uneven && (
+        {timing?.uneven && (
           <IconTooltip
             icon={SvgAlertTriangle}
             status="warning"
@@ -204,17 +260,97 @@ function StageRow({ stage, scale }: StageRowProps) {
             aria-label={t("stageDetails.uneven.tooltip")}
           />
         )}
+        {action}
       </Section>
     </Section>
   );
 }
 
+interface StageRowProps {
+  stage: PhaseStage;
+  scale: number;
+}
+function StageRow({ stage: { stage, metric }, scale }: StageRowProps) {
+  const t = useTranslations("admin.connector");
+  return (
+    <TimingRow
+      label={t(STAGE_LABEL_KEYS[stage])}
+      indented
+      scale={scale}
+      timing={
+        metric && {
+          batchCount: metric.event_count,
+          avgMs: metric.avg_duration_ms,
+          stdDevMs: metric.std_dev_duration_ms,
+          minMs: metric.min_duration_ms,
+          maxMs: metric.max_duration_ms,
+          uneven: isUneven(metric),
+        }
+      }
+    />
+  );
+}
+
+interface PhaseRowsProps {
+  phase: PhaseSummary;
+  scale: number;
+}
+/** A phase's totals, folding open to every one of its stages. */
+function PhaseRows({ phase, scale }: PhaseRowsProps) {
+  const t = useTranslations("admin.connector");
+  const strings = useOpalStrings();
+  const [open, setOpen] = useState(false);
+  const label = t(PHASE_LABEL_KEYS[phase.phase]);
+  return (
+    <Section alignItems="stretch" gap={0} height="fit">
+      <TimingRow
+        label={label}
+        scale={scale}
+        timing={
+          phase.reached
+            ? {
+                batchCount: phase.batchCount,
+                avgMs: phase.avgDurationMs,
+                // Stage spreads do not add up to a phase spread.
+                stdDevMs: null,
+                minMs: phase.minDurationMs,
+                maxMs: phase.maxDurationMs,
+                uneven: phase.uneven,
+              }
+            : undefined
+        }
+        action={
+          <Button
+            icon={open ? SvgChevronUp : SvgChevronDown}
+            prominence="tertiary"
+            size="xs"
+            aria-label={
+              open
+                ? strings.collapsibleFoldSection(label)
+                : strings.collapsibleExpandSection(label)
+            }
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          />
+        }
+      />
+      <Fold open={open}>
+        <Section alignItems="stretch" gap={0} height="fit">
+          {phase.stages.map((stage) => (
+            <StageRow key={stage.stage} stage={stage} scale={scale} />
+          ))}
+        </Section>
+      </Fold>
+    </Section>
+  );
+}
+
 interface StageRowsProps {
-  rows: IndexAttemptStageMetric[];
+  stages: IndexAttemptStageMetric[];
   loaded: boolean;
   failed: boolean;
 }
-function StageRows({ rows, loaded, failed }: StageRowsProps) {
+function StageRows({ stages, loaded, failed }: StageRowsProps) {
   const t = useTranslations("admin.connector");
   if (failed) {
     return (
@@ -232,20 +368,12 @@ function StageRows({ rows, loaded, failed }: StageRowsProps) {
       </Section>
     );
   }
-  if (rows.length === 0) {
-    return (
-      <Section padding={1} height="fit">
-        <Text font="secondary-body" color="text-03">
-          {t("stageMetrics.perBatch.empty")}
-        </Text>
-      </Section>
-    );
-  }
-  const scale = Math.max(0, ...rows.map((row) => row.max_duration_ms ?? 0));
+  const phases = summarizePhases(stages);
+  const scale = phaseScale(phases);
   return (
     <ShadowDiv>
-      {rows.map((row) => (
-        <StageRow key={row.stage} stage={row} scale={scale} />
+      {phases.map((phase) => (
+        <PhaseRows key={phase.phase} phase={phase} scale={scale} />
       ))}
     </ShadowDiv>
   );
@@ -255,19 +383,13 @@ interface StageDetailsBodyProps {
   indexAttemptId: number;
 }
 
-/** How long each pipeline stage took per batch of one index attempt. The header carries the attempt's totals under each column title. */
+/** How long each pipeline phase and its stages took per batch of one index attempt. The header carries the attempt's totals under each column title. */
 function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
   const t = useTranslations("admin.connector");
   const format = useFormatter();
   const { data, error } = useIndexAttemptStageMetrics(indexAttemptId);
   const stages = data?.stages ?? [];
   const total = stages.find((stage) => stage.stage === SUMMARY_STAGE);
-  const rows = stages
-    .filter(
-      (stage) =>
-        stage.scope === "BATCH_LEVEL" && !HIDDEN_STAGES.has(stage.stage)
-    )
-    .sort((a, b) => PIPELINE_ORDER[a.stage] - PIPELINE_ORDER[b.stage]);
 
   return (
     <Section
@@ -296,7 +418,10 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
         </Cell>
         <Cell width={AVERAGE_WIDTH}>
           <ColumnTitle>{t("stageDetails.averageTime")}</ColumnTitle>
-          <Average stage={total} />
+          <Average
+            avgMs={total?.avg_duration_ms}
+            stdDevMs={total?.std_dev_duration_ms}
+          />
         </Cell>
         <Cell width={BAR_WIDTH + MAX_WIDTH} align="end">
           <ColumnTitle>{t("stageDetails.maxTime")}</ColumnTitle>
@@ -324,7 +449,7 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
       </Section>
       <Divider paddingParallel={1} paddingPerpendicular={1} />
       <StageRows
-        rows={rows}
+        stages={stages}
         loaded={data !== undefined}
         failed={error !== undefined}
       />

@@ -2215,9 +2215,6 @@
         "loadError": {
           "title": "ステージメトリクスの読み込みに失敗しました"
         },
-        "perBatch": {
-          "empty": "バッチごとのステージデータは記録されていません。"
-        },
         "stages": {
           "batchLoad": {
             "label": "バッチ読み込み"
@@ -2302,6 +2299,26 @@
             "label": "プロバイダーの制限による待機",
             "description": "埋め込みプロバイダーがリクエストを制限した後に、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
           }
+        },
+        "phases": {
+          "fetch": {
+            "label": "Fetch"
+          },
+          "queue": {
+            "label": "Queue"
+          },
+          "process": {
+            "label": "Process"
+          },
+          "write": {
+            "label": "Write"
+          },
+          "finish": {
+            "label": "Finish"
+          }
+        },
+        "notReached": {
+          "label": "Not reached"
         }
       },
       "statusCard": {

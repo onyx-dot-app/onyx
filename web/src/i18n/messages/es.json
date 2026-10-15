@@ -2215,9 +2215,6 @@
         "loadError": {
           "title": "No se pudieron cargar las métricas por etapa"
         },
-        "perBatch": {
-          "empty": "No se registraron datos de etapa por lote."
-        },
         "stages": {
           "batchLoad": {
             "label": "Carga del lote"
@@ -2302,6 +2299,26 @@
             "label": "Espera por límite del proveedor",
             "description": "Tiempo que las solicitudes de embedding esperaron después de que el proveedor de embeddings las limitara. Forma parte de Embedding y se suma entre los hilos de embedding."
           }
+        },
+        "phases": {
+          "fetch": {
+            "label": "Fetch"
+          },
+          "queue": {
+            "label": "Queue"
+          },
+          "process": {
+            "label": "Process"
+          },
+          "write": {
+            "label": "Write"
+          },
+          "finish": {
+            "label": "Finish"
+          }
+        },
+        "notReached": {
+          "label": "Not reached"
         }
       },
       "statusCard": {

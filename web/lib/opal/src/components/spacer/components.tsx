@@ -30,7 +30,9 @@ export function Spacer({ orientation = "vertical", rem = 1 }: SpacerProps) {
   const size = `${rem}rem`;
 
   return (
+    // A fixed gap never shrinks, even in a crowded flex row.
     <div
+      className="shrink-0"
       style={{
         height: isVertical ? size : undefined,
         width: !isVertical ? size : undefined,

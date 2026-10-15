@@ -2215,9 +2215,6 @@
         "loadError": {
           "title": "Échec du chargement des métriques des étapes"
         },
-        "perBatch": {
-          "empty": "Aucune donnée d'étape par lot enregistrée."
-        },
         "stages": {
           "batchLoad": {
             "label": "Chargement du lot"
@@ -2302,6 +2299,26 @@
             "label": "Attente de limitation du fournisseur",
             "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
           }
+        },
+        "phases": {
+          "fetch": {
+            "label": "Fetch"
+          },
+          "queue": {
+            "label": "Queue"
+          },
+          "process": {
+            "label": "Process"
+          },
+          "write": {
+            "label": "Write"
+          },
+          "finish": {
+            "label": "Finish"
+          }
+        },
+        "notReached": {
+          "label": "Not reached"
         }
       },
       "statusCard": {

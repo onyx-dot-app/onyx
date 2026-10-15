@@ -1,4 +1,4 @@
-import { INDEX_ATTEMPT_STAGES, IndexAttemptStage } from "@/lib/types";
+import type { IndexAttemptStage } from "@/lib/types";
 
 // Message key (inside the `admin.connector` namespace) for the human-readable
 // label of each stage. Labels are explicit (rather than auto-cased) so that
@@ -35,7 +35,57 @@ export const STAGE_LABEL_KEYS = {
   BATCH_TOTAL: "stageMetrics.stages.batchTotal.label",
 } as const satisfies Record<IndexAttemptStage, string>;
 
-export const PIPELINE_ORDER: Record<IndexAttemptStage, number> =
-  Object.fromEntries(
-    INDEX_ATTEMPT_STAGES.map((stage, idx) => [stage, idx])
-  ) as Record<IndexAttemptStage, number>;
+export const STAGE_PHASES = [
+  "fetch",
+  "queue",
+  "process",
+  "write",
+  "finish",
+] as const;
+
+export type StagePhase = (typeof STAGE_PHASES)[number];
+
+// The batch-level stages of each phase, in pipeline order. Attempt-level
+// stages, BATCH_TOTAL and BATCH_UNACCOUNTED belong to no phase.
+export const PHASE_STAGES = {
+  fetch: ["CONNECTOR_FETCH", "HIERARCHY_UPSERT"],
+  queue: ["DOC_BATCH_STORE", "DOC_BATCH_ENQUEUE", "QUEUE_WAIT"],
+  process: [
+    "DOCPROCESSING_SETUP",
+    "BATCH_LOAD",
+    "DOC_DB_PREPARE",
+    "IMAGE_PROCESSING",
+    "CHUNKING",
+    "CONTEXTUAL_RAG",
+    "EMBEDDING",
+    "EMBEDDING_RATE_LIMIT_WAIT",
+    "EMBEDDING_PROVIDER_THROTTLE_WAIT",
+  ],
+  write: [
+    "DOC_LOCK_ACQUIRE_WAIT",
+    "ENRICHMENT_PREP",
+    "VECTOR_DB_WRITE",
+    "POST_INDEX_DB_UPDATE",
+  ],
+  finish: [
+    "COORD_LOCK_ACQUIRE_WAIT",
+    "COORDINATION_UPDATE",
+    "FINALIZATION",
+    "GC_COLLECT",
+  ],
+} as const satisfies Record<StagePhase, readonly IndexAttemptStage[]>;
+
+// Stages timed inside another stage (the embedding waits are parts of
+// EMBEDDING), so a phase total leaves them out to avoid counting twice.
+export const NESTED_STAGES: ReadonlySet<IndexAttemptStage> = new Set([
+  "EMBEDDING_RATE_LIMIT_WAIT",
+  "EMBEDDING_PROVIDER_THROTTLE_WAIT",
+]);
+
+export const PHASE_LABEL_KEYS = {
+  fetch: "stageMetrics.phases.fetch.label",
+  queue: "stageMetrics.phases.queue.label",
+  process: "stageMetrics.phases.process.label",
+  write: "stageMetrics.phases.write.label",
+  finish: "stageMetrics.phases.finish.label",
+} as const satisfies Record<StagePhase, string>;

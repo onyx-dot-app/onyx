@@ -2215,9 +2215,6 @@
         "loadError": {
           "title": "加载阶段指标失败"
         },
-        "perBatch": {
-          "empty": "未记录按批次的阶段数据。"
-        },
         "stages": {
           "batchLoad": {
             "label": "批次加载"
@@ -2302,6 +2299,26 @@
             "label": "提供商限流等待",
             "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
           }
+        },
+        "phases": {
+          "fetch": {
+            "label": "Fetch"
+          },
+          "queue": {
+            "label": "Queue"
+          },
+          "process": {
+            "label": "Process"
+          },
+          "write": {
+            "label": "Write"
+          },
+          "finish": {
+            "label": "Finish"
+          }
+        },
+        "notReached": {
+          "label": "Not reached"
         }
       },
       "statusCard": {

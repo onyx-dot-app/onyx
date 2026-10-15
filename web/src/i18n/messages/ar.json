@@ -2215,9 +2215,6 @@
         "loadError": {
           "title": "فشل تحميل مقاييس المراحل"
         },
-        "perBatch": {
-          "empty": "لم تُسجل بيانات مراحل لكل دفعة."
-        },
         "stages": {
           "batchLoad": {
             "label": "تحميل الدفعة"
@@ -2302,6 +2299,26 @@
             "label": "انتظار تقييد المزوّد",
             "description": "الوقت الذي انتظرته طلبات التضمين بعد أن قيّدها مزوّد التضمين. جزء من التضمين، ومجموع عبر خيوط التضمين."
           }
+        },
+        "phases": {
+          "fetch": {
+            "label": "Fetch"
+          },
+          "queue": {
+            "label": "Queue"
+          },
+          "process": {
+            "label": "Process"
+          },
+          "write": {
+            "label": "Write"
+          },
+          "finish": {
+            "label": "Finish"
+          }
+        },
+        "notReached": {
+          "label": "Not reached"
         }
       },
       "statusCard": {

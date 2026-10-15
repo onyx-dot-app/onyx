@@ -2215,9 +2215,6 @@
         "loadError": {
           "title": "Failed to load stage metrics"
         },
-        "perBatch": {
-          "empty": "No per-batch stage data recorded."
-        },
         "stages": {
           "batchLoad": {
             "label": "Batch load"
@@ -2302,6 +2299,26 @@
             "label": "Embedding provider throttle wait",
             "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
           }
+        },
+        "phases": {
+          "fetch": {
+            "label": "Fetch"
+          },
+          "queue": {
+            "label": "Queue"
+          },
+          "process": {
+            "label": "Process"
+          },
+          "write": {
+            "label": "Write"
+          },
+          "finish": {
+            "label": "Finish"
+          }
+        },
+        "notReached": {
+          "label": "Not reached"
         }
       },
       "statusCard": {
