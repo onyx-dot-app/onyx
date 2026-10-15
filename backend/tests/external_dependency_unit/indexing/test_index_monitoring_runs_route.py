@@ -213,6 +213,7 @@ def _runs(
         q=mark,
         errors=errors,
         superseded=superseded,
+        resolved=None,
         user=user,
         db_session=db_session,
     )

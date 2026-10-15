@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "対象を指定した再インデックス作成に失敗しました: {message}",
         "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。",
         "checkFrequencyUpdated": "コネクタのチェック頻度を更新しました",
-        "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした"
+        "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "すべてのコネクタ"
@@ -2545,7 +2547,8 @@
           "failures": "失敗",
           "errors": "エラー",
           "other": "その他",
-          "resolved": "解決済み"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, other {失敗 # 件}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
-          "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
+          "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "さらに表示",
         "empty": {
           "title": "失敗もエラーもありません",
-          "resolved": "解決済みのエラーはありません",
           "filtered": "この検索に一致するものはありません。",
           "failures": "失敗はありません",
           "errors": "エラーはありません",
@@ -2658,7 +2661,9 @@
           "copy": "スタックトレースをコピー"
         },
         "actions": {
-          "resolve": "解決"
+          "resolve": "解決",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

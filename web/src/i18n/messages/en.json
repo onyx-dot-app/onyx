@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "Targeted reindex failed: {message}",
         "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing.",
         "checkFrequencyUpdated": "Connector check frequency updated successfully",
-        "checkFrequencyUpdateFailed": "Failed to update connector check frequency"
+        "checkFrequencyUpdateFailed": "Failed to update connector check frequency",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "All Connectors"
@@ -2545,7 +2547,8 @@
           "failures": "Failures",
           "errors": "Errors",
           "other": "Other",
-          "resolved": "Resolved"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, one {# Failure} other {# Failures}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
-          "checks": "{count, plural, one {# check failed} other {# checks failed}}"
+          "checks": "{count, plural, one {# check failed} other {# checks failed}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "Show more",
         "empty": {
           "title": "No failures or errors",
-          "resolved": "No resolved errors",
           "filtered": "Nothing matches this search.",
           "failures": "No failures",
           "errors": "No errors",
@@ -2658,7 +2661,9 @@
           "copy": "Copy the stack trace"
         },
         "actions": {
-          "resolve": "Resolve"
+          "resolve": "Resolve",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

@@ -1,14 +1,16 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Popover, Tag, Text } from "@opal/components";
+import { Button, Card, Dropdown, Popover, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgAlertTriangle,
   SvgCheckAll,
   SvgCheckCircle,
+  SvgChevronDown,
   SvgFiles,
+  SvgRefreshCw,
   SvgTextLines,
   SvgUser,
   SvgUsers,
@@ -57,11 +59,6 @@ const GROUP_STYLE: Record<
     icon: SvgCheckCircle,
     stroke: "stroke-status-success-05",
   },
-  resolved: {
-    color: "background-tint-01",
-    icon: SvgCheckCircle,
-    stroke: "stroke-status-success-05",
-  },
 };
 
 /** What each kind's failed items are: documents, users, groups or checks. */
@@ -84,17 +81,21 @@ type CardState =
   | "canceled"
   | "succeeded";
 
-/** The title's state key: how the run stands in its group. */
-function cardState(run: CCPairRun, group: ActivityGroup): CardState {
+/** The title's state key: how the run stands in its group. A run an admin resolved reads as it did when open. */
+function cardState(
+  run: CCPairRun,
+  group: ActivityGroup,
+  closed: boolean
+): CardState {
   const stopped =
     run.attempt.status === "canceled" || run.attempt.status === "interrupted";
+  // Closed without a resolution: superseded, or every document error resolved.
+  const closedBySystem = closed && run.resolved_at === null;
   switch (group) {
     case "failures":
-      return "failed";
-    case "resolved":
-      // A failed run is here because a newer run of its kind followed it.
-      return isFailed(run) ? "superseded" : "resolved";
+      return closedBySystem && isFailed(run) ? "superseded" : "failed";
     case "errors":
+      if (closedBySystem) return "resolved";
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
@@ -107,12 +108,18 @@ export interface ActivityCardProps {
   ccPairId: number;
   run: CCPairRun;
   group: ActivityGroup;
+  /** The run is resolved or superseded: it keeps its level's colour, faded. */
+  closed: boolean;
   /** Names the pair in place of the run's kind, for a feed across pairs. */
   connector?: CCPairRef;
   /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
   canResolve: boolean;
-  /** Resolves these errors of the run, or every open one when `null`. */
+  /** Whether the viewer may mark the run resolved. */
+  canResolveRuns: boolean;
+  /** Resolves these errors of the run by a targeted reindex, or every open one when `null`. */
   onResolve: (errorIds: number[] | null) => void;
+  /** Marks the run resolved without a reindex. */
+  onResolveRun: () => void;
   /** A resolve is in flight, so the resolve actions wait for it. */
   resolving: boolean;
 }
@@ -122,9 +129,12 @@ export default function ActivityCard({
   ccPairId,
   run,
   group,
+  closed,
   connector,
   canResolve,
+  canResolveRuns,
   onResolve,
+  onResolveRun,
   resolving,
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
@@ -149,7 +159,8 @@ export default function ActivityCard({
   const resolvable = canResolve && listsDocs;
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
-  const state = cardState(run, group);
+  const state = cardState(run, group, closed);
+  const resolvesRun = canResolveRuns && !closed && group !== "other";
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
@@ -169,156 +180,223 @@ export default function ActivityCard({
       : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
   return (
-    <Card color={style.color} border="none" rounding={2} padding={1}>
-      <Section alignItems="stretch" gap={0} height="fit">
-        <Section
-          flexDirection="row"
-          alignItems="start"
-          gap={1}
-          padding={1}
-          height="fit"
-        >
+    <Section height="fit" className={closed ? "opacity-60" : undefined}>
+      <Card color={style.color} border="none" rounding={2} padding={1}>
+        <Section alignItems="stretch" gap={0} height="fit">
           <Section
-            alignItems="center"
-            justifyContent="center"
-            padding={0.5}
-            width="fit"
+            flexDirection="row"
+            alignItems="start"
+            gap={1}
+            padding={1}
             height="fit"
           >
-            <StatusIcon size={16} className={style.stroke} />
+            <Section
+              alignItems="center"
+              justifyContent="center"
+              padding={0.5}
+              width="fit"
+              height="fit"
+            >
+              <StatusIcon size={16} className={style.stroke} />
+            </Section>
+            <Section
+              alignItems="stretch"
+              gap={0}
+              height="fit"
+              className="min-w-0 flex-1"
+            >
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                alignItems="center"
+                gap={1}
+                height="fit"
+              >
+                <Text font="secondary-mono" color="text-03">
+                  {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
+                </Text>
+                <Section
+                  flexDirection="row"
+                  alignItems="center"
+                  gap={0.5}
+                  padding={0.5}
+                  width="fit"
+                  height="fit"
+                >
+                  {run.kind === "indexing" && run.attempt.is_new_model && (
+                    <Tag
+                      title={tRuns("newModel.label")}
+                      tooltip={tRuns("newModel.tooltip")}
+                      color="purple"
+                    />
+                  )}
+                  <Text font="secondary-body" color="text-03" maxLines={1}>
+                    {identity}
+                  </Text>
+                  <IdentityIcon size={12} className="stroke-text-03" />
+                </Section>
+              </Section>
+              <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
+                <Text font="main-ui-body" color="text-04">
+                  {t(`title.${run.kind}.${state}`)}
+                </Text>
+                {description !== null && (
+                  <Text font="secondary-body" color="text-03" maxLines={3}>
+                    {description}
+                  </Text>
+                )}
+              </Section>
+            </Section>
           </Section>
-          <Section
-            alignItems="stretch"
-            gap={0}
-            height="fit"
-            className="min-w-0 flex-1"
-          >
+          {(trace !== null ||
+            warnings > 0 ||
+            listsChecks ||
+            run.resolved_at !== null ||
+            resolvesRun) && (
             <Section
               flexDirection="row"
               justifyContent="between"
               alignItems="center"
               gap={1}
+              padding={0.5}
               height="fit"
             >
-              <Text font="secondary-mono" color="text-03">
-                {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
-              </Text>
               <Section
                 flexDirection="row"
+                justifyContent="start"
                 alignItems="center"
-                gap={0.5}
-                padding={0.5}
-                width="fit"
+                gap={1}
                 height="fit"
+                className="min-w-0 flex-1"
+                wrap
               >
-                {run.kind === "indexing" && run.attempt.is_new_model && (
+                {run.resolved_at !== null && (
                   <Tag
-                    title={tRuns("newModel.label")}
-                    tooltip={tRuns("newModel.tooltip")}
-                    color="purple"
-                  />
-                )}
-                <Text font="secondary-body" color="text-03" maxLines={1}>
-                  {identity}
-                </Text>
-                <IdentityIcon size={12} className="stroke-text-03" />
-              </Section>
-            </Section>
-            <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
-              <Text font="main-ui-body" color="text-04">
-                {t(`title.${run.kind}.${state}`)}
-              </Text>
-              {description !== null && (
-                <Text font="secondary-body" color="text-03" maxLines={3}>
-                  {description}
-                </Text>
-              )}
-            </Section>
-          </Section>
-        </Section>
-        {(trace !== null || warnings > 0 || listsChecks) && (
-          <Section
-            flexDirection="row"
-            justifyContent="between"
-            alignItems="center"
-            gap={1}
-            padding={0.5}
-            height="fit"
-          >
-            <Section
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="center"
-              gap={1}
-              height="fit"
-              className="min-w-0 flex-1"
-              wrap
-            >
-              {trace !== null && (
-                <Popover>
-                  <Popover.Trigger asChild>
-                    <Button icon={SvgTextLines} prominence="tertiary" size="xs">
-                      {t("tags.stackTrace")}
-                    </Button>
-                  </Popover.Trigger>
-                  <StackTracePopoverContent
-                    runId={run.attempt.id}
-                    trace={trace}
-                  />
-                </Popover>
-              )}
-              {listsDocs ? (
-                <Popover>
-                  <Popover.Trigger asChild>
-                    <Button icon={SvgFiles} prominence="tertiary" size="xs">
-                      {docsLabel}
-                    </Button>
-                  </Popover.Trigger>
-                  <FailedDocsPopoverContent
-                    ccPairId={ccPairId}
-                    indexAttemptId={run.attempt.id}
-                    canResolve={resolvable}
-                    onResolve={onResolve}
-                    resolving={resolving}
-                  />
-                </Popover>
-              ) : run.kind === "checks" && listsChecks ? (
-                <Popover>
-                  <Popover.Trigger asChild>
-                    <Button
-                      icon={WARNING_ICONS.checks}
-                      prominence="tertiary"
-                      size="xs"
-                    >
-                      {docsLabel}
-                    </Button>
-                  </Popover.Trigger>
-                  <CheckRunPopoverContent run={run.attempt} beside />
-                </Popover>
-              ) : (
-                warnings > 0 && (
-                  <Tag
-                    icon={WARNING_ICONS[run.kind]}
-                    title={docsLabel}
+                    icon={SvgCheckAll}
+                    title={t("tags.resolvedOn", {
+                      date: format.dateTime(
+                        new Date(run.resolved_at),
+                        RUN_TIME_FORMAT
+                      ),
+                    })}
                     color="gray"
                   />
+                )}
+                {trace !== null && (
+                  <Popover>
+                    <Popover.Trigger asChild>
+                      <Button
+                        icon={SvgTextLines}
+                        prominence="tertiary"
+                        size="xs"
+                      >
+                        {t("tags.stackTrace")}
+                      </Button>
+                    </Popover.Trigger>
+                    <StackTracePopoverContent
+                      runId={run.attempt.id}
+                      trace={trace}
+                    />
+                  </Popover>
+                )}
+                {listsDocs ? (
+                  <Popover>
+                    <Popover.Trigger asChild>
+                      <Button icon={SvgFiles} prominence="tertiary" size="xs">
+                        {docsLabel}
+                      </Button>
+                    </Popover.Trigger>
+                    <FailedDocsPopoverContent
+                      ccPairId={ccPairId}
+                      indexAttemptId={run.attempt.id}
+                      canResolve={resolvable}
+                      onResolve={onResolve}
+                      resolving={resolving}
+                    />
+                  </Popover>
+                ) : run.kind === "checks" && listsChecks ? (
+                  <Popover>
+                    <Popover.Trigger asChild>
+                      <Button
+                        icon={WARNING_ICONS.checks}
+                        prominence="tertiary"
+                        size="xs"
+                      >
+                        {docsLabel}
+                      </Button>
+                    </Popover.Trigger>
+                    <CheckRunPopoverContent run={run.attempt} beside />
+                  </Popover>
+                ) : (
+                  warnings > 0 && (
+                    <Tag
+                      icon={WARNING_ICONS[run.kind]}
+                      title={docsLabel}
+                      color="gray"
+                    />
+                  )
+                )}
+              </Section>
+              {resolvable && resolvesRun ? (
+                <Dropdown>
+                  <Dropdown.Trigger asChild>
+                    <Button
+                      icon={SvgCheckAll}
+                      rightIcon={SvgChevronDown}
+                      prominence="tertiary"
+                      size="xs"
+                      disabled={resolving}
+                    >
+                      {t("actions.resolve")}
+                    </Button>
+                  </Dropdown.Trigger>
+                  <Dropdown.Data
+                    label={t("actions.resolve")}
+                    items={[
+                      {
+                        kind: "action",
+                        id: "reindex",
+                        icon: SvgRefreshCw,
+                        title: t("actions.reindex"),
+                        onSelect: () => onResolve(null),
+                      },
+                      {
+                        kind: "action",
+                        id: "resolve",
+                        icon: SvgCheckAll,
+                        title: t("actions.resolveWithoutReindex"),
+                        onSelect: onResolveRun,
+                      },
+                    ]}
+                  />
+                </Dropdown>
+              ) : resolvable ? (
+                <Button
+                  icon={SvgRefreshCw}
+                  prominence="tertiary"
+                  size="xs"
+                  disabled={resolving}
+                  onClick={() => onResolve(null)}
+                >
+                  {t("actions.reindex")}
+                </Button>
+              ) : (
+                resolvesRun && (
+                  <Button
+                    icon={SvgCheckAll}
+                    prominence="tertiary"
+                    size="xs"
+                    disabled={resolving}
+                    onClick={onResolveRun}
+                  >
+                    {t("actions.resolve")}
+                  </Button>
                 )
               )}
             </Section>
-            {resolvable && (
-              <Button
-                icon={SvgCheckAll}
-                prominence="tertiary"
-                size="xs"
-                disabled={resolving}
-                onClick={() => onResolve(null)}
-              >
-                {t("actions.resolve")}
-              </Button>
-            )}
-          </Section>
-        )}
-      </Section>
-    </Card>
+          )}
+        </Section>
+      </Card>
+    </Section>
   );
 }

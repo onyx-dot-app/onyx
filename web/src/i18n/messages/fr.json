@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "Échec de la réindexation ciblée : {message}",
         "targetedReindexSubmitted": "Réindexation ciblée envoyée pour {count, plural, one {# document} other {# documents}}. Les erreurs disparaîtront de la liste au fur et à mesure de la réindexation des documents.",
         "checkFrequencyUpdated": "Fréquence de vérification du connecteur mise à jour",
-        "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur"
+        "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "Tous les connecteurs"
@@ -2545,7 +2547,8 @@
           "failures": "Échecs",
           "errors": "Erreurs",
           "other": "Autres",
-          "resolved": "Résolues"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, one {# échec} other {# échecs}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
-          "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}"
+          "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "Afficher plus",
         "empty": {
           "title": "Aucun échec ni erreur",
-          "resolved": "Aucune erreur résolue",
           "filtered": "Rien ne correspond à cette recherche.",
           "failures": "Aucun échec",
           "errors": "Aucune erreur",
@@ -2658,7 +2661,9 @@
           "copy": "Copier la trace de la pile"
         },
         "actions": {
-          "resolve": "Résoudre"
+          "resolve": "Résoudre",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

@@ -184,6 +184,7 @@ def _runs(
         q=q,
         errors=errors,
         superseded=superseded,
+        resolved=None,
         user=user,
         db_session=db_session,
     )

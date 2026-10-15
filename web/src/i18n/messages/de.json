@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "Die gezielte Neuindizierung ist fehlgeschlagen: {message}",
         "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind.",
         "checkFrequencyUpdated": "Prüfintervall des Connectors erfolgreich aktualisiert",
-        "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden"
+        "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "Alle Konnektoren"
@@ -2545,7 +2547,8 @@
           "failures": "Fehlschläge",
           "errors": "Fehler",
           "other": "Sonstige",
-          "resolved": "Behoben"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, one {# Fehlschlag} other {# Fehlschläge}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
-          "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}"
+          "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "Mehr anzeigen",
         "empty": {
           "title": "Keine Fehlschläge oder Fehler",
-          "resolved": "Keine behobenen Fehler",
           "filtered": "Nichts passt zu dieser Suche.",
           "failures": "Keine Fehlschläge",
           "errors": "Keine Fehler",
@@ -2658,7 +2661,9 @@
           "copy": "Stacktrace kopieren"
         },
         "actions": {
-          "resolve": "Beheben"
+          "resolve": "Beheben",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

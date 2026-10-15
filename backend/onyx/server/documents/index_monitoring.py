@@ -407,6 +407,7 @@ def get_indexing_runs(
     q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
     errors: CCPairRunErrors | None = Query(None),
     superseded: bool | None = Query(None),
+    resolved: bool | None = Query(None),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -431,6 +432,7 @@ def get_indexing_runs(
         status_groups=groups,
         errors=errors,
         superseded=superseded,
+        resolved=resolved,
     )
     feed = fetch_run_feed(db_session, wanted, run_filter, page_num, page_size)
     page = feed.page
@@ -463,6 +465,7 @@ def get_indexing_runs(
             and connector_supports_targeted_reindex(
                 cc_pair.connector.source, cc_pair.connector.input_type
             ),
+            can_resolve_runs=may_submit and cc_pair.id in operate_ids,
         )
 
     return IndexingRunsResponse(

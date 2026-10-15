@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "定向重新索引失败：{message}",
         "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。",
         "checkFrequencyUpdated": "连接器检查频率已更新",
-        "checkFrequencyUpdateFailed": "无法更新连接器检查频率"
+        "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "所有连接器"
@@ -2545,7 +2547,8 @@
           "failures": "失败",
           "errors": "错误",
           "other": "其他",
-          "resolved": "已解决"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, other {# 次失败}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "resolvedDocs": "{count, plural, other {# 个文档已解决}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
-          "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}"
+          "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "显示更多",
         "empty": {
           "title": "没有失败或错误",
-          "resolved": "没有已解决的错误",
           "filtered": "没有与此搜索匹配的内容。",
           "failures": "没有失败",
           "errors": "没有错误",
@@ -2658,7 +2661,9 @@
           "copy": "复制堆栈跟踪"
         },
         "actions": {
-          "resolve": "解决"
+          "resolve": "解决",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

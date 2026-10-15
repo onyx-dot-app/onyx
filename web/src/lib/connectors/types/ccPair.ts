@@ -259,20 +259,27 @@ export interface CCPairHierarchyBreakdown {
 export type CCPairRunErrors = "unresolved" | "resolved" | "none";
 
 /** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
-export type CCPairRun =
-  | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
-  | {
-      kind: "doc_permission_sync";
-      time_created: string;
-      attempt: DocPermissionSyncAttemptSnapshot;
-    }
-  | {
-      kind: "group_sync";
-      time_created: string;
-      attempt: ExternalGroupSyncAttemptSnapshot;
-    }
-  | { kind: "pruning"; time_created: string; attempt: PruneRunSnapshot }
-  | { kind: "checks"; time_created: string; attempt: CheckRunSnapshot };
+/** When an admin resolved the run, on every run. A resolved run keeps its status. */
+interface CCPairRunResolution {
+  resolved_at: string | null;
+}
+
+export type CCPairRun = CCPairRunResolution &
+  (
+    | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
+    | {
+        kind: "doc_permission_sync";
+        time_created: string;
+        attempt: DocPermissionSyncAttemptSnapshot;
+      }
+    | {
+        kind: "group_sync";
+        time_created: string;
+        attempt: ExternalGroupSyncAttemptSnapshot;
+      }
+    | { kind: "pruning"; time_created: string; attempt: PruneRunSnapshot }
+    | { kind: "checks"; time_created: string; attempt: CheckRunSnapshot }
+  );
 
 /** Mirrors `CCPairRunsResponse`. `status_counts` ignores the status filter. */
 export interface CCPairRunsResponse {
@@ -296,6 +303,8 @@ export interface CCPairRunsQuery {
   errors: CCPairRunErrors | null;
   /** Leaves out (`false`) or keeps only (`true`) the failed runs a newer run of their kind followed. With `errors`, `true` keeps the runs either matches. */
   superseded: boolean | null;
+  /** Reads the runs an admin resolved the way `superseded` reads the superseded ones. */
+  resolved: boolean | null;
 }
 
 export interface IndexAttemptError {

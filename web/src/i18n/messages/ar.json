@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "فشلت إعادة الفهرسة الموجهة: {message}",
         "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات.",
         "checkFrequencyUpdated": "تم تحديث معدل فحص الموصّل بنجاح",
-        "checkFrequencyUpdateFailed": "فشل تحديث معدل فحص الموصّل"
+        "checkFrequencyUpdateFailed": "فشل تحديث معدل فحص الموصّل",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "كل الموصلات"
@@ -2545,7 +2547,8 @@
           "failures": "الإخفاقات",
           "errors": "الأخطاء",
           "other": "أخرى",
-          "resolved": "تم حلها"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, zero {لا إخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, zero {لم تفشل مزامنة أي مجموعة} one {فشلت مزامنة مجموعة واحدة} two {فشلت مزامنة مجموعتين} few {فشلت مزامنة # مجموعات} many {فشلت مزامنة # مجموعة} other {فشلت مزامنة # مجموعة}}",
           "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}",
           "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
-          "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
+          "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "عرض المزيد",
         "empty": {
           "title": "لا توجد إخفاقات أو أخطاء",
-          "resolved": "لا توجد أخطاء تم حلها",
           "filtered": "لا شيء يطابق هذا البحث.",
           "failures": "لا توجد إخفاقات",
           "errors": "لا توجد أخطاء",
@@ -2658,7 +2661,9 @@
           "copy": "نسخ تتبع المكدس"
         },
         "actions": {
-          "resolve": "حل"
+          "resolve": "حل",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

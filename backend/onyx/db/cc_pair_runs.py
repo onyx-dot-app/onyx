@@ -23,6 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 
+from onyx.db.cc_pair_run_resolution import run_is_resolved
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import (
     CapabilityCheckRunStatus,
@@ -112,24 +113,31 @@ def _narrowed(
     with_status_filter: bool,
     matches_errors: ColumnElement[bool] | None,
     has_newer_run: ColumnElement[bool],
+    is_resolved: ColumnElement[bool],
 ) -> Select:
     """Applies the filter's shared axes. ``matches_errors`` is the kind's
-    ``errors`` filter, and ``has_newer_run`` says a newer run of the kind
-    follows the run on the same history."""
+    ``errors`` filter, ``has_newer_run`` says a newer run of the kind
+    follows the run on the same history, and ``is_resolved`` says an admin
+    resolved the run."""
     failed = [
         s for s in statuses if _STATUS_GROUPS[s.value] is CCPairRunStatusGroup.FAILED
     ]
     superseded = and_(status.in_(failed), has_newer_run)
-    kept = matches_errors
-    match run_filter.superseded:
-        case True:
-            kept = superseded if kept is None else or_(kept, superseded)
-        case False:
-            kept = ~superseded if kept is None else and_(kept, ~superseded)
-        case None:
-            pass
-    if kept is not None:
-        stmt = stmt.where(kept)
+    # A True closed-item axis widens what ``errors`` keeps, a False one narrows it.
+    widened = [] if matches_errors is None else [matches_errors]
+    narrowed: list[ColumnElement[bool]] = []
+    for wanted, clause in (
+        (run_filter.superseded, superseded),
+        (run_filter.resolved, is_resolved),
+    ):
+        if wanted is True:
+            widened.append(clause)
+        elif wanted is False:
+            narrowed.append(~clause)
+    if widened:
+        stmt = stmt.where(or_(*widened))
+    if narrowed:
+        stmt = stmt.where(*narrowed)
     if run_filter.since is not None:
         stmt = stmt.where(time_created >= run_filter.since)
     if run_filter.error_query:
@@ -272,6 +280,7 @@ def _index_attempt_runs(
         with_status_filter,
         matches_errors,
         has_newer_run,
+        run_is_resolved(CCPairRunKind.INDEXING, IndexAttempt.id),
     )
 
 
@@ -318,6 +327,7 @@ def _doc_permission_sync_runs(
         with_status_filter,
         matches_errors,
         has_newer_run,
+        run_is_resolved(CCPairRunKind.DOC_PERMISSION_SYNC, DocPermissionSyncAttempt.id),
     )
 
 
@@ -338,6 +348,9 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
         with_status_filter,
         _no_item_errors(run_filter),
         _group_sync_has_newer_run(run_filter),
+        run_is_resolved(
+            CCPairRunKind.GROUP_SYNC, ExternalGroupPermissionSyncAttempt.id
+        ),
     )
 
 
@@ -365,6 +378,7 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         with_status_filter,
         _no_item_errors(run_filter),
         has_newer_run,
+        run_is_resolved(CCPairRunKind.PRUNING, SyncRecord.id),
     )
 
 
@@ -421,6 +435,7 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         with_status_filter,
         _no_item_errors(run_filter),
         has_newer_run,
+        run_is_resolved(CCPairRunKind.CHECKS, CapabilityCheckRun.id),
     )
 
 
@@ -525,6 +540,62 @@ def get_cc_pair_run_page(
         prune_runs=prune_runs,
         check_runs=check_runs,
     )
+
+
+def _id_and_pair_columns(
+    kind: CCPairRunKind,
+) -> tuple[
+    InstrumentedAttribute[int],
+    InstrumentedAttribute[int] | InstrumentedAttribute[int | None],
+]:
+    match kind:
+        case CCPairRunKind.INDEXING:
+            return IndexAttempt.id, IndexAttempt.connector_credential_pair_id
+        case CCPairRunKind.DOC_PERMISSION_SYNC:
+            return (
+                DocPermissionSyncAttempt.id,
+                DocPermissionSyncAttempt.connector_credential_pair_id,
+            )
+        case CCPairRunKind.GROUP_SYNC:
+            return (
+                ExternalGroupPermissionSyncAttempt.id,
+                ExternalGroupPermissionSyncAttempt.connector_credential_pair_id,
+            )
+        case CCPairRunKind.PRUNING:
+            return SyncRecord.id, SyncRecord.entity_id
+        case CCPairRunKind.CHECKS:
+            # The check runs' query joins the pair on credential and connector.
+            return CapabilityCheckRun.id, ConnectorCredentialPair.id
+
+
+def get_resolvable_runs(
+    db_session: Session,
+    kinds: list[CCPairRunKind],
+    run_filter: CCPairRunFilter,
+    runs: list[tuple[CCPairRunKind, int]],
+) -> dict[tuple[CCPairRunKind, int], int]:
+    """The runs among ``runs`` in the feed of ``kinds`` that failed or hold
+    open errors, each with the pair it ran on. Only those have something to
+    resolve."""
+    found: dict[tuple[CCPairRunKind, int], int] = {}
+    open_items = (
+        run_filter.model_copy(update={"status_groups": {CCPairRunStatusGroup.FAILED}}),
+        run_filter.model_copy(update={"errors": CCPairRunErrors.UNRESOLVED}),
+    )
+    for kind in kinds:
+        ids = [run_id for run_kind, run_id in runs if run_kind == kind]
+        if not ids:
+            continue
+        run_id, pair_id = _id_and_pair_columns(kind)
+        for narrowed in open_items:
+            stmt = (
+                _runs_of_kind(kind, narrowed, True)
+                .with_only_columns(run_id, pair_id)
+                .where(run_id.in_(ids))
+            )
+            for found_id, found_pair in db_session.execute(stmt).all():
+                found[(kind, found_id)] = found_pair
+    return found
 
 
 def _status_column(kind: CCPairRunKind) -> InstrumentedAttribute:

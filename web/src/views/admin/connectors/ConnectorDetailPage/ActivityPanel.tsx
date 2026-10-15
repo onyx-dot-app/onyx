@@ -18,7 +18,7 @@ import { CardLoader } from "@opal/loaders";
 import {
   SvgActivity,
   SvgAlertTriangle,
-  SvgEyeClosed,
+  SvgEye,
   SvgFold,
   SvgXCircle,
 } from "@opal/icons";
@@ -41,7 +41,7 @@ import {
 
 const LOADER_ROWS = 2;
 
-/** Which groups the filter shows. "all" leaves out the resolved runs. */
+/** Which levels the filter shows. */
 type Shown = "all" | ActivityGroup;
 
 export interface ActivityCountTagsProps {
@@ -77,23 +77,38 @@ interface GroupListProps {
   state: ActivityGroupState;
   resolving: boolean;
   onResolve: (item: ActivityItem, errorIds: number[] | null) => void;
+  onResolveRun: (item: ActivityItem) => void;
 }
-function GroupList({ state, resolving, onResolve }: GroupListProps) {
+function GroupList({
+  state,
+  resolving,
+  onResolve,
+  onResolveRun,
+}: GroupListProps) {
   const t = useTranslations("admin.connector.activity");
   if (state.runs.length === 0) return null;
   return (
     <Section alignItems="stretch" gap={1} height="fit">
-      <Divider title={t(`groups.${state.group}`, { count: state.total })} />
+      <Divider
+        title={
+          state.closed
+            ? t("groups.resolved", { count: state.total })
+            : t(`groups.${state.group}`, { count: state.total })
+        }
+      />
       {state.runs.map((item) => (
         <ActivityCard
           key={`${item.run.kind}-${item.run.attempt.id}`}
           ccPairId={item.ccPairId}
           run={item.run}
           group={state.group}
+          closed={state.closed}
           connector={item.connector}
           canResolve={item.canResolve}
+          canResolveRuns={item.canResolveRuns}
           resolving={resolving}
           onResolve={(errorIds) => onResolve(item, errorIds)}
+          onResolveRun={() => onResolveRun(item)}
         />
       ))}
       {state.hasMore && (
@@ -117,7 +132,7 @@ export interface ActivityPanelProps {
   className?: string;
 }
 
-/** The scope's failed runs and runs with document errors, newest first, with the resolved ones a filter away, and every other run too for the fleet. */
+/** The scope's failed runs and runs with document errors, newest first, with each level's resolved runs a toggle away, and every other run too for the fleet. */
 export default function ActivityPanel({
   scope,
   title,
@@ -129,41 +144,60 @@ export default function ActivityPanel({
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   const [shown, setShown] = useState<Shown>("all");
-  const { resolving, resolve } = useResolveRunErrors();
+  // Adds the resolved and superseded runs of the levels shown.
+  const [showResolved, setShowResolved] = useState(false);
+  const { resolving, resolve, resolveRun } = useResolveRunErrors();
   // The fleet panel lists every run. A pair's page has its run list for that.
   const shownOptions: Shown[] =
     scope === "fleet"
-      ? ["all", "failures", "errors", "other", "resolved"]
-      : ["all", "failures", "errors", "resolved"];
+      ? ["all", "failures", "errors", "other"]
+      : ["all", "failures", "errors"];
   const isShown = (group: ActivityGroup) =>
-    shownOptions.includes(group) &&
-    (shown === "all" ? group !== "resolved" : shown === group);
+    shownOptions.includes(group) && (shown === "all" || shown === group);
 
   // The failures and errors totals head the panel, so both always poll.
   const failures = useActivityItems(
     scope,
     "failures",
+    false,
     search,
     true,
     RUNS_POLL_MS
   );
-  const errors = useActivityItems(scope, "errors", search, true, RUNS_POLL_MS);
+  const closedFailures = useActivityItems(
+    scope,
+    "failures",
+    true,
+    search,
+    showResolved && isShown("failures"),
+    RUNS_POLL_MS
+  );
+  const errors = useActivityItems(
+    scope,
+    "errors",
+    false,
+    search,
+    true,
+    RUNS_POLL_MS
+  );
+  const closedErrors = useActivityItems(
+    scope,
+    "errors",
+    true,
+    search,
+    showResolved && isShown("errors"),
+    RUNS_POLL_MS
+  );
   const other = useActivityItems(
     scope,
     "other",
+    false,
     search,
     isShown("other"),
     RUNS_POLL_MS
   );
-  const resolvedRuns = useActivityItems(
-    scope,
-    "resolved",
-    search,
-    isShown("resolved"),
-    RUNS_POLL_MS
-  );
-  const groups = [failures, errors, other, resolvedRuns].filter((group) =>
-    isShown(group.group)
+  const groups = [failures, closedFailures, errors, closedErrors, other].filter(
+    (group) => isShown(group.group) && (showResolved || !group.closed)
   );
   const loading = groups.some((group) => group.isLoading && !group.loaded);
   const failed = groups.some((group) => group.failed);
@@ -256,10 +290,17 @@ export default function ActivityPanel({
                 <Dropdown.Trigger asChild>
                   <FilterButton
                     icon={SvgActivity}
-                    active={shown !== "all"}
-                    onClear={() => setShown("all")}
+                    active={shown !== "all" || showResolved}
+                    onClear={() => {
+                      setShown("all");
+                      setShowResolved(false);
+                    }}
                   >
-                    {t(`filter.${shown}`)}
+                    {showResolved
+                      ? t("filter.withResolved", {
+                          level: t(`filter.${shown}`),
+                        })
+                      : t(`filter.${shown}`)}
                   </FilterButton>
                 </Dropdown.Trigger>
                 <Dropdown.Data
@@ -272,12 +313,21 @@ export default function ActivityPanel({
                       ) ?? "all"
                     )
                   }
-                  items={shownOptions.map((candidate) => ({
-                    kind: "option" as const,
-                    value: candidate,
-                    icon: candidate === "resolved" ? SvgEyeClosed : undefined,
-                    title: t(`filter.${candidate}`),
-                  }))}
+                  items={[
+                    ...shownOptions.map((candidate) => ({
+                      kind: "option" as const,
+                      value: candidate,
+                      title: t(`filter.${candidate}`),
+                    })),
+                    {
+                      kind: "toggle" as const,
+                      id: "show-resolved",
+                      icon: SvgEye,
+                      title: t("filter.showResolved"),
+                      checked: showResolved,
+                      onCheckedChange: setShowResolved,
+                    },
+                  ]}
                 />
               </Dropdown>
             </Section>
@@ -302,10 +352,11 @@ export default function ActivityPanel({
           ) : (
             groups.map((group) => (
               <GroupList
-                key={group.group}
+                key={`${group.group}-${group.closed}`}
                 state={group}
                 resolving={resolving}
                 onResolve={(item, errorIds) => void resolve(item, errorIds)}
+                onResolveRun={(item) => void resolveRun(item)}
               />
             ))
           )}

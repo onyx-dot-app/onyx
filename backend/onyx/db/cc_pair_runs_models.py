@@ -20,7 +20,8 @@ class CCPairRunFilter(BaseModel):
     sources, since such a source logs its one sync against whichever pair ran it.
     A failed run is superseded once a newer run of its kind follows it on the
     same history. ``superseded`` False leaves those runs out, True keeps only
-    them, or adds them to what ``errors`` keeps, as both are closed items."""
+    them, or adds them to what ``errors`` keeps, as both are closed items.
+    ``resolved`` reads the runs an admin resolved the same way."""
 
     cc_pair_ids: list[int]
     source: DocumentSource | None
@@ -30,6 +31,7 @@ class CCPairRunFilter(BaseModel):
     status_groups: set[CCPairRunStatusGroup] | None
     errors: CCPairRunErrors | None
     superseded: bool | None
+    resolved: bool | None = None
 
 
 class CCPairRunPage(BaseModel):

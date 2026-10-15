@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "Falha na reindexação direcionada: {message}",
         "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados.",
         "checkFrequencyUpdated": "Frequência de verificação do conector atualizada com sucesso",
-        "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector"
+        "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "Todos os conectores"
@@ -2545,7 +2547,8 @@
           "failures": "Falhas",
           "errors": "Erros",
           "other": "Outros",
-          "resolved": "Resolvidos"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, one {# falha} other {# falhas}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
-          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}"
+          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "Mostrar mais",
         "empty": {
           "title": "Sem falhas ou erros",
-          "resolved": "Sem erros resolvidos",
           "filtered": "Nada corresponde a esta pesquisa.",
           "failures": "Sem falhas",
           "errors": "Sem erros",
@@ -2658,7 +2661,9 @@
           "copy": "Copiar o rastreamento de pilha"
         },
         "actions": {
-          "resolve": "Resolver"
+          "resolve": "Resolver",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

@@ -115,6 +115,7 @@ export default function RunsCard({
     q: search,
     errors: null,
     superseded: null,
+    resolved: null,
   });
   const { data, error, isLoading } = useSWR<CCPairRunsResponse>(
     key,

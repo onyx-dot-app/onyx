@@ -1,5 +1,8 @@
 import type { ErrorResponseBody } from "@/lib/fetcher";
-import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
+import {
+  ConnectorCredentialPairStatus,
+  type CCPairRunKind,
+} from "@/lib/connectors/types";
 import { toast } from "@opal/layouts";
 
 export async function setCCPairStatus(
@@ -57,3 +60,22 @@ export const getCCPairStatusMessage = (
   }
   return undefined;
 };
+
+/** Marks these runs of the pair resolved. They keep their status; the feeds move them out of the open failures and errors. */
+export async function resolveCCPairRuns(
+  ccPairId: number,
+  runs: { kind: CCPairRunKind; attempt_id: number }[]
+): Promise<void> {
+  const response = await fetch(
+    `/api/manage/admin/cc-pair/${ccPairId}/runs/resolve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runs }),
+    }
+  );
+  if (!response.ok) {
+    const { detail }: ErrorResponseBody = await response.json();
+    throw new Error(detail);
+  }
+}

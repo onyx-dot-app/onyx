@@ -7,6 +7,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
+from onyx.db.cc_pair_run_resolution import get_resolution_times
 from onyx.db.cc_pair_runs import (
     count_cc_pair_runs_by_status_group,
     get_cc_pair_run_page,
@@ -111,12 +112,15 @@ def fetch_run_feed(
     open_counts = get_open_doc_error_counts_for_index_attempts(
         db_session, list(page.index_attempts)
     )
+    resolved_at = get_resolution_times(db_session, page.order)
     status_counts = count_cc_pair_runs_by_status_group(db_session, kinds, run_filter)
     groups = run_filter.status_groups
     return RunFeed(
         page=page,
         items=[
-            run_item(kind, run_id, page, error_counts, open_counts)
+            run_item(kind, run_id, page, error_counts, open_counts).model_copy(
+                update={"resolved_at": resolved_at.get((kind, run_id))}
+            )
             for kind, run_id in page.order
         ],
         total_items=sum(

@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "Falló la reindexación selectiva: {message}",
         "targetedReindexSubmitted": "Se envió la reindexación selectiva de {count, plural, one {# documento} other {# documentos}}. Los errores desaparecerán de la lista a medida que los documentos terminen de reindexarse.",
         "checkFrequencyUpdated": "Frecuencia de comprobación del conector actualizada correctamente",
-        "checkFrequencyUpdateFailed": "No se pudo actualizar la frecuencia de comprobación del conector"
+        "checkFrequencyUpdateFailed": "No se pudo actualizar la frecuencia de comprobación del conector",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "Todos los conectores"
@@ -2545,7 +2547,8 @@
           "failures": "Fallos",
           "errors": "Errores",
           "other": "Otros",
-          "resolved": "Resueltos"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, one {# fallo} other {# fallos}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, one {# grupo no se sincronizó} other {# grupos no se sincronizaron}}",
           "resolvedDocs": "{count, plural, one {# documento resuelto} other {# documentos resueltos}}",
           "pruning": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
-          "checks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}"
+          "checks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "Mostrar más",
         "empty": {
           "title": "Sin fallos ni errores",
-          "resolved": "Sin errores resueltos",
           "filtered": "Nada coincide con esta búsqueda.",
           "failures": "Sin fallos",
           "errors": "Sin errores",
@@ -2658,7 +2661,9 @@
           "copy": "Copiar el seguimiento de pila"
         },
         "actions": {
-          "resolve": "Resolver"
+          "resolve": "Resolver",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

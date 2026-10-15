@@ -2348,7 +2348,9 @@
         "targetedReindexFailed": "대상 지정 재인덱싱에 실패했습니다: {message}",
         "targetedReindexSubmitted": "{count, plural, one {문서 #개} other {문서 #개}}에 대해 대상 지정 재인덱싱을 요청했습니다. 문서의 재인덱싱이 끝나면 목록에서 오류가 사라집니다.",
         "checkFrequencyUpdated": "커넥터 검사 주기가 업데이트되었습니다",
-        "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다"
+        "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}"
       },
       "backButton": {
         "label": "모든 커넥터"
@@ -2545,7 +2547,8 @@
           "failures": "실패",
           "errors": "오류",
           "other": "기타",
-          "resolved": "해결됨"
+          "showResolved": "Show resolved",
+          "withResolved": "{level}, with resolved"
         },
         "groups": {
           "failures": "{count, plural, other {실패 #개}}",
@@ -2625,12 +2628,12 @@
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
-          "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}"
+          "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
+          "resolvedOn": "Resolved {date}"
         },
         "more": "더 보기",
         "empty": {
           "title": "실패나 오류가 없습니다",
-          "resolved": "해결된 오류가 없습니다",
           "filtered": "이 검색과 일치하는 항목이 없습니다.",
           "failures": "실패가 없습니다",
           "errors": "오류가 없습니다",
@@ -2658,7 +2661,9 @@
           "copy": "스택 트레이스 복사"
         },
         "actions": {
-          "resolve": "해결"
+          "resolve": "해결",
+          "reindex": "Reindex failed docs",
+          "resolveWithoutReindex": "Resolve without reindex"
         }
       },
       "stageDetails": {

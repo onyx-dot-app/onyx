@@ -28,6 +28,9 @@ function runsQueryParams(query: CCPairRunsQuery): string {
   if (query.superseded !== null) {
     params.set("superseded", String(query.superseded));
   }
+  if (query.resolved !== null) {
+    params.set("resolved", String(query.resolved));
+  }
   return params.toString();
 }
 
