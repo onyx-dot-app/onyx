@@ -24,7 +24,7 @@ from onyx.tools.constants import SEARCH_TOOL_ID
 @contextmanager
 def public_search_dependencies(primary: MagicMock) -> Iterator[MagicMock]:
     tool = MagicMock()
-    tool.run.return_value.llm_facing_response = json.dumps({"results": []})
+    tool.search.return_value.text = json.dumps({"results": []})
     with (
         patch.multiple(
             api,

@@ -149,6 +149,9 @@ Checkpoint bindings identify the tenant and response. Saved progress uses the ru
 | `current_alternate_model` | |
 | `slack_thread_id` | |
 | `project_id` | FK to `user_project`. |
+| `spawned_by_message_id` | Nullable owning response. Deleting that message cascades through the child session and its messages. |
+| `agent_name` | Nullable child-agent name. |
+| `restoration_config` | Nullable JSONB configuration for restoring the child agent. |
 | `llm_override`, `temperature_override`, `reasoning_effort_override`, `prompt_override` | Per-session overrides; take precedence over the persona but are outranked by per-request overrides. |
 | `time_created`, `time_updated` | |
 
@@ -168,6 +171,9 @@ separate share-link table.
 | `last_summarized_message_id` | Set on a compression-summary message; the last original message it replaces. |
 | `preferred_response_id` | User-message-only: which assistant child (of a multi-model turn) was chosen. `set_preferred_response` (`db/chat.py`) writes this and also advances `latest_child_message_id`. |
 | `model_display_name` | Assistant-message-only, which model produced this row. |
+| `response_status` | Nullable execution status for the whole response. |
+| `response_failure` | Nullable JSONB failure details for the response. |
+| `invoking_tool_call_id` | Nullable tool invocation that supplied a child input. This provenance link uses deferred NO ACTION on deletion. |
 | `request_params` | Requested reasoning effort plus the actual provider kwargs. Attribution, not content: kept even when `persist_content=False` (`backend/onyx/db/chat_response.py:save_chat_turn`). |
 | `reasoning_tokens` | See §5, reasoning attaches forward. |
 | `message` | Text. Blank string for a content-free incognito row. |
@@ -190,7 +196,8 @@ separate share-link table.
 | `parent_tool_call_id` | Optional display nesting under the tool that invoked the child. It does not replace canonical response ownership. |
 | `turn_number` | SDK step index within the owning response. Calls in one step can execute in parallel. Legacy rows retain their display grouping. |
 | `tab_index` | Ordering within a parallel group, for UI tabs. |
-| `tool_id` | Not a FK; deleting the `Tool` row does not cascade here. |
+| `tool_id` | Nullable for runtime operations without a catalog tool. Not a FK; deleting a catalog tool preserves history. |
+| `operation_status` | Nullable execution status for this tool call. |
 | `tool_call_id` | The provider-facing call id string (must round-trip to the LLM). |
 | `reasoning_tokens` | The reasoning that preceded this call. See §5. |
 | `tool_call_arguments` | JSONB. For a sub-agent, this is the agent's task/instructions. |
@@ -236,6 +243,8 @@ snapshot.
 ```
 ChatSession
   └─< ChatMessage (parent_message_id → self, tree)
+        ├─< ChatSession (spawned_by_message_id)    owns child session; CASCADE
+        ├── invoking_tool_call_id → ToolCall      child input provenance; deferred NO ACTION
         ├─< ChatResponseItem                     model generations
         ├── ChatResponseCheckpoint               suspended execution progress
         ├─< ToolCall (parent_chat_message_id)      results and execution status
@@ -245,6 +254,10 @@ ChatSession
         ├─< ChatMessageFeedback
         └─< DocumentRetrievalFeedback
 ```
+
+The owning response controls child-session deletion. Removing only its invoking tool fails at commit while child inputs reference it.
+Deleting the owning response or session removes the complete child subtree.
+The invocation constraint checks at commit, after all ownership cascades finish.
 
 ### The message tree
 
