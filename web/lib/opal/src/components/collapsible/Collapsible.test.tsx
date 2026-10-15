@@ -116,4 +116,25 @@ describe("Collapsible parts", () => {
     await user.click(disabledTrigger);
     expect(disabledTrigger).toHaveAttribute("aria-expanded", "false");
   });
+
+  it("runs no click handler on a disabled asChild trigger", async () => {
+    const user = userEvent.setup();
+    const onTriggerClick = jest.fn();
+    const onChildClick = jest.fn();
+    render(
+      <Collapsible.Root disabled>
+        <Collapsible.Trigger asChild onClick={onTriggerClick}>
+          <div role="button" tabIndex={0} onClick={onChildClick}>
+            Toggle
+          </div>
+        </Collapsible.Trigger>
+        <Collapsible.Content>Body</Collapsible.Content>
+      </Collapsible.Root>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Toggle" }));
+    expect(onTriggerClick).not.toHaveBeenCalled();
+    expect(onChildClick).not.toHaveBeenCalled();
+    expect(screen.queryByText("Body")).not.toBeInTheDocument();
+  });
 });

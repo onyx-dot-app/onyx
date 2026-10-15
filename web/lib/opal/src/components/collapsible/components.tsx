@@ -239,6 +239,7 @@ type CollapsibleTriggerProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 function CollapsibleTrigger({
   asChild = false,
   onClick,
+  onClickCapture,
   ...props
 }: CollapsibleTriggerProps) {
   const { open, disabled, toggle, contentId } =
@@ -256,7 +257,18 @@ function CollapsibleTrigger({
       aria-controls={contentId}
       data-state={open ? "open" : "closed"}
       data-disabled={disabled || undefined}
+      // A disabled native button gets no clicks. Another element does, so
+      // the click stops here, before any handler on it or its child runs.
+      onClickCapture={(event: React.MouseEvent<HTMLButtonElement>) => {
+        if (disabled) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        onClickCapture?.(event);
+      }}
       onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
+        if (disabled) return;
         onClick?.(event);
         if (!event.defaultPrevented) toggle();
       }}
