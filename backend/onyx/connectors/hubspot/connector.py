@@ -981,9 +981,13 @@ class HubSpotConnector(
                 )
             return
 
-        # The batch read leaves out ids that are deleted, archived or unreadable.
+        # The batch read leaves out ids that are deleted or unreadable. A merged
+        # record comes back under its new id, which the crawl indexes on its own.
+        # The crawl lists no archived records, so none is indexed here either.
         found: dict[str, HubSpotRecord] = {
-            record.id: record for record in records if record.id in document_ids
+            record.id: record
+            for record in records
+            if record.id in document_ids and not record.archived
         }
         viewers: dict[str, set[int]] = {}
         viewer_errors: dict[str, Exception] = {}
