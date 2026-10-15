@@ -154,6 +154,14 @@ SEARCH_FOLDER_TYPE = "#microsoft.graph.mailSearchFolder"
 # carry this always-true bound to be allowed ``$orderby=receivedDateTime desc``.
 EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
 
+# MAPI ids of a folder's entry id and of an item's parent folder. Graph hides
+# which calendar an event sits in from app-only callers, so the two are compared.
+FOLDER_ENTRY_ID_PROPERTY = "Binary 0x0FFF"
+PARENT_ENTRY_ID_PROPERTY = "Binary 0x0E09"
+# Pages a conversation lookup reads before it stops: the conversations named
+# so far are found, any others are reported as not held.
+CONVERSATION_LOOKUP_PAGE_LIMIT = 20
+
 # Graph may answer a collection request with an empty page and a next link.
 # Lookups that want a single item follow at most this many of them.
 EMPTY_PAGE_FOLLOW_LIMIT = 20
@@ -351,6 +359,17 @@ def _parse_attachment(raw: dict[str, Any]) -> OutlookAttachment:
         is_inline=bool(raw.get("isInline")),
         is_file=raw.get("@odata.type") == FILE_ATTACHMENT_TYPE,
     )
+
+
+def _expand_property(property_id: str) -> str:
+    return f"singleValueExtendedProperties($filter=id eq '{property_id}')"
+
+
+def _expanded_property(raw: dict[str, Any]) -> str | None:
+    """The value of the one extended property ``_expand_property`` asked for.
+    Graph writes its id back in its own spelling, so it is not matched."""
+    props = raw.get("singleValueExtendedProperties") or []
+    return props[0].get("value") if props else None
 
 
 def _graph_timestamp(moment: datetime) -> str:
@@ -786,6 +805,35 @@ class OutlookSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs an event id, which only the calendar walk produces. The "
+            "calendar check reads the same calendar under the same grant."
+        ),
+    )
+    def get_default_calendar_event(
+        self, *, mailbox_id: str, event_id: str
+    ) -> OutlookEvent | None:
+        """One event by id when it sits in the mailbox's default calendar, the
+        one the calendar walk reads. None for an event in another calendar."""
+        calendar = self._get(
+            f"{self._user_url(mailbox_id)}/calendar",
+            {"$select": "id", "$expand": _expand_property(FOLDER_ENTRY_ID_PROPERTY)},
+        )
+        raw = self._get(
+            # The id comes from a stored document id, so it is kept to one segment.
+            f"{self._user_url(mailbox_id)}/events/{quote(event_id, safe='')}",
+            {"$expand": _expand_property(PARENT_ENTRY_ID_PROPERTY)},
+            {"Prefer": EVENT_PREFERENCES},
+        )
+        calendar_entry_id = _expanded_property(calendar)
+        parent_entry_id = _expanded_property(raw)
+        if calendar_entry_id is None or parent_entry_id != calendar_entry_id:
+            return None
+        return _parse_event(raw)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
     )
     def list_message_attachments(
         self, *, mailbox_id: str, message_id: str, limit: int
@@ -959,3 +1007,59 @@ class OutlookSourceOperations(SourceOperations):
             messages=[_parse_message(raw) for raw in data.get("value", [])],
             next_link=data.get("@odata.nextLink"),
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Reads one message's conversation id on the mailbox-wide route the "
+            "mail-read check proves with read_any_message."
+        ),
+    )
+    def sample_conversation_id(self, *, mailbox_id: str) -> str | None:
+        """The conversation id of any message in the mailbox, None when it
+        holds none. Every conversation id of a mailbox shares its prefix."""
+        raw = self._first_item(
+            f"{self._user_url(mailbox_id)}/messages",
+            {"$select": "conversationId", "$top": "1"},
+        )
+        return raw.get("conversationId") if raw else None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs conversation ids, which only the delta walk produces. The "
+            "mail-read check proves the mailbox-wide route."
+        ),
+    )
+    def held_conversation_ids(
+        self, *, mailbox_id: str, conversation_ids: list[str]
+    ) -> set[str]:
+        """Which of the conversations have a message in the mailbox, read in
+        one filtered listing of conversation ids only."""
+        wanted = set(conversation_ids)
+        if not wanted:
+            return set()
+        url: str | None = f"{self._user_url(mailbox_id)}/messages"
+        params: dict[str, str] | None = {
+            "$filter": " or ".join(
+                f"conversationId eq '{_odata_quote(conversation_id)}'"
+                for conversation_id in sorted(wanted)
+            ),
+            "$select": "conversationId",
+            "$top": str(MESSAGES_PAGE_SIZE),
+        }
+        held: set[str] = set()
+        for _ in range(CONVERSATION_LOOKUP_PAGE_LIMIT):
+            if url is None or held >= wanted:
+                break
+            data = self._get(url, params)
+            params = None
+            held.update(
+                raw["conversationId"]
+                for raw in data.get("value", [])
+                if raw.get("conversationId") in wanted
+            )
+            url = data.get("@odata.nextLink")
+        return held
