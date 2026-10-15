@@ -423,7 +423,12 @@ matches exactly and whose status `should_reuse_checkpoint()` (`FAILED`, `CANCELE
 or `INTERRUPTED`, but not a successful terminal state, which always starts a fresh
 window), then loads that attempt's checkpoint blob. If 50 consecutive attempts made
 no progress at all, the checkpoint is discarded and the run starts from scratch
-rather than replaying a permanently stuck cursor.
+rather than replaying a permanently stuck cursor. The lookback, and the "most
+recent attempt" whose poll window a new attempt reuses, skip attempts with no
+`poll_range_end` (`get_recent_completed_attempts_for_cc_pair`). Such an attempt
+ended before docfetching set its window, for example one cancelled by a pause
+right after the scheduler created it. Without the skip, the next attempt takes a
+fresh window, finds no matching checkpoint and deletes the leftover batches.
 
 Checkpointing tracks **which batches were sent to the file store**, not which
 batches finished processing (`run_docfetching.py` comment, verified in source). A
