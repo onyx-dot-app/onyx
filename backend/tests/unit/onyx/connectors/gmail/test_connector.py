@@ -16,7 +16,14 @@ from onyx.connectors.gmail.connector import (
     _build_time_range_query,
     thread_to_document,
 )
-from onyx.connectors.models import Document, SlimDocument, TextSection
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
@@ -359,3 +366,60 @@ def test_slim_listing_fails_after_the_page_limit(
             {"user1@example.com": pages},
             [],
         )
+
+
+def _reindex_with_thread_labels(
+    labels_per_message: list[list[str]],
+) -> list[Document | ConnectorFailure | HierarchyNode]:
+    """Reindex the fixture thread, with these labels on its messages."""
+    json_path = os.path.join(os.path.dirname(__file__), "thread.json")
+    with open(json_path, "r") as f:
+        thread = cast(dict[str, Any], json.load(f))
+    for message, labels in zip(thread["messages"], labels_per_message, strict=True):
+        message["labelIds"] = labels
+
+    connector = GmailConnector()
+    connector._creds = MagicMock()
+    connector._primary_admin_email = "admin@example.com"
+    failure = ConnectorFailure(
+        failed_document=DocumentFailure(document_id=thread["id"]),
+        failure_message="synthetic",
+    )
+    with (
+        patch.object(
+            connector, "_get_all_user_emails", return_value=["admin@example.com"]
+        ),
+        patch.object(gmail_connector_module, "get_gmail_service"),
+        patch.object(
+            gmail_connector_module,
+            "_batch_get_threads",
+            return_value=({thread["id"]: thread}, {}),
+        ),
+    ):
+        return list(connector.reindex([failure]))
+
+
+def test_reindex_skips_thread_the_crawl_does_not_list() -> None:
+    # threads.list leaves out threads whose messages are all in Spam or Trash.
+    results = _reindex_with_thread_labels([["TRASH"], ["SPAM"], ["TRASH"], ["TRASH"]])
+
+    assert len(results) == 1
+    failure = results[0]
+    assert isinstance(failure, ConnectorFailure)
+    assert failure.failed_document is not None
+    assert failure.failed_document.document_id == "192edefb315737c3"
+    assert "Spam or Trash" in failure.failure_message
+
+
+def test_reindex_matches_crawl_document_for_listed_thread() -> None:
+    results = _reindex_with_thread_labels([["TRASH"], ["INBOX"], ["SENT"], ["INBOX"]])
+
+    assert len(results) == 1
+    doc = results[0]
+    assert isinstance(doc, Document)
+    assert doc.id == "192edefb315737c3"
+    # The crawl does not fetch labels, so they must not reach the document.
+    assert all(
+        isinstance(section, TextSection) and "labels:" not in section.text
+        for section in doc.sections
+    )
