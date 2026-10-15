@@ -103,6 +103,16 @@ def parse_csv_stream(lines: Iterable[str]) -> Iterator[ParsedRow]:
         yield ParsedRow(header=header, row=row)
 
 
+def read_csv_rows(lines: Iterable[str]) -> Iterator[list[str]]:
+    """Stream the raw rows of a CSV line source, header row included and
+    nothing paired up, for callers that do their own header detection.
+
+    Importing this module is also what raises the csv field size limit, so read
+    CSVs through here rather than calling `csv.reader` directly.
+    """
+    yield from csv.reader(lines)
+
+
 def parse_csv_string(csv_text: str) -> Generator[ParsedRow, None, None]:
     """Yield each data row paired with its header from a CSV string.
 
