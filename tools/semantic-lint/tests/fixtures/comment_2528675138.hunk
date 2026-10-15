@@ -1,0 +1,87 @@
+@@ -379,18 +503,99 @@ def slack_retrieval(
+     query: SearchQuery,
+     access_token: str,
+     db_session: Session,
++    connector: FederatedConnectorDetail | None = None,
++    entities: dict[str, Any] | None = None,
+     limit: int | None = None,
+     slack_event_context: SlackContext | None = None,
+     bot_token: str | None = None,  # Add bot token parameter
++    team_id: str | None = None,
+ ) -> list[InferenceChunk]:
+-    # query slack
++    """
++    Main entry point for Slack federated search with entity filtering.
++
++    Applies entity filtering including:
++    - Channel selection and exclusion
++    - Date range extraction and enforcement
++    - DM/private channel filtering
++    - Multi-layer caching
++
++    Args:
++        query: Search query object
++        access_token: User OAuth access token
++        db_session: Database session
++        connector: Federated connector detail (unused, kept for backwards compat)
++        entities: Connector-level config (entity filtering configuration)
++        limit: Maximum number of results
++        slack_event_context: Context when called from Slack bot
++        bot_token: Bot token for enhanced permissions
++        team_id: Slack team/workspace ID
++
++    Returns:
++        List of InferenceChunk objects
++    """
++    # Use connector-level config
++    entities = entities or {}
++
++    if not entities:
++        logger.info("No entity configuration found, using defaults")
++    else:
++        logger.info(f"Using entity configuration: {entities}")
++
++    # Extract limit from entity config if not explicitly provided
++    query_limit = limit
++    if entities:
++        try:
++            parsed_entities = SlackEntities(**entities)
++            if limit is None:
++                query_limit = parsed_entities.max_messages_per_query
++                logger.info(f"Using max_messages_per_query from config: {query_limit}")
++        except Exception as e:
++            logger.warning(f"Error parsing entities for limit: {e}")
++            if limit is None:
++                query_limit = 100  # Fallback default
++    elif limit is None:
++        query_limit = 100  # Default when no entities and no limit provided
++
++    # Pre-fetch channel metadata AND available channels to avoid cache misses in parallel searches
++    # Store in memory to pass down and avoid Redis cache issues
++    available_channels = None
++    channel_metadata_dict = None
++    if team_id:
++        # Always fetch all channel types (include_private=True) to ensure single cache entry
++        channel_metadata_dict = fetch_and_cache_channel_metadata(
++            access_token, team_id, include_private=True
++        )
++
++        # Pre-fetch available channels list if needed for pattern matching
++        # Use the already-fetched metadata to avoid another cache lookup
++        if entities and channel_metadata_dict:
++            try:
++                parsed_entities = SlackEntities(**entities)
++                if parsed_entities.exclude_channels or parsed_entities.channels:
++                    # Extract channel names from metadata dict instead of calling get_available_channels
++                    # This avoids cache lookups
++                    available_channels = [
++                        meta["name"]
++                        for meta in channel_metadata_dict.values()
++                        if meta["name"]
++                        and (
++                            parsed_entities.include_private_channels
++                            or meta.get("type") != "private_channel"
++                        )
++                    ]
++            except ValidationError:
++                pass
