@@ -61,6 +61,16 @@ interface TagProps {
 
   /** Warning indicator after the title. */
   error?: boolean;
+
+  /**
+   * Switches to the toggle tag: the tag becomes a button, with a hover ring
+   * and a solid ring while `selected`. The tooltip doubles as its label.
+   * Ignored on editable tags.
+   */
+  onClick?: () => void;
+
+  /** Toggle only: draws the selected ring and sets `aria-pressed`. */
+  selected?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,10 +94,13 @@ function Tag({
   truncate = false,
   tooltip,
   error = false,
+  onClick,
+  selected = false,
 }: TagProps) {
   const strings = useOpalStrings();
   const config = TAG_COLORS[color];
   const editable = onRemove !== undefined;
+  const toggle = !editable && onClick !== undefined;
   const capped = editable || truncate;
 
   const font =
@@ -102,14 +115,8 @@ function Tag({
   // (text-03) stays for the passive metadata tag.
   const textClass = editable && color === "gray" ? "text-text-04" : config.text;
 
-  const tag = (
-    <div
-      className={cn("opal-auxiliary-tag", config.bg, textClass)}
-      data-size={size}
-      data-type={editable ? "editable" : undefined}
-      data-color={color}
-      data-disabled={(editable && disabled) || undefined}
-    >
+  const content = (
+    <>
       {Icon && (
         <div className="opal-auxiliary-tag-icon-container">
           <Icon className={cn("opal-auxiliary-tag-icon", textClass)} />
@@ -155,11 +162,38 @@ function Tag({
             <SvgX />
           </button>
         )}
-    </div>
+    </>
   );
 
   const tooltipText =
     tooltip ?? (capped && typeof title === "string" ? title : undefined);
+
+  const tag = toggle ? (
+    // raw-ok: the toggle tag keeps the passive tag's metrics and colors, which no Opal button offers
+    <button
+      type="button"
+      className={cn("opal-auxiliary-tag", config.bg, textClass)}
+      data-size={size}
+      data-type="toggle"
+      data-color={color}
+      data-selected={selected || undefined}
+      aria-pressed={selected}
+      aria-label={tooltipText}
+      onClick={onClick}
+    >
+      {content}
+    </button>
+  ) : (
+    <div
+      className={cn("opal-auxiliary-tag", config.bg, textClass)}
+      data-size={size}
+      data-type={editable ? "editable" : undefined}
+      data-color={color}
+      data-disabled={(editable && disabled) || undefined}
+    >
+      {content}
+    </div>
+  );
 
   return (
     <Tooltip tooltip={tooltipText} side="top">

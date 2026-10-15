@@ -5,6 +5,7 @@
 A small colored label used to annotate items with status, category, or metadata. Two types, matching the Figma `Tag` component:
 
 - **Passive** (default): metadata label. 1rem tall with `font-figure-small-value` at `sm`, 1.375rem with `secondary-body` at `md`.
+- **Toggle** (`onClick` set, no `onRemove`): the passive tag as a button, with an inset ring in its own color on hover and while `selected`. The tooltip is its accessible label. Use it for count tags that filter a list.
 - **Editable** (`onRemove` set): remove button, gray hover, and a dark focus-within treatment chip fields use as the keyboard-selection state before deleting a tag.
 
 ## Props
@@ -23,6 +24,8 @@ A small colored label used to annotate items with status, category, or metadata.
 | `truncate` | `boolean`               | `false`        | Cap the title at 120px (`sm`) / 160px (`md`) with an ellipsis. Editable tags are always capped |
 | `tooltip`  | `string`                | —              | Hover tooltip. Defaults to string titles on editable or truncated tags                         |
 | `error`    | `boolean`               | `false`        | Warning indicator after the title (no Figma variant, exists for chip-field validation)         |
+| `onClick`  | `() => void`            | —              | Switches to the toggle type. Ignored when `onRemove` is set                                    |
+| `selected` | `boolean`               | `false`        | Toggle only: solid ring and `aria-pressed`                                                     |
 
 ### `TagColor`
 
@@ -54,6 +57,16 @@ import SvgStar from "@opal/icons/star";
 
 // Editable with secondary value
 <Tag title="env" value="production" size="md" onRemove={() => {}} />
+
+// Toggle: a count tag that filters its list
+<Tag
+  icon={SvgCheckCircle}
+  title="12"
+  tooltip="12 succeeded"
+  color="green"
+  selected={group === "succeeded"}
+  onClick={() => toggle("succeeded")}
+/>
 
 // Truncated passive tag with the default title tooltip
 <Tag title="A very long label" truncate />

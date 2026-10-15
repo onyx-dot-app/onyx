@@ -15,6 +15,8 @@ export class AdminConnectorDetailPage {
   readonly runsSection: Locator;
   /** The run-type filter, shown only when the pair runs more than indexing. */
   readonly runKindFilter: Locator;
+  /** The status card's time window, shared by the chart and the run list. */
+  readonly timeWindowPicker: Locator;
   /** The logs action of every run that has logs, newest first. */
   readonly runLogsButtons: Locator;
   /** The run list's empty state, shown once the feed has loaded with no runs. */
@@ -36,6 +38,9 @@ export class AdminConnectorDetailPage {
     this.indexingSection = page.getByTestId("connector-indexing-status");
     this.runsSection = page.getByTestId("connector-runs");
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
+    this.timeWindowPicker = this.indexingSection.getByRole("button", {
+      name: /^(All time|Last \d+ (hours|days))$/,
+    });
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
     this.noRunsMessage = page.getByText("No runs yet", { exact: true });
     this.activityPanel = page.getByTestId("connector-activity");
@@ -82,6 +87,17 @@ export class AdminConnectorDetailPage {
 
   async expectRunsVisible(): Promise<void> {
     await expect(this.runsSection).toBeVisible({ timeout: 30000 });
+  }
+
+  /** Picks the shared time window by its label, such as "Last 24 hours". */
+  async pickTimeWindow(label: string): Promise<void> {
+    await this.timeWindowPicker.click();
+    await this.page.getByRole("option", { name: label }).click();
+  }
+
+  /** The run list's count tag for a status, a toggle named by its tooltip such as "2 runs failed". */
+  countTag(name: string): Locator {
+    return this.runsSection.getByRole("button", { name, exact: true });
   }
 
   /** Waits for the feed to load and show no runs. */

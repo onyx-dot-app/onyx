@@ -2494,16 +2494,7 @@
           "h1": "Última hora",
           "h12": "Últimas 12 horas",
           "h24": "Últimas 24 horas",
-          "d7": "Últimos 7 días",
-          "d30": "Últimos 30 días"
-        },
-        "statusGroups": {
-          "label": "Estado",
-          "all": "Todos los estados",
-          "running": "En curso",
-          "succeeded": "Correctas",
-          "failed": "Fallidas",
-          "canceled": "Canceladas"
+          "d7": "Últimos 7 días"
         },
         "loadError": {
           "title": "No se pudieron cargar las ejecuciones."

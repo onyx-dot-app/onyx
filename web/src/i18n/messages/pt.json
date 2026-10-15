@@ -2494,16 +2494,7 @@
           "h1": "Última hora",
           "h12": "Últimas 12 horas",
           "h24": "Últimas 24 horas",
-          "d7": "Últimos 7 dias",
-          "d30": "Últimos 30 dias"
-        },
-        "statusGroups": {
-          "label": "Status",
-          "all": "Todos os status",
-          "running": "Em execução",
-          "succeeded": "Bem-sucedidas",
-          "failed": "Com falha",
-          "canceled": "Canceladas"
+          "d7": "Últimos 7 dias"
         },
         "loadError": {
           "title": "Não foi possível carregar as execuções."

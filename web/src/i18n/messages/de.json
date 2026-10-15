@@ -2494,16 +2494,7 @@
           "h1": "Letzte Stunde",
           "h12": "Letzte 12 Stunden",
           "h24": "Letzte 24 Stunden",
-          "d7": "Letzte 7 Tage",
-          "d30": "Letzte 30 Tage"
-        },
-        "statusGroups": {
-          "label": "Status",
-          "all": "Alle Status",
-          "running": "Läuft",
-          "succeeded": "Erfolgreich",
-          "failed": "Fehlgeschlagen",
-          "canceled": "Abgebrochen"
+          "d7": "Letzte 7 Tage"
         },
         "loadError": {
           "title": "Die Läufe konnten nicht geladen werden."

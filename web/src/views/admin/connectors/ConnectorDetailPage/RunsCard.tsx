@@ -16,13 +16,7 @@ import { useDebouncedValue } from "@opal/hooks";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { CardLoader, IconLoader } from "@opal/loaders";
-import {
-  SvgActivity,
-  SvgCheckCircle,
-  SvgClock,
-  SvgSlowMotion,
-  SvgXOctagon,
-} from "@opal/icons";
+import { SvgCheckCircle, SvgSlowMotion, SvgXOctagon } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -46,32 +40,9 @@ export const SEARCH_DELAY_MS = 300;
 // The runs and errors routes refuse a longer search.
 export const SEARCH_MAX_LENGTH = 200;
 
-/** The windows the time filter offers, in hours. `null` is all time. */
-const WINDOWS = [
-  { id: "all", hours: null },
-  { id: "h12", hours: 12 },
-  { id: "h24", hours: 24 },
-  { id: "d7", hours: 24 * 7 },
-  { id: "d30", hours: 24 * 30 },
-] as const;
-type TimeWindow = (typeof WINDOWS)[number];
-
-interface PickedWindow {
-  window: TimeWindow;
-  /** Fixed when the window is picked, so polling keeps one cache key. */
-  since: string | null;
-}
-const ALL_TIME: PickedWindow = { window: WINDOWS[0], since: null };
 const LOADER_ROWS = 3;
 
-const STATUS_GROUPS: CCPairRunStatusGroup[] = [
-  "running",
-  "succeeded",
-  "failed",
-  "canceled",
-];
-
-// The header counts. Canceled runs get none.
+// The header counts, each a toggle for its status group. Canceled runs get none.
 const COUNT_TAGS = [
   { group: "succeeded", icon: SvgCheckCircle, color: "green" },
   { group: "running", icon: IconLoader, color: "blue" },
@@ -86,6 +57,8 @@ export interface RunsCardProps {
   canOperate: boolean;
   /** Renders the list without its own card, for a card that already frames it. */
   embedded?: boolean;
+  /** The start of the page's time window. `null` is all time. */
+  since?: string | null;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
@@ -93,11 +66,17 @@ export default function RunsCard({
   ccPairId,
   canOperate,
   embedded = false,
+  since = null,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const [page, setPage] = useState(1);
-  const [picked, setPicked] = useState<PickedWindow>(ALL_TIME);
+  // A new window starts the list over at its first page.
+  const [pagedSince, setPagedSince] = useState(since);
+  if (pagedSince !== since) {
+    setPagedSince(since);
+    setPage(1);
+  }
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
   const [statusGroup, setStatusGroup] = useState<CCPairRunStatusGroup | null>(
     null
@@ -109,7 +88,7 @@ export default function RunsCard({
   const key = SWR_KEYS.ccPairRuns(ccPairId, {
     pageNum: page - 1,
     pageSize: PAGE_SIZE,
-    since: picked.since,
+    since,
     kinds: kind === null ? null : [kind],
     statusGroups: statusGroup === null ? null : [statusGroup],
     q: search,
@@ -121,24 +100,13 @@ export default function RunsCard({
     { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
   );
 
-  function pickWindow(window: TimeWindow) {
-    setPicked({
-      window,
-      since:
-        window.hours === null
-          ? null
-          : new Date(Date.now() - window.hours * 3_600_000).toISOString(),
-    });
-    setPage(1);
-  }
-
   function pickKind(next: CCPairRunKind | null) {
     setKind(next);
     setPage(1);
   }
 
-  function pickStatusGroup(next: CCPairRunStatusGroup | null) {
-    setStatusGroup(next);
+  function toggleStatusGroup(group: CCPairRunStatusGroup) {
+    setStatusGroup((current) => (current === group ? null : group));
     setPage(1);
   }
 
@@ -172,10 +140,7 @@ export default function RunsCard({
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
   const filtered =
-    kind !== null ||
-    statusGroup !== null ||
-    picked.since !== null ||
-    search !== "";
+    kind !== null || statusGroup !== null || since !== null || search !== "";
 
   const body = (
     <>
@@ -212,6 +177,42 @@ export default function RunsCard({
             width="fit"
             height="fit"
           >
+            {kinds.length > 1 && (
+              <Dropdown>
+                <Dropdown.Trigger asChild>
+                  <FilterButton
+                    icon={SvgSlowMotion}
+                    active={kind !== null}
+                    onClear={() => pickKind(null)}
+                  >
+                    {kind === null ? t("kinds.all") : t(`kinds.${kind}`)}
+                  </FilterButton>
+                </Dropdown.Trigger>
+                <Dropdown.Data
+                  label={t("kinds.label")}
+                  value={kind ?? ALL}
+                  onSelect={(option) =>
+                    pickKind(
+                      kinds.find((candidate) => candidate === option.value) ??
+                        null
+                    )
+                  }
+                  items={[
+                    {
+                      kind: "option" as const,
+                      value: ALL,
+                      title: t("kinds.all"),
+                    },
+                    ...kinds.map((candidate) => ({
+                      kind: "option" as const,
+                      value: candidate,
+                      icon: RUN_KIND_ICONS[candidate],
+                      title: t(`kinds.${candidate}`),
+                    })),
+                  ]}
+                />
+              </Dropdown>
+            )}
             {COUNT_TAGS.map(({ group, icon, color }) => (
               <Tag
                 key={group}
@@ -221,112 +222,11 @@ export default function RunsCard({
                   count: data?.status_counts[group] ?? 0,
                 })}
                 color={color}
+                selected={statusGroup === group}
+                onClick={() => toggleStatusGroup(group)}
               />
             ))}
           </Section>
-        </Section>
-
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          gap={1}
-          height="fit"
-          wrap
-        >
-          <Dropdown>
-            <Dropdown.Trigger asChild>
-              <FilterButton
-                icon={SvgClock}
-                active={picked.since !== null}
-                onClear={() => pickWindow(ALL_TIME.window)}
-              >
-                {t(`window.${picked.window.id}`)}
-              </FilterButton>
-            </Dropdown.Trigger>
-            <Dropdown.Data
-              label={t("window.label")}
-              value={picked.window.id}
-              onSelect={(option) => {
-                const window = WINDOWS.find((w) => w.id === option.value);
-                if (window !== undefined) pickWindow(window);
-              }}
-              items={WINDOWS.map((option) => ({
-                kind: "option" as const,
-                value: option.id,
-                title: t(`window.${option.id}`),
-              }))}
-            />
-          </Dropdown>
-          {kinds.length > 1 && (
-            <Dropdown>
-              <Dropdown.Trigger asChild>
-                <FilterButton
-                  icon={SvgSlowMotion}
-                  active={kind !== null}
-                  onClear={() => pickKind(null)}
-                >
-                  {kind === null ? t("kinds.all") : t(`kinds.${kind}`)}
-                </FilterButton>
-              </Dropdown.Trigger>
-              <Dropdown.Data
-                label={t("kinds.label")}
-                value={kind ?? ALL}
-                onSelect={(option) =>
-                  pickKind(
-                    kinds.find((candidate) => candidate === option.value) ??
-                      null
-                  )
-                }
-                items={[
-                  {
-                    kind: "option" as const,
-                    value: ALL,
-                    title: t("kinds.all"),
-                  },
-                  ...kinds.map((candidate) => ({
-                    kind: "option" as const,
-                    value: candidate,
-                    icon: RUN_KIND_ICONS[candidate],
-                    title: t(`kinds.${candidate}`),
-                  })),
-                ]}
-              />
-            </Dropdown>
-          )}
-          <Dropdown>
-            <Dropdown.Trigger asChild>
-              <FilterButton
-                icon={SvgActivity}
-                active={statusGroup !== null}
-                onClear={() => pickStatusGroup(null)}
-              >
-                {statusGroup === null
-                  ? t("statusGroups.all")
-                  : t(`statusGroups.${statusGroup}`)}
-              </FilterButton>
-            </Dropdown.Trigger>
-            <Dropdown.Data
-              label={t("statusGroups.label")}
-              value={statusGroup ?? ALL}
-              onSelect={(option) =>
-                pickStatusGroup(
-                  STATUS_GROUPS.find((group) => group === option.value) ?? null
-                )
-              }
-              items={[
-                {
-                  kind: "option" as const,
-                  value: ALL,
-                  title: t("statusGroups.all"),
-                },
-                ...STATUS_GROUPS.map((group) => ({
-                  kind: "option" as const,
-                  value: group,
-                  title: t(`statusGroups.${group}`),
-                })),
-              ]}
-            />
-          </Dropdown>
         </Section>
 
         {error !== undefined ? (

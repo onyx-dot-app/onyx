@@ -1,6 +1,7 @@
 /** The run list and the activity panel: a file connector shows no run-type
- * filter and no activity, and a perm-synced pair's failed syncs open their
- * error and the doc sync's shows in the panel. */
+ * filter and no activity, a perm-synced pair's failed syncs open their
+ * error and the doc sync's shows in the panel, and the status card's window
+ * and the count tags filter the list. */
 
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -138,6 +139,16 @@ async function mockSyncConnector(page: Page): Promise<void> {
   await page.route(`${base}/index-attempts*`, async (route) => {
     await route.fulfill(jsonResponse({ items: [], total_items: 0 }));
   });
+  await page.route(`${base}/throughput*`, async (route) => {
+    await route.fulfill(
+      jsonResponse({
+        window_start: new Date(Date.now() - 3_600_000).toISOString(),
+        window_end: new Date().toISOString(),
+        docs_indexed: [0, 0, 0],
+        runs: [],
+      })
+    );
+  });
   await page.route(`${base}/errors*`, async (route) => {
     await route.fulfill(jsonResponse({ items: [], total_items: 0 }));
   });
@@ -196,5 +207,52 @@ test.describe("Connector runs", () => {
       "Group Membership Sync Error"
     );
     await expect(groupModal).toContainText(MOCK_GROUP_ERROR_MESSAGE);
+  });
+
+  test("the status card's window and the count tags filter the runs", async ({
+    page,
+  }) => {
+    await mockSyncConnector(page);
+    const runsQueries: URLSearchParams[] = [];
+    const chartWindows: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith(`/cc-pair/${MOCK_SYNC_CC_PAIR_ID}/runs`)) {
+        runsQueries.push(url.searchParams);
+      }
+      if (
+        url.pathname.endsWith(`/cc-pair/${MOCK_SYNC_CC_PAIR_ID}/throughput`)
+      ) {
+        chartWindows.push(url.searchParams.get("window") ?? "");
+      }
+    });
+    const detail = new AdminConnectorDetailPage(page);
+    await detail.goto(MOCK_SYNC_CC_PAIR_ID);
+    await detail.expectRunsVisible();
+
+    // All time lists every run and shows the chart's widest window.
+    await expect(detail.timeWindowPicker).toHaveText("All time");
+    await expect.poll(() => chartWindows.at(-1)).toBe("7d");
+    expect(runsQueries.every((query) => !query.has("since"))).toBe(true);
+
+    await detail.pickTimeWindow("Last 24 hours");
+    await expect.poll(() => chartWindows.at(-1)).toBe("24h");
+    await expect
+      .poll(() => runsQueries.at(-1)?.has("since") ?? false)
+      .toBe(true);
+
+    const failed = detail.countTag("2 runs failed");
+    await expect(failed).toHaveAttribute("aria-pressed", "false");
+    await failed.click();
+    await expect(failed).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(() => runsQueries.at(-1)?.getAll("status_groups"))
+      .toEqual(["failed"]);
+
+    await failed.click();
+    await expect(failed).toHaveAttribute("aria-pressed", "false");
+    await expect
+      .poll(() => runsQueries.at(-1)?.getAll("status_groups"))
+      .toEqual([]);
   });
 });
