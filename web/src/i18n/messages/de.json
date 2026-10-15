@@ -6131,8 +6131,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Neuen API-Schlüssel eingeben oder vorhandenen Anbieter auswählen",
-          "idle": "Geben Sie einen neuen API-Schlüssel ein oder wählen Sie einen vorhandenen Anbieter.",
+          "idle": "Geben Sie Ihren API-Schlüssel ein.",
           "label": "API-Schlüssel",
           "placeholder": "Geben Sie Ihren API-Schlüssel ein",
           "required": "API-Schlüssel ist erforderlich"
@@ -6177,9 +6176,6 @@
         },
         "editHeader": {
           "title": "{title} bearbeiten"
-        },
-        "invalidProviderSelection": {
-          "message": "Ungültige Anbieterauswahl"
         },
         "loading": {
           "placeholder": "Wird geladen..."

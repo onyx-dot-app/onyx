@@ -6131,8 +6131,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Enter new API key or select existing provider",
-          "idle": "Enter a new API key or select an existing provider.",
+          "idle": "Enter your API key.",
           "label": "API Key",
           "placeholder": "Enter your API key",
           "required": "API Key is required"
@@ -6177,9 +6176,6 @@
         },
         "editHeader": {
           "title": "Edit {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "Invalid provider selection"
         },
         "loading": {
           "placeholder": "Loading..."

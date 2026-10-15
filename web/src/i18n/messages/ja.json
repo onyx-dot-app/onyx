@@ -6131,8 +6131,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "新しい API キーを入力するか、既存のプロバイダーを選択",
-          "idle": "新しい API キーを入力するか、既存のプロバイダーを選択してください。",
+          "idle": "API キーを入力してください。",
           "label": "API キー",
           "placeholder": "API キーを入力",
           "required": "API キーは必須です"
@@ -6177,9 +6176,6 @@
         },
         "editHeader": {
           "title": "{title} を編集"
-        },
-        "invalidProviderSelection": {
-          "message": "プロバイダーの選択が無効です"
         },
         "loading": {
           "placeholder": "読み込んでいます..."

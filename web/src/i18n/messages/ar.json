@@ -6131,8 +6131,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "أدخل مفتاح API جديدًا أو اختر موفرًا موجودًا",
-          "idle": "أدخل مفتاح API جديدًا أو اختر موفرًا موجودًا.",
+          "idle": "أدخل مفتاح API الخاص بك.",
           "label": "مفتاح API",
           "placeholder": "أدخل مفتاح API الخاص بك",
           "required": "مفتاح API مطلوب"
@@ -6177,9 +6176,6 @@
         },
         "editHeader": {
           "title": "تعديل {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "اختيار موفر غير صالح"
         },
         "loading": {
           "placeholder": "جارٍ التحميل..."
