@@ -49,11 +49,13 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.db.enums import HierarchyNodeType
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -570,10 +572,15 @@ class CanvasConnector(
 
     def _get_course_permissions(self, course_id: int) -> ExternalAccess | None:
         """Get course permissions with caching."""
+        if self.lti_context_id and self.course_ids != [course_id]:
+            raise ConnectorValidationError(
+                "An LTI Canvas connector must reference exactly its configured course"
+            )
         if course_id not in self._course_permissions_cache:
             self._course_permissions_cache[course_id] = get_course_permissions(
                 canvas_client=self.canvas_client,
                 course_id=course_id,
+                lti_context_id=self.lti_context_id,
             )
         return self._course_permissions_cache[course_id]
 
@@ -1675,12 +1682,7 @@ class CanvasConnector(
                 new_checkpoint.has_more = len(new_checkpoint.course_ids) > 0
                 return new_checkpoint
 
-            try:
-                courses = self._list_courses()
-            except Exception as e:
-                logger.warning(f"Failed to list Canvas courses: {e}")
-                new_checkpoint.has_more = True
-                return new_checkpoint
+            courses = self._list_courses()
             new_checkpoint.course_ids = [c.id for c in courses]
             new_checkpoint.current_course_index = 0
             new_checkpoint.stage = "pages"
@@ -1713,10 +1715,12 @@ class CanvasConnector(
         if stage not in _VALID_STAGES:
             raise ValueError(f"Invalid checkpoint stage: {stage!r}")
 
-        # Hierarchy nodes attached to this course's perms only when we are
-        # running the perm-sync flavor of this method.
+        # Hierarchy upserts replace ACLs even during ordinary content refreshes.
+        # Keep LTI course folders permissioned after the initial index as well.
         hierarchy_perms = (
-            self._get_course_permissions(course_id) if include_permissions else None
+            self._get_course_permissions(course_id)
+            if include_permissions or self.lti_context_id
+            else None
         )
 
         # Emit starter hierarchy once per course per connector-instance.
@@ -1758,18 +1762,7 @@ class CanvasConnector(
         # If next_url is set, we're resuming mid-pagination.
         # --- Syllabus is a special stage (single fetch, not paginated) ---
         if stage == "syllabus":
-            try:
-                syllabus_body = self._get_syllabus(course_id)
-            except Exception as e:
-                logger.warning(f"Failed to fetch syllabus for course {course_id}: {e}")
-                # Syllabus is last stage — advance to next course
-                new_checkpoint.advance_course()
-                new_checkpoint.has_more = new_checkpoint.current_course_index < len(
-                    new_checkpoint.course_ids
-                )
-                if not new_checkpoint.has_more:
-                    self._release_check_time = None
-                return new_checkpoint
+            syllabus_body = self._get_syllabus(course_id)
 
             if syllabus_body:
                 try:
@@ -1798,24 +1791,10 @@ class CanvasConnector(
 
         # --- Modules stage: fetch modules + items (not paginated via stage_config) ---
         if stage == "modules":
-            try:
-                modules = self._list_modules(course_id)
-            except Exception as e:
-                logger.warning(f"Failed to fetch modules for course {course_id}: {e}")
-                new_checkpoint.next_url = None
-                new_checkpoint.stage = "quizzes"
-                new_checkpoint.has_more = True
-                return new_checkpoint
+            modules = self._list_modules(course_id)
 
             for module in modules:
-                try:
-                    items = self._list_module_items(course_id, module.id)
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to fetch items for module {module.id} "
-                        f"in course {course_id}: {e}"
-                    )
-                    continue
+                items = self._list_module_items(course_id, module.id)
                 for mi in items:
                     # Module items are structural references; we index
                     # the actual content (pages, assignments, files) in
@@ -1878,20 +1857,43 @@ class CanvasConnector(
                     api_version=config.get("api_version", "/api/v1"),
                 )
         except OnyxError as oe:
-            # Re-raise security errors from _parse_next_link (host/scheme
-            # mismatch on pagination URLs) — these must not be silenced.
-            # Security errors have no HTTP status code override (they are
-            # raised locally, not from an API response).
-            is_api_error = oe._status_code_override is not None
-            if not is_api_error:
-                raise
-            logger.warning(f"Failed to fetch {stage} for course {course_id}: {oe}")
-            new_checkpoint.has_more = True
-            return new_checkpoint
-        except Exception as e:
-            logger.warning(f"Failed to fetch {stage} for course {course_id}: {e}")
-            new_checkpoint.has_more = True
-            return new_checkpoint
+            if (
+                stage == "new_quizzes"
+                and oe.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+            ):
+                detail = (
+                    f"Canvas denied access to New Quizzes for course {course_id}: "
+                    f"{oe}. Check whether the connected Canvas user has an active "
+                    "course role with New Quizzes access. Other course content "
+                    "will continue indexing."
+                )
+                logger.warning(detail)
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=f"canvas-new-quizzes-course-{course_id}"
+                    ),
+                    failure_message=detail,
+                    exception=oe,
+                    counts_toward_failure_threshold=False,
+                )
+                # Do not retry a denied page within this attempt. The next
+                # scheduled index will try New Quizzes again.
+                new_checkpoint.next_url = None
+                new_checkpoint.stage = "discussions"
+                new_checkpoint.has_more = True
+                return new_checkpoint
+
+            # End this attempt so the scheduler can retry it. Returning the
+            # unchanged checkpoint here loops forever, even on a permanent 403.
+            detail = f"Failed to fetch {stage} for Canvas course {course_id}: {oe}"
+            if oe.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS:
+                detail += (
+                    " Check the Canvas user's course permissions and the "
+                    "developer key's granted scopes."
+                )
+            raise OnyxError(
+                oe.error_code, detail, status_code_override=oe.status_code
+            ) from oe
 
         # Process fetched items
         for item in response or []:
@@ -1995,6 +1997,10 @@ class CanvasConnector(
 
             except Exception as e:
                 item_id = item.get("id") or item.get("page_id", "unknown")
+                if stage in {"quizzes", "new_quizzes"}:
+                    # Keep the last successful checkpoint for a later attempt;
+                    # do not retry an incomplete quiz page within this run.
+                    raise
                 if stage == "pages":
                     doc_link = (
                         f"{self.canvas_base_url}/courses/{course_id}"
@@ -2010,11 +2016,6 @@ class CanvasConnector(
                     failure_message=f"Failed to process {stage.removesuffix('s')}: {e}",
                     exception=e,
                 )
-                if stage in {"quizzes", "new_quizzes"}:
-                    # Do not checkpoint an incomplete quiz page. A later connector
-                    # run must retry fetching its question content.
-                    new_checkpoint.has_more = True
-                    return new_checkpoint
 
         # If there are more pages, save the cursor and return
         if result_next_url:

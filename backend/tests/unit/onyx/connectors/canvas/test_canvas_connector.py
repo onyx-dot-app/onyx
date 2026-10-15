@@ -9,6 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from onyx.access.models import ExternalAccess
+from onyx.background.indexing.run_docfetching import (
+    _count_failure_and_check_threshold,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.connector import CanvasConnector
@@ -297,11 +300,14 @@ def _make_url_dispatcher(
         if "/public_url" in url:
             return _mock_response(json_data={"public_url": SIGNED_FILE_URL})
         if "/quizzes/" in url and "/questions" in url:
+            assert quiz_questions_error_ids is not None
+            assert quiz_questions is not None
             quiz_id = int(url.rstrip("/").split("/")[-2])
             if quiz_id in quiz_questions_error_ids:
                 return _mock_response(500, {"error": "Question fetch failed"})
             return _mock_response(json_data=quiz_questions.get(quiz_id, []))
         if "/api/quiz/v1/" in url and "/items" in url:
+            assert new_quiz_items is not None
             quiz_id = int(url.rstrip("/").split("/")[-2])
             return _mock_response(json_data=new_quiz_items.get(quiz_id, []))
         if "/modules/" in url and "/items" in url:
@@ -353,7 +359,7 @@ def _run_checkpoint(
             items.append(item)
     except StopIteration as e:
         new_cp: CanvasConnectorCheckpoint = e.value
-    return items, new_cp
+        return items, new_cp
 
 
 @pytest.fixture(autouse=True)
@@ -1602,6 +1608,7 @@ class TestLoadFromCheckpoint:
 
         assert len(items) == expected_count
         assert isinstance(items[0], Document)
+        assert isinstance(items[0], Document)
         assert items[0].id == expected_id
         assert new_cp.stage == expected_next_stage
 
@@ -1697,6 +1704,7 @@ class TestLoadFromCheckpoint:
         expected_id = "canvas-page-1-11"
 
         assert len(items) == expected_count
+        assert isinstance(items[0], Document)
         assert items[0].id == expected_id
 
     @patch("onyx.connectors.canvas.client.rl_requests")
@@ -1718,19 +1726,18 @@ class TestLoadFromCheckpoint:
         assert len(items) == 0
 
     @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_stage_failure_does_not_advance(self, mock_requests: MagicMock) -> None:
-        """If listing fails, stage stays the same for retry."""
+    def test_stage_failure_ends_attempt(self, mock_requests: MagicMock) -> None:
+        """An API failure must not return an unchanged checkpoint forever."""
         mock_requests.get.side_effect = _make_url_dispatcher(page_error=True)
         connector = _build_connector()
         cp = CanvasConnectorCheckpoint(
             has_more=True, course_ids=[1], current_course_index=0, stage="pages"
         )
 
-        items, new_cp = _run_checkpoint(connector, cp)
-
-        assert items == []
-        assert new_cp.stage == "pages"
-        assert new_cp.current_course_index == 0
+        with pytest.raises(OnyxError, match="Internal Server Error"):
+            _run_checkpoint(connector, cp)
+        assert cp.stage == "pages"
+        assert cp.current_course_index == 0
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_per_document_conversion_failure_yields_connector_failure(
@@ -1812,6 +1819,7 @@ class TestLoadFromCheckpointWithPermSync:
         end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
 
         gen = connector.load_from_checkpoint_with_perm_sync(start, end, cp)
+        new_cp: CanvasConnectorCheckpoint | None = None
         items: list[Document | ConnectorFailure | HierarchyNode] = []
         try:
             while True:
@@ -1822,6 +1830,7 @@ class TestLoadFromCheckpointWithPermSync:
         docs = [i for i in items if isinstance(i, Document)]
         assert len(docs) == 1
         assert docs[0].external_access == expected_access
+        assert new_cp is not None
         assert new_cp.stage == "assignments"
         # Permissions are looked up once per course and cached. The hierarchy
         # emission path also consults them, so we just assert it was called.
@@ -2024,119 +2033,261 @@ def _mock_enrollment(
 
 @pytest.mark.usefixtures("enable_ee")
 class TestEEGetCoursePermissions:
-    def test_extracts_emails_from_login_id(self) -> None:
-        """Emails are extracted from user.login_id."""
+    @pytest.mark.parametrize("sync_mode", ["indexing", "permissions", "refresh"])
+    @patch("ee.onyx.external_permissions.canvas.access.fetch_lti_course_nrps_url")
+    @patch("ee.onyx.external_permissions.canvas.access.fetch_nrps_roster")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_lti_roster_permissions_reach_documents_and_hierarchy(
+        self,
+        mock_requests: MagicMock,
+        mock_roster: MagicMock,
+        mock_nrps_url: MagicMock,
+        sync_mode: str,
+    ) -> None:
+        from onyx.server.lti.nrps import NrpsMember
+        from onyx.server.lti.nrps import NrpsRoster
+
+        mock_nrps_url.return_value = (
+            f"{FAKE_BASE_URL}/api/lti/courses/1/names_and_roles"
+        )
+        mock_roster.return_value = NrpsRoster(
+            members=[
+                NrpsMember(email="teacher@school.edu"),
+                NrpsMember(email="student@school.edu"),
+                NrpsMember(email="former@school.edu", status="Inactive"),
+                NrpsMember(),  # Canvas Student View has no email identity.
+            ]
+        )
+        mock_requests.get.side_effect = _make_url_dispatcher(pages=[_mock_page()])
+        connector = _build_connector(course_ids=[1])
+        connector.lti_context_id = "course-context"
+        items: list[Document | SlimDocument | HierarchyNode | ConnectorFailure]
+        if sync_mode in {"indexing", "refresh"}:
+            load = (
+                connector.load_from_checkpoint_with_perm_sync
+                if sync_mode == "indexing"
+                else connector.load_from_checkpoint
+            )
+            items = list(
+                load(
+                    0,
+                    9999999999,
+                    CanvasConnectorCheckpoint(
+                        has_more=True, course_ids=[1], stage="pages"
+                    ),
+                )
+            )
+        else:
+            items = [
+                item
+                for batch in connector.retrieve_all_slim_docs_perm_sync()
+                for item in batch
+            ]
+        permissioned = [
+            item
+            for item in items
+            if isinstance(item, (Document, SlimDocument, HierarchyNode))
+        ]
+        assert any(isinstance(item, (Document, SlimDocument)) for item in permissioned)
+        assert any(
+            isinstance(item, HierarchyNode) and item.raw_node_id == "canvas-course-1"
+            for item in permissioned
+        )
+        for item in permissioned:
+            if sync_mode == "refresh" and isinstance(item, Document):
+                continue  # Ordinary refreshes update hierarchy ACLs; doc sync owns document ACLs.
+            assert item.external_access is not None
+            assert item.external_access.external_user_emails == {
+                "teacher@school.edu",
+                "student@school.edu",
+            }
+            assert item.external_access.is_public is False
+        mock_nrps_url.assert_called_once_with("course-context")
+        mock_roster.assert_called_once_with(mock_nrps_url.return_value)
+        assert not any(
+            "/enrollments" in call.args[0] for call in mock_requests.get.call_args_list
+        )
+
+    @patch("ee.onyx.external_permissions.canvas.access.fetch_lti_course_nrps_url")
+    @patch("ee.onyx.external_permissions.canvas.access.fetch_nrps_roster")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    @pytest.mark.parametrize("missing_url", [True, False])
+    def test_lti_roster_failure_aborts_without_falling_back_to_empty_permissions(
+        self,
+        mock_requests: MagicMock,
+        mock_roster: MagicMock,
+        mock_nrps_url: MagicMock,
+        missing_url: bool,
+    ) -> None:
+        mock_nrps_url.return_value = (
+            None if missing_url else "https://canvas.test/roster"
+        )
+        mock_roster.side_effect = OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, "Roster unavailable"
+        )
+        connector = _build_connector(course_ids=[1])
+        connector.lti_context_id = "course-context"
+        mock_requests.get.side_effect = AssertionError("LTI permissions must use NRPS")
+        with pytest.raises(OnyxError):
+            connector._get_course_permissions(1)
+        assert 1 not in connector._course_permissions_cache
+        mock_requests.get.assert_not_called()
+
+    def test_lti_roster_cannot_permission_another_course(self) -> None:
+        connector = _build_connector(course_ids=[1])
+        connector.lti_context_id = "course-context"
+        with pytest.raises(ConnectorValidationError, match="configured course"):
+            connector._get_course_permissions(2)
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_resolves_active_roster_identities(self, mock_requests: MagicMock) -> None:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
-        client = MagicMock(spec=CanvasApiClient)
-        client.paginate.return_value = [
-            [
-                _mock_enrollment(
-                    "prof@school.edu", enrollment_type="TeacherEnrollment"
-                ),
-                _mock_enrollment(
-                    "student@school.edu", enrollment_type="StudentEnrollment"
-                ),
-            ]
+        client = CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL)
+        mock_requests.get.side_effect = [
+            _mock_response(
+                json_data=[
+                    _mock_enrollment(
+                        "prof@school.edu", enrollment_type="TeacherEnrollment"
+                    ),
+                    {"user_id": 42, "user": {"id": 42, "login_id": "student"}},
+                ],
+                link_header=f'<{FAKE_BASE_URL}/api/v1/courses/1/enrollments?page=2>; rel="next"',
+            ),
+            _mock_response(json_data={"id": 42, "email": "student@school.edu"}),
+            _mock_response(json_data=[_mock_enrollment("prof@school.edu")]),
         ]
 
         result = get_course_permissions(client, course_id=1)
 
-        expected_emails = {"prof@school.edu", "student@school.edu"}
-
-        assert result.external_user_emails == expected_emails
+        assert result.external_user_emails == {"prof@school.edu", "student@school.edu"}
         assert result.is_public is False
         assert result.external_user_group_ids == set()
+        calls = mock_requests.get.call_args_list
+        assert calls[0].kwargs["params"] == {"per_page": "100", "state[]": "active"}
+        assert calls[1].args[0] == f"{FAKE_BASE_URL}/api/v1/users/42"
+        assert calls[2].args[0].endswith("enrollments?page=2")
 
-    def test_falls_back_to_email_field(self) -> None:
-        """If login_id is missing, falls back to user.email."""
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_student_view_enrollment_does_not_block_roster_permissions(
+        self, mock_requests: MagicMock
+    ) -> None:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
-        client = MagicMock(spec=CanvasApiClient)
-        client.paginate.return_value = [
-            [{"type": "StudentEnrollment", "user": {"email": "fallback@school.edu"}}]
+        mock_requests.get.side_effect = [
+            _mock_response(
+                json_data=[
+                    _mock_enrollment(
+                        "prof@school.edu", enrollment_type="TeacherEnrollment"
+                    ),
+                    {
+                        "type": "StudentViewEnrollment",
+                        "enrollment_state": "active",
+                        "user_id": 42,
+                        "user": {"id": 42, "name": "Test Student"},
+                    },
+                    _mock_enrollment("student@school.edu"),
+                ]
+            )
         ]
 
-        result = get_course_permissions(client, course_id=1)
+        result = get_course_permissions(CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL), 1)
 
-        expected_emails = {"fallback@school.edu"}
+        assert result.external_user_emails == {"prof@school.edu", "student@school.edu"}
+        assert result.is_public is False
+        mock_requests.get.assert_called_once()
+        assert mock_requests.get.call_args.args[0].endswith("/courses/1/enrollments")
 
-        assert result.external_user_emails == expected_emails
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_resolved_permissions_reach_documents_and_course_root(
+        self, mock_requests: MagicMock
+    ) -> None:
+        dispatch = _make_url_dispatcher(pages=[_mock_page()])
 
-    def test_skips_users_without_email(self) -> None:
-        """Users with no login_id or email are skipped."""
+        def respond(url: str, **kwargs: Any) -> MagicMock:
+            if url.endswith("/enrollments"):
+                return _mock_response(
+                    json_data=[
+                        {"user_id": 42, "user": {"id": 42, "login_id": "student"}}
+                    ]
+                )
+            if url.endswith("/users/42"):
+                return _mock_response(
+                    json_data={"id": 42, "email": "student@school.edu"}
+                )
+            return dispatch(url, **kwargs)
+
+        mock_requests.get.side_effect = respond
+        connector = _build_connector(course_ids=[1])
+        checkpoint = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], stage="pages"
+        )
+        items = list(
+            connector.load_from_checkpoint_with_perm_sync(0, 9999999999, checkpoint)
+        )
+        documents = [item for item in items if isinstance(item, Document)]
+        nodes = [item for item in items if isinstance(item, HierarchyNode)]
+        assert documents
+        assert any(node.raw_node_id == "canvas-course-1" for node in nodes)
+        permissioned_items: list[Document | HierarchyNode] = [*documents, *nodes]
+        for item in permissioned_items:
+            assert item.external_access is not None
+            assert item.external_access.external_user_emails == {"student@school.edu"}
+            assert item.external_access.is_public is False
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_prefers_email_to_non_email_login(self, mock_requests: MagicMock) -> None:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
-        client = MagicMock(spec=CanvasApiClient)
-        client.paginate.return_value = [
-            [
-                _mock_enrollment("valid@school.edu"),
-                {"type": "StudentEnrollment", "user": {}},
-            ]
+        mock_requests.get.return_value = _mock_response(
+            json_data=[_mock_enrollment("username", email="student@school.edu")]
+        )
+        result = get_course_permissions(CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL), 1)
+
+        assert result.external_user_emails == {"student@school.edu"}
+        assert mock_requests.get.call_count == 1
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_empty_roster_returns_empty_access(self, mock_requests: MagicMock) -> None:
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        mock_requests.get.return_value = _mock_response(json_data=[])
+        assert (
+            get_course_permissions(CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL), 1)
+            == ExternalAccess.empty()
+        )
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_unresolved_identity_fails_instead_of_revoking_access(
+        self, mock_requests: MagicMock
+    ) -> None:
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        mock_requests.get.side_effect = [
+            _mock_response(
+                json_data=[
+                    _mock_enrollment("known@school.edu"),
+                    {"user_id": 42, "user": {"id": 42, "login_id": "student"}},
+                ]
+            ),
+            _mock_response(json_data={"id": 42, "login_id": "student"}),
         ]
+        with pytest.raises(OnyxError, match="email"):
+            get_course_permissions(CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL), 1)
 
-        result = get_course_permissions(client, course_id=1)
-
-        expected_emails = {"valid@school.edu"}
-
-        assert result.external_user_emails == expected_emails
-
-    def test_deduplicates_emails(self) -> None:
-        """Same email appearing twice is deduplicated."""
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_partial_roster_failure_propagates(self, mock_requests: MagicMock) -> None:
         from ee.onyx.external_permissions.canvas.access import get_course_permissions
 
-        client = MagicMock(spec=CanvasApiClient)
-        client.paginate.return_value = [
-            [
-                _mock_enrollment("same@school.edu"),
-                _mock_enrollment("same@school.edu", enrollment_type="TaEnrollment"),
-            ]
+        mock_requests.get.side_effect = [
+            _mock_response(
+                json_data=[_mock_enrollment("known@school.edu")],
+                link_header=f'<{FAKE_BASE_URL}/api/v1/courses/1/enrollments?page=2>; rel="next"',
+            ),
+            _mock_response(403, {"error": "Insufficient scopes"}),
         ]
-
-        result = get_course_permissions(client, course_id=1)
-
-        expected_emails = {"same@school.edu"}
-
-        assert result.external_user_emails == expected_emails
-
-    def test_paginates_via_next_url(self) -> None:
-        """Follows pagination links to collect all enrollments."""
-        from ee.onyx.external_permissions.canvas.access import get_course_permissions
-
-        client = MagicMock(spec=CanvasApiClient)
-        client.paginate.return_value = [
-            [_mock_enrollment("page1@school.edu")],
-            [_mock_enrollment("page2@school.edu")],
-        ]
-
-        result = get_course_permissions(client, course_id=1)
-
-        expected_emails = {"page1@school.edu", "page2@school.edu"}
-
-        assert result.external_user_emails == expected_emails
-        client.paginate.assert_called_once()
-
-    def test_empty_enrollments_returns_empty_access(self) -> None:
-        """No enrollments returns ExternalAccess.empty()."""
-        from ee.onyx.external_permissions.canvas.access import get_course_permissions
-
-        client = MagicMock(spec=CanvasApiClient)
-        client.paginate.return_value = [[]]
-
-        result = get_course_permissions(client, course_id=1)
-
-        assert result == ExternalAccess.empty()
-
-    def test_api_error_returns_empty_access(self) -> None:
-        """API failure returns ExternalAccess.empty() (safe fallback)."""
-        from ee.onyx.external_permissions.canvas.access import get_course_permissions
-
-        client = MagicMock(spec=CanvasApiClient)
-        client.paginate.side_effect = Exception("Canvas API down")
-
-        result = get_course_permissions(client, course_id=1)
-
-        assert result == ExternalAccess.empty()
+        with pytest.raises(OnyxError, match="Insufficient scopes"):
+            get_course_permissions(CanvasApiClient(FAKE_TOKEN, FAKE_BASE_URL), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -2397,6 +2548,7 @@ class TestDocumentConversionNewTypes:
         assert doc.semantic_identifier == "Midterm Review"
         assert doc.metadata["type"] == "quiz"
         text = doc.sections[0].text
+        assert text is not None
         assert "Midterm Review" in text
         assert "Practice for the midterm" in text
         assert "Questions: 20" in text
@@ -2435,6 +2587,7 @@ class TestDocumentConversionNewTypes:
         doc = connector._convert_quiz_to_document(quiz, questions)
 
         text = doc.sections[0].text
+        assert text is not None
         assert "A" in text
         assert "B" in text
         assert "Correct" not in text
@@ -2518,6 +2671,7 @@ class TestDocumentConversionNewTypes:
         doc = connector._convert_quiz_to_document(quiz, questions)
 
         text = doc.sections[0].text
+        assert text is not None
         assert "Question 1" in text
         assert "Explain your debugging process." in text
 
@@ -2549,6 +2703,7 @@ class TestDocumentConversionNewTypes:
         assert doc.semantic_identifier == "Week 1 Discussion"
         assert doc.metadata["type"] == "discussion"
         text = doc.sections[0].text
+        assert text is not None
         assert "Week 1 Discussion" in text
         assert "Discuss the readings" in text
         assert doc.parent_hierarchy_raw_node_id == "canvas-type-course-1-discussion"
@@ -2564,6 +2719,7 @@ class TestDocumentConversionNewTypes:
         assert doc.semantic_identifier == "Syllabus"
         assert doc.metadata["type"] == "syllabus"
         text = doc.sections[0].text
+        assert text is not None
         assert "Syllabus" in text
         assert "Welcome to CS 101" in text
         assert doc.parent_hierarchy_raw_node_id == "canvas-type-course-1-syllabus"
@@ -2593,6 +2749,7 @@ class TestCheckpointNewStages:
         assert len(items) == 1
         assert isinstance(items[0], Document)
         assert items[0].id == "canvas-file-1-40"
+        assert items[0].sections[0].text is not None
         assert "Lecture notes for week one" in items[0].sections[0].text
         assert new_cp.stage == "modules"
 
@@ -2627,12 +2784,13 @@ class TestCheckpointNewStages:
         assert len(items) == 1
         assert isinstance(items[0], Document)
         assert items[0].id == "canvas-quiz-1-50"
+        assert items[0].sections[0].text is not None
         assert "Which structure repeats work?" in items[0].sections[0].text
         assert "Loop" in items[0].sections[0].text
         assert new_cp.stage == "new_quizzes"
 
     @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_quizzes_stage_falls_back_when_question_fetch_fails(
+    def test_quizzes_stage_fails_attempt_when_question_fetch_fails(
         self, mock_requests: MagicMock
     ) -> None:
         quiz = _mock_quiz(50, updated_at="2025-06-15T12:00:00Z")
@@ -2646,12 +2804,10 @@ class TestCheckpointNewStages:
         start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
         end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
 
-        items, new_cp = _run_checkpoint(connector, cp, start, end)
-
-        assert len(items) == 1
-        assert isinstance(items[0], ConnectorFailure)
-        assert new_cp.stage == "quizzes"
-        assert new_cp.next_url is None
+        with pytest.raises(OnyxError, match="Question fetch failed"):
+            _run_checkpoint(connector, cp, start, end)
+        assert cp.stage == "quizzes"
+        assert cp.next_url is None
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_new_quizzes_stage_yields_question_content(
@@ -2674,6 +2830,7 @@ class TestCheckpointNewStages:
         assert len(items) == 1
         assert isinstance(items[0], Document)
         assert items[0].id == "canvas-new-quiz-1-80"
+        assert items[0].sections[0].text is not None
         assert "Which structure repeats work?" in items[0].sections[0].text
         assert "Loop" in items[0].sections[0].text
         assert new_cp.stage == "discussions"
@@ -2697,6 +2854,7 @@ class TestCheckpointNewStages:
 
         assert len(items) == 1
         assert isinstance(items[0], Document)
+        assert items[0].sections[0].text is not None
         assert "Question 1" not in items[0].sections[0].text
 
     @patch("onyx.connectors.canvas.client.rl_requests")
@@ -2817,6 +2975,7 @@ class TestCheckpointNewStages:
         items, _ = _run_checkpoint(connector, cp, start, end)
 
         assert len(items) == 1
+        assert isinstance(items[0], Document)
         assert items[0].id == "canvas-file-1-41"
 
 
@@ -3427,3 +3586,134 @@ class TestHierarchyEmissionInIndexing:
         ]
         assert len(course_nodes_pages) == 1
         assert len(course_nodes_assignments) == 0
+
+
+@pytest.mark.parametrize("status_code", [401, 429, 500])
+@patch("onyx.connectors.canvas.client.rl_requests")
+def test_new_quiz_api_error_ends_attempt(
+    mock_requests: MagicMock, status_code: int
+) -> None:
+    connector = _build_connector()
+    dispatch = _make_url_dispatcher()
+
+    def refuse_quizzes(url: str, **kwargs: Any) -> MagicMock:
+        if "/api/quiz/v1/" in url:
+            return _mock_response(status_code, {"error": "Canvas quiz request failed"})
+        return dispatch(url, **kwargs)
+
+    mock_requests.get.side_effect = refuse_quizzes
+    checkpoint = CanvasConnectorCheckpoint(
+        has_more=True, course_ids=[1], stage="new_quizzes"
+    )
+    with pytest.raises(OnyxError, match="Canvas quiz request failed"):
+        _run_checkpoint(connector, checkpoint)
+    assert checkpoint.stage == "new_quizzes"
+    assert (
+        sum(
+            "/api/quiz/v1/" in call.args[0] for call in mock_requests.get.call_args_list
+        )
+        == 1
+    )
+
+
+@patch("onyx.connectors.canvas.client.rl_requests")
+def test_new_quiz_permission_denial_records_failure_and_continues(
+    mock_requests: MagicMock,
+) -> None:
+    connector = _build_connector()
+    dispatch = _make_url_dispatcher()
+
+    def refuse_new_quizzes(url: str, **kwargs: Any) -> MagicMock:
+        if "/api/quiz/v1/" in url:
+            return _mock_response(403, {"error": "user not authorized"})
+        return dispatch(url, **kwargs)
+
+    mock_requests.get.side_effect = refuse_new_quizzes
+    checkpoint = CanvasConnectorCheckpoint(
+        has_more=True, course_ids=[1], stage="new_quizzes"
+    )
+
+    items, next_checkpoint = _run_checkpoint(connector, checkpoint)
+
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_entity is not None
+    assert failures[0].failed_entity.entity_id == "canvas-new-quizzes-course-1"
+    assert "user not authorized" in failures[0].failure_message
+    assert failures[0].counts_toward_failure_threshold is False
+    assert next_checkpoint.stage == "discussions"
+    assert next_checkpoint.next_url is None
+    assert next_checkpoint.has_more
+
+    _, discussions_checkpoint = _run_checkpoint(connector, next_checkpoint)
+    assert discussions_checkpoint.stage == "syllabus"
+
+
+@patch("onyx.connectors.canvas.client.rl_requests")
+def test_new_quiz_denials_across_courses_do_not_abort_indexing(
+    mock_requests: MagicMock,
+) -> None:
+    connector = _build_connector(course_ids=[1, 2, 3, 4])
+    dispatch = _make_url_dispatcher()
+
+    def refuse_new_quizzes(url: str, **kwargs: Any) -> MagicMock:
+        if "/api/quiz/v1/" in url:
+            return _mock_response(403, {"error": "user not authorized"})
+        return dispatch(url, **kwargs)
+
+    mock_requests.get.side_effect = refuse_new_quizzes
+    total_failures = 0
+    for course_index in range(4):
+        checkpoint = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1, 2, 3, 4],
+            current_course_index=course_index,
+            stage="new_quizzes",
+        )
+        items, checkpoint = _run_checkpoint(connector, checkpoint)
+        failure = next(item for item in items if isinstance(item, ConnectorFailure))
+        total_failures = _count_failure_and_check_threshold(
+            total_failures, 0, 0, failure
+        )
+        assert checkpoint.stage == "discussions"
+    assert total_failures == 0
+
+
+@patch("onyx.connectors.canvas.client.rl_requests")
+def test_other_canvas_permission_denial_still_ends_attempt(
+    mock_requests: MagicMock,
+) -> None:
+    connector = _build_connector()
+    dispatch = _make_url_dispatcher()
+
+    def refuse_pages(url: str, **kwargs: Any) -> MagicMock:
+        if "/pages" in url:
+            return _mock_response(403, {"error": "user not authorized"})
+        return dispatch(url, **kwargs)
+
+    mock_requests.get.side_effect = refuse_pages
+    checkpoint = CanvasConnectorCheckpoint(has_more=True, course_ids=[1], stage="pages")
+
+    with pytest.raises(OnyxError, match="course permissions"):
+        _run_checkpoint(connector, checkpoint)
+    assert checkpoint.stage == "pages"
+
+
+@patch("onyx.connectors.canvas.connector.get_course_permissions")
+@patch("onyx.connectors.canvas.client.rl_requests")
+def test_new_quiz_permission_denial_aborts_permission_sync(
+    mock_requests: MagicMock, mock_permissions: MagicMock
+) -> None:
+    mock_permissions.return_value = ExternalAccess.empty()
+    connector = _build_connector(course_ids=[1])
+    dispatch = _make_url_dispatcher()
+
+    def refuse_new_quizzes(url: str, **kwargs: Any) -> MagicMock:
+        if "/api/quiz/v1/" in url:
+            return _mock_response(403, {"error": "user not authorized"})
+        return dispatch(url, **kwargs)
+
+    mock_requests.get.side_effect = refuse_new_quizzes
+
+    with pytest.raises(OnyxError, match="user not authorized"):
+        list(connector.retrieve_all_slim_docs_perm_sync())
