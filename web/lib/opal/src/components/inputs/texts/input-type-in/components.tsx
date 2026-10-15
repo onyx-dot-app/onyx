@@ -25,6 +25,11 @@ export interface InputTypeInProps extends WithoutStyles<
    * (a select's button trigger). `variant="readOnly"` implies it.
    */
   readOnly?: boolean;
+  /**
+   * The list this field opens is open. The field keeps its focused border,
+   * even when focus moves into the list.
+   */
+  open?: boolean;
 }
 
 /**
@@ -65,6 +70,7 @@ export default function InputTypeIn({
   rightChildren,
   clearButton = false,
   readOnly = false,
+  open = false,
   value,
   onChange,
   name,
@@ -87,6 +93,7 @@ export default function InputTypeIn({
     <div
       role="presentation"
       data-variant={variant}
+      data-open={open || undefined}
       className="opal-input"
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
     >
