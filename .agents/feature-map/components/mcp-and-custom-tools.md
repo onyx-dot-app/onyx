@@ -220,6 +220,11 @@ per-user access/refresh token issued through that client, looked up by
 This is a separate mechanism from MCP's OAuth (§4.3); it exists so a single
 OpenAPI action can require its own OAuth login independent of `passthrough_auth`.
 
+The action authentication form exposes `supports_pkce` as **Use PKCE**, disabled by default.
+Enable it only for providers that support S256 PKCE.
+Authorization uses the shared tenant-aware attempt store and protocol helpers described in [[auth-and-identity]] §4.
+The action route owns configuration validation and per-user token storage; MCP keeps its separate credential model.
+
 ### Diagram
 
 ```

@@ -154,7 +154,7 @@ User ──< OAuthAccount (fastapi-users; oauth_name + linked SSOProvider identi
      ──< ApiKey (as owner_id and as the credential's own user_id)
      ──< PersonalAccessToken
      ──< User__UserGroup >── UserGroup ──< PermissionGrant
-     ──< OAuthUserToken >── OAuthConfig  (per-tool/MCP OAuth, distinct from login OAuth)
+     ──< OAuthUserToken >── OAuthConfig  (custom-action OAuth, distinct from login OAuth)
 
 SSOProvider ── encrypted `config` blob (protocol-specific) + allowed_email_domains
 ScimToken   ── hashed bearer token for IdP-driven provisioning
@@ -227,9 +227,10 @@ false. The Community downgrade sets every token inactive
 
 ### `OAuthConfig` / `OAuthUserToken` (`models.py`)
 
-Per-tool/MCP OAuth (for custom actions calling third-party APIs), unrelated
-to login SSO. `client_id`/`client_secret` and the token blob are
-`EncryptedString`/`EncryptedJson`.
+Custom-action OAuth lets each user connect a third-party account to an OpenAPI action.
+`client_id`/`client_secret` and the token blob use `EncryptedString`/`EncryptedJson`.
+`supports_pkce` defaults to false; administrators can enable S256 PKCE for compatible providers.
+MCP stores its credentials separately in `MCPConnectionConfig` ([[mcp-and-custom-tools]] §3).
 
 ---
 
@@ -454,6 +455,24 @@ state, client identity, redirect URI, response type, scope, or PKCE fields.
 MCP also owns `resource`; action configurations may supply it as an extension.
 Provider adapters retain scope spelling, client authentication, and token parsing.
 Feature routes own permissions, configuration snapshots, and credential storage.
+
+### Custom-action OAuth authorization
+
+`server/features/oauth_config/api.py` starts an attempt through `POST /oauth-config/initiate`.
+The payload holds the configuration ID, validated internal return path, configuration hash, and optional PKCE verifier.
+The hash covers credentials, endpoints, scopes, additional parameters, callback URL, and PKCE setting.
+Client secrets remain outside the attempt payload.
+
+`POST /oauth-config/callback` consumes the caller's attempt before contacting the provider.
+It rejects deleted configurations and configuration changes, including cleared credentials.
+The shared exchange helper sends the stored verifier when PKCE is enabled.
+The route stores the resulting token for the caller and returns the validated return path.
+Provider failures return HTTP 502 with a safe message; the user must start authorization again.
+Database failures propagate separately from provider failures.
+
+Configuration creation, updates, and initiation reject reserved authorization parameters in endpoint queries and configured extras.
+Action configurations may still supply `resource` through additional parameters.
+Management keeps its owner-or-admin permission checks; initiation and callback require `BASIC_ACCESS` and bind tokens to the caller.
 
 ## 5. Contracts and invariants
 
