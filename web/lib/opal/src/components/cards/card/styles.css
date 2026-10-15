@@ -8,6 +8,10 @@
   @apply w-full overflow-clip;
 }
 
+.opal-card[data-height="full"] {
+  @apply h-full min-h-0 flex flex-col;
+}
+
 /* Surface colors — one rule per token, names match the palette */
 .opal-card[data-color="transparent"] {
   @apply bg-transparent;
