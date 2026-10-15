@@ -517,6 +517,11 @@ When one has `FAILED` in the form's latest run, Create first opens an advisory
 (`web/src/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal.tsx`)
 that states the count and offers to show the checks card or to create the
 connector anyway. Edit mode skips the advisory: its plan lists failed checks itself.
+When an edit changes the config, the credential or the access type, the plan modal
+(`web/src/views/admin/connectors/EditConnectorPage/EditPlanModal.tsx`) lists every
+check of the blocking validation with the checks card's rows, titled with the outcome;
+a check that did not finish in time shows as pending. Apply records the validation as
+a check run with trigger `CONNECTOR_CONFIG_UPDATE`, which the pair's run feed lists.
 
 An admin can start the held attempt from the connector page's status card
 (`POST /admin/cc-pair/{id}/release-indexing-hold`), which stamps

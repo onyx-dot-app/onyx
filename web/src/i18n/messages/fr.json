@@ -10273,8 +10273,26 @@
         },
         "validation": {
           "title": "Validation",
-          "blocks": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer.",
-          "warns": "Certaines vérifications facultatives ont échoué. Vous pouvez quand même appliquer.",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer."
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
+          "unfinished": "Did not finish in time",
           "error": {
             "title": "Les paramètres ne sont pas valides"
           }

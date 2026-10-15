@@ -10273,8 +10273,26 @@
         },
         "validation": {
           "title": "Validierung",
-          "blocks": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden.",
-          "warns": "Einige optionale Prüfungen sind fehlgeschlagen. Sie können trotzdem anwenden.",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden."
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
+          "unfinished": "Did not finish in time",
           "error": {
             "title": "Die Einstellungen sind ungültig"
           }

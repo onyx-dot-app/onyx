@@ -32,9 +32,16 @@ import type {
   ConnectorEditPlanResponse,
   CredentialPath,
   EditCheckResult,
+  EditNote,
+  EditPlan,
   EditStep,
+  ProposedPairingValidation,
   ReconciliationOption,
 } from "@/lib/connectors/edit/types";
+import {
+  CheckLineGroups,
+  type CheckLine,
+} from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 
 export interface EditPlanModalProps {
   planResponse: ConnectorEditPlanResponse;
@@ -178,6 +185,104 @@ function CheckFailures({
   );
 }
 
+// The validation section shows this note under the checks it is about.
+const CHECKS_STILL_RUNNING_NOTE = "checks_still_running";
+
+type ValidationOutcome = "failed" | "warnings" | "incomplete" | "passed";
+
+function validationOutcome(
+  validation: ProposedPairingValidation,
+  blocksApply: boolean
+): ValidationOutcome {
+  if (blocksApply) return "failed";
+  if (
+    validation.check_results.some(
+      (result) =>
+        result.status === "failed" || result.status === "indeterminate"
+    )
+  )
+    return "warnings";
+  if (validation.unfinished_check_ids.length > 0) return "incomplete";
+  return "passed";
+}
+
+interface ValidationSectionProps {
+  plan: EditPlan;
+  validation: ProposedPairingValidation;
+  blocksApply: boolean;
+  stillRunningNote: EditNote | undefined;
+}
+
+/** Every check of the blocking validation, as the add-connector page lists them. */
+function ValidationSection({
+  plan,
+  validation,
+  blocksApply,
+  stillRunningNote,
+}: ValidationSectionProps) {
+  const t = useTranslations("admin.connectorEdit.plan.validation");
+  const outcome = validationOutcome(validation, blocksApply);
+  // An unfinished check has only its ID. A dry run of it, if any, names it.
+  const unfinished: CheckLine[] = validation.unfinished_check_ids.flatMap(
+    (checkId): CheckLine[] => {
+      const dryRuns = plan.dry_run_results.filter(
+        (result) => result.check_id === checkId
+      );
+      const known: Array<
+        Pick<CheckLine, "capability" | "display_name" | "required">
+      > =
+        dryRuns.length > 0
+          ? dryRuns
+          : [
+              {
+                capability: "indexing",
+                display_name: checkId,
+                required: false,
+              },
+            ];
+      return known.map((check) => ({
+        capability: check.capability,
+        check_id: checkId,
+        display_name: check.display_name,
+        required: check.required,
+        message: t("unfinished"),
+        remediation: null,
+        docs_link: null,
+        state: "pending",
+      }));
+    }
+  );
+  const lines: CheckLine[] = [
+    ...validation.check_results.map((result) => ({
+      ...result,
+      state: result.status,
+    })),
+    ...unfinished,
+  ];
+
+  return (
+    <Section gap={2} alignItems="stretch" height="fit">
+      <Content
+        title={t(`outcome.${outcome}.title`)}
+        description={t(`outcome.${outcome}.description`)}
+        sizePreset="main-ui"
+        variant="section"
+      />
+      {validation.validation_error !== null && (
+        <MessageCard
+          variant="error"
+          title={t("error.title")}
+          description={validation.validation_error}
+        />
+      )}
+      {lines.length > 0 && <CheckLineGroups lines={lines} />}
+      {stillRunningNote !== undefined && (
+        <MessageCard variant="info" title={stillRunningNote.message} />
+      )}
+    </Section>
+  );
+}
+
 /**
  * The plan for an edit: what apply will do and why, the notes and the
  * validation result, the choices the admin must or can make, and Apply.
@@ -207,14 +312,16 @@ export default function EditPlanModal({
   const disabled = busy !== null;
 
   const validation = plan.validation;
-  const failedChecks = (validation?.check_results ?? []).filter(
-    (result) => result.status === "failed"
-  );
   const failedDryRuns = plan.dry_run_results.filter(
     (result) => result.status === "failed"
   );
   const warnings = plan.notes.filter((note) => note.severity === "warning");
-  const infos = plan.notes.filter((note) => note.severity === "info");
+  const stillRunningNote = plan.notes.find(
+    (note) => note.kind === CHECKS_STILL_RUNNING_NOTE
+  );
+  const infos = plan.notes.filter(
+    (note) => note.severity === "info" && note !== stillRunningNote
+  );
   const changedFields = [
     ...plan.field_changes.map((change) => change.field_name),
     ...plan.changed_settings,
@@ -298,37 +405,21 @@ export default function EditPlanModal({
               />
             )}
 
-            {validation !== null &&
-              (validation.validation_error !== null ||
-                failedChecks.length > 0) && (
-                <Section gap={2} alignItems="stretch" height="fit">
-                  <Content
-                    title={t("validation.title")}
-                    description={
-                      planResponse.validation_blocks_apply
-                        ? t("validation.blocks")
-                        : t("validation.warns")
-                    }
-                    sizePreset="main-ui"
-                    variant="section"
-                  />
-                  {validation.validation_error !== null && (
-                    <MessageCard
-                      variant="error"
-                      title={t("validation.error.title")}
-                      description={validation.validation_error}
-                    />
-                  )}
-                  <CheckFailures
-                    results={failedChecks.filter((result) => result.required)}
-                    variant="error"
-                  />
-                  <CheckFailures
-                    results={failedChecks.filter((result) => !result.required)}
-                    variant="warning"
-                  />
-                </Section>
-              )}
+            {validation !== null ? (
+              <ValidationSection
+                plan={plan}
+                validation={validation}
+                blocksApply={planResponse.validation_blocks_apply}
+                stillRunningNote={stillRunningNote}
+              />
+            ) : (
+              <Content
+                title={t("validation.title")}
+                description={t("validation.unchanged")}
+                sizePreset="main-ui"
+                variant="section"
+              />
+            )}
 
             {(warnings.length > 0 || failedDryRuns.length > 0) && (
               <Section gap={2} alignItems="stretch" height="fit">

@@ -10273,8 +10273,26 @@
         },
         "validation": {
           "title": "验证",
-          "blocks": "新设置未通过验证。请在应用前修复。",
-          "warns": "部分可选检查失败。你仍然可以应用。",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "新设置未通过验证。请在应用前修复。"
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
+          "unfinished": "Did not finish in time",
           "error": {
             "title": "设置无效"
           }

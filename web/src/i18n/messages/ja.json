@@ -10273,8 +10273,26 @@
         },
         "validation": {
           "title": "検証",
-          "blocks": "新しい設定は検証に失敗しました。適用する前に修正してください。",
-          "warns": "一部の任意のチェックが失敗しました。適用は可能です。",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "新しい設定は検証に失敗しました。適用する前に修正してください。"
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
+          "unfinished": "Did not finish in time",
           "error": {
             "title": "設定が無効です"
           }

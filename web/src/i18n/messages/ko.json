@@ -10273,8 +10273,26 @@
         },
         "validation": {
           "title": "유효성 검사",
-          "blocks": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요.",
-          "warns": "일부 선택 검사에 실패했습니다. 그래도 적용할 수 있습니다.",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요."
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
+          "unfinished": "Did not finish in time",
           "error": {
             "title": "설정이 유효하지 않습니다"
           }

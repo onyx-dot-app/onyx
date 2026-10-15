@@ -10273,8 +10273,26 @@
         },
         "validation": {
           "title": "Validation",
-          "blocks": "The new settings failed validation. Fix them before you apply.",
-          "warns": "Some optional checks failed. You can still apply.",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "The new settings failed validation. Fix them before you apply."
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
+          "unfinished": "Did not finish in time",
           "error": {
             "title": "The settings are not valid"
           }

@@ -76,3 +76,90 @@ test("applies with the chosen reconciliation and offers to plan again on a stale
   await user.click(screen.getByRole("button", { name: "Plan again" }));
   await waitFor(() => expect(onReplan).toHaveBeenCalledTimes(1));
 });
+
+function renderPlan(planResponse: ConnectorEditPlanResponse) {
+  render(
+    <EditPlanModal
+      planResponse={planResponse}
+      onApply={jest.fn()}
+      onReplan={jest.fn()}
+      onClose={jest.fn()}
+    />
+  );
+}
+
+const PASSED_CHECK = {
+  capability: "doc_permission_sync",
+  check_id: "list_permissions",
+  display_name: "List file permissions",
+  required: true,
+  status: "passed",
+  message: "",
+  remediation: null,
+  docs_link: null,
+} as const;
+
+test("lists every validation check when an access type change passes", () => {
+  renderPlan({
+    ...PLAN,
+    plan: {
+      ...PLAN.plan,
+      changed_settings: ["access_type"],
+      validation: {
+        validation_error: null,
+        check_results: [PASSED_CHECK],
+        unfinished_check_ids: [],
+      },
+    },
+  });
+
+  expect(screen.getByText("Validation passed")).toBeVisible();
+  expect(screen.getByText("List file permissions")).toBeVisible();
+  expect(screen.getByText("Passed")).toBeVisible();
+});
+
+test("shows failed checks and unfinished ones as pending with the still-running note", () => {
+  const stillRunning = "Some checks did not finish in time.";
+  renderPlan({
+    ...PLAN,
+    validation_blocks_apply: true,
+    plan: {
+      ...PLAN.plan,
+      notes: [
+        {
+          kind: "checks_still_running",
+          severity: "info",
+          message: stillRunning,
+        },
+      ],
+      validation: {
+        validation_error: null,
+        check_results: [
+          {
+            ...PASSED_CHECK,
+            check_id: "list_groups",
+            display_name: "List groups",
+            status: "failed",
+            message: "Missing scope",
+          },
+        ],
+        unfinished_check_ids: ["list_permissions"],
+      },
+      dry_run_results: [PASSED_CHECK],
+    },
+  });
+
+  expect(screen.getByText("Validation failed")).toBeVisible();
+  expect(screen.getByText("Missing scope")).toBeVisible();
+  expect(screen.getByText("List file permissions")).toBeVisible();
+  expect(screen.getByText("Did not finish in time")).toBeVisible();
+  expect(screen.getAllByText(stillRunning)).toHaveLength(1);
+});
+
+test("says when no setting that needs validation changed", () => {
+  renderPlan(PLAN);
+
+  expect(
+    screen.getByText("Settings that need validation did not change.")
+  ).toBeVisible();
+});

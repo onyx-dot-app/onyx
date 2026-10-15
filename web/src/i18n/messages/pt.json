@@ -10273,8 +10273,26 @@
         },
         "validation": {
           "title": "Validação",
-          "blocks": "As novas configurações falharam na validação. Corrija-as antes de aplicar.",
-          "warns": "Algumas verificações opcionais falharam. Você ainda pode aplicar.",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "As novas configurações falharam na validação. Corrija-as antes de aplicar."
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
+          "unfinished": "Did not finish in time",
           "error": {
             "title": "As configurações não são válidas"
           }
