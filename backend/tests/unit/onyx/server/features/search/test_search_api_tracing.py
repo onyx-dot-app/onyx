@@ -172,6 +172,8 @@ def test_search_failure_is_recorded_on_the_tool_span(
     (tool_span,) = processor.ended_spans
     error = tool_span.error
     assert error is not None
-    assert error["message"] == "Search API run failed"
-    assert error["data"] is not None
-    assert error["data"]["error_type"] == "RuntimeError"
+    assert error["message"] == "RuntimeError: search failed"
+    # The exception text is deliberately left out: nothing redacts credentials
+    # out of a provider error on this path.
+    assert "index unreachable" not in error["message"]
+    assert error["data"] is None
