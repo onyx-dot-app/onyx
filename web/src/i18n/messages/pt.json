@@ -2075,33 +2075,6 @@
           "text": "Confira <link>nossa documentação</link> para mais informações sobre como configurar este conector."
         }
       },
-      "errorsModal": {
-        "columns": {
-          "documentId": "ID da falha",
-          "errorMessage": "Mensagem de erro",
-          "status": "Status",
-          "time": "Horário"
-        },
-        "description": "Veja abaixo os erros encontrados durante a indexação. Cada linha representa um documento ou entidade com falha.",
-        "empty": {
-          "description": "Nenhum erro encontrado nesta página"
-        },
-        "fullReindex": {
-          "description": "Clique no botão abaixo para iniciar uma reindexação completa e tentar resolver estes erros. Esta reindexação completa pode demorar muito mais do que uma atualização normal."
-        },
-        "resolveAllButton": {
-          "label": "Resolver tudo"
-        },
-        "status": {
-          "resolved": "Resolvido",
-          "unresolved": "Não resolvido"
-        },
-        "targetedReindex": {
-          "description": "Clique no botão abaixo para buscar novamente apenas os documentos com falha. É muito mais rápido do que uma reindexação completa."
-        },
-        "title": "Erros de indexação",
-        "unknownDocument": "Desconhecido"
-      },
       "fileManagement": {
         "addFilesButton": {
           "label": "Adicionar arquivos"
@@ -2181,14 +2154,6 @@
         "toggle": {
           "description": "Limite o acesso aos membros dos grupos selecionados. As permissões sincronizadas continuam valendo.",
           "title": "Restringir acesso a grupos"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "Encontramos alguns problemas ao processar alguns documentos.",
-        "resolvingStatus": "Resolvendo as falhas",
-        "title": "Alguns documentos não foram indexados",
-        "detailsButton": {
-          "label": "Ver detalhes"
         }
       },
       "invalidState": {

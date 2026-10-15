@@ -37,22 +37,14 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { triggerIndexing } from "@/lib/connectors/svc";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
-import type {
-  CCPairFullInfo,
-  IndexAttemptError,
-  PaginatedIndexAttempts,
-} from "@/lib/connectors/types";
+import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
-import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
-import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import IndexAttemptErrorsModal from "@/views/admin/connectors/ConnectorDetailPage/IndexAttemptErrorsModal";
 import PendingBackfills from "@/views/admin/connectors/ConnectorDetailPage/PendingBackfills";
 import StatusCard from "@/views/admin/connectors/ConnectorDetailPage/StatusCard";
 import PairChecksCard from "@/views/admin/connectors/ConnectorDetailPage/PairChecksCard";
@@ -80,38 +72,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
     { refreshInterval: CC_PAIR_POLL_MS }
   );
 
-  // The error notice reads the latest attempt. The status card shares this key.
-  const { data: latestIndexAttempts } = useSWR<PaginatedIndexAttempts>(
-    SWR_KEYS.ccPairLatestIndexAttempt(ccPairId),
-    errorHandlingFetcher,
-    { refreshInterval: CC_PAIR_POLL_MS }
-  );
-
-  const {
-    currentPageData: indexAttemptErrorsPage,
-    totalPages: indexAttemptErrorsTotalPages,
-    totalItems: indexAttemptErrorsTotalItems,
-    currentPage: indexAttemptErrorsCurrentPage,
-    goToPage: goToIndexAttemptErrorsPage,
-  } = usePaginatedFetch<IndexAttemptError>({
-    itemsPerPage: 10,
-    pagesPerBatch: 1,
-    endpoint: SWR_KEYS.ccPairIndexingErrors(ccPairId),
-    disableUrlSync: true,
-  });
-
   const {
     handleStatusChange,
     isUpdating: isStatusUpdating,
     ConfirmModal,
   } = useStatusChange(ccPair || null);
 
-  const indexAttemptErrors = indexAttemptErrorsPage
-    ? { items: indexAttemptErrorsPage }
-    : null;
-
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
   // A re-index or error resolve in flight: the Manage button spins meanwhile.
   const [busy, setBusy] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
@@ -140,16 +107,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
     });
     finishConnectorDeletion();
   }, [ccPair, finishConnectorDeletion, t]);
-
-  const latestIndexAttempt = latestIndexAttempts?.items[0];
-  const isResolvingErrors =
-    (latestIndexAttempt?.status === "in_progress" ||
-      latestIndexAttempt?.status === "not_started") &&
-    latestIndexAttempt?.from_beginning &&
-    // Errors in the latest attempt mean it is not the resolving run.
-    !indexAttemptErrors?.items?.some(
-      (error) => error.index_attempt_id === latestIndexAttempt?.id
-    );
 
   const triggerReIndex = async (fromBeginning: boolean) => {
     if (!ccPair) return;
@@ -321,37 +278,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
       : []),
   ];
 
-  const resolveAllErrors = async () => {
-    setShowIndexAttemptErrors(false);
-    if (!ccPair.supports_targeted_reindex) {
-      await triggerReIndex(true);
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await resolveAllErrorsForCCPair(ccPairId);
-      if (result.total_error_ids === 0) {
-        toast.success(t("toasts.noUnresolvedErrors"));
-      } else {
-        toast.success(
-          t("toasts.targetedReindexSubmitted", {
-            count: result.total_error_ids,
-          })
-        );
-      }
-      mutate(
-        (key) =>
-          typeof key === "string" &&
-          key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId))
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(t("toasts.targetedReindexFailed", { message }));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <SettingsLayouts.Root width="xl">
       {ConfirmModal}
@@ -363,17 +289,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
           additionalDetails={t("deleteModal.additionalDetails")}
           onClose={() => setShowDeleteConnectorConfirmModal(false)}
           onSubmit={scheduleConnectorDeletion}
-        />
-      )}
-      {showIndexAttemptErrors && indexAttemptErrors && (
-        <IndexAttemptErrorsModal
-          errors={indexAttemptErrors}
-          totalPages={indexAttemptErrorsTotalPages}
-          currentPage={indexAttemptErrorsCurrentPage}
-          onPageChange={goToIndexAttemptErrorsPage}
-          onClose={() => setShowIndexAttemptErrors(false)}
-          onResolveAll={resolveAllErrors}
-          supportsTargetedReindex={ccPair.supports_targeted_reindex}
         />
       )}
 
@@ -450,27 +365,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 variant="warning"
                 title={t("invalidState.title")}
                 description={t("invalidState.description")}
-              />
-            )}
-            {indexAttemptErrors && indexAttemptErrorsTotalItems > 0 && (
-              <MessageCard
-                variant="warning"
-                title={t("indexErrorsAlert.title")}
-                description={
-                  isResolvingErrors
-                    ? t("indexErrorsAlert.resolvingStatus")
-                    : t("indexErrorsAlert.description")
-                }
-                rightChildren={
-                  !isResolvingErrors && (
-                    <Button
-                      prominence="secondary"
-                      onClick={() => setShowIndexAttemptErrors(true)}
-                    >
-                      {t("indexErrorsAlert.detailsButton.label")}
-                    </Button>
-                  )
-                }
               />
             )}
             {ccPair.pending_backfills.length > 0 && (

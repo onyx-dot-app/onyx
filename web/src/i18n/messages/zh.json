@@ -2075,33 +2075,6 @@
           "text": "有关配置此连接器的更多信息，请查看<link>我们的文档</link>。"
         }
       },
-      "errorsModal": {
-        "columns": {
-          "documentId": "失败 ID",
-          "errorMessage": "错误信息",
-          "status": "状态",
-          "time": "时间"
-        },
-        "description": "以下是索引过程中遇到的错误。每一行代表一个失败的文档或实体。",
-        "empty": {
-          "description": "此页面未发现错误"
-        },
-        "fullReindex": {
-          "description": "点击下方按钮启动完整重新索引，尝试解决这些错误。完整重新索引可能比常规更新耗时长得多。"
-        },
-        "resolveAllButton": {
-          "label": "全部解决"
-        },
-        "status": {
-          "resolved": "已解决",
-          "unresolved": "未解决"
-        },
-        "targetedReindex": {
-          "description": "点击下方按钮，仅重新获取失败的文档。这比完整重新索引快得多。"
-        },
-        "title": "索引错误",
-        "unknownDocument": "未知"
-      },
       "fileManagement": {
         "addFilesButton": {
           "label": "添加文件"
@@ -2181,14 +2154,6 @@
         "toggle": {
           "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
           "title": "限制为群组访问"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "处理部分文档时遇到问题。",
-        "resolvingStatus": "正在解决失败项",
-        "title": "部分文档索引失败",
-        "detailsButton": {
-          "label": "查看详情"
         }
       },
       "invalidState": {

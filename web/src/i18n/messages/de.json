@@ -2075,33 +2075,6 @@
           "text": "In <link>unserer Dokumentation</link> findest du weitere Informationen zur Konfiguration dieses Konnektors."
         }
       },
-      "errorsModal": {
-        "columns": {
-          "documentId": "Fehler-ID",
-          "errorMessage": "Fehlermeldung",
-          "status": "Status",
-          "time": "Zeit"
-        },
-        "description": "Unten sehen Sie die Fehler, die während der Indizierung aufgetreten sind. Jede Zeile steht für ein fehlgeschlagenes Dokument oder Objekt.",
-        "empty": {
-          "description": "Auf dieser Seite wurden keine Fehler gefunden"
-        },
-        "fullReindex": {
-          "description": "Klicken Sie auf die Schaltfläche unten, um eine vollständige Neuindizierung zu starten und diese Fehler zu beheben. Diese vollständige Neuindizierung kann viel länger dauern als eine normale Aktualisierung."
-        },
-        "resolveAllButton": {
-          "label": "Alle beheben"
-        },
-        "status": {
-          "resolved": "Behoben",
-          "unresolved": "Nicht behoben"
-        },
-        "targetedReindex": {
-          "description": "Klicken Sie auf die Schaltfläche unten, um nur die fehlgeschlagenen Dokumente erneut abzurufen. Das ist viel schneller als eine vollständige Neuindizierung."
-        },
-        "title": "Indizierungsfehler",
-        "unknownDocument": "Unbekannt"
-      },
       "fileManagement": {
         "addFilesButton": {
           "label": "Dateien hinzufügen"
@@ -2181,14 +2154,6 @@
         "toggle": {
           "description": "Zugriff auf Mitglieder der ausgewählten Gruppen beschränken. Synchronisierte Berechtigungen gelten weiterhin.",
           "title": "Zugriff auf Gruppen beschränken"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "Bei der Verarbeitung einiger Dokumente sind Probleme aufgetreten.",
-        "resolvingStatus": "Fehler werden behoben",
-        "title": "Einige Dokumente konnten nicht indiziert werden",
-        "detailsButton": {
-          "label": "Details anzeigen"
         }
       },
       "invalidState": {
