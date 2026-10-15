@@ -1,0 +1,59 @@
+# Settings every rule shares. Every other *.toml file in this directory is one
+# rule, and its file stem is the rule id.
+
+# Pinned. Part of every calibration seal, so a bump deactivates every rule
+# until `lint.py eval --write` reruns.
+jev_model = "jev-1.13.0"
+
+# No rule screens these paths.
+ignore = [
+  "**/*.lock",
+  "**/package-lock.json",
+  "**/generated/**",
+  "**/*.snap",
+  "**/*.svg",
+  "backend/requirements/*.txt",
+  "web/src/i18n/messages/**",
+  "web/tools/oxlint/anti-slop/**",
+  "cli/internal/deploy/deployfiles/embedded/**",
+]
+
+[window]
+# Part of every seal. Window size from 12 lines to a full hunk moved AUC by
+# under 0.01, so the cut only bounds tokens.
+max_lines = 40
+
+[budget]
+# Windows screened per PR, in path order.
+max_windows = 600
+# Windows the LLM reviews per PR, fix before nit, then by margin.
+max_llm_windows = 12
+max_findings_per_rule = 3
+max_annotations = 30
+# File patch context the LLM gets around a window.
+patch_context_chars = 12000
+# git grep lines a repo-search rule gets per window.
+max_search_matches = 40
+
+[llm]
+model = "gpt-5-mini"
+reasoning_effort = "low"
+timeout_seconds = 180
+never_flag = []
+
+[calibration]
+confidence = 0.80
+min_positives = 3
+# Share of PRs, by PR-number hash, held out to report precision and recall.
+report_percent = 30
+
+# A rule posts when the Wilson lower bound of its tune-split precision meets
+# this. Below it, the rule runs in shadow and posts nothing.
+[calibration.min_precision]
+fix = 0.5
+nit = 0.6
+
+[prices]
+jev_input = 0.042
+llm_input = 0.25
+llm_output = 2.0
