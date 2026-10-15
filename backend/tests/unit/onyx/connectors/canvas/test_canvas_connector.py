@@ -44,6 +44,7 @@ from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
     HierarchyNode,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -2047,3 +2048,97 @@ class TestCanvasPermissionMapping:
             },
             is_public=False,
         )
+
+
+# ---------------------------------------------------------------------------
+# reindex: single-item fetches must match the crawl listing filters
+# ---------------------------------------------------------------------------
+
+_FUTURE = "2999-01-01T00:00:00Z"
+
+
+def _reindex_one(doc_id: str, item_payload: dict[str, Any]) -> list[Any]:
+    connector = _build_connector()
+    api_prefix = f"{FAKE_BASE_URL}/api/v1"
+
+    def _dispatcher(url: str, **_kwargs: Any) -> MagicMock:
+        if url == f"{api_prefix}/courses":
+            return _mock_response(json_data=[_mock_course()])
+        return _mock_response(json_data=item_payload)
+
+    failure = ConnectorFailure(
+        failed_document=DocumentFailure(document_id=doc_id),
+        failure_message="synthetic",
+    )
+    with patch("onyx.connectors.canvas.client.rl_requests") as mock_requests:
+        mock_requests.get.side_effect = _dispatcher
+        return list(connector.reindex([failure]))
+
+
+def _published_announcement(**overrides: Any) -> dict[str, Any]:
+    payload = _mock_announcement()
+    payload.update({"is_announcement": True, "published": True})
+    payload.update(overrides)
+    return payload
+
+
+class TestReindexListingParity:
+    @pytest.mark.parametrize(
+        "doc_id,payload",
+        [
+            ("canvas-page-1-10", {**_mock_page(), "published": True}),
+            ("canvas-assignment-1-20", {**_mock_assignment(), "published": True}),
+            ("canvas-announcement-1-30", _published_announcement()),
+            (
+                "canvas-announcement-1-30",
+                _published_announcement(delayed_post_at="2025-05-01T00:00:00Z"),
+            ),
+        ],
+    )
+    def test_listed_item_is_reindexed(
+        self, doc_id: str, payload: dict[str, Any]
+    ) -> None:
+        results = _reindex_one(doc_id, payload)
+
+        assert len(results) == 1
+        assert isinstance(results[0], Document)
+        assert results[0].id == doc_id
+
+    @pytest.mark.parametrize(
+        "doc_id,payload",
+        [
+            ("canvas-page-1-10", {**_mock_page(), "published": False}),
+            ("canvas-page-1-10", _mock_page()),
+            ("canvas-assignment-1-20", {**_mock_assignment(), "published": False}),
+            (
+                "canvas-assignment-1-20",
+                {**_mock_assignment(), "published": True, "workflow_state": "deleted"},
+            ),
+            ("canvas-announcement-1-30", _published_announcement(published=False)),
+            (
+                "canvas-announcement-1-30",
+                _published_announcement(workflow_state="post_delayed"),
+            ),
+            (
+                "canvas-announcement-1-30",
+                _published_announcement(delayed_post_at=_FUTURE, posted_at=None),
+            ),
+            (
+                "canvas-announcement-1-30",
+                _published_announcement(delayed_post_at=_FUTURE),
+            ),
+            (
+                "canvas-announcement-1-30",
+                _published_announcement(is_announcement=False),
+            ),
+        ],
+    )
+    def test_unlisted_item_yields_failure(
+        self, doc_id: str, payload: dict[str, Any]
+    ) -> None:
+        results = _reindex_one(doc_id, payload)
+
+        assert len(results) == 1
+        assert isinstance(results[0], ConnectorFailure)
+        assert results[0].failed_document is not None
+        assert results[0].failed_document.document_id == doc_id

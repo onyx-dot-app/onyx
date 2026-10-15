@@ -175,6 +175,35 @@ def _format_stage_params(
     return formatted_params
 
 
+_EXCLUDED_WORKFLOW_STATES = {"unpublished", "deleted", "post_delayed"}
+
+
+def _listing_exclusion_reason(
+    stage: CanvasStage, payload: dict[str, Any]
+) -> str | None:
+    """Return why the crawl listing (`_STAGE_CONFIG` filters plus the
+    `_process_items` checks) would leave this single-item payload out, or None
+    if it would include it. Time-window checks are not applied."""
+    if not payload.get("published"):
+        return "not published"
+    if payload.get("workflow_state") in _EXCLUDED_WORKFLOW_STATES:
+        return f"workflow_state is {payload.get('workflow_state')}"
+    if stage != CanvasStage.ANNOUNCEMENTS:
+        return None
+
+    # Mirrors `active_only=true`: published and not scheduled for later.
+    if not payload.get("is_announcement"):
+        return "discussion topic is not an announcement"
+    delayed_post_at = payload.get("delayed_post_at")
+    if delayed_post_at and _parse_canvas_dt(delayed_post_at) > datetime.now(
+        timezone.utc
+    ):
+        return "post is delayed"
+    if not payload.get("posted_at"):
+        return "not posted"
+    return None
+
+
 class CanvasCourse(BaseModel):
     id: int
     name: str | None = None
@@ -929,34 +958,32 @@ class CanvasConnector(
     def _fetch_item(
         self, stage: CanvasStage, course_id: int, item_id: int
     ) -> CanvasItem:
-        """Fetch one item by id. Raises ValueError if the crawl would not index it."""
+        """Fetch one item by id. Raises ValueError if the crawl listing would
+        not return it."""
         if stage == CanvasStage.PAGES:
             payload, _ = self.canvas_client.get(f"courses/{course_id}/pages/{item_id}")
-            if not payload.get("published"):
-                raise ValueError(f"Canvas page {item_id} is not published")
-            return CanvasPage.from_api(payload, course_id=course_id)
-
-        if stage == CanvasStage.ASSIGNMENTS:
+        elif stage == CanvasStage.ASSIGNMENTS:
             config = _STAGE_CONFIG[CanvasStage.ASSIGNMENTS]
             payload, _ = self.canvas_client.get(
                 f"courses/{course_id}/assignments/{item_id}",
                 params={"include[]": config["params"]["include[]"]},
             )
-            if not payload.get("published"):
-                raise ValueError(f"Canvas assignment {item_id} is not published")
-            return CanvasAssignment.from_api(payload, course_id=course_id)
-
-        # Announcements are discussion topics with is_announcement set.
-        payload, _ = self.canvas_client.get(
-            f"courses/{course_id}/discussion_topics/{item_id}",
-            params={"include[]": "sections"},
-        )
-        if not payload.get("is_announcement"):
-            raise ValueError(
-                f"Canvas discussion topic {item_id} is not an announcement"
+        else:
+            payload, _ = self.canvas_client.get(
+                f"courses/{course_id}/discussion_topics/{item_id}",
+                params={"include[]": "sections"},
             )
-        if not payload.get("posted_at"):
-            raise ValueError(f"Canvas announcement {item_id} is not posted")
+
+        reason = _listing_exclusion_reason(stage, payload)
+        if reason is not None:
+            raise ValueError(
+                f"Canvas {stage.removesuffix('s')} {item_id} is not indexed: {reason}"
+            )
+
+        if stage == CanvasStage.PAGES:
+            return CanvasPage.from_api(payload, course_id=course_id)
+        if stage == CanvasStage.ASSIGNMENTS:
+            return CanvasAssignment.from_api(payload, course_id=course_id)
         return CanvasAnnouncement.from_api(payload, course_id=course_id)
 
     @override
