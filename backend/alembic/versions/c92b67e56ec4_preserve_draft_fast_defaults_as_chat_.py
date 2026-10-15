@@ -1,7 +1,7 @@
 """Preserve draft fast defaults as chat naming defaults
 
 Revision ID: c92b67e56ec4
-Revises: e7a3c1f5b2d4
+Revises: 1c7b6cce66ac
 Create Date: 2026-10-14 16:53:14.197305
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "c92b67e56ec4"
-down_revision = "e7a3c1f5b2d4"
+down_revision = "1c7b6cce66ac"
 branch_labels = None
 depends_on = None
 
