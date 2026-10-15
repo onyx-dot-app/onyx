@@ -440,6 +440,16 @@ Providers own scope parameters, client authentication, and token and grant extra
 The callback stamps an absolute `expires_at`
 (`external_apps/token_utils.py:stamp_expires_at`), stores the granted scopes, and refreshes the user's sandbox skills.
 
+Zendesk uses a Confidential OAuth client with `read`, `tickets:write`, `hc:write`,
+`side_conversations:write`, and `macros:write` scopes. All five are requested.
+Help Center, side conversations, and macros have separate read and write action policies.
+Reads default to `ALWAYS`; writes default to `ASK`, including nested and bulk resource routes.
+The skill uses its existing `call` command for these workflows. Articles start as drafts;
+macro examples use a personal restriction. Zendesk roles and feature availability still apply.
+View and trigger write scopes are not requested.
+Search and ticket audits require broad `read`; resource-specific read scopes do not cover these endpoints.
+Existing users must reconnect after allowed scopes change to obtain the new grant.
+
 The authorize and token URLs come from
 `OAuthExternalAppProvider.resolve_oauth_endpoints`, not straight from the
 spec: a provider whose endpoints live on the customer's own host (Zendesk's

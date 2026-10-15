@@ -21,6 +21,9 @@ _WRITE_ACTIONS = {
     ZendeskAction.TICKETS_CREATE,
     ZendeskAction.TICKETS_UPDATE,
     ZendeskAction.TICKETS_DELETE,
+    ZendeskAction.HELP_CENTER_WRITE,
+    ZendeskAction.SIDE_CONVERSATIONS_WRITE,
+    ZendeskAction.MACROS_WRITE,
 }
 
 
@@ -142,7 +145,7 @@ def test_every_catalog_id_is_unique() -> None:
 
 
 def test_reads_auto_approve_and_writes_ask() -> None:
-    """Reads run unattended; anything that changes a ticket needs a human."""
+    """Reads run unattended; every supported write needs approval."""
     for endpoint in _CATALOG:
         expected = (
             EndpointPolicy.ASK
@@ -150,3 +153,75 @@ def test_reads_auto_approve_and_writes_ask() -> None:
             else EndpointPolicy.ALWAYS
         )
         assert endpoint.default_policy is expected, endpoint.id
+
+
+@pytest.mark.parametrize("suffix", ["", ".json"])
+@pytest.mark.parametrize(
+    "path, read_action, write_action",
+    [
+        (
+            "/api/v2/help_center/sections/12/articles",
+            ZendeskAction.HELP_CENTER_READ,
+            ZendeskAction.HELP_CENTER_WRITE,
+        ),
+        (
+            "/api/v2/help_center/en-us/sections/12/articles",
+            ZendeskAction.HELP_CENTER_READ,
+            ZendeskAction.HELP_CENTER_WRITE,
+        ),
+        (
+            "/api/v2/help_center/articles/34",
+            ZendeskAction.HELP_CENTER_READ,
+            ZendeskAction.HELP_CENTER_WRITE,
+        ),
+        (
+            "/api/v2/help_center/articles/34/translations/en-us",
+            ZendeskAction.HELP_CENTER_READ,
+            ZendeskAction.HELP_CENTER_WRITE,
+        ),
+        (
+            "/api/v2/tickets/12/side_conversations",
+            ZendeskAction.SIDE_CONVERSATIONS_READ,
+            ZendeskAction.SIDE_CONVERSATIONS_WRITE,
+        ),
+        (
+            "/api/v2/tickets/12/side_conversations/abc/reply",
+            ZendeskAction.SIDE_CONVERSATIONS_READ,
+            ZendeskAction.SIDE_CONVERSATIONS_WRITE,
+        ),
+        (
+            "/api/v2/tickets/12/side_conversations/abc/events",
+            ZendeskAction.SIDE_CONVERSATIONS_READ,
+            ZendeskAction.SIDE_CONVERSATIONS_WRITE,
+        ),
+        ("/api/v2/macros", ZendeskAction.MACROS_READ, ZendeskAction.MACROS_WRITE),
+        ("/api/v2/macros/34", ZendeskAction.MACROS_READ, ZendeskAction.MACROS_WRITE),
+        (
+            "/api/v2/macros/update_many",
+            ZendeskAction.MACROS_READ,
+            ZendeskAction.MACROS_WRITE,
+        ),
+        (
+            "/api/v2/macros/destroy_many",
+            ZendeskAction.MACROS_READ,
+            ZendeskAction.MACROS_WRITE,
+        ),
+    ],
+)
+def test_resource_policies_cover_nested_and_bulk_routes(
+    path: str, read_action: ZendeskAction, write_action: ZendeskAction, suffix: str
+) -> None:
+    assert _matching_actions("GET", path + suffix) == {read_action}
+    for method in ("POST", "PUT", "PATCH", "DELETE"):
+        assert _matching_actions(method, path + suffix) == {write_action}
+
+
+def test_new_policies_do_not_claim_other_resources() -> None:
+    for path in (
+        "/api/v2/views",
+        "/api/v2/triggers",
+        "/api/v2/automations",
+        "/api/v2/macros_extra",
+        "/api/v2/tickets/12/side_conversations_extra",
+    ):
+        assert _matching_actions("POST", path) == set()

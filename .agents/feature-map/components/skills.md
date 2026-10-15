@@ -247,6 +247,10 @@ paths, and directories. The static-file loader skips raw template sources. The l
 calls the same renderer
 (`server/features/skill/response_helpers.py:skill_preview_response`), so what a
 user reads in the preview is what the agent gets — not the raw markers.
+The Zendesk skill documents draft Help Center articles, ticket side conversations,
+and personal macros through its existing JSON `call` command. These workflows
+use separate app policies and require their resource-specific OAuth write scopes.
+
 Only `DENY` is surfaced; `ALWAYS` and `ASK` actions are left undocumented
 here because the skill body already covers them and `ASK` is handled at call
 time by the sandbox proxy (`[[craft-external-apps]]`). An unresolved

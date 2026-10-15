@@ -211,7 +211,7 @@ def test_rendered_files_withhold_secret_credential_fields(
             get_value=lambda **_: {
                 "subdomain": "acme",
                 "client_id": "cid",
-                "client_secret": "secret",
+                "client_secret": "test-client-secret-do-not-render",
             }
         ),
     )
@@ -227,4 +227,7 @@ def test_rendered_files_withhold_secret_credential_fields(
         BUILT_IN_SKILLS["zendesk"].source_dir,
     )
     assert captured == {"subdomain": "acme", "client_id": "cid"}
-    assert all("secret" not in content for content in rendered.values())
+    assert all(
+        "test-client-secret-do-not-render" not in content
+        for content in rendered.values()
+    )

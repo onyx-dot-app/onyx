@@ -117,6 +117,7 @@ def test_token_exchange_posts_json_with_an_explicit_expiry() -> None:
     assert request.body["grant_type"] == "authorization_code"
     assert request.body["code"] == "the-code"
     assert request.body["redirect_uri"] == "https://onyx.test/callback"
+    assert request.body["scope"] == _provider().spec.oauth.scope
     # An integer, as Zendesk's JSON token endpoint documents it.
     assert isinstance(request.body["expires_in"], int)
     assert 300 <= request.body["expires_in"] <= 172800
@@ -155,15 +156,13 @@ def test_extract_credentials_rejects_a_response_without_a_token() -> None:
         _provider().extract_credentials({"error": "invalid_grant"})
 
 
-def test_requested_scopes_cover_the_catalog_and_nothing_more() -> None:
-    """No optional-scope mechanism, so every scope must be grantable on any
-    plan — and writes stop at tickets."""
+def test_requested_scopes_allow_search_and_supported_writes() -> None:
+    """Search and ticket audits reject resource-specific read scopes."""
     scopes = set(_provider().spec.oauth.scope.split())
     assert scopes == {
-        "tickets:read",
+        "read",
         "tickets:write",
-        "users:read",
-        "organizations:read",
-        "ticket_views:read",
-        "satisfaction_ratings:read",
+        "hc:write",
+        "side_conversations:write",
+        "macros:write",
     }

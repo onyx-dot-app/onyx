@@ -1,6 +1,6 @@
 ---
 name: zendesk
-description: Read and act on Zendesk Support tickets, users, organizations, views, and CSAT ratings on the connected user's behalf via a light REST wrapper.
+description: Read and act on Zendesk Support tickets, users, organizations, views, CSAT ratings, Help Center content, side conversations, and macros on the connected user's behalf via a light REST wrapper.
 ---
 
 # Zendesk
@@ -77,6 +77,56 @@ python zendesk_api.py update 12345 --set status=solved --set priority=high
 python zendesk_api.py comment 12345 --body "Looked into this." [--public]
 python zendesk_api.py tag 12345 --tags needs-review [--replace]
 ```
+
+### Turn a resolved ticket into a Help Center article
+
+Read the ticket and comments. Remove customer details, secrets, and internal notes
+from the proposed article. Choose an existing section and an enabled locale.
+Create a draft unless the user explicitly asks to publish.
+
+```
+python zendesk_api.py call GET /api/v2/help_center/sections.json
+python zendesk_api.py call POST /api/v2/help_center/sections/360001/articles.json '{"article":{"title":"Resolve a billing error","body":"<p>Steps to resolve the issue.</p>","locale":"en-us","draft":true},"notify_subscribers":false}'
+```
+
+Use the section ID returned by Zendesk. Help Center permissions still apply;
+creating or publishing content requires the corresponding Zendesk role.
+See [Articles](https://developer.zendesk.com/api-reference/help_center/help-center-api/articles/).
+
+### Loop in engineering or a vendor
+
+A side conversation keeps a separate exchange inside the ticket. Confirm the
+recipients and message before sending. The account must have side conversations enabled.
+
+```
+python zendesk_api.py call GET /api/v2/tickets/12345/side_conversations.json
+python zendesk_api.py call POST /api/v2/tickets/12345/side_conversations.json '{"message":{"subject":"Investigate billing error","body":"Please review this issue.","to":[{"email":"engineer@example.com"}]}}'
+python zendesk_api.py call POST /api/v2/tickets/12345/side_conversations/CONVERSATION_ID/reply.json '{"message":{"body":"Here is the update.","to":[{"email":"engineer@example.com"}]}}'
+```
+
+Use the returned conversation ID for replies. Zendesk also supports Slack,
+Teams, and child-ticket recipients with the corresponding account integrations.
+See [Side conversations](https://developer.zendesk.com/api-reference/ticketing/side_conversation/side_conversation/).
+
+### Save a reply as a macro
+
+Read existing macros first. Use `user me` to get the connected user's numeric ID.
+Create a personal macro unless the user requests a shared one. Replace `42`
+with that user's ID. Remove ticket-specific details from reusable replies.
+
+```
+python zendesk_api.py call GET /api/v2/macros.json
+python zendesk_api.py call POST /api/v2/macros.json '{"macro":{"title":"Billing follow-up","actions":[{"field":"comment_value","value":"Thanks for contacting support."}],"restriction":{"type":"User","id":42}}}'
+```
+
+Editing a macro's actions replaces its entire action list. Read the current
+macro and preserve actions that the user did not ask to change.
+See [Macros](https://developer.zendesk.com/api-reference/ticketing/business-rules/macros/).
+
+These writes each have a separate Onyx approval policy. A 403 can indicate a
+missing OAuth scope or Zendesk feature permission. Ask the admin to allow
+`hc:write`, `side_conversations:write`, and `macros:write`, then reconnect in
+Onyx. Do not repeatedly reconnect when a feature is absent from the Zendesk plan.
 
 ## Output
 

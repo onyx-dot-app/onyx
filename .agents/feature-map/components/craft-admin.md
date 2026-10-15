@@ -38,7 +38,12 @@ agent can reach: built-in apps (Slack, Gmail, Google Calendar, Google Drive, Lin
 HubSpot, Notion, GitHub, Zendesk), any custom app the admin has registered, and connected MCP
 servers. For each, the admin can enable or disable it, edit its per-action
 policy (auto-approve, ask, or deny each kind of action), and configure its
-credentials. On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
+credentials. Zendesk also exposes Help Center, side conversation, and macro policies.
+Their reads auto-approve and their writes require approval by default.
+The permissions selector shows Default when effective policies match
+the catalog and Custom for mixed overrides. Default restores each catalog policy.
+The shared MCP editor uses the same control, with Ask as each tool’s default.
+On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
 credentials, so the admin can only toggle them on and set policy. Custom apps
 on Cloud keep a normal credential form, as does a built-in whose OAuth client
 cannot be Onyx-owned because it is registered per customer account (Zendesk).

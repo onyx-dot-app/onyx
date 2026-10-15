@@ -13824,6 +13824,7 @@
           "askOption": "Demander",
           "autoApproveOption": "Approbation automatique",
           "customOption": "Personnalisé",
+          "defaultOption": "Par défaut",
           "description": "Choisissez ce que l'agent peut faire. « Demander » vous sollicite dans le chat avant chaque action ; « Approbation automatique » l'exécute sans demander. Utilisez Avancé pour définir une politique par action.",
           "title": "Autorisations"
         },

@@ -81,6 +81,12 @@ class ZendeskAction(ExternalAppAction):
     TICKETS_CREATE = "zendesk.tickets.create"
     TICKETS_UPDATE = "zendesk.tickets.update"
     TICKETS_DELETE = "zendesk.tickets.delete"
+    HELP_CENTER_READ = "zendesk.help_center.read"
+    HELP_CENTER_WRITE = "zendesk.help_center.write"
+    SIDE_CONVERSATIONS_READ = "zendesk.side_conversations.read"
+    SIDE_CONVERSATIONS_WRITE = "zendesk.side_conversations.write"
+    MACROS_READ = "zendesk.macros.read"
+    MACROS_WRITE = "zendesk.macros.write"
 
 
 _ENDPOINTS: list[EndpointSpec] = [
@@ -238,17 +244,91 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/tickets/destroy_many",
         ),
     ),
+    EndpointSpec(
+        id=ZendeskAction.HELP_CENTER_READ,
+        normalised_name="Read Help Center",
+        description="Read articles, sections, and article translations.",
+        matches=_routes(
+            "GET",
+            "/api/v2/help_center/{resource...}",
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=ZendeskAction.HELP_CENTER_WRITE,
+        normalised_name="Write Help Center content",
+        description="Create, edit, publish, or delete Help Center content.",
+        matches=tuple(
+            route
+            for method in ("POST", "PUT", "PATCH", "DELETE")
+            for route in _routes(
+                method,
+                "/api/v2/help_center/{resource...}",
+            )
+        ),
+        default_policy=EndpointPolicy.ASK,
+    ),
+    EndpointSpec(
+        id=ZendeskAction.SIDE_CONVERSATIONS_READ,
+        normalised_name="Read side conversations",
+        description="Read conversations and their messages within a ticket.",
+        matches=_routes(
+            "GET",
+            "/api/v2/tickets/{ticket_id}/side_conversations",
+            "/api/v2/tickets/{ticket_id}/side_conversations/{resource...}",
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=ZendeskAction.SIDE_CONVERSATIONS_WRITE,
+        normalised_name="Write side conversations",
+        description="Start, reply to, or update side conversations, including messages to external recipients.",
+        matches=tuple(
+            route
+            for method in ("POST", "PUT", "PATCH", "DELETE")
+            for route in _routes(
+                method,
+                "/api/v2/tickets/{ticket_id}/side_conversations",
+                "/api/v2/tickets/{ticket_id}/side_conversations/{resource...}",
+            )
+        ),
+        default_policy=EndpointPolicy.ASK,
+    ),
+    EndpointSpec(
+        id=ZendeskAction.MACROS_READ,
+        normalised_name="Read macros",
+        description="Read saved replies and macro actions.",
+        matches=_routes(
+            "GET",
+            "/api/v2/macros",
+            "/api/v2/macros/{resource...}",
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=ZendeskAction.MACROS_WRITE,
+        normalised_name="Write macros",
+        description="Create, edit, or delete saved replies and macro actions.",
+        matches=tuple(
+            route
+            for method in ("POST", "PUT", "PATCH", "DELETE")
+            for route in _routes(
+                method,
+                "/api/v2/macros",
+                "/api/v2/macros/{resource...}",
+            )
+        ),
+        default_policy=EndpointPolicy.ASK,
+    ),
 ]
 
-# Resource scopes rather than Zendesk's broad `read`/`write`. Zendesk has no
-# optional-scope mechanism, so every scope here must be grantable on any plan.
+# Search and ticket audits require broad read access. Writes use resource scopes.
 _SCOPES = [
-    "tickets:read",
+    "read",
     "tickets:write",
-    "users:read",
-    "organizations:read",
-    "ticket_views:read",
-    "satisfaction_ratings:read",
+    "hc:write",
+    "side_conversations:write",
+    "macros:write",
 ]
 
 
@@ -287,8 +367,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
                     label="Unique identifier",
                     description=(
                         "The OAuth client's Unique identifier, from Zendesk "
-                        "Admin Center → Apps and integrations → APIs → "
-                        "Zendesk API → OAuth Clients."
+                        "Admin Center → APIs → OAuth clients."
                     ),
                 ),
                 OrgCredentialField(
@@ -302,17 +381,23 @@ class ZendeskProvider(OAuthExternalAppProvider):
                 ),
             ],
             setup_instructions=(
-                "In Zendesk: Admin Center → Apps and integrations → APIs → "
-                "Zendesk API → OAuth Clients → add a client. Set its Redirect "
-                "URL to this Onyx instance's callback URL "
-                "(/craft/v1/apps/oauth/callback) and copy the Secret when "
-                "Zendesk shows it — it is shown only once. Then fill in your "
-                "subdomain, the client's Unique identifier, and the Secret "
-                "below. The subdomain decides which Zendesk host this app may "
-                "reach, so check it before saving. The agent is granted read "
-                "access to tickets, users, "
-                "organizations, views, and satisfaction ratings, plus write "
-                "access to tickets."
+                "In Zendesk, open Admin Center → APIs → OAuth clients and add a client. "
+                "Set Client kind to Confidential. "
+                "Add these allowed scopes to the client: "
+                f"{', '.join(_SCOPES)}. "
+                "The read scope allows reading all Zendesk data and is required for search and ticket audits. "
+                "The tickets:write scope allows creating, updating, and deleting tickets. "
+                "The hc:write scope allows Help Center changes, side_conversations:write allows ticket side conversations, "
+                "and macros:write allows saved reply changes. "
+                "Onyx asks for approval before writes by default. "
+                "Help Center and side conversations also require the relevant Zendesk features and user permissions. "
+                "All listed scopes must be allowed, even if you do not use every feature. "
+                "After changing allowed scopes, reconnect Zendesk in Onyx to grant them. "
+                "Set the Redirect URL to this Onyx instance's full callback URL "
+                "(https://<your-onyx-domain>/craft/v1/apps/oauth/callback). "
+                "Copy the Secret when Zendesk shows it; it is shown only once. "
+                "Then enter your subdomain, the client's Unique identifier, and the Secret below. "
+                "The subdomain selects the Zendesk account this app can access."
             ),
         ),
         endpoint_catalog=_ENDPOINTS,

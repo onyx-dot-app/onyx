@@ -13824,6 +13824,7 @@
           "askOption": "Perguntar",
           "autoApproveOption": "Aprovar automaticamente",
           "customOption": "Personalizado",
+          "defaultOption": "Padrão",
           "description": "Escolha o que o agente pode fazer. “Perguntar” consulta você no chat antes de cada ação; “Aprovar automaticamente” executa sem perguntar. Use Avançado para definir uma política por ação.",
           "title": "Permissões"
         },
