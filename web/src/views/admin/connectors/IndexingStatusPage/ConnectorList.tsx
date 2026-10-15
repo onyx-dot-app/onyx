@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
 import {
   Button,
   Card,
+  Divider,
   Dropdown,
   FilterButton,
   InputTypeIn,
@@ -242,14 +243,23 @@ export default function ConnectorList() {
         />
       ) : (
         <Section alignItems="stretch" gap={2} height="fit">
-          {data?.items.map((row) => (
-            <ConnectorRow
-              key={row.cc_pair_id}
-              row={row}
-              expanded={expandedIds.has(row.cc_pair_id)}
-              onToggle={() => toggleExpanded(row.cc_pair_id)}
-            />
+          {/* The route sorts by source first, so each change of source starts a section. */}
+          {data?.items.map((row, index) => (
+            <Fragment key={row.cc_pair_id}>
+              {data.items[index - 1]?.source !== row.source && (
+                <Divider title={getSourceMetadata(row.source).displayName} />
+              )}
+              <ConnectorRow
+                row={row}
+                expanded={expandedIds.has(row.cc_pair_id)}
+                onToggle={() => toggleExpanded(row.cc_pair_id)}
+              />
+            </Fragment>
           ))}
+          {/* Its own section, so a federated row does not read as part of the last source. */}
+          {data !== undefined && data.federated_connectors.length > 0 && (
+            <Divider title={t("federated.tag")} />
+          )}
           {data?.federated_connectors.map((connector) => (
             <FederatedRow key={connector.id} connector={connector} />
           ))}

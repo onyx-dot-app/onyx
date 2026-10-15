@@ -242,7 +242,8 @@ def get_indexing_connectors(
     ),
     db_session: Session = Depends(get_session),
 ) -> IndexingConnectorsResponse:
-    """The readable pairs page, sorted by status then name. ``q`` matches the name."""
+    """The readable pairs page, grouped by source, then sorted by status then
+    name within a source. ``q`` matches the name."""
     pairs = _readable_cc_pairs(db_session, user)
     latest = _latest_index_attempts(db_session)
     query = (q or "").strip().lower() or None
@@ -264,8 +265,10 @@ def get_indexing_connectors(
             for cc_pair in searched
             if status is None or statuses[cc_pair.id] == status
         ),
+        # Paging is server side, so the source grouping must lead the sort key.
         # The id breaks name ties, so a page boundary splits same-named pairs the same way every request.
         key=lambda cc_pair: (
+            cc_pair.connector.source.value,
             _STATUS_ORDER[statuses[cc_pair.id]],
             cc_pair.name.lower(),
             cc_pair.id,

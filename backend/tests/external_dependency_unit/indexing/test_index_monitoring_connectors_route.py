@@ -1,6 +1,6 @@
 """Coverage for the indexing status page's connector list: a pair's bucket
-follows its own state before its latest attempt, the list sorts by bucket then
-name, the search narrows the list and the counts while the status filter
+follows its own state before its latest attempt, the list groups by source and
+sorts by bucket then name within a source, the search narrows the list and the counts while the status filter
 narrows only the list, and a queued attempt knows its place in line."""
 
 from datetime import datetime, timedelta, timezone
@@ -37,11 +37,12 @@ def _create_cc_pair(
     name: str,
     status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     in_repeated_error_state: bool = False,
+    source: DocumentSource = DocumentSource.GOOGLE_DRIVE,
 ) -> ConnectorCredentialPair:
     owner = create_test_user(db_session, "monitor_list_owner")
     connector = Connector(
         name=f"{prefix} Connector",
-        source=DocumentSource.GOOGLE_DRIVE,
+        source=source,
         input_type=InputType.POLL,
         connector_specific_config={},
         refresh_freq=None,
@@ -166,6 +167,49 @@ def test_pairs_sort_by_bucket_then_name_and_the_filter_keeps_the_counts(
     assert [row.name for row in filtered.items] == [indexed_a.name, indexed_b.name]
     assert filtered.total_items == 2
     assert filtered.status_counts == response.status_counts
+
+
+def test_pairs_group_by_source_across_pages(db_session: Session) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    # Created interleaved, so only the sort can put each source together.
+    slack_indexed = _create_cc_pair(
+        db_session, prefix, "a slack indexed", source=DocumentSource.SLACK
+    )
+    drive_indexed = _create_cc_pair(db_session, prefix, "b drive indexed")
+    slack_paused = _create_cc_pair(
+        db_session,
+        prefix,
+        "c slack paused",
+        ConnectorCredentialPairStatus.PAUSED,
+        source=DocumentSource.SLACK,
+    )
+    drive_indexing = _create_cc_pair(db_session, prefix, "d drive indexing")
+    slack_scheduled = _create_cc_pair(
+        db_session, prefix, "e slack scheduled", source=DocumentSource.SLACK
+    )
+    drive_indexed_first = _create_cc_pair(db_session, prefix, "a drive indexed")
+    _index_attempt(db_session, slack_indexed, IndexingStatus.SUCCESS, now)
+    _index_attempt(db_session, drive_indexed, IndexingStatus.SUCCESS, now)
+    _index_attempt(db_session, drive_indexing, IndexingStatus.IN_PROGRESS, now)
+    _index_attempt(db_session, drive_indexed_first, IndexingStatus.SUCCESS, now)
+
+    first = _connectors(db_session, prefix, page_size=4)
+    second = _connectors(db_session, prefix, page_num=1, page_size=4)
+
+    # "google_drive" sorts before "slack"; a page boundary does not reorder a source.
+    assert [row.name for row in first.items + second.items] == [
+        drive_indexing.name,
+        drive_indexed_first.name,
+        drive_indexed.name,
+        slack_paused.name,
+        slack_scheduled.name,
+        slack_indexed.name,
+    ]
+    assert [row.source for row in first.items + second.items] == [
+        DocumentSource.GOOGLE_DRIVE
+    ] * 3 + [DocumentSource.SLACK] * 3
+    assert first.total_items == 6
 
 
 def test_a_running_backfill_is_the_pairs_current_run(db_session: Session) -> None:

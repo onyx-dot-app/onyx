@@ -79,7 +79,7 @@ already has a federated connector,
 `web/src/app/admin/documents/sets/page.tsx` links to it from a document set's
 linked federated connector, and the indexing status page
 (`web/src/views/admin/connectors/IndexingStatusPage/ConnectorList.tsx`) lists it
-after the regular cc-pairs for admins and links to it. `web/src/lib/admin-routes.ts` lists `/admin/federated`
+after the regular cc-pairs, under its own divider, for admins and links to it. `web/src/lib/admin-routes.ts` lists `/admin/federated`
 only inside `VECTOR_DB_REQUIRED_ROUTE_PREFIXES`, not as a registered `ADMIN_ROUTES` entry: there is
 no admin sidebar item and no `/admin/federated` index page, only the `[id]`
 detail page reached by the links above.
