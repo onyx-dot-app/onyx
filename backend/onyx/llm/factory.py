@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import Permission
+from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
     fetch_default_contextual_rag_model,
     fetch_default_llm_model,
+    fetch_default_model,
     fetch_default_vision_model,
     fetch_existing_llm_provider,
     fetch_model_configuration_by_id,
@@ -32,8 +33,10 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -402,6 +405,57 @@ def get_default_llm(
             policy_fn=policy_fn,
             user_defaults=user_defaults,
         )
+
+
+def _get_default_utility_llm(
+    flow_type: LLMModelFlowType,
+    additional_headers: dict[str, str] | None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None,
+) -> LLM | None:
+    with get_session_with_current_tenant() as db_session:
+        model = fetch_default_model(db_session, flow_type)
+        if model is None:
+            return None
+        provider = LLMProviderView.from_model(
+            model.llm_provider, model_configurations=[model]
+        )
+        model_name = model.name
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=provider.api_key,
+        )
+
+    return llm_from_provider(
+        model_name=model_name,
+        llm_provider=provider,
+        additional_headers=additional_headers,
+        policy_fn=policy_fn,
+    )
+
+
+def get_search_selection_llm(
+    *,
+    fallback: LLM,
+    additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+) -> LLM:
+    return (
+        _get_default_utility_llm(
+            LLMModelFlowType.SEARCH_SELECTION, additional_headers, policy_fn
+        )
+        or fallback
+    )
+
+
+def get_chat_naming_llm(
+    *,
+    additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+) -> LLM | None:
+    return _get_default_utility_llm(
+        LLMModelFlowType.CHAT_NAMING, additional_headers, policy_fn
+    )
 
 
 def get_llm(

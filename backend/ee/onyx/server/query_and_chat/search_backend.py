@@ -9,7 +9,7 @@ multi-stage retrieval used by chat mode), see
 onyx/server/features/search/api.py (POST /api/search).
 """
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -38,7 +38,9 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.llm.factory import get_default_llm
+from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.factory import get_default_llm, get_search_selection_llm
+from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
@@ -140,18 +142,46 @@ def handle_send_search_message(
         request.hybrid_alpha = 0.0
 
     # Query expansion and LLM doc selection spend tokens, so the chat budgets apply.
-    if request.run_query_expansion or (request.num_docs_fed_to_llm_selection or 0) >= 1:
+    primary_llm: LLM | None = None
+    selection_llm_factory: Callable[[], LLM] | None = None
+    run_selection = (request.num_docs_fed_to_llm_selection or 0) >= 1
+    if request.run_query_expansion or run_selection:
         check_token_rate_limits(user)
+        primary_llm = get_default_llm()
+    if request.run_query_expansion and primary_llm is not None:
         check_llm_cost_limit_for_provider(
             db_session=db_session,
             tenant_id=get_current_tenant_id(),
-            llm_provider_api_key=get_default_llm().config.api_key,
+            llm_provider_api_key=primary_llm.config.api_key,
         )
+    if run_selection and primary_llm is not None:
+        selection_fallback = primary_llm
+
+        def resolve_selection_llm() -> LLM:
+            selection_llm = get_search_selection_llm(fallback=selection_fallback)
+            if (
+                not request.run_query_expansion
+                or selection_llm.config.api_key != selection_fallback.config.api_key
+            ):
+                check_llm_cost_limit_for_provider(
+                    db_session=db_session,
+                    tenant_id=get_current_tenant_id(),
+                    llm_provider_api_key=selection_llm.config.api_key,
+                )
+            return selection_llm
+
+        selection_llm_factory = resolve_selection_llm
 
     # Non-streaming path
     if not request.stream:
         try:
-            packets = stream_search_query(request, user, db_session)
+            packets = stream_search_query(
+                request,
+                user,
+                db_session,
+                primary_llm=primary_llm,
+                selection_llm_factory=selection_llm_factory,
+            )
             return gather_search_stream(packets)
         except NotImplementedError as e:
             return SearchFullResponse(
@@ -164,10 +194,18 @@ def handle_send_search_message(
     def stream_generator() -> Generator[str, None, None]:
         try:
             with get_session_with_current_tenant() as streaming_db_session:
-                for packet in stream_search_query(request, user, streaming_db_session):
+                for packet in stream_search_query(
+                    request,
+                    user,
+                    streaming_db_session,
+                    primary_llm=primary_llm,
+                    selection_llm_factory=selection_llm_factory,
+                ):
                     yield get_json_line(packet.model_dump())
         except NotImplementedError as e:
             yield get_json_line(SearchErrorPacket(error=str(e)).model_dump())
+        except OnyxError as e:
+            yield get_json_line(SearchErrorPacket(error=e.detail).model_dump())
         except HTTPException:
             raise
         except Exception as e:

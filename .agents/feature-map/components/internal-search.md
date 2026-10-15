@@ -231,6 +231,19 @@ The merged list is capped to `override_kwargs.num_hits`.
 
 ### 4.5 LLM selection
 
+Chat constructs search tools with the session client and a lazy
+SEARCH_SELECTION resolver. Query rewrites, source/time filters, and Slack query
+processing keep the session client. Selection resolves only after retrieval
+returns sections, so offering search or finding no results never checks the
+selection provider. An unset SEARCH_SELECTION returns the same session client,
+never CHAT_NAMING. The public Search API honors explicit provider/model requests for
+both clients; otherwise only selection uses SEARCH_SELECTION. The EE Search UI
+likewise keeps rewrites on the default chat client and resolves selection lazily.
+If that lazy check raises `OnyxError` during streaming, the EE endpoint sends a
+`SearchErrorPacket` instead of aborting the connection.
+Before scheduling a Slack lane, `SearchTool.run` checks the primary provider's
+cost limit. This also covers API searches with query expansion and automatic filters disabled.
+
 `_trim_sections_by_tokens` (`search_tool.py`) first drops sections once a token
 budget (`max_llm_chunks * DOC_EMBEDDING_CONTEXT_SIZE * SELECTION_TOKEN_BUDGET_MULTIPLIER`,
 `SELECTION_TOKEN_BUDGET_MULTIPLIER = 2`) is exhausted, counting at most
@@ -239,6 +252,14 @@ cannot starve the budget. `select_sections_for_expansion`
 (`secondary_llm_flows/document_filter.py`) then makes one LLM call over all
 surviving sections together (so the model can compare across documents, not just
 within one) and returns the sections it picked plus any `best_doc_ids` it flagged.
+
+When SEARCH_SELECTION is configured, `backend/onyx/secondary_llm_flows/search_prompt_budget.py` also
+bounds serialized prompts against the selection model's input and context limits,
+with an output allowance and safety margin. Selection drops trailing candidates
+until the actual prompt fits. Expansion classification bounds its own input
+without changing the original evidence. Rewrites retain their primary-model limits.
+An oversized fixed prompt takes the flow's local fallback without a provider
+call. The final answer's evidence allowance remains independent.
 
 ### 4.6 Context expansion
 
@@ -338,9 +359,9 @@ the LLM, assigning one citation number per unique `document_id` starting at
   citation-tagged string and mapping this component hands back.
 - [[tools-framework]]: `SearchTool` implements `Tool`; `tool_runner.py` merges
   repeated calls and allocates the citation range.
-- [[llm-providers]]: every secondary flow (`query_expansion`, `source_filter`,
-  `time_filter`, `document_filter`) and the selection/expansion stages make
-  their own LLM calls through the persona's resolved `LLM`.
+- [[llm-providers]]: section selection and relevance classification use the
+  optional SEARCH_SELECTION default, falling back directly to the persona's
+  resolved `LLM`. Rewrites and filters keep that primary client. CHAT_NAMING is separate.
 
 **Depended on by**
 - [[core-chat-loop]]: `construct_tools` attaches `SearchTool` per turn; the loop

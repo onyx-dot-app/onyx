@@ -24,7 +24,7 @@ OpenAI-compatible endpoint, and more) under **Admin > LLM**, enters credentials,
 and picks which of the provider's models are visible to end users. The admin
 then marks one model as the default for chat, and optionally separate defaults
 for vision, contextual RAG, chat naming, search selection, and Craft.
-The search-selection designation is stored independently of the chat default.
+The selected chat model still answers and rewrites queries.
 
 A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
@@ -237,6 +237,17 @@ validates the selected model and creates its pointer mapping through
 returns every `ModelConfiguration` that has an `LLMModelFlow` row matching any
 flow type in the list.
 
+`factory.py:get_search_selection_llm` resolves SEARCH_SELECTION and returns the
+same supplied fallback client when unset. It never uses the naming default.
+Configured utility defaults resolve directly from their admin designation, with
+explicit request headers, provider-specific policy, and a managed-key cost check.
+Provider conversion includes only the designated model row, preserving its
+configured limits even when an undated alias also exists.
+It does not inherit user temperature or reasoning overrides. Operation tracing
+tags remain unchanged. `get_chat_naming_llm` resolves CHAT_NAMING or returns
+`None`. The naming endpoint constructs and cost-checks the session client only
+when no naming default exists.
+
 CHAT_NAMING and SEARCH_SELECTION preserve `ModelConfiguration.is_visible`; they do
 not add a model to the user picker. Provider edits can change a task-only default's visibility, but
 cannot remove its model until the default is cleared. Auto-mode sync does not
@@ -393,10 +404,11 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
    not by application logic alone. `_update_default_model` clears the old
    default and sets the new one in one transaction so this index is never
    violated.
-2. **Provider access is group- and persona-gated and must stay gated.** Every
-   path that resolves an `LLM` for a user-initiated call must run through
-   `can_user_access_llm_provider` (or fall back to the default). Do not add a
-   new resolution path that skips it.
+2. **User-selected providers are group- and persona-gated.** Resolution runs
+   through `can_user_access_llm_provider` or falls back to the default.
+   Admin-designated SEARCH_SELECTION and CHAT_NAMING defaults resolve independently
+   of picker access. Document ACLs, tenant policy, and managed-key cost limits
+   still apply.
 3. **The policy function is applied last.** `factory.py:get_llm` merges
    `policy_headers` / `policy_model_kwargs` after every other header/kwarg
    source. A new merge step must preserve that ordering, or a policy like

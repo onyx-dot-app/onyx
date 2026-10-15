@@ -109,7 +109,11 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingResponse,
 )
 from onyx.llm.exceptions import litellm_exception_to_safe_error
-from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import (
+    get_llm_for_persona,
+    get_llm_token_counter,
+    get_search_selection_llm,
+)
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
@@ -1086,6 +1090,7 @@ def build_chat_turn(
         slack_context=slack_context,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
+        litellm_additional_headers=litellm_additional_headers,
     )
 
 
@@ -1323,6 +1328,14 @@ def _run_models(
                 emitter=model_emitter,
                 user=user,
                 llm=model_llm,
+                selection_llm_factory=partial(
+                    get_search_selection_llm,
+                    fallback=model_llm,
+                    additional_headers=setup.litellm_additional_headers,
+                    policy_fn=partial(
+                        incognito_llm_request_policy, setup.incognito_record_mode
+                    ),
+                ),
                 search_tool_config=SearchToolConfig(
                     user_selected_filters=setup.new_msg_req.internal_search_filters,
                     project_id_filter=setup.search_params.project_id_filter,

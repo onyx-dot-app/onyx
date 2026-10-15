@@ -34,7 +34,13 @@ from onyx.db.tools import get_tools
 from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.factory import get_default_llm, get_llm_for_persona, llm_from_provider
+from onyx.llm.factory import (
+    get_default_llm,
+    get_llm_for_persona,
+    get_search_selection_llm,
+    llm_from_provider,
+)
+from onyx.llm.interfaces import LLM
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     SearchRequest,
@@ -141,13 +147,31 @@ def search(
     else:
         llm = get_default_llm()
 
-    # Since the agentic search flow requires multiple LLM calls
-    # we should check the tenant usage limits before continuing
-    check_llm_cost_limit_for_provider(
-        db_session=db_session,
-        tenant_id=get_current_tenant_id(),
-        llm_provider_api_key=llm.config.api_key,
+    auto_detect_filters = load_settings().auto_detect_search_filters is not False
+    primary_provider_checked = (
+        bool(request.provider)
+        or not request.skip_query_expansion
+        or auto_detect_filters
     )
+    if primary_provider_checked:
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=llm.config.api_key,
+        )
+
+    def resolve_selection_llm() -> LLM:
+        selection_llm = get_search_selection_llm(fallback=llm)
+        if (
+            not primary_provider_checked
+            or selection_llm.config.api_key != llm.config.api_key
+        ):
+            check_llm_cost_limit_for_provider(
+                db_session=db_session,
+                tenant_id=get_current_tenant_id(),
+                llm_provider_api_key=selection_llm.config.api_key,
+            )
+        return selection_llm
 
     # 3. Build filters. The public time_cutoff maps onto the internal
     # updated_at_range lower bound; TimeRange coerces naive bounds to UTC.
@@ -185,13 +209,14 @@ def search(
         user=user,
         persona_search_info=persona_search_info,
         llm=llm,
+        selection_llm_factory=resolve_selection_llm if not request.provider else None,
         document_index=document_index,
         user_selected_filters=base_filters,
         project_id_filter=None,
         persona_id_filter=None,
         slack_context=None,
         enable_slack_search=True,
-        auto_detect_filters=load_settings().auto_detect_search_filters is not False,
+        auto_detect_filters=auto_detect_filters,
     )
 
     # 7. Run search. Chat opens the trace in the LLM loop and the tool span in

@@ -6,7 +6,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.search.models import BaseFilters, UserAccessFilters
+from onyx.context.search.models import (
+    BaseFilters,
+    InferenceChunk,
+    InferenceSection,
+    UserAccessFilters,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
@@ -21,6 +28,7 @@ ScopeDecision = list[DocumentSource] | None
 def _make_tool(
     user_selected_filters: BaseFilters | None = None,
     auto_detect_filters: bool = True,
+    selection_llm_factory: MagicMock | None = None,
 ) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
@@ -34,6 +42,7 @@ def _make_tool(
         project_id_filter=None,
         enable_slack_search=False,
         auto_detect_filters=auto_detect_filters,
+        selection_llm_factory=selection_llm_factory,
     )
 
 
@@ -44,6 +53,7 @@ def _run(
     decision: ScopeDecision = None,
     decide_mock: MagicMock | None = None,
     skip_query_expansion: bool = False,
+    sections: list[InferenceSection] | None = None,
 ) -> MagicMock:
     """Run tool.run() with all DB/LLM deps mocked; returns the search_pipeline mock.
 
@@ -72,7 +82,7 @@ def _run(
         patch(f"{MODULE}.decide_search_scope", decide),
         patch(f"{MODULE}.decide_time_filter", MagicMock(return_value=None)),
         patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
-        patch(f"{MODULE}.merge_individual_chunks", return_value=[]),
+        patch(f"{MODULE}.merge_individual_chunks", return_value=sections or []),
         patch(f"{MODULE}.search_pipeline", mock_search_pipeline),
     ):
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
@@ -93,6 +103,87 @@ def _run(
             queries=["ticket"],
         )
     return mock_search_pipeline
+
+
+def test_empty_search_never_resolves_selection_model() -> None:
+    resolver = MagicMock(side_effect=ValueError("selection model unavailable"))
+    tool = _make_tool(selection_llm_factory=resolver)
+
+    _run(tool, connected_sources=[DocumentSource.GITHUB])
+
+    resolver.assert_not_called()
+
+
+def test_slack_search_checks_primary_budget_before_utility_calls() -> None:
+    tool = _make_tool(auto_detect_filters=False)
+    tool.enable_slack_search = True
+    tool.llm.config.api_key = "primary-key"
+    error = OnyxError(OnyxErrorCode.RATE_LIMITED, "Provider budget exceeded")
+    with (
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        patch(f"{MODULE}.check_llm_cost_limit_for_provider", side_effect=error) as cost,
+        patch.object(tool, "_run_slack_search") as slack,
+        pytest.raises(OnyxError, match="Provider budget exceeded"),
+    ):
+        _run(tool, connected_sources=[DocumentSource.SLACK], skip_query_expansion=True)
+
+    assert cost.call_args.kwargs["llm_provider_api_key"] == "primary-key"
+    slack.assert_not_called()
+
+
+def test_search_uses_selection_model_only_for_evidence_decisions() -> None:
+    selection_llm = MagicMock()
+    resolver = MagicMock(return_value=selection_llm)
+    tool = _make_tool(selection_llm_factory=resolver)
+    chunk = InferenceChunk(
+        document_id="doc-1",
+        chunk_id=0,
+        content="selected evidence",
+        source_type=DocumentSource.GITHUB,
+        semantic_identifier="Runbook",
+        title="Runbook",
+        boost=1,
+        score=0.5,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+        image_file_id=None,
+        source_links={},
+        section_continuation=False,
+        blurb="selected evidence",
+    )
+    section = InferenceSection(
+        center_chunk=chunk, chunks=[chunk], combined_content=chunk.content
+    )
+    sections = [section]
+    with (
+        patch(f"{MODULE}.populate_file_ids_on_sections"),
+        patch(f"{MODULE}.convert_inference_sections_to_search_docs", return_value=[]),
+        patch(f"{MODULE}.get_llm_token_counter", return_value=lambda _: 0),
+        patch(f"{MODULE}._trim_sections_by_tokens", return_value=sections),
+        patch(
+            f"{MODULE}.select_sections_for_expansion",
+            return_value=(sections, None),
+        ) as select,
+        patch(f"{MODULE}.expand_section_with_context", return_value=section) as expand,
+        patch(f"{MODULE}.merge_overlapping_sections", return_value=sections),
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            return_value=("selected evidence", {1: "doc-1"}),
+        ),
+    ):
+        _run(tool, connected_sources=[DocumentSource.GITHUB], sections=sections)
+
+    resolver.assert_called_once_with()
+    assert select.call_args.kwargs["llm"] is selection_llm
+    assert expand.call_args.kwargs["llm"] is selection_llm
+    assert select.call_args.kwargs["enforce_llm_input_budget"] is True
+    assert expand.call_args.kwargs["enforce_llm_input_budget"] is True
 
 
 def _filters_passed_to_search(mock_search_pipeline: MagicMock) -> list[Any]:
