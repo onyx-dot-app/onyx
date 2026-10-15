@@ -9,8 +9,7 @@ import {
   type Locale,
 } from "@/i18n/config";
 import englishMessages from "@/i18n/messages/en.json";
-import type { Settings } from "@/lib/settings/types";
-import { fetchSS } from "@/lib/utilsSS";
+import { fetchStandardSettingsSS } from "@/lib/settings/svcSS";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
@@ -39,16 +38,8 @@ const english = englishMessages as MessageTree;
 // Only consulted when the request carries no usable locale cookie: anonymous
 // access or a first render before GET /me sets it. Any failure means English.
 async function workspaceDefaultLocale(): Promise<Locale> {
-  try {
-    const response = await fetchSS("/settings");
-    if (!response.ok) return DEFAULT_LOCALE;
-    const settings: Pick<Settings, "default_language"> = await response.json();
-    return isSupportedLocale(settings.default_language)
-      ? settings.default_language
-      : DEFAULT_LOCALE;
-  } catch {
-    return DEFAULT_LOCALE;
-  }
+  const language = (await fetchStandardSettingsSS())?.default_language;
+  return isSupportedLocale(language) ? language : DEFAULT_LOCALE;
 }
 
 export default getRequestConfig(async () => {

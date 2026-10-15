@@ -70,9 +70,9 @@ export default async function Layout({ children }: LayoutProps) {
   // default when there is none (see src/i18n/request.ts).
   const locale = await getLocale();
   const messages = await getMessages();
-  // <html lang> and the direction follow the effective language, not the
-  // runtime tag: UserProvider refreshes whenever <html lang> differs from the
-  // effective language, and the numbering system belongs to Intl, not the document.
+  // <html lang> and the direction drop the numbering extension, which belongs
+  // to Intl, not the document. UserProvider refreshes when <html lang> differs
+  // from the effective language.
   const language = messageLocale(locale);
 
   let dir: HtmlDir = htmlDirForLocale(language);
