@@ -56,15 +56,21 @@ def exchange_oauth_code_for_token(
         code=code,
         redirect_uri=redirect_uri,
         client_id=params.client_id,
-        client_secret=params.client_secret,
+        client_secret=params.client_secret or None,
         code_verifier=code_verifier,
     )
 
     validate_oauth_endpoint_url(params.token_url)
     response = requests.post(
-        params.token_url, data=data, headers={"Accept": "application/json"}, timeout=30
+        params.token_url,
+        data=data,
+        headers={"Accept": "application/json"},
+        timeout=30,
+        allow_redirects=False,
     )
     response.raise_for_status()
+    if 300 <= response.status_code < 400:
+        raise ValueError("OAuth token endpoint must not redirect")
 
     token_data = response.json()
     if (
