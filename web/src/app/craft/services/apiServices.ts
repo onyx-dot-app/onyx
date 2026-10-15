@@ -116,11 +116,6 @@ interface ApiSessionListResponse {
   sessions: ApiSessionResponse[];
 }
 
-// Mirrors backend `SessionNameGenerateResponse`.
-interface ApiSessionNameGenerateResponse {
-  name: string;
-}
-
 export async function createSession(
   options?: CreateSessionOptions
 ): Promise<ApiDetailedSessionResponse> {
@@ -201,27 +196,10 @@ export async function fetchSessionHistory(): Promise<SessionHistoryItem[]> {
   }));
 }
 
-export async function generateSessionName(sessionId: string): Promise<string> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/generate-name`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error(`Failed to generate session name: ${res.status}`);
-  }
-
-  const data: ApiSessionNameGenerateResponse = await res.json();
-  return data.name;
-}
-
 export async function updateSessionName(
   sessionId: string,
   name: string | null
-): Promise<void> {
+): Promise<ApiSessionResponse> {
   const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/name`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -231,6 +209,8 @@ export async function updateSessionName(
   if (!res.ok) {
     throw new Error(`Failed to update session name: ${res.status}`);
   }
+
+  return res.json();
 }
 
 export async function setSessionSharing(
