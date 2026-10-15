@@ -12,7 +12,7 @@ import type {
   WithoutStyles,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
-import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
+import { HtmlHTMLAttributes } from "react";
 import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
 
@@ -39,8 +39,8 @@ interface SettingsRootProps extends WithoutStyles<
 
 /**
  * Wrapper for settings pages. Creates a centered, scrollable container.
- * The `id="page-wrapper-scroll-container"` is referenced by `Header` for
- * scroll-shadow detection — do not remove it.
+ * The Playwright tests locate it by `id="page-wrapper-scroll-container"` —
+ * do not remove it.
  */
 function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
   return (
@@ -88,9 +88,8 @@ export interface SettingsHeaderProps {
 }
 
 /**
- * Sticky header for settings pages. Shows a scroll shadow when the page
- * has scrolled. Headers with a Cancel or any `actions` are sticky; others
- * are not.
+ * Sticky header for settings pages. Headers with a Cancel or any `actions`
+ * are sticky; others are not.
  */
 function SettingsHeader({
   icon: Icon,
@@ -108,8 +107,6 @@ function SettingsHeader({
 }: SettingsHeaderProps) {
   const router = useRouter();
   const strings = useOpalStrings();
-  const [showShadow, setShowShadow] = useState(false);
-  const headerRef = useRef<HTMLDivElement>(null);
 
   const onCancel =
     typeof cancel === "function"
@@ -120,29 +117,10 @@ function SettingsHeader({
   const hasActions = !!onCancel || (!!actions && actions.length > 0);
   const isSticky = hasActions;
 
-  useEffect(() => {
-    if (!isSticky) return;
-
-    const scrollContainer = document.getElementById(
-      "page-wrapper-scroll-container"
-    );
-    if (!scrollContainer) return;
-
-    const handleScroll = () => {
-      setShowShadow(scrollContainer.scrollTop > 0);
-    };
-
-    scrollContainer.addEventListener("scroll", handleScroll);
-    handleScroll();
-
-    return () => scrollContainer.removeEventListener("scroll", handleScroll);
-  }, [isSticky]);
-
   return (
     <div
-      ref={headerRef}
       className={cn(
-        "w-full -mb-6",
+        "w-full",
         isSticky && "sticky top-0 z-settings-header bg-background-tint-01"
       )}
     >
@@ -186,21 +164,6 @@ function SettingsHeader({
         </>
       ) : (
         <Spacer rem={0.5} />
-      )}
-      {/* The header paints the body's top gap (its -mb-6 pulls the body up under it), so a pinned header leaves no unpainted band where scrolled content can show. */}
-      <Spacer rem={1.5} />
-
-      {isSticky && (
-        <div
-          className={cn(
-            "absolute start-0 end-0 h-2 pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
-            showShadow && "opacity-100"
-          )}
-          style={{
-            background:
-              "linear-gradient(to bottom, var(--mask-02), transparent)",
-          }}
-        />
       )}
     </div>
   );

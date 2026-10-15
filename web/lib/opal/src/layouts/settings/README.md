@@ -11,9 +11,9 @@ structure with a sticky scroll-aware header, centered content container, and bod
 
 Scrollable wrapper that centers content at a configurable max-width.
 
-| Prop    | Type                                        | Default | Description                           |
-| ------- | ------------------------------------------- | ------- | ------------------------------------- |
-| `width` | `"sm" \| "md" \| "lg" \| "xl" \| "full"`    | `"md"`  | Max-width of the inner content column |
+| Prop    | Type                                     | Default | Description                           |
+| ------- | ---------------------------------------- | ------- | ------------------------------------- |
+| `width` | `"sm" \| "md" \| "lg" \| "xl" \| "full"` | `"md"`  | Max-width of the inner content column |
 
 Width presets map to CSS variables defined by the app (`--app-container-*`):
 `sm` = 672px, `md` = 872px, `lg` = 992px, `xl` = 1120px, `full` = 100%.
@@ -21,7 +21,6 @@ Width presets map to CSS variables defined by the app (`--app-container-*`):
 ### Header
 
 Sticky page header with icon, title, optional description, and action slots.
-Automatically shows a scroll shadow when the page has scrolled down.
 Headers are only sticky when `actions` is non-empty.
 
 | Prop             | Type                      | Default | Description                                                                                                                                               |
@@ -43,8 +42,8 @@ Headers are only sticky when `actions` is non-empty.
 
 Content container with consistent padding and vertical spacing.
 
-| Prop  | Type      | Default | Description                                        |
-| ----- | --------- | ------- | -------------------------------------------------- |
+| Prop  | Type      | Default | Description                                         |
+| ----- | --------- | ------- | --------------------------------------------------- |
 | `gap` | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem) |
 
 ## Usage
