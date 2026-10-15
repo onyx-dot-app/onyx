@@ -306,8 +306,7 @@ def test_ee_flow_classification_uses_primary_not_background_or_selection() -> No
     selection.assert_not_called()
 
 
-def test_ee_selection_provider_limit_propagates_before_generation() -> None:
-    primary = MagicMock()
+def test_ee_selection_provider_limit_still_returns_docs() -> None:
     error = OnyxError(OnyxErrorCode.RATE_LIMITED, "Provider budget exceeded")
     with (
         patch.multiple(
@@ -318,21 +317,27 @@ def test_ee_selection_provider_limit_propagates_before_generation() -> None:
             merge_individual_chunks=MagicMock(return_value=[MagicMock()]),
         ),
         patch.object(
+            process_search_query.SearchDocWithContent,
+            "from_inference_sections",
+            return_value=[],
+        ),
+        patch.object(
             process_search_query, "select_sections_for_expansion"
         ) as selection,
-        pytest.raises(OnyxError, match="Provider budget exceeded"),
     ):
-        list(
+        response = process_search_query.gather_search_stream(
             process_search_query.stream_search_query(
                 SendSearchQueryRequest(
                     search_query="runbook", num_docs_fed_to_llm_selection=1
                 ),
                 MagicMock(is_anonymous=True),
                 MagicMock(),
-                primary_llm=primary,
+                primary_llm=MagicMock(),
                 selection_llm_factory=MagicMock(side_effect=error),
             )
         )
+    assert response.all_executed_queries == ["runbook"]
+    assert response.llm_selected_doc_ids is None
     selection.assert_not_called()
 
 

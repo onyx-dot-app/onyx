@@ -210,14 +210,14 @@ def stream_search_query(
     llm_selected_doc_ids: list[str] | None = None
     llm_selection_failed = False
     if run_llm_selection and sections:
-        if primary_llm is None:
-            primary_llm = get_default_llm()
-        selection_llm = (
-            selection_llm_factory()
-            if selection_llm_factory is not None
-            else get_search_selection_llm(fallback=primary_llm)
-        )
         try:
+            if primary_llm is None:
+                primary_llm = get_default_llm()
+            selection_llm = (
+                selection_llm_factory()
+                if selection_llm_factory is not None
+                else get_search_selection_llm(fallback=primary_llm)
+            )
             sections_to_evaluate = sections[: request.num_docs_fed_to_llm_selection]
             selected_sections, _ = select_sections_for_expansion(
                 sections=sections_to_evaluate,
