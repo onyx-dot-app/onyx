@@ -380,3 +380,65 @@ def test_all_oauth_providers_preserve_authorization_parameters(
     for key, value in oauth.extra_authorize_params.items():
         assert query[key] == [value]
     assert ("code_challenge" in query) == oauth.supports_pkce
+
+
+@pytest.mark.parametrize(
+    ("app_type", "token_body"),
+    [
+        (ExternalAppType.LINEAR, {"access_token": 123}),
+        (ExternalAppType.NOTION, {"access_token": ["not-a-token"]}),
+        (ExternalAppType.SLACK, {"authed_user": ["invalid"]}),
+        (ExternalAppType.SLACK, {"authed_user": {"access_token": 123}}),
+        (
+            ExternalAppType.SLACK,
+            {"authed_user": {"access_token": "token"}, "team": "invalid"},
+        ),
+    ],
+)
+def test_callback_rejects_invalid_provider_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+    app_type: ExternalAppType,
+    token_body: dict[str, Any],
+) -> None:
+    app, _, db_session, token_post = _configure_route(monkeypatch)
+    app.app_type = app_type
+    persist = MagicMock()
+    monkeypatch.setattr(oauth_route, "upsert_external_app_user_credential", persist)
+    owner = _user("owner")
+    query = _authorize_query(app=app, user=owner, db_session=db_session)
+    token_post.return_value.json.return_value = token_body
+    callback = OAuthCallbackRequest(code="code", state=query["state"][0])
+    with pytest.raises(OnyxError, match="invalid") as error:
+        oauth_route.handle_external_app_oauth_callback(
+            callback, user=owner, db_session=db_session
+        )
+    assert error.value.status_code == 502
+    persist.assert_not_called()
+    db_session.commit.assert_not_called()
+    with pytest.raises(OnyxError, match="Invalid or expired"):
+        oauth_route.handle_external_app_oauth_callback(
+            callback, user=owner, db_session=db_session
+        )
+    token_post.assert_called_once()
+
+
+@pytest.mark.parametrize("status_code", [301, 302, 303, 307, 308])
+def test_callback_does_not_follow_token_redirects(
+    monkeypatch: pytest.MonkeyPatch, status_code: int
+) -> None:
+    app, _, db_session, token_post = _configure_route(monkeypatch)
+    persist = MagicMock()
+    monkeypatch.setattr(oauth_route, "upsert_external_app_user_credential", persist)
+    owner = _user("owner")
+    query = _authorize_query(app=app, user=owner, db_session=db_session)
+    token_post.return_value.status_code = status_code
+    with pytest.raises(OnyxError, match="redirected") as error:
+        oauth_route.handle_external_app_oauth_callback(
+            OAuthCallbackRequest(code="code", state=query["state"][0]),
+            user=owner,
+            db_session=db_session,
+        )
+    assert error.value.status_code == 502
+    assert token_post.call_args.kwargs["allow_redirects"] is False
+    persist.assert_not_called()
+    db_session.commit.assert_not_called()

@@ -208,6 +208,7 @@ def handle_external_app_oauth_callback(
             data=None if token_request.json_encoded else token_request.body,
             json=token_request.body if token_request.json_encoded else None,
             timeout=30,
+            allow_redirects=False,
         )
     except requests.RequestException as exc:
         logger.warning(
@@ -219,6 +220,12 @@ def handle_external_app_oauth_callback(
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             f"Could not reach {app.name} to complete OAuth.",
+        )
+
+    if 300 <= response.status_code < 400:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"{app.name} redirected its OAuth token request.",
         )
 
     try:
@@ -256,9 +263,14 @@ def handle_external_app_oauth_callback(
 
     # Stamp an absolute `expires_at` now so the lazy-refresh path can later
     # decide staleness without "when was this written" bookkeeping.
-    stored_credentials = stamp_expires_at(
-        provider.extract_credentials(response_data), datetime.now(timezone.utc)
-    )
+    credentials = provider.extract_credentials(response_data)
+    access_token = credentials.get("access_token")
+    if not isinstance(access_token, str) or not access_token:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"{app.name} returned an invalid access token during OAuth.",
+        )
+    stored_credentials = stamp_expires_at(credentials, datetime.now(timezone.utc))
 
     # The grant is authoritative and captured only here (a refresh can't change
     # it); None when the provider gives no signal.

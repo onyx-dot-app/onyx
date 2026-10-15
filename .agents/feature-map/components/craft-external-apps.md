@@ -431,6 +431,7 @@ Each attempt is bound to the user, tenant, app, and OAuth configuration.
 GitHub and Linear use S256 PKCE. Other providers keep their existing exchange format.
 The callback consumes the attempt before token exchange and rejects changed configuration.
 A failed exchange requires a new connection attempt; retries cannot reuse state.
+The callback rejects malformed provider data and non-string access tokens before storage.
 Providers own scope parameters, client authentication, and token and grant extraction.
 The callback stamps an absolute `expires_at`
 (`external_apps/token_utils.py:stamp_expires_at`), stores the granted scopes, and refreshes the user's sandbox skills.
