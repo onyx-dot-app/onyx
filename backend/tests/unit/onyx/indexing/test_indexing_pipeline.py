@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime, timezone
+from io import BytesIO
 from types import SimpleNamespace
 from typing import Any, List, cast
 from unittest.mock import MagicMock, Mock, patch
@@ -11,6 +12,10 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from onyx.access.models import ExternalAccess
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    CONTENT_SKIPPED_PLACEHOLDER,
+    tabular_file_to_sections,
+)
 from onyx.connectors.models import (
     Document,
     DocumentSource,
@@ -31,7 +36,6 @@ from onyx.hooks.points.document_ingestion import (
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import (
-    CONTENT_SKIPPED_PLACEHOLDER,
     INDEXING_PIPELINE_TRACE_NAME,
     DocumentBatchPrepareContext,
     DocumentPushFailure,
@@ -46,7 +50,6 @@ from onyx.indexing.indexing_pipeline import (
     index_doc_batch_with_handler,
     process_image_sections,
     run_indexing_pipeline,
-    skip_tabular_content,
 )
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.constants import LlmProviderNames
@@ -1170,62 +1173,29 @@ def _make_tabular_doc(doc_id: str, section: TabularSection) -> Document:
     )
 
 
-def test_index_batch_skips_spreadsheet_content() -> None:
-    """With the option on, every sheet of a spreadsheet becomes one placeholder
-    section before the change gate. Other sections and documents stay."""
+def test_skipped_spreadsheet_embeds_as_its_title(
+    embedder: DefaultIndexingEmbedder,
+) -> None:
     workbook = Document(
         id="workbook",
         title="Budget.xlsx",
         semantic_identifier="Budget.xlsx",
-        sections=[
-            TextSection(text="Notes", link="notes-link"),
-            TabularSection(csv_file_id="sheet-1", link="sheet-1-link"),
-            TabularSection(csv_file_id="sheet-2", link="sheet-2-link"),
-        ],
+        sections=tabular_file_to_sections(
+            BytesIO(b"unused"),
+            file_name="Budget.xlsx",
+            stage=lambda _content, _content_type: "unused",
+            skip_content=True,
+        ),
         source=DocumentSource.GOOGLE_DRIVE,
         metadata={},
     )
-    text_doc = _make_doc("text-doc")
-    adapter = MagicMock()
-    adapter.index_attempt_metadata = None
-    adapter.prepare.return_value = None
-
-    with patch(
-        f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
-        side_effect=lambda documents: documents,
-    ):
-        index_doc_batch(
-            document_batch=[workbook, text_doc],
-            chunker=MagicMock(),
-            embedder=MagicMock(),
-            document_index=MagicMock(),
-            request_id=None,
-            tenant_id="tenant",
-            adapter=adapter,
-            skip_spreadsheet_content=True,
-        )
-
-    prepared_workbook, prepared_text_doc = adapter.prepare.call_args.args[0]
-    assert prepared_workbook.sections == [
-        TextSection(text="Notes", link="notes-link"),
-        TextSection(text=CONTENT_SKIPPED_PLACEHOLDER, link="sheet-1-link"),
-    ]
-    assert prepared_text_doc == text_doc
-
-
-def test_skipped_spreadsheet_embeds_as_its_title(
-    embedder: DefaultIndexingEmbedder,
-) -> None:
-    workbook = _make_tabular_doc(
-        "workbook", TabularSection(csv_file_id="sheet-1", link="sheet-1-link")
-    )
     chunker = Chunker(tokenizer=embedder.embedding_model.tokenizer)
 
-    chunks = chunker.chunk(process_image_sections(skip_tabular_content([workbook])))
+    chunks = chunker.chunk(process_image_sections([workbook]))
 
     assert len(chunks) == 1
     assert chunks[0].content == CONTENT_SKIPPED_PLACEHOLDER
-    assert chunks[0].title_prefix.startswith("Doc workbook")
+    assert chunks[0].title_prefix.startswith("Budget.xlsx")
     assert generate_enriched_content_for_chunk_embedding(chunks[0]).startswith(
         chunks[0].title_prefix + CONTENT_SKIPPED_PLACEHOLDER
     )

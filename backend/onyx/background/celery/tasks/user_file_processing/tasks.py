@@ -349,6 +349,7 @@ def _load_user_file_documents(
     connector = LocalFileConnector(
         file_locations=[file_id],
         file_names=[file_name] if file_name else None,
+        skip_spreadsheet_content=False,
     )
     connector.load_credentials({})
 

@@ -31,7 +31,6 @@ from onyx.connectors.models import (
     IndexingDocument,
     Section,
     SectionType,
-    TabularSection,
     TextSection,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -133,7 +132,6 @@ LLM_ENRICHMENT_SPEND_LIMIT_FAILURE_MESSAGE = (
     "has been reached. Adjust the limit or wait for it to reset, then retry."
 )
 INDEXING_PIPELINE_TRACE_NAME = "indexing_pipeline"
-CONTENT_SKIPPED_PLACEHOLDER = "<content-skipped>"
 
 # Contextual-RAG doc/chunk summaries are a short, non-reasoning task. On a reasoning
 # model the hidden reasoning tokens consume the small MAX_CONTEXT_TOKENS budget and the
@@ -507,7 +505,6 @@ def index_doc_batch_with_handler(
     llm_enrichment_allowed: bool = True,
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
-    skip_spreadsheet_content: bool = False,
 ) -> IndexingPipelineResult:
     # Documents whose prepare() committed before the batch raised. Their change
     # gates would now see nothing to do, so a retry of them forces the update.
@@ -536,7 +533,6 @@ def index_doc_batch_with_handler(
                 llm=llm,
                 force_update=force_update,
                 on_prepared=prepared.update,
-                skip_spreadsheet_content=skip_spreadsheet_content,
             )
         except ConnectorStopSignal as e:
             logger.warning(
@@ -753,32 +749,6 @@ def index_doc_batch_prepare(
         id_to_boost_map=id_to_boost_map,
         doc_id_to_content_hash=doc_id_to_content_hash,
     )
-
-
-def skip_tabular_content(documents: list[Document]) -> list[Document]:
-    """Replace each document's tabular sections with one placeholder text
-    section, so a spreadsheet indexes as its title plus the placeholder. Other
-    sections stay. Runs before the change gate, so the placeholder version gets
-    its own content hash."""
-    result: list[Document] = []
-    for document in documents:
-        if not any(isinstance(s, TabularSection) for s in document.sections):
-            result.append(document)
-            continue
-
-        sections: list[TextSection | ImageSection | TabularSection] = []
-        placeholder_added: bool = False
-        for section in document.sections:
-            if not isinstance(section, TabularSection):
-                sections.append(section)
-            elif not placeholder_added:
-                sections.append(
-                    TextSection(text=CONTENT_SKIPPED_PLACEHOLDER, link=section.link)
-                )
-                placeholder_added = True
-        logger.debug("Skipped tabular content of document %s", document.id)
-        result.append(document.model_copy(update={"sections": sections}))
-    return result
 
 
 def filter_documents(
@@ -1498,7 +1468,6 @@ def index_doc_batch(
     filter_fnc: Callable[
         [list[Document]], tuple[list[Document], list[ConnectorFailure]]
     ] = filter_documents,
-    skip_spreadsheet_content: bool = False,
 ) -> IndexingPipelineResult:
     """End-to-end indexing for a pre-batched set of documents."""
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
@@ -1531,8 +1500,6 @@ def index_doc_batch(
         _attempt_metadata.attempt_id if _attempt_metadata is not None else None
     )
 
-    if skip_spreadsheet_content:
-        document_batch = skip_tabular_content(document_batch)
     filtered_documents, filter_failures = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
@@ -1762,16 +1729,11 @@ def run_indexing_pipeline(
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     from_beginning: bool = False,
-    skip_spreadsheet_content: bool = False,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them.
 
     index_to_secondary disables the content-hash gate + stamp for FUTURE writes so
     they don't cross-suppress the PRESENT index's shared hash.
-
-    skip_spreadsheet_content indexes each tabular file as its title plus a
-    placeholder (see skip_tabular_content). Only connector indexing sets it:
-    user files and the ingestion API need the content they were given.
     """
     if db_session is not None:
         all_search_settings = get_active_search_settings(db_session)
@@ -1837,5 +1799,4 @@ def run_indexing_pipeline(
             ignore_time_skip=ignore_time_skip,
             index_to_secondary=index_to_secondary,
             from_beginning=from_beginning,
-            skip_spreadsheet_content=skip_spreadsheet_content,
         )

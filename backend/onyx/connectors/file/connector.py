@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import IO, Any
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, SKIP_SPREADSHEET_CONTENT
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
@@ -87,6 +87,7 @@ def _process_file(
     pdf_pass: str | None,
     file_type: str | None,
     stage: RawFileCallback | None,
+    skip_spreadsheet_content: bool = False,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -227,6 +228,7 @@ def _process_file(
                     file_name=file_name,
                     stage=stage,
                     link=link or "",
+                    skip_content=skip_spreadsheet_content,
                 )
             )
         except Exception as e:
@@ -302,8 +304,15 @@ class LocalFileConnector(LoadConnector):
         zip_metadata_file_id: str | None = None,
         zip_metadata: dict[str, Any] | None = None,  # Deprecated, for backwards compat
         batch_size: int = INDEX_BATCH_SIZE,
+        # None follows SKIP_SPREADSHEET_CONTENT. User uploads pass False.
+        skip_spreadsheet_content: bool | None = None,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
+        self.skip_spreadsheet_content: bool = (
+            SKIP_SPREADSHEET_CONTENT
+            if skip_spreadsheet_content is None
+            else skip_spreadsheet_content
+        )
         self.batch_size = batch_size
         self.pdf_pass: str | None = None
         self._zip_metadata_file_id = zip_metadata_file_id
@@ -345,6 +354,7 @@ class LocalFileConnector(LoadConnector):
                 pdf_pass=self.pdf_pass,
                 file_type=file_record.file_type,
                 stage=self.raw_file_callback,
+                skip_spreadsheet_content=self.skip_spreadsheet_content,
             )
             documents.extend(new_docs)
 

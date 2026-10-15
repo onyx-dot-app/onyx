@@ -48,11 +48,7 @@ from onyx.background.indexing.index_attempt_utils import (
     cleanup_index_attempts,
     get_old_index_attempt_ids,
 )
-from onyx.configs.app_configs import (
-    DISABLE_INDEX_UPDATE_ON_SWAP,
-    PERSISTENT_INDEXING,
-    SKIP_SPREADSHEET_CONTENT,
-)
+from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP, PERSISTENT_INDEXING
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_INDEXING_LOCK_TIMEOUT,
@@ -2084,7 +2080,6 @@ def _docprocessing_task(
             request_id=index_attempt_metadata.request_id,
             adapter=adapter,
             from_beginning=from_beginning,
-            skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
         )
 
         # Track chunk indexing usage for cloud usage limits

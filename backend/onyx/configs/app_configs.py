@@ -1554,10 +1554,11 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
 
-# When true, connector indexing replaces the content of spreadsheets and other
-# tabular files (xlsx, Google Sheets, CSV, TSV) with a "<content-skipped>"
-# placeholder, so each file indexes as its title only. Bounds the embedding cost
-# of large spreadsheets. Fetching still downloads and converts the files.
+# When true, connectors replace the content of spreadsheets and other tabular
+# files (xlsx, Google Sheets, CSV, TSV) with a "<content-skipped>" placeholder
+# at fetch time, so each file indexes as its title only. The sheets are not
+# parsed, but the raw file is still downloaded and stored. Bounds the embedding
+# cost of large spreadsheets. User uploads keep their content.
 SKIP_SPREADSHEET_CONTENT = (
     os.environ.get("SKIP_SPREADSHEET_CONTENT", "").lower() == "true"
 )
