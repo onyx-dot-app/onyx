@@ -1,5 +1,8 @@
 """The pair's indexing errors route narrows to one attempt and to errors whose
-message or document id contains the search text, and counts what it lists."""
+message or document id contains the search text, counts what it lists, and
+names each error's document when the document is indexed."""
+
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -10,10 +13,12 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    Document,
     IndexAttempt,
     IndexAttemptError,
 )
 from onyx.db.search_settings import get_current_search_settings
+from onyx.kg.models import KGStage
 from onyx.server.documents.cc_pair import get_cc_pair_indexing_errors
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -107,3 +112,34 @@ def test_errors_narrow_to_one_attempt_and_to_a_search(db_session: Session) -> No
     assert errors(index_attempt_id=first.id, q="eof") == [eof.id]
     assert errors(q="%") == []
     assert errors(q="   ") == errors()
+
+
+def test_errors_carry_the_title_of_an_indexed_document(db_session: Session) -> None:
+    admin = create_test_user(db_session, "errors_names_admin", is_admin=True)
+    cc_pair = _cc_pair(db_session)
+    attempt = _attempt(db_session, cc_pair)
+    indexed_id = f"indexed-{uuid4().hex}"
+    document = Document(
+        id=indexed_id, semantic_id="Quarterly Report", kg_stage=KGStage.NOT_STARTED
+    )
+    db_session.add(document)
+    db_session.commit()
+    indexed = _error(db_session, attempt, indexed_id, "chunking failed")
+    missing = _error(db_session, attempt, f"missing-{uuid4().hex}", "fetch failed")
+
+    try:
+        page = get_cc_pair_indexing_errors(
+            cc_pair_id=cc_pair.id,
+            include_resolved=False,
+            page_num=0,
+            page_size=10,
+            index_attempt_id=attempt.id,
+            q=None,
+            user=admin,
+            db_session=db_session,
+        )
+        names = {error.id: error.document_name for error in page.items}
+        assert names == {indexed.id: "Quarterly Report", missing.id: None}
+    finally:
+        db_session.delete(document)
+        db_session.commit()

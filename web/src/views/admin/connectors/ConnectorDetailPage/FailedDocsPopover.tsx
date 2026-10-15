@@ -51,7 +51,11 @@ function FailedDocRow({
   const [expanded, setExpanded] = useState(false);
   const [message, setMessage] = useState<HTMLElement | null>(null);
   const clipped = useOverflow(message);
-  const label = error.document_id ?? error.entity_id ?? t("unknownDocument");
+  const label =
+    error.document_name ??
+    error.document_id ??
+    error.entity_id ??
+    t("unknownDocument");
   return (
     <Section
       flexDirection="row"
@@ -79,13 +83,25 @@ function FailedDocRow({
           gap={0.5}
           height="fit"
         >
-          <OverflowText
-            font="secondary-body"
-            color="text-03"
-            wordWrap="wrap-anywhere"
-          >
-            {label}
-          </OverflowText>
+          <Section alignItems="start" gap={0} height="fit" className="min-w-0">
+            <OverflowText
+              font="secondary-body"
+              color="text-03"
+              wordWrap="wrap-anywhere"
+            >
+              {label}
+            </OverflowText>
+            {/* A title hides the id, so the id stays below it to copy. */}
+            {error.document_name !== null && error.document_id !== null && (
+              <OverflowText
+                font="secondary-mono"
+                color="text-03"
+                wordWrap="wrap-anywhere"
+              >
+                {error.document_id}
+              </OverflowText>
+            )}
+          </Section>
           {error.document_link !== null && (
             <Button
               icon={SvgExternalLink}
