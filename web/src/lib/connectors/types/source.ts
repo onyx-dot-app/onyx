@@ -67,6 +67,7 @@ export enum ValidSources {
   TestRail = "testrail",
   Braintrust = "braintrust",
   Lumapps = "lumapps",
+  YouTrack = "youtrack",
   Canvas = "canvas",
   Zoom = "zoom",
 

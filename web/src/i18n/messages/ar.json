@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "صفحات الشبكة الداخلية والمجتمعات"
         },
+        "youtrack": {
+          "description": "متتبع المشكلات وإدارة المشاريع"
+        },
         "canvas": {
           "description": "الدورات والصفحات والإعلانات"
         },
@@ -3323,6 +3326,19 @@
             }
           }
         },
+        "youtrack": {
+          "description": "تهيئة موصل YouTrack",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL لـ YouTrack",
+              "description": "عنوان YouTrack الخاص بك، مثل https://example.youtrack.cloud. في YouTrack Server، أضف مسار السياق، مثل https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "المشاريع",
+              "description": "الأسماء المختصرة للمشاريع المراد فهرستها (مثل ABC). اتركه فارغًا لفهرسة كل المشاريع التي يمكن للرمز قراءتها."
+            }
+          }
+        },
         "github": {
           "description": "تهيئة موصل GitHub",
           "fields": {
@@ -4675,6 +4691,7 @@
         "gongBaseUrl": "اختياري. للبيانات خارج الولايات المتحدة، حدد مضيف منطقتك، مثل https://[region].api.gong.io.",
         "jiraUserEmail": "مطلوب لـ Jira Cloud.",
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
+        "youtrackToken": "رمز دائم لمستخدم YouTrack يمكنه قراءة كل المشاريع المراد فهرستها. أنشئه في ملفك الشخصي في YouTrack ضمن أمان الحساب.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",

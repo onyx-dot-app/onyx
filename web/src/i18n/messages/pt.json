@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "Páginas e comunidades da intranet"
         },
+        "youtrack": {
+          "description": "Rastreador de issues e gestão de projetos"
+        },
         "canvas": {
           "description": "Cursos, páginas e avisos"
         },
@@ -3323,6 +3326,19 @@
             }
           }
         },
+        "youtrack": {
+          "description": "Configurar o conector do YouTrack",
+          "fields": {
+            "base_url": {
+              "label": "URL do YouTrack",
+              "description": "Seu endereço do YouTrack, por ex. https://example.youtrack.cloud. Para o YouTrack Server, inclua o caminho de contexto, por ex. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projetos",
+              "description": "Nomes curtos dos projetos a indexar (por ex. ABC). Deixe vazio para indexar todos os projetos que o token pode ler."
+            }
+          }
+        },
         "github": {
           "description": "Configurar conector do GitHub",
           "fields": {
@@ -4675,6 +4691,7 @@
         "gongBaseUrl": "Opcional. Para dados fora dos EUA, defina o host da sua região, como https://[region].api.gong.io.",
         "jiraUserEmail": "Obrigatório para o Jira Cloud.",
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
+        "youtrackToken": "Um token permanente de um usuário do YouTrack que pode ler todos os projetos a indexar. Crie-o no seu perfil do YouTrack, em Segurança da conta.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",

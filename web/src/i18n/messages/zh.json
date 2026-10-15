@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "内网页面和社区"
         },
+        "youtrack": {
+          "description": "问题跟踪与项目管理"
+        },
         "canvas": {
           "description": "课程、页面和公告"
         },
@@ -3323,6 +3326,19 @@
             }
           }
         },
+        "youtrack": {
+          "description": "配置 YouTrack 连接器",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack URL",
+              "description": "您的 YouTrack 地址，例如 https://example.youtrack.cloud。对于 YouTrack Server，请包含上下文路径，例如 https://example.com/youtrack。"
+            },
+            "projects": {
+              "label": "项目",
+              "description": "要索引的项目简称（例如 ABC）。留空则索引令牌可读取的所有项目。"
+            }
+          }
+        },
         "github": {
           "description": "配置 GitHub 连接器",
           "fields": {
@@ -4675,6 +4691,7 @@
         "gongBaseUrl": "可选。美国以外的数据请设置你所在区域的主机，例如 https://[region].api.gong.io。",
         "jiraUserEmail": "Jira Cloud 必填。",
         "lumappsServiceUser": "要代表其建立索引的用户。",
+        "youtrackToken": "可读取所有待索引项目的 YouTrack 用户的永久令牌。请在 YouTrack 个人资料的“账户安全”中创建。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
