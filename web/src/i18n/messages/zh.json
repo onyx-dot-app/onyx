@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "连接到 Onyx",
+      "request": "允许 {clientName} 搜索 Onyx 吗？",
+      "account": "当前登录账号：{email}",
+      "workspace": "工作区：{workspaceName}",
+      "appAddress": "应用地址：{origin}",
+      "access": "读取你有权访问的文档的搜索结果。使用网页搜索并打开网页。",
+      "allow": "允许访问",
+      "deny": "拒绝",
+      "pending": "正在保存你的选择...",
+      "loading": "正在加载授权请求...",
+      "unavailable": "此请求已过期或发生更改。请从应用重新开始。",
+      "failed": "未能完成授权。请从应用重新开始。",
+      "signInRequired": "请登录以授权此应用。",
+      "signIn": "登录",
+      "forbidden": "你无法授权此应用。请联系工作区管理员。",
+      "loadFailed": "Onyx 无法加载此请求。请重试。",
+      "retry": "重试"
+    },
+    "connections": {
+      "cancel": "取消",
+      "title": "已连接的应用",
+      "description": "你已允许搜索 Onyx 的应用。",
+      "empty": "没有已连接的应用。",
+      "loading": "正在加载已连接的应用...",
+      "expires": "到期日期：{date}",
+      "disconnect": "断开连接",
+      "disconnectAriaLabel": "断开与 {clientName} 的连接",
+      "pending": "正在断开连接...",
+      "failed": "无法断开应用连接。请重试。",
+      "loadFailed": "无法加载已连接的应用。",
+      "confirmTitle": "断开 {clientName} 的连接吗？",
+      "confirmDescription": "此应用将失去对 Onyx 的访问权限。你可以稍后重新连接。"
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "账户"
@@ -773,6 +809,12 @@
         "ariaLabel": "搜索工具",
         "placeholder": "搜索工具…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://mcp-fuwuqi.com/mcp"
     }
   },
   "admin": {
@@ -783,6 +825,9 @@
         },
         "messaging": {
           "label": "即时通讯"
+        },
+        "meetings": {
+          "label": "会议"
         },
         "sales": {
           "label": "销售与 GTM"
@@ -1385,6 +1430,43 @@
           "text": "在您的 1 个月免费试用结束后，我们将于 <value>{date}</value> 向您收费。"
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "降级失败"
+        },
+        "link": {
+          "label": "降级到 Community"
+        },
+        "modal": {
+          "changes": {
+            "text": "降级后："
+          },
+          "confirmButton": {
+            "label": "降级",
+            "loading": "正在降级..."
+          },
+          "deleted": {
+            "text": "**删除：** 用户组、服务账户 API 密钥、令牌速率限制和钩子；"
+          },
+          "description": "移除您的许可证和所有付费功能。",
+          "disabled": {
+            "text": "**停用：** 标准答案和 SCIM 令牌；"
+          },
+          "intro": {
+            "text": "访问控制将从此部署中移除。**这会启动重新索引**，使搜索结果反映此更改，大型索引可能需要一段时间。"
+          },
+          "madePublic": {
+            "text": "**公开：** 所有连接器，以及与用户组共享的代理、文档集、LLM 提供方、MCP 服务器和技能；"
+          },
+          "reset": {
+            "text": "**重置为默认：** 自定义品牌和聊天保留策略。"
+          },
+          "title": "降级到 Community Edition",
+          "warning": {
+            "text": "受同步权限或用户组限制的文档将**对所有用户可见**。此操作无法撤销。"
+          }
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "激活许可证密钥"
@@ -1784,9 +1866,6 @@
           "restoreTooltip": "恢复默认"
         },
         "description": "指定 {appName} 在您的组织中保留对话的时长。",
-        "enterprisePlanTag": {
-          "label": "企业版套餐"
-        },
         "forever": {
           "label": "永久"
         },
@@ -1802,16 +1881,11 @@
           "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
           "title": "缩短对话保留期？"
         },
-        "tierTooltip": "对话历史保留是企业版套餐的功能。",
         "title": "保留对话历史"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "商业版套餐"
-        },
         "description": "用于在组织内快速搜索文档的界面模式。",
         "noConnectorsTooltip": "设置连接器后才能使用搜索模式",
-        "tierTooltip": "搜索模式需要商业版或企业版套餐。",
         "title": "搜索模式"
       },
       "systemPrompt": {
@@ -1963,47 +2037,16 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "我们将自动从数据源同步权限。只有当执行搜索的用户在数据源中有权访问该文档时，该文档才能在 {appName} 中被搜索到。",
-          "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
-          "name": "自动同步权限"
-        },
-        "heading": {
-          "description": "控制谁可以访问此连接器索引的文档。",
-          "title": "文档访问权限"
-        },
-        "privateOption": {
-          "description": "只有（通过用户组页面）被明确授予此连接器访问权限的用户才能访问此连接器导入的文档",
-          "name": "私有"
-        },
-        "publicOption": {
-          "description": "拥有 {appName} 账户的所有人都可以访问此连接器导入的文档",
-          "name": "公开"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# 天} other {# 天}}",
           "hours": "{count, plural, one {# 小时} other {# 小时}}",
           "minutes": "{count, plural, one {# 分钟} other {# 分钟}}"
-        },
-        "indexingStart": {
-          "label": "索引起始时间"
-        },
-        "pruningFrequency": {
-          "label": "清理频率"
-        },
-        "refreshFrequency": {
-          "label": "刷新频率"
         }
       },
       "configItem": {
         "booleanFalse": "否",
         "booleanTrue": "是",
-        "edit": {
-          "tooltip": "编辑"
-        },
         "showAll": {
           "label": "显示全部（{count} 项）"
         },
@@ -2027,53 +2070,10 @@
         "description": "尝试删除连接器时发生此错误。您可以点击“删除”按钮重新尝试删除。",
         "title": "删除错误"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "已同步文档数",
-          "errorMessage": "错误信息",
-          "permissionErrors": "权限错误",
-          "status": "状态",
-          "timeStarted": "开始时间"
-        },
-        "empty": {
-          "description": "文档权限同步任务在后台安排执行。可能需要一段时间才会显示——请在约 30 秒后刷新。",
-          "title": "暂无文档权限同步尝试"
-        },
-        "errorModal": {
-          "title": "文档权限同步错误"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "有关配置此连接器的更多信息，请查看<link>我们的文档</link>。"
         }
-      },
-      "errorsModal": {
-        "columns": {
-          "documentId": "失败 ID",
-          "errorMessage": "错误信息",
-          "status": "状态",
-          "time": "时间"
-        },
-        "description": "以下是索引过程中遇到的错误。每一行代表一个失败的文档或实体。",
-        "empty": {
-          "description": "此页面未发现错误"
-        },
-        "fullReindex": {
-          "description": "点击下方按钮启动完整重新索引，尝试解决这些错误。完整重新索引可能比常规更新耗时长得多。"
-        },
-        "resolveAllButton": {
-          "label": "全部解决"
-        },
-        "status": {
-          "resolved": "已解决",
-          "unresolved": "未解决"
-        },
-        "targetedReindex": {
-          "description": "点击下方按钮，仅重新获取失败的文档。这比完整重新索引快得多。"
-        },
-        "title": "索引错误",
-        "unknownDocument": "未知"
       },
       "fileManagement": {
         "addFilesButton": {
@@ -2135,28 +2135,12 @@
           "heading": "{multiple, select, true {已选择的文件} other {已选择的文件}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "错误信息",
-          "groups": "用户组",
-          "memberships": "成员关系",
-          "status": "状态",
-          "timeStarted": "开始时间",
-          "users": "用户"
-        },
-        "empty": {
-          "description": "用户组成员同步任务在后台安排执行。可能需要一段时间才会显示——请在约 30 秒后刷新。",
-          "title": "暂无用户组成员同步尝试"
-        },
-        "errorModal": {
-          "title": "用户组成员同步错误"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "所有人保留从源系统同步的访问权限。",
           "title": "添加群组前不设限制"
         },
+        "loadError": "无法加载群组。请重新加载页面后重试。",
         "memberCount": "{count, plural, other {# 名成员}}",
         "picker": {
           "placeholder": "添加群组以限制对此连接器的访问"
@@ -2164,59 +2148,13 @@
         "remove": {
           "tooltip": "移除 {name}"
         },
+        "table": {
+          "group": "群组"
+        },
         "toggle": {
           "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
           "title": "限制为群组访问"
         }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "为此连接器分配组访问权限"
-        },
-        "assignToGroup": {
-          "title": "可以管理此连接器的群组"
-        },
-        "scopedManagerGroups": {
-          "description": "选择一个或多个您管理的组以授予对此连接器的访问权限"
-        },
-        "syncGroups": {
-          "description": "以下的组控制谁可以管理此连接器。其文档的访问权限继承自数据源本身的权限。"
-        },
-        "visibleToGroups": {
-          "description": "此连接器将对以下所选的组可见/可访问"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "错误信息",
-          "newDocs": "新增文档数",
-          "status": "状态",
-          "timeStarted": "开始时间",
-          "totalDocs": "文档总数",
-          "totalDocsTooltip": "本次索引尝试中在索引里被替换的文档总数"
-        },
-        "docsPerMinute": "{rate} 个文档 / 分钟",
-        "docsRemoved": "（同时移除了 {count} 个在来源中被检测为已删除的文档）",
-        "empty": {
-          "description": "索引尝试在后台安排执行，可能需要一段时间才会显示。请在约 30 秒后刷新页面！",
-          "title": "尚未安排索引尝试"
-        },
-        "noAdditionalDocs": "未处理额外的文档",
-        "reindexTooltip": {
-          "completed": "本次索引尝试是完整重新索引。来源中的所有文档均已同步到系统。",
-          "inProgress": "本次索引尝试是完整重新索引。来源中的所有文档正在同步到系统。"
-        },
-        "stageMetricsButton": {
-          "tooltip": "查看阶段指标"
-        },
-        "viewTrace": {
-          "ariaLabel": "查看完整追踪"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "处理部分文档时遇到问题。<details>查看详情。</details>",
-        "resolvingStatus": "正在解决失败项",
-        "title": "部分文档索引失败"
       },
       "invalidState": {
         "description": "此连接器处于无效状态。请先更新凭据或创建新连接器，然后再重新索引。",
@@ -2234,7 +2172,6 @@
           }
         },
         "reIndex": {
-          "label": "重新索引",
           "tooltip": {
             "indexing": "索引正在进行中，无法重新索引",
             "invalid": "重新索引前请先修复连接器配置",
@@ -2243,45 +2180,28 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "暂停"
+            "label": "暂停索引",
+            "description": "取消所有进行中和未来的索引运行与同步。"
           },
           "resume": {
-            "label": "恢复"
+            "label": "恢复索引",
+            "description": "重新允许计划的索引运行与同步。"
           },
           "tooltip": {
             "updating": "状态更新进行中"
           }
         },
         "trigger": {
-          "label": "管理"
+          "label": "管理索引"
+        },
+        "updateIndex": {
+          "label": "更新索引",
+          "description": "拉取自上次成功索引以来的更新并建立索引。"
+        },
+        "fullReindex": {
+          "label": "完全重新索引",
+          "description": "重新索引来源中的所有文档。视语料规模可能需要数小时或数天。"
         }
-      },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "已取消"
-        },
-        "completedWithErrors": {
-          "label": "已完成，但有错误"
-        },
-        "failed": {
-          "label": "失败"
-        },
-        "fallback": {
-          "label": "未开始"
-        },
-        "inProgress": {
-          "label": "进行中"
-        },
-        "notStarted": {
-          "label": "已安排"
-        },
-        "success": {
-          "label": "成功"
-        }
-      },
-      "pruningFrequencyModal": {
-        "description": "连接器执行清理的频率（以小时为单位）",
-        "title": "清理频率"
       },
       "reEnableModal": {
         "actionButton": {
@@ -2290,247 +2210,133 @@
         "additionalDetails": "此连接器之前被标记为无效。重新启用前，请确认配置正确。确定要继续吗？",
         "entityType": "无效连接器"
       },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "这将对来源中的所有文档执行完整重新索引。",
-          "note": "<strong>注意：</strong>根据来源中存储的文档数量，这可能需要很长时间。"
-        },
-        "fullReindexButton": {
-          "label": "运行完整重新索引"
-        },
-        "title": "运行索引",
-        "update": {
-          "description": "这将拉取并索引自上次成功索引运行以来发生更改和/或新增的所有文档。"
-        },
-        "updateButton": {
-          "label": "运行更新"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "连接器执行刷新的频率（以分钟为单位）",
-        "title": "刷新频率"
-      },
-      "sections": {
-        "advanced": {
-          "title": "高级"
-        },
-        "advancedConfiguration": {
-          "title": "高级配置"
-        },
-        "connectorConfiguration": {
-          "title": "连接器配置"
-        },
-        "credential": {
-          "title": "凭据"
-        },
-        "indexing": {
-          "title": "索引"
-        },
-        "indexingAttempts": {
-          "title": "索引尝试"
-        }
-      },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "隐藏尝试开销"
-          },
-          "showButton": {
-            "label": "显示尝试开销"
-          }
-        },
-        "batchTotal": {
-          "empty": "尚无已完成的批次",
-          "summary": "平均批次：{avgLabel}，共 {count, plural, one {# 个批次} other {# 个批次}}——分布如下所示。"
-        },
-        "empty": {
-          "description": "尚未记录本次尝试的阶段耗时数据。在部署阶段埋点之前运行的旧尝试没有指标数据。"
-        },
         "loadError": {
-          "description": "无法加载本次尝试的阶段耗时数据。即使指标记录不可用，流水线仍会运行，因此这并不表示索引运行本身有问题。",
           "title": "加载阶段指标失败"
         },
-        "loading": "正在加载阶段指标…",
         "perBatch": {
-          "columns": {
-            "avgTime": "平均耗时",
-            "calls": "调用次数",
-            "max": "最大值",
-            "min": "最小值",
-            "stage": "阶段",
-            "totalTime": "总耗时"
-          },
           "empty": "未记录按批次的阶段数据。"
-        },
-        "sort": {
-          "label": "排序：",
-          "pipelineOrder": {
-            "label": "流水线顺序"
-          },
-          "timeTaken": {
-            "label": "耗时"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "将批次从对象存储读回工作进程内存。",
             "label": "批次加载"
           },
           "batchTotal": {
-            "description": "端到端处理单个批次所用的总实际时间。",
             "label": "批次总计"
           },
           "batchUnaccounted": {
-            "description": "未归入任何具名阶段的批次时间。数值偏大表示埋点缺失。",
             "label": "未归类"
           },
           "checkpointLoad": {
-            "description": "加载已保存的检查点，使本次尝试从上次运行停止的位置继续。",
             "label": "检查点加载"
           },
           "chunking": {
-            "description": "将每个文档拆分为用于生成 embedding 并建立索引的分块。",
             "label": "分块"
           },
           "connectorFetch": {
-            "description": "连接器调用来源 API 并产出原始文档所花费的时间。",
             "label": "连接器抓取"
           },
           "connectorValidation": {
-            "description": "在开始抓取前，验证连接器配置正确且可访问。",
             "label": "连接器验证"
           },
           "contextualRag": {
-            "description": "使用 LLM 为每个分块生成上下文摘要，以提升检索质量。",
             "label": "上下文 RAG"
           },
           "coordLockAcquireWait": {
-            "description": "等待保护本次尝试共享进度计数器的协调锁。",
             "label": "协调锁获取等待"
           },
           "coordinationUpdate": {
-            "description": "更新本次尝试的进度计数器，使界面反映已完成的批次。",
             "label": "协调更新"
           },
           "docBatchEnqueue": {
-            "description": "将已存储的批次发布到 Celery 队列，供 docprocessing 工作进程获取。",
             "label": "文档批次入队"
           },
           "docBatchStore": {
-            "description": "将抓取到的一批文档持久化到对象存储，供 docprocessing 工作进程使用。",
             "label": "文档批次存储"
           },
           "docDbPrepare": {
-            "description": "确定哪些文档是新增或已更新的，并准备相应的数据库行。",
             "label": "文档数据库准备"
           },
           "docLockAcquireWait": {
-            "description": "等待单个文档的锁，避免并发任务写入同一文档。",
             "label": "文档锁等待"
           },
           "docprocessingSetup": {
-            "description": "准备工作进程：加载搜索设置、embedding 模型和索引客户端。",
             "label": "文档处理初始化"
           },
           "embedding": {
-            "description": "调用 embedding 模型，将文本块转换为向量。通常是最慢的阶段。",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "在写入前，为每个文本块附加访问控制、权重提升和其他元数据。",
             "label": "元数据填充准备"
           },
           "finalization": {
-            "description": "处理完成后清理工作进程资源并释放该批次。",
             "label": "收尾"
           },
           "gcCollect": {
-            "description": "两个批次之间显式垃圾回收所用的时间。",
             "label": "垃圾回收"
           },
           "hierarchyUpsert": {
-            "description": "写入数据源的文件夹或空间层级，以便按位置筛选文档。",
             "label": "层级写入"
           },
           "imageProcessing": {
-            "description": "提取并总结图片，把图片内容转换为可搜索的文本。",
             "label": "图片处理"
           },
           "permissionValidation": {
-            "description": "确认该凭据具有读取数据源文档所需的权限。",
             "label": "权限校验"
           },
           "postIndexDbUpdate": {
-            "description": "索引写入成功后，更新 Postgres 中的文档记录。",
             "label": "索引后数据库更新"
           },
           "queueWait": {
-            "description": "批次在队列中等待文档处理工作进程启动它的时间。",
             "label": "队列等待"
           },
           "vectorDbWrite": {
-            "description": "将已生成 embedding 的文本块写入文档索引。",
             "label": "向量数据库写入"
+          },
+          "embeddingRateLimitWait": {
+            "label": "嵌入速率限制等待",
+            "description": "嵌入请求因索引设置中的嵌入速率限制而等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "提供商限流等待",
+            "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "本次索引任务按批次和按尝试的耗时统计。",
-        "title": "索引阶段指标"
       },
       "statusCard": {
         "documentsIndexed": {
           "label": "已索引文档数"
         },
-        "indexingSpeed": "（{speed} 文档 / 分钟）",
+        "indexingSpeed": "{speed} 文档/分钟",
         "lastIndexed": {
-          "label": "上次索引"
+          "value": "上次索引 {when}"
         },
-        "lastSynced": {
-          "label": "上次同步"
+        "title": "索引状态",
+        "documents": {
+          "label": "最近 / 总计",
+          "total": "/ {total}"
         },
-        "permissionSyncing": {
-          "label": "权限同步"
+        "throughput": {
+          "ariaLabel": "随时间索引的文档",
+          "tooltip": "{count, plural, one {# 个文档} other {# 个文档}}",
+          "loadError": "无法加载图表。"
         },
-        "status": {
-          "label": "状态"
-        }
-      },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "查看完整错误信息"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "文档权限同步",
-          "notApplicableDescription": "此连接器不使用独立的文档权限同步任务。"
-        },
-        "groupMembership": {
-          "label": "群组成员同步",
-          "notApplicableDescription": "此连接器不使用独立的群组成员同步任务。"
-        },
-        "indexing": {
-          "label": "索引"
-        },
-        "loadError": {
-          "title": "加载同步任务失败"
-        },
-        "notApplicable": {
-          "title": "不适用"
+        "hold": {
+          "checks_running": "正在运行索引前检查",
+          "checks_failed_to_run": "已暂停：检查无法运行",
+          "required_checks_failed": "已暂停：必需的检查失败",
+          "start": "开始索引",
+          "released": "索引已开始",
+          "releaseFailed": "无法开始索引",
+          "viewChecks": "查看连接器检查"
         }
       },
       "toasts": {
         "completeReindexStarted": "已成功启动完全重新索引",
-        "completeReindexStarting": "正在启动完全重新索引…",
         "deletionScheduleFailed": "安排删除连接器失败 - {message}",
-        "indexingProcessStartFailed": "启动索引进程失败",
         "indexingStartFailed": "启动索引失败",
         "indexingStartUnexpectedError": "尝试启动索引时发生意外错误",
         "indexingUpdateStarted": "已成功启动索引更新",
-        "indexingUpdateStarting": "正在启动索引更新…",
-        "invalidPruningFrequency": "清理频率无效：必须是有效数字",
-        "invalidRefreshFrequency": "刷新频率无效：必须是整数",
         "nameUpdateFailed": "更新连接器名称失败",
         "nameUpdated": "已成功更新连接器名称",
         "noUnresolvedErrors": "没有可重试的未解决错误。",
@@ -2539,7 +2345,327 @@
         "refreshFrequencyUpdateFailed": "更新连接器刷新频率失败",
         "refreshFrequencyUpdated": "已成功更新连接器刷新频率",
         "targetedReindexFailed": "定向重新索引失败：{message}",
-        "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。"
+        "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。",
+        "checkFrequencyUpdated": "连接器检查频率已更新",
+        "checkFrequencyUpdateFailed": "无法更新连接器检查频率"
+      },
+      "backButton": {
+        "label": "所有连接器"
+      },
+      "account": {
+        "title": "认证账户",
+        "editButton": {
+          "label": "编辑账户"
+        }
+      },
+      "configuration": {
+        "title": "索引配置",
+        "description": "{source} • {count, plural, one {# 项设置} other {# 项设置}}",
+        "editButton": {
+          "label": "编辑配置"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, other {文件夹}}",
+            "source": "{count, plural, other {来源}}",
+            "stub": "{count, plural, other {节点}}",
+            "shared_drive": "{count, plural, other {共享云端硬盘}}",
+            "my_drive": "{count, plural, other {我的云端硬盘}}",
+            "space": "{count, plural, other {空间}}",
+            "page": "{count, plural, other {页面}}",
+            "project": "{count, plural, other {项目}}",
+            "database": "{count, plural, other {数据库}}",
+            "workspace": "{count, plural, other {工作区}}",
+            "site": "{count, plural, other {站点}}",
+            "drive": "{count, plural, other {文档资料库}}",
+            "channel": "{count, plural, other {频道}}",
+            "mailbox": "{count, plural, other {邮箱}}"
+          },
+          "counts": {
+            "folder": "{count, plural, other {# 文件夹}}",
+            "source": "{count, plural, other {# 来源}}",
+            "stub": "{count, plural, other {# 节点}}",
+            "shared_drive": "{count, plural, other {# 共享云端硬盘}}",
+            "my_drive": "{count, plural, other {# 我的云端硬盘}}",
+            "space": "{count, plural, other {# 空间}}",
+            "page": "{count, plural, other {# 页面}}",
+            "project": "{count, plural, other {# 项目}}",
+            "database": "{count, plural, other {# 数据库}}",
+            "workspace": "{count, plural, other {# 工作区}}",
+            "site": "{count, plural, other {# 站点}}",
+            "drive": "{count, plural, other {# 文档资料库}}",
+            "channel": "{count, plural, other {# 频道}}",
+            "mailbox": "{count, plural, other {# 邮箱}}"
+          },
+          "notIndexed": "未索引",
+          "other": "其他文档",
+          "loadError": "无法加载文档分布。",
+          "open": "在来源中打开",
+          "empty": "尚未索引任何文档。",
+          "unavailable": "首次成功运行后可用。",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, other {个文档}}"
+        },
+        "summary": "{realm} • {counts}"
+      },
+      "sharing": {
+        "title": "共享设置",
+        "summary": {
+          "everyone": "文档与**所有人**共享",
+          "groups": "文档与 **{count, plural, one {# 个群组} other {# 个群组}}** 共享",
+          "sync": "文档访问**与 {source} 同步**",
+          "managedByAdmins": "由**管理员**管理",
+          "managedByGroups": "由 **{count, plural, one {# 个群组} other {# 个群组}}** 管理",
+          "syncRestricted": "文档访问**与 {source} 同步**，并限制为 **{count, plural, one {# 个群组} other {# 个群组}}**",
+          "groupsPending": "文档与**特定群组**共享",
+          "syncRestrictedPending": "文档访问**与 {source} 同步**，并限制为**特定群组**"
+        },
+        "manageAccess": {
+          "title": "连接器管理权限",
+          "unavailable": "你无法查看谁在管理此连接器。"
+        },
+        "editButton": {
+          "label": "编辑权限"
+        },
+        "groupsUnavailable": "无法加载群组。"
+      },
+      "schedule": {
+        "refresh": "每 **{every}** 刷新一次",
+        "prune": "每 **{every}** 清理一次",
+        "checks": "每 **{every}** 运行一次检查"
+      },
+      "runs": {
+        "kinds": {
+          "label": "运行类型",
+          "all": "所有类型",
+          "indexing": "文档索引",
+          "doc_permission_sync": "权限同步",
+          "group_sync": "群组成员同步",
+          "pruning": "文档清理",
+          "checks": "连接器检查"
+        },
+        "detail": {
+          "queued": "排队中",
+          "running": "运行中",
+          "rate": "{rate} 文档/分钟",
+          "finished": "{time}（{minutes, number} 分钟）"
+        },
+        "actions": {
+          "stages": "查看阶段指标",
+          "cancel": "取消",
+          "logs": "查看日志",
+          "checks": "查看检查结果"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, other {# 个文档失败}}",
+          "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}"
+        },
+        "newModel": {
+          "label": "新模型",
+          "tooltip": "使用将替换当前模型的嵌入模型编入索引。"
+        },
+        "figures": {
+          "indexed": "已索引",
+          "synced": "已同步",
+          "memberships": "个成员关系",
+          "removed": "已移除",
+          "checks": "项检查已运行"
+        },
+        "counts": {
+          "newDocs": "{count, plural, other {# 个新文档}}",
+          "updatedDocs": "已更新的文档",
+          "removedDocs": "{count, plural, other {已移除 # 个文档}}",
+          "users": "{count, plural, other {# 个用户}}",
+          "groups": "{count, plural, other {# 个群组}}",
+          "running": "{count, plural, other {# 个运行进行中}}",
+          "succeeded": "{count, plural, other {# 个运行成功}}",
+          "failed": "{count, plural, other {# 个运行失败}}",
+          "passedChecks": "{count, plural, one {# 项检查通过} other {# 项检查通过}}",
+          "failedChecks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
+          "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}"
+        },
+        "search": {
+          "placeholder": "搜索索引运行..."
+        },
+        "window": {
+          "label": "时间范围",
+          "all": "全部时间",
+          "h1": "过去 1 小时",
+          "h12": "过去 12 小时",
+          "h24": "过去 24 小时",
+          "d7": "过去 7 天",
+          "d30": "过去 30 天"
+        },
+        "statusGroups": {
+          "label": "状态",
+          "all": "所有状态",
+          "running": "运行中",
+          "succeeded": "成功",
+          "failed": "失败",
+          "canceled": "已取消"
+        },
+        "loadError": {
+          "title": "无法加载运行记录。"
+        },
+        "empty": {
+          "title": "暂无运行记录",
+          "filteredTitle": "没有符合这些筛选条件的运行。",
+          "description": "运行在后台调度，可能需要一点时间才会显示。"
+        },
+        "units": "{count, plural, other {个运行}}",
+        "errorModal": {
+          "indexing": "索引运行错误",
+          "doc_permission_sync": "文档权限同步错误",
+          "group_sync": "群组成员同步错误",
+          "pruning": "文档清理错误",
+          "checks": "连接器检查错误"
+        },
+        "toasts": {
+          "canceled": "正在取消运行。",
+          "cancelFailed": "无法取消运行，请重试。"
+        },
+        "checkResults": {
+          "title": "连接器检查",
+          "close": "关闭",
+          "count": "({count})"
+        }
+      },
+      "activity": {
+        "search": {
+          "placeholder": "搜索活动记录..."
+        },
+        "counts": {
+          "failures": "{count, plural, other {# 次运行失败}}",
+          "errors": "{count, plural, other {# 次运行存在文档错误}}"
+        },
+        "filter": {
+          "label": "显示",
+          "all": "所有级别",
+          "failures": "失败",
+          "errors": "错误",
+          "other": "其他"
+        },
+        "resolved": {
+          "label": "已解决"
+        },
+        "groups": {
+          "failures": "{count, plural, other {# 次失败}}",
+          "errors": "{count, plural, other {# 个错误}}",
+          "resolved": "{count, plural, other {# 个已解决}}",
+          "other": "其他"
+        },
+        "title": {
+          "indexing": {
+            "failed": "索引失败",
+            "running": "索引进行中，存在错误",
+            "stopped": "索引已停止，存在错误",
+            "errors": "索引已完成，存在错误",
+            "resolved": "索引错误已解决",
+            "succeeded": "索引成功完成",
+            "inProgress": "索引进行中",
+            "canceled": "索引已停止"
+          },
+          "doc_permission_sync": {
+            "failed": "权限同步失败",
+            "running": "权限同步进行中，存在错误",
+            "stopped": "权限同步已停止，存在错误",
+            "errors": "权限已同步，存在错误",
+            "resolved": "权限同步错误已解决",
+            "succeeded": "权限同步成功",
+            "inProgress": "正在同步权限",
+            "canceled": "权限同步已停止"
+          },
+          "group_sync": {
+            "failed": "群组成员同步失败",
+            "running": "群组成员同步进行中，存在错误",
+            "stopped": "群组成员同步已停止，存在错误",
+            "errors": "群组成员已同步，存在错误",
+            "resolved": "群组成员同步错误已解决",
+            "succeeded": "群组成员同步成功",
+            "inProgress": "正在同步群组成员",
+            "canceled": "群组同步已停止"
+          },
+          "pruning": {
+            "failed": "清理失败",
+            "running": "清理进行中，但有错误",
+            "stopped": "清理已停止，但有错误",
+            "errors": "清理已完成，但有错误",
+            "resolved": "清理错误已解决",
+            "succeeded": "清理成功完成",
+            "inProgress": "清理进行中",
+            "canceled": "清理已停止"
+          },
+          "checks": {
+            "failed": "连接器检查失败",
+            "running": "连接器检查进行中，但有错误",
+            "stopped": "连接器检查已停止，但有错误",
+            "errors": "连接器检查已完成，但有错误",
+            "resolved": "连接器检查错误已解决",
+            "succeeded": "连接器检查通过",
+            "inProgress": "连接器检查进行中",
+            "canceled": "连接器检查已停止"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, other {已索引 # 个文档}}。运行时间 {minutes, plural, other {# 分钟}}。",
+          "doc_permission_sync": "{count, plural, other {已同步 # 个文档}}。运行时间 {minutes, plural, other {# 分钟}}。",
+          "group_sync": "{count, plural, other {已同步 # 个成员关系}}。运行时间 {minutes, plural, other {# 分钟}}。",
+          "pruning": "{count, plural, one {已移除 # 个文档} other {已移除 # 个文档}}。清理运行时间 {minutes, plural, one {# 分钟} other {# 分钟}}。",
+          "checks": "{count, plural, one {已运行 # 项检查} other {已运行 # 项检查}}。检查运行时间 {minutes, plural, one {# 分钟} other {# 分钟}}。",
+          "checksFailed": "{count, plural, one {# 项检查失败} other {# 项检查失败}}。"
+        },
+        "tags": {
+          "stackTrace": "堆栈跟踪",
+          "indexing": "{count, plural, other {# 个文档失败}}",
+          "doc_permission_sync": "{count, plural, other {# 个文档同步失败}}",
+          "group_sync": "{count, plural, other {# 个群组同步失败}}",
+          "resolvedDocs": "{count, plural, other {# 个文档已解决}}",
+          "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
+          "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}"
+        },
+        "more": "显示更多",
+        "empty": {
+          "title": "没有失败或错误",
+          "resolved": "没有已解决的错误",
+          "filtered": "没有与此搜索匹配的内容。",
+          "failures": "没有失败",
+          "errors": "没有错误",
+          "other": "没有其他运行"
+        },
+        "loadError": {
+          "title": "无法加载活动。"
+        },
+        "docs": {
+          "title": "失败的文档",
+          "search": {
+            "placeholder": "搜索文件..."
+          },
+          "resolveAll": "全部解决",
+          "resolveOne": "解决此文档",
+          "more": "更多",
+          "less": "收起",
+          "unknownDocument": "未知文档",
+          "empty": "没有未解决的文档错误",
+          "loadError": "无法加载失败的文档。",
+          "open": "打开文档"
+        },
+        "trace": {
+          "runId": "运行 ID：{id}",
+          "copy": "复制堆栈跟踪"
+        },
+        "actions": {
+          "resolve": "解决"
+        }
+      },
+      "stageDetails": {
+        "title": "阶段详情",
+        "calls": "批次",
+        "averageTime": "平均时间",
+        "maxTime": "最长时间",
+        "uneven": {
+          "tooltip": "此阶段各批次耗时差异很大"
+        },
+        "close": "关闭阶段详情"
       }
     },
     "connectorTitle": {
@@ -2562,7 +2688,7 @@
       "oneDrive": {
         "description": "配置 OneDrive 连接器",
         "indexingScope": {
-          "label": "Onyx 应为哪些用户的 OneDrive 文件建立索引？",
+          "label": "要索引的 OneDrive 文件",
           "general": {
             "label": "常规",
             "description": "为 Microsoft 应用程序可以访问的所有符合条件的用户建立索引。"
@@ -2578,7 +2704,7 @@
         },
         "excludedPaths": {
           "label": "排除的路径",
-          "description": "与每个文件路径和文件名匹配的 glob 模式，例如“*.tmp”或“Archive/*”。"
+          "description": "与每个文件路径和文件名匹配的 glob 模式，例如`*.tmp`或`Archive/*`。"
         },
         "organizationLinks": {
           "label": "将组织链接视为公开链接",
@@ -2593,22 +2719,28 @@
           "description": "Microsoft Graph 主机。GCC High 或 DoD 请使用 https://graph.microsoft.us。"
         }
       },
+      "linear": {
+        "description": "配置 Linear 连接器",
+        "teams": {
+          "label": "团队",
+          "description": "要索引的 Linear 团队键（例如 ENG）。留空则索引已连接用户可见的所有团队。"
+        },
+        "projects": {
+          "label": "项目",
+          "description": "要索引的 Linear 项目名称或 URL。留空则索引所有项目。若同时设置了团队，问题必须同时匹配两者。"
+        },
+        "syncNotice": "请以属于您要索引的每个私有团队的工作区成员（而非访客）身份连接。Onyx 无法看到已连接用户不在其中的私有团队。公开团队的问题可由所有工作区成员搜索，私有或受限团队的问题仅可由其成员搜索。"
+      },
       "add": {
         "authorizeButton": {
           "label": "使用 {source} 授权",
           "pendingLabel": "正在授权…"
-        },
-        "collapseButton": {
-          "ariaLabel": "折叠"
         },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "新建"
-        },
-        "credentialDeleted": {
-          "toast": "已成功删除凭据！"
         },
         "credentialModal": {
           "title": "创建 {source} 凭据"
@@ -2621,14 +2753,8 @@
           "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
           "title": "身份验证账户"
         },
-        "credentialSwapped": {
-          "toast": "已成功更换凭据！"
-        },
         "error": {
           "toast": "错误：{detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "展开"
         },
         "federated": {
           "tooltip": {
@@ -2660,57 +2786,123 @@
         "retryButton": {
           "label": "重试"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}",
+          "expandButton": {
+            "ariaLabel": "显示已保存的账户"
+          },
+          "collapseButton": {
+            "ariaLabel": "隐藏已保存的账户"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(新账户)",
+          "editButton": {
+            "label": "编辑账户"
+          }
         },
         "timeout": {
           "toast": "操作在 {seconds} 秒后超时。请检查配置是否有误。"
         },
         "unknownError": {
           "toast": "发生未知错误"
+        },
+        "account": {
+          "untitled": {
+            "label": "未命名"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "添加于 {date}"
+          },
+          "selected": {
+            "label": "已选择"
+          },
+          "useButton": {
+            "label": "使用此账户"
+          },
+          "unsupportedRealm": {
+            "label": "不支持的网站域名"
+          },
+          "expandButton": {
+            "ariaLabel": "显示账户详情"
+          },
+          "collapseButton": {
+            "ariaLabel": "隐藏账户详情"
+          },
+          "deleteButton": {
+            "label": "删除账户",
+            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。"
+          },
+          "updateButton": {
+            "label": "更新凭据",
+            "tooltip": "更改使用此帐户的所有连接器的已保存值。"
+          },
+          "usedBy": {
+            "label": "{count, plural, other {# 个连接器}}正在使用"
+          },
+          "owner": {
+            "you": "{name}（你）"
+          },
+          "lastTested": {
+            "title": "上次测试 {date}"
+          },
+          "notTested": {
+            "title": "尚未测试"
+          },
+          "details": {
+            "description": "已保存账户的凭据无法编辑，也无法指向其他主机。你可以在复用前测试该账户，或改为添加新账户。"
+          },
+          "rerunButton": {
+            "label": "重新运行检查"
+          },
+          "authenticationType": {
+            "label": "认证类型"
+          },
+          "rerunFailed": {
+            "toast": "无法启动检查，请重试。"
+          },
+          "shareSaved": {
+            "toast": "共享已更新。"
+          },
+          "shareFailed": {
+            "toast": "无法更改可使用此账户的人员。请重试。"
+          },
+          "renameSaved": {
+            "toast": "账号已重命名。"
+          },
+          "renameFailed": {
+            "toast": "无法重命名此账号。请重试。"
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "只有添加此账户的人才能将其设为私有。"
+          },
+          "shareLocked": {
+            "tooltip": "只有添加此账户的人或与其共享的管理员可以更改可使用此账户的人员。"
+          }
+        },
+        "accountUnavailable": {
+          "toast": "此账户已不可用。请选择其他账户。"
         }
-      },
-      "advanced": {
-        "indexingStart": {
-          "label": "索引起始日期",
-          "subtext": "早于此日期的文档不会被拉取"
-        },
-        "pruneFrequency": {
-          "description": "对照数据源检查所有文档，删除已不存在的文档。注意：此过程会检查每一个文档，因此提高频率时请谨慎。默认为 {hours} 小时（{days} 天）。支持小数小时（例如 0.1 小时 = 6 分钟）。输入 0 可为此连接器禁用清理。",
-          "label": "清理频率（小时）"
-        },
-        "refreshFrequency": {
-          "description": "这是我们从数据源拉取新文档的频率（以分钟计）。如果输入 0，我们将不再为此连接器拉取新文档。",
-          "label": "刷新频率（分钟）"
-        },
-        "resetButton": {
-          "label": "重置"
-        },
-        "title": "高级配置"
-      },
-      "connectorName": {
-        "label": "连接器名称",
-        "subtext": "用于描述该连接器的名称。"
       },
       "credentialRequired": {
         "tooltip": "请先选择一个凭据。"
       },
-      "credentialsLoadError": {
-        "title": "加载凭据失败。"
+      "bindingGate": {
+        "enterField": "请输入“{field}”。",
+        "fixField": "请检查“{field}”。",
+        "awaitingCheck": "离开该字段后将使用凭据进行检查。",
+        "runChecks": "运行检查，以使用这些设置检查新账户。",
+        "checking": "正在检查凭据…",
+        "fieldInvalid": "请检查“{field}”：{detail}",
+        "rejected": "此凭据无法与这些设置一起使用。{detail}"
       },
       "field": {
-        "optional": {
-          "label": "（可选）"
-        },
         "optionalSuffix": {
           "label": "可选"
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "已创建您的 Google Drive 凭据。您可以在凭据列表中管理或撤销它。",
-          "title": "认证完成"
-        },
         "authFailed": {
           "toast": "使用 Google Drive 认证失败 - {error}"
         },
@@ -2718,58 +2910,15 @@
           "label": "使用 Google Drive 认证",
           "pendingLabel": "正在认证…"
         },
-        "createButton": {
-          "label": "创建凭据",
-          "pendingLabel": "正在创建…"
-        },
-        "credentialsLoadError": {
-          "title": "加载 Google Drive 凭据失败。"
-        },
-        "invalidFile": {
-          "toast": "提供的文件无效 - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "提供的文件无效 - 需要服务账号 JSON 密钥"
-        },
-        "missingServiceAccountKey": {
-          "toast": "请先上传服务账号密钥，然后再创建凭据"
-        },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Drive 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用",
           "sharedScopesNote": "Google 会同时请求 Google Drive 和 Gmail 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Google Drive，请在同意屏幕上取消勾选 Gmail 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
-        },
-        "primaryAdmin": {
-          "description": "输入拥有目标 Google Drive 的 Google 组织的管理员或所有者邮箱。",
-          "invalidEmail": "必须是有效的邮箱地址",
-          "label": "主管理员邮箱",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必填"
-        },
-        "section": {
-          "title": "Google Drive 认证"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "创建服务账号凭据失败 - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "已成功创建服务账号凭据"
-        },
-        "serviceAccountOption": {
-          "title": "选项 2：服务账号"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "上传或粘贴您的服务账号 JSON 密钥"
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "已创建您的 Gmail 凭据。您可以在凭据列表中管理或撤销它。",
-          "title": "认证完成"
-        },
         "authFailed": {
           "toast": "使用 Gmail 认证失败 - {error}"
         },
@@ -2777,51 +2926,12 @@
           "label": "使用 Gmail 认证",
           "pendingLabel": "正在认证…"
         },
-        "createButton": {
-          "label": "创建凭据",
-          "pendingLabel": "正在创建…"
-        },
-        "credentialsLoadError": {
-          "title": "加载 Gmail 凭据失败。"
-        },
-        "invalidFile": {
-          "toast": "提供的文件无效 - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "提供的文件无效 - 需要服务账号 JSON 密钥"
-        },
-        "missingServiceAccountKey": {
-          "toast": "请先上传服务账号密钥，然后再创建凭据"
-        },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Gmail 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用",
           "sharedScopesNote": "Google 会同时请求 Gmail 和 Google Drive 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Gmail，请在同意屏幕上取消勾选 Google Drive 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
-        },
-        "primaryAdmin": {
-          "description": "输入拥有目标 Gmail 账号的 Google 组织的管理员或所有者邮箱。",
-          "invalidEmail": "必须是有效的邮箱地址",
-          "label": "主管理员邮箱",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必填"
-        },
-        "section": {
-          "title": "Gmail 认证"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "创建服务账号凭据失败 - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "已成功创建服务账号凭据"
-        },
-        "serviceAccountOption": {
-          "title": "选项 2：服务账号"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "上传或粘贴您的服务账号 JSON 密钥"
         }
       },
       "header": {
@@ -2829,7 +2939,7 @@
           "label": "取消"
         },
         "connectButton": {
-          "label": "连接"
+          "label": "创建连接器"
         },
         "description": "连接到 {source} 并为 {appName} 设置连接器。{hasDocs, select, true {查看[文档]({url})} other {}}"
       },
@@ -2934,27 +3044,1210 @@
           "title": "提交时出错。"
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "配置"
-        }
+      "content": {
+        "title": "连接器内容",
+        "description": "选择此连接器要索引的内容。"
       },
       "selectInput": {
         "emptyOption": {
           "label": "选择一个选项"
         }
       },
-      "stringPairList": {
-        "addButton": {
-          "label": "新增"
-        },
-        "removeButton": {
-          "tooltip": "移除"
-        }
-      },
       "tabs": {
         "empty": {
           "label": "没有可显示的标签页。"
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "subDescriptions": {
+        "siteUrl": "粘贴你的站点 URL。{connectorName} 的 REST API 必须能在该地址访问。"
+      },
+      "boundFields": {
+        "errors": {
+          "missing": "请输入一个值。",
+          "invalid": "此值无效：{detail}"
+        }
+      },
+      "scheduled": {
+        "description": "指定连接器如何执行索引。操作员可以编辑此部分。",
+        "indexingStart": {
+          "description": "最后更新日期早于此日期的文档将被忽略。",
+          "placeholder": "全部时间",
+          "title": "索引此日期之后的文档"
+        },
+        "pruneFrequency": {
+          "description": "检查来源并删除已不存在的文档。",
+          "title": "清理间隔"
+        },
+        "refreshFrequency": {
+          "description": "从来源拉取新文档。",
+          "title": "刷新间隔"
+        },
+        "title": "计划",
+        "units": {
+          "hours": "小时",
+          "minutes": "分钟"
+        },
+        "checkFrequency": {
+          "title": "检查运行间隔",
+          "description": "检查连接的功能与健康状况。"
+        }
+      },
+      "settings": {
+        "description": "连接器信息与访问权限。",
+        "displayName": {
+          "title": "连接器显示名称"
+        },
+        "documentAccess": {
+          "description": "控制谁可以访问此连接器索引的文档。",
+          "everyone": {
+            "description": "此连接器索引的文档将对组织中的所有人公开。",
+            "title": "组织中的所有人"
+          },
+          "specificGroups": {
+            "description": "指定可以访问此连接器文档的群组。",
+            "required": "请至少选择一个群组。",
+            "title": "特定群组"
+          },
+          "sync": {
+            "description": "{appName} 会与来源同步权限。用户只能搜索他们在来源中可见的内容。",
+            "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
+            "title": "与 {source} 同步"
+          },
+          "title": "文档访问"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "始终共享",
+            "title": "管理员"
+          },
+          "description": "控制谁可以运行（安排和监控索引）和/或编辑连接器配置。",
+          "note": "只有拥有“管理连接器”权限（群组管理员角色或群组权限）的用户才能运行和/或编辑连接器。",
+          "placeholder": "添加群组以共享此连接器",
+          "role": {
+            "editor": {
+              "description": "更新/删除配置。",
+              "label": "编辑者"
+            },
+            "menu": {
+              "ariaLabel": "{name} 的角色"
+            },
+            "operator": {
+              "description": "安排/监控索引。",
+              "label": "操作员"
+            },
+            "removeAccess": {
+              "label": "移除访问权限"
+            }
+          },
+          "title": "连接器管理权限"
+        },
+        "title": "连接器设置"
+      },
+      "optionsListInput": {
+        "placeholder": "从列表中选择{label}或输入"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "启用对页面附件（包括图片和文档）的处理",
+              "label": "包含附件"
+            },
+            "scoped_token": {
+              "label": "这是带作用域的 API 令牌",
+              "description": "带作用域的令牌需要通过 Atlassian 的 API 网关路由。使用经典令牌时请保持关闭。"
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "会议 ID",
+              "description": "每个周期性会议会按场次逐一索引。Zoom 仅返回最近 15 个月的场次，因此更早的场次无法通过会议 ID 获取。若要索引更早的历史记录，请改为按主持人邮箱或 Zoom 群组限定范围，这两种方式都没有此限制。"
+            },
+            "webinar_ids": {
+              "label": "网络研讨会 ID",
+              "description": "网络研讨会还需要为主持人启用 Webinar 附加组件。与会议 ID 不同，网络研讨会的历史记录没有 15 个月的限制。"
+            },
+            "host_emails": {
+              "label": "主持人邮箱",
+              "description": "索引这些人主持的所有会话，类型以下方勾选为准。与任何 Zoom 用户都不匹配的邮箱会作为索引错误报告，而不会被静默忽略。"
+            },
+            "group_id": {
+              "label": "Zoom 群组 ID",
+              "description": "索引某个 Zoom 群组的成员主持的所有会话，类型以下方勾选为准。Zoom 每次运行都会重新读取成员列表，因此无需编辑此连接器即可纳入新加入或已离开的成员。"
+            },
+            "include_meetings": {
+              "label": "包含会议",
+              "description": "适用于主持人邮箱和 Zoom 群组。上方的 ID 列表已经说明了每个 ID 的类型。"
+            },
+            "include_webinars": {
+              "label": "包含网络研讨会",
+              "description": "适用于主持人邮箱和 Zoom 群组。网络研讨会还需要为主持人启用 Webinar 附加组件。"
+            },
+            "treat_link_access_as_public": {
+              "label": "将链接访问视为公开",
+              "description": "仅在启用权限同步时有效。开启后，链接访问权限为“任何拥有链接的人”或需登录规则的录制内容对所有 Onyx 用户可见，域规则则对这些域的用户可见。关闭后，每份转录文本仅对录制所有者可见，因为 Zoom 无法提供“有权访问的人员”中包含哪些人。"
+            },
+            "plan_tier": {
+              "label": "Zoom 套餐",
+              "options": {
+                "pro": "专业版",
+                "business_plus": "商务版及以上"
+              },
+              "description": "设置此连接器调用 Zoom 的速度上限。Pro 账户请选择 `pro`，Business、Education、Enterprise 或 Partner 账户请选择 `business_plus`。"
+            },
+            "rate_limit_percent": {
+              "label": "Zoom API 速率限制",
+              "description": "此连接器可使用的账户 Zoom 速率限制的百分比，取 1 到 100 的整数。留空表示 50，为客户的其他 Zoom 集成留出余量。每个 Zoom 连接器各自控制节奏，彼此不可见，因此同一 Zoom 账户上的两个连接器各自占用该百分比。如果运行多个连接器，请将其平分。"
+            }
+          },
+          "description": "配置 Zoom 连接器",
+          "subtext": "索引每个 Zoom 会话的云录制转录文本，需 Zoom Pro 或更高版本套餐。从未进行云录制的会话会被跳过。请在“高级”下设置索引起始日期。Zoom 每次请求只列出一个月的录制内容，因此若不设置，首次抓取会请求一直回溯到 2013 年的每个月份，并把账户的 API 额度浪费在没有内容的年份上。"
+        },
+        "web": {
+          "description": "配置 Web 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL",
+              "placeholder": "https://example.com"
+            },
+            "web_connector_type": {
+              "label": "抓取方式",
+              "options": {
+                "recursive": "递归",
+                "single": "单页",
+                "sitemap": "站点地图"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "抓取前滚动页面",
+              "description": "如果网站需要滚动才能加载所需内容，请启用"
+            },
+            "url_rewrites": {
+              "label": "URL 重写",
+              "description": "在存储前重写文档 URL。适用于通过内部镜像抓取、同时存储规范的公开链接的场景，例如 https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "源 URL 前缀",
+              "rightLabel": "替换前缀",
+              "leftPlaceholder": "https://neibu-jingxiang.example.com",
+              "rightPlaceholder": "https://docs.example.com"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "配置 LumApps 连接器",
+          "fields": {
+            "base_url": {
+              "label": "API 基础 URL（cell 主机）",
+              "description": "您的 LumApps cell/API 主机，例如 https://go-cell-005.api.lumapps.com（不是文档站点 api.lumapps.com）。"
+            },
+            "organization_id": {
+              "label": "组织 ID",
+              "description": "您的 LumApps 组织 ID（数字）。"
+            },
+            "instance_ids": {
+              "label": "实例（站点）ID",
+              "description": "将索引限定在特定的实例/站点 ID。留空则索引服务用户可见的所有内容。"
+            },
+            "custom_content_types": {
+              "label": "自定义内容类型 ID",
+              "description": "限定为特定的自定义内容类型 ID。留空则索引所有内容类型。"
+            },
+            "lang": {
+              "label": "语言",
+              "description": "用于内容标题/正文和元数据标签的语言（ISO 639-1，例如 en、fr）。"
+            }
+          }
+        },
+        "github": {
+          "description": "配置 GitHub 连接器",
+          "fields": {
+            "github_base_url": {
+              "label": "GitHub Enterprise Server URL",
+              "description": "使用 github.com 时请留空。",
+              "placeholder": "https://github.example.com"
+            },
+            "repo_owner": {
+              "label": "仓库所有者"
+            },
+            "github_mode": {
+              "label": "要索引的 GitHub 内容",
+              "tabs": {
+                "repo": {
+                  "label": "指定仓库"
+                },
+                "everything": {
+                  "label": "全部"
+                }
+              }
+            },
+            "repositories": {
+              "label": "仓库名称",
+              "description": "如有多个仓库，请输入以逗号分隔的名称（例如 repo1,repo2,repo3）"
+            },
+            "everything": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有仓库！"
+            },
+            "include_prs": {
+              "label": "包含拉取请求",
+              "description": "索引仓库中的拉取请求"
+            },
+            "include_issues": {
+              "label": "包含议题",
+              "description": "索引仓库中的议题"
+            },
+            "include_files": {
+              "label": "包含文档",
+              "description": "索引仓库中的文本类文档（Markdown、文本等）"
+            },
+            "branch": {
+              "label": "分支",
+              "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。"
+            }
+          }
+        },
+        "testrail": {
+          "description": "配置 TestRail 连接器",
+          "fields": {
+            "testrail_base_url": {
+              "label": "TestRail 基础 URL",
+              "placeholder": "https://acme.testrail.io"
+            },
+            "project_ids": {
+              "label": "项目 ID",
+              "description": "要索引的 TestRail 项目 ID，以逗号分隔（例如 1 或 1,2,3）。留空则索引所有项目。"
+            },
+            "cases_page_size": {
+              "label": "用例分页大小",
+              "description": "从 TestRail API 每页获取的测试用例数量（默认：250）"
+            },
+            "max_pages": {
+              "label": "最大页数",
+              "description": "为防止无限循环而设置的最大获取页数（默认：10000）"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "跳过文档字符数上限",
+              "description": "跳过超出此字符数上限的测试用例（默认：200000）"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "配置 GitLab 连接器",
+          "fields": {
+            "gitlab_url": {
+              "label": "GitLab URL",
+              "placeholder": "https://gitlab.com"
+            },
+            "project_owner": {
+              "label": "项目所有者"
+            },
+            "project_name": {
+              "label": "项目名称"
+            },
+            "include_mrs": {
+              "label": "包含合并请求",
+              "description": "索引仓库中的合并请求"
+            },
+            "include_issues": {
+              "label": "包含议题",
+              "description": "索引仓库中的议题"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "配置 Bitbucket 连接器",
+          "subtext": "配置 Bitbucket 连接器（仅限 Cloud）。您可以索引整个工作区、指定项目或仓库。",
+          "fields": {
+            "workspace": {
+              "label": "工作区",
+              "description": "要索引的 Bitbucket 工作区（例如，来自 https://bitbucket.org/atlassian/workspace 的 \"atlassian\"）。"
+            },
+            "bitbucket_mode": {
+              "label": "要索引的 Bitbucket 内容",
+              "tabs": {
+                "repo": {
+                  "label": "指定仓库"
+                },
+                "project": {
+                  "label": "项目"
+                },
+                "workspace": {
+                  "label": "工作区"
+                }
+              }
+            },
+            "repositories": {
+              "label": "仓库 Slug",
+              "description": "如有多个仓库，请输入以逗号分隔的 Slug（例如 repo1,repo2,repo3）"
+            },
+            "projects": {
+              "label": "项目键",
+              "description": "一个或多个 Bitbucket 项目键（以逗号分隔），用于索引这些项目中的所有仓库（例如 PROJ1,PROJ2）"
+            },
+            "workspace_tab": {
+              "label": "工作区",
+              "description": "此连接器将索引工作区中的所有仓库。"
+            }
+          }
+        },
+        "gitbook": {
+          "description": "配置 GitBook 连接器",
+          "fields": {
+            "space_id": {
+              "label": "空间 ID",
+              "description": "要索引的 GitBook 空间的 ID。可在该空间内任意页面的 URL 中找到。例如，如果您的 URL 为 `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`，则您的空间 ID 为 `8JkzVx8QCIGRrmxhGHU8`。"
+            }
+          }
+        },
+        "google_drive": {
+          "description": "配置 Google Drive 连接器",
+          "fields": {
+            "credential_kind": {
+              "label": "凭据类型"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "常规"
+                },
+                "Specific": {
+                  "label": "指定"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "包含共享云端硬盘",
+              "description": {
+                "oauth": "这将允许 Onyx 索引您有权访问的共享云端硬盘中的所有内容。",
+                "serviceAccount": "这将允许 Onyx 索引贵组织共享云端硬盘中的所有内容。"
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "包含我的云端硬盘",
+                "serviceAccount": "包含所有人的我的云端硬盘"
+              },
+              "description": {
+                "oauth": "这将允许 Onyx 索引您的我的云端硬盘中的所有内容。",
+                "serviceAccount": "这将允许 Onyx 索引所有人的我的云端硬盘中的所有内容。"
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "这将允许 Onyx 索引与您共享的所有文件。",
+              "label": "包含与您共享的所有文件"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "输入要索引的共享云端硬盘的 URL，以逗号分隔。您必须有权访问这些共享云端硬盘。",
+                "serviceAccount": "输入要索引的共享云端硬盘的 URL，以逗号分隔。"
+              },
+              "label": "共享云端硬盘 URL"
+            },
+            "shared_folder_urls": {
+              "description": "输入要索引的文件夹的 URL，以逗号分隔。这些文件夹（及其所有子文件夹）中的文件都会被索引。",
+              "label": "文件夹 URL"
+            },
+            "my_drive_emails": {
+              "description": "输入要索引其“我的云端硬盘”的用户的邮箱，以逗号分隔。",
+              "label": "我的云端硬盘邮箱"
+            },
+            "specific_user_emails": {
+              "description": "输入要索引的特定用户邮箱，以逗号分隔。这将只索引这些用户可访问的文件。",
+              "label": "指定用户邮箱"
+            },
+            "exclude_domain_link_only": {
+              "label": "隐藏仅限域链接的文件",
+              "description": "启用后，Onyx 会跳过广泛共享（域内或公开）但需要通过链接访问的文件。"
+            }
+          }
+        },
+        "gmail": {
+          "description": "配置 Gmail 连接器"
+        },
+        "bookstack": {
+          "description": "配置 Bookstack 连接器",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "BookStack 基础 URL",
+              "placeholder": "https://bookstack.example.com"
+            }
+          }
+        },
+        "outline": {
+          "description": "配置 Outline 连接器",
+          "fields": {
+            "outline_base_url": {
+              "label": "Outline 基础 URL",
+              "placeholder": "https://app.getoutline.com"
+            }
+          }
+        },
+        "confluence": {
+          "description": "配置 Confluence 连接器",
+          "fields": {
+            "is_cloud": {
+              "label": "是否为云端版",
+              "description": "对于 atlassian.net 上的站点，请选择 Confluence Cloud；对于自托管的 Confluence Server 或 Data Center 站点，请选择 Confluence Data Center。"
+            },
+            "wiki_base": {
+              "label": "站点 URL",
+              "placeholder": "https://nide-yuming.atlassian.net/wiki"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "space": {
+                  "label": "空间"
+                },
+                "page": {
+                  "label": "页面"
+                },
+                "cql": {
+                  "label": "CQL 查询"
+                }
+              }
+            },
+            "everything": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有页面！"
+            },
+            "space": {
+              "label": "空间键",
+              "description": "要索引的 Confluence 空间键（例如 `KB`）。"
+            },
+            "page_id": {
+              "label": "页面 ID",
+              "description": "要索引的特定页面 ID（例如 `131368`）"
+            },
+            "index_recursively": {
+              "label": "递归索引",
+              "description": "设置后，将索引页面 ID 所指定的页面及其所有子页面。"
+            },
+            "cql_query": {
+              "label": "CQL 查询",
+              "description": "重要提示：目前仅支持返回“page”类型对象的 CQL 查询。这意味着所有 CQL 查询都必须包含“type=page”作为唯一的类型过滤条件。同时请勿使用“lastModified”过滤条件，否则会影响连接器的轮询逻辑。请勿使用 ORDER BY，因为连接器会设置自己的排序方式。我们仍会获取 CQL 查询所返回页面的所有附件和评论。任何“lastmodified”过滤条件都将被覆盖。更多详情请参阅 Atlassian 的 [CQL 文档](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)。"
+            }
+          }
+        },
+        "jira": {
+          "description": "配置 Jira 连接器",
+          "subtext": "配置要索引的 Jira 内容。您可以索引全部内容，也可以指定某个项目。",
+          "fields": {
+            "jira_base_url": {
+              "label": "站点 URL",
+              "placeholder": "https://nide-yuming.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "project": {
+                  "label": "项目"
+                },
+                "jql": {
+                  "label": "JQL 查询"
+                }
+              }
+            },
+            "everything": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有议题！"
+            },
+            "project_key": {
+              "label": "项目键",
+              "description": "要索引的特定项目的键（例如 “PROJ”）。"
+            },
+            "jql_query": {
+              "label": "JQL 查询",
+              "description": "用于筛选 Jira 议题的自定义 JQL 查询。\n\n重要提示：请勿在 JQL 查询中包含任何基于时间的过滤条件，否则会与连接器的逻辑冲突。此外，请勿包含 ORDER BY 子句。\n\n有关语法的更多详情，请参阅 Atlassian 的 [JQL 文档](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)。"
+            },
+            "comment_email_blacklist": {
+              "label": "评论邮箱黑名单",
+              "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "salesforce": {
+          "description": "配置 Salesforce 连接器",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "配置类型",
+              "tabs": {
+                "simple": {
+                  "label": "简单"
+                },
+                "advanced": {
+                  "label": "高级"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "请求的对象",
+              "description": "指定要索引的 Salesforce 对象类型。如果不确定，请不要指定任何对象，Onyx 将默认按“Account”索引。\n\n提示：请使用对象名称的单数形式（例如使用“Opportunity”而不是“Opportunities”）。"
+            },
+            "custom_query_config": {
+              "label": "自定义查询配置",
+              "description": "输入一个 JSON 配置，精确定义要索引的字段和子对象。这样您可以完全控制数据结构。\n\n示例：`'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n更多详情请[查看我们的文档]({docsAdminsPath}/connectors/official/salesforce)。"
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "配置 SharePoint 连接器",
+          "fields": {
+            "sites": {
+              "label": "站点",
+              "description": "- 如果未指定站点，将索引您组织中的所有站点（需要 `Sites.Read.All` 权限）。\n- 例如，指定 `https://onyxai.sharepoint.com/sites/support` 只会索引该站点。\n- 例如，指定 `https://onyxai.sharepoint.com/sites/support/subfolder` 只会索引该文件夹。\n- 如需索引用户的个人站点，请使用 [OneDrive 连接器]({docsAdminsPath}/connectors/official/onedrive)。\n- 目前，指定站点适用于使用英语、西班牙语或德语的 SharePoint 实例。如需支持其他语言，请联系 Onyx 团队。"
+            },
+            "include_site_documents": {
+              "label": "索引文档",
+              "description": "索引上方所定义的所有 SharePoint 文档库或文件夹中的文档。"
+            },
+            "include_site_pages": {
+              "label": "索引 ASPX 站点",
+              "description": "索引上方所定义的所有 SharePoint 站点的 aspx 页面，即使已指定文档库或文件夹也会索引。"
+            },
+            "treat_sharing_link_as_public": {
+              "label": "将共享链接视为公开",
+              "description": "启用后，带有共享链接（匿名或全组织范围）的文档将被视为公开（对所有 Onyx 用户可见）。禁用后，只有被明确分配角色的用户和群组才能查看该文档。"
+            },
+            "excluded_sites": {
+              "label": "排除的站点",
+              "description": "要排除在索引之外的站点 URL 或 glob 模式。匹配的站点永远不会被索引，即使它们出现在上方的站点列表中。示例：`https://contoso.sharepoint.com/sites/archive`（精确匹配）、`*://*/sites/archive-*`（glob 模式）。"
+            },
+            "excluded_paths": {
+              "label": "排除的路径",
+              "description": "用于在文档库内将文件路径排除在索引之外的 glob 模式。模式会同时与完整相对路径和文件名进行匹配。示例：`*.tmp`（临时文件）、`~$*`（Office 锁定文件）、`Archive/*`（文件夹）。"
+            },
+            "authority_host": {
+              "label": "授权主机",
+              "description": "用于身份验证的 Microsoft 标识授权主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API 主机",
+              "description": "Microsoft Graph API 主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://graph.microsoft.us"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "SharePoint 域名后缀",
+              "description": "SharePoint 站点的域名后缀（例如 sharepoint.com）。大多数部署请保持默认。对于 GCC High，请使用 sharepoint.us"
+            }
+          }
+        },
+        "teams": {
+          "description": "配置 Teams 连接器",
+          "fields": {
+            "teams": {
+              "label": "团队",
+              "description": "指定 0 个或多个要索引的团队。例如，为“onyxai”组织指定团队“Support”，将只索引发送到属于“Support”团队的频道中的消息。如果未指定团队，将索引您组织中的所有团队。"
+            },
+            "include_attachments": {
+              "description": "将每个频道“文件”选项卡中的文件作为独立文档进行索引，并沿用 SharePoint 授予的读取者。需要证书凭据、Graph 上的 Files.Read.All 或 Sites.Read.All，以及 SharePoint API 上的 Sites.FullControl.All，以读取每个文件的读取者。使用 Sites.Selected 时，请为每个频道站点授予该应用完全控制权限。"
+            },
+            "include_inline_images": {
+              "label": "包含内嵌图片",
+              "description": "将粘贴到频道消息中的图片连同其会话串一起索引。无需额外权限。当搜索设置中关闭了图片提取和分析时，不会下载任何内容。"
+            },
+            "include_meeting_transcripts": {
+              "label": "包含会议转录文本",
+              "description": "将已安排会议的转录文本作为独立文档进行索引，组织者和参会者可读取。需要 OnlineMeetingTranscript.Read.All、OnlineMeetings.Read.All 和 User.Read.All 应用程序权限、允许通过 Graph API 访问转录文本的租户设置，以及授予组织者的应用程序访问策略。不包括频道会议。仅索引最近六个月的转录文本，超过该期限的转录文本将从索引中移除。"
+            },
+            "include_meeting_chats": {
+              "label": "包含会议聊天",
+              "description": "索引人们在已安排会议的聊天中所写的内容，每天一份文档，聊天成员可读取。需要 Chat.Read.All 和 User.Read.All 应用程序权限。涵盖在此租户中组织的会议：Microsoft 不提供由其他组织创建的会议的聊天内容。"
+            },
+            "meeting_organizers": {
+              "label": "会议组织者",
+              "description": "要索引其会议转录文本和聊天的组织者的用户主体名称。留空则包含所有拥有 Teams 许可证的已启用用户。"
+            },
+            "authority_host": {
+              "label": "授权主机",
+              "description": "用于身份验证的 Microsoft 标识授权主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API 主机",
+              "description": "Microsoft Graph API 主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://graph.microsoft.us"
+            }
+          }
+        },
+        "outlook": {
+          "description": "配置 Outlook 连接器",
+          "fields": {
+            "mailboxes": {
+              "label": "邮箱",
+              "description": "要索引的邮箱的用户主体名称或主要邮箱地址。将此项和“邮箱组”都留空，则索引应用注册可访问的所有邮箱。共享邮箱不会被自动纳入，必须在此列出。"
+            },
+            "mailbox_groups": {
+              "label": "邮箱组",
+              "description": "Entra 组的显示名称或对象 ID。将索引每位成员的邮箱，包括嵌套组的成员，因此可将租户限定为使用 Onyx 的人员。需要 GroupMember.Read.All 应用程序权限。"
+            },
+            "include_attachments": {
+              "description": "索引文件附件中的文本。内嵌图片、嵌套项目和云链接会被跳过。"
+            },
+            "include_calendar": {
+              "label": "包含日历",
+              "description": "除邮件外，同时索引每个邮箱的日历。需要 Calendars.Read 应用程序权限。"
+            },
+            "excluded_folders": {
+              "label": "排除的文件夹",
+              "description": "在每个邮箱中要跳过的文件夹名称。垃圾邮件、已删除邮件、草稿和发件箱始终会被跳过，无需在此添加。"
+            },
+            "calendar_past_days": {
+              "label": "日历过去天数",
+              "description": "在“包含日历”开启时使用。日历窗口向过去回溯的范围。随着窗口向前移动，早于此范围的事件将在下次清理时从索引中移除。之后若要扩大范围，需要重新索引，因为未变更的事件不会自行重新进入索引。"
+            },
+            "calendar_future_days": {
+              "label": "日历未来天数",
+              "description": "在“包含日历”开启时使用。日历窗口向未来延伸的范围。之后若要扩大范围，需要重新索引，因为未变更的事件不会自行重新进入索引。"
+            },
+            "authority_host": {
+              "label": "授权主机",
+              "description": "用于身份验证的 Microsoft 标识授权主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API 主机",
+              "description": "Microsoft Graph API 主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://graph.microsoft.us"
+            }
+          }
+        },
+        "discourse": {
+          "description": "配置 Discourse 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL"
+            },
+            "categories": {
+              "label": "分类"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "配置 Drupal Wiki 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL",
+              "description": "您的 Drupal Wiki 实例的基础 URL（例如 https://help.drupal-wiki.com ）"
+            },
+            "indexing_scope": {
+              "label": "要索引的 Drupal Wiki 内容",
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "specific": {
+                  "label": "指定空间/页面"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有空间！"
+            },
+            "spaces": {
+              "label": "空间 ID",
+              "description": "指定一个或多个要索引的空间 ID。仅允许数字。"
+            },
+            "pages": {
+              "label": "页面 ID",
+              "description": "指定一个或多个要索引的页面 ID。仅允许数字。"
+            }
+          }
+        },
+        "axero": {
+          "description": "配置 Axero 连接器",
+          "fields": {
+            "base_url": {
+              "label": "Axero 基础 URL",
+              "placeholder": "https://axero.example.com"
+            },
+            "spaces": {
+              "label": "空间",
+              "description": "指定 0 个或多个要索引的空间（按空间 ID）。如果未指定空间 ID，将索引所有空间。"
+            }
+          }
+        },
+        "productboard": {
+          "description": "配置 Productboard 连接器"
+        },
+        "slack": {
+          "description": "配置 Slack 连接器",
+          "fields": {
+            "channels": {
+              "label": "频道",
+              "description": "指定 0 个或多个要索引的频道。从列表中选择频道即可按 ID 跟踪该频道，这样重命名不会导致索引中断；也可以输入列表中未显示的频道名称，例如机器人已被邀请加入的私有频道。如果未指定频道，将索引您工作区中的所有频道。"
+            },
+            "channel_regex_enabled": {
+              "label": "启用频道正则表达式",
+              "description": "启用后，上方指定的“频道”将被视为正则表达式。如果频道名称与任一指定的正则表达式完全匹配，连接器就会拉取该频道的消息。\n\n例如，将 `.*-support.*` 指定为“频道”，连接器会包含名称中带有“-support”的所有频道。"
+            },
+            "exclude_channels": {
+              "label": "要排除的频道",
+              "description": "指定 0 个或多个要排除的频道。排除规则在上方“频道”筛选之后应用，因此同时被两者匹配的频道会被排除。如果未指定频道，则不排除任何频道。"
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "启用排除频道正则表达式",
+              "description": "启用后，上方指定的“要排除的频道”将被视为正则表达式。如果频道名称与任一指定的正则表达式完全匹配，该频道将被排除。\n\n例如，将 `.*-alerts` 指定为“要排除的频道”，连接器会跳过所有以“-alerts”结尾的频道。"
+            },
+            "include_bot_messages": {
+              "label": "包含机器人消息",
+              "description": "启用后，将索引来自机器人和应用的消息。适用于主要由机器人推送的频道（例如 CRM 更新、自动笔记）。"
+            }
+          }
+        },
+        "slab": {
+          "description": "配置 Slab 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL",
+              "description": "指定您的 Slab 团队的基础 URL，格式类似：https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "配置 Guru 连接器"
+        },
+        "gong": {
+          "description": "配置 Gong 连接器",
+          "fields": {
+            "gong_base_url": {
+              "label": "Gong API 基础 URL",
+              "description": "默认为 `https://api.gong.io`。",
+              "placeholder": "https://api.gong.io"
+            },
+            "workspaces": {
+              "label": "工作区",
+              "description": "指定 0 个或多个要索引的工作区。请提供工作区 ID 或 Gong 中完全一致的工作区名称。如果未指定工作区，将索引所有工作区的转录文本。"
+            }
+          }
+        },
+        "loopio": {
+          "description": "配置 Loopio 连接器",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Loopio 子域名",
+              "description": "您的 Loopio 站点的子域名，例如 `acme.loopio.com` 中的 `acme`。",
+              "placeholder": "acme"
+            },
+            "loopio_stack_name": {
+              "label": "Loopio Stack 名称",
+              "description": "必须与“资料库管理”中的名称完全一致；如需索引所有 Stack，请留空"
+            }
+          }
+        },
+        "file": {
+          "description": "配置文件连接器",
+          "fields": {
+            "file_locations": {
+              "label": "文件"
+            }
+          }
+        },
+        "zulip": {
+          "description": "配置 Zulip 连接器",
+          "fields": {
+            "realm_name": {
+              "label": "Realm 名称"
+            },
+            "realm_url": {
+              "label": "Realm URL"
+            }
+          }
+        },
+        "coda": {
+          "description": "配置 Coda 连接器"
+        },
+        "notion": {
+          "description": "配置 Notion 连接器",
+          "fields": {
+            "root_page_id": {
+              "label": "根页面 ID",
+              "description": "如果指定，则只索引该页面及其所有子页面。如果留空，则索引该集成有权访问的所有页面。"
+            }
+          }
+        },
+        "hubspot": {
+          "description": "配置 HubSpot 连接器",
+          "fields": {
+            "object_types": {
+              "label": "对象类型",
+              "options": {
+                "tickets": "工单",
+                "companies": "公司",
+                "deals": "交易",
+                "contacts": "联系人"
+              },
+              "description": "选择要索引的 HubSpot 对象类型。默认选中所有类型。"
+            }
+          }
+        },
+        "document360": {
+          "description": "配置 Document360 连接器",
+          "fields": {
+            "workspace": {
+              "label": "工作区"
+            },
+            "categories": {
+              "label": "分类",
+              "description": "指定 0 个或多个要索引的分类。例如，指定分类“Help”将只索引“Help”分类下的所有内容。如果未指定分类，将索引您工作区中的所有分类。"
+            }
+          }
+        },
+        "clickup": {
+          "description": "配置 ClickUp 连接器",
+          "fields": {
+            "connector_type": {
+              "label": "连接器类型",
+              "options": {
+                "list": "列表",
+                "folder": "文件夹",
+                "space": "空间",
+                "workspace": "工作区"
+              }
+            },
+            "connector_ids": {
+              "label": "连接器 ID",
+              "description": "指定 0 个或多个要索引的 ID。"
+            },
+            "retrieve_task_comments": {
+              "label": "获取任务评论",
+              "description": "勾选后，还会获取并索引每个任务的所有评论。"
+            }
+          }
+        },
+        "google_sites": {
+          "description": "配置 Google Sites 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL",
+              "placeholder": "https://sites.google.com/view/nide-zhandian"
+            },
+            "file_locations": {
+              "label": "站点导出文件",
+              "description": "上传包含您的 Google 站点 HTML 的 `.zip` 文件。"
+            }
+          }
+        },
+        "zendesk": {
+          "description": "配置 Zendesk 连接器",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Zendesk 子域名",
+              "description": "您的 Zendesk 站点的子域名，例如 `acme.zendesk.com` 中的 `acme`。",
+              "placeholder": "acme"
+            },
+            "content_type": {
+              "label": "内容类型",
+              "options": {
+                "articles": "文章",
+                "tickets": "工单"
+              }
+            },
+            "calls_per_minute": {
+              "label": "每分钟 API 调用次数",
+              "description": "限制此连接器每分钟可发起的 Zendesk API 调用次数（仅适用于此连接器）。默认值请参阅：https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "配置 Box 连接器",
+          "fields": {
+            "folder_ids": {
+              "label": "文件夹",
+              "description": "要索引的 Box 文件夹 ID 或文件夹 URL（例如 https://app.box.com/folder/123456789）。留空则索引已认证用户可见的所有内容。"
+            },
+            "include_web_links": {
+              "label": "包含网页链接",
+              "description": "同时将 Box 网页链接（书签）作为轻量级文档进行索引。"
+            }
+          }
+        },
+        "dropbox": {
+          "description": "配置 Dropbox 连接器"
+        },
+        "s3": {
+          "description": "配置 S3 连接器",
+          "fields": {
+            "bucket_name": {
+              "label": "存储桶名称"
+            },
+            "prefix": {
+              "label": "前缀"
+            },
+            "region_name": {
+              "label": "AWS 区域",
+              "description": "存储桶所在的 AWS 区域（例如 us-east-1）。对于位于非默认分区（如 GovCloud，us-gov-west-1）的存储桶，此项为必填；否则将使用默认区域解析。"
+            },
+            "bucket_type": {
+              "label": "存储桶类型"
+            }
+          }
+        },
+        "r2": {
+          "description": "配置 R2 连接器",
+          "fields": {
+            "bucket_name": {
+              "label": "存储桶名称"
+            },
+            "prefix": {
+              "label": "前缀"
+            },
+            "european_residency": {
+              "label": "欧盟数据驻留",
+              "description": "如果您的存储桶已启用欧盟数据驻留，请勾选此框。"
+            },
+            "bucket_type": {
+              "label": "存储桶类型"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "配置 Google Cloud Storage 连接器",
+          "fields": {
+            "bucket_name": {
+              "label": "存储桶名称",
+              "description": "要索引的 GCS 存储桶名称，例如 my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "路径前缀"
+            },
+            "bucket_type": {
+              "label": "存储桶类型"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "配置 OCI Storage 连接器",
+          "fields": {
+            "bucket_name": {
+              "label": "存储桶名称"
+            },
+            "prefix": {
+              "label": "前缀"
+            },
+            "bucket_type": {
+              "label": "存储桶类型"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "配置 Wikipedia 连接器",
+          "fields": {
+            "language_code": {
+              "label": "语言代码",
+              "description": "输入有效的 Wikipedia 语言代码（例如 “en”、“es”）"
+            },
+            "categories": {
+              "label": "要索引的分类",
+              "description": "指定 0 个或多个要索引的分类名称。在大多数 Wikipedia 站点中，这些分类是名称形如“Category: XYZ”的页面，其内容是其他页面/分类的列表。只需指定分类名称，不要填写其 URL。"
+            },
+            "pages": {
+              "label": "页面",
+              "description": "指定 0 个或多个要索引的页面名称。"
+            },
+            "recurse_depth": {
+              "label": "递归深度",
+              "description": "在索引含有子分类的分类时，此项决定索引的层级数。指定 0 表示只索引该分类本身（即不递归）。指定 -1 表示递归深度不限。注意，在极少数情况下，某个分类可能在其依赖关系中包含自身，从而导致无限循环。仅在确信不会发生这种情况时才使用 -1。"
+            }
+          }
+        },
+        "xenforo": {
+          "description": "配置 Xenforo 连接器",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "要索引的 XenForo v2.2 论坛 URL。可以是版块或主题帖。"
+            }
+          }
+        },
+        "asana": {
+          "description": "配置 Asana 连接器",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "工作区 ID",
+              "description": "要索引的 Asana 工作区的 ID。可在 https://app.asana.com/api/1.0/workspaces 找到。它是形如 1234567890123456 的数字。"
+            },
+            "asana_project_ids": {
+              "label": "项目 ID",
+              "description": "要索引的特定 Asana 项目的 ID，以逗号分隔。留空则索引工作区中的所有项目。示例：1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "团队 ID",
+              "description": "用于访问团队可见任务的团队 ID。这样除公开任务外，还可以索引团队可见的任务。如果不想使用此功能，请留空。"
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "配置 MediaWiki 连接器",
+          "fields": {
+            "language_code": {
+              "label": "语言代码",
+              "description": "输入有效的 MediaWiki 语言代码（例如 “en”、“es”）"
+            },
+            "hostname": {
+              "label": "MediaWiki 站点 URL"
+            },
+            "categories": {
+              "label": "要索引的分类",
+              "description": "指定 0 个或多个要索引的分类名称。在大多数 MediaWiki 站点中，这些分类是名称形如“Category: XYZ”的页面，其内容是其他页面/分类的列表。只需指定分类名称，不要填写其 URL。"
+            },
+            "pages": {
+              "label": "页面",
+              "description": "指定 0 个或多个要索引的页面名称。只需指定页面名称，不要填写其 URL。"
+            },
+            "recurse_depth": {
+              "label": "递归深度",
+              "description": "在索引含有子分类的分类时，此项决定索引的层级数。指定 0 表示只索引该分类本身（即不递归）。指定 -1 表示递归深度不限。注意，在极少数情况下，某个分类可能在其依赖关系中包含自身，从而导致无限循环。仅在确信不会发生这种情况时才使用 -1。"
+            }
+          }
+        },
+        "discord": {
+          "description": "配置 Discord 连接器",
+          "fields": {
+            "server_ids": {
+              "label": "服务器 ID",
+              "description": "指定 0 个或多个要包含的服务器 ID。仅会索引其中的频道"
+            },
+            "channel_names": {
+              "label": "频道",
+              "description": "指定 0 个或多个要索引的频道。例如，指定频道“support”将只索引“#support”频道中的所有内容。如果未指定频道，将索引机器人有权访问的所有频道。"
+            },
+            "start_date": {
+              "label": "开始日期",
+              "description": "仅索引此日期之后的消息。格式：YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "配置 Freshdesk 连接器",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Freshdesk 域名",
+              "description": "您的 Freshdesk 站点的子域名，例如 `acme.freshdesk.com` 中的 `acme`。",
+              "placeholder": "acme"
+            }
+          }
+        },
+        "fireflies": {
+          "description": "配置 Fireflies 连接器"
+        },
+        "braintrust": {
+          "description": "配置 Braintrust 连接器",
+          "fields": {
+            "project_name": {
+              "label": "项目名称",
+              "description": "仅索引此项目中的提示词、数据集和实验。留空则索引整个组织。"
+            },
+            "experiment_row_lookback_days": {
+              "label": "实验行回溯天数",
+              "description": "仅索引在此天数内创建的实验的逐行结果。实验摘要始终会被索引。设为 0 则索引所有实验的行。"
+            }
+          }
+        },
+        "canvas": {
+          "description": "配置 Canvas 连接器",
+          "fields": {
+            "canvas_base_url": {
+              "label": "Canvas 基础 URL",
+              "description": "例如 https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "配置 Egnyte 连接器",
+          "fields": {
+            "domain": {
+              "label": "Egnyte 域名",
+              "description": "您的 Egnyte 站点的子域名，例如 `acme.egnyte.com` 中的 `acme`。",
+              "placeholder": "acme"
+            },
+            "folder_path": {
+              "label": "文件夹路径",
+              "description": "要索引的文件夹路径（例如 “/Shared/Documents”）。留空则索引所有内容。"
+            }
+          }
+        },
+        "airtable": {
+          "description": "配置 Airtable 连接器",
+          "fields": {
+            "airtable_scope": {
+              "label": "要索引的 Airtable 内容",
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "specific": {
+                  "label": "指定数据表"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "全部",
+              "description": "此连接器将自动发现并索引您的 API 令牌可访问的所有基础和数据表。"
+            },
+            "airtable_url": {
+              "label": "Airtable URL",
+              "description": "粘贴在浏览器中查看该数据表时的 URL，例如 https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "共享 ID",
+              "description": "可选。如果希望记录链接使用共享视图 URL，请在此填写共享 ID，例如 shrkfjEzDmLaDtK83。"
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "将附件以外的所有字段视为元数据",
+              "description": "当要索引的主要内容是附件、其他所有列都是这些附件的元数据时，请选择此项。"
+            }
+          }
+        },
+        "highspot": {
+          "description": "配置 Highspot 连接器",
+          "fields": {
+            "highspot_url": {
+              "label": "Highspot URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
+            },
+            "highspot_scope": {
+              "label": "要索引的 Highspot 内容",
+              "tabs": {
+                "spots": {
+                  "label": "指定 Spot"
+                },
+                "everything": {
+                  "label": "全部"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "Spot 名称",
+              "description": "如有多个 Spot，请逐个输入。"
+            },
+            "everything": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有 Spot！"
+            }
+          }
+        },
+        "imap": {
+          "description": "配置邮件连接器",
+          "fields": {
+            "host": {
+              "label": "IMAP 服务器主机",
+              "description": "IMAP 服务器主机名（例如 imap.gmail.com、outlook.office365.com）"
+            },
+            "port": {
+              "label": "IMAP 服务器端口",
+              "description": "IMAP 服务器端口（默认：SSL 使用 993）"
+            },
+            "mailboxes": {
+              "label": "邮箱",
+              "description": "指定要索引的邮箱（例如 INBOX、Sent、Drafts）。留空则索引所有邮箱。"
+            }
+          }
         }
       }
     },
@@ -3018,6 +4311,10 @@
         "saveFailed": "保存覆盖失败：{message}",
         "saved": "已保存 {model} 的价格。",
         "unknownError": "未知错误"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -3212,21 +4509,43 @@
         },
         "createdOnBy": {
           "label": "由 <i>{email}</i> 创建于 <i>{date}</i>"
-        },
-        "unnamed": {
-          "label": "凭据 #{id}"
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "请使用拥有该 API 令牌的账户邮箱。"
+        },
+        "nameField": {
+          "title": "显示名称",
+          "placeholder": "为你的身份验证账户命名"
+        },
+        "apiTokenField": {
+          "subDescription": "粘贴你的 API 令牌以访问 {source}。"
+        },
         "createButton": {
           "label": "创建"
         },
         "created": {
           "toast": "已创建新凭据!"
         },
-        "name": {
-          "label": "名称:",
-          "placeholder": "(可选) 凭据名称..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "管理员",
+            "description": "所有管理员都可以重复使用此账户来创建连接器。",
+            "suffix": "（默认）"
+          },
+          "adminsAndGroups": {
+            "description": "管理员和你指定的群组可以重复使用此账户。",
+            "label": "管理员和群组"
+          },
+          "onlyMe": {
+            "label": "仅限我"
+          },
+          "description": "允许群组复用此账号来创建连接器。",
+          "title": "共享此账号"
         },
         "submitError": {
           "toast": "提交凭据时出错"
@@ -3243,6 +4562,106 @@
           "label": "确认"
         },
         "confirmTitle": "确认删除"
+      },
+      "displayNames": {
+        "accessKeyId": "{source} 访问密钥 ID",
+        "secretAccessKey": "{source} 秘密访问密钥",
+        "accountId": "{source} 账户 ID",
+        "apiToken": "API 令牌",
+        "clientId": "{source} 客户端 ID",
+        "clientSecret": "{source} 客户端密钥",
+        "clientToken": "{source} 客户端令牌",
+        "directoryId": "{source} 目录 ID",
+        "certificatePassword": "{source} 证书密码",
+        "privateKey": "{source} 私钥",
+        "certificate": "{source} 证书",
+        "baseUrl": "{source} 基础 URL",
+        "apiBaseUrl": "{source} API 基础 URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} 机器人令牌",
+        "username": "{source} 用户名",
+        "apiUsername": "{source} API 用户名",
+        "userEmail": "{source} 用户邮箱",
+        "accountEmail": "{source} 账号邮箱",
+        "password": "{source} 密码",
+        "subdomain": "{source} 子域名",
+        "domain": "{source} 域名",
+        "enterpriseId": "{source} 企业 ID",
+        "teamId": "{source} 团队 ID",
+        "applicationId": "{source} 应用 ID",
+        "apiTokenId": "{source} API 令牌 ID",
+        "apiTokenSecret": "{source} API 令牌密钥",
+        "securityToken": "{source} 安全令牌",
+        "integrationToken": "{source} 集成令牌",
+        "accessKey": "{source} 访问密钥",
+        "accessKeySecret": "{source} 访问密钥 Secret",
+        "key": "{source} 密钥",
+        "secret": "{source} Secret",
+        "roleArn": "{source} 角色 ARN",
+        "namespace": "{source} 命名空间",
+        "region": "{source} 区域",
+        "portalId": "{source} 门户 ID",
+        "isSandbox": "是否为沙盒环境",
+        "serviceUserEmail": "服务用户邮箱",
+        "zuliprcContent": "Zuliprc 内容",
+        "authenticationMethod": "身份验证方式",
+        "primaryAdminEmail": "主管理员邮箱",
+        "serviceAccountKey": "服务账号密钥"
+      },
+      "hints": {
+        "boxUserEmail": "可选。要模拟的 Box 用户。",
+        "githubBaseUrl": "可选。设置你的服务器主机，例如 https://github.example.com。使用 github.com 时请留空。",
+        "gongBaseUrl": "可选。美国以外的数据请设置你所在区域的主机，例如 https://[region].api.gong.io。",
+        "jiraUserEmail": "Jira Cloud 必填。",
+        "lumappsServiceUser": "要代表其建立索引的用户。",
+        "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
+        "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
+        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
+        "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。"
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "客户端密钥",
+          "certificateAuthentication": "证书身份验证",
+          "certificate": "证书",
+          "accessKeyAndSecret": "访问密钥和 Secret",
+          "iamRole": "IAM 角色",
+          "assumeRole": "代入角色",
+          "serviceAccount": "服务账号",
+          "oauth": "OAuth"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "选择此模式后，SharePoint 连接器将使用客户端密钥进行身份验证。你需要提供客户端 ID 和客户端密钥。",
+          "sharepointCertificate": "选择此模式后，SharePoint 连接器将使用证书进行身份验证。你需要提供客户端 ID、目录 ID、证书密码和 PFX 数据。",
+          "teamsClientSecret": "连接器使用应用注册的客户端密钥登录。请提供客户端 ID、目录 ID 和密钥。仅限频道消息和成员：SharePoint 不接受密钥，因此“包含附件”需要使用证书选项。",
+          "teamsCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件包及其密码。“包含附件”需要此选项，该功能会从 SharePoint 读取频道文件及其读者。",
+          "outlookClientSecret": "连接器使用应用注册的客户端密钥登录。请提供客户端 ID、目录 ID 和密钥。",
+          "outlookCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件包及其密码。",
+          "s3AssumeRole": "选择此模式后，Amazon EC2 实例将代入其现有角色来访问 S3。无需其他凭据。"
+        }
+      },
+      "oauth": {
+        "connectButton": {
+          "label": "连接"
+        },
+        "connectError": {
+          "title": "无法连接"
+        },
+        "signIn": {
+          "description": "{appName} 需要只读权限范围。",
+          "title": "使用 {source} 登录"
+        },
+        "startError": {
+          "message": "无法启动 OAuth"
+        }
+      },
+      "validation": {
+        "authMethodRequired": "请选择身份验证方式",
+        "empty": "{field}不能为空",
+        "fileRequired": "请选择{field}文件",
+        "invalidEmail": "请在{field}中输入有效的邮箱地址",
+        "required": "请输入{field}"
       },
       "edit": {
         "name": {
@@ -3261,79 +4680,6 @@
           "toast": "更新凭据时出错"
         }
       },
-      "modal": {
-        "createTitle": "创建 {source} 凭据",
-        "editTitle": "编辑凭据",
-        "updateTitle": "更新凭据"
-      },
-      "modify": {
-        "createButton": {
-          "label": "创建"
-        },
-        "instructions": {
-          "message": "请根据需要选择凭据!请确保为此连接器选择了具有适当权限的凭据!"
-        },
-        "selectButton": {
-          "label": "选择"
-        }
-      },
-      "oauth": {
-        "connectButton": {
-          "label": "连接"
-        },
-        "connectError": {
-          "title": "无法连接"
-        },
-        "redirectFailed": {
-          "message": "无法重定向到 {source} 登录。请重试。"
-        },
-        "retryButton": {
-          "label": "重试"
-        },
-        "startError": {
-          "message": "无法启动 OAuth"
-        }
-      },
-      "swap": {
-        "error": {
-          "toast": "切换凭据时出现问题:{detail}"
-        },
-        "success": {
-          "toast": "已成功切换凭据!"
-        }
-      },
-      "table": {
-        "actions": {
-          "label": "操作"
-        },
-        "created": {
-          "header": "创建时间"
-        },
-        "edit": {
-          "ariaLabel": "编辑凭据"
-        },
-        "empty": {
-          "message": "此连接器不存在任何凭据!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "最后更新"
-        },
-        "name": {
-          "header": "名称"
-        },
-        "select": {
-          "label": "选择"
-        },
-        "selected": {
-          "badge": "已选择"
-        },
-        "untitled": {
-          "label": "未命名"
-        }
-      },
       "update": {
         "error": {
           "toast": "更新凭据时出现问题"
@@ -3341,6 +4687,9 @@
         "success": {
           "toast": "已更新凭据"
         }
+      },
+      "modal": {
+        "editTitle": "编辑凭据"
       }
     },
     "customAnalytics": {
@@ -4220,6 +5569,7 @@
           "tooltip": "由于此用户组最近发生更改，正在更新文档 embedding。"
         },
         "systemGroup": {
+          "basicDescription": "此用户组由 {appName} 管理。它只包含成员，下方的权限适用于其中的所有人。",
           "description": "此用户组由 {appName} 管理。它只包含成员，您也只能更改成员。",
           "title": "系统用户组"
         },
@@ -4417,6 +5767,9 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -4690,6 +6043,9 @@
           "name": "查询处理",
           "description": "在每个用户查询进入管道之前运行。允许重写、过滤或拒绝查询。"
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://api-duandian.com"
       }
     },
     "imageGeneration": {
@@ -4915,6 +6271,16 @@
           "title": "目标 URL"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "Bifrost 网关的基础 URL。{appName} 会将嵌入请求发送到其 /v1/embeddings 端点。",
+          "title": "基础 URL"
+        },
+        "modelName": {
+          "description": "Bifrost 模型 ID，例如 openai/text-embedding-3-large。保存时，{appName} 会对一段测试文本进行嵌入，以确认这是嵌入模型并获取其维度。",
+          "editDescription": "{appName} 当前使用此模型。保存时会使用新的 URL 和密钥对其进行测试。要使用其他模型，请在模型列表中选择。"
+        }
+      },
       "cancelReindexModal": {
         "description": "取消后将还原为之前的 embedding 模型，并且所有重新索引的进度都会丢失。",
         "submit": {
@@ -4927,6 +6293,10 @@
         "title": "图像描述 LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "立即停止为新增和更新的文档生成上下文，或者重建所有文档以同时移除已生成的上下文。",
+          "title": "选择关闭上下文检索的方式"
+        },
         "contextualModelMissing": {
           "description": "上下文检索已启用，但尚未选择模型。请先在下方选择上下文检索 LLM，再重新索引——没有模型，重新索引无法运行。",
           "title": "选择上下文检索 LLM"
@@ -4945,6 +6315,10 @@
         },
         "orSeparator": {
           "label": "或"
+        },
+        "quantizationOnly": {
+          "description": "仅更改了向量量化，因此 Onyx 会使用已存储的向量重建索引，无需重新嵌入。这比完整重新索引快得多。",
+          "title": "将重建索引。"
         },
         "reindex": {
           "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
@@ -5043,6 +6417,10 @@
       "forwardOnlyModal": {
         "description": "现有文档将保留由之前的模型生成的上下文。新模型仅在文档新增或更新时生效。不同文档之间的上下文增强可能存在差异。",
         "title": "今后应用上下文检索 LLM"
+      },
+      "disableForwardModal": {
+        "description": "此后新增或更新的文档将不再使用上下文检索。现有文档会保留已生成的上下文，直到它们被更新或您重新索引。",
+        "title": "今后关闭上下文检索"
       },
       "header": {
         "description": "配置文档的索引方式、embedding 方式，以及为搜索和检索所做的准备。"
@@ -5162,7 +6540,9 @@
         "cancelButton": {
           "label": "取消重新索引并还原"
         },
+        "copyTitle": "正在重建索引…",
         "description": {
+          "copy": "Onyx 正在使用已存储的向量重建索引，无需重新嵌入。这比重新嵌入快得多。",
           "withModel": "随着重新索引的进行，新的 embedding 设置（**{model}**）正在生效。这可能需要**数小时或数天**，具体取决于语料库规模。",
           "withoutModel": "随着重新索引的进行，新的 embedding 设置正在生效。这可能需要**数小时或数天**，具体取决于语料库规模。"
         },
@@ -5180,9 +6560,6 @@
             "label": "添加配置"
           },
           "title": "为您的 {provider} embedding 提供商添加配置。"
-        },
-        "deprecated": {
-          "suffix": "（已弃用）"
         },
         "disconnect": {
           "errorToast": "断开 {provider} 的连接失败",
@@ -5262,6 +6639,8 @@
         "contextualModelRequired": "请在重新索引前选择上下文检索 LLM。",
         "contextualModelUpdateFailed": "更新上下文检索 LLM 失败",
         "contextualModelUpdated": "已更新上下文检索 LLM",
+        "contextualRetrievalDisableFailed": "关闭上下文检索失败",
+        "contextualRetrievalDisabled": "已关闭上下文检索",
         "modelNotFound": "找不到所选模型",
         "providerResolveFailed": "无法解析提供商",
         "reindexCanceled": "已取消重新索引",
@@ -5285,17 +6664,17 @@
         "googleProjectRequired": "必须填写 GCP 项目 ID"
       },
       "vectorQuantization": {
-        "description": "使用更少的位存储文档向量，以减少内存占用。位数越少，搜索质量可能越低。",
+        "description": "使用更少的位存储文档向量，以减少向量搜索的内存占用。位数越少，搜索质量可能越低。仅更改此设置时，将使用已存储的向量重建索引，无需重新嵌入。",
         "none": {
           "description": "完整的 32 位精度。",
           "label": "无"
         },
         "scalar1Bit": {
-          "description": "内存占用降至 1/32。需要 OpenSearch 3.6 或更高版本。",
+          "description": "向量搜索内存占用最低，搜索质量略有下降。推荐用于大型索引。需要 OpenSearch 3.6 或更高版本。",
           "label": "1 位"
         },
         "scalar7Bit": {
-          "description": "内存占用降至 1/4，搜索质量几乎无损。",
+          "description": "向量搜索内存占用降至约 1/4，搜索质量几乎无损。",
           "label": "7 位"
         },
         "title": "向量量化"
@@ -5320,158 +6699,171 @@
         "googleGeminiEmbedding2": "Google 最新的多模态嵌入模型（GA）。3072 维输出，检索质量最高。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 的预览版。新部署已由 gemini-embedding-2 取代。",
         "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
+        "voyage4Large": "Voyage 4 系列中最大的嵌入模型。Voyage 最佳检索质量，支持多语言。",
+        "voyage4": "Voyage 4 系列通用嵌入模型。以适中成本提供高检索质量。",
+        "voyage4Lite": "Voyage 4 系列轻量级嵌入模型。成本最低，速率限制最高。",
         "voyageLight2Instruct": "Voyage 的轻量级嵌入模型。性能与效率平衡良好。",
         "nomicEmbedTextV1": "Nomic 的嵌入模型，专注于检索、相似度、聚类和分类。",
         "e5BaseV2": "比默认模型更小、更快的模型。速度约为默认模型的 2 倍，但搜索质量较低。",
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",
         "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
         "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
-      }
-    },
-    "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "继承自 {source}"
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "搜索索引中的每个分块都有其连接器 ID。搜索使用连接器级访问。",
+            "off": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表。连接器级访问已关闭。",
+            "shadow": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表，并将其与连接器级访问进行比较。"
           },
-          "organizationPublic": {
-            "label": "组织内公开"
-          },
-          "private": {
-            "label": "私有"
-          }
+          "title": "连接器访问更新已完成"
         },
-        "connectorCreated": {
-          "toast": "已成功创建连接器"
+        "notStarted": {
+          "description": "后台任务将为搜索索引中的现有分块添加连接器 ID。它会在几分钟内开始。",
+          "title": "连接器访问更新尚未开始"
         },
-        "empty": {
-          "message": "您似乎还没有设置任何连接器。请访问[添加连接器](/admin/connectors)页面开始使用！"
+        "progress": {
+          "ariaLabel": "连接器访问更新进度"
         },
-        "federated": {
-          "access": {
-            "label": "联合访问"
-          },
-          "indexed": {
-            "label": "已索引"
-          },
-          "notApplicable": {
-            "label": "不适用"
-          }
+        "running": {
+          "description": "后台任务正在为搜索索引中的现有分块添加连接器 ID。只有在完成后才能强制执行连接器级搜索访问。",
+          "title": "正在为连接器访问更新搜索索引…"
         },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "自动同步"
-            },
-            "private": {
-              "label": "私有"
-            },
-            "public": {
-              "label": "公开"
-            },
-            "title": "访问类型"
-          },
-          "applyButton": {
-            "label": "应用"
-          },
-          "docCount": {
-            "placeholder": "数量",
-            "title": "文档数量"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "完成但有错误"
-            },
-            "failed": {
-              "label": "失败"
-            },
-            "inProgress": {
-              "label": "进行中"
-            },
-            "interrupted": {
-              "label": "已中断"
-            },
-            "notStarted": {
-              "label": "未开始"
-            },
-            "success": {
-              "label": "成功"
-            },
-            "title": "最近状态"
-          },
-          "title": "筛选连接器"
+        "status": {
+          "connectors": "已完成 {done, number}/{total, number} 个连接器",
+          "connectorsLeft": "{count, plural, one {剩余 # 个连接器} other {剩余 # 个连接器}}",
+          "current": "当前连接器：{name}",
+          "documentsLeft": "{count, plural, one {剩余 # 个文档} other {剩余 # 个文档}}"
         },
-        "filters": {
-          "accessBadge": {
-            "label": "访问：{values}"
+        "mode": {
+          "description": "搜索如何决定用户可以看到哪些文档。",
+          "enforcePending": "已设置强制，将在更新完成后开始。",
+          "enforceUnavailable": "搜索索引更新完成后可用。",
+          "label": "搜索访问模式",
+          "options": {
+            "enforce": {
+              "description": "搜索使用连接器级访问。",
+              "title": "强制"
+            },
+            "off": {
+              "description": "搜索使用文档访问列表。",
+              "title": "关闭"
+            },
+            "shadow": {
+              "description": "搜索使用文档访问列表，并记录连接器级访问结果不同的情况。",
+              "title": "影子"
+            }
           },
-          "clearBadge": {
-            "label": "清除"
-          },
-          "docsAnyBadge": {
-            "label": "文档 {operator} 任意"
-          },
-          "docsBadge": {
-            "label": "文档 {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "状态：{values}"
+          "placeholder": "选择模式",
+          "toasts": {
+            "error": "无法更新搜索访问模式。",
+            "success": "搜索访问模式已设置为{mode}。"
           }
         },
         "loadError": {
-          "message": "加载索引状态时出错。"
+          "description": "请重新加载页面后重试。",
+          "title": "无法加载连接器访问更新"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "嵌入请求速率限制",
+        "description": "限制索引在一个时间窗口内发送的嵌入请求数量，覆盖所有索引工作进程。达到限制时，索引会等待后重试而不是失败，因此工作进程会少接新任务。只有等待时间过长时，批次才会失败。搜索查询不受限制。",
+        "requests": {
+          "title": "每个窗口的请求数",
+          "description": "留空表示不限制。",
+          "placeholder": "不限制"
         },
-        "manageConnector": {
-          "tooltip": "管理连接器"
+        "period": {
+          "title": "窗口长度",
+          "description": "例如，每分钟限制填 60。",
+          "suffix": "（秒）"
         },
-        "manageFederatedConnector": {
-          "tooltip": "管理联合连接器"
+        "restoreDefault": "恢复默认值",
+        "validation": {
+          "requests": "请输入 1 到 {max, number} 之间的整数，或留空表示不限制。",
+          "period": "请输入 1 到 {max, number} 之间的整数秒数。"
         },
+        "toasts": {
+          "saved": "速率限制已保存。",
+          "failed": "无法保存速率限制。"
+        }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
+      }
+    },
+    "indexing": {
+      "connectorCreated": {
+        "toast": "已成功创建连接器"
+      },
+      "overview": {
+        "connectors": {
+          "caption": "索引中 / 活跃",
+          "label": "连接器"
+        },
+        "documents": {
+          "caption": "最近索引 / 总计",
+          "label": "文档"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "无法加载概览。"
+      },
+      "activities": {
+        "title": "活动",
+        "history": "完整活动历史",
+        "viewLogs": "查看活动历史",
+        "panel": {
+          "title": "活动历史",
+          "close": "隐藏活动历史"
+        }
+      },
+      "list": {
         "search": {
           "placeholder": "搜索连接器..."
         },
-        "summary": {
-          "activeConnectors": {
-            "label": "活跃连接器"
-          },
-          "publicConnectors": {
-            "label": "公开连接器"
-          },
-          "totalConnectors": {
-            "label": "连接器总数"
-          },
-          "totalDocsIndexed": {
-            "label": "已索引文档总数"
-          }
+        "statusFilter": {
+          "label": "状态",
+          "all": "全部状态"
         },
-        "table": {
-          "allCaughtUp": {
-            "label": "已全部加载！没有更多连接器"
-          },
-          "lastIndexed": {
-            "header": "上次索引时间"
-          },
-          "name": {
-            "header": "名称"
-          },
-          "permissions": {
-            "header": "权限 / 访问"
-          },
-          "status": {
-            "header": "状态"
-          },
-          "totalDocs": {
-            "header": "文档总数"
-          }
+        "counts": {
+          "indexed": "{count, plural, other {# 个连接器已索引}}",
+          "indexing": "{count, plural, other {# 个连接器正在索引}}",
+          "failed": "{count, plural, other {# 个连接器失败}}",
+          "paused": "{count, plural, other {# 个连接器已暂停}}"
         },
-        "toggleAll": {
-          "collapse": {
-            "label": "全部折叠"
-          },
-          "expand": {
-            "label": "全部展开"
-          }
-        }
+        "access": {
+          "public": "公开",
+          "private": "私有",
+          "sync": "自动同步",
+          "sync_restricted": "自动同步（受限）"
+        },
+        "detail": {
+          "queued": "队列中第 {position, selectordinal, other {#}} 位",
+          "lastIndexed": "上次索引 {when}",
+          "neverIndexed": "尚未索引"
+        },
+        "docs": {
+          "label": "文档",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "管理",
+          "manageFederated": "管理联合连接器",
+          "expand": "查看详情",
+          "collapse": "隐藏详情"
+        },
+        "federated": {
+          "tag": "联合"
+        },
+        "empty": {
+          "title": "还没有连接器",
+          "description": "前往[添加连接器](/admin/connectors)页面开始。",
+          "filteredTitle": "没有连接器符合这些筛选条件。"
+        },
+        "loadError": "无法加载连接器。",
+        "units": "{count, plural, other {个连接器}}"
       }
     },
     "languageModels": {
@@ -5886,6 +7278,9 @@
           "optionalSuffix": {
             "label": "可选"
           },
+          "slowSave": {
+            "text": "耗时比平时更长。模型列表较大时可能需要一分钟。"
+          },
           "submitButton": {
             "invalidTooltip": "请填写所有必填字段。",
             "pristineTooltip": "没有需要保存的更改。"
@@ -5979,9 +7374,23 @@
       "toasts": {
         "providerDeleteFailed": "删除提供商失败：{message}",
         "providerDeleted": "提供商已成功删除！",
+        "providerLoadFailed": "无法加载提供商：{message}",
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "自动模式",
+          "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。"
+        },
+        "target": {
+          "title": "路由器模型",
+          "description": "负责 Auto 模式的模型路由。",
+          "empty": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。",
+          "error": "无法加载路由器模型。",
+          "retry": "重试"
+        }
       }
     },
     "mcpActions": {
@@ -6642,6 +8051,11 @@
         "securitySettingsUpdated": "安全设置已更新",
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -7322,7 +8736,8 @@
           },
           "nameField": {
             "description": "用于登录 URL 的唯一小写标识符。创建后无法更改。",
-            "title": "名称"
+            "title": "名称",
+            "placeholder": "gongsi-a"
           },
           "providerTypeField": {
             "description": "此提供商使用的认证协议。",
@@ -7392,7 +8807,8 @@
         },
         "openidConfigUrl": {
           "label": "OpenID 配置 URL",
-          "description": "IdP 的 OpenID Connect 发现文档 URL。"
+          "description": "IdP 的 OpenID Connect 发现文档 URL。",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "要求已验证邮箱声明",
@@ -7400,27 +8816,33 @@
         },
         "idpEntityId": {
           "label": "IdP 实体 ID",
-          "description": "身份提供方的实体 ID（颁发者）。"
+          "description": "身份提供方的实体 ID（颁发者）。",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "IdP SSO URL",
-          "description": "接收登录请求的 IdP 端点。"
+          "description": "接收登录请求的 IdP 端点。",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "IdP X.509 证书",
-          "description": "IdP 的签名证书，用于验证断言。"
+          "description": "IdP 的签名证书，用于验证断言。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "SP 实体 ID",
-          "description": "此实例在 IdP 注册的实体 ID。"
+          "description": "此实例在 IdP 注册的实体 ID。",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "SP X.509 证书",
-          "description": "仅当此实例对请求签名或解密断言时需要。"
+          "description": "仅当此实例对请求签名或解密断言时需要。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "SP 私钥",
-          "description": "与 SP 证书配对的私钥。加密存储。"
+          "description": "与 SP 证书配对的私钥。加密存储。",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "邮箱属性",
@@ -7584,6 +9006,9 @@
         "deleted": {
           "message": "已删除标准答案 {id}"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:IT|支持)\\s*工单"
       }
     },
     "status": {
@@ -7593,18 +9018,22 @@
         "deleting": "正在删除",
         "error": "错误",
         "failed": "失败",
-        "inProgress": "进行中",
         "indexed": "已索引",
         "indexing": "正在索引",
         "initialIndexing": "初始索引",
         "interrupted": "已中断",
         "invalid": "无效",
         "invalidConnectorTooltip": "连接器处于无效状态。请更新凭据或创建新的连接器。",
-        "none": "无",
         "notStarted": "未开始",
         "paused": "已暂停",
         "scheduled": "已计划",
-        "succeeded": "成功"
+        "synced": "已同步",
+        "syncing": "同步中",
+        "pruning": "清理中",
+        "pruned": "已清理",
+        "checking": "检查中",
+        "passed": "通过",
+        "failedToRun": "无法运行"
       }
     },
     "systemInfo": {
@@ -7747,6 +9176,9 @@
         "logo": {
           "alt": "Logo"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -7970,11 +9402,13 @@
             },
             "project": {
               "label": "项目名称",
-              "description": "记录跟踪数据的 Braintrust 项目名称。"
+              "description": "记录跟踪数据的 Braintrust 项目名称。",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "API URL",
-              "description": "默认为美国区域。其他区域或自托管请粘贴您的 Braintrust API URL。"
+              "description": "默认为美国区域。其他区域或自托管请粘贴您的 Braintrust API URL。",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -7991,7 +9425,8 @@
             },
             "host": {
               "label": "API 基础 URL",
-              "description": "默认为欧盟区域。其他区域或自托管请粘贴您的 Langfuse 基础 URL。"
+              "description": "默认为欧盟区域。其他区域或自托管请粘贴您的 Langfuse 基础 URL。",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -8312,6 +9747,9 @@
         "makeAdmin": {
           "label": "设为管理员"
         },
+        "menuButton": {
+          "ariaLabel": "用户操作"
+        },
         "removeAdmin": {
           "label": "移除管理员权限"
         },
@@ -8545,6 +9983,9 @@
       },
       "unexpectedError": {
         "message": "发生意外错误。"
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -8661,12 +10102,332 @@
         },
         "searxngBaseUrl": {
           "label": "SearXNG 基础 URL",
-          "description": "粘贴您的 [SearXNG 实例](https://docs.searxng.org/admin/installation.html)的基础 URL。"
+          "description": "粘贴您的 [SearXNG 实例](https://docs.searxng.org/admin/installation.html)的基础 URL。",
+          "placeholder": "https://searxng-shili.com"
         },
         "firecrawlBaseUrl": {
           "label": "API 基础 URL",
-          "description": "您的 Firecrawl API 基础 URL。"
+          "description": "您的 Firecrawl API 基础 URL。",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
+      }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM 网关",
+        "description": "控制外部工具对工作区语言模型的直接 API 访问。"
+      },
+      "access": {
+        "title": "直接访问模型的 API",
+        "description": "允许工作区成员通过 Claude Code 或 Cursor 等外部工具，使用限定范围的访问令牌调用工作区的语言模型。调用将计入您配置的提供商。",
+        "toggle": {
+          "title": "启用 LLM 网关",
+          "description": "关闭后，所有网关端点都会拒绝请求，现有令牌将失效，令牌选择器中也会隐藏网关范围。Craft 沙箱流量由 Craft 设置单独控制。"
+        }
+      },
+      "tierTooltip": "LLM 网关需要商业版或企业版套餐。",
+      "scopeNote": {
+        "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
+      },
+      "toasts": {
+        "settingsUpdated": "设置已更新",
+        "settingsUpdateFailed": "更新设置失败"
+      }
+    },
+    "connectorChecks": {
+      "lockReason": "请先运行上方的连接器检查，并解决所有失败项，然后继续。",
+      "prompt": {
+        "title": "测试连接",
+        "description": "{appName} 将在继续之前运行检查，以验证所需的权限范围。",
+        "startButton": {
+          "label": "开始检查"
+        }
+      },
+      "title": "连接器检查",
+      "groups": {
+        "failed": "{count} 项失败",
+        "indeterminate": "{count} 项未验证",
+        "passed": "{count} 项完成",
+        "skipped": "{count} 项跳过",
+        "running": "{count} 项运行中",
+        "expected": "{count} 项待运行"
+      },
+      "status": {
+        "passed": "通过",
+        "failed": "失败",
+        "indeterminate": "无法验证",
+        "skipped": "已跳过",
+        "running": "正在测试…",
+        "pending": "排队中",
+        "waiting": "正在等待设置"
+      },
+      "required": {
+        "label": "必需"
+      },
+      "empty": {
+        "label": "尚未运行任何检查。"
+      },
+      "docsLink": {
+        "label": "文档"
+      },
+      "foldButton": {
+        "fold": "收起",
+        "expand": "展开"
+      },
+      "titleCount": "（{complete}/{total}）",
+      "summary": {
+        "failed": "{count} 项失败",
+        "unverified": "{count} 项未验证",
+        "inProgress": "{count} 项进行中",
+        "expected": "{count} 项待执行",
+        "skipped": "{count} 项跳过",
+        "successful": "{count} 项成功"
+      },
+      "failedToRun": "检查未能运行。请重试。",
+      "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
+      "state": {
+        "completed": "检查已完成。",
+        "inProgress": "检查进行中...",
+        "waiting": "正在等待连接器设置..."
+      },
+      "advisory": {
+        "title": "部分内容不会被索引。",
+        "description": "**{count, plural, other {# 项非必需的连接器检查失败。}}** 这不会阻止整个连接器的索引，但受影响的内容不会被索引。",
+        "proceed": "你仍然可以继续创建连接器，稍后再处理这些问题。",
+        "viewButton": {
+          "label": "查看失败的检查"
+        },
+        "proceedButton": {
+          "label": "仍然创建连接器"
+        }
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "编辑连接器"
+      },
+      "header": {
+        "title": "编辑 {name}",
+        "description": "更改此 {source} 连接器的设置。应用更改前，你将先查看计划。",
+        "reviewButton": {
+          "label": "查看更改"
+        }
+      },
+      "loadError": {
+        "title": "无法加载连接器",
+        "description": "请重新加载页面，或返回连接器。",
+        "backButton": {
+          "label": "返回连接器"
+        }
+      },
+      "credentialSwap": {
+        "title": "你选择了其他凭据",
+        "description": "在计划中，你可以保留已索引的文档，或全部重新索引并清除新凭据无法访问的文档。"
+      },
+      "files": {
+        "title": "文件",
+        "description": "添加或移除文件。新文件仅在你应用计划后才会被索引。",
+        "empty": "该连接器没有文件。",
+        "addButton": {
+          "label": "添加文件"
+        },
+        "remove": {
+          "tooltip": "移除 {name}"
+        },
+        "uploadFailed": {
+          "toast": "无法上传文件：{detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "无法计算计划：{detail}"
+      },
+      "typedAccount": {
+        "toast": "请先保存新账户再查看更改，或选择一个已保存的账户。"
+      },
+      "applied": {
+        "toast": "更改已应用。"
+      },
+      "plan": {
+        "title": "查看计划",
+        "description": "{count, plural, other {该连接器有 # 个已索引的文档。}}",
+        "changes": {
+          "list": "已更改：{fields}",
+          "none": "没有任何更改。"
+        },
+        "stale": {
+          "title": "连接器已更改",
+          "description": "此计划计算后连接器发生了更改。请在应用前重新计算计划。",
+          "replanButton": {
+            "label": "重新计划"
+          }
+        },
+        "expired": {
+          "title": "计划已过期",
+          "description": "此计划已过期或已应用。请重新计算计划。"
+        },
+        "applyFailed": {
+          "title": "无法应用更改"
+        },
+        "validation": {
+          "title": "验证",
+          "blocks": "新设置未通过验证。请在应用前修复。",
+          "warns": "部分可选检查失败。你仍然可以应用。",
+          "error": {
+            "title": "设置无效"
+          }
+        },
+        "warnings": {
+          "title": "警告"
+        },
+        "notes": {
+          "title": "说明"
+        },
+        "reconciliation": {
+          "title": "选择如何协调范围更改",
+          "description": "计划无法判断对 {fields} 的更改会添加还是移除文档。请选择应用时的操作。",
+          "option": {
+            "prune": {
+              "title": "清除",
+              "description": "移除不再在范围内的文档。"
+            },
+            "full_reindex": {
+              "title": "完全重新索引",
+              "description": "从开始日期起重新索引全部内容，以添加现在在范围内的文档。"
+            },
+            "both": {
+              "title": "完全重新索引后清除",
+              "description": "重新索引全部内容，然后移除不再在范围内的文档。"
+            },
+            "nothing": {
+              "title": "不执行任何操作",
+              "description": "保留已索引的文档。之后的运行使用新设置。"
+            }
+          }
+        },
+        "credential": {
+          "title": "凭据更改",
+          "description": "选择如何处理使用旧凭据索引的文档。",
+          "option": {
+            "keep_indexed": {
+              "title": "保留已索引的文档",
+              "description": "之后的运行使用新凭据。这是快速方式。"
+            },
+            "full_reindex_and_prune": {
+              "title": "完全重新索引并清除",
+              "description": "使用新凭据重新索引全部内容，然后移除其无法访问的文档。"
+            }
+          }
+        },
+        "steps": {
+          "title": "步骤",
+          "description": "应用时按顺序执行的操作。你可以关闭可选步骤。",
+          "none": "应用会保存设置。无需索引工作。",
+          "required": {
+            "label": "必需"
+          },
+          "optional": {
+            "label": "可选"
+          },
+          "include": {
+            "ariaLabel": "运行步骤：{step}"
+          },
+          "fields": "字段：{fields}",
+          "window": "时间范围：{start} 至 {end}",
+          "windowFromStart": "时间范围：截至 {end} 的全部内容",
+          "kind": {
+            "access_groups": {
+              "title": "更新数据访问组",
+              "description": "搜索会立即应用新组。"
+            },
+            "access_type": {
+              "title": "更改访问类型",
+              "description": "可读取文档的人员会发生变化。"
+            },
+            "enter_perm_sync": {
+              "title": "开始权限同步",
+              "description": "在首次权限同步完成之前，文档保持隐藏。"
+            },
+            "leave_perm_sync": {
+              "title": "停止权限同步",
+              "description": "来源的权限不再决定谁可以读取文档。"
+            },
+            "restart_attempt": {
+              "title": "重新开始正在运行的索引尝试",
+              "description": "正在运行的尝试会停止，并使用新设置开始新的尝试。"
+            },
+            "full_reindex_then_prune": {
+              "title": "完全重新索引后清除",
+              "description": "重新索引全部内容，然后移除来源不再返回的文档。"
+            },
+            "full_reindex": {
+              "title": "完全重新索引",
+              "description": "从开始日期起重新索引全部内容。"
+            },
+            "scoped_backfill": {
+              "title": "回填新增项",
+              "description": "仅索引新增项的历史记录。"
+            },
+            "window_backfill": {
+              "title": "回填更早的时间范围",
+              "description": "索引新旧开始日期之间的时间段。"
+            },
+            "prune": {
+              "title": "清除",
+              "description": "移除来源不再返回的文档。"
+            }
+          },
+          "reason": {
+            "identity_changed": "文档 ID 发生变化",
+            "behavior_changed": "处理方式已更改",
+            "scope_widened": "范围扩大",
+            "scope_narrowed": "范围缩小",
+            "items_added_or_changed": "新增或更改的项",
+            "items_removed": "已移除的项",
+            "opaque_scope_choice": "你的范围选择",
+            "indexing_start_earlier": "更早的开始日期",
+            "credential_full_path": "凭据完整方式",
+            "access_changed": "访问权限已更改",
+            "permissions_fetched_during_indexing": "权限随索引获取",
+            "attempt_running": "有尝试正在运行",
+            "scoped_backfill_superseded": "替换之前的回填",
+            "admin_added": "由你添加",
+            "indexing_start_later": "更晚的开始日期"
+          }
+        },
+        "extra": {
+          "title": "额外工作",
+          "description": "添加计划不需要的工作。",
+          "fullReindex": {
+            "title": "添加完全重新索引",
+            "description": "从开始日期起重新索引全部内容。"
+          },
+          "prune": {
+            "title": "添加清除",
+            "description": "移除来源不再返回的文档。"
+          }
+        },
+        "backButton": {
+          "label": "返回编辑"
+        },
+        "applyButton": {
+          "label": "应用"
+        },
+        "blocked": {
+          "validation": "请先修复验证失败。",
+          "reconciliation": "请先选择如何协调范围更改。"
+        }
+      },
+      "pendingBackfills": {
+        "title": "待处理的回填",
+        "description": "某次编辑请求了这些运行。每项会保留在此，直到其运行成功。",
+        "window": "{start} 至 {end}",
+        "windowFromStart": "截至 {end} 的全部内容",
+        "waiting": "等待运行。",
+        "runningNow": "索引尝试正在运行它。",
+        "retry": "{count, plural, other {已失败 # 次。下次重试：{time}。}}",
+        "scoped": "仅限新增或更改的项目",
+        "failures": "{count, plural, other {失败 # 次}}"
       }
     }
   },
@@ -10595,18 +12356,6 @@
           "label": "修改"
         }
       },
-      "editProperty": {
-        "header": {
-          "title": "编辑{property}"
-        },
-        "submitButton": {
-          "label": "更新属性",
-          "loadingLabel": "正在更新..."
-        },
-        "valueInput": {
-          "placeholder": "属性值"
-        }
-      },
       "feedback": {
         "additionalDetails": {
           "dislikePlaceholder": "您不喜欢这条回复的哪些方面？",
@@ -10916,6 +12665,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "此模型不支持修改该设置。"
+      },
+      "autoItem": {
+        "label": "自动",
+        "description": "为每条消息选择最佳模型"
       }
     },
     "nrf": {
@@ -11102,6 +12855,9 @@
         "expand": {
           "ariaLabel": "展开项目"
         },
+        "options": {
+          "label": "项目选项"
+        },
         "rename": {
           "label": "重命名项目"
         }
@@ -11160,6 +12916,14 @@
     }
   },
   "common": {
+    "textListField": {
+      "addButton": {
+        "label": "新增"
+      },
+      "removeButton": {
+        "tooltip": "移除"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "打开侧边栏"
@@ -11323,6 +13087,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "如果您是管理员，请访问<billingLink>管理员账单</billingLink>页面以{hadLicense, select, true {续订} other {激活}}您的许可证，通过 Stripe 注册，或联系 <supportLink>support@onyx.app</supportLink> 获取账单帮助。"
+        },
+        "downgradeButton": {
+          "label": "降级到 Community"
         },
         "heading": {
           "title": "访问受限"
@@ -11666,6 +13433,49 @@
         "empty": "此工作表为空。",
         "tooLarge": "此工作表过大，无法预览。请下载文件查看。"
       }
+    },
+    "plans": {
+      "free": {
+        "title": "免费版",
+        "tooltip": "所有版本均可用。"
+      },
+      "business": {
+        "title": "商业版",
+        "tooltip": "需要[商业版或企业版](/admin/billing)。"
+      },
+      "enterprise": {
+        "title": "企业版",
+        "tooltip": "需要[企业版](/admin/billing)。"
+      },
+      "upgrade": {
+        "label": "升级方案"
+      },
+      "availableFor": "{plan}可用"
+    },
+    "placeholders": {
+      "email": "youxiang@nide-gongsi.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://ziyuan-ming.cognitiveservices.azure.com/openai/deployments/bushu-mingcheng/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://ziyuan-ming.cognitiveservices.azure.com/openai/deployments/bushu-mingcheng/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://ziyuan_mingcheng.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://ziyuan_quyu.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://bifrost-wangguan.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://litellm-daili.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "wode-vertex-xiangmu",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -11741,7 +13551,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "关联 {name}",
         "associateButton": "关联现有技能",
         "create": {
           "github": {
@@ -11850,7 +13659,10 @@
           }
         },
         "saveButton": "保存",
-        "savingButton": "正在保存…"
+        "savingButton": "正在保存…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
@@ -11980,6 +13792,11 @@
       },
       "toggleItem": {
         "ariaLabel": "展开或折叠 {name}"
+      },
+      "status": {
+        "loading": "正在加载输出…",
+        "incomplete": "部分输出无法列出。请打开“文件”浏览工作区。",
+        "error": "无法刷新输出。请重试。"
       }
     },
     "chatPanel": {
@@ -12005,6 +13822,17 @@
         "operationWait": "请等待当前操作完成。",
         "sandboxWait": "请等待沙箱初始化",
         "scheduledRunWait": "请等待计划运行结束。"
+      },
+      "loadError": {
+        "title": "无法加载会话",
+        "retry": "重试"
+      },
+      "queuedSendError": {
+        "title": "无法发送排队中的消息"
+      },
+      "settlementError": {
+        "title": "无法确认任务是否完成",
+        "description": "请重试以检查任务并加载已保存的回复。"
       }
     },
     "compaction": {
@@ -12015,22 +13843,6 @@
     "connectDataBanner": {
       "cta": {
         "label": "连接您的数据"
-      }
-    },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "正在打造您的工作区...",
-        "enchanting": "正在施加魔法附魔...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "正在收集资源...",
-        "miningDependencies": "正在挖掘依赖项...",
-        "placingBlocks": "正在放置方块...",
-        "punchingWood": "正在撸树...",
-        "smeltingCode": "正在熔炼代码...",
-        "worldGenerated": "世界生成完成..."
-      },
-      "tagline": {
-        "label": "正在打造您的下一个好点子..."
       }
     },
     "debugLogs": {
@@ -12118,6 +13930,16 @@
       },
       "noContent": {
         "label": "无内容"
+      },
+      "csv": {
+        "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
+        "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
+      },
+      "imageTooLarge": {
+        "description": "此图片过大，无法预览。请下载原始文件以打开它。"
+      },
+      "unsupported": {
+        "description": "此文件无法预览。请下载原文件后打开。"
       }
     },
     "filesTab": {
@@ -12125,24 +13947,46 @@
         "description": "构建过程中创建的文件将显示在这里",
         "title": "暂无文件"
       },
-      "emptyDirectory": {
-        "label": "此目录中没有文件"
-      },
       "error": {
         "title": "加载文件出错"
       },
       "loading": {
         "label": "正在加载文件..."
       },
-      "loadingChildren": {
-        "label": "加载中..."
-      },
       "preparing": {
         "description": "正在设置您的开发环境",
         "title": "正在准备沙箱..."
+      },
+      "download": {
+        "label": "下载"
+      },
+      "partial": {
+        "label": "部分文件夹无法加载。请刷新后重试。"
+      },
+      "noMatches": {
+        "label": "没有匹配的文件"
+      },
+      "previousPage": {
+        "label": "上一页"
+      },
+      "nextPage": {
+        "label": "下一页"
+      },
+      "page": {
+        "label": "第{page}页，共{total}页"
+      },
+      "upload": {
+        "label": "上传文件",
+        "error": "无法上传文件。请重试。"
+      },
+      "emptyDirectory": {
+        "label": "此目录中没有文件"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "对比背景"
+      },
       "error": {
         "description": "无法显示该图片",
         "title": "图片加载失败"
@@ -12295,6 +14139,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "关闭 {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "开始构建内容即可查看产物！"
       },
@@ -12306,6 +14153,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF 控件"
+      },
+      "thumbnails": {
+        "toggle": "显示或隐藏页面缩略图",
+        "resize": "调整页面缩略图宽度",
+        "label": "页面缩略图"
+      },
+      "page": {
+        "previous": "上一页",
+        "next": "下一页",
+        "counter": "{current} / {total}",
+        "preview": "第 {page} 页预览",
+        "select": "转到第 {page} 页"
+      },
+      "zoom": {
+        "out": "缩小",
+        "in": "放大",
+        "label": "缩放",
+        "fitWidth": "适合宽度",
+        "fitPage": "适合页面"
+      },
       "error": {
         "description": "无法加载该 PDF 文件。",
         "title": "无法预览 PDF"
@@ -12318,8 +14187,26 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "演示文稿控件"
+      },
+      "thumbnails": {
+        "toggle": "显示或隐藏幻灯片缩略图"
+      },
+      "resize": {
+        "ariaLabel": "调整幻灯片缩略图宽度"
+      },
+      "slides": {
+        "label": "幻灯片"
+      },
+      "previous": {
+        "label": "上一张幻灯片"
+      },
+      "next": {
+        "label": "下一张幻灯片"
+      },
       "converting": {
-        "label": "正在转换演示文稿..."
+        "label": "正在准备预览..."
       },
       "empty": {
         "label": "此演示文稿中没有幻灯片"
@@ -12452,6 +14339,9 @@
       },
       "newSession": {
         "label": "开始创作"
+      },
+      "options": {
+        "label": "会话选项"
       },
       "rename": {
         "label": "重命名"
@@ -12721,9 +14611,6 @@
         "calls": {
           "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
         },
-        "failed": {
-          "tag": "{count} 个失败"
-        },
         "working": {
           "label": "处理中"
         }
@@ -12765,7 +14652,8 @@
         "ariaLabel": "复制 URL：{url}"
       },
       "downloadFile": {
-        "tooltip": "下载文件"
+        "tooltip": "下载文件",
+        "label": "下载"
       },
       "export": {
         "button": "导出为 .docx",
@@ -12835,6 +14723,170 @@
     "welcome": {
       "input": {
         "placeholder": "分析我的数据并创建仪表板..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "所有文件"
+      },
+      "browser": {
+        "label": "应用"
+      },
+      "list": {
+        "label": "输出标签页"
+      },
+      "close": {
+        "label": "关闭{name}"
+      },
+      "reordered": {
+        "label": "标签页已移至第{position}个，共{count}个"
+      },
+      "open": {
+        "label": "打开标签页"
+      },
+      "outputs": {
+        "label": "输出"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "预览你的应用"
+      },
+      "home": {
+        "title": "应用",
+        "action": "应用"
+      },
+      "checking": {
+        "label": "正在检查网页应用"
+      },
+      "failed": {
+        "description": "无法检查本地网页应用。请重新加载后重试。"
+      },
+      "unavailable": {
+        "description": "网页应用不可用。请恢复沙盒或重新加载后重试。",
+        "label": "不可用"
+      },
+      "empty": {
+        "title": "没有可用的网页应用",
+        "description": "本地应用运行后会显示在这里。"
+      },
+      "starting": {
+        "label": "正在启动网页应用"
+      },
+      "loading": {
+        "label": "正在加载网页应用"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "打开输出"
+      },
+      "close": {
+        "ariaLabel": "关闭输出"
+      },
+      "expand": {
+        "ariaLabel": "展开输出"
+      },
+      "restore": {
+        "ariaLabel": "还原输出"
+      },
+      "resize": {
+        "ariaLabel": "调整输出大小"
+      },
+      "files": {
+        "search": {
+          "placeholder": "搜索文件"
+        },
+        "location": {
+          "label": "沙盒中的所有文件"
+        }
+      },
+      "browser": {
+        "placeholder": "沙箱中的网页应用"
+      },
+      "reload": {
+        "file": "重新加载文件",
+        "files": "刷新文件",
+        "browser": "刷新网页应用",
+        "unavailable": "请恢复沙盒以刷新"
+      },
+      "export": {
+        "failed": "无法导出此文件。请重试。"
+      },
+      "empty": {
+        "title": "选择工作区视图"
+      },
+      "status": {
+        "provisioning": "正在初始化沙盒",
+        "running": "沙盒正在运行",
+        "sleeping": "沙盒正在休眠",
+        "restoring": "正在恢复会话",
+        "terminated": "沙盒已终止",
+        "failed": "沙盒发生故障",
+        "ready": "沙盒已就绪",
+        "loading": "正在查找沙盒"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "全部标为已查看",
+        "error": "无法将输出标为已查看。请重试。"
+      },
+      "home": {
+        "description": "智能体创建的文件"
+      },
+      "empty": {
+        "description": "智能体创建的文件将显示在这里。"
+      },
+      "loading": {
+        "label": "正在加载输出…"
+      },
+      "unavailable": {
+        "description": "沙盒准备就绪后将显示输出。"
+      },
+      "error": {
+        "description": "无法刷新输出，请重试。"
+      },
+      "incomplete": {
+        "description": "部分输出无法加载。"
+      },
+      "filter": {
+        "label": "文件类型",
+        "all": "全部",
+        "folders": "文件夹",
+        "noExtension": "无扩展名"
+      },
+      "folders": {
+        "ariaLabel": "输出文件夹",
+        "root": "输出"
+      },
+      "filtered": {
+        "empty": "没有匹配的输出"
+      },
+      "search": {
+        "placeholder": "搜索输出"
+      },
+      "scope": {
+        "turn": "第 {turn, number} 轮输出",
+        "all": "所有输出"
+      },
+      "unseen": "新增或已更新"
+    },
+    "turnOutputs": {
+      "showAll": "查看全部 {count} 个输出",
+      "app": "应用",
+      "unavailable": "已不可用",
+      "appTitle": "预览你的应用"
+    },
+    "upgrade": {
+      "title": "Craft 需要商业版套餐",
+      "adminDescription": "Craft 适用于商业版和企业版套餐。在 Craft 并入主聊天之前，社区版不支持 Craft。",
+      "userDescription": "Craft 适用于商业版和企业版套餐。请联系管理员升级以使用 Craft。",
+      "backToChat": {
+        "label": "返回聊天"
+      },
+      "viewPlans": {
+        "label": "查看套餐"
       }
     }
   },
@@ -13115,6 +15167,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "展开",
+      "expandSection": "展开{title}",
+      "fold": "折叠",
+      "foldSection": "折叠{title}"
+    },
     "comboBox": {
       "close": "关闭下拉菜单",
       "create": "创建",
@@ -13135,6 +15193,7 @@
       "loading": "加载中",
       "loadingPage": "加载中…",
       "openCalendar": "打开日历",
+      "optional": "（可选）",
       "progress": "进度",
       "remove": "移除",
       "removeItem": "移除 {title}",
@@ -13153,6 +15212,9 @@
       "sevenDays": "7天",
       "threeMonths": "3个月"
     },
+    "iconTooltip": {
+      "label": "更多信息"
+    },
     "input": {
       "day": "日",
       "hidePassword": "隐藏密码",
@@ -13165,8 +15227,19 @@
       "year": "年"
     },
     "inputFile": {
-      "attachFile": "附加文件",
       "clearFile": "清除文件"
+    },
+    "inputMultiUpload": {
+      "placeholder": "添加文件…",
+      "dropToAdd": "将文件拖放到此处以添加",
+      "dropToAddMore": "拖放到此处以添加更多文件"
+    },
+    "inputUpload": {
+      "placeholder": "添加文件…",
+      "pasted": "已粘贴的文本",
+      "attached": "已附加文件",
+      "dropToAdd": "将文件拖放到此处以添加",
+      "dropToReplace": "拖放到此处以替换文件"
     },
     "inputImage": {
       "alt": "图片",
@@ -13443,6 +15516,10 @@
       "title": "危险区域"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "管理员已为此工作区关闭 LLM 网关。请联系管理员重新开启。",
+        "title": "LLM 网关已关闭"
+      },
       "accessToken": {
         "button": "新建 token",
         "description": "在连接应用之前，请先创建一个限定范围的 token。",
@@ -13754,6 +15831,9 @@
         "languageModels": {
           "label": "语言模型"
         },
+        "llmGateway": {
+          "label": "LLM 网关"
+        },
         "mcpActions": {
           "label": "MCP 操作"
         },
@@ -13849,7 +15929,8 @@
         "title": "智能体"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "商业版"
       },
       "exploreAgents": {
         "label": "探索智能体"
@@ -13902,6 +15983,9 @@
       },
       "moveToProject": {
         "label": "移动到项目"
+      },
+      "options": {
+        "label": "聊天选项"
       },
       "projectSearchInput": {
         "placeholder": "搜索项目"
@@ -14338,6 +16422,9 @@
         "transferredToast": {
           "message": "所有权已转移。"
         }
+      },
+      "placeholders": {
+        "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
       }
     },
     "page": {
@@ -14464,5 +16551,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch 需要更多资源",
+    "disk": "OpenSearch 数据节点的磁盘使用率至少为 85%。磁盘空间耗尽时，索引可能停止。",
+    "jvmMemory": "多次检查显示 OpenSearch JVM 内存使用率持续超过 85%。搜索和索引可能失败。",
+    "vectorMemory": "OpenSearch 向量内存接近满载或已达到上限。搜索和索引可能失败。",
+    "contact": "请联系系统管理员或通过 [support@onyx.app](mailto:support@onyx.app) 联系 Onyx 团队。",
+    "stale": "最新检查不可用。此警告反映上次成功检查的结果，尚未确认恢复。",
+    "dismiss": "关闭",
+    "diskTitle": "磁盘空间",
+    "jvmMemoryTitle": "JVM 内存",
+    "vectorMemoryTitle": "向量内存",
+    "viewDetails": "查看详情"
   }
 }

@@ -129,6 +129,8 @@ type XlContentProps = ContentBaseProps & {
   moreIcon1?: IconFunctionComponent;
   /** Optional tertiary icon rendered in the icon row (ContentXl only). */
   moreIcon2?: IconFunctionComponent;
+  /** Tag rendered inline after the description (ContentXl only). */
+  descriptionTag?: TagProps;
 };
 
 type LgContentProps = ContentBaseProps & {
@@ -141,7 +143,7 @@ type LgContentProps = ContentBaseProps & {
 type MdContentProps = ContentBaseProps & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant?: "section";
-  /** Muted suffix rendered beside the title. Use `"optional"` for "(Optional)". */
+  /** Muted suffix rendered beside the title. Use `"optional"` for the translated "(Optional)" (`OpalStrings.contentOptional`). */
   suffix?: "optional" | (string & {});
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";

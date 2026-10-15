@@ -17,6 +17,7 @@ from onyx.auth.users import current_chat_accessible_user, scope_exempt
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
+    ModelConfigurationWindow,
     can_user_access_llm_provider,
     fetch_default_chat_naming_model,
     fetch_default_craft_model,
@@ -25,11 +26,14 @@ from onyx.db.llm import (
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
     fetch_existing_models,
+    fetch_llm_providers_with_router_models,
     fetch_model_configuration_by_id,
     fetch_model_configurations_page,
     fetch_persona_with_groups,
     fetch_user_group_ids,
+    mark_model_configuration_visible,
     remove_llm_provider,
+    require_router_model_configuration,
     sync_model_configurations,
     update_default_chat_naming_provider,
     update_default_craft_provider,
@@ -101,6 +105,7 @@ from onyx.server.manage.llm.models import (
     LMStudioModelsRequest,
     ModelConfigurationPage,
     ModelConfigurationUpsertRequest,
+    ModelRoutingUpdateRequest,
     NebiusTokenfactoryFinalModelResponse,
     NebiusTokenfactoryModelsRequest,
     OllamaFinalModelResponse,
@@ -128,11 +133,17 @@ from onyx.server.manage.llm.utils import (
     ModelMetadata,
     generate_bedrock_display_name,
     generate_ollama_display_name,
-    is_embedding_model,
+    is_non_chat_model,
     is_reasoning_model,
     is_valid_bedrock_model,
     lm_studio_capability_enabled,
     strip_openrouter_vendor_prefix,
+)
+from onyx.server.settings.models import Settings
+from onyx.server.settings.store import (
+    load_settings,
+    settings_write_lock,
+    store_settings,
 )
 from onyx.utils.audit import (
     AuditAction,
@@ -529,20 +540,58 @@ def test_default_provider(
 @admin_router.get("/provider")
 def list_llm_providers(
     include_image_gen: bool = Query(False),
+    page_models: bool = Query(
+        False,
+        description="Return each provider's first page of models plus the "
+        "workspace defaults, with next_model_configuration_offset, instead of "
+        "every model",
+    ),
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers")
 
-    llm_provider_list: list[LLMProviderView] = []
-    for llm_provider_model in fetch_existing_llm_providers(
+    providers = fetch_existing_llm_providers(
         db_session=db_session,
         flow_type_filter=[],
         exclude_image_generation_providers=not include_image_gen,
-    ):
+        include_model_configurations=not page_models,
+        include_model_flows=not page_models,
+    )
+    default_text_model = fetch_default_llm_model(db_session)
+    default_vision_model = fetch_default_vision_model(db_session)
+    default_chat_naming_model = fetch_default_chat_naming_model(db_session)
+    default_craft_model = fetch_default_craft_model(db_session)
+    # page_models is opt-in: the admin UI takes one page per provider plus the
+    # defaults, callers that omit it still get every model.
+    windows = (
+        _page_model_windows(
+            db_session,
+            providers,
+            [
+                default_text_model,
+                default_vision_model,
+                default_chat_naming_model,
+                default_craft_model,
+            ],
+        )
+        if page_models
+        else None
+    )
+
+    llm_provider_list: list[LLMProviderView] = []
+    for llm_provider_model in providers:
         from_model_start = datetime.now(timezone.utc)
-        full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        if windows is None:
+            full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        else:
+            window = windows[llm_provider_model.id]
+            full_llm_provider = LLMProviderView.from_model(
+                llm_provider_model,
+                model_configurations=window.model_configurations,
+                next_model_configuration_offset=window.next_offset,
+            )
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
@@ -561,18 +610,10 @@ def list_llm_providers(
 
     return LLMProviderResponse[LLMProviderView].from_models(
         providers=llm_provider_list,
-        default_text=DefaultModel.from_model_config(
-            fetch_default_llm_model(db_session)
-        ),
-        default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
-        ),
-        default_chat_naming=DefaultModel.from_model_config(
-            fetch_default_chat_naming_model(db_session)
-        ),
-        default_craft=DefaultModel.from_model_config(
-            fetch_default_craft_model(db_session)
-        ),
+        default_text=DefaultModel.from_model_config(default_text_model),
+        default_vision=DefaultModel.from_model_config(default_vision_model),
+        default_chat_naming=DefaultModel.from_model_config(default_chat_naming_model),
+        default_craft=DefaultModel.from_model_config(default_craft_model),
     )
 
 
@@ -592,6 +633,53 @@ def get_llm_provider(
     provider_view = LLMProviderView.from_model(llm_provider_model)
     _mask_provider_credentials(provider_view)
     return provider_view
+
+
+@admin_router.get("/router-models")
+def list_router_model_providers(
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[LLMProviderView]:
+    """Every router model configuration, grouped under its provider. Unlike
+    the paged listings this never truncates: pickers offering a routing
+    target must see hidden routers too, so no visibility or page filter."""
+    views: list[LLMProviderView] = [
+        LLMProviderView.from_model(
+            provider,
+            include_api_key=False,
+            model_configurations=provider.model_configurations,
+        )
+        for provider in fetch_llm_providers_with_router_models(db_session)
+    ]
+    for view in views:
+        _mask_provider_credentials(view)
+    return views
+
+
+@admin_router.patch("/model-routing")
+def update_model_routing(
+    update: ModelRoutingUpdateRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> Settings:
+    """Same write path as PATCH /admin/settings for the routing fields, but
+    scoped to MANAGE_LLMS so delegated model managers can save them."""
+    with settings_write_lock():
+        settings: Settings = load_settings(raise_on_error=True)
+        if update.model_routing_enabled is not None:
+            settings.model_routing_enabled = update.model_routing_enabled
+        if "model_routing_model_configuration_id" in update.model_fields_set:
+            routing_id: int | None = update.model_routing_model_configuration_id
+            settings.model_routing_model_configuration_id = routing_id
+            if routing_id is not None:
+                routing_model: ModelConfiguration = require_router_model_configuration(
+                    db_session, routing_id
+                )
+                # Hidden routers don't reach the picker's provider payload.
+                if mark_model_configuration_visible(db_session, routing_model):
+                    invalidate_provider_listing_cache()
+        store_settings(settings)
+    return settings
 
 
 @admin_router.put("/provider")
@@ -927,25 +1015,35 @@ def _fetch_persona_for_listing(
     return persona
 
 
-def _build_provider_descriptors(
+def _page_model_windows(
     db_session: Session,
     providers: list[LLMProviderModel],
-    pinned_models: list[ModelConfiguration],
-) -> list[LLMProviderDescriptor]:
-    """Descriptors carrying each provider's first page of models. The listing
-    never loads a provider's full model list. The picker pages the rest in.
-    `pinned_models` (the defaults) ride along even when they sort past the
-    page, so clients can resolve them without paging."""
+    pinned_models: list[ModelConfiguration | None],
+) -> dict[int, ModelConfigurationWindow]:
+    """Each provider's first page of models, for listings whose client pages
+    the rest in. `pinned_models` (the defaults, None where unset) ride along
+    even when they sort past the page, so clients can resolve them."""
     windows = fetch_model_configurations_page(
         db_session, [provider.id for provider in providers]
     )
     for model in pinned_models:
+        if model is None:
+            continue
         window = windows.get(model.llm_provider_id)
         if window is None or any(
             mc.id == model.id for mc in window.model_configurations
         ):
             continue
         window.model_configurations.append(model)
+    return windows
+
+
+def _build_provider_descriptors(
+    db_session: Session,
+    providers: list[LLMProviderModel],
+    pinned_models: list[ModelConfiguration | None],
+) -> list[LLMProviderDescriptor]:
+    windows = _page_model_windows(db_session, providers, pinned_models)
     return [
         LLMProviderDescriptor.from_model(
             provider,
@@ -1055,14 +1153,10 @@ def list_llm_provider_basics(
             )
         ],
         [
-            model
-            for model in (
-                default_text_model,
-                default_vision_model,
-                default_chat_naming_model,
-                default_craft_model,
-            )
-            if model is not None
+            default_text_model,
+            default_vision_model,
+            default_chat_naming_model,
+            default_craft_model,
         ],
     )
 
@@ -1234,15 +1328,7 @@ def list_llm_providers_for_persona(
                 can_manage_llms=can_manage_llms,
             )
         ],
-        [
-            model
-            for model in (
-                default_text_model,
-                default_vision_model,
-                persona_default_model,
-            )
-            if model is not None
-        ],
+        [default_text_model, default_vision_model, persona_default_model],
     )
 
     end_time = datetime.now(timezone.utc)
@@ -1284,7 +1370,9 @@ def get_provider_contextual_cost(
       - the chunk_context
     - The per-token cost of the LLM used to generate the doc_summary and chunk_context
     """
-    providers = fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT])
+    providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT], include_model_flows=True
+    )
     costs = []
     for provider in providers:
         for model_configuration in provider.model_configurations:
@@ -1726,6 +1814,7 @@ def get_openrouter_available_models(
                     display_name=display_name,
                     max_input_tokens=context_length,
                     supports_image_input=model_details.supports_image_input,
+                    is_router=model_details.is_router,
                 )
             )
         except Exception as e:
@@ -1753,6 +1842,7 @@ def get_openrouter_available_models(
                     display_name=r.display_name,
                     max_input_tokens=r.max_input_tokens,
                     supports_image_input=r.supports_image_input,
+                    is_router=r.is_router,
                 )
                 for r in sorted_results
             ],
@@ -1914,8 +2004,8 @@ def get_litellm_available_models(
 
             litellm_params_model = model_details.get_litellm_params_model()
 
-            # Skip embedding models
-            if is_embedding_model(litellm_params_model) or is_embedding_model(
+            # Skip non-chat models
+            if is_non_chat_model(litellm_params_model) or is_non_chat_model(
                 model_details.model_name
             ):
                 continue
@@ -2068,8 +2158,8 @@ def get_bifrost_available_models(
             if not model_id:
                 continue
 
-            # Skip embedding models
-            if is_embedding_model(model_id):
+            # Skip non-chat models
+            if is_non_chat_model(model_id):
                 continue
 
             results.append(
@@ -2202,7 +2292,7 @@ def get_nebius_tokenfactory_available_models(
             model_id = model.get("id", "")
             if not model_id:
                 continue
-            if is_embedding_model(model_id):
+            if is_non_chat_model(model_id):
                 continue
 
             # Only keep models whose output modality is text (chat / vision-chat);
@@ -2318,8 +2408,8 @@ def get_openai_compatible_server_available_models(
             if not model_id:
                 continue
 
-            # Skip embedding models
-            if is_embedding_model(model_id):
+            # Skip non-chat models
+            if is_non_chat_model(model_id):
                 continue
 
             results.append(
@@ -2531,8 +2621,8 @@ def get_portkey_available_models(
             if not model_id:
                 continue
 
-            # Skip embedding models
-            if is_embedding_model(model_id):
+            # Skip non-chat models
+            if is_non_chat_model(model_id):
                 continue
 
             results.append(

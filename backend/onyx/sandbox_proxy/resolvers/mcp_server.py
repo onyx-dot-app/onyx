@@ -32,10 +32,10 @@ from onyx.db.users import fetch_user_by_id
 from onyx.sandbox_proxy.credential_injection import (
     CredentialResolver,
     CredentialUnavailableError,
-    InjectionContext,
 )
 from onyx.sandbox_proxy.logging_utils import short_log_id
-from onyx.sandbox_proxy.mcp_jsonrpc import McpRpcKind, classify_mcp_request
+from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
+from onyx.sandbox_proxy.models import InjectionContext, McpRpcKind
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     AmbiguousMCPTargetError,
     CraftMCPTarget,
@@ -44,9 +44,9 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     normalized_request_path,
     parse_target,
 )
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.server.features.mcp.credentials import (
     MCPCredentialsError,
-    extract_connection_data,
     mcp_token_expired,
     resolve_mcp_credentials,
 )
@@ -76,6 +76,19 @@ class MCPServerResolver(CredentialResolver):
             TTLCache(maxsize=10_000, ttl=cache_ttl_s)
         )
 
+    def allows_destination(
+        self, sandbox: ResolvedSandbox, scheme: str, host: str, port: int
+    ) -> bool:
+        """Allow only origins enabled for Craft and accessible to this user."""
+        return scheme in {"http", "https"} and bool(
+            host_targets(
+                self._user_targets(sandbox.tenant_id, sandbox.user_id),
+                scheme,
+                host,
+                port,
+            )
+        )
+
     def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
         # A request the external-app matcher attributed belongs to that resolver
         # on a shared host (MCP servers aren't in that catalog) — defer. An MCP
@@ -103,7 +116,7 @@ class MCPServerResolver(CredentialResolver):
         # call (or anything unclassifiable) reaching injection ungated means the
         # evaluator failed and the gate fell open — fail closed here so no
         # invocation ever forwards with credentials but without a verdict.
-        classification = classify_mcp_request(request.method or "", request.raw_content)
+        classification = classify_mcp_request(request)
         if classification.kind is not McpRpcKind.PLUMBING:
             raise CredentialUnavailableError(
                 f"non-plumbing MCP request on {request.host} reached credential "
@@ -177,10 +190,10 @@ class MCPServerResolver(CredentialResolver):
             expired_oauth_config_id: int | None = None
             if (
                 server.auth_type == MCPAuthenticationType.OAUTH
-                and creds.connection_config is not None
-                and mcp_token_expired(extract_connection_data(creds.connection_config))
+                and creds.connection_config_id is not None
+                and mcp_token_expired(creds.connection_data)
             ):
-                expired_oauth_config_id = creds.connection_config.id
+                expired_oauth_config_id = creds.connection_config_id
 
         # Refresh after the session closes — the primitive opens its own.
         if expired_oauth_config_id is not None:

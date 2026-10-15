@@ -16,7 +16,7 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import {
-  SvgGithub,
+  SvgGitHub,
   SvgGmail,
   SvgGoogleDocs,
   SvgGoogleDrive,
@@ -242,7 +242,7 @@ const OUTPUT_CARD_LAYOUT: Record<
 > = {
   googleDoc: { y: 170, icon: SvgGoogleDocs },
   liveApp: { y: 280, icon: SvgDashboard, tint: true },
-  githubPr: { y: 390, icon: SvgGithub },
+  githubPr: { y: 390, icon: SvgGitHub },
 };
 
 // ---------------------------------------------------------------------------

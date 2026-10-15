@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import uuid
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, cast
@@ -46,6 +47,8 @@ class GCSBackedFileStore(FileStore):
         service_account_key_json: str | None = None,
     ) -> None:
         self._gcs_client: GCSClient | None = None
+        # Shared across threads, so the first operations build one client.
+        self._client_lock = threading.Lock()
         self._bucket_name = bucket_name
         self._gcs_prefix = gcs_prefix or "onyx-files"
         self._project_id = project_id
@@ -61,7 +64,9 @@ class GCSBackedFileStore(FileStore):
         3. Application Default Credentials (Workload Identity, metadata server,
            gcloud CLI). Project ID is auto-resolved from the environment.
         """
-        if self._gcs_client is None:
+        with self._client_lock:
+            if self._gcs_client is not None:
+                return self._gcs_client
             try:
                 from google.cloud import storage
 
@@ -105,7 +110,7 @@ class GCSBackedFileStore(FileStore):
                 logger.error("Failed to initialize GCS client: %s", e)
                 raise RuntimeError(f"Failed to initialize GCS client: {e}") from e
 
-        return self._gcs_client
+            return self._gcs_client
 
     def _get_object_key(self, file_name: str) -> str:
         """Generate object key from file name with tenant ID prefix.

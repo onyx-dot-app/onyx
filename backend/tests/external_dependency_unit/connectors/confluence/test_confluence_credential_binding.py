@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import factory
+from onyx.connectors.capability_checks import creation
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (
     validate_ccpair_for_user,
@@ -17,7 +18,8 @@ from onyx.connectors.factory import (
 from onyx.connectors.interfaces import BaseConnector
 from onyx.db.credentials import backend_update_credential_json
 from onyx.db.enums import AccessType
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, User
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -31,6 +33,11 @@ def instantiate_connector(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     mock = MagicMock(return_value=MagicMock(spec=BaseConnector))
     monkeypatch.setattr(factory, "instantiate_connector", mock)
     monkeypatch.setattr(factory, "INTEGRATION_TESTS_MODE", False)
+    # Confluence has named checks, so validation runs them after the binding
+    # gate. These tests cover only the gate; the checks would reach the site.
+    monkeypatch.setattr(
+        creation, "validate_pairing_with_named_checks", MagicMock(return_value=True)
+    )
     return mock
 
 
@@ -79,6 +86,7 @@ def test_other_site_is_rejected_before_the_connector_is_built(
             confluence_oauth_cc_pair.credential_id,
             AccessType.PUBLIC,
             db_session,
+            user=None,
         )
 
     # Postcondition.
@@ -102,6 +110,7 @@ def test_authorized_site_is_accepted(
         confluence_oauth_cc_pair.credential_id,
         AccessType.PUBLIC,
         db_session,
+        user=None,
     )
 
     # Postcondition.
@@ -125,15 +134,25 @@ def test_http_downgrade_of_the_authorized_site_is_rejected(
             confluence_oauth_cc_pair.credential_id,
             AccessType.PUBLIC,
             db_session,
+            user=None,
         )
 
     # Postcondition.
     instantiate_connector.assert_not_called()
 
 
+@pytest.fixture
+def admin(db_session: Session) -> Generator[User, None, None]:
+    user = create_test_user(db_session, "confluence_binding_admin", is_admin=True)
+    yield user
+    db_session.rollback()
+    delete_test_user(db_session, user)
+
+
 @pytest.mark.usefixtures("tenant_context")
 def test_config_edit_is_checked_against_paired_credentials(
     db_session: Session,
+    admin: User,
     confluence_oauth_cc_pair: ConnectorCredentialPair,
 ) -> None:
     # Under test / postcondition: the edit an admin would PATCH.
@@ -143,6 +162,7 @@ def test_config_edit_is_checked_against_paired_credentials(
             DocumentSource.CONFLUENCE,
             {"wiki_base": "https://other.atlassian.net", "is_cloud": True},
             db_session,
+            user=admin,
         )
     with pytest.raises(ConnectorValidationError, match="invalid"):
         validate_connector_credential_bindings(
@@ -150,10 +170,12 @@ def test_config_edit_is_checked_against_paired_credentials(
             DocumentSource.CONFLUENCE,
             {"wiki_base": _AUTHORIZED_SITE, "is_cloud": "not-a-bool"},
             db_session,
+            user=admin,
         )
     validate_connector_credential_bindings(
         confluence_oauth_cc_pair.connector_id,
         DocumentSource.CONFLUENCE,
         {"wiki_base": _AUTHORIZED_SITE, "is_cloud": True},
         db_session,
+        user=admin,
     )

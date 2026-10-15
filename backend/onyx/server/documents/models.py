@@ -1,7 +1,7 @@
 from collections.abc import Sequence
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum
-from typing import Annotated, Any, Generic, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 from uuid import UUID
 
 from pydantic import (
@@ -15,15 +15,31 @@ from pydantic import (
 
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings_setting import (
+    hide_findings_if_disabled,
+)
+from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckResult,
+    CredentialCapabilityReport,
+)
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
+from onyx.db.backfill_models import PendingBackfill
+from onyx.db.cc_pair_runs_models import CCPairRunPage
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckRunStatus,
+    CapabilityCheckTrigger,
+    CCPairRunKind,
+    CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
+    HierarchyNodeType,
     PermissionSyncStatus,
     ProcessingMode,
+    SyncStatus,
 )
 from onyx.db.index_attempt_metrics_models import (
     STAGE_SCOPE,
@@ -31,6 +47,7 @@ from onyx.db.index_attempt_metrics_models import (
     StageScope,
 )
 from onyx.db.models import (
+    CapabilityCheckRun,
     Connector,
     ConnectorCredentialPair,
     Credential,
@@ -39,6 +56,7 @@ from onyx.db.models import (
     IndexAttempt,
     IndexAttemptStageMetric,
     IndexingStatus,
+    SyncRecord,
     TaskStatus,
 )
 from onyx.db.models import Document as DbDocument
@@ -93,6 +111,8 @@ class ConnectorBase(BaseModel):
     # In seconds, None for one time index with no refresh
     refresh_freq: int | None = None
     prune_freq: int | None = None
+    # In seconds, None runs the connector checks only on request
+    check_freq: int | None = None
     indexing_start: datetime | None = None
 
 
@@ -101,7 +121,11 @@ class ConnectorUpdateRequest(ConnectorBase):
     groups: list[int] = Field(default_factory=list)
 
     def to_connector_base(self) -> ConnectorBase:
-        return ConnectorBase(**self.model_dump(exclude={"access_type", "groups"}))
+        # Only the request's own fields, so an omitted check_freq stays omitted
+        # (update_connector keeps the stored schedule) instead of becoming null.
+        return ConnectorBase(
+            **self.model_dump(exclude_unset=True, exclude={"access_type", "groups"})
+        )
 
 
 class ConnectorSnapshot(ConnectorBase):
@@ -123,6 +147,7 @@ class ConnectorSnapshot(ConnectorBase):
             connector_specific_config=connector.connector_specific_config,
             refresh_freq=connector.refresh_freq,
             prune_freq=connector.prune_freq,
+            check_freq=connector.check_freq,
             credential_ids=(
                 credential_ids
                 or [association.credential.id for association in connector.credentials]
@@ -158,8 +183,13 @@ class CredentialSnapshot(CredentialBase):
     id: int
     user_id: UUID | None
     user_email: str | None = None
+    # The creator's display name; None when they never set one.
+    user_personal_name: str | None = None
     time_created: datetime
     time_updated: datetime
+    # Whether the requesting user owns the credential. None when the response
+    # does not say (snapshots nested in pair, group and document-set views).
+    is_owner: bool | None = None
 
     @classmethod
     def from_credential_db_model(
@@ -168,10 +198,17 @@ class CredentialSnapshot(CredentialBase):
         *,
         mask_credential_prefix: bool,
         view_source: DocumentSource | None = None,
+        viewer_id: UUID | None = None,
+        group_ids: list[int] | None = None,
     ) -> Self:
         """``view_source`` picks the keys ``credential_json`` is shown in: a
         family credential listed for another source of its family is shown in
-        that source's keys. Defaults to the credential's own source."""
+        that source's keys. Defaults to the credential's own source.
+
+        ``viewer_id`` fills ``is_owner``. ``group_ids`` are the groups the
+        credential is shared with (``fetch_credential_group_ids``); the
+        credential endpoints pass them, nested snapshots leave ``groups``
+        empty."""
         source = credential.source or DocumentSource.NOT_APPLICABLE
         stored_json = (
             credential.credential_json.get_value(apply_mask=False)
@@ -199,12 +236,21 @@ class CredentialSnapshot(CredentialBase):
             credential_json=credential_json_value,
             user_id=credential.user_id,
             user_email=credential.user.email if credential.user else None,
+            user_personal_name=(
+                credential.user.personal_name if credential.user else None
+            ),
             admin_public=credential.admin_public,
             time_created=credential.time_created,
             time_updated=credential.time_updated,
             source=source,
             name=credential.name,
             curator_public=credential.curator_public,
+            groups=group_ids or [],
+            is_owner=(
+                None
+                if viewer_id is None
+                else credential.user_id is not None and credential.user_id == viewer_id
+            ),
         )
 
 
@@ -234,16 +280,36 @@ class IndexAttemptSnapshot(BaseModel):
     docs_removed_from_index: int
     error_msg: str | None
     error_count: int
+    # Unresolved document-level errors, the ones a targeted reindex can retry.
+    open_doc_error_count: int
     full_exception_trace: str | None
     time_started: str | None
     time_updated: str
+    # When a finished attempt ended. `time_updated` moves days later when
+    # checkpoint cleanup touches the row, so it is no stand-in.
+    time_finished: str | None
     poll_range_start: datetime | None = None
     poll_range_end: datetime | None = None
+    # A one-off run over poll_range_start..poll_range_end outside the pair's
+    # incremental cursor; it does not drive the pair's status.
+    is_backfill: bool = False
+    # Indexed under the FUTURE search settings of a running model switch.
+    is_new_model: bool = False
 
     @classmethod
     def from_index_attempt_db_model(
-        cls, index_attempt: IndexAttempt, error_count: int
+        cls, index_attempt: IndexAttempt, error_count: int, open_doc_error_count: int
     ) -> "IndexAttemptSnapshot":
+        # Attempts from before time_finished existed end at their last heartbeat
+        # check, and at their start when they never reached one.
+        finished = (
+            index_attempt.time_finished
+            or index_attempt.last_heartbeat_time
+            or index_attempt.time_started
+            or index_attempt.time_created
+            if index_attempt.is_finished()
+            else None
+        )
         return IndexAttemptSnapshot(
             id=index_attempt.id,
             status=index_attempt.status,
@@ -253,6 +319,7 @@ class IndexAttemptSnapshot(BaseModel):
             docs_removed_from_index=index_attempt.docs_removed_from_index or 0,
             error_msg=index_attempt.error_msg,
             error_count=error_count,
+            open_doc_error_count=open_doc_error_count,
             full_exception_trace=index_attempt.full_exception_trace,
             time_started=(
                 index_attempt.time_started.isoformat()
@@ -260,8 +327,14 @@ class IndexAttemptSnapshot(BaseModel):
                 else None
             ),
             time_updated=index_attempt.time_updated.isoformat(),
+            time_finished=finished.isoformat() if finished else None,
             poll_range_start=index_attempt.poll_range_start,
             poll_range_end=index_attempt.poll_range_end,
+            is_new_model=(
+                index_attempt.search_settings is not None
+                and index_attempt.search_settings.status.is_future()
+            ),
+            is_backfill=index_attempt.is_backfill,
         )
 
 
@@ -466,21 +539,312 @@ class PaginatedReturn(BaseModel, Generic[PaginatedType]):
     total_items: int
 
 
-class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
-    """Paginated response for the per-cc-pair sync-attempt history endpoints.
+class CCPairIndexRun(BaseModel):
+    kind: Literal[CCPairRunKind.INDEXING] = CCPairRunKind.INDEXING
+    time_created: datetime
+    attempt: IndexAttemptSnapshot
 
-    ``applicable`` is False when the cc-pair's source does not run the kind
-    of sync this endpoint reports on (e.g. Slack has no group sync; Salesforce
-    has neither doc sync nor group sync). The frontend uses this to render an
-    explanatory message instead of an empty-state — the two are distinct
-    states: ``applicable=True, items=[], total_items=0`` legitimately means
-    "no attempts yet" and must not be confused with "this kind of sync isn't
-    applicable for this source".
-    """
 
-    applicable: bool
-    items: list[PaginatedType]
+class CCPairDocPermissionSyncRun(BaseModel):
+    kind: Literal[CCPairRunKind.DOC_PERMISSION_SYNC] = CCPairRunKind.DOC_PERMISSION_SYNC
+    time_created: datetime
+    attempt: DocPermissionSyncAttemptSnapshot
+
+
+class CCPairGroupSyncRun(BaseModel):
+    kind: Literal[CCPairRunKind.GROUP_SYNC] = CCPairRunKind.GROUP_SYNC
+    time_created: datetime
+    attempt: ExternalGroupSyncAttemptSnapshot
+
+
+class PruneRunSnapshot(BaseModel):
+    """One prune of the pair, from its pruning sync record."""
+
+    id: int
+    status: SyncStatus
+    docs_removed: int
+    error_message: str | None
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_sync_record(cls, record: SyncRecord) -> "PruneRunSnapshot":
+        return cls(
+            id=record.id,
+            status=record.sync_status,
+            docs_removed=record.num_docs_synced,
+            error_message=record.error_message,
+            time_created=record.sync_start_time.isoformat(),
+            time_started=record.sync_start_time.isoformat(),
+            time_finished=(
+                record.sync_end_time.isoformat() if record.sync_end_time else None
+            ),
+        )
+
+
+class CheckRunSnapshot(BaseModel):
+    """One run of the pair's connector checks and what it found."""
+
+    id: int
+    status: CapabilityCheckRunStatus
+    trigger: CapabilityCheckTrigger
+    # Empty until the run completes, and for a run that broke.
+    check_results: list[CapabilityCheckResult]
+    # Why a run broke.
+    error_message: str | None
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_check_run(cls, run: CapabilityCheckRun) -> "CheckRunSnapshot":
+        results: list[CapabilityCheckResult] = []
+        if run.report is not None:
+            results = CredentialCapabilityReport.model_validate(
+                run.report
+            ).check_results
+        # The history keeps the findings, the response honors the workspace switch.
+        hide_findings_if_disabled(results)
+        return cls(
+            id=run.id,
+            status=run.status,
+            trigger=run.trigger,
+            check_results=results,
+            error_message=run.error_message,
+            time_created=run.time_created.isoformat(),
+            time_started=run.time_created.isoformat(),
+            time_finished=(
+                run.time_finished.isoformat() if run.time_finished else None
+            ),
+        )
+
+
+class CCPairPruneRun(BaseModel):
+    kind: Literal[CCPairRunKind.PRUNING] = CCPairRunKind.PRUNING
+    time_created: datetime
+    attempt: PruneRunSnapshot
+
+
+class CCPairChecksRun(BaseModel):
+    kind: Literal[CCPairRunKind.CHECKS] = CCPairRunKind.CHECKS
+    time_created: datetime
+    attempt: CheckRunSnapshot
+
+
+CCPairRun = Annotated[
+    CCPairIndexRun
+    | CCPairDocPermissionSyncRun
+    | CCPairGroupSyncRun
+    | CCPairPruneRun
+    | CCPairChecksRun,
+    Field(discriminator="kind"),
+]
+
+
+class CCPairRunsResponse(BaseModel):
+    """One page of the pair's runs, newest first."""
+
+    items: list[CCPairRun]
+    # Runs matching every filter, across the kinds asked for.
     total_items: int
+    # The kinds this pair runs, whatever was asked for.
+    kinds: list[CCPairRunKind]
+    # Per status group, ignoring the status filter, so the counts stay put
+    # while one is applied.
+    status_counts: dict[CCPairRunStatusGroup, int]
+
+
+class RunFeed(BaseModel):
+    """One page of a run feed, for a pair's own feed and the fleet's: the rows
+    for lookups, the items to serve, the runs matching every filter, and the
+    counts per status group ignoring the status filter."""
+
+    # ORM rows ride inside, as in db/projects.py
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    page: CCPairRunPage
+    items: list[CCPairRun]
+    total_items: int
+    status_counts: dict[CCPairRunStatusGroup, int]
+
+
+class CCPairThroughputWindow(str, Enum):
+    """How far back a throughput chart reaches."""
+
+    HOURS_1 = "1h"
+    HOURS_12 = "12h"
+    HOURS_24 = "24h"
+    DAYS_7 = "7d"
+
+    def duration(self) -> timedelta:
+        match self:
+            case CCPairThroughputWindow.HOURS_1:
+                return timedelta(hours=1)
+            case CCPairThroughputWindow.HOURS_12:
+                return timedelta(hours=12)
+            case CCPairThroughputWindow.HOURS_24:
+                return timedelta(hours=24)
+            case CCPairThroughputWindow.DAYS_7:
+                return timedelta(days=7)
+
+
+class CCPairThroughputRun(BaseModel):
+    started: datetime
+    # None while the run is still going.
+    ended: datetime | None
+    status: IndexingStatus
+
+
+class CCPairThroughputResponse(BaseModel):
+    """A rough estimate of the documents indexed in each equal slice of the
+    window, oldest first (each run's total spread evenly over its span, since
+    nothing records when a document landed), and the runs that overlap it,
+    oldest first."""
+
+    window_start: datetime
+    window_end: datetime
+    docs_indexed: list[int]
+    runs: list[CCPairThroughputRun]
+
+
+class IndexingOverviewResponse(BaseModel):
+    """The pairs the caller can read at a glance: how many run an index now and
+    how many are active at all, the documents indexed in the window against the
+    documents held, and the window's throughput."""
+
+    indexing_connectors: int
+    active_connectors: int
+    recent_docs_indexed: int
+    total_docs_indexed: int
+    throughput: CCPairThroughputResponse
+
+
+class CCPairRef(BaseModel):
+    """A pair named in a fleet-wide feed."""
+
+    id: int
+    name: str
+    source: DocumentSource
+    # The caller may re-fetch single documents of this pair: they may submit a
+    # targeted reindex, operate the pair, and its connector resolves documents.
+    can_resolve: bool
+
+
+class IndexingRun(BaseModel):
+    """One run in the fleet-wide feed, with the pair it ran on."""
+
+    cc_pair: CCPairRef
+    run: CCPairRun
+
+
+class IndexingRunsResponse(BaseModel):
+    """One page of the readable pairs' runs, newest first."""
+
+    items: list[IndexingRun]
+    # Runs matching every filter.
+    total_items: int
+    # Per status group, ignoring the status filter, so the counts stay put
+    # while one is applied.
+    status_counts: dict[CCPairRunStatusGroup, int]
+
+
+class IndexingConnectorStatus(str, Enum):
+    """How the status page buckets a pair, in the order the list sorts them."""
+
+    INDEXING = "indexing"
+    FAILED = "failed"
+    PAUSED = "paused"
+    SCHEDULED = "scheduled"
+    INDEXED = "indexed"
+
+
+class IndexingConnectorRow(BaseModel):
+    """One pair in the status page's list, with its latest index attempt."""
+
+    cc_pair_id: int
+    name: str
+    source: DocumentSource
+    access_type: AccessType
+    # The pair's own state, which names the tag for a pair that is deleting,
+    # invalid or on its first index. `status` is the bucket.
+    cc_pair_status: ConnectorCredentialPairStatus
+    status: IndexingConnectorStatus
+    creator_email: str | None
+    docs_indexed: int
+    last_success: datetime | None
+    latest_index_attempt: IndexAttemptSnapshot | None
+    # Place by age in the line of index attempts handed to the queue, from 1,
+    # while the latest waits there. The queue serves first runs ahead of
+    # repeats, so a repeat can wait a little longer than its place says.
+    queue_position: int | None
+    # per-action affordance map for the requesting user, from the same access
+    # decisions the write guards enforce
+    permissions: dict[str, bool]
+
+
+class IndexingConnectorsResponse(BaseModel):
+    """One page of the readable pairs, sorted by status then name."""
+
+    items: list[IndexingConnectorRow]
+    # Pairs matching the search and the status filter.
+    total_items: int
+    # Per status, ignoring the status filter, so the counts stay put while one is applied.
+    status_counts: dict[IndexingConnectorStatus, int]
+    # Federated connectors have no runs or documents. Admins see them after the
+    # pairs on the first page, under the search but outside the status filter.
+    federated_connectors: list[FederatedConnectorStatus]
+
+
+class PendingBackfillSnapshot(BaseModel):
+    """A backfill an applied edit requested, until an attempt of it succeeds.
+    The beat retries a failed one after ``retry_after``."""
+
+    window_start: datetime
+    window_end: datetime
+    requested_at: datetime
+    # It runs with a config other than the saved one.
+    scoped: bool
+    attempt_id: int | None
+    failure_count: int
+    retry_after: datetime | None
+
+    @classmethod
+    def from_pending(cls, pending: PendingBackfill) -> "PendingBackfillSnapshot":
+        return cls(
+            window_start=pending.backfill.window_start,
+            window_end=pending.backfill.window_end,
+            requested_at=pending.requested_at,
+            scoped=pending.backfill.connector_config_override is not None,
+            attempt_id=pending.attempt_id,
+            failure_count=pending.failure_count,
+            retry_after=pending.retry_after,
+        )
+
+
+class HierarchyBreakdownEntry(BaseModel):
+    # The id the connector config uses for the node (Confluence: space key,
+    # numeric page id). It differs from the stored raw id for Confluence pages.
+    raw_node_id: str
+    # None when the config names a node that the hierarchy does not have.
+    display_name: str | None
+    link: str | None
+    # Indexed documents of the cc-pair in the node's subtree. None: the config
+    # names the node, but no document of the cc-pair is under it.
+    doc_count: int | None
+
+
+class CCPairHierarchyBreakdown(BaseModel):
+    """Where a cc-pair's documents come from, by hierarchy node type."""
+
+    nodes_by_type: dict[HierarchyNodeType, list[HierarchyBreakdownEntry]]
+    # Indexed documents of the cc-pair that are in no listed node's subtree:
+    # documents without a hierarchy parent, or under nodes that are not listed.
+    # The rows can overlap (a listed page inside a listed space), so the row
+    # counts plus this count can be more than the cc-pair's total.
+    other_doc_count: int
+    # Config fields whose values the rows list, so the page shows no row for them.
+    config_fields: list[str]
 
 
 class CCPairFullInfo(BaseModel):
@@ -522,12 +886,19 @@ class CCPairFullInfo(BaseModel):
     # True if this connector's class implements `Resolver.reindex`. The FE
     # uses this to route Resolve-All to targeted reindex vs full reindex.
     supports_targeted_reindex: bool
+    # The source names checks of its own, so check runs can be scheduled and
+    # listed. A source without them only records the blocking validation.
+    has_named_checks: bool
 
     # Written at create time on the association route but not returned until now,
     # so a client could never refresh or import them.
     groups: list[int]
     auto_sync_options: dict[str, Any] | None
     processing_mode: ProcessingMode
+
+    # Set while the first index attempt waits on the capability checks.
+    indexing_hold: IndexingHold | None = None
+    pending_backfills: list[PendingBackfillSnapshot]
 
     @classmethod
     def _get_last_full_permission_sync(
@@ -588,6 +959,8 @@ class CCPairFullInfo(BaseModel):
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
         supports_targeted_reindex: bool = False,
+        has_named_checks: bool = False,
+        indexing_hold: IndexingHold | None = None,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -652,9 +1025,15 @@ class CCPairFullInfo(BaseModel):
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
             supports_targeted_reindex=supports_targeted_reindex,
+            has_named_checks=has_named_checks,
             groups=groups or [],
             auto_sync_options=cc_pair_model.auto_sync_options,
             processing_mode=cc_pair_model.processing_mode,
+            indexing_hold=indexing_hold,
+            pending_backfills=[
+                PendingBackfillSnapshot.from_pending(pending)
+                for pending in cc_pair_model.pending_backfills
+            ],
         )
 
 
@@ -778,6 +1157,31 @@ def manage_access_by_group(
     return {entry.group_id: entry.role for entry in entries}
 
 
+NAMES_A_CREDENTIAL = "Give credential_id, credential_json or both."
+
+
+def names_a_credential(
+    credential_id: int | None, credential_json: dict[str, Any] | None
+) -> bool:
+    """A connector form's request names a saved credential or draft, a new
+    account's values, or both (see onyx/server/documents/draft_credentials.py)."""
+    return credential_id is not None or credential_json is not None
+
+
+class CredentialSharing(BaseModel):
+    """Who may reuse a credential: ``CredentialBase``'s sharing fields.
+
+    ``admin_public`` shares with every admin (global MANAGE_CONNECTORS).
+    ``groups`` (EE) shares with the users who hold Manage Connectors in one of
+    the groups: its managers, and members who hold the permission globally.
+    ``curator_public`` is kept for older clients and grants nothing."""
+
+    admin_public: bool = True
+    curator_public: bool = False
+    groups: list[int] = Field(default_factory=list)
+    name: str | None = None
+
+
 class ConnectorCredentialPairMetadata(BaseModel):
     name: str
     access_type: AccessType
@@ -802,6 +1206,28 @@ class ConnectorCredentialPairMetadata(BaseModel):
         if self.manage_access:
             return manage_access_by_group(self.manage_access)
         return dict.fromkeys(self.groups, ConnectorManageRole.EDITOR)
+
+
+class ConnectorWithCredentialCreateRequest(BaseModel):
+    """Creates a connector and pairs it with a credential in one request: a
+    saved credential, or a new account that this request saves (see
+    onyx/server/documents/draft_credentials.py)."""
+
+    connector: ConnectorUpdateRequest
+    pairing: ConnectorCredentialPairMetadata
+    # A saved credential or the user's draft, a new account's values, or a
+    # draft with its changed values.
+    credential_id: int | None = None
+    credential_json: dict[str, Any] | None = None
+    # How a new account (a draft) is shared once saved. Rejected for a saved
+    # credential.
+    credential_sharing: CredentialSharing | None = None
+
+    @model_validator(mode="after")
+    def _names_a_credential(self) -> Self:
+        if not names_a_credential(self.credential_id, self.credential_json):
+            raise ValueError(NAMES_A_CREDENTIAL)
+        return self
 
 
 class CCStatusUpdateRequest(BaseModel):

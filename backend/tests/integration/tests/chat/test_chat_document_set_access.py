@@ -37,7 +37,7 @@ from tests.integration.mock_services.mock_llm_server.models import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Document set group restrictions are enterprise only",
 )
 

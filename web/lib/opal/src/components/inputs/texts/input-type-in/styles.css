@@ -20,6 +20,12 @@
   @apply h-4 w-4 text-text-02;
 }
 
+/* A select trigger's chosen-option icon reads a step stronger than the
+   search icon. */
+.opal-input-option-icon {
+  @apply text-text-03;
+}
+
 .opal-input[data-variant="primary"] .opal-input-field,
 .opal-input[data-variant="internal"] .opal-input-field,
 .opal-input[data-variant="error"] .opal-input-field {

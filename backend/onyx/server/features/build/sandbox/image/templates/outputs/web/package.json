@@ -42,9 +42,9 @@
     "typescript": "^6"
   },
   "overrides": {
-    "hono": "^4.12.25",
+    "hono": "^4.13.7",
     "path-to-regexp": "^8.4.2",
     "postcss": "^8.5.28",
-    "qs": "^6.15.2"
+    "qs": "^6.16.0"
   }
 }

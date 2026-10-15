@@ -51,7 +51,7 @@ def mark_sync_records_as_cancelled(
                 SyncRecord.sync_status == SyncStatus.IN_PROGRESS,
             )
         )
-        .values(sync_status=SyncStatus.CANCELED)
+        .values(sync_status=SyncStatus.CANCELED, sync_end_time=func.now())
     )
     db_session.execute(stmt)
     db_session.commit()
@@ -106,6 +106,25 @@ def fetch_latest_sync_record(
 
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+def record_sync_record_error(
+    db_session: Session,
+    entity_id: int,
+    sync_type: SyncType,
+    error_message: str,
+    finish: bool,
+) -> None:
+    """Stores why the latest sync of the entity failed. ``finish`` also ends it
+    as FAILED, for a sync nothing else finalizes."""
+    sync_record = fetch_latest_sync_record(db_session, entity_id, sync_type)
+    if sync_record is None:
+        return
+    sync_record.error_message = error_message
+    if finish:
+        sync_record.sync_status = SyncStatus.FAILED
+        sync_record.sync_end_time = func.now()
+    db_session.commit()
 
 
 def update_sync_record_status(

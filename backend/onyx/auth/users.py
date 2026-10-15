@@ -1,7 +1,6 @@
 import contextvars
 import hashlib
 import os
-import random
 import secrets
 import string
 import uuid
@@ -154,6 +153,10 @@ from onyx.error_handling.exceptions import (
     log_onyx_error,
     onyx_error_to_json_response,
 )
+from onyx.oauth_provider.auth import (
+    authenticate_oauth_provider_request,
+    extract_oauth_provider_bearer,
+)
 from onyx.redis.redis_pool import (
     get_async_redis_connection,
     retrieve_auth_token_data,
@@ -165,10 +168,8 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
-    RecordType,
     mt_cloud_identify_user,
     mt_cloud_telemetry,
-    optional_telemetry,
 )
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params, sanitize_next_url
@@ -261,27 +262,32 @@ def get_display_email(email: str | None, space_less: bool = False) -> str:
     return email or ""
 
 
+_GENERATED_PASSWORD_DEFAULT_LENGTH = 12
+
+
 def generate_password() -> str:
-    lowercase_letters = string.ascii_lowercase
-    uppercase_letters = string.ascii_uppercase
-    digits = string.digits
-    special_characters = string.punctuation
-
-    # Ensure at least one of each required character type
-    password = [
-        secrets.choice(uppercase_letters),
-        secrets.choice(digits),
-        secrets.choice(special_characters),
-    ]
-
-    # Fill the rest with a mix of characters
-    remaining_length = 12 - len(password)
-    all_characters = lowercase_letters + uppercase_letters + digits + special_characters
-    password.extend(secrets.choice(all_characters) for _ in range(remaining_length))
-
-    # Shuffle the password to randomize the position of the required characters
-    random.shuffle(password)
-
+    """Random password that satisfies the configured password policy, so
+    `validate_password` accepts it (admin reset, JWT user provisioning)."""
+    settings = get_security_settings()
+    length = min(
+        max(_GENERATED_PASSWORD_DEFAULT_LENGTH, settings.password_min_length),
+        settings.password_max_length,
+    )
+    # One of each class satisfies every require_* flag. The policy floors
+    # password_max_length at 4, so all four always fit. Specials come only from
+    # PASSWORD_SPECIAL_CHARS, the set validate_password accepts.
+    character_classes = (
+        string.ascii_lowercase,
+        string.ascii_uppercase,
+        string.digits,
+        PASSWORD_SPECIAL_CHARS,
+    )
+    password = [secrets.choice(chars) for chars in character_classes]
+    all_characters = "".join(character_classes)
+    password.extend(
+        secrets.choice(all_characters) for _ in range(length - len(password))
+    )
+    secrets.SystemRandom().shuffle(password)
     return "".join(password)
 
 
@@ -1001,7 +1007,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             oauth_account_dict,
         )
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
         oauth_name: str,
@@ -1405,11 +1411,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
 
         logger.debug("User %s has registered.", user.id)
-        optional_telemetry(
-            record_type=RecordType.SIGN_UP,
-            data={"action": "create"},
-            user_id=str(user.id),
-        )
 
         emit_audit_event(
             AuditAction.REGISTER,
@@ -1531,7 +1532,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
@@ -1858,11 +1859,30 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
             public_key=public_key,
         )
 
-    async def write_token(self, user: User) -> str:
-        data = {
+    def get_session_id(self, token: str, user: User) -> str | None:
+        try:
+            data = decode_jwt(
+                token,
+                self.decode_key,
+                self.token_audience,
+                algorithms=[self.algorithm],
+            )
+        except jwt.PyJWTError:
+            return None
+        if data.get("sub") != str(user.id):
+            return None
+
+        sid = data.get("sid")
+        if isinstance(sid, str) and sid:
+            return sid
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    async def write_token(self, user: User, session_id: str | None = None) -> str:
+        data: dict[str, Any] = {
             "sub": str(user.id),
             "aud": self.token_audience,
             "iat": int(datetime.now(timezone.utc).timestamp()),
+            "sid": session_id or secrets.token_urlsafe(32),
         }
         return generate_jwt(
             data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm
@@ -1879,11 +1899,12 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
 
     async def refresh_token(
         self,
-        token: Optional[str],  # noqa: ARG002
-        user: User,  # noqa: ARG002
+        token: Optional[str],
+        user: User,
     ) -> str:
         """Issue a fresh JWT with a new expiry."""
-        return await self.write_token(user)
+        session_id = self.get_session_id(token, user) if token else None
+        return await self.write_token(user, session_id)
 
 
 def get_redis_strategy() -> TenantAwareRedisStrategy:
@@ -1954,8 +1975,13 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
         router = APIRouter()
 
+        # Authenticate only via this router's own transport. Otherwise a
+        # same-origin script could send the HttpOnly cookie to the bearer
+        # router and read the session token from the response body.
         get_current_user_token = self.authenticator.current_user_token(
-            active=True, verified=requires_verification
+            active=True,
+            verified=requires_verification,
+            get_enabled_backends=lambda: [backend],
         )
 
         refresh_responses: OpenAPIResponseType = {
@@ -2032,7 +2058,9 @@ fastapi_users = FastAPIUserWithRefreshRouter[User, uuid.UUID](
 # take care of that in `double_check_user` ourself. This is needed, since
 # we want the /me endpoint to still return a user even if they are not
 # yet verified, so that the frontend knows they exist
-optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
+optional_fastapi_current_user = fastapi_users.authenticator.current_user_token(
+    active=True, optional=True
+)
 
 
 _JWT_EMAIL_CLAIM_KEYS = ("email", "preferred_username", "upn")
@@ -2229,6 +2257,14 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
+    mcp_token = extract_oauth_provider_bearer(request)
+    if mcp_token is not None:
+        mcp_user = await authenticate_oauth_provider_request(
+            request, async_db_session, mcp_token
+        )
+        await _maybe_refresh_oauth_tokens(mcp_user, async_db_session, user_manager)
+        return mcp_user
+
     if user is not None:
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.SESSION
@@ -2291,9 +2327,12 @@ async def _resolve_optional_user(
 async def optional_user(
     request: Request,
     async_db_session: AsyncSession = Depends(get_async_session),
-    user: User | None = Depends(optional_fastapi_current_user),
+    user_token: tuple[User | None, str | None] = Depends(optional_fastapi_current_user),
     user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
 ) -> AsyncGenerator[User | None, None]:
+    user, token = user_token
+    if user is not None and token is not None:
+        request.state.authenticated_session_token = token
     user = await _resolve_optional_user(
         request,
         async_db_session,
@@ -3016,7 +3055,7 @@ def get_oauth_router(
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     @router.get(
         "/callback",
         name=callback_route_name,

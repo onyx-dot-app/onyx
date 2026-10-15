@@ -64,3 +64,22 @@ it("does not reveal a hover the pointer already left when suppression lifts", as
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });
+
+it('keeps showing and tracking the pointer with align="follow"', async () => {
+  const user = userEvent.setup();
+  render(
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <Tooltip tooltip="Locked" align="follow">
+        <div>Block</div>
+      </Tooltip>
+    </TooltipPrimitive.Provider>
+  );
+  const block = screen.getByText("Block");
+
+  await user.hover(block);
+  await user.pointer({ target: block, coords: { clientX: 4, clientY: 40 } });
+
+  await waitFor(() => {
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+  });
+});

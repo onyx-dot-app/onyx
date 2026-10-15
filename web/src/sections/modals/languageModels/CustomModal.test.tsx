@@ -61,7 +61,7 @@ jest.mock("@opal/layouts/toast/store", () => {
 // Mock useTierAtLeast — return false so the test exercises the
 // non-paid-tier code path, matching the prior usePaidEnterpriseFeaturesEnabled
 // mock behavior.
-jest.mock("@/hooks/useTierAtLeast", () => ({
+jest.mock("@/lib/tiers/hooks", () => ({
   useTierAtLeast: () => false,
 }));
 
@@ -173,7 +173,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     });
 
     // Verify SWR cache was invalidated
-    expect(mockMutate).toHaveBeenCalledWith("/api/admin/llm/provider");
+    expect(mockMutate).toHaveBeenCalledWith(
+      "/api/admin/llm/provider?page_models=true"
+    );
     expect(mockMutate).toHaveBeenCalledWith("/api/llm/provider");
 
     const personaProvidersMutateCall = mockMutate.mock.calls.find(

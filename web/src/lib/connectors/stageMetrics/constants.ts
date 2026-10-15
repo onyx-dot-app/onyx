@@ -20,6 +20,9 @@ export const STAGE_LABEL_KEYS = {
   CHUNKING: "stageMetrics.stages.chunking.label",
   CONTEXTUAL_RAG: "stageMetrics.stages.contextualRag.label",
   EMBEDDING: "stageMetrics.stages.embedding.label",
+  EMBEDDING_RATE_LIMIT_WAIT: "stageMetrics.stages.embeddingRateLimitWait.label",
+  EMBEDDING_PROVIDER_THROTTLE_WAIT:
+    "stageMetrics.stages.embeddingProviderThrottleWait.label",
   DOC_LOCK_ACQUIRE_WAIT: "stageMetrics.stages.docLockAcquireWait.label",
   ENRICHMENT_PREP: "stageMetrics.stages.enrichmentPrep.label",
   VECTOR_DB_WRITE: "stageMetrics.stages.vectorDbWrite.label",
@@ -31,52 +34,6 @@ export const STAGE_LABEL_KEYS = {
   BATCH_UNACCOUNTED: "stageMetrics.stages.batchUnaccounted.label",
   BATCH_TOTAL: "stageMetrics.stages.batchTotal.label",
 } as const satisfies Record<IndexAttemptStage, string>;
-
-// Message key for the short explainer per stage, shown in a tooltip next to
-// each row in the per-batch table so admins can interpret the timings without
-// leaving the modal.
-export const STAGE_DESCRIPTION_KEYS = {
-  CONNECTOR_VALIDATION: "stageMetrics.stages.connectorValidation.description",
-  PERMISSION_VALIDATION: "stageMetrics.stages.permissionValidation.description",
-  CHECKPOINT_LOAD: "stageMetrics.stages.checkpointLoad.description",
-  CONNECTOR_FETCH: "stageMetrics.stages.connectorFetch.description",
-  HIERARCHY_UPSERT: "stageMetrics.stages.hierarchyUpsert.description",
-  DOC_BATCH_STORE: "stageMetrics.stages.docBatchStore.description",
-  DOC_BATCH_ENQUEUE: "stageMetrics.stages.docBatchEnqueue.description",
-  QUEUE_WAIT: "stageMetrics.stages.queueWait.description",
-  DOCPROCESSING_SETUP: "stageMetrics.stages.docprocessingSetup.description",
-  BATCH_LOAD: "stageMetrics.stages.batchLoad.description",
-  DOC_DB_PREPARE: "stageMetrics.stages.docDbPrepare.description",
-  IMAGE_PROCESSING: "stageMetrics.stages.imageProcessing.description",
-  CHUNKING: "stageMetrics.stages.chunking.description",
-  CONTEXTUAL_RAG: "stageMetrics.stages.contextualRag.description",
-  EMBEDDING: "stageMetrics.stages.embedding.description",
-  DOC_LOCK_ACQUIRE_WAIT: "stageMetrics.stages.docLockAcquireWait.description",
-  ENRICHMENT_PREP: "stageMetrics.stages.enrichmentPrep.description",
-  VECTOR_DB_WRITE: "stageMetrics.stages.vectorDbWrite.description",
-  POST_INDEX_DB_UPDATE: "stageMetrics.stages.postIndexDbUpdate.description",
-  COORD_LOCK_ACQUIRE_WAIT:
-    "stageMetrics.stages.coordLockAcquireWait.description",
-  COORDINATION_UPDATE: "stageMetrics.stages.coordinationUpdate.description",
-  FINALIZATION: "stageMetrics.stages.finalization.description",
-  GC_COLLECT: "stageMetrics.stages.gcCollect.description",
-  BATCH_UNACCOUNTED: "stageMetrics.stages.batchUnaccounted.description",
-  BATCH_TOTAL: "stageMetrics.stages.batchTotal.description",
-} as const satisfies Record<IndexAttemptStage, string>;
-
-// Distinct background classes for the per-row average-time bar. Cycled by
-// stage's pipeline-order index so the same stage gets the same color in both
-// the bar and the table swatch regardless of the active sort mode.
-export const STAGE_BAR_COLORS = [
-  "bg-theme-blue-05",
-  "bg-theme-green-05",
-  "bg-theme-orange-05",
-  "bg-theme-purple-05",
-  "bg-theme-cyan-05",
-  "bg-theme-red-05",
-  "bg-theme-yellow-05",
-  "bg-theme-primary-05",
-] as const;
 
 export const PIPELINE_ORDER: Record<IndexAttemptStage, number> =
   Object.fromEntries(

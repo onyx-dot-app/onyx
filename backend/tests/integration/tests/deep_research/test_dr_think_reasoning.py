@@ -1,7 +1,7 @@
 from typing import Any
 
 from onyx.configs.constants import MessageType
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TASK_KEY,

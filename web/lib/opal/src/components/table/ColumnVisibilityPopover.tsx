@@ -47,7 +47,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
         <Button
           icon={SvgColumn}
           interaction={open ? "hover" : "rest"}
-          size={size === "md" ? "sm" : "md"}
+          size={size === 2.25 ? "sm" : "md"}
           prominence="tertiary"
           tooltip={strings.columns}
         />

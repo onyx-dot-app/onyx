@@ -34,15 +34,19 @@ from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
     anthropic_identity_is_always_thinking,
+    anthropic_identity_turns_thinking_off_between_tools,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
+    find_model_obj,
     gemini_lowest_thinking_level_is_low,
+    get_model_map,
     is_true_openai_model,
     model_is_reasoning_model,
     openai_chat_tools_require_reasoning_none,
@@ -82,17 +86,19 @@ from onyx.llm.models import (
     resolve_reasoning_effort,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.utils import build_litellm_passthrough_kwargs
+from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_request_params,
     record_llm_response,
+    record_llm_routed_model,
     record_llm_span_output,
 )
-from onyx.utils.encryption import mask_env_value_for_logging, mask_string
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.logger import setup_logger
+from onyx.utils.redaction import scrub_sensitive_values
 
 # OpenAI reasoning effort mapping
 # Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
@@ -219,6 +225,23 @@ def _rejection_demands_reasoning_none(error: Exception) -> bool:
     return _REASONING_NONE_DEMAND in str(error).lower()
 
 
+def _litellm_bridges_tool_turn_to_responses(
+    model: str, custom_llm_provider: str | None
+) -> bool:
+    """True when LiteLLM sends this chat call to the responses API once it
+    carries tools and reasoning_effort. Mirrors `responses_api_bridge_check`."""
+    from litellm.llms.openai.chat.gpt_5_transformation import OpenAIGPT5Config
+
+    provider = custom_llm_provider or model.split("/")[0]
+    return (
+        provider in (LlmProviderNames.OPENAI, LlmProviderNames.AZURE)
+        and "responses/" not in model
+        and OpenAIGPT5Config.is_model_gpt_5_model(model)
+        and not OpenAIGPT5Config.is_model_gpt_5_search_model(model)
+        and OpenAIGPT5Config.is_model_gpt_5_4_plus_model(model)
+    )
+
+
 def _retry_attempts(
     kwargs: dict[str, Any], required_keys: frozenset[str]
 ) -> list[dict[str, Any]]:
@@ -232,18 +255,6 @@ def _retry_attempts(
         if len(stripped) < len(attempts[-1]):
             attempts.append(stripped)
     return attempts
-
-
-class LLMTimeoutError(Exception):
-    """
-    Exception raised when an LLM call times out.
-    """
-
-
-class LLMRateLimitError(Exception):
-    """
-    Exception raised when an LLM call is rate limited.
-    """
 
 
 class ProviderOperation(BaseModel):
@@ -474,20 +485,19 @@ def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _prompt_contains_tool_call_history(prompt: list[ChatCompletionMessage]) -> bool:
-    """Check if the prompt contains any assistant messages with tool_calls.
+def _prompt_in_tool_loop(prompt: list[ChatCompletionMessage]) -> bool:
+    """True when the latest assistant message called tools.
 
-    When Anthropic's extended thinking is enabled, the API requires every
-    assistant message to start with a thinking block before any tool_use
-    blocks.  Since we don't preserve thinking_blocks (they carry
-    cryptographic signatures that can't be reconstructed), we must skip
-    the thinking param whenever history contains prior tool-calling turns.
+    With thinking on, Anthropic requires that message to start with its signed
+    thinking block, which we cannot always replay. Earlier turns' thinking
+    blocks are optional, so tool calls there do not matter.
     """
     from onyx.llm.model_request import AssistantMessage as ProviderAssistantMessage
 
-    return any(
-        isinstance(msg, ProviderAssistantMessage) and msg.tool_calls for msg in prompt
-    )
+    for msg in reversed(prompt):
+        if isinstance(msg, ProviderAssistantMessage):
+            return bool(msg.tool_calls)
+    return False
 
 
 @lru_cache(maxsize=None)
@@ -573,6 +583,9 @@ class LitellmLLM(LLM):
         reasoning_effort_default: ReasoningEffort | None = None,
         reasoning_effort_user_default: ReasoningEffort | None = None,
         reasoning_effort_max: ReasoningEffort | None = None,
+        supports_reasoning: bool = False,
+        supports_images: bool | None = None,
+        is_router: bool = False,
     ):
         # No instance-level timeout: invoke() and stream() each take their own,
         # so an instance default would be a second source of truth.
@@ -580,21 +593,25 @@ class LitellmLLM(LLM):
 
         self._model_provider = model_provider
         self._model_version = model_name
+        self._is_router = is_router
         self._api_key = api_key
         self._deployment_name = deployment_name
         self._api_base = api_base
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
         self._max_input_tokens = max_input_tokens
-        self._custom_config = custom_config
+        self._custom_config = (
+            custom_config.copy() if custom_config is not None else None
+        )
         self._reasoning_effort_default = reasoning_effort_default
         self._reasoning_effort_user_default = reasoning_effort_user_default
         self._reasoning_effort_max = reasoning_effort_max
+        self._supports_reasoning = supports_reasoning
 
         self._api_surface = resolve_api_surface(model_provider, custom_config)
 
         # Create a dictionary for model-specific arguments if it's None
-        model_kwargs = model_kwargs or {}
+        model_kwargs = dict(model_kwargs or {})
 
         custom_config_mapping = map_custom_config_to_model_kwargs(
             model_provider=model_provider,
@@ -667,21 +684,38 @@ class LitellmLLM(LLM):
                 extra_body, model_kwargs.get("extra_body") or {}
             )
 
-        self._model_kwargs = model_kwargs
+        self._model_kwargs = copy.deepcopy(model_kwargs)
+        if supports_images is None:
+            model_map: dict[str, dict[str, Any]] = get_model_map()
+            identities: list[str] = resolve_model_identity_names(
+                model_name, deployment_name
+            )
+            known: list[dict[str, Any] | None] = [
+                find_model_obj(model_map, model_provider, name) for name in identities
+            ]
+            vision_values: list[bool | None] = [
+                entry.get("supports_vision") for entry in known if entry
+            ]
+            if any(value is not None for value in vision_values):
+                supports_images = any(vision_values)
+        self._supports_images = supports_images
 
-    def _safe_model_config(self) -> dict:
-        dump = self.config.model_dump()
-        dump["api_key"] = mask_string(dump.get("api_key") or "")
-        custom_config = dump.get("custom_config")
-        if isinstance(custom_config, dict):
-            # Mask sensitive values in custom_config
-            masked_config = {}
-            for k, v in custom_config.items():
-                masked_config[k] = mask_string(v) if v else v
-            dump["custom_config"] = masked_config
-        return dump
+    def _routed_model(self, response_model: str | None) -> str | None:
+        """Model a router served, when it differs from the configured name.
+        LiteLLM prefixes some responses with the provider (openrouter/x/y)."""
+        if not self._is_router or not response_model:
+            return None
+        model: str = response_model
+        for prefix in (self._model_provider, self._custom_llm_provider):
+            if (
+                prefix
+                and model.startswith(f"{prefix}/")
+                and model != self._model_version
+            ):
+                model = model[len(prefix) + 1 :]
+        return model if model != self._model_version else None
 
-    def _track_llm_cost(self, usage: Usage) -> None:
+    def _track_llm_cost(self, usage: Usage, routed_model: str | None = None) -> None:
         """
         Track LLM usage cost for Onyx-managed API keys.
 
@@ -710,6 +744,7 @@ class LitellmLLM(LLM):
             with get_session_with_current_tenant() as db_session:
                 input_cents, output_cents = compute_cost_cents(
                     model=self._model_version,
+                    served_model=routed_model,
                     provider=provider,
                     prompt_tokens=usage.prompt_tokens,
                     completion_tokens=usage.completion_tokens,
@@ -770,7 +805,8 @@ class LitellmLLM(LLM):
             anthropic_supports_thinking(name) for name in model_identity_names
         )
         is_reasoning = (
-            uses_adaptive_thinking
+            self.config.supports_reasoning
+            or uses_adaptive_thinking
             or model_supports_anthropic_thinking
             or any(
                 model_is_reasoning_model(name, self.config.model_provider)
@@ -886,11 +922,16 @@ class LitellmLLM(LLM):
             maximum=self.config.reasoning_effort_max,
         )
 
+        litellm_bridges_tool_turn = bool(
+            tools
+        ) and _litellm_bridges_tool_turn_to_responses(model, self._custom_llm_provider)
+
         # Tool turns over chat completions for GPT-5.4+ trade reasoning for a
         # working call. Responses routes, registry bridge included, are exempt.
         if (
             tools
             and not is_openai_model
+            and not litellm_bridges_tool_turn
             and (
                 self._api_surface is LlmApiSurface.OPENAI_CHAT_COMPLETIONS
                 or self._model_provider in OPENAI_API_PROVIDERS
@@ -911,8 +952,8 @@ class LitellmLLM(LLM):
             self._api_surface,
         )
 
-        # Fable and Mythos never stop thinking, so off there means the least
-        # reasoning they take rather than the API's own default.
+        # Always-thinking Claude models accept no off spelling, so off there
+        # means the least reasoning they take rather than the API's default.
         if (
             reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
@@ -964,7 +1005,7 @@ class LitellmLLM(LLM):
                     # Only a gateway routes Claude here, and it still translates
                     # to Anthropic, so the signed-thinking-block constraint
                     # described below applies to these requests too.
-                    send_reasoning = not _prompt_contains_tool_call_history(prompt)
+                    send_reasoning = not _prompt_in_tool_loop(prompt)
                 else:
                     # OpenAI API does not accept reasoning params for GPT 5 chat
                     # models (neither reasoning nor reasoning_effort are accepted)
@@ -988,14 +1029,11 @@ class LitellmLLM(LLM):
                 ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
                 ReasoningParamStyle.ANTHROPIC_BUDGET,
             ):
-                # Anthropic requires every assistant message with tool_use
-                # blocks to start with a thinking block that carries a
-                # cryptographic signature.  We don't preserve those blocks
-                # across turns, so skip thinking when the history already
-                # contains tool-calling assistant messages.  LiteLLM's
+                # Mid tool loop, Anthropic requires the signed thinking block
+                # we may not have, so skip thinking there. LiteLLM's
                 # modify_params workaround doesn't cover all providers
                 # (notably Bedrock).
-                has_tool_call_history = _prompt_contains_tool_call_history(prompt)
+                in_tool_loop = _prompt_in_tool_loop(prompt)
 
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
                     # No signed blocks to lose, and without it Claude 5 picks
@@ -1003,7 +1041,7 @@ class LitellmLLM(LLM):
                     optional_kwargs["output_config"] = {
                         "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[reasoning_effort],
                     }
-                    if not has_tool_call_history:
+                    if not in_tool_loop:
                         optional_kwargs["thinking"] = {"type": "adaptive"}
                 else:
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
@@ -1014,7 +1052,7 @@ class LitellmLLM(LLM):
                     # use), so skip thinking for a NamedToolChoice.
                     if (
                         budget_tokens is not None
-                        and not has_tool_call_history
+                        and not in_tool_loop
                         and not isinstance(tool_choice, NamedToolChoice)
                     ):
                         if max_tokens is not None:
@@ -1053,15 +1091,32 @@ class LitellmLLM(LLM):
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
+        # The bridge keys on reasoning_effort, which also takes the summary.
+        # Without one the call stays on chat completions and fails.
+        if litellm_bridges_tool_turn:
+            if "reasoning_effort" not in optional_kwargs:
+                optional_kwargs["reasoning_effort"] = optional_kwargs.pop(
+                    "reasoning", _OPENAI_REASONING_NONE
+                )
+            required_kwarg_keys = required_kwarg_keys | {"reasoning_effort"}
+
         # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
-        # No effort with it, which Opus 5 caps, and no signed-block guard like
-        # the sibling branch: that one binds only while thinking is on.
+        # No effort with it, which Opus 5 and Sonnet 5.5 cap, and no signed-block
+        # guard like the sibling branch: that one binds only while thinking is on.
+        # Sonnet 5.5 spells off as between_tools.
         if (
             is_reasoning
             and reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
         ):
-            optional_kwargs["thinking"] = {"type": "disabled"}
+            off_type: str = (
+                "between_tools"
+                if anthropic_identity_turns_thinking_off_between_tools(
+                    model_identity_names
+                )
+                else "disabled"
+            )
+            optional_kwargs["thinking"] = {"type": off_type}
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
@@ -1081,6 +1136,10 @@ class LitellmLLM(LLM):
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
             optional_kwargs["allowed_openai_params"] = ["tool_choice"]
+            # drop_params removes reasoning_effort for any model LiteLLM does
+            # not list as a reasoning model, e.g. Gemini behind a gateway.
+            if is_openai_compatible_proxy and "reasoning_effort" in optional_kwargs:
+                optional_kwargs["allowed_openai_params"].append("reasoning_effort")
 
         # Passthrough kwargs
         passthrough_kwargs = build_litellm_passthrough_kwargs(
@@ -1291,6 +1350,16 @@ class LitellmLLM(LLM):
         except Exception as e:
             raise _as_onyx_llm_error(e)
 
+    def redact_error(self, text: str) -> str:
+        config = self.config
+        credentials = collect_credential_values(config.api_key, config.custom_config)
+        # custom_config can map a key to model_kwargs["api_key"] under a name
+        # that is_sensitive_custom_config_key does not match.
+        effective_key = self._model_kwargs.get("api_key")
+        if isinstance(effective_key, str):
+            credentials.append(effective_key)
+        return scrub_sensitive_values(text, credentials)
+
     @property
     def config(self) -> LLMConfig:
         return LLMConfig(
@@ -1302,10 +1371,12 @@ class LitellmLLM(LLM):
             api_version=self._api_version,
             deployment_name=self._deployment_name,
             custom_config=self._custom_config,
+            supports_images=self._supports_images,
             max_input_tokens=self._max_input_tokens,
             reasoning_effort_default=self._reasoning_effort_default,
             reasoning_effort_user_default=self._reasoning_effort_user_default,
             reasoning_effort_max=self._reasoning_effort_max,
+            supports_reasoning=self._supports_reasoning,
         )
 
     def _uses_isolated_client(self) -> bool:
@@ -1347,7 +1418,10 @@ class LitellmLLM(LLM):
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
-        from onyx.llm.model_response import from_litellm_model_response
+        from onyx.llm.model_response import (
+            from_litellm_model_response,
+            served_model_from_litellm_response,
+        )
 
         # HTTPHandler Threading & Connection Pool Notes:
         # =============================================
@@ -1428,14 +1502,31 @@ class LitellmLLM(LLM):
                         f"LLM {self.config.model_name} returned an empty stream"
                     )
                 response = cast(LiteLLMModelResponse, built)
+                # stream_chunk_builder reports the requested model; keep the served one
+                served_model: str | None = next(
+                    (
+                        m
+                        for m in (
+                            served_model_from_litellm_response(c.model_dump())
+                            for c in chunks
+                        )
+                        if m
+                    ),
+                    None,
+                )
+                if served_model:
+                    response.model = served_model
             else:
                 response = cast(LiteLLMModelResponse, raw_response)
 
             model_response = from_litellm_model_response(response)
 
+            routed_model: str | None = self._routed_model(model_response.model)
+            if routed_model:
+                record_llm_routed_model(routed_model)
             # Track LLM cost for Onyx-managed API keys
             if model_response.usage:
-                self._track_llm_cost(model_response.usage)
+                self._track_llm_cost(model_response.usage, routed_model)
 
             return model_response
         finally:
@@ -1534,12 +1625,17 @@ class LitellmLLM(LLM):
                     ),
                 )
 
+                routed_model: str | None = None
                 for chunk in response:
                     model_response = from_litellm_model_response_stream(chunk)
 
+                    chunk_routed: str | None = self._routed_model(model_response.model)
+                    if chunk_routed and chunk_routed != routed_model:
+                        routed_model = chunk_routed
+                        record_llm_routed_model(routed_model)
                     # Track LLM cost when usage info is available (typically in the last chunk)
                     if model_response.usage:
-                        self._track_llm_cost(model_response.usage)
+                        self._track_llm_cost(model_response.usage, routed_model)
 
                     yielded_any = True
                     yield model_response
@@ -1599,7 +1695,10 @@ class LitellmLLM(LLM):
                 )
             except Exception as exc:
                 span.set_error(
-                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                    {
+                        "message": self.redact_error(f"{type(exc).__name__}: {exc}"),
+                        "data": None,
+                    }
                 )
                 raise
             record_llm_response(span, response)
@@ -1674,7 +1773,10 @@ class LitellmLLM(LLM):
                     )
             except Exception as exc:
                 span.set_error(
-                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                    {
+                        "message": self.redact_error(f"{type(exc).__name__}: {exc}"),
+                        "data": None,
+                    }
                 )
                 accumulator.message.stop_reason = "error"
                 accumulator.message.error_message = "Generation failed"

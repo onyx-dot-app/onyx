@@ -25,5 +25,6 @@ Segmented date field on the shared `.opal-input` chrome, the Figma `Input/Date`.
 | `minDate`   | `Date`                         | —       | Earliest selectable day (inclusive)                                      |
 | `maxDate`   | `Date`                         | —       | Latest selectable day (inclusive)                                        |
 | `id`        | `string`                       | —       | Applied to the month segment for `<label htmlFor>`                       |
+| `placeholder` | `string`                     | —       | Shown instead of the empty segments until the field takes focus          |
 
 Date ranges (the Figma `Range` variant) are not implemented yet. The `Calendar` beneath already supports `mode="range"`, so a range picker is an API addition here, not a new surface.

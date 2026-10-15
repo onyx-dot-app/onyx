@@ -118,6 +118,34 @@ class PermissionSyncStatus(str, PyEnum):
         )
 
 
+class CCPairRunKind(str, PyEnum):
+    """A kind of run in a pair's run history."""
+
+    INDEXING = "indexing"
+    DOC_PERMISSION_SYNC = "doc_permission_sync"
+    GROUP_SYNC = "group_sync"
+    PRUNING = "pruning"
+    CHECKS = "checks"
+
+
+class CCPairRunStatusGroup(str, PyEnum):
+    """How the run history buckets the attempt statuses of every kind."""
+
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+class CCPairRunErrors(str, PyEnum):
+    """Runs by their document errors: some still open, all of them resolved,
+    or none at all."""
+
+    UNRESOLVED = "unresolved"
+    RESOLVED = "resolved"
+    NONE = "none"
+
+
 class PortAttemptStatus(str, PyEnum):
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"
@@ -307,6 +335,11 @@ class AccessType(str, PyEnum):
     @classmethod
     def perm_synced_types(cls) -> list["AccessType"]:
         return [cls.SYNC, cls.SYNC_RESTRICTED]
+
+    @classmethod
+    def data_access_types(cls) -> list["AccessType"]:
+        """Types whose data-access groups decide who may read the documents."""
+        return [cls.PRIVATE, cls.SYNC_RESTRICTED]
 
 
 class EmbeddingPrecision(str, PyEnum):
@@ -894,6 +927,20 @@ class CapabilityCheckTrigger(str, PyEnum):
     INDEXING_ATTEMPT = "indexing_attempt"
     # Recorded from the blocking validation at doc-permission-sync run start.
     PERM_SYNC_ATTEMPT = "perm_sync_attempt"
+    # Recorded from the validation that applies an edit to an existing cc-pair.
+    CONNECTOR_CONFIG_UPDATE = "connector_config_update"
+    # The beat re-ran a pair's checks on its connector's check frequency.
+    SCHEDULED = "scheduled"
+
+
+class CapabilityCheckRunStatus(str, PyEnum):
+    """How one run in a pair's check history ended. FAILED means a required,
+    applicable check failed; other failures leave the run PASSED."""
+
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    FAILED_TO_RUN = "failed_to_run"
 
 
 class CapabilityReportRunStatus(str, PyEnum):

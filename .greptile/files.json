@@ -53,5 +53,10 @@
     "scope": [],
     "path": "deployment/docker_compose/docker-compose.onyx-lite.yml",
     "description": "Lite deployment Docker Compose overlay and disabled service behavior"
+  },
+  {
+    "scope": [],
+    "path": ".agents/feature-map/PATHS.md",
+    "description": "Maps code paths to the feature-map component documents in .agents/feature-map/components/"
   }
 ]

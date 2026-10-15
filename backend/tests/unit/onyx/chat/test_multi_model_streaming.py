@@ -40,7 +40,7 @@ CONTENT_FILTER_FINISH_REASON = "content_filter"
 def _restore_ee_version() -> Generator[None, None, None]:
     """Reset EE global state after each test.
 
-    Importing onyx.chat.process_message triggers set_is_ee_based_on_env_variable()
+    Importing onyx.chat.process_message triggers set_is_ee_if_available()
     (via the celery client import chain).  Without this fixture, the EE flag stays
     True for the rest of the session and breaks unrelated tests that mock Confluence
     or other connectors and assume EE is disabled.
@@ -187,35 +187,71 @@ class TestSetPreferredResponseValidation:
                 db, user_message_id=1, preferred_assistant_message_id=2
             )
 
-    def test_assistant_not_child_of_user(self) -> None:
+    @pytest.mark.parametrize(
+        "message_type,same_session,parent_id,error",
+        [
+            (MessageType.USER, True, 1, "not an assistant message"),
+            (MessageType.SYSTEM, True, 1, "not an assistant message"),
+            (MessageType.ASSISTANT, False, 1, "not in the same chat session"),
+            (MessageType.ASSISTANT, True, 999, "not a child"),
+        ],
+    )
+    def test_invalid_response_leaves_selection_unchanged(
+        self,
+        message_type: MessageType,
+        same_session: bool,
+        parent_id: int,
+        error: str,
+    ) -> None:
         db = MagicMock()
-        user_msg = MagicMock()
-        user_msg.message_type = MessageType.USER
+        session_id = uuid4()
+        user_msg = ChatMessage(
+            id=1,
+            message_type=MessageType.USER,
+            chat_session_id=session_id,
+            preferred_response_id=3,
+            latest_child_message_id=3,
+        )
+        candidate = ChatMessage(
+            id=2,
+            message_type=message_type,
+            chat_session_id=session_id if same_session else uuid4(),
+            parent_message_id=parent_id,
+        )
+        db.get.side_effect = [user_msg, candidate]
 
-        assistant_msg = MagicMock()
-        assistant_msg.parent_message_id = 999  # different parent
-
-        db.get.side_effect = [user_msg, assistant_msg]
-
-        with pytest.raises(ValueError, match="not a child"):
+        with pytest.raises(ValueError, match=error):
             set_preferred_response(
                 db, user_message_id=1, preferred_assistant_message_id=2
             )
 
+        assert user_msg.preferred_response_id == 3
+        assert user_msg.latest_child_message_id == 3
+        db.commit.assert_not_called()
+
     def test_valid_call_sets_preferred_response_id(self) -> None:
         db = MagicMock()
-        user_msg = MagicMock()
-        user_msg.message_type = MessageType.USER
-
-        assistant_msg = MagicMock()
-        assistant_msg.parent_message_id = 1  # correct parent
-
+        session_id = uuid4()
+        user_msg = ChatMessage(
+            id=1,
+            message_type=MessageType.USER,
+            chat_session_id=session_id,
+            preferred_response_id=3,
+            latest_child_message_id=3,
+        )
+        assistant_msg = ChatMessage(
+            id=2,
+            message_type=MessageType.ASSISTANT,
+            chat_session_id=session_id,
+            parent_message_id=1,
+        )
         db.get.side_effect = [user_msg, assistant_msg]
 
         set_preferred_response(db, user_message_id=1, preferred_assistant_message_id=2)
 
         assert user_msg.preferred_response_id == 2
         assert user_msg.latest_child_message_id == 2
+        db.commit.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +294,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     # Real int so the min() over model windows in _persist_model_outcome works.
     for mock_llm in setup.llms:
         mock_llm.config.max_input_tokens = 32_000
+        mock_llm.redact_error.side_effect = lambda text: text
     setup.model_display_names = [f"model-{i}" for i in range(n_models)]
     setup.check_is_connected = MagicMock(return_value=True)
     setup.reserved_messages = [MagicMock() for _ in range(n_models)]
@@ -1031,8 +1068,6 @@ class TestRunModels:
 def test_worker_traceback_only_reaches_development_clients() -> None:
     for dev_mode in (False, True):
         setup = _make_setup()
-        setup.llms[0].config.api_key = None
-        setup.llms[0].config.custom_config = None
         setup.llms[0].config.model_name = "test-model"
         setup.llms[0].config.model_provider = "test-provider"
         with (
@@ -1060,3 +1095,59 @@ def test_worker_traceback_only_reaches_development_clients() -> None:
             assert error.stack_trace and "worker-frame" in error.stack_trace
         else:
             assert error.stack_trace is None
+
+
+@pytest.mark.parametrize("n_models", [1, 2])
+@pytest.mark.parametrize("fails", [False, True])
+def test_writer_reports_tool_usage_once_after_reader_disconnect(
+    n_models: int,
+    fails: bool,
+) -> None:
+    from onyx.chat.process_message import _run_models
+    from onyx.utils.fleet_query_telemetry import QueryObservation, observe_chat_packets
+
+    released = threading.Event()
+    finished = threading.Event()
+    observation = QueryObservation(channel="api", mode="chat")
+    setup = _make_setup(n_models=n_models)
+
+    def run_until_released(**kwargs: Any) -> None:
+        emitter = kwargs["emitter"]
+        emitter.tool_started(is_search=True)
+        emitter.emit(Packet(placement=Placement(turn_index=0), obj=ReasoningStart()))
+        assert released.wait(timeout=5)
+        emitter.tool_started(is_search=False)
+        if fails:
+            raise RuntimeError("private failure after tool usage")
+
+    with (
+        patch("onyx.chat.process_message.load_settings"),
+        patch("onyx.chat.process_message.get_session_with_current_tenant"),
+        patch("onyx.chat.process_message.run_llm_loop", side_effect=run_until_released),
+        patch("onyx.chat.process_message.construct_tools", return_value={}),
+        patch("onyx.chat.process_message.llm_loop_completion_handle"),
+        patch(
+            "onyx.chat.process_message.get_llm_token_counter", return_value=lambda _: 0
+        ),
+        patch(
+            "onyx.chat.process_message.set_processing_status",
+            side_effect=lambda **_: finished.set(),
+        ),
+        patch("onyx.utils.fleet_query_telemetry.emit_telemetry") as sink,
+    ):
+        reader = observe_chat_packets(
+            _run_models(setup, MagicMock(), query_observation=observation),
+            channel="api",
+            observation=observation,
+        )
+        next(reader)
+        assert isinstance(reader, Generator)
+        reader.close()
+        sink.assert_not_called()
+        released.set()
+        assert finished.wait(timeout=5)
+        sink.assert_called_once()
+        data = sink.call_args.args[1]
+        assert data["tool_usage"] == "search_and_other"
+        assert data["outcome"] == ("failure" if fails else "success")
+        assert "private" not in str(data)

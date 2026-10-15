@@ -1,18 +1,30 @@
 "use client";
 
+import type { TextPartUpdate } from "@/app/craft/utils/packetTypes";
+
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+
 import { create } from "zustand";
+import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useShallow } from "zustand/react/shallow";
+import {
+  readOutputPanelPreferences,
+  clearOutputPanelPreferences,
+} from "@/app/craft/services/outputPanelPreferences";
 
 import {
   ApiSessionResponse,
   Artifact,
-  ArtifactType,
   BuildMessage,
   BuildMessageAttachment,
-  FileSystemEntry,
   SessionHistoryItem,
   SessionOrigin,
   SessionStatus,
   SandboxRuntimeState,
+  type CompletedInteractiveTurn,
+  type OutputFile,
+  type OutputInventory,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -21,6 +33,8 @@ import {
   TodoListState,
   type ContextUsage,
   type PanelTab,
+  type OutputPanelMode,
+  normalizePanelPath,
   panelTabId,
   type SubagentState,
   type SubagentStatus,
@@ -38,10 +52,15 @@ import {
   deleteSession as apiDeleteSession,
   fetchMessages,
   fetchActiveTurn,
+  fetchKnownTurn,
+  fetchScheduledRunContext,
   fetchArtifacts,
+  fetchOutputInventory,
   fetchWebappInfo,
   restoreSession,
 } from "@/app/craft/services/apiServices";
+
+import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
@@ -65,7 +84,7 @@ import {
  * This function converts agent messages to StreamItem[] for rendering.
  */
 function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
-  const items: StreamItem[] = [];
+  let items: StreamItem[] = [];
 
   for (const message of messages) {
     if (message.type === "user") continue;
@@ -87,7 +106,11 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         if (packet.sessionId && packet.parentSessionId) {
           break;
         }
-        if (packet.text) {
+        if (packet.text && packet.part) {
+          items = settleStreamItems(
+            appendStreamingChunk(items, "text", packet.text, packet.part)
+          );
+        } else if (packet.text) {
           items.push({
             type: "text",
             id: message.id || genId("text"),
@@ -101,7 +124,11 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         if (packet.sessionId && packet.parentSessionId) {
           break;
         }
-        if (packet.text) {
+        if (packet.text && packet.part) {
+          items = settleStreamItems(
+            appendStreamingChunk(items, "thinking", packet.text, packet.part)
+          );
+        } else if (packet.text) {
           items.push({
             type: "thinking",
             id: message.id || genId("thinking"),
@@ -258,11 +285,40 @@ function upsertToolStreamItem(
   return [...items, { type: "tool_call", id: toolCall.id, toolCall }];
 }
 
-function appendStreamingSubagentChunk(
+function appendStreamingChunk(
   items: StreamItem[],
   type: "text" | "thinking",
-  text: string
+  text: string,
+  part?: TextPartUpdate
 ): StreamItem[] {
+  if (part) {
+    const existing = items.find(
+      (item) => item.type === type && item.partId === part.partId
+    );
+    if (
+      existing &&
+      (existing.type === "text" || existing.type === "thinking")
+    ) {
+      return items.map((item) =>
+        item === existing
+          ? {
+              ...existing,
+              content: part.snapshotText ?? existing.content + text,
+            }
+          : item
+      );
+    }
+    return [
+      ...settleStreamItems(items),
+      {
+        type,
+        id: genId(type),
+        partId: part.partId,
+        content: part.snapshotText ?? text,
+        isStreaming: true,
+      },
+    ];
+  }
   const last = items[items.length - 1];
   if (last?.type === type) {
     return items.map((item, i) =>
@@ -301,9 +357,7 @@ function replaceOrAppendSettledTextItem(
   });
 
   if (lastTextIndex === -1) {
-    return settleStreamItems(
-      appendStreamingSubagentChunk(settled, "text", text)
-    );
+    return settleStreamItems(appendStreamingChunk(settled, "text", text));
   }
 
   return settled.map((item, index) =>
@@ -375,10 +429,11 @@ function buildSubagentsFromMessages(
             ...last,
             response: (last.response ?? "") + packet.text,
             streamItems: settleStreamItems(
-              appendStreamingSubagentChunk(
+              appendStreamingChunk(
                 last.streamItems,
                 "text",
-                packet.text
+                packet.text,
+                packet.part
               )
             ),
           };
@@ -387,10 +442,11 @@ function buildSubagentsFromMessages(
             ...last,
             thinking: (last.thinking ?? "") + packet.text,
             streamItems: settleStreamItems(
-              appendStreamingSubagentChunk(
+              appendStreamingChunk(
                 last.streamItems,
                 "thinking",
-                packet.text
+                packet.text,
+                packet.part
               )
             ),
           };
@@ -430,10 +486,11 @@ function buildSubagentsFromMessages(
         ...firstTurn,
         prompt: firstTurn.prompt || packet.command,
         response,
-        streamItems: replaceOrAppendSettledTextItem(
-          firstTurn.streamItems,
-          response
-        ),
+        // Child rows own the transcript; response can contain several parts.
+        streamItems:
+          firstTurn.response !== null
+            ? settleStreamItems(firstTurn.streamItems)
+            : replaceOrAppendSettledTextItem(firstTurn.streamItems, response),
       };
       subagents.set(cls.subagentSessionId, {
         ...sa,
@@ -575,9 +632,6 @@ function mapApiSessionStatus(
   }
 }
 
-// Re-export types for consumers
-export type { Artifact, ArtifactType, SessionHistoryItem };
-
 // =============================================================================
 // Store Types (mirrors chat's useChatSessionStore pattern)
 // =============================================================================
@@ -587,62 +641,76 @@ export type PreProvisioningState =
   | { status: "idle" }
   | { status: "provisioning" }
   | { status: "ready"; sessionId: string }
+  | { status: "starting"; sessionId: string }
   | { status: "failed"; error: string; retryCount: number; retryAt: number };
 
 // Module-level variable to store the provisioning promise (not in Zustand state for serializability)
 let provisioningPromise: Promise<string | null> | null = null;
 
+interface OutputInventoryRequest {
+  controller: AbortController;
+  promise: Promise<void>;
+  session: BuildSessionData;
+  coalescible: boolean;
+}
+const outputInventoryRequests = new Map<string, OutputInventoryRequest>();
+
+function sameSessionRuntime(
+  first: BuildSessionData,
+  second: BuildSessionData
+): boolean {
+  return (
+    first.instanceId === second.instanceId &&
+    first.sandbox?.id === second.sandbox?.id &&
+    first.sandbox?.status === second.sandbox?.status
+  );
+}
+
 // Monotonic id for queued messages (kept out of Zustand state for simplicity).
 let nextQueuedMessageId = 1;
 
-interface CraftQueuedMessage {
+export interface CraftQueuedMessage {
   id: number;
+  phase: "waiting" | "starting" | "failed";
+  model?: BuildLlmSelection | null;
   text: string;
   attachments: BuildMessageAttachment[];
 }
 
 const EMPTY_CRAFT_QUEUED_MESSAGES: readonly CraftQueuedMessage[] = [];
 
-/** File preview tab data */
-export interface FilePreviewTab {
-  path: string;
-  fileName: string;
-}
-
 /** Files tab state - persisted across tab switches */
 export interface FilesTabState {
   expandedPaths: string[];
   scrollTop: number;
-  /** Cached directory listings by path - avoids refetch on tab switch */
-  directoryCache: Record<string, FileSystemEntry[]>;
-  /** Last refresh generation completed by the Files tab. */
-  lastRefreshGeneration?: number;
 }
 
-/** Tab history entry - can be a pinned tab or a transient panel tab */
-export type TabHistoryEntry =
-  | { type: "pinned"; tab: OutputTabType }
-  | { type: "panel-tab"; tabId: string };
+export type CompletionOwner =
+  | { kind: "interactive"; turnId: string | null }
+  | { kind: "scheduled"; runId: string };
 
-/** Browser-style tab navigation history */
-export interface TabNavigationHistory {
-  entries: TabHistoryEntry[];
-  currentIndex: number;
-}
-
-/** Output panel tab types */
-export type OutputTabType = "preview" | "files" | "artifacts";
+export type TurnSettlement = {
+  owner: CompletionOwner;
+  turnGeneration: number;
+} & (
+  | { phase: "reconciling" | "ready" }
+  | { phase: "failed"; error: string | null }
+);
 
 export interface BuildSessionData {
   id: string;
+  /** Reject responses from an earlier instance of this local session. */
+  instanceId: string;
   status: SessionStatus;
   messages: BuildMessage[];
   artifacts: Artifact[];
   /** Active backend turn, if this session is currently running. */
   activeTurnId: string | null;
+  /** The streamed response stays visible until this turn reaches durable completion. */
+  turnSettlement: TurnSettlement | null;
   /** The user-message turn index for the active backend turn. */
   activeTurnIndex: number | null;
-  /** True when this tab created the active turn and already owns its stream. */
+  /** True while this tab owns a pending start or its accepted turn stream. */
   activeTurnLocalOwner: boolean;
   /**
    * FIFO stream items for the current agent turn.
@@ -652,7 +720,7 @@ export interface BuildSessionData {
   streamItems: StreamItem[];
   /**
    * Messages typed while a response is streaming. Auto-sent FIFO once the
-   * current run finishes (see the auto-send effect in BuildChatPanel).
+   * session confirms completion and its stream owner claims the queue head.
    */
   queuedMessages: CraftQueuedMessage[];
   /**
@@ -671,7 +739,10 @@ export interface BuildSessionData {
    * when it changes, so a stale reconcile can't clobber the superseding turn.
    */
   turnGeneration: number;
+  /** Only the latest API load can publish session state. */
+  loadGeneration: number;
   error: string | null;
+  loadError: string | null;
   webappUrl: string | null;
   /** Backend sandbox state plus transient client-owned lifecycle states. */
   sandbox: SandboxRuntimeState | null;
@@ -686,14 +757,25 @@ export interface BuildSessionData {
   lastAccessed: Date;
   isLoaded: boolean;
   contextUsage: ContextUsage | null;
-  outputPanelOpen: boolean;
+  /** UI identity remains stable while a welcome workspace becomes a conversation. */
+  outputWorkspaceId: string;
+  outputPanelMode: OutputPanelMode;
+  outputPanelInitialized: boolean;
+  mediumPanelProportion: number;
   /** Counter to trigger webapp refresh when web/ files change (increments on each edit) */
   webappNeedsRefresh: number;
   /** Counter to force an iframe remount (restore only — live edits are handled by HMR) */
   webappNeedsRemount: number;
   /** Counter to trigger files list refresh when outputs/ directory changes (increments on each write/edit) */
   filesNeedsRefresh: number;
-  /** Transient panel tabs open in this session (files, subagents, etc.) */
+  /** The Outputs collection can be narrowed to one completed turn. */
+  outputsTabState: {
+    turnIndex: number | null;
+    searchQuery: string;
+    folder: string;
+    fileType: string;
+  };
+  /** Ordered resource tabs scoped to this session. */
   panelTabs: PanelTab[];
   /** Subagents spawned in this session, keyed by child opencode session id. */
   subagents: Map<string, SubagentState>;
@@ -702,17 +784,335 @@ export interface BuildSessionData {
    * in place of the chat. `null` = normal chat view.
    */
   viewedSubagentSessionId: string | null;
-  /** Active pinned tab in output panel */
-  activeOutputTab: OutputTabType;
-  /** Active transient panel tab ID (when set, takes precedence over pinned tab) */
+  /** Selected resource tab, or null when all tabs are closed. */
   activePanelTabId: string | null;
+  /** Unique open tab IDs, most recently viewed first. */
+  panelTabHistory: string[];
   /** Files tab state - expanded folders and scroll position */
   filesTabState: FilesTabState;
-  /** Browser-style tab navigation history for back/forward */
-  tabHistory: TabNavigationHistory;
-  /** True if the user has manually closed the panel this session; suppresses auto-open-on-first-preview */
-  panelManuallyDismissed: boolean;
+  /** Shared file metadata for discovery and preview revisions. */
+  outputInventory: Record<string, OutputFile> | null;
+  outputInventoryStatus: "unloaded" | "complete" | "partial" | "error";
+  outputInventoryLoading: boolean;
+  outputInventoryError?: Error;
+  /** True until an authoritative inventory establishes which files predate this task. */
+  outputBaselinePending: boolean;
+  /** Manual navigation or the first automatic preview retains selection until the next task. */
+  outputSelectionLocked: boolean;
+  /** Explicit preview reloads, keyed by file path. File edits use inventory revisions. */
+  filePreviewRefreshKeys: Record<string, number>;
 }
+
+export function canReuseSession(
+  session: BuildSessionData | undefined
+): boolean {
+  return (
+    session?.isLoaded === true &&
+    session.loadError === null &&
+    session.turnSettlement?.phase !== "reconciling" &&
+    session.sandbox?.status !== "sleeping" &&
+    session.sandbox?.status !== "terminated" &&
+    session.sandbox?.status !== "failed"
+  );
+}
+
+const completedTranscriptReads: Map<string, Promise<void>> = new Map();
+
+function reconcileCompletedTranscript(
+  sessionId: string,
+  started: BuildSessionData,
+  completion?: CompletedInteractiveTurn
+): Promise<void> {
+  const owner = started.turnSettlement?.owner;
+  const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${owner?.kind}:${owner?.kind === "interactive" ? owner.turnId : owner?.runId}`;
+  const existing = completedTranscriptReads.get(requestKey);
+  if (existing) return existing;
+  // Final discovery supersedes reads started before the completion boundary.
+  outputInventoryRequests.get(sessionId)?.controller.abort();
+  const ownsCompletion = () => {
+    const current = useBuildSessionStore.getState().sessions.get(sessionId);
+    return (
+      current?.instanceId === started.instanceId &&
+      current.turnGeneration === started.turnGeneration &&
+      current.turnSettlement?.owner === owner &&
+      current.turnSettlement?.phase === "reconciling"
+    );
+  };
+  const fail = (error: unknown) => {
+    const current = useBuildSessionStore.getState().sessions.get(sessionId);
+    if (!ownsCompletion() || !current?.turnSettlement) return;
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "idle",
+      isInterrupting: false,
+      turnSettlement: {
+        ...current.turnSettlement,
+        phase: "failed",
+        error:
+          error === null
+            ? null
+            : error instanceof Error
+              ? error.message
+              : String(error),
+      },
+    });
+  };
+  const request = (async () => {
+    try {
+      for (let attempt = 0; attempt < 33; attempt++) {
+        // Catch the usual short commit tail quickly, then back off for slow workers.
+        const retryDelay = attempt < 4 ? 250 : 1000;
+        if (!ownsCompletion()) return;
+        if (!owner) return;
+        let waiting = false;
+        let approvalPause = false;
+        let scheduledFailure = false;
+        let interactiveFailure: string | null = null;
+        let interactiveFailed = false;
+        let successor: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+        if (owner.kind === "scheduled") {
+          const run = await fetchScheduledRunContext(sessionId);
+          if (!ownsCompletion()) return;
+          if (run.run_id !== owner.runId) return;
+          scheduledFailure =
+            run.status === "FAILED" || run.status === "SKIPPED";
+          waiting = run.status === "RUNNING" || run.status === "QUEUED";
+          approvalPause = run.status === "AWAITING_APPROVAL";
+        } else if (!completion) {
+          const activeTurn = await fetchActiveTurn(sessionId);
+          if (!ownsCompletion()) return;
+          successor =
+            activeTurn && activeTurn.turn_id !== owner.turnId
+              ? activeTurn
+              : null;
+          waiting = activeTurn !== null && !successor;
+        }
+        if (!ownsCompletion()) return;
+        if (waiting) {
+          await new Promise<void>((resolve) => setTimeout(resolve, retryDelay));
+          continue;
+        }
+        if (owner.kind === "interactive" && owner.turnId !== null) {
+          const completedTurn =
+            completion ?? (await fetchKnownTurn(sessionId, owner.turnId));
+          if (!ownsCompletion()) return;
+          if (!completedTurn) {
+            fail(null);
+            return;
+          }
+          if (
+            completedTurn.status === "QUEUED" ||
+            completedTurn.status === "RUNNING"
+          ) {
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, retryDelay)
+            );
+            continue;
+          }
+          interactiveFailed = completedTurn.status === "FAILED";
+          interactiveFailure = completedTurn.error_detail ?? null;
+        }
+        // The worker has committed output revisions. Fetch cards alongside history.
+        void mutate(
+          (key) =>
+            Array.isArray(key) &&
+            key[0] === SWR_KEYS.buildSessionOutputCards(sessionId)
+        ).catch((error) => {
+          console.warn("Failed to refresh output cards:", error);
+        });
+        let messages = await fetchMessages(sessionId);
+        if (!ownsCompletion()) return;
+        if (owner.kind === "interactive") {
+          const historyTurnId = successor?.turn_id;
+          const activeTurn = await fetchActiveTurn(sessionId);
+          if (!ownsCompletion()) return;
+          if (activeTurn) {
+            if (activeTurn.turn_id === owner.turnId) {
+              await new Promise<void>((resolve) =>
+                setTimeout(resolve, retryDelay)
+              );
+              continue;
+            }
+            successor = activeTurn;
+          }
+          if (successor && successor.turn_id !== historyTurnId) {
+            messages = await fetchMessages(sessionId);
+            if (!ownsCompletion()) return;
+          }
+        }
+        const restored = splitActiveTurnTranscript(
+          consolidateMessagesIntoTurns(messages),
+          successor?.turn_index ?? null
+        );
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (!current?.turnSettlement) return;
+        void useBuildSessionStore.getState().refreshOutputInventory(sessionId);
+        useBuildSessionStore.getState().updateSessionData(sessionId, {
+          messages: restored.messages,
+          streamItems: restored.streamItems,
+          subagents: buildSubagentsFromMessages(messages),
+          contextUsage: deriveContextUsage(messages),
+          status: successor
+            ? "running"
+            : scheduledFailure || interactiveFailed
+              ? "failed"
+              : "active",
+          error:
+            interactiveFailed && !successor
+              ? interactiveFailure
+              : current.error,
+          isInterrupting: false,
+          activeTurnId: successor?.turn_id ?? null,
+          activeTurnIndex: successor?.turn_index ?? null,
+          activeTurnLocalOwner: false,
+          ...(successor && {
+            turnGeneration: current.turnGeneration + 1,
+            outputSelectionLocked: false,
+            wasInterrupted: false,
+          }),
+          turnSettlement:
+            successor || approvalPause || scheduledFailure || interactiveFailed
+              ? null
+              : { ...current.turnSettlement, phase: "ready" },
+        });
+        return;
+      }
+      fail(null);
+    } catch (error) {
+      fail(error);
+    }
+  })().finally(() => completedTranscriptReads.delete(requestKey));
+  completedTranscriptReads.set(requestKey, request);
+  return request;
+}
+
+function outputPreviewPriority(path: string): number {
+  if (/\.pptx?$/i.test(path)) return 0;
+  if (/\.pdf$/i.test(path)) return 1;
+  if (/\.md$/i.test(path)) return 2;
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(path)) return 3;
+  return 4;
+}
+
+function compareOutputInventory(
+  previous: Record<string, OutputFile>,
+  inventory: OutputInventory
+) {
+  const files: Record<string, OutputFile> = inventory.complete
+    ? {}
+    : { ...previous };
+  const added: OutputFile[] = [];
+  const changed: string[] = [];
+  for (const file of inventory.files) {
+    files[file.path] = file;
+    if (previous[file.path] === undefined) added.push(file);
+    else if (previous[file.path]?.revision !== file.revision)
+      changed.push(file.path);
+  }
+  if (!inventory.complete) {
+    const scannedPaths = new Set(inventory.files.map((file) => file.path));
+    // A path cannot be both a file and a parent directory, even in a partial scan.
+    for (const path of Object.keys(files)) {
+      const segments = path.split("/");
+      while (segments.length > 2) {
+        segments.pop();
+        const parent = segments.join("/");
+        if (scannedPaths.has(parent)) {
+          delete files[path];
+          changed.push(path);
+          break;
+        }
+        if (scannedPaths.has(path) && files[parent]) {
+          delete files[parent];
+          changed.push(parent);
+        }
+      }
+    }
+  }
+  if (inventory.complete) {
+    for (const path of Object.keys(previous)) {
+      if (files[path] === undefined) changed.push(path);
+    }
+  }
+  return { files, added, changed };
+}
+
+function panelTabHistory(
+  tabs: PanelTab[],
+  active: string | null,
+  history: readonly string[] = []
+): string[] {
+  const openIds = new Set(tabs.map(panelTabId));
+  return [...new Set(active ? [active, ...history] : history)].filter((id) =>
+    openIds.has(id)
+  );
+}
+
+function selectOutputTarget(
+  session: Pick<BuildSessionData, "panelTabs" | "panelTabHistory">,
+  target: PanelTab
+): Pick<
+  BuildSessionData,
+  "panelTabs" | "activePanelTabId" | "panelTabHistory"
+> {
+  const id = panelTabId(target);
+  const panelTabs = session.panelTabs.some((tab) => panelTabId(tab) === id)
+    ? session.panelTabs
+    : [...session.panelTabs, target];
+  return {
+    activePanelTabId: id,
+    panelTabs,
+    panelTabHistory: panelTabHistory(panelTabs, id, session.panelTabHistory),
+  };
+}
+
+function selectWelcomeOutputTarget(
+  state: BuildSessionStore,
+  target: PanelTab
+): Partial<BuildSessionStore> {
+  const selected = selectOutputTarget(
+    {
+      panelTabs: state.noSessionPanelTabs,
+      panelTabHistory: state.noSessionPanelTabHistory,
+    },
+    target
+  );
+  return {
+    noSessionPanelTabs: selected.panelTabs,
+    noSessionActivePanelTabId: selected.activePanelTabId,
+    noSessionPanelTabHistory: selected.panelTabHistory,
+  };
+}
+
+function canAutomaticallySelectOutput(session: BuildSessionData): boolean {
+  return (
+    !session.outputSelectionLocked &&
+    !session.isInterrupting &&
+    !session.wasInterrupted &&
+    session.status !== "failed"
+  );
+}
+
+function automaticallySelectOutput(
+  session: BuildSessionData,
+  target: PanelTab
+): Partial<BuildSessionData> {
+  if (!canAutomaticallySelectOutput(session)) return {};
+  const panelTabs: PanelTab[] = session.outputPanelInitialized
+    ? session.panelTabs
+    : [{ kind: "outputs" }, ...session.panelTabs];
+  return {
+    ...selectOutputTarget({ ...session, panelTabs }, target),
+    outputSelectionLocked: true,
+    outputPanelInitialized: true,
+    outputPanelMode:
+      session.outputPanelMode === "closed" ? "medium" : session.outputPanelMode,
+  };
+}
+
+const webappAutoOpenRequests = new Map<
+  string,
+  { session: BuildSessionData; promise: Promise<void> }
+>();
 
 interface BuildSessionStore {
   // Session management (mirrors chat)
@@ -732,10 +1132,15 @@ interface BuildSessionStore {
   };
 
   // Temporary output panel state when no session exists (resets when session is created/cleared)
-  noSessionOutputPanelOpen: boolean;
+  noSessionOutputWorkspaceId: string;
+  noSessionOutputPanelMode: OutputPanelMode;
+  noSessionOutputPanelInitialized: boolean;
+  noSessionMediumPanelProportion: number;
+  noSessionPanelTabs: PanelTab[];
+  noSessionActivePanelTabId: string | null;
+  noSessionPanelTabHistory: string[];
 
   // Temporary active tab when no session exists (resets when session is created/cleared)
-  noSessionActiveOutputTab: OutputTabType;
 
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
@@ -750,7 +1155,6 @@ interface BuildSessionStore {
 
   // Actions - Current Session Shortcuts
   appendMessageToCurrent: (message: BuildMessage) => void;
-  addArtifactToCurrent: (artifact: Artifact) => void;
   toggleCurrentOutputPanel: () => void;
 
   // Actions - Session-specific operations (for streaming - immune to currentSessionId changes)
@@ -783,19 +1187,27 @@ interface BuildSessionStore {
   enqueueMessage: (
     sessionId: string,
     text: string,
-    attachments: BuildMessageAttachment[]
-  ) => void;
-  removeQueuedMessage: (sessionId: string, index: number) => void;
+    attachments: BuildMessageAttachment[],
+    model?: BuildLlmSelection | null
+  ) => boolean;
+  removeQueuedMessage: (sessionId: string, messageId: number) => void;
+  claimQueuedMessage: (sessionId: string) => CraftQueuedMessage | null;
+  beginTurnSettlement: (
+    sessionId: string,
+    owner: CompletionOwner,
+    generation: number,
+    completion?: CompletedInteractiveTurn
+  ) => Promise<void>;
+  retryTurnSettlement: (sessionId: string) => Promise<void>;
 
   // Actions - Abort Control
   setAbortController: (sessionId: string, controller: AbortController) => void;
   abortSession: (sessionId: string) => void;
-  abortCurrentSession: () => void;
 
   // Actions - Session Lifecycle
   loadSession: (
     sessionId: string,
-    options?: { force?: boolean; preferPersisted?: boolean }
+    options?: { force?: boolean }
   ) => Promise<void>;
 
   // Actions - Session History
@@ -817,36 +1229,55 @@ interface BuildSessionStore {
 
   // Webapp Refresh Actions
   triggerWebappRefresh: (sessionId: string) => void;
+  maybeAutoOpenWebapp: (sessionId: string) => Promise<void>;
   // Files Refresh Actions
   triggerFilesRefresh: (sessionId: string) => void;
 
-  // Auto-open Actions
-  maybeAutoOpenPanelForPreview: (sessionId: string) => void;
+  // Output inventory and automatic navigation
+  refreshOutputInventory: (
+    sessionId: string,
+    options?: { silent?: boolean; signal?: AbortSignal }
+  ) => Promise<void>;
 
   // File Preview Actions
-  openFilePreview: (sessionId: string, path: string, fileName: string) => void;
-  /** Atomically open panel + create file tab + set active for a markdown file detected during streaming */
-  openMarkdownPreview: (sessionId: string, filePath: string) => void;
-  closeFilePreview: (sessionId: string, path: string) => void;
+  openFilePreview: (
+    sessionId: string | null,
+    path: string,
+    fileName: string
+  ) => void;
   /** Generic: remove the panel tab whose panelTabId === tabId; clears active if it was active. */
-  closePanelTab: (sessionId: string, tabId: string) => void;
-  setActiveOutputTab: (sessionId: string, tab: OutputTabType) => void;
-  setActivePanelTabId: (sessionId: string, tabId: string | null) => void;
+  setCurrentOutputPanelMode: (mode: OutputPanelMode) => void;
+  setCurrentMediumPanelProportion: (proportion: number) => void;
+  openOutputsTab: (sessionId: string | null, turnIndex?: number | null) => void;
+  updateOutputsTabState: (
+    sessionId: string,
+    updates: Partial<BuildSessionData["outputsTabState"]>
+  ) => void;
+  openFilesTab: (sessionId: string | null) => void;
+  openBrowserTab: (
+    sessionId: string | null,
+    appId?: string,
+    appName?: string
+  ) => void;
+  navigateBrowserTab: (
+    sessionId: string | null,
+    tabId: string,
+    appId: string | null,
+    appName?: string
+  ) => void;
+  reorderPanelTab: (
+    sessionId: string | null,
+    tabId: string,
+    index: number
+  ) => void;
+  closePanelTab: (sessionId: string | null, tabId: string) => void;
+  setActivePanelTabId: (sessionId: string | null, tabId: string | null) => void;
   /** Set active tab when no session exists (for pre-provisioned sandbox viewing) */
-  setNoSessionActiveOutputTab: (tab: OutputTabType) => void;
 
   // Files Tab State Actions
   updateFilesTabState: (
     sessionId: string,
     updates: Partial<FilesTabState>
-  ) => void;
-  mergeFilesTabDirectoryCache: (
-    sessionId: string,
-    listings: Record<string, FileSystemEntry[]>
-  ) => void;
-  retainFilesTabDirectoryCache: (
-    sessionId: string,
-    retainedPaths: ReadonlySet<string>
   ) => void;
 
   // Subagent Actions
@@ -890,18 +1321,16 @@ interface BuildSessionStore {
   appendSubagentResponseChunk: (
     sessionId: string,
     subagentSessionId: string,
-    text: string
+    text: string,
+    part?: TextPartUpdate
   ) => void;
   /** Append streamed thinking text to the LAST turn's thinking stream. */
   appendSubagentThinkingChunk: (
     sessionId: string,
     subagentSessionId: string,
-    text: string
+    text: string,
+    part?: TextPartUpdate
   ) => void;
-
-  // Tab Navigation History Actions
-  navigateTabBack: (sessionId: string) => void;
-  navigateTabForward: (sessionId: string) => void;
 }
 
 // =============================================================================
@@ -911,80 +1340,126 @@ interface BuildSessionStore {
 const createInitialSessionData = (
   sessionId: string,
   initialData?: Partial<BuildSessionData>
-): BuildSessionData => ({
-  id: sessionId,
-  status: "idle",
-  messages: [],
-  artifacts: [],
-  activeTurnId: null,
-  activeTurnIndex: null,
-  activeTurnLocalOwner: false,
-  streamItems: [],
-  queuedMessages: [],
-  isInterrupting: false,
-  wasInterrupted: false,
-  turnGeneration: 0,
-  error: null,
-  webappUrl: null,
-  sandbox: null,
-  agentProvider: null,
-  agentModel: null,
-  skillsStale: false,
-  skillsStaleRevision: 0,
-  origin: "INTERACTIVE",
-  abortController: new AbortController(),
-  lastAccessed: new Date(),
-  isLoaded: false,
-  contextUsage: null,
-  outputPanelOpen: false,
-  webappNeedsRefresh: 0,
-  webappNeedsRemount: 0,
-  filesNeedsRefresh: 0,
-  panelTabs: [],
-  subagents: new Map(),
-  viewedSubagentSessionId: null,
-  activeOutputTab: "preview",
-  activePanelTabId: null,
-  filesTabState: {
-    expandedPaths: [],
-    scrollTop: 0,
-    directoryCache: {},
-    lastRefreshGeneration: 0,
-  },
-  tabHistory: {
-    entries: [{ type: "pinned", tab: "preview" }],
-    currentIndex: 0,
-  },
-  panelManuallyDismissed: false,
-  ...initialData,
-});
+): BuildSessionData => {
+  const preferences = readOutputPanelPreferences(sessionId);
+  initialData = { ...preferences, ...initialData };
+  const mode = initialData?.outputPanelMode ?? "closed";
+  let panelTabs = (initialData?.panelTabs ?? []).map(
+    (tab): PanelTab =>
+      tab.kind === "file" ? { ...tab, path: normalizePanelPath(tab.path) } : tab
+  );
+  let activePanelTabId = initialData?.activePanelTabId ?? null;
+  if (activePanelTabId?.startsWith("file:"))
+    activePanelTabId = `file:${normalizePanelPath(activePanelTabId.slice("file:".length))}`;
+  const initialized =
+    initialData?.outputPanelInitialized ??
+    (mode !== "closed" || panelTabs.length > 0);
+  if (
+    mode !== "closed" &&
+    panelTabs.length === 0 &&
+    initialData?.outputPanelInitialized === undefined
+  ) {
+    panelTabs = [{ kind: "outputs" }];
+    activePanelTabId = "outputs";
+  }
+  return {
+    id: sessionId,
+    status: "idle",
+    messages: [],
+    artifacts: [],
+    activeTurnId: null,
+    turnSettlement: null,
+    activeTurnIndex: null,
+    activeTurnLocalOwner: false,
+    streamItems: [],
+    queuedMessages: [],
+    isInterrupting: false,
+    wasInterrupted: false,
+    turnGeneration: 0,
+    loadGeneration: 0,
+    error: null,
+    loadError: null,
+    webappUrl: null,
+    sandbox: null,
+    agentProvider: null,
+    agentModel: null,
+    skillsStale: false,
+    skillsStaleRevision: 0,
+    origin: "INTERACTIVE",
+    abortController: new AbortController(),
+    lastAccessed: new Date(),
+    isLoaded: false,
+    contextUsage: null,
+
+    mediumPanelProportion: 0.5,
+    webappNeedsRefresh: 0,
+    webappNeedsRemount: 0,
+    filesNeedsRefresh: 0,
+    outputsTabState: {
+      turnIndex: null,
+      searchQuery: "",
+      folder: "",
+      fileType: "all",
+    },
+    subagents: new Map(),
+    viewedSubagentSessionId: null,
+    filesTabState: {
+      expandedPaths: ["outputs"],
+      scrollTop: 0,
+    },
+    outputInventory: null,
+    outputInventoryStatus: "unloaded",
+    outputInventoryLoading: false,
+    outputBaselinePending: initialData?.outputInventory == null,
+    outputSelectionLocked: preferences?.outputPanelInitialized ?? false,
+    filePreviewRefreshKeys: {},
+    ...initialData,
+    instanceId: genId("session-state"),
+    outputWorkspaceId: initialData?.outputWorkspaceId ?? sessionId,
+    outputPanelMode: mode,
+    outputPanelInitialized: initialized,
+    panelTabs,
+    activePanelTabId,
+    panelTabHistory: panelTabHistory(
+      panelTabs,
+      activePanelTabId,
+      initialData.panelTabHistory
+    ),
+  };
+};
 
 // =============================================================================
 // Store
 // =============================================================================
 
 // The dev server is started fire-and-forget, so the backend reports RUNNING
-// before the webapp serves. Poll webapp-info until ready (bounded by maxAttempts).
-export async function waitForWebappReady(
-  sessionId: string,
-  { intervalMs = 1500, maxAttempts = 20 }: WaitForWebappReadyOptions = {}
-): Promise<void> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    let info: Awaited<ReturnType<typeof fetchWebappInfo>> | null = null;
-    try {
-      info = await fetchWebappInfo(sessionId);
-    } catch {
-      // keep polling
+// before the webapp serves. Bound polling and stalled requests by one deadline.
+export async function waitForWebappReady(sessionId: string): Promise<boolean> {
+  const controller: AbortController = new AbortController();
+  const deadline: number = Date.now() + 30000;
+  const timeout: ReturnType<typeof setTimeout> = setTimeout(
+    () => controller.abort(),
+    30000
+  );
+  try {
+    while (!controller.signal.aborted) {
+      let info: Awaited<ReturnType<typeof fetchWebappInfo>> | null = null;
+      try {
+        info = await fetchWebappInfo(sessionId, controller.signal);
+      } catch {
+        // Transient errors retry within the same deadline.
+      }
+      if (controller.signal.aborted) return false;
+      if (info && (info.has_webapp === false || info.ready))
+        return info.has_webapp === true && info.ready;
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, Math.min(1500, Math.max(0, deadline - Date.now())))
+      );
     }
-    // Done on a definitive answer (no webapp or serving); errors keep polling.
-    if (info && (info.has_webapp === false || info.ready)) return;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    return false;
+  } finally {
+    clearTimeout(timeout);
   }
-}
-
-interface WaitForWebappReadyOptions {
-  intervalMs?: number;
-  maxAttempts?: number;
 }
 
 export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
@@ -1002,10 +1477,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   // Temporary output panel state when no session exists (resets when session is created/cleared)
-  noSessionOutputPanelOpen: false,
-
-  // Temporary active tab when no session exists
-  noSessionActiveOutputTab: "preview",
+  noSessionOutputWorkspaceId: genId("workspace"),
+  noSessionOutputPanelMode: "closed",
+  noSessionOutputPanelInitialized: false,
+  noSessionMediumPanelProportion: 0.5,
+  noSessionPanelTabs: [],
+  noSessionActivePanelTabId: null,
+  noSessionPanelTabHistory: [],
 
   // ===========================================================================
   // Session Management (mirrors chat's pattern)
@@ -1015,33 +1493,61 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     set((state) => {
       // If setting to null, clear current session and reset no-session panel state
       if (sessionId === null) {
-        return { currentSessionId: null, noSessionOutputPanelOpen: false };
+        return {
+          currentSessionId: null,
+          noSessionOutputWorkspaceId: genId("workspace"),
+          noSessionOutputPanelMode: "closed",
+          noSessionOutputPanelInitialized: false,
+          noSessionPanelTabs: [],
+          noSessionActivePanelTabId: null,
+          noSessionPanelTabHistory: [],
+        };
       }
 
-      // If session doesn't exist, create it and inherit output panel state
+      // Keep the welcome sandbox available until the URL selects a session.
+      const preProvisioning: PreProvisioningState =
+        state.preProvisioning.status === "starting"
+          ? { status: "idle" }
+          : state.preProvisioning;
+
+      // History sessions restore their own panel preferences.
       if (!state.sessions.has(sessionId)) {
-        const newSession = createInitialSessionData(sessionId, {
-          outputPanelOpen: state.noSessionOutputPanelOpen,
-        });
+        const newSession = createInitialSessionData(sessionId);
         const newSessions = new Map(state.sessions);
         newSessions.set(sessionId, newSession);
         return {
           currentSessionId: sessionId,
+          preProvisioning,
           sessions: newSessions,
-          noSessionOutputPanelOpen: false,
         };
       }
 
       // Update last accessed for existing session and reset no-session panel state
       const session = state.sessions.get(sessionId)!;
+      const claimedWelcome =
+        state.currentSessionId === null &&
+        state.noSessionOutputPanelInitialized &&
+        (state.preProvisioning.status === "ready" ||
+          state.preProvisioning.status === "starting") &&
+        state.preProvisioning.sessionId === sessionId;
       const updatedSession = { ...session, lastAccessed: new Date() };
+      if (claimedWelcome) {
+        updatedSession.outputWorkspaceId = state.noSessionOutputWorkspaceId;
+        updatedSession.outputPanelMode = state.noSessionOutputPanelMode;
+        updatedSession.outputPanelInitialized = true;
+        updatedSession.panelTabs = state.noSessionPanelTabs;
+        updatedSession.activePanelTabId = state.noSessionActivePanelTabId;
+        updatedSession.panelTabHistory = state.noSessionPanelTabHistory;
+        updatedSession.mediumPanelProportion =
+          state.noSessionMediumPanelProportion;
+      }
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
 
       return {
         currentSessionId: sessionId,
+        preProvisioning,
         sessions: newSessions,
-        noSessionOutputPanelOpen: false,
       };
     });
   },
@@ -1052,12 +1558,24 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     initialData?: Partial<BuildSessionData>
   ) => {
     set((state) => {
-      // Inherit output panel state from no-session state if not explicitly set
-      const outputPanelOpen =
-        initialData?.outputPanelOpen ?? state.noSessionOutputPanelOpen;
+      // Carry the welcome panel's visible tab into the conversation.
+      const existingSession = state.sessions.get(sessionId);
       const newSession = createInitialSessionData(sessionId, {
+        ...(state.currentSessionId === null &&
+          state.noSessionOutputPanelInitialized && {
+            outputWorkspaceId: state.noSessionOutputWorkspaceId,
+            outputPanelMode: state.noSessionOutputPanelMode,
+            outputPanelInitialized: true,
+            panelTabs: state.noSessionPanelTabs,
+            activePanelTabId: state.noSessionActivePanelTabId,
+            panelTabHistory: state.noSessionPanelTabHistory,
+            mediumPanelProportion: state.noSessionMediumPanelProportion,
+          }),
+        ...(existingSession && {
+          outputsTabState: existingSession.outputsTabState,
+          filesTabState: existingSession.filesTabState,
+        }),
         ...initialData,
-        outputPanelOpen,
       });
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, newSession);
@@ -1111,46 +1629,57 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
-  addArtifactToCurrent: (artifact: Artifact) => {
-    const { currentSessionId } = get();
-    if (!currentSessionId) return;
-
-    set((state) => {
-      const session = state.sessions.get(currentSessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        artifacts: [...session.artifacts, artifact],
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(currentSessionId, updatedSession);
-      return { sessions: newSessions };
-    });
+  toggleCurrentOutputPanel: () => {
+    const state = get();
+    const mode = state.currentSessionId
+      ? state.sessions.get(state.currentSessionId)?.outputPanelMode
+      : state.noSessionOutputPanelMode;
+    state.setCurrentOutputPanelMode(mode === "closed" ? "medium" : "closed");
   },
 
-  toggleCurrentOutputPanel: () => {
-    const {
-      currentSessionId,
-      sessions,
-      updateSessionData,
-      noSessionOutputPanelOpen,
-    } = get();
-    if (currentSessionId) {
-      const session = sessions.get(currentSessionId);
-      if (session) {
-        const closing = session.outputPanelOpen;
-        const update: Partial<BuildSessionData> = {
-          outputPanelOpen: !session.outputPanelOpen,
-        };
-        if (closing) update.panelManuallyDismissed = true;
-        updateSessionData(currentSessionId, update);
-      }
+  setCurrentOutputPanelMode: (mode) => {
+    const state = get();
+    if (state.currentSessionId) {
+      const session = state.sessions.get(state.currentSessionId);
+      if (!session) return;
+      const updates: Partial<BuildSessionData> = {
+        outputPanelMode: mode,
+        ...(mode === "closed" && { outputSelectionLocked: true }),
+        outputPanelInitialized:
+          session.outputPanelInitialized || mode !== "closed",
+      };
+      if (mode !== "closed" && !session.outputPanelInitialized)
+        Object.assign(
+          updates,
+          selectOutputTarget(session, { kind: "outputs" })
+        );
+      state.updateSessionData(state.currentSessionId, updates);
     } else {
-      // No session - toggle temporary state
-      set({ noSessionOutputPanelOpen: !noSessionOutputPanelOpen });
+      const fresh = mode !== "closed" && !state.noSessionOutputPanelInitialized;
+      const updates: Partial<BuildSessionStore> = {
+        noSessionOutputPanelInitialized:
+          state.noSessionOutputPanelInitialized || mode !== "closed",
+        noSessionOutputPanelMode: mode,
+      };
+      if (fresh) {
+        Object.assign(
+          updates,
+          selectWelcomeOutputTarget(state, { kind: "outputs" })
+        );
+      }
+      set(updates);
     }
+  },
+
+  setCurrentMediumPanelProportion: (proportion) => {
+    if (!Number.isFinite(proportion)) return;
+    const value = Math.max(0, Math.min(1, proportion));
+    const state = get();
+    if (state.currentSessionId)
+      state.updateSessionData(state.currentSessionId, {
+        mediumPanelProportion: value,
+      });
+    else set({ noSessionMediumPanelProportion: value });
   },
 
   // ===========================================================================
@@ -1187,6 +1716,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       newSessions.set(sessionId, updatedSession);
       return { sessions: newSessions };
     });
+    if (artifact.type === "nextjs_app" || artifact.type === "web_app")
+      void get().maybeAutoOpenWebapp(sessionId);
   },
 
   // ===========================================================================
@@ -1427,18 +1958,33 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   enqueueMessage: (
     sessionId: string,
     text: string,
-    attachments: BuildMessageAttachment[]
+    attachments: BuildMessageAttachment[],
+    model?: BuildLlmSelection | null
   ) => {
+    let accepted = false;
     set((state) => {
       const session = state.sessions.get(sessionId);
-      if (!session || session.queuedMessages.length >= MAX_QUEUED_MESSAGES) {
+      if (
+        !session ||
+        session.queuedMessages.length >= MAX_QUEUED_MESSAGES ||
+        (session.status === "creating" &&
+          !session.activeTurnLocalOwner &&
+          session.activeTurnId === null)
+      ) {
         return state;
       }
+      accepted = true;
       const updatedSession: BuildSessionData = {
         ...session,
         queuedMessages: [
           ...session.queuedMessages,
-          { id: nextQueuedMessageId++, text, attachments },
+          {
+            id: nextQueuedMessageId++,
+            phase: "waiting",
+            text,
+            attachments,
+            model,
+          },
         ],
         lastAccessed: new Date(),
       };
@@ -1446,21 +1992,134 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       newSessions.set(sessionId, updatedSession);
       return { sessions: newSessions };
     });
+    return accepted;
   },
 
-  removeQueuedMessage: (sessionId: string, index: number) => {
+  claimQueuedMessage: (sessionId) => {
+    let claimed: CraftQueuedMessage | null = null;
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (
+        !session ||
+        session.status !== "active" ||
+        session.activeTurnId !== null ||
+        session.error ||
+        session.turnSettlement?.phase !== "ready" ||
+        session.turnSettlement.turnGeneration !== session.turnGeneration
+      )
+        return state;
+      const head = session.queuedMessages[0];
+      if (!head || head.phase !== "waiting") return state;
+      claimed = head;
+      const sessions = new Map(state.sessions);
+      sessions.set(sessionId, {
+        ...session,
+        queuedMessages: session.queuedMessages.map((message) =>
+          message.id === head.id ? { ...message, phase: "starting" } : message
+        ),
+      });
+      return { sessions };
+    });
+    return claimed;
+  },
+
+  beginTurnSettlement: async (sessionId, owner, generation, completion) => {
+    if (
+      completion &&
+      (owner.kind !== "interactive" ||
+        completion.session_id !== sessionId ||
+        completion.turn_id !== owner.turnId)
+    )
+      return;
+    const session = get().sessions.get(sessionId);
+    if (
+      !session ||
+      session.turnGeneration !== generation ||
+      session.error ||
+      session.isInterrupting ||
+      session.turnSettlement
+    )
+      return;
+    if (owner.kind === "scheduled") {
+      if (session.activeTurnLocalOwner || session.activeTurnId !== null) return;
+    } else if (session.status !== "running" && session.status !== "creating")
+      return;
+    get().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: null,
+      activeTurnIndex: null,
+      activeTurnLocalOwner: false,
+      turnSettlement: {
+        owner,
+        turnGeneration: generation,
+        phase: "reconciling",
+      },
+    });
+    const started = get().sessions.get(sessionId);
+    if (started)
+      await reconcileCompletedTranscript(sessionId, started, completion);
+  },
+
+  retryTurnSettlement: async (sessionId) => {
+    const session = get().sessions.get(sessionId);
+    if (
+      !session?.turnSettlement ||
+      session.turnSettlement.phase !== "failed" ||
+      session.turnSettlement.turnGeneration !== session.turnGeneration ||
+      session.activeTurnId !== null
+    )
+      return;
+    get().updateSessionData(sessionId, {
+      status: "running",
+      turnSettlement: {
+        owner: session.turnSettlement.owner,
+        turnGeneration: session.turnGeneration,
+        phase: "reconciling",
+      },
+    });
+    const started = get().sessions.get(sessionId);
+    if (started) await reconcileCompletedTranscript(sessionId, started);
+  },
+
+  removeQueuedMessage: (sessionId: string, messageId: number) => {
+    let discardedStart: BuildSessionData | undefined;
     set((state) => {
       const session = state.sessions.get(sessionId);
       if (!session) return state;
+      const head = session.queuedMessages[0];
+      const discardsFailedStart =
+        head?.id === messageId &&
+        head.phase === "failed" &&
+        (session.status === "failed" || session.status === "active") &&
+        session.error !== null &&
+        session.activeTurnId === null &&
+        !session.activeTurnLocalOwner &&
+        session.turnSettlement === null;
       const updatedSession: BuildSessionData = {
         ...session,
-        queuedMessages: session.queuedMessages.filter((_, i) => i !== index),
+        queuedMessages: session.queuedMessages.filter(
+          (message) => message.id !== messageId || message.phase === "starting"
+        ),
+        ...(discardsFailedStart && {
+          status: "running" as const,
+          error: null,
+          isInterrupting: false,
+          turnSettlement: {
+            owner: { kind: "interactive" as const, turnId: null },
+            turnGeneration: session.turnGeneration,
+            phase: "reconciling" as const,
+          },
+        }),
         lastAccessed: new Date(),
       };
+      if (discardsFailedStart) discardedStart = updatedSession;
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
       return { sessions: newSessions };
     });
+    // A lost start response can hide an accepted turn. Reconcile before dispatch.
+    if (discardedStart)
+      void reconcileCompletedTranscript(sessionId, discardedStart);
   },
 
   // ===========================================================================
@@ -1481,167 +2140,224 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     }
   },
 
-  abortCurrentSession: () => {
-    const { currentSessionId, abortSession } = get();
-    if (currentSessionId) {
-      abortSession(currentSessionId);
-    }
-  },
-
   // ===========================================================================
   // Session Lifecycle
   // ===========================================================================
 
-  loadSession: async (
-    sessionId: string,
-    options?: { force?: boolean; preferPersisted?: boolean }
-  ) => {
-    const { setCurrentSession, updateSessionData, sessions } = get();
+  loadSession: async (sessionId: string, options?: { force?: boolean }) => {
+    const { updateSessionData, sessions } = get();
 
     // Check if already loaded in cache
     const existingSession = sessions.get(sessionId);
-    if (existingSession?.isLoaded && options?.force !== true) {
-      setCurrentSession(sessionId);
+    if (canReuseSession(existingSession) && options?.force !== true) {
+      if (
+        existingSession?.sandbox?.status === "running" &&
+        existingSession.status !== "running"
+      )
+        void get().refreshOutputInventory(sessionId, { silent: true });
       return;
     }
 
-    // Set as current and mark as loading
-    setCurrentSession(sessionId);
-    const skillsStaleRevision =
-      get().sessions.get(sessionId)!.skillsStaleRevision;
-    const canApplySkillsStale = () =>
+    // Load metadata without changing the active session.
+    if (!get().sessions.has(sessionId)) get().createSession(sessionId);
+    const loadingSession: BuildSessionData | undefined =
+      get().sessions.get(sessionId);
+    if (!loadingSession) return;
+    const loadGeneration: number = loadingSession.loadGeneration + 1;
+    updateSessionData(sessionId, { loadGeneration });
+    const isCurrentRuntimeLoad: () => boolean = () => {
+      const current: BuildSessionData | undefined =
+        get().sessions.get(sessionId);
+      return (
+        current?.instanceId === loadingSession.instanceId &&
+        current.loadGeneration === loadGeneration
+      );
+    };
+    const isCurrentLoad: () => boolean = () => {
+      const current: BuildSessionData | undefined =
+        get().sessions.get(sessionId);
+      return (
+        current?.instanceId === loadingSession.instanceId &&
+        current.turnGeneration === loadingSession.turnGeneration &&
+        current.turnSettlement === loadingSession.turnSettlement &&
+        current.loadGeneration === loadGeneration
+      );
+    };
+    const skillsStaleRevision: number = loadingSession.skillsStaleRevision;
+    const canApplySkillsStale: () => boolean = () =>
       get().sessions.get(sessionId)?.skillsStaleRevision ===
       skillsStaleRevision;
 
     try {
-      // First fetch session to check sandbox status
-      let sessionData = await fetchSession(sessionId);
-
-      // Check if session needs to be restored:
-      // - Sandbox is sleeping, terminated, or failed (the backend treats
-      //   failed as reprovisionable — restore retries the attempt)
-      // - Sandbox is running but session workspace is not loaded
-      const needsRestore =
-        sessionData.sandbox?.status === "sleeping" ||
-        sessionData.sandbox?.status === "terminated" ||
-        sessionData.sandbox?.status === "failed" ||
-        (sessionData.sandbox?.status === "running" &&
-          !sessionData.session_loaded_in_sandbox);
-
-      if (needsRestore) {
-        // Show sandbox as "restoring" while we load messages + restore
-        updateSessionData(sessionId, {
-          status: "creating",
-          sandbox: sessionData.sandbox
-            ? { ...sessionData.sandbox, status: "restoring" }
-            : null,
-        });
-      }
-
-      // Messages come from DB and don't need the sandbox running.
-      // Artifacts need sandbox filesystem, so skip during restore.
-      const messages = await fetchMessages(sessionId);
+      // Capture runtime failures while history loads independently.
+      const runtimeRequest: Promise<
+        [PromiseSettledResult<Awaited<ReturnType<typeof fetchSession>>>]
+      > = Promise.allSettled([fetchSession(sessionId)]);
       let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
       try {
         activeTurn = await fetchActiveTurn(sessionId);
       } catch (err) {
         console.warn("Failed to fetch active turn:", err);
       }
-      const artifacts = needsRestore ? [] : await fetchArtifacts(sessionId);
-
-      // Preserve optimistic messages if actively streaming (pre-provisioned flow).
-      const currentSession = get().sessions.get(sessionId);
-      const currentSessionIsLive =
-        currentSession?.status === "running" ||
-        currentSession?.status === "creating";
-      const hasOptimisticMessages =
-        (currentSession?.messages?.length ?? 0) > 0 && currentSessionIsLive;
-      const isStreaming = hasOptimisticMessages;
-      // settle() (the only preferPersisted caller) runs on a live "running"
-      // session, so the isStreaming status branch below already keeps status live,
-      // leaving settle the sole owner of the flip to "active" (else auto-send races).
-      const useDbMessages = !isStreaming || options?.preferPersisted === true;
-
-      // Construct webapp URL
-      let webappUrl: string | null = null;
-      const hasWebapp = artifacts.some(
-        (a) => a.type === "nextjs_app" || a.type === "web_app"
-      );
-      if (hasWebapp && sessionData.nextjs_port) {
-        webappUrl = `http://localhost:${sessionData.nextjs_port}`;
+      if (!isCurrentRuntimeLoad()) return;
+      // Server completion follows the final transcript commit. Observe it before reading messages.
+      let messages: BuildMessage[] = await fetchMessages(sessionId);
+      if (!isCurrentRuntimeLoad()) return;
+      const historyTurnId = activeTurn?.turn_id;
+      try {
+        // A second tab can start while history loads. Keep the first owner if it completed during the read.
+        activeTurn = (await fetchActiveTurn(sessionId)) ?? activeTurn;
+      } catch (err) {
+        console.warn("Failed to recheck active turn:", err);
+      }
+      if (!isCurrentRuntimeLoad()) return;
+      if (activeTurn && activeTurn.turn_id !== historyTurnId) {
+        // The new turn may have committed its prompt after our history read.
+        messages = await fetchMessages(sessionId);
+        if (!isCurrentRuntimeLoad()) return;
       }
 
-      const resolvedActiveTurnId =
-        activeTurn?.turn_id ??
-        (useDbMessages ? null : currentSession!.activeTurnId);
-      const resolvedActiveTurnIndex =
-        activeTurn?.turn_index ??
-        (useDbMessages ? null : currentSession!.activeTurnIndex);
+      // Preserve optimistic messages if actively streaming (pre-provisioned flow).
+      const currentSession: BuildSessionData | undefined =
+        get().sessions.get(sessionId);
+      const currentSessionIsLive: boolean =
+        currentSession?.status === "running" ||
+        currentSession?.status === "creating";
+      const isStreaming: boolean =
+        currentSessionIsLive && (currentSession?.messages.length ?? 0) > 0;
+      const keepCompletedTranscript =
+        currentSession?.turnSettlement != null &&
+        currentSession.turnSettlement.phase !== "ready";
+      const useDbMessages = !keepCompletedTranscript && !isStreaming;
 
-      const status = isStreaming
-        ? currentSession!.status
-        : activeTurn
-          ? "running"
-          : needsRestore
-            ? "creating"
-            : mapApiSessionStatus(sessionData.status);
-      const persistedMessages = useDbMessages
+      const resolvedActiveTurnId: string | null = keepCompletedTranscript
+        ? currentSession!.activeTurnId
+        : (activeTurn?.turn_id ??
+          (useDbMessages ? null : currentSession!.activeTurnId));
+      const resolvedActiveTurnIndex: number | null = keepCompletedTranscript
+        ? currentSession!.activeTurnIndex
+        : (activeTurn?.turn_index ??
+          (useDbMessages ? null : currentSession!.activeTurnIndex));
+
+      const status: SessionStatus =
+        isStreaming || keepCompletedTranscript
+          ? currentSession!.status
+          : activeTurn
+            ? "running"
+            : currentSession!.status;
+      const persistedMessages: BuildMessage[] = useDbMessages
         ? consolidateMessagesIntoTurns(messages)
         : currentSession!.messages;
-      const restoredActiveTurn = useDbMessages
-        ? splitActiveTurnTranscript(persistedMessages, resolvedActiveTurnIndex)
-        : {
-            messages: persistedMessages,
-            streamItems: currentSession!.streamItems,
-          };
-      const resolvedMessages = restoredActiveTurn.messages;
-      const streamItems = restoredActiveTurn.streamItems;
+      const restoredActiveTurn: ReturnType<typeof splitActiveTurnTranscript> =
+        useDbMessages
+          ? splitActiveTurnTranscript(
+              persistedMessages,
+              resolvedActiveTurnIndex
+            )
+          : {
+              messages: persistedMessages,
+              streamItems: currentSession!.streamItems,
+            };
+      const resolvedMessages: BuildMessage[] = restoredActiveTurn.messages;
+      const streamItems: StreamItem[] = restoredActiveTurn.streamItems;
       // Reconstruct subagents from the raw (un-consolidated) messages — they
       // carry the per-packet _meta needed for classification. Preserve the
       // live map if actively streaming.
-      const subagents = useDbMessages
+      const subagents: Map<string, SubagentState> = useDbMessages
         ? buildSubagentsFromMessages(messages)
         : currentSession!.subagents;
-      const sandbox =
-        needsRestore && sessionData.sandbox
-          ? { ...sessionData.sandbox, status: "restoring" as const }
-          : sessionData.sandbox;
+      if (isCurrentLoad())
+        updateSessionData(sessionId, {
+          status,
+          messages: resolvedMessages,
+          streamItems,
+          subagents,
+          activeTurnId: resolvedActiveTurnId,
+          turnSettlement: currentSession!.turnSettlement,
+          activeTurnIndex: resolvedActiveTurnIndex,
+          activeTurnLocalOwner: useDbMessages
+            ? false
+            : currentSession!.activeTurnLocalOwner,
+          contextUsage: useDbMessages
+            ? deriveContextUsage(messages)
+            : currentSession!.contextUsage,
+        });
 
+      const [runtimeResult] = await runtimeRequest;
+      if (!isCurrentRuntimeLoad()) return;
+      if (runtimeResult.status === "rejected") throw runtimeResult.reason;
+      let sessionData = runtimeResult.value;
+      const runtimeSession: BuildSessionData | undefined =
+        get().sessions.get(sessionId);
+      if (!runtimeSession) return;
+      const needsRestore: boolean =
+        sessionData.sandbox?.status === "sleeping" ||
+        sessionData.sandbox?.status === "terminated" ||
+        sessionData.sandbox?.status === "failed" ||
+        (sessionData.sandbox?.status === "running" &&
+          !sessionData.session_loaded_in_sandbox);
       updateSessionData(sessionId, {
-        status,
-        messages: resolvedMessages,
-        streamItems,
-        subagents,
-        artifacts,
-        webappUrl,
-        sandbox,
-        agentProvider: sessionData.agent_provider,
-        agentModel: sessionData.agent_model,
-        ...(sessionData.skills_stale &&
-          canApplySkillsStale() && { skillsStale: true }),
-        origin: sessionData.origin,
-        activeTurnId: resolvedActiveTurnId,
-        activeTurnIndex: resolvedActiveTurnIndex,
-        activeTurnLocalOwner: useDbMessages
-          ? false
-          : currentSession!.activeTurnLocalOwner,
-        contextUsage: useDbMessages
-          ? deriveContextUsage(messages)
-          : currentSession!.contextUsage,
-        error: null,
+        status:
+          !isCurrentLoad() ||
+          isStreaming ||
+          keepCompletedTranscript ||
+          runtimeSession.status !== status ||
+          runtimeSession.activeTurnId !== resolvedActiveTurnId ||
+          runtimeSession.turnSettlement !== currentSession!.turnSettlement
+            ? runtimeSession.status
+            : activeTurn
+              ? "running"
+              : needsRestore
+                ? "creating"
+                : mapApiSessionStatus(sessionData.status),
+        sandbox:
+          needsRestore && sessionData.sandbox
+            ? { ...sessionData.sandbox, status: "restoring" }
+            : sessionData.sandbox,
+        ...(runtimeSession.agentProvider === loadingSession.agentProvider &&
+          runtimeSession.agentModel === loadingSession.agentModel && {
+            agentProvider: sessionData.agent_provider,
+            agentModel: sessionData.agent_model,
+          }),
         isLoaded: true,
+        loadError: null,
+        ...(canApplySkillsStale() && { skillsStale: sessionData.skills_stale }),
+        origin: sessionData.origin,
       });
+      if (!needsRestore) {
+        if (
+          get().sessions.get(sessionId)?.outputInventory === null ||
+          runtimeSession.status !== "running"
+        )
+          void get().refreshOutputInventory(sessionId, { silent: true });
+        const artifacts: Artifact[] = await fetchArtifacts(sessionId);
+        if (!isCurrentRuntimeLoad()) return;
+        const hasWebapp: boolean = artifacts.some(
+          (artifact) =>
+            artifact.type === "nextjs_app" || artifact.type === "web_app"
+        );
+        updateSessionData(sessionId, {
+          artifacts,
+          webappUrl:
+            hasWebapp && sessionData.nextjs_port
+              ? `http://localhost:${sessionData.nextjs_port}`
+              : null,
+        });
+      }
 
       if (needsRestore) {
-        const skillsStaleRevisionBeforeRestore =
+        outputInventoryRequests.get(sessionId)?.controller.abort();
+        const skillsStaleRevisionBeforeRestore: number | undefined =
           get().sessions.get(sessionId)?.skillsStaleRevision;
         try {
           sessionData = await restoreSession(sessionId);
+          if (!isCurrentRuntimeLoad()) return;
         } catch (restoreErr) {
+          if (!isCurrentRuntimeLoad()) return;
           // Only a genuine restore failure marks the sandbox failed.
           console.error("Sandbox restore failed:", restoreErr);
           updateSessionData(sessionId, {
-            status: "idle",
+            ...(isCurrentLoad() && { status: "idle" }),
             sandbox: sessionData.sandbox
               ? { ...sessionData.sandbox, status: "failed" }
               : null,
@@ -1649,35 +2365,41 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           return;
         }
 
-        // Hold the chip on "restoring" (and poll webapp readiness) until the
-        // webapp actually serves, then flip to the real status below.
         updateSessionData(sessionId, {
-          status: mapApiSessionStatus(sessionData.status),
-          sandbox: sessionData.sandbox
-            ? { ...sessionData.sandbox, status: "restoring" }
-            : sessionData.sandbox,
+          ...(isCurrentLoad() && {
+            status: mapApiSessionStatus(sessionData.status),
+          }),
+          sandbox: sessionData.sandbox,
           ...(get().sessions.get(sessionId)?.skillsStaleRevision ===
             skillsStaleRevisionBeforeRestore && {
             skillsStale: sessionData.skills_stale,
           }),
+          filesNeedsRefresh:
+            (get().sessions.get(sessionId)?.filesNeedsRefresh ?? 0) + 1,
           webappNeedsRefresh:
-            (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+            (get().sessions.get(sessionId)?.webappNeedsRefresh ?? 0) + 1,
         });
+        void get().refreshOutputInventory(sessionId, { silent: true });
 
-        // Remount the iframe only once the restored pod serves — the old
-        // page's HMR socket died with the old pod. If readiness times out the
-        // remount still runs: worst case the iframe lands on the offline page,
-        // which reloads itself until the server responds.
-        await waitForWebappReady(sessionId);
-        updateSessionData(sessionId, {
-          sandbox: sessionData.sandbox,
-          webappNeedsRemount:
-            (get().sessions.get(sessionId)?.webappNeedsRemount || 0) + 1,
+        // App readiness controls iframe replacement, not restored filesystem access.
+        void waitForWebappReady(sessionId).then(() => {
+          const current = get().sessions.get(sessionId);
+          if (
+            current?.instanceId !== loadingSession.instanceId ||
+            current.sandbox?.id !== sessionData.sandbox?.id
+          )
+            return;
+          updateSessionData(sessionId, {
+            webappNeedsRemount:
+              (get().sessions.get(sessionId)?.webappNeedsRemount ?? 0) + 1,
+          });
         });
 
         // An artifact-fetch failure must NOT flip the sandbox to "failed".
         try {
-          const restoredArtifacts = await fetchArtifacts(sessionId);
+          if (!isCurrentRuntimeLoad()) return;
+          const restoredArtifacts: Artifact[] = await fetchArtifacts(sessionId);
+          if (!isCurrentRuntimeLoad()) return;
           updateSessionData(sessionId, { artifacts: restoredArtifacts });
         } catch (artifactsErr) {
           console.warn(
@@ -1687,9 +2409,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         }
       }
     } catch (err) {
+      if (!isCurrentRuntimeLoad()) return;
       console.error("Failed to load session:", err);
       updateSessionData(sessionId, {
-        error: (err as Error).message,
+        loadError: err instanceof Error ? err.message : String(err),
       });
     }
   },
@@ -1745,11 +2468,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   deleteBuildSession: async (sessionId: string) => {
-    const { currentSessionId, abortSession, refreshSessionHistory } = get();
+    const { abortSession, refreshSessionHistory } = get();
 
     try {
-      abortSession(sessionId);
       await apiDeleteSession(sessionId);
+      abortSession(sessionId);
+      clearOutputPanelPreferences(sessionId);
 
       // Remove session from local state
       set((state) => {
@@ -1760,11 +2484,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sessionHistory: state.sessionHistory.filter(
             (historyItem) => historyItem.id !== sessionId
           ),
-          currentSessionId:
-            currentSessionId === sessionId ? null : state.currentSessionId,
         };
       });
 
+      if (get().currentSessionId === sessionId) get().setCurrentSession(null);
       void refreshSessionHistory();
     } catch (err) {
       console.error("Failed to delete session:", err);
@@ -1813,6 +2536,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return preProvisioning.sessionId;
     }
 
+    if (preProvisioning.status === "starting") return null;
+
     if (preProvisioning.status === "provisioning") {
       return provisioningPromise;
     }
@@ -1832,12 +2557,18 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         const sessionData = await apiCreateSession({});
 
         provisioningPromise = null;
-        set({
+        set((state) => ({
+          sessions: new Map(state.sessions).set(
+            sessionData.id,
+            state.sessions.get(sessionData.id) ??
+              createInitialSessionData(sessionData.id)
+          ),
           preProvisioning: {
             status: "ready",
             sessionId: sessionData.id,
           },
-        });
+        }));
+        void get().refreshOutputInventory(sessionData.id, { silent: true });
         return sessionData.id;
       } catch (err) {
         console.error("[PreProvision] Failed to pre-provision session:", err);
@@ -1889,21 +2620,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const alreadyInHistory = sessionHistory.some(
         (item) => item.id === sessionId
       );
-      if (!alreadyInHistory) {
-        set({
-          sessionHistory: [
-            {
-              id: sessionId,
-              title: "Fresh Craft",
-              createdAt: new Date(),
-            },
-            ...sessionHistory,
-          ],
-        });
-      }
-
-      // Reset to idle and return the session ID
-      set({ preProvisioning: { status: "idle" } });
+      set({
+        preProvisioning: { status: "starting", sessionId },
+        sessionHistory: alreadyInHistory
+          ? sessionHistory
+          : [
+              {
+                id: sessionId,
+                title: "Fresh Craft",
+                createdAt: new Date(),
+              },
+              ...sessionHistory,
+            ],
+      });
       return sessionId;
     }
 
@@ -1940,255 +2669,446 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   triggerWebappRefresh: (sessionId: string) => {
     const session = get().sessions.get(sessionId);
     if (session) {
-      // Increment refresh counter and open panel if not already open
-      // Using a counter ensures each edit triggers a new refresh
       get().updateSessionData(sessionId, {
         webappNeedsRefresh: (session.webappNeedsRefresh || 0) + 1,
-        outputPanelOpen: true,
       });
+      void get().maybeAutoOpenWebapp(sessionId);
     }
   },
 
   triggerFilesRefresh: (sessionId: string) => {
     const session = get().sessions.get(sessionId);
     if (session) {
-      // Increment refresh counter to trigger files list refresh
-      // Using a counter ensures each filesystem change triggers a new refresh
       get().updateSessionData(sessionId, {
-        filesNeedsRefresh: (session.filesNeedsRefresh || 0) + 1,
+        filesNeedsRefresh: session.filesNeedsRefresh + 1,
       });
+      // Streaming owns discovery during a task; idle writes only validate metadata.
+      if (
+        !session.activeTurnId &&
+        session.status !== "running" &&
+        session.status !== "creating"
+      ) {
+        // A write needs a read started after the mutation.
+        const previousRead = outputInventoryRequests.get(sessionId);
+        if (previousRead) previousRead.coalescible = false;
+        void get().refreshOutputInventory(sessionId, { silent: true });
+      }
     }
   },
 
   // ===========================================================================
-  // Auto-open Actions
+  // Output Inventory
   // ===========================================================================
 
-  maybeAutoOpenPanelForPreview: (sessionId: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-      if (session.outputPanelOpen) return state; // already open
-      if (session.panelManuallyDismissed) return state; // respect user dismissal
-
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, {
-        ...session,
-        outputPanelOpen: true,
-        activeOutputTab: "preview",
-        activePanelTabId: null,
-      });
-      return { sessions: newSessions };
-    });
-  },
-
-  // ===========================================================================
-  // File Preview Actions
-  // ===========================================================================
-
-  openFilePreview: (sessionId: string, path: string, fileName: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const newTab: PanelTab = { kind: "file", path, fileName };
-      const tabId = panelTabId(newTab);
-
-      const existingTab = session.panelTabs.find(
-        (t) => panelTabId(t) === tabId
-      );
-
-      const panelTabs = existingTab
-        ? session.panelTabs
-        : [...session.panelTabs, newTab];
-
-      const { tabHistory } = session;
-      const newEntry: TabHistoryEntry = { type: "panel-tab", tabId };
-      const newEntries = [
-        ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
-        newEntry,
-      ];
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        panelTabs,
-        activePanelTabId: tabId,
-        tabHistory: {
-          entries: newEntries,
-          currentIndex: newEntries.length - 1,
-        },
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  openMarkdownPreview: (sessionId: string, filePath: string) => {
-    const fileName = filePath.split("/").pop() || filePath;
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const newTab: PanelTab = { kind: "file", path: filePath, fileName };
-      const tabId = panelTabId(newTab);
-
-      const existingTab = session.panelTabs.find(
-        (t) => panelTabId(t) === tabId
-      );
-
-      const panelTabs = existingTab
-        ? session.panelTabs
-        : [...session.panelTabs, newTab];
-
-      const { tabHistory } = session;
-      const newEntry: TabHistoryEntry = { type: "panel-tab", tabId };
-      const newEntries = [
-        ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
-        newEntry,
-      ];
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        outputPanelOpen: true,
-        panelTabs,
-        activePanelTabId: tabId,
-        tabHistory: {
-          entries: newEntries,
-          currentIndex: newEntries.length - 1,
-        },
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  closeFilePreview: (sessionId: string, path: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const closingTabId = panelTabId({ kind: "file", path, fileName: "" });
-
-      const panelTabs = session.panelTabs.filter(
-        (t) => panelTabId(t) !== closingTabId
-      );
-
-      const activePanelTabId =
-        session.activePanelTabId === closingTabId
-          ? null
-          : session.activePanelTabId;
-
-      const activeOutputTab =
-        session.activePanelTabId === closingTabId
-          ? "files"
-          : session.activeOutputTab;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        panelTabs,
-        activePanelTabId,
-        activeOutputTab,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  closePanelTab: (sessionId: string, tabId: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const panelTabs = session.panelTabs.filter(
-        (t) => panelTabId(t) !== tabId
-      );
-
-      const wasActive = session.activePanelTabId === tabId;
-      const activePanelTabId = wasActive ? null : session.activePanelTabId;
-      const activeOutputTab = wasActive ? "files" : session.activeOutputTab;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        panelTabs,
-        activePanelTabId,
-        activeOutputTab,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  setActiveOutputTab: (sessionId: string, tab: OutputTabType) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      // Push to history (truncate forward history if navigating from middle)
-      const { tabHistory } = session;
-      const newEntry: TabHistoryEntry = { type: "pinned", tab };
-      const newEntries = [
-        ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
-        newEntry,
-      ];
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        activeOutputTab: tab,
-        activePanelTabId: null, // Clear transient tab when selecting pinned tab
-        tabHistory: {
-          entries: newEntries,
-          currentIndex: newEntries.length - 1,
-        },
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  setActivePanelTabId: (sessionId: string, tabId: string | null) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      // Push to history if switching to a panel tab (truncate forward history)
-      const { tabHistory } = session;
-      let newTabHistory = tabHistory;
-      if (tabId !== null) {
-        const newEntry: TabHistoryEntry = { type: "panel-tab", tabId };
-        const newEntries = [
-          ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
-          newEntry,
-        ];
-        newTabHistory = {
-          entries: newEntries,
-          currentIndex: newEntries.length - 1,
-        };
+  refreshOutputInventory: async (
+    sessionId,
+    { silent = false, signal } = {}
+  ) => {
+    const started: BuildSessionData | undefined = get().sessions.get(sessionId);
+    if (!started || signal?.aborted) return;
+    // Committed completion owns discovery; passive reads must not consume new files first.
+    if (silent && started.turnSettlement?.phase === "reconciling") return;
+    const matchesRuntime = (session: BuildSessionData): boolean =>
+      sameSessionRuntime(session, started);
+    const previousRequest = outputInventoryRequests.get(sessionId);
+    const sameRuntime =
+      previousRequest &&
+      !previousRequest.controller.signal.aborted &&
+      sameSessionRuntime(previousRequest.session, started);
+    if (previousRequest && !sameRuntime) previousRequest.controller.abort();
+    const runtimeController =
+      sameRuntime && previousRequest
+        ? previousRequest.controller
+        : new AbortController();
+    const coalescible = silent && signal === undefined;
+    if (
+      coalescible &&
+      sameRuntime &&
+      previousRequest?.coalescible &&
+      previousRequest.session.activeTurnId === started.activeTurnId &&
+      matchesRuntime(previousRequest.session) &&
+      previousRequest.session.turnGeneration === started.turnGeneration
+    ) {
+      await previousRequest.promise;
+      return;
+    }
+    const requestSignal = signal
+      ? AbortSignal.any([signal, runtimeController.signal])
+      : runtimeController.signal;
+    const isCurrent = (): boolean => {
+      const current = get().sessions.get(sessionId);
+      if (requestSignal.aborted || !current || !matchesRuntime(current))
+        return false;
+      // Passive reads cannot consume files from a newly attached turn.
+      if (silent)
+        return (
+          current.turnGeneration === started.turnGeneration &&
+          current.activeTurnId === started.activeTurnId
+        );
+      return true;
+    };
+    const ownsTurn = (session: BuildSessionData): boolean =>
+      session.turnGeneration === started.turnGeneration &&
+      (!session.activeTurnId ||
+        !started.activeTurnId ||
+        session.activeTurnId === started.activeTurnId);
+    const readInventory = async (): Promise<void> => {
+      if (!isCurrent()) return;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const current = get().sessions.get(sessionId);
+        if (!isCurrent() || !current || (attempt > 0 && !ownsTurn(current)))
+          return;
+        const controller = new AbortController();
+        const abort = (): void => controller.abort();
+        // Allow the backend's 30-second RPC deadline plus HTTP overhead.
+        const timeout = setTimeout(abort, 35000);
+        try {
+          const inventory = await fetchOutputInventory(
+            sessionId,
+            AbortSignal.any([controller.signal, requestSignal])
+          );
+          if (!isCurrent()) return;
+          const session = get().sessions.get(sessionId);
+          if (!session) return;
+          const previous = session.outputInventory;
+          const { files, added, changed } = compareOutputInventory(
+            previous ?? {},
+            inventory
+          );
+          const updates: Partial<BuildSessionData> = {
+            outputInventory: files,
+            outputInventoryStatus: inventory.complete ? "complete" : "partial",
+            outputInventoryError: undefined,
+            outputBaselinePending:
+              (session.outputBaselinePending || previous === null) &&
+              !inventory.complete,
+            filesNeedsRefresh:
+              session.filesNeedsRefresh +
+              (previous !== null && (added.length > 0 || changed.length > 0)
+                ? 1
+                : 0),
+          };
+          if (
+            previous !== null &&
+            !session.outputBaselinePending &&
+            !silent &&
+            ownsTurn(session)
+          ) {
+            const newTabs: PanelTab[] = added
+              .filter((file) => outputPreviewPriority(file.path) < 4)
+              .sort(
+                (a, b) =>
+                  outputPreviewPriority(a.path) -
+                    outputPreviewPriority(b.path) ||
+                  a.path.localeCompare(b.path)
+              )
+              .map((file) => ({
+                kind: "file",
+                path: file.path,
+                fileName: file.path.split("/").pop() || file.path,
+              }));
+            const existingIds = new Set(session.panelTabs.map(panelTabId));
+            updates.panelTabs = [
+              ...session.panelTabs,
+              ...newTabs.filter((tab) => !existingIds.has(panelTabId(tab))),
+            ];
+            const target = newTabs[0];
+            if (target)
+              Object.assign(
+                updates,
+                automaticallySelectOutput(
+                  { ...session, panelTabs: updates.panelTabs },
+                  target
+                )
+              );
+          }
+          get().updateSessionData(sessionId, updates);
+          return;
+        } catch (error) {
+          const current = get().sessions.get(sessionId);
+          if (!isCurrent() || !current || !ownsTurn(current)) return;
+          const terminal = isAuthStatusError(error) || isNotFoundError(error);
+          if (terminal || attempt === 2) {
+            get().updateSessionData(sessionId, {
+              outputInventoryStatus: "error",
+              outputInventoryError:
+                error instanceof Error ? error : new Error(String(error)),
+              ...(terminal && {
+                outputInventory: null,
+                outputBaselinePending: true,
+              }),
+            });
+            console.warn(
+              "[Streaming] Failed to refresh output inventory:",
+              error
+            );
+            return;
+          }
+        } finally {
+          clearTimeout(timeout);
+        }
+        if (attempt < 2) {
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, 1000 * (attempt + 1))
+          );
+        }
       }
+    };
 
-      const updatedSession: BuildSessionData = {
-        ...session,
-        activePanelTabId: tabId,
-        tabHistory: newTabHistory,
-        lastAccessed: new Date(),
+    // Loading belongs to the request queue; accepted completeness stays intact.
+    get().updateSessionData(sessionId, { outputInventoryLoading: true });
+    // Focus and panel reads must not consume files before pending turn discovery.
+    const request =
+      sameRuntime && previousRequest
+        ? previousRequest.promise.then(readInventory)
+        : readInventory();
+    const queued: OutputInventoryRequest = {
+      controller: runtimeController,
+      promise: request,
+      session: started,
+      coalescible,
+    };
+    outputInventoryRequests.set(sessionId, queued);
+    try {
+      await request;
+    } finally {
+      if (outputInventoryRequests.get(sessionId) === queued) {
+        outputInventoryRequests.delete(sessionId);
+        if (get().sessions.get(sessionId)?.instanceId === started.instanceId)
+          get().updateSessionData(sessionId, { outputInventoryLoading: false });
+      }
+    }
+  },
+
+  maybeAutoOpenWebapp: async (sessionId) => {
+    const started = get().sessions.get(sessionId);
+    if (!started || !canAutomaticallySelectOutput(started)) return;
+    const matchesRuntime = (session: BuildSessionData) =>
+      sameSessionRuntime(session, started) &&
+      session.turnGeneration === started.turnGeneration &&
+      session.webappNeedsRemount === started.webappNeedsRemount;
+    const existing = webappAutoOpenRequests.get(sessionId);
+    if (existing && matchesRuntime(existing.session)) return existing.promise;
+    const request = (async () => {
+      if (!(await waitForWebappReady(sessionId))) return;
+      const session = get().sessions.get(sessionId);
+      if (
+        !session ||
+        !matchesRuntime(session) ||
+        !canAutomaticallySelectOutput(session)
+      )
+        return;
+      const target: PanelTab = session.panelTabs.find(
+        (tab) => tab.kind === "browser" && tab.appId === sessionId
+      ) ?? { kind: "browser", id: genId("browser"), appId: sessionId };
+      get().updateSessionData(
+        sessionId,
+        automaticallySelectOutput(session, target)
+      );
+    })();
+    const entry = { session: started, promise: request };
+    webappAutoOpenRequests.set(sessionId, entry);
+    try {
+      await request;
+    } finally {
+      if (webappAutoOpenRequests.get(sessionId) === entry)
+        webappAutoOpenRequests.delete(sessionId);
+    }
+  },
+
+  openFilePreview: (sessionId, path, fileName) => {
+    if (!sessionId) {
+      const state = get();
+      const tab: PanelTab = {
+        kind: "file",
+        path: normalizePanelPath(path),
+        fileName,
       };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
+      set({
+        ...selectWelcomeOutputTarget(state, tab),
+        noSessionOutputPanelInitialized: true,
+        noSessionOutputPanelMode:
+          state.noSessionOutputPanelMode === "closed"
+            ? "medium"
+            : state.noSessionOutputPanelMode,
+      });
+      return;
+    }
+    const session = get().sessions.get(sessionId);
+    if (!session) return;
+    get().updateSessionData(sessionId, {
+      outputPanelInitialized: true,
+      outputSelectionLocked: true,
+      ...selectOutputTarget(session, {
+        kind: "file",
+        path: normalizePanelPath(path),
+        fileName,
+      }),
+      outputPanelMode:
+        session.outputPanelMode === "closed"
+          ? "medium"
+          : session.outputPanelMode,
     });
   },
 
-  setNoSessionActiveOutputTab: (tab: OutputTabType) => {
-    set({ noSessionActiveOutputTab: tab });
+  openOutputsTab: (sessionId, turnIndex = null) => {
+    if (sessionId)
+      get().updateSessionData(sessionId, {
+        outputsTabState: {
+          turnIndex,
+          searchQuery: "",
+          folder: "",
+          fileType: "all",
+        },
+      });
+    openCollectionTab(sessionId, "outputs");
+  },
+
+  openFilesTab: (sessionId) => openCollectionTab(sessionId, "files"),
+
+  updateOutputsTabState: (sessionId, updates) => {
+    const session = get().sessions.get(sessionId);
+    if (session)
+      get().updateSessionData(sessionId, {
+        outputsTabState: { ...session.outputsTabState, ...updates },
+      });
+  },
+
+  openBrowserTab: (sessionId, appId, appName) => {
+    const state = get();
+    const session = sessionId ? state.sessions.get(sessionId) : undefined;
+    if (sessionId && !session) return;
+    const tabs = session?.panelTabs ?? state.noSessionPanelTabs;
+    const existing = appId
+      ? tabs.find((tab) => tab.kind === "browser" && tab.appId === appId)
+      : undefined;
+    const tab: PanelTab = existing ?? {
+      kind: "browser",
+      id: genId("browser"),
+      appId: appId ?? null,
+      appName,
+    };
+    if (session && sessionId)
+      state.updateSessionData(sessionId, {
+        outputPanelInitialized: true,
+        outputSelectionLocked: true,
+        ...selectOutputTarget(session, tab),
+        outputPanelMode:
+          session.outputPanelMode === "closed"
+            ? "medium"
+            : session.outputPanelMode,
+      });
+    else
+      set({
+        noSessionOutputPanelInitialized: true,
+        ...selectWelcomeOutputTarget(state, tab),
+        noSessionOutputPanelMode:
+          state.noSessionOutputPanelMode === "closed"
+            ? "medium"
+            : state.noSessionOutputPanelMode,
+      });
+  },
+
+  navigateBrowserTab: (sessionId, tabId, appId, appName) => {
+    const state = get();
+    const tabs = sessionId
+      ? state.sessions.get(sessionId)?.panelTabs
+      : state.noSessionPanelTabs;
+    if (!tabs) return;
+    const panelTabs = tabs.map((tab) =>
+      panelTabId(tab) === tabId && tab.kind === "browser"
+        ? { ...tab, appId, appName }
+        : tab
+    );
+    if (sessionId)
+      state.updateSessionData(sessionId, {
+        panelTabs,
+        outputSelectionLocked: true,
+      });
+    else set({ noSessionPanelTabs: panelTabs });
+  },
+
+  reorderPanelTab: (sessionId, tabId, index) => {
+    const state = get();
+    const tabs = sessionId
+      ? state.sessions.get(sessionId)?.panelTabs
+      : state.noSessionPanelTabs;
+    if (!tabs) return;
+    const tab = tabs.find((item) => panelTabId(item) === tabId);
+    if (!tab) return;
+    const panelTabs = tabs.filter((item) => panelTabId(item) !== tabId);
+    panelTabs.splice(Math.max(0, Math.min(panelTabs.length, index)), 0, tab);
+    if (sessionId)
+      state.updateSessionData(sessionId, {
+        panelTabs,
+        outputSelectionLocked: true,
+      });
+    else set({ noSessionPanelTabs: panelTabs });
+  },
+
+  closePanelTab: (sessionId, tabId) => {
+    const state = get();
+    const session = sessionId ? state.sessions.get(sessionId) : undefined;
+    if (sessionId && !session) return;
+    const tabs = session?.panelTabs ?? state.noSessionPanelTabs;
+    const index = tabs.findIndex((tab) => panelTabId(tab) === tabId);
+    if (index < 0) return;
+    const panelTabs = tabs.filter((tab) => panelTabId(tab) !== tabId);
+    const active = session
+      ? session.activePanelTabId
+      : state.noSessionActivePanelTabId;
+    const history = panelTabHistory(
+      panelTabs,
+      null,
+      session?.panelTabHistory ?? state.noSessionPanelTabHistory
+    );
+    const neighbor = panelTabs[Math.max(0, index - 1)];
+    const activePanelTabId =
+      active === tabId
+        ? (history[0] ?? (neighbor ? panelTabId(neighbor) : null))
+        : active;
+    const nextHistory = panelTabHistory(panelTabs, activePanelTabId, history);
+    if (sessionId)
+      state.updateSessionData(sessionId, {
+        panelTabs,
+        activePanelTabId,
+        panelTabHistory: nextHistory,
+        outputSelectionLocked: true,
+      });
+    else
+      set({
+        noSessionPanelTabs: panelTabs,
+        noSessionActivePanelTabId: activePanelTabId,
+        noSessionPanelTabHistory: nextHistory,
+      });
+  },
+
+  setActivePanelTabId: (sessionId, tabId) => {
+    if (!sessionId) {
+      if (
+        tabId === null ||
+        get().noSessionPanelTabs.some((tab) => panelTabId(tab) === tabId)
+      )
+        set((state) => ({
+          noSessionActivePanelTabId: tabId,
+          noSessionPanelTabHistory: panelTabHistory(
+            state.noSessionPanelTabs,
+            tabId,
+            state.noSessionPanelTabHistory
+          ),
+        }));
+      return;
+    }
+    const session = get().sessions.get(sessionId);
+    if (!session) return;
+    const tab = session.panelTabs.find(
+      (candidate) => panelTabId(candidate) === tabId
+    );
+    if (tabId !== null && !tab) return;
+    get().updateSessionData(sessionId, {
+      outputSelectionLocked: true,
+      ...(tab ? selectOutputTarget(session, tab) : { activePanelTabId: null }),
+    });
   },
 
   // ===========================================================================
@@ -2203,62 +3123,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         filesTabState: { ...session.filesTabState, ...updates },
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  mergeFilesTabDirectoryCache: (
-    sessionId: string,
-    listings: Record<string, FileSystemEntry[]>
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        filesTabState: {
-          ...session.filesTabState,
-          directoryCache: {
-            ...session.filesTabState.directoryCache,
-            ...listings,
-          },
-        },
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  retainFilesTabDirectoryCache: (
-    sessionId: string,
-    retainedPaths: ReadonlySet<string>
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const cachedListings = Object.entries(
-        session.filesTabState.directoryCache
-      );
-      const retainedListings = cachedListings.filter(([path]) =>
-        retainedPaths.has(path)
-      );
-      if (retainedListings.length === cachedListings.length) return state;
-
-      const directoryCache = Object.fromEntries(retainedListings);
-      const updatedSession: BuildSessionData = {
-        ...session,
-        filesTabState: {
-          ...session.filesTabState,
-          directoryCache,
-        },
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -2488,7 +3352,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   appendSubagentResponseChunk: (
     sessionId: string,
     subagentSessionId: string,
-    text: string
+    text: string,
+    part?: TextPartUpdate
   ) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
@@ -2508,14 +3373,21 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
       const last = turns[turns.length - 1] ?? emptyTurn();
+      const streamItems = appendStreamingChunk(
+        last.streamItems,
+        "text",
+        text,
+        part
+      );
       turns[turns.length - 1] = {
         ...last,
-        response: (last.response ?? "") + text,
-        streamItems: appendStreamingSubagentChunk(
-          last.streamItems,
-          "text",
-          text
-        ),
+        response: part
+          ? streamItems
+              .filter((item) => item.type === "text")
+              .map((item) => (item.type === "text" ? item.content : ""))
+              .join("")
+          : (last.response ?? "") + text,
+        streamItems,
       };
 
       const subagents = new Map(session.subagents);
@@ -2535,7 +3407,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   appendSubagentThinkingChunk: (
     sessionId: string,
     subagentSessionId: string,
-    text: string
+    text: string,
+    part?: TextPartUpdate
   ) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
@@ -2555,14 +3428,21 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
       const last = turns[turns.length - 1] ?? emptyTurn();
+      const streamItems = appendStreamingChunk(
+        last.streamItems,
+        "thinking",
+        text,
+        part
+      );
       turns[turns.length - 1] = {
         ...last,
-        thinking: (last.thinking ?? "") + text,
-        streamItems: appendStreamingSubagentChunk(
-          last.streamItems,
-          "thinking",
-          text
-        ),
+        thinking: part
+          ? streamItems
+              .filter((item) => item.type === "thinking")
+              .map((item) => (item.type === "thinking" ? item.content : ""))
+              .join("")
+          : (last.thinking ?? "") + text,
+        streamItems,
       };
 
       const subagents = new Map(session.subagents);
@@ -2571,96 +3451,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         subagents,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  // ===========================================================================
-  // Tab Navigation History Actions
-  // ===========================================================================
-
-  navigateTabBack: (sessionId: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const { tabHistory } = session;
-      if (tabHistory.currentIndex <= 0) return state;
-
-      const newIndex = tabHistory.currentIndex - 1;
-      const entry = tabHistory.entries[newIndex];
-      if (!entry) return state;
-
-      // TODO: extract a shared reconstructPanelTab(tabId) helper, or store the
-      // full PanelTab in TabHistoryEntry instead of just the tabId, to avoid
-      // duplicating this parsing in both navigateTabBack and navigateTabForward.
-      // Re-open panel tab if it was closed
-      let panelTabs = session.panelTabs;
-      if (entry.type === "panel-tab") {
-        const tabExists = panelTabs.some((t) => panelTabId(t) === entry.tabId);
-        if (!tabExists) {
-          // Reconstruct a file tab from the ID (format: "file:<path>")
-          if (entry.tabId.startsWith("file:")) {
-            const path = entry.tabId.slice("file:".length);
-            const fileName = path.split("/").pop() || path;
-            panelTabs = [...panelTabs, { kind: "file", path, fileName }];
-          }
-        }
-      }
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        tabHistory: { ...tabHistory, currentIndex: newIndex },
-        activeOutputTab:
-          entry.type === "pinned" ? entry.tab : session.activeOutputTab,
-        activePanelTabId: entry.type === "panel-tab" ? entry.tabId : null,
-        panelTabs,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  navigateTabForward: (sessionId: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const { tabHistory } = session;
-      if (tabHistory.currentIndex >= tabHistory.entries.length - 1)
-        return state;
-
-      const newIndex = tabHistory.currentIndex + 1;
-      const entry = tabHistory.entries[newIndex];
-      if (!entry) return state;
-
-      // Re-open panel tab if it was closed
-      let panelTabs = session.panelTabs;
-      if (entry.type === "panel-tab") {
-        const tabExists = panelTabs.some((t) => panelTabId(t) === entry.tabId);
-        if (!tabExists) {
-          // Reconstruct a file tab from the ID (format: "file:<path>")
-          if (entry.tabId.startsWith("file:")) {
-            const path = entry.tabId.slice("file:".length);
-            const fileName = path.split("/").pop() || path;
-            panelTabs = [...panelTabs, { kind: "file", path, fileName }];
-          }
-        }
-      }
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        tabHistory: { ...tabHistory, currentIndex: newIndex },
-        activeOutputTab:
-          entry.type === "pinned" ? entry.tab : session.activeOutputTab,
-        activePanelTabId: entry.type === "panel-tab" ? entry.tabId : null,
-        panelTabs,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -2677,14 +3467,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 // Stable empty references for SSR hydration (prevents infinite loop)
 const EMPTY_PANEL_TABS: PanelTab[] = [];
 const EMPTY_FILES_TAB_STATE: FilesTabState = {
-  expandedPaths: [],
+  expandedPaths: ["outputs"],
   scrollTop: 0,
-  directoryCache: {},
-  lastRefreshGeneration: 0,
-};
-const EMPTY_TAB_HISTORY: TabNavigationHistory = {
-  entries: [],
-  currentIndex: 0,
 };
 const EMPTY_SUBAGENTS: Map<string, SubagentState> = new Map();
 
@@ -2698,6 +3482,141 @@ export const useSession = (): BuildSessionData | null =>
     if (!currentSessionId) return null;
     return sessions.get(currentSessionId) ?? null;
   });
+
+type ChatSessionData = Pick<
+  BuildSessionData,
+  | "origin"
+  | "status"
+  | "agentProvider"
+  | "agentModel"
+  | "contextUsage"
+  | "activeTurnId"
+  | "activeTurnLocalOwner"
+  | "error"
+  | "loadError"
+  | "turnSettlement"
+  | "isLoaded"
+  | "messages"
+  | "streamItems"
+  | "webappNeedsRefresh"
+  | "skillsStale"
+>;
+
+/** Output controls do not invalidate the chat transcript subscription. */
+export const useChatSession = (): ChatSessionData | null =>
+  useBuildSessionStore(
+    useShallow((state) => {
+      const session = state.currentSessionId
+        ? state.sessions.get(state.currentSessionId)
+        : undefined;
+      if (!session) return null;
+      const {
+        origin,
+        status,
+        agentProvider,
+        agentModel,
+        contextUsage,
+        activeTurnId,
+        activeTurnLocalOwner,
+        error,
+        loadError,
+        turnSettlement,
+        isLoaded,
+        messages,
+        streamItems,
+        webappNeedsRefresh,
+        skillsStale,
+      } = session;
+      return {
+        origin,
+        status,
+        agentProvider,
+        agentModel,
+        contextUsage,
+        activeTurnId,
+        activeTurnLocalOwner,
+        error,
+        loadError,
+        turnSettlement,
+        isLoaded,
+        messages,
+        streamItems,
+        webappNeedsRefresh,
+        skillsStale,
+      };
+    })
+  );
+
+function openCollectionTab(
+  sessionId: string | null,
+  kind: "outputs" | "files"
+): void {
+  const state = useBuildSessionStore.getState();
+  if (sessionId) {
+    const session = state.sessions.get(sessionId);
+    if (!session) return;
+    state.updateSessionData(sessionId, {
+      outputPanelInitialized: true,
+      outputSelectionLocked: true,
+      ...selectOutputTarget(session, { kind }),
+      outputPanelMode:
+        session.outputPanelMode === "closed"
+          ? "medium"
+          : session.outputPanelMode,
+    });
+  } else {
+    useBuildSessionStore.setState({
+      noSessionOutputPanelInitialized: true,
+      noSessionOutputPanelMode:
+        state.noSessionOutputPanelMode === "closed"
+          ? "medium"
+          : state.noSessionOutputPanelMode,
+      ...selectWelcomeOutputTarget(state, { kind }),
+    });
+  }
+}
+
+type OutputSessionData = Pick<
+  BuildSessionData,
+  | "sandbox"
+  | "status"
+  | "webappNeedsRefresh"
+  | "outputInventory"
+  | "outputInventoryStatus"
+  | "outputInventoryLoading"
+  | "filePreviewRefreshKeys"
+  | "webappNeedsRemount"
+>;
+
+export const useOutputSession = (): OutputSessionData | null =>
+  useBuildSessionStore(
+    useShallow((state) => {
+      const session = state.currentSessionId
+        ? state.sessions.get(state.currentSessionId)
+        : undefined;
+      if (!session) return null;
+      const {
+        sandbox,
+        status,
+        webappNeedsRefresh,
+        outputInventory,
+        outputInventoryStatus,
+        outputInventoryLoading,
+        filePreviewRefreshKeys,
+        webappNeedsRemount,
+      } = session;
+      return {
+        sandbox,
+        status,
+        webappNeedsRefresh,
+        outputInventory,
+        outputInventoryStatus,
+        outputInventoryLoading,
+        filePreviewRefreshKeys,
+        webappNeedsRemount,
+      };
+    })
+  );
 
 export const useSessionId = () =>
   useBuildSessionStore((state) => state.currentSessionId);
@@ -2730,36 +3649,19 @@ export const useWasInterrupted = () =>
 export const useSessionHistory = () =>
   useBuildSessionStore((state) => state.sessionHistory);
 
-/**
- * Returns the output panel open state for the current session.
- * Falls back to temporary state when no session exists (welcome page).
- * This temporary state resets to false when a session is created or cleared.
- */
-export const useOutputPanelOpen = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions, noSessionOutputPanelOpen } = state;
-    if (!currentSessionId) return noSessionOutputPanelOpen;
-    return sessions.get(currentSessionId)?.outputPanelOpen ?? false;
-  });
-
-export const useToggleOutputPanel = () =>
-  useBuildSessionStore((state) => state.toggleCurrentOutputPanel);
-
 // Pre-provisioning selectors
 export const useIsPreProvisioning = () =>
   useBuildSessionStore(
     (state) => state.preProvisioning.status === "provisioning"
   );
 
-export const useIsPreProvisioningReady = () =>
-  useBuildSessionStore((state) => state.preProvisioning.status === "ready");
-
 export const useIsPreProvisioningFailed = () =>
   useBuildSessionStore((state) => state.preProvisioning.status === "failed");
 
 export const usePreProvisionedSessionId = () =>
   useBuildSessionStore((state) =>
-    state.preProvisioning.status === "ready"
+    state.preProvisioning.status === "ready" ||
+    state.preProvisioning.status === "starting"
       ? state.preProvisioning.sessionId
       : null
   );
@@ -2775,66 +3677,27 @@ export const useQueuedMessages = () =>
     );
   });
 
-// Webapp refresh selector
-export const useWebappNeedsRefresh = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return 0;
-    return sessions.get(currentSessionId)?.webappNeedsRefresh ?? 0;
-  });
-
-// Webapp remount selector
-export const useWebappNeedsRemount = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return 0;
-    return sessions.get(currentSessionId)?.webappNeedsRemount ?? 0;
-  });
-
-// Files refresh selector
-export const useFilesNeedsRefresh = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return 0;
-    return sessions.get(currentSessionId)?.filesNeedsRefresh ?? 0;
-  });
-
 // Panel tab selectors
 export const usePanelTabs = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_PANEL_TABS;
+    if (!currentSessionId) return state.noSessionPanelTabs;
     return sessions.get(currentSessionId)?.panelTabs ?? EMPTY_PANEL_TABS;
-  });
-
-export const useActiveOutputTab = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions, noSessionActiveOutputTab } = state;
-    if (!currentSessionId) return noSessionActiveOutputTab;
-    return sessions.get(currentSessionId)?.activeOutputTab ?? "preview";
   });
 
 export const useActivePanelTabId = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return null;
+    if (!currentSessionId) return state.noSessionActivePanelTabId;
     return sessions.get(currentSessionId)?.activePanelTabId ?? null;
   });
 
-export const useFilesTabState = () =>
+export const useFilesTabState = (sessionId: string | null) =>
   useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_FILES_TAB_STATE;
+    if (!sessionId) return EMPTY_FILES_TAB_STATE;
     return (
-      sessions.get(currentSessionId)?.filesTabState ?? EMPTY_FILES_TAB_STATE
+      state.sessions.get(sessionId)?.filesTabState ?? EMPTY_FILES_TAB_STATE
     );
-  });
-
-export const useTabHistory = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_TAB_HISTORY;
-    return sessions.get(currentSessionId)?.tabHistory ?? EMPTY_TAB_HISTORY;
   });
 
 // Subagent selectors
@@ -2881,3 +3744,27 @@ export const useCurrentSessionTitle = (): string | null =>
       sessionHistory.find((item) => item.id === currentSessionId)?.title ?? null
     );
   });
+
+export const useOutputPanelMode = () =>
+  useBuildSessionStore((state) =>
+    state.currentSessionId
+      ? (state.sessions.get(state.currentSessionId)?.outputPanelMode ??
+        "closed")
+      : state.noSessionOutputPanelMode
+  );
+
+export const useMediumPanelProportion = () =>
+  useBuildSessionStore((state) =>
+    state.currentSessionId
+      ? (state.sessions.get(state.currentSessionId)?.mediumPanelProportion ??
+        0.5)
+      : state.noSessionMediumPanelProportion
+  );
+
+export const useOutputWorkspaceId = () =>
+  useBuildSessionStore((state) =>
+    state.currentSessionId
+      ? (state.sessions.get(state.currentSessionId)?.outputWorkspaceId ??
+        state.currentSessionId)
+      : state.noSessionOutputWorkspaceId
+  );

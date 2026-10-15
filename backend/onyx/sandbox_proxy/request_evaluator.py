@@ -32,11 +32,8 @@ from onyx.external_apps.matching.engine import (
     recognize_actions,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.sandbox_proxy.mcp_jsonrpc import (
-    McpRpcClassification,
-    McpRpcKind,
-    classify_mcp_request,
-)
+from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
+from onyx.sandbox_proxy.models import McpRpcClassification, McpRpcKind
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     AmbiguousMCPTargetError,
     match_request,
@@ -201,9 +198,7 @@ class McpRequestEvaluator(RequestEvaluator):
             # resolver claims by host — the request would forward with injected
             # credentials, ungated.
             try:
-                classification = classify_mcp_request(
-                    request.method or "", request.raw_content
-                )
+                classification = classify_mcp_request(request)
                 if classification.kind is McpRpcKind.PLUMBING:
                     return None
                 actions = _mcp_tool_actions(classification, server, request, db)

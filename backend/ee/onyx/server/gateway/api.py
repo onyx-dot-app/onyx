@@ -41,6 +41,7 @@ from onyx.db.llm import (
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_request import (
@@ -60,13 +61,14 @@ from onyx.llm.models import (
     ToolChoice,
     ToolChoiceOptions,
 )
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import (
     GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
     GATEWAY_PATH_PREFIX,
 )
+from onyx.server.gateway.craft_session import craft_session_binder
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
     AnthropicContentBlock,
@@ -114,11 +116,12 @@ from onyx.server.gateway.models import (
     ResponsesOutputTextPart,
     ResponsesRequest,
 )
+from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import trace
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
@@ -137,7 +140,15 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
-router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
+# One user dependency object, shared by the endpoints and the Craft session
+# binder, so FastAPI resolves the user once per request.
+_gateway_user = require_permission(Permission.USE_LLM_GATEWAY)
+router = APIRouter(
+    prefix=GATEWAY_PATH_PREFIX,
+    # Binds the calling Craft session (if any) for the traces opened below,
+    # including on the stream worker threads.
+    dependencies=[Depends(craft_session_binder(_gateway_user))],
+)
 
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
@@ -145,7 +156,7 @@ _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
 
 
 def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
+    return llm_gateway_trace(flow, model)
 
 
 def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
@@ -154,6 +165,18 @@ def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
+        )
+    # The workspace switch only gates third-party PAT traffic. Craft sandbox
+    # tokens keep working — admins control those via the Craft setting.
+    # Fail closed: a settings-read error must not silently re-enable a
+    # feature the admin switched off.
+    if (
+        flow is LLMFlow.LLM_GATEWAY
+        and not load_settings(raise_on_error=True).llm_gateway_enabled
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_DISABLED,
+            "The Onyx LLM gateway is disabled by an administrator.",
         )
     return flow
 
@@ -993,7 +1016,7 @@ def _anthropic_reasoning_effort(
 ) -> ReasoningEffort:
     """Anthropic has two thinking APIs: legacy ``thinking.type=enabled`` with
     ``budget_tokens``, and adaptive ``thinking.type=adaptive`` where effort
-    lives in top-level ``output_config.effort``. The downstream LLM layer
+    lives in top-level ``output_config.effort``. The provider adapter
     re-derives the right API per model from the single ReasoningEffort, so
     both request shapes must map faithfully here."""
     if thinking is not None and thinking.get("type") == "disabled":
@@ -1381,7 +1404,7 @@ def handle_anthropic_messages(
     except ValueError as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            "The upstream LLM returned invalid tool arguments.",
+            "The upstream model returned invalid tool arguments.",
         ) from e
     content.extend(tool_blocks)
     return AnthropicMessageResponse.from_parts(
@@ -1421,7 +1444,7 @@ def _resolve_metered_gateway_model(
 @router.get("/v1/models")
 def gateway_list_models(
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     _authorize_gateway_request(http_request, user)
@@ -1434,7 +1457,7 @@ def gateway_list_models(
 def gateway_chat_completions(
     request: ChatCompletionRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
@@ -1459,7 +1482,7 @@ def gateway_chat_completions(
 def gateway_responses(
     request: ResponsesRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
@@ -1490,7 +1513,7 @@ def gateway_responses(
 def gateway_anthropic_messages(
     request: AnthropicMessagesRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
@@ -1524,7 +1547,7 @@ def gateway_anthropic_messages(
 def gateway_anthropic_count_tokens(
     request: AnthropicCountTokensRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     # No token rate limit check: nothing is generated by this endpoint.

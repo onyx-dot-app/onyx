@@ -39,7 +39,7 @@ async function runResumeStream(
   const node = data
     ? getMessageByMessageId(data.messageTree, runId)
     : undefined;
-  // Single-model only: a multi-model run_id is the user message, not an assistant node.
+  // Single-model only: a multi-model stream_id is the user message, not an assistant node.
   if (!data || !node || node.type !== "assistant") return;
   // local send owns the stream, or another reopen already resumed this run
   if (resumingRuns.has(runId) || data.abortController) return;
@@ -157,7 +157,7 @@ async function runResumeStream(
               sessionId,
               processRawChatHistory(settled.messages, settled.packets),
             );
-          // clear the stale current_run so a remount can't re-resume this finished run
+          // clear the stale current_stream so a remount can't re-resume this finished run
           queryClient.setQueryData(
             QUERY_KEYS.chatSession(serverUrl, sessionId),
             settled,
@@ -191,7 +191,7 @@ export function useChatSessionController(sessionId: string | null): void {
     enabled: false,
   });
 
-  const runId = data?.current_run?.run_id ?? null;
+  const runId = data?.current_stream?.stream_id ?? null;
 
   useEffect(() => {
     if (sessionId == null || runId == null) return;

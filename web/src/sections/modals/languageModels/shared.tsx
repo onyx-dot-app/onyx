@@ -8,8 +8,8 @@ import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import type {
@@ -25,6 +25,9 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
+// The file's unqualified `Text` is the legacy component, kept for its
+// existing call sites.
+import { Text as OpalText } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -66,6 +69,9 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
+
+/** How long a save may run before the footer says it is taking a while. */
+const SLOW_SAVE_NOTICE_MS = 10_000;
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -168,10 +174,11 @@ export interface APIBaseFieldProps {
 export function APIBaseField({
   optional = false,
   subDescription,
-  placeholder = "https://",
+  placeholder,
   rightChildren,
 }: APIBaseFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   return (
     <InputPadder>
       <InputVertical
@@ -182,7 +189,7 @@ export function APIBaseField({
       >
         <InputTypeInField
           name="api_base"
-          placeholder={placeholder}
+          placeholder={placeholder ?? tPlaceholders("url")}
           rightChildren={rightChildren}
         />
       </InputVertical>
@@ -1071,6 +1078,18 @@ function ModalWrapperInner({
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
 
+  // A provider with thousands of models saves in seconds, not instantly, so
+  // a long-running submit says so instead of looking stuck.
+  const [saveIsSlow, setSaveIsSlow] = useState(false);
+  useEffect(() => {
+    if (!isSubmitting) {
+      setSaveIsSlow(false);
+      return;
+    }
+    const handle = setTimeout(() => setSaveIsSlow(true), SLOW_SAVE_NOTICE_MS);
+    return () => clearTimeout(handle);
+  }, [isSubmitting]);
+
   const disabledTooltip = busy
     ? undefined
     : !isValid
@@ -1115,6 +1134,11 @@ function ModalWrapperInner({
             {children}
           </Modal.Body>
           <Modal.Footer>
+            {saveIsSlow && (
+              <OpalText font="secondary-body" color="text-03">
+                {t("setup.slowSave.text")}
+              </OpalText>
+            )}
             <Button prominence="secondary" onClick={onClose} type="button">
               {t("setup.cancelButton.label")}
             </Button>

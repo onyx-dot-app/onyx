@@ -3,6 +3,7 @@
     "claude-fable-5": "claude-fable-5@default",
     "claude-fable-5-1": "claude-fable-5-1@default",
     "claude-haiku-4-5": "claude-haiku-4-5@20251001",
+    "claude-haiku-5-5": "claude-haiku-5-5@default",
     "claude-opus-4": "claude-opus-4@20250514",
     "claude-opus-4-1": "claude-opus-4-1@20250805",
     "claude-opus-4-5": "claude-opus-4-5@20251101",
@@ -14,12 +15,20 @@
     "claude-sonnet-4": "claude-sonnet-4@20250514",
     "claude-sonnet-4-5": "claude-sonnet-4-5@20250929",
     "claude-sonnet-4-6": "claude-sonnet-4-6@default",
-    "claude-sonnet-5": "claude-sonnet-5@default"
+    "claude-sonnet-5": "claude-sonnet-5@default",
+    "claude-sonnet-5-5": "claude-sonnet-5-5@default"
   },
   "models": {
     "chirp": {
       "mode": "audio_speech",
       "name": "chirp"
+    },
+    "chirp_2": {
+      "cost": {
+        "second_input": 0.00026667
+      },
+      "mode": "audio_transcription",
+      "name": "chirp_2"
     },
     "chirp_3": {
       "cost": {
@@ -119,6 +128,49 @@
       "temperature": true,
       "tool_call": true
     },
+    "claude-haiku-5-5@default": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "claude-opus-4-1@20250805": {
       "attachment": true,
       "cost": {
@@ -185,26 +237,8 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
-        "context_over_200k": {
-          "cache_read": 1,
-          "cache_write": 12.5,
-          "input": 10,
-          "output": 37.5
-        },
         "input": 5,
-        "output": 25,
-        "tiers": [
-          {
-            "cache_read": 1,
-            "cache_write": 12.5,
-            "input": 10,
-            "output": 37.5,
-            "tier": {
-              "size": 200000,
-              "type": "context"
-            }
-          }
-        ]
+        "output": 25
       },
       "family": "claude-opus",
       "limit": {
@@ -233,26 +267,8 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
-        "context_over_200k": {
-          "cache_read": 1,
-          "cache_write": 12.5,
-          "input": 10,
-          "output": 37.5
-        },
         "input": 5,
-        "output": 25,
-        "tiers": [
-          {
-            "cache_read": 1,
-            "cache_write": 12.5,
-            "input": 10,
-            "output": 37.5,
-            "tier": {
-              "size": 200000,
-              "type": "context"
-            }
-          }
-        ]
+        "output": 25
       },
       "family": "claude-opus",
       "limit": {
@@ -281,26 +297,8 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
-        "context_over_200k": {
-          "cache_read": 1,
-          "cache_write": 12.5,
-          "input": 10,
-          "output": 37.5
-        },
         "input": 5,
-        "output": 25,
-        "tiers": [
-          {
-            "cache_read": 1,
-            "cache_write": 12.5,
-            "input": 10,
-            "output": 37.5,
-            "tier": {
-              "size": 200000,
-              "type": "context"
-            }
-          }
-        ]
+        "output": 25
       },
       "family": "claude-opus",
       "limit": {
@@ -443,6 +441,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -451,26 +450,8 @@
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3.75,
-        "context_over_200k": {
-          "cache_read": 0.6,
-          "cache_write": 7.5,
-          "input": 6,
-          "output": 22.5
-        },
         "input": 3,
-        "output": 15,
-        "tiers": [
-          {
-            "cache_read": 0.6,
-            "cache_write": 7.5,
-            "input": 6,
-            "output": 22.5,
-            "tier": {
-              "size": 200000,
-              "type": "context"
-            }
-          }
-        ]
+        "output": 15
       },
       "family": "claude-sonnet",
       "limit": {
@@ -525,6 +506,37 @@
       "temperature": true,
       "tool_call": true
     },
+    "claude-sonnet-5-5@default": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "claude-sonnet-5@default": {
       "attachment": true,
       "cost": {
@@ -555,6 +567,33 @@
       "temperature": false,
       "tool_call": true
     },
+    "codestral-2": {
+      "attachment": false,
+      "cost": {
+        "input": 0.3,
+        "output": 0.9
+      },
+      "family": "codestral",
+      "limit": {
+        "context": 128000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Codestral 2",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-07-30",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "deep-research-pro-preview-12-2025": {
       "cost": {
         "cache_read": 0.19999999999999998,
@@ -567,8 +606,19 @@
         "context": 65536,
         "output": 32768
       },
-      "mode": "image_generation",
-      "name": "deep-research-pro-preview-12-2025"
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "deep-research-pro-preview-12-2025",
+      "structured_output": true,
+      "tool_call": false
     },
     "deepseek-ai/deepseek-ocr-maas": {
       "cost": {
@@ -592,8 +642,7 @@
       },
       "modalities": {
         "input": [
-          "text",
-          "pdf"
+          "text"
         ],
         "output": [
           "text"
@@ -622,8 +671,7 @@
       },
       "modalities": {
         "input": [
-          "text",
-          "pdf"
+          "text"
         ],
         "output": [
           "text"
@@ -636,6 +684,28 @@
       "status": "deprecated",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "gemini-2.5-computer-use-preview-10-2025": {
+      "cost": {
+        "input": 1.25,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 128000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-2.5-computer-use-preview-10-2025",
       "tool_call": true
     },
     "gemini-2.5-flash": {
@@ -668,13 +738,14 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-17",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
     "gemini-2.5-flash-image": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.03,
         "image": 0.039,
         "input": 0.3,
         "output": 30
@@ -687,7 +758,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text",
@@ -732,7 +804,35 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-17",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "gemini-2.5-flash-lite-preview-09-2025": {
+      "cost": {
+        "cache_read": 0.01,
+        "input": 0.09999999999999999,
+        "output": 0.39999999999999997
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-2.5-flash-lite-preview-09-2025",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "gemini-2.5-flash-native-audio": {
@@ -742,6 +842,32 @@
       },
       "mode": "realtime",
       "name": "gemini-2.5-flash-native-audio"
+    },
+    "gemini-2.5-flash-preview-09-2025": {
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.3,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-2.5-flash-preview-09-2025",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
     },
     "gemini-2.5-flash-preview-tts": {
       "cost": {
@@ -760,6 +886,7 @@
       "family": "gemini-flash",
       "limit": {
         "context": 32768,
+        "input": 8192,
         "output": 16384
       },
       "modalities": {
@@ -770,6 +897,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Gemini 2.5 Flash TTS",
       "open_weights": false,
       "reasoning": false,
@@ -822,7 +950,33 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-17",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "gemini-2.5-pro-preview-tts": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 1.0,
+        "output": 20.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-2.5-pro-preview-tts",
+      "structured_output": true,
       "tool_call": true
     },
     "gemini-2.5-pro-tts": {
@@ -834,6 +988,7 @@
       "family": "gemini-pro",
       "limit": {
         "context": 32768,
+        "input": 8192,
         "output": 16384
       },
       "modalities": {
@@ -844,6 +999,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Gemini 2.5 Pro TTS",
       "open_weights": false,
       "reasoning": false,
@@ -881,6 +1037,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-12-17",
+      "status": "beta",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -902,7 +1059,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text",
@@ -919,6 +1077,7 @@
     },
     "gemini-3-pro-image-preview": {
       "cost": {
+        "cache_read": 0.19999999999999998,
         "image": 0.134,
         "image_input": 0.0011,
         "input": 2.0,
@@ -930,6 +1089,32 @@
       },
       "mode": "image_generation",
       "name": "gemini-3-pro-image-preview"
+    },
+    "gemini-3-pro-preview": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-3-pro-preview",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
     },
     "gemini-3.1-flash-image": {
       "attachment": true,
@@ -967,6 +1152,7 @@
     },
     "gemini-3.1-flash-image-preview": {
       "cost": {
+        "cache_read": 0.049999999999999996,
         "image": 0.0672,
         "image_input": 0.00056,
         "input": 0.5,
@@ -1014,29 +1200,44 @@
       "tool_call": true
     },
     "gemini-3.1-flash-lite-image": {
+      "attachment": true,
       "cost": {
-        "cache_read": 0.024999999999999998,
+        "cache_read": 0.025,
         "image": 0.0336,
         "image_input": 0.00028,
         "input": 0.25,
-        "output": 1.5
+        "output": 30
       },
+      "family": "gemini-flash-lite",
       "limit": {
         "context": 65536,
         "output": 4096
       },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text",
+          "image"
+        ]
+      },
       "mode": "image_generation",
-      "name": "gemini-3.1-flash-lite-image"
+      "name": "Nano Banana 2 Lite",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
     },
     "gemini-3.1-flash-lite-preview": {
-      "attachment": true,
       "cost": {
-        "cache_read": 0.025,
+        "cache_read": 0.024999999999999998,
         "input": 0.25,
-        "input_audio": 0.5,
         "output": 1.5
       },
-      "family": "gemini-flash-lite",
       "limit": {
         "context": 1048576,
         "output": 65536
@@ -1045,8 +1246,6 @@
         "input": [
           "text",
           "image",
-          "video",
-          "audio",
           "pdf"
         ],
         "output": [
@@ -1054,13 +1253,9 @@
         ]
       },
       "mode": "chat",
-      "name": "Gemini 3.1 Flash Lite Preview",
-      "open_weights": false,
+      "name": "gemini-3.1-flash-lite-preview",
       "reasoning": true,
-      "release_date": "2026-03-03",
-      "status": "deprecated",
       "structured_output": true,
-      "temperature": true,
       "tool_call": true
     },
     "gemini-3.1-flash-tts-preview": {
@@ -1117,6 +1312,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-19",
+      "status": "beta",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1167,6 +1363,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-19",
+      "status": "beta",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1242,7 +1439,7 @@
       "cost": {
         "input": 3.5,
         "output": 21.0,
-        "second_input": 8.83333333333e-05
+        "second_input": 8.75e-05
       },
       "mode": "realtime",
       "name": "gemini-3.5-live-translate-preview"
@@ -1258,7 +1455,7 @@
     "gemini-3.5-transcribe-live": {
       "cost": {
         "output": 21.0,
-        "second_input": 8.33333333333e-05
+        "second_input": 8.75e-05
       },
       "mode": "audio_transcription",
       "name": "gemini-3.5-transcribe-live"
@@ -1309,6 +1506,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-21",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1381,6 +1579,68 @@
       "temperature": true,
       "tool_call": true
     },
+    "gemini-3.8-flash-cyber": {
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-3.8-flash-cyber",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": false
+    },
+    "gemini-3.8-flash-lite-tts": {
+      "cost": {
+        "input": 0.5,
+        "output": 6.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 16384
+      },
+      "mode": "audio_speech",
+      "name": "gemini-3.8-flash-lite-tts"
+    },
+    "gemini-3.8-flash-tts": {
+      "cost": {
+        "input": 0.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 16384
+      },
+      "mode": "audio_speech",
+      "name": "gemini-3.8-flash-tts"
+    },
+    "gemini-3.8-live": {
+      "cost": {
+        "input": 0.75,
+        "output": 4.5
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "mode": "realtime",
+      "name": "gemini-3.8-live"
+    },
     "gemini-embedding-001": {
       "attachment": false,
       "cost": {
@@ -1442,71 +1702,6 @@
       "mode": "embedding",
       "name": "gemini-flash-experimental"
     },
-    "gemini-flash-latest": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.15,
-        "input": 1.5,
-        "input_audio": 1.5,
-        "output": 9
-      },
-      "family": "gemini-flash",
-      "limit": {
-        "context": 1048576,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "video",
-          "audio",
-          "pdf"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Gemini Flash Latest",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-08-13",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "gemini-flash-lite-latest": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.025,
-        "input": 0.25,
-        "input_audio": 0.5,
-        "output": 1.5
-      },
-      "family": "gemini-flash-lite",
-      "limit": {
-        "context": 1048576,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "video",
-          "audio",
-          "pdf"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Gemini Flash-Lite Latest",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-07-21",
-      "temperature": true,
-      "tool_call": true
-    },
     "gemini-live-2.5-flash-native-audio": {
       "cost": {
         "input": 0.5,
@@ -1530,6 +1725,172 @@
       },
       "mode": "realtime",
       "name": "gemini-live-2.5-flash-preview-native-audio-09-2025"
+    },
+    "gemini-nano-banana-2.1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "image": 0.0336,
+        "image_input": 0.00168,
+        "input": 1.5,
+        "output": 30
+      },
+      "family": "gemini-flash",
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text",
+          "image"
+        ]
+      },
+      "mode": "image_generation",
+      "name": "Nano Banana 2.1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-06",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": false
+    },
+    "gemini-omni-1.1-flash": {
+      "cost": {
+        "input": 1.5,
+        "output": 9.0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-omni-1.1-flash"
+    },
+    "gemini-omni-1.1-flash-preview": {
+      "cost": {
+        "input": 1.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 57920,
+        "output": 57920
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-omni-1.1-flash-preview",
+      "reasoning": true
+    },
+    "gemini-omni-flash-preview": {
+      "cost": {
+        "input": 1.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-omni-flash-preview",
+      "reasoning": true
+    },
+    "gemini-robotics-er-1.5-preview": {
+      "cost": {
+        "cache_read": 0.0,
+        "input": 0.3,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65535
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-robotics-er-1.5-preview",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gemma-4-26b-a4b-it": {
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemma-4-26b-a4b-it"
+    },
+    "google/gemma-4-26b-a4b-it-maas": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 262144,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 4 26B A4B IT",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-02",
+      "status": "alpha",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
     },
     "lyria-002": {
       "cost": {
@@ -1620,9 +1981,92 @@
       "temperature": true,
       "tool_call": true
     },
+    "meta/llama-4-scout-17b-16e-instruct-maas": {
+      "attachment": true,
+      "cost": {
+        "input": 0.25,
+        "output": 0.7
+      },
+      "family": "llama",
+      "limit": {
+        "context": 1310720,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama 4 Scout 17B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral-medium-3": {
+      "attachment": true,
+      "cost": {
+        "input": 0.4,
+        "output": 2
+      },
+      "family": "mistral-medium",
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral Medium 3",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-05-07",
+      "temperature": true,
+      "tool_call": true
+    },
     "mistral-ocr-2505": {
       "mode": "ocr",
       "name": "mistral-ocr-2505"
+    },
+    "mistral-small-2503": {
+      "attachment": true,
+      "cost": {
+        "input": 0.1,
+        "output": 0.3
+      },
+      "family": "mistral-small",
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral Small 3.1 24B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
     },
     "moonshotai/kimi-k2-thinking-maas": {
       "attachment": false,
@@ -1686,7 +2130,7 @@
       "family": "gpt-oss",
       "limit": {
         "context": 131072,
-        "output": 32768
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -1700,6 +2144,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-05",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1728,6 +2173,7 @@
       "reasoning": true,
       "release_date": "2025-08-05",
       "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1752,7 +2198,7 @@
       },
       "name": "Qwen3 235B A22B Instruct",
       "open_weights": true,
-      "reasoning": true,
+      "reasoning": false,
       "release_date": "2025-08-13",
       "status": "deprecated",
       "structured_output": true,
@@ -1818,24 +2264,48 @@
       "mode": "embedding",
       "name": "text-multilingual-embedding-002"
     },
-    "vertex_ai/deep-research-pro-preview-12-2025": {
+    "text-unicorn": {
       "cost": {
-        "cache_read": 0.19999999999999998,
-        "image": 0.134,
-        "image_input": 0.0011,
-        "input": 2.0,
-        "output": 12.0
+        "input": 10.0,
+        "output": 28.0
       },
       "limit": {
-        "context": 65536,
-        "output": 32768
+        "context": 8192,
+        "output": 1024
       },
-      "mode": "image_generation",
-      "name": "vertex_ai/deep-research-pro-preview-12-2025"
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "completion",
+      "name": "text-unicorn"
+    },
+    "text-unicorn@001": {
+      "cost": {
+        "input": 10.0,
+        "output": 28.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 1024
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "completion",
+      "name": "text-unicorn@001"
     },
     "vertex_ai/gemini-2.5-flash-image": {
       "cost": {
-        "cache_read": 0.03,
         "image": 0.039,
         "input": 0.3,
         "output": 2.5
@@ -1864,6 +2334,7 @@
     },
     "vertex_ai/gemini-3-pro-image-preview": {
       "cost": {
+        "cache_read": 0.19999999999999998,
         "image": 0.134,
         "image_input": 0.0011,
         "input": 2.0,
@@ -1893,6 +2364,7 @@
     },
     "vertex_ai/gemini-3.1-flash-image-preview": {
       "cost": {
+        "cache_read": 0.049999999999999996,
         "image": 0.0672,
         "image_input": 0.00056,
         "input": 0.5,
@@ -1919,6 +2391,51 @@
       },
       "mode": "image_generation",
       "name": "vertex_ai/gemini-3.1-flash-lite-image"
+    },
+    "vertex_ai/gemini-nano-banana-2.1": {
+      "cost": {
+        "cache_read": 0.15,
+        "image": 0.0336,
+        "image_input": 0.00168,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "vertex_ai/gemini-nano-banana-2.1"
+    },
+    "vertex_ai/veo-2.0-generate-001": {
+      "cost": {
+        "second": 0.5
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-2.0-generate-001"
+    },
+    "vertex_ai/veo-3.0-fast-generate-001": {
+      "cost": {
+        "second": 0.1
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.0-fast-generate-001"
+    },
+    "vertex_ai/veo-3.0-generate-001": {
+      "cost": {
+        "second": 0.4
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.0-generate-001"
     },
     "vertex_ai/veo-3.1-fast-generate-001": {
       "cost": {
@@ -1969,6 +2486,13 @@
       },
       "mode": "video_generation",
       "name": "vertex_ai/veo-3.1-lite-generate-001"
+    },
+    "virtual-try-on-001": {
+      "cost": {
+        "image": 0.06
+      },
+      "mode": "image_generation",
+      "name": "virtual-try-on-001"
     },
     "xai/grok-4.1-fast-non-reasoning": {
       "attachment": true,
@@ -2213,6 +2737,52 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "xai/grok-4.7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "context_over_200k": {
+          "cache_read": 1,
+          "input": 4,
+          "output": 12
+        },
+        "input": 2,
+        "output": 6,
+        "tiers": [
+          {
+            "cache_read": 1,
+            "input": 4,
+            "output": 12,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 524288,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.7",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-21",
       "status": "beta",
       "structured_output": true,
       "temperature": true,
@@ -2232,8 +2802,7 @@
       },
       "modalities": {
         "input": [
-          "text",
-          "pdf"
+          "text"
         ],
         "output": [
           "text"
@@ -2257,8 +2826,8 @@
       },
       "family": "glm",
       "limit": {
-        "context": 202752,
-        "output": 131072
+        "context": 200000,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -2271,8 +2840,9 @@
       "name": "GLM-5",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-11",
+      "release_date": "2026-02-12",
       "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },

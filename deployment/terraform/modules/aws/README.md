@@ -208,6 +208,33 @@ module "onyx" {
 }
 ```
 
+### Accounts that require a permissions boundary on new roles
+Some AWS accounts let operators create IAM roles only if each role carries a set permissions boundary. Pass that boundary, and optionally an IAM path, to apply it to every role the stack creates (VPC flow logs, EKS cluster and node groups, EBS CSI, workload, load balancer controller and cluster autoscaler roles):
+
+```hcl
+module "onyx" {
+  source = "./modules/aws/onyx"
+  # ...
+  iam_role_permissions_boundary = "arn:aws:iam::123456789012:policy/MyBoundary"
+  iam_role_path                 = "/bounded/"
+}
+```
+
+Both default to null, which leaves existing stacks unchanged. Setting `iam_role_path` on an existing stack replaces its roles, so set it only on new stacks.
+
+### Pinning the cluster admin
+By default the EKS module gives cluster-admin, and the cluster's KMS key administrator role, to whoever runs Terraform. If a different person or role applies later, the plan replaces that access entry and rewrites the key policy. Pin both to one principal:
+
+```hcl
+module "onyx" {
+  source = "./modules/aws/onyx"
+  # ...
+  cluster_admin_principal_arn = "arn:aws:iam::123456789012:role/aws-reserved/sso.amazonaws.com/us-east-2/AWSReservedSSO_AdministratorAccess_abc123"
+}
+```
+
+On an existing cluster, set it to the principal in the current `cluster_creator` access entry (`terraform state show 'module.onyx.module.eks.module.eks.aws_eks_access_entry.this["cluster_creator"]'`). The pinned entry reuses the same Terraform addresses, so that plans no changes.
+
 ## What each module does
 
 ### `onyx`

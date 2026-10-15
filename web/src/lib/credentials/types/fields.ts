@@ -14,3 +14,16 @@ export interface CredentialFormValues extends CredentialFieldValues {
 }
 
 export type CredentialActionType = "create" | "createAndSwap";
+
+/**
+ * What a credential form's validation says, already translated. `fieldTitle`
+ * names a field by its key; the rest wrap that title in a message.
+ */
+export interface CredentialValidationMessages {
+  fieldTitle: (key: string) => string;
+  required: (field: string) => string;
+  empty: (field: string) => string;
+  invalidEmail: (field: string) => string;
+  fileRequired: (field: string) => string;
+  authMethodRequired: string;
+}

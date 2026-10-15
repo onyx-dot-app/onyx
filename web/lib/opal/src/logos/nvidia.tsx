@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgNvidia = ({ size, ...props }: IconProps) => (
+const SvgNVIDIA = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -14,4 +14,4 @@ const SvgNvidia = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgNvidia;
+export default SvgNVIDIA;

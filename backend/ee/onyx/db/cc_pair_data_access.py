@@ -1,9 +1,10 @@
 """Data-access groups of cc-pairs (UserGroup__CCPairDataAccess).
 
 For a PRIVATE pair, members of its data-access groups may read all its
-documents. The rows are read at query time (the cc-pair access filter) and at
-index time (the group: ACL entries). A write marks the pair's documents for
-metadata sync, so the group: entries stay current.
+documents. For a SYNC_RESTRICTED pair, they may read the documents their source
+ACL allows. The rows are read at query time (the cc-pair access filter) and,
+for PRIVATE pairs, at index time (the group: ACL entries). A write marks the
+pair's documents for metadata sync, so the group: entries stay current.
 """
 
 from collections.abc import Collection
@@ -12,6 +13,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from onyx.auth.scoped_permissions import scope_data_access_group_ids
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import AccessType
 from onyx.db.models import (
@@ -65,6 +67,70 @@ def fetch_private_cc_pair_ids(
             )
         )
     )
+
+
+def fetch_cc_pair_ids_with_data_access(
+    db_session: Session, cc_pair_ids: Collection[int]
+) -> set[int]:
+    """The pairs of cc_pair_ids whose data-access groups decide who may read
+    them (PRIVATE and SYNC_RESTRICTED)."""
+    if not cc_pair_ids:
+        return set()
+    return set(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id).where(
+                ConnectorCredentialPair.id.in_(cc_pair_ids),
+                ConnectorCredentialPair.access_type.in_(AccessType.data_access_types()),
+            )
+        )
+    )
+
+
+def lock_cc_pairs_for_data_access__no_commit(
+    db_session: Session, cc_pair_ids: Collection[int]
+) -> None:
+    """Row-locks the pairs in id order. A writer that can remove a data-access
+    group takes this lock before it writes, so that
+    assert_restricted_cc_pairs_keep_a_group sees the removals of concurrent
+    writers. NO KEY UPDATE does not block inserts that reference the pairs."""
+    if not cc_pair_ids:
+        return
+    db_session.execute(
+        select(ConnectorCredentialPair.id)
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+        .order_by(ConnectorCredentialPair.id)
+        .with_for_update(key_share=True)
+    )
+
+
+def assert_restricted_cc_pairs_keep_a_group(
+    db_session: Session, cc_pair_ids: Collection[int]
+) -> None:
+    """A SYNC_RESTRICTED pair with no data-access group is visible to nobody,
+    so a write must not remove its last group. The caller locks the pairs with
+    lock_cc_pairs_for_data_access__no_commit before it removes groups."""
+    if not cc_pair_ids:
+        return
+    has_group = (
+        select(UserGroup__CCPairDataAccess.cc_pair_id)
+        .where(UserGroup__CCPairDataAccess.cc_pair_id == ConnectorCredentialPair.id)
+        .exists()
+    )
+    ungrouped_ids = sorted(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id).where(
+                ConnectorCredentialPair.id.in_(cc_pair_ids),
+                ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+                ~has_group,
+            )
+        )
+    )
+    if ungrouped_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "A restricted connector needs at least one data-access group: "
+            f"{ungrouped_ids}",
+        )
 
 
 def add_cc_pair_data_access__no_commit(
@@ -144,14 +210,9 @@ def set_cc_pair_data_access_groups__no_commit(
         group.id
         for group in fetch_data_access_groups_for_cc_pair(db_session, cc_pair_id)
     }
-    final_group_ids = requested_group_ids
-    if visible_group_ids is not None:
-        if hidden_added := requested_group_ids - current_group_ids - visible_group_ids:
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                f"You can't give data access to groups you can't see: {sorted(hidden_added)}",
-            )
-        final_group_ids = requested_group_ids | (current_group_ids - visible_group_ids)
+    final_group_ids = scope_data_access_group_ids(
+        requested_group_ids, current_group_ids, visible_group_ids
+    )
 
     added_group_ids = final_group_ids - current_group_ids
     removed_group_ids = current_group_ids - final_group_ids

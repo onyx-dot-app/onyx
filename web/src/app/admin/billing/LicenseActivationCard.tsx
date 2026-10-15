@@ -4,12 +4,12 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { InputFile } from "@opal/components";
+import { InputSingleUpload } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputVertical } from "@opal/layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/svc";
-import { LicenseStatus } from "@/lib/billing/interfaces";
+import { LicenseStatus } from "@/lib/billing/types";
 import { formatDateShort } from "@/lib/dateUtils";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -201,13 +201,13 @@ export default function LicenseActivationCard({
               }
               withLabel
             >
-              <InputFile
+              <InputSingleUpload
                 placeholder="eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
                 setValue={(value) => {
                   setLicenseKey(value);
                   setError(null);
                 }}
-                error={!!error}
+                variant={error ? "error" : "primary"}
               />
               {error && (
                 <Section

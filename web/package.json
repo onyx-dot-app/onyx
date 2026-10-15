@@ -7,12 +7,12 @@
     "lib/shared"
   ],
   "scripts": {
-    "dev": "next dev",
-    "dev:profile": "NEXT_PUBLIC_ENABLE_STATS=true next dev",
-    "dev:clean": "bun run clean && next dev",
+    "dev": "node tools/prepare-pdf-assets.cjs && next dev",
+    "dev:profile": "node tools/prepare-pdf-assets.cjs && NEXT_PUBLIC_ENABLE_STATS=true next dev",
+    "dev:clean": "node tools/prepare-pdf-assets.cjs && bun run clean && next dev",
     "clean": "rm -rf .next node_modules/.cache *.tsbuildinfo",
-    "build": "next build",
-    "build:fast": "SKIP_TYPE_CHECK=1 next build",
+    "build": "node tools/prepare-pdf-assets.cjs && next build",
+    "build:fast": "node tools/prepare-pdf-assets.cjs && SKIP_TYPE_CHECK=1 next build",
     "start": "next start",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -76,6 +76,7 @@
     "next": "16.3.8",
     "next-intl": "^4.13.7",
     "next-themes": "^0.4.4",
+    "pdfjs-dist": "6.3.289",
     "postcss": "^8.5.10",
     "posthog-js": "^1.421.0",
     "react": "19.2.8",
@@ -84,6 +85,7 @@
     "react-dropzone": "^20.1.0",
     "react-icons": "^5.7.0",
     "react-markdown": "^9.0.1",
+    "react-pdf": "11.0.0",
     "recharts": "^3.9.2",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",
@@ -139,6 +141,7 @@
     "whatwg-fetch": "^3.6.20"
   },
   "overrides": {
-    "react-is": "^19.0.0-rc-69d4b800-20241021"
+    "react-is": "^19.0.0-rc-69d4b800-20241021",
+    "tinypool": "2.1.2"
   }
 }

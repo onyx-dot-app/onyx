@@ -1,5 +1,5 @@
 import { Permission } from "@/lib/types";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
@@ -152,6 +152,16 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "",
     requiredTier: null,
+    visibleWhen: null,
+  },
+  LLM_GATEWAY: {
+    path: "/admin/llm-gateway",
+    icon: SvgGlobe,
+    title: "LLM Gateway",
+    sidebarLabel: "LLM Gateway",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "",
+    requiredTier: Tier.BUSINESS,
     visibleWhen: null,
   },
   // ── Craft ─────────────────────────────────────────────────────────

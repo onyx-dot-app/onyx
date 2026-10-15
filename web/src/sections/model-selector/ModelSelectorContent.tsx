@@ -18,6 +18,7 @@ import {
   SvgChevronRight,
   SvgCode,
   SvgSliders,
+  SvgSparkle,
   SvgThermometer,
 } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
@@ -439,7 +440,11 @@ export default function ModelSelectorContent({
   onDetailSelect,
 }: ModelSelectorContentProps) {
   const t = useTranslations("chat.modelSelector");
-  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
+  const {
+    hide_provider_grouping: hideProviderGrouping,
+    model_routing_enabled: modelRoutingEnabled,
+    model_routing_model_configuration_id: routingModelId,
+  } = useSettings();
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
     llmProviders: currentAgentProviderOptions,
@@ -461,8 +466,18 @@ export default function ModelSelectorContent({
     [llmProviders, currentModelName, includeHiddenModels]
   );
 
+  // "Auto" selects the admin-configured router; router rows never list.
+  const autoOption = useMemo<LLMOption | undefined>(() => {
+    if (!modelRoutingEnabled || routingModelId == null) return undefined;
+    const backing: LLMOption | undefined = llmOptions.find(
+      (opt) => opt.modelConfigurationId === routingModelId
+    );
+    if (!backing) return undefined;
+    return { ...backing, displayName: t("autoItem.label"), isAuto: true };
+  }, [llmOptions, modelRoutingEnabled, routingModelId, t]);
+
   const filteredOptions = useMemo(() => {
-    let result = llmOptions;
+    let result = llmOptions.filter((opt) => !opt.isRouter);
     if (requiresImageInput) {
       result = result.filter((opt) => opt.supportsImageInput);
     }
@@ -612,8 +627,11 @@ export default function ModelSelectorContent({
     const disabled = isDisabled?.(option) ?? false;
 
     // Skip the model-id description when it would just repeat the display name.
-    const description =
-      option.modelName !== option.displayName ? option.modelName : undefined;
+    const description: string | undefined = option.isAuto
+      ? t("autoItem.description")
+      : option.modelName !== option.displayName
+        ? option.modelName
+        : undefined;
 
     return (
       <Disabled key={llmOptionKey(option)} disabled={disabled}>
@@ -621,7 +639,9 @@ export default function ModelSelectorContent({
           <LineItemButton
             selectVariant="select-heavy"
             state={selected ? "selected" : "empty"}
-            icon={selectionIcon(selected)}
+            icon={
+              option.isAuto && !selected ? SvgSparkle : selectionIcon(selected)
+            }
             title={option.displayName}
             description={description}
             onClick={() => onSelect(option)}
@@ -691,6 +711,9 @@ export default function ModelSelectorContent({
                   rounding={2}
                 />,
               ]
+            : []),
+          ...(autoOption && !requiresImageInput && !isLoading
+            ? [renderModelItem(autoOption)]
             : []),
           null,
           ...(isLoading

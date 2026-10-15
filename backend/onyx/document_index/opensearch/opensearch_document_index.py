@@ -53,6 +53,7 @@ from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
     CC_PAIR_IDS_FIELD_NAME,
     CONTENT_FIELD_NAME,
+    CONTENT_VECTOR_FIELD_NAME,
     CREATED_AT_FIELD_NAME,
     DOCUMENT_SETS_FIELD_NAME,
     GLOBAL_BOOST_FIELD_NAME,
@@ -261,11 +262,9 @@ def _convert_onyx_chunk_to_opensearch_document(
     return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
-        # Use get_title_for_document_index to match the logic used when creating
-        # the title_embedding in the embedder. This method falls back to
-        # semantic_identifier when title is None (but not empty string).
+        # get_title_for_document_index falls back to semantic_identifier when
+        # title is None (but not empty string).
         title=filtered_title,
-        title_vector=chunk.title_embedding,
         content=filtered_content,
         content_vector=chunk.embeddings.full_embedding,
         source_type=source_types[0].value,
@@ -312,6 +311,27 @@ def _convert_onyx_chunk_to_opensearch_document(
         # Store ancestor hierarchy node IDs for hierarchy-based filtering.
         ancestor_hierarchy_node_ids=chunk.ancestor_hierarchy_node_ids or None,
     )
+
+
+def _with_vector_encoder(
+    mappings: dict[str, Any], encoder: dict[str, Any]
+) -> dict[str, Any]:
+    """A copy of the mappings with the content vector's encoder replaced."""
+    content_vector: dict[str, Any] = mappings["properties"][CONTENT_VECTOR_FIELD_NAME]
+    method: dict[str, Any] = content_vector["method"]
+    return {
+        **mappings,
+        "properties": {
+            **mappings["properties"],
+            CONTENT_VECTOR_FIELD_NAME: {
+                **content_vector,
+                "method": {
+                    **method,
+                    "parameters": {**method["parameters"], "encoder": encoder},
+                },
+            },
+        },
+    }
 
 
 class OpenSearchDocumentIndex(DocumentIndex):
@@ -423,6 +443,22 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     settings=index_settings,
                 )
             else:
+                legacy_encoder: dict[str, Any] | None = (
+                    self._unset_7_bit_confidence_interval_encoder()
+                )
+                if legacy_encoder is not None:
+                    # OpenSearch cannot change an existing field's encoder, so
+                    # keep this index's encoder until a reindex. The rest of the
+                    # vector mapping, such as its dimension, is still checked.
+                    logger.warning(
+                        "Index %s uses 7-bit quantization without an explicit "
+                        "confidence_interval, which clips vector values and "
+                        "lowers recall. Reindex to apply the current setting.",
+                        self._index_name,
+                    )
+                    expected_mappings = _with_vector_encoder(
+                        expected_mappings, legacy_encoder
+                    )
                 # Ensure schema is up to date by applying the current mappings.
                 try:
                     self._client.put_mapping(expected_mappings)
@@ -442,6 +478,19 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         e,
                     )
                     raise
+
+    def _unset_7_bit_confidence_interval_encoder(self) -> dict[str, Any] | None:
+        """The index's encoder if this 7-bit index was built before
+        confidence_interval was set explicitly (its encoder carries only the bit
+        count), otherwise None."""
+        if self._vector_quantization is not VectorQuantization.SCALAR_7_BIT:
+            return None
+        encoder: dict[str, Any] | None = self._client.get_vector_field_encoder(
+            CONTENT_VECTOR_FIELD_NAME
+        )
+        if encoder != {"name": "sq", "parameters": {"bits": 7}}:
+            return None
+        return encoder
 
     def index(
         self,

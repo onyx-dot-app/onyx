@@ -459,8 +459,12 @@ OPENSEARCH_VERIFY_CERTS = (
     os.environ.get("OPENSEARCH_VERIFY_CERTS", "").lower() == "true"
 )
 # CA bundle to verify the server cert against when OPENSEARCH_VERIFY_CERTS=true.
-# Falls back to the system trust store if unset.
+# If unset, uses SSL_CERT_FILE (set by the Helm chart's customCACerts) when that
+# file exists, else certifi's public roots. opensearch-py ignores SSL_CERT_FILE.
 OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
+_ssl_cert_file: str | None = os.environ.get("SSL_CERT_FILE") or None
+if OPENSEARCH_CA_CERTS is None and _ssl_cert_file and os.path.exists(_ssl_cert_file):
+    OPENSEARCH_CA_CERTS = _ssl_cert_file
 # Client certificate + key for mutual TLS (OpenSearch authenticating us). Both
 # must be set together.
 OPENSEARCH_CLIENT_CERT: str | None = os.environ.get("OPENSEARCH_CLIENT_CERT") or None
@@ -575,8 +579,6 @@ DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP = int(
 
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
 INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
-
-MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
@@ -1552,6 +1554,17 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
 
+# When true, connectors replace the content of spreadsheets and other tabular
+# files (xlsx, Google Sheets, CSV, TSV) with a "<content-skipped>" placeholder
+# at fetch time, so each file indexes as its title only. The sheets are not
+# parsed, but the raw file is still downloaded and stored. Docprocessing applies
+# the same replacement to tabular sections that still reach it, e.g. in batches
+# staged before this was set. Bounds the embedding cost of large spreadsheets.
+# User uploads keep their content. Set it on docfetching and docprocessing.
+SKIP_SPREADSHEET_CONTENT = (
+    os.environ.get("SKIP_SPREADSHEET_CONTENT", "").lower() == "true"
+)
+
 # Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
 # docfetching watchdog terminates the worker and fails the attempt with a clear
 # error, pre-empting a kernel OOM kill of the whole pod — which would also kill
@@ -1820,22 +1833,6 @@ AUTO_LLM_CONFIG_URL = os.environ.get(
     "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/onyx/llm/well_known_providers/recommended-models.json",
 )
 
-# How often to check for auto LLM model updates (in seconds)
-AUTO_LLM_UPDATE_INTERVAL_SECONDS = int(
-    os.environ.get("AUTO_LLM_UPDATE_INTERVAL_SECONDS", 1800)  # 30 minutes
-)
-
-#####
-# Enterprise Edition Configs
-#####
-# NOTE: this should only be enabled if you have purchased an enterprise license.
-# if you're interested in an enterprise license, please reach out to us at
-# founders@onyx.app OR message Chris Weaver or Yuhong Sun in the Onyx
-# Discord community https://discord.gg/4NA5SbzrWb
-ENTERPRISE_EDITION_ENABLED = (
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
-)
-
 #####
 # Image Generation Configuration (DEPRECATED)
 # These environment variables will be deprecated soon.
@@ -1965,6 +1962,17 @@ MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 
+# Global limit on indexing embedding requests (see embedding_rate_limit.py).
+# The window is stored in Redis, one entry per request, so the request count
+# is capped. Gemini Embedding 2 on Vertex allows 60,000 requests per minute.
+DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 60
+# How long one indexing embedding request may wait for the rate limit or a
+# provider's rate limit before its batch fails. Cloud workers are shared by all
+# tenants, so they give up quickly.
+EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS = 60 if MULTI_TENANT else 6 * 60 * 60
+MAX_EMBEDDING_RATE_LIMIT_REQUESTS = 100_000
+MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 24 * 60 * 60
+
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
 
@@ -1983,6 +1991,13 @@ ENABLE_TENANT_WORK_GATING = (
 # cache-only (Redis, or the Postgres cache) with a hard-coded default of False.
 ENABLE_CC_PAIR_ACCESS_FILTER = (
     os.environ.get("ENABLE_CC_PAIR_ACCESS_FILTER", "").lower() == "true"
+)
+
+# Turns on behavior that needs the connector checks UI (today: the first index
+# attempt waits for required capability checks). Enable together with
+# NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED.
+CONNECTOR_CHECKS_ENABLED = (
+    os.environ.get("CONNECTOR_CHECKS_ENABLED", "").lower() == "true"
 )
 
 # Membership TTL for the `active_tenants` sorted set. Members older than this

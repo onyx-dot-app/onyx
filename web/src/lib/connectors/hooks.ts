@@ -1,12 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import type { CredentialRef } from "@/lib/credentials/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
+import { checkCredentialBinding } from "@/lib/connectors/svc";
+import { useSavedDraftCredential } from "@/lib/credentials/hooks";
+import { bindingCheckCredentialId } from "@/lib/credentials/utils";
+import { formOnlyFieldNames } from "@/lib/connectors/utils";
+import {
+  bindingCheckInput,
+  decideBindingGate,
+  type BindingCheckState,
+  type BindingGate,
+  type BindingGateReason,
+  type BoundFieldState,
+  type CredentialBindingFieldError,
+} from "@/lib/connectors/bindingGate";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { CCPairHierarchyBreakdown } from "@/lib/connectors/types";
 import type { FederatedConnectorDetail } from "@/lib/types";
 import type { CredentialSchemaResponse } from "@/lib/credentials/types";
 import type {
@@ -194,4 +209,238 @@ export function useConnectorGroupRestrictionsEnabled(): boolean {
     errorHandlingFetcher
   );
   return data?.enabled ?? false;
+}
+
+/**
+ * Wait this long after a bound field loses focus. Focus that moves between
+ * bound fields, or a click that changes a bound value, then sends one check.
+ */
+const BINDING_CHECK_BLUR_DELAY_MS = 300;
+/** Wait this long after the credential changes, for the values it sets. */
+const BINDING_CHECK_CREDENTIAL_DELAY_MS = 50;
+
+export interface UseBoundFieldsGateParams {
+  source: ValidSources;
+  /** A saved credential or a draft; `null` when none is selected. */
+  credential: CredentialRef | null;
+  /** The credential's `time_updated`. An edit makes older results stale. */
+  credentialUpdatedAt: string | null;
+  /** A credential is selected, or the source needs none. */
+  credentialSelected: boolean;
+  /** Every credential-bound field of the source; the check sends their values. */
+  boundFieldNames: string[];
+  /** The visible bound fields, as the gate reads them. */
+  boundFields: BoundFieldState[];
+  values: Record<string, unknown>;
+  /** One more condition, applied after the binding passes. */
+  extra?: BindingGate;
+}
+
+export interface UseBoundFieldsGateResult extends BindingGate {
+  /** Bound field name to the backend's error for the current input. */
+  fieldErrors: Record<string, CredentialBindingFieldError>;
+  /** Checks the current input again, e.g. when a bound field loses focus. */
+  requestCheck: () => void;
+}
+
+interface BindingCheckResult {
+  key: string;
+  state: BindingCheckState;
+}
+
+/**
+ * Whether the create form's configuration is unlocked. It checks the
+ * credential and the credential-bound values with the backend when a bound
+ * field loses focus or the credential changes, not on each change of a value:
+ * each check reads the credential, which writes an audit event. A response
+ * for an older input is ignored.
+ */
+export function useBoundFieldsGate({
+  source,
+  credential,
+  credentialUpdatedAt,
+  credentialSelected,
+  boundFieldNames,
+  boundFields,
+  values,
+  extra,
+}: UseBoundFieldsGateParams): UseBoundFieldsGateResult {
+  const { savedDraft } = useSavedDraftCredential(source);
+  // The check sends no values: a typed account goes by its saved draft, so it
+  // waits until a check run saves its current values.
+  const credentialId: number | null =
+    credential === null
+      ? null
+      : bindingCheckCredentialId(credential, savedDraft);
+  const awaitingRun: boolean = credential !== null && credentialId === null;
+  // A string, so effects follow the credential rather than the object. The
+  // values are part of it: a draft keeps its id when they change.
+  const credentialKey: string | null =
+    credentialId === null ? null : JSON.stringify([credential, credentialId]);
+  // Form-only bound fields (the realm) are never sent, so a source with only
+  // those has nothing for the backend to check.
+  const formOnly: ReadonlySet<string> = new Set(formOnlyFieldNames(source));
+  const checksBinding: boolean = boundFieldNames.some(
+    (name) => !formOnly.has(name)
+  );
+  const { key: inputKey, config } = bindingCheckInput(
+    source,
+    credentialKey,
+    boundFieldNames,
+    values
+  );
+  // A result for another source or an older version of the credential is
+  // stale too.
+  const key = JSON.stringify({ source, inputKey, credentialUpdatedAt });
+  const ready =
+    checksBinding &&
+    boundFields.length > 0 &&
+    credentialId !== null &&
+    boundFields.every((field) => !field.missing && !field.invalid);
+
+  const [result, setResult] = useState<BindingCheckResult | null>(null);
+  const resultRef = useRef(result);
+  const latestRef = useRef({ key, config, credentialId, ready });
+  useEffect(() => {
+    latestRef.current = { key, config, credentialId, ready };
+  });
+
+  // Bumped by every scheduled check and on unmount; an older response is
+  // ignored.
+  const generationRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const setResultFor = useCallback(
+    (resultKey: string, state: BindingCheckState) => {
+      const next = { key: resultKey, state };
+      resultRef.current = next;
+      setResult(next);
+    },
+    []
+  );
+
+  const send = useCallback(() => {
+    const latest = latestRef.current;
+    if (!latest.ready || latest.credentialId === null) return;
+    const generation = ++generationRef.current;
+    const update = (state: BindingCheckState) => {
+      if (generation === generationRef.current) {
+        setResultFor(latest.key, state);
+      }
+    };
+    update({ kind: "checking" });
+    checkCredentialBinding(latest.credentialId, {
+      source,
+      connector_specific_config: latest.config,
+    }).then(
+      (response) => update({ kind: "done", response }),
+      () => update({ kind: "unavailable" })
+    );
+  }, [source, setResultFor]);
+
+  // Every blur and credential change checks again: the source may have
+  // changed, and a failed request must not stick.
+  const schedule = useCallback(
+    (delayMs: number) => {
+      const latest = latestRef.current;
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      if (latest.ready) {
+        // Shown at once; a response for an older input is dropped.
+        generationRef.current += 1;
+        setResultFor(latest.key, { kind: "checking" });
+      }
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        send();
+      }, delayMs);
+    },
+    [send, setResultFor]
+  );
+
+  useEffect(() => {
+    if (credentialKey === null) return;
+    schedule(BINDING_CHECK_CREDENTIAL_DELAY_MS);
+  }, [credentialKey, credentialUpdatedAt, schedule]);
+
+  useEffect(
+    () => () => {
+      generationRef.current += 1;
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    },
+    []
+  );
+
+  const requestCheck = useCallback(
+    () => schedule(BINDING_CHECK_BLUR_DELAY_MS),
+    [schedule]
+  );
+
+  const binding: BindingCheckState =
+    credential === null
+      ? { kind: credentialSelected ? "unavailable" : "idle" }
+      : !checksBinding
+        ? { kind: "notNeeded" }
+        : awaitingRun
+          ? { kind: "awaitingRun" }
+          : result !== null && result.key === key
+            ? result.state
+            : { kind: "idle" };
+  const gate = decideBindingGate({
+    hasBoundFields: boundFields.length > 0,
+    credentialSelected,
+    boundFields,
+    binding,
+    extra,
+  });
+  return {
+    ...gate,
+    fieldErrors: binding.kind === "done" ? binding.response.field_errors : {},
+    requestCheck,
+  };
+}
+
+/** The line the locked configuration shows, or `null` when it is unlocked. */
+export function useBindingGateMessage(
+  reason: BindingGateReason | null
+): string | null {
+  const t = useTranslations("admin.connectorsList");
+  if (reason === null) return null;
+  switch (reason.kind) {
+    case "enterField":
+      return t("bindingGate.enterField", { field: reason.label });
+    case "fixField":
+      return t("bindingGate.fixField", { field: reason.label });
+    case "selectCredential":
+      return t("credentialRequired.tooltip");
+    case "awaitingCheck":
+      return t("bindingGate.awaitingCheck");
+    case "runChecks":
+      return t("bindingGate.runChecks");
+    case "checking":
+      return t("bindingGate.checking");
+    case "fieldRejected":
+      return reason.error.kind === "missing"
+        ? t("bindingGate.enterField", { field: reason.label })
+        : t("bindingGate.fieldInvalid", {
+            field: reason.label,
+            detail: reason.error.detail,
+          });
+    case "rejected":
+      return t("bindingGate.rejected", { detail: reason.rejection.detail });
+    case "custom":
+      return reason.message;
+  }
+}
+
+/** The pair's document breakdown: `null` until its first successful run. It reads every document of the pair, so it loads once per visit and gives up early. */
+export function useHierarchyBreakdown(ccPairId: number) {
+  return useSWR<CCPairHierarchyBreakdown | null>(
+    SWR_KEYS.ccPairHierarchyBreakdown(ccPairId),
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      errorRetryCount: 1,
+    }
+  );
 }

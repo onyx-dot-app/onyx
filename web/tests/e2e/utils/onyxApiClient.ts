@@ -314,7 +314,9 @@ export class OnyxApiClient {
     groups: number[] = []
   ): Promise<number> {
     const response = await this.post(
-      "/manage/admin/connector-with-mock-credential",
+      // Created paused: an index attempt on the empty file list fails, and the
+      // repeated-error alert toast then covers the page for later tests.
+      "/manage/admin/connector-with-mock-credential?paused=true",
       {
         name: connectorName,
         source: "file",
@@ -337,11 +339,8 @@ export class OnyxApiClient {
 
     const ccPairId = responseData.data;
     this.log(
-      `Created file connector: ${connectorName} (CC Pair ID: ${ccPairId})`
+      `Created paused file connector: ${connectorName} (CC Pair ID: ${ccPairId})`
     );
-
-    // Pause the connector immediately to prevent indexing during tests
-    await this.pauseConnector(ccPairId);
 
     return ccPairId;
   }
@@ -1965,6 +1964,24 @@ export class OnyxApiClient {
       `Failed to delete chat session ${chatId}`
     );
     this.log(`Deleted chat session: ${chatId}`);
+  }
+
+  /** Creates the worker user's empty Craft session through the real backend. */
+  async createCraftSession(name: string): Promise<string> {
+    const response = await this.post("/build/sessions", { name });
+    const session = await this.handleResponse<{ id: string }>(
+      response,
+      "Failed to create Craft session"
+    );
+    return session.id;
+  }
+
+  /** Removes the isolated Craft fixture session. */
+  async deleteCraftSession(sessionId: string): Promise<void> {
+    await this.handleResponseSoft(
+      await this.delete(`/build/sessions/${sessionId}`),
+      `Failed to delete Craft session ${sessionId}`
+    );
   }
 
   // === Project Methods ===

@@ -60,6 +60,7 @@ class ScriptedLLM(LitellmLLM):
     def __init__(self, steps: list[Delta]) -> None:
         self.steps = iter(steps)
         self.requests: list[dict[str, Any]] = []
+        self._model_kwargs: dict[str, Any] = {}
 
     @property
     def config(self) -> LLMConfig:

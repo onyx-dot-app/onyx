@@ -2,10 +2,10 @@ import {
   SvgSlack,
   SvgLinear,
   SvgGmail,
-  SvgGithub,
+  SvgGitHub,
   SvgGoogleCalendar,
   SvgGoogleDrive,
-  SvgHubspot,
+  SvgHubSpot,
   SvgNotion,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
@@ -30,8 +30,8 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     GOOGLE_DRIVE: SvgGoogleDrive,
     GMAIL: SvgGmail,
     LINEAR: SvgLinear,
-    GITHUB: SvgGithub,
-    HUBSPOT: SvgHubspot,
+    GITHUB: SvgGitHub,
+    HUBSPOT: SvgHubSpot,
     NOTION: SvgNotion,
   };
 

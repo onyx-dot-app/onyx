@@ -14,6 +14,11 @@ on:
   push:
     tags:
       - "v*.*.*"
+  schedule:
+    # Daily run of the suites that PRs skip unless related code changes (the
+    # reindex port suite). 11:00 UTC is 3 AM PST / 4 AM PDT.
+    - cron: "0 11 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -62,6 +67,13 @@ jobs:
       # so PRs run it only for related changes. Merge queue and tag runs include it
       # whenever the integration suite runs.
       slack: ${{ github.event_name == 'pull_request' && steps.filter.outputs.slack || 'true' }}
+      # The live OneDrive suite indexes one shared Microsoft tenant, and Graph
+      # throttles it when many PRs run at once. Same rule as Slack.
+      onedrive: ${{ github.event_name == 'pull_request' && steps.filter.outputs.onedrive || 'true' }}
+      # The reindex port suite is slow (each test waits for a full re-embed and
+      # swap). PRs and the merge queue run it only for related changes; the
+      # daily run and tag runs always include it.
+      reindex_port: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && steps.filter.outputs.reindex_port || 'true' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -102,6 +114,39 @@ jobs:
               - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
               - 'backend/tests/integration/connector_job_tests/slack/**'
               - '.github/workflows/pr-integration-tests.yml'
+            onedrive:
+              - 'backend/onyx/connectors/onedrive/**'
+              - 'backend/onyx/connectors/microsoft_utils/**'
+              - 'backend/onyx/connectors/microsoft_credential.py'
+              - 'backend/onyx/connectors/*.py'
+              - 'backend/onyx/connectors/capability_checks/**'
+              - 'backend/onyx/utils/retry_after.py'
+              - 'backend/ee/onyx/db/external_perm.py'
+              - 'backend/onyx/access/**'
+              - 'backend/ee/onyx/access/**'
+              - 'backend/ee/onyx/external_permissions/*.py'
+              - 'backend/ee/onyx/external_permissions/onedrive/**'
+              - 'backend/ee/onyx/external_permissions/microsoft_utils/**'
+              - 'backend/ee/onyx/background/celery/tasks/doc_permission_syncing/**'
+              - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
+              - 'backend/tests/integration/connector_job_tests/onedrive/**'
+              - 'backend/tests/integration/common_utils/managers/cc_pair.py'
+              - '.github/workflows/pr-integration-tests.yml'
+            reindex_port:
+              - 'backend/onyx/background/celery/tasks/port/**'
+              - 'backend/onyx/background/celery/tasks/docprocessing/**'
+              - 'backend/onyx/background/celery/tasks/beat_schedule.py'
+              - 'backend/onyx/background/celery/apps/docprocessing.py'
+              - 'backend/onyx/background/celery/apps/primary.py'
+              - 'backend/onyx/db/port_attempt.py'
+              - 'backend/onyx/db/port_orphan_candidate.py'
+              - 'backend/onyx/db/swap_index.py'
+              - 'backend/onyx/db/search_settings.py'
+              - 'backend/onyx/server/manage/search_settings.py'
+              - 'backend/onyx/document_index/**'
+              - 'backend/onyx/indexing/**'
+              - 'backend/tests/integration/tests/reindex_port/**'
+              - '.github/workflows/pr-integration-tests.yml'
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -123,16 +168,30 @@ jobs:
         env:
           GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
           SLACK_CHANGED: ${{ needs.changes.outputs.slack }}
+          ONEDRIVE_CHANGED: ${{ needs.changes.outputs.onedrive }}
+          REINDEX_PORT_CHANGED: ${{ needs.changes.outputs.reindex_port }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           # Find all leaf-level directories in both test directories.
           # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" ! -name "gateway_clients" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" ! -name "gateway_clients" ! -name "reindex_port" -exec basename {} \; | sort)
           if [[ "$GATEWAY_CHANGED" == "true" ]]; then
             tests_dirs="$tests_dirs gateway_clients"
           fi
-          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" -exec basename {} \; | sort)
+          if [[ "$REINDEX_PORT_CHANGED" == "true" ]]; then
+            tests_dirs="$tests_dirs reindex_port"
+          fi
+          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" ! -name "onedrive" -exec basename {} \; | sort)
           if [[ "$SLACK_CHANGED" == "true" ]]; then
             connector_dirs="$connector_dirs slack"
+          fi
+          if [[ "$ONEDRIVE_CHANGED" == "true" ]]; then
+            connector_dirs="$connector_dirs onedrive"
+          fi
+          # The daily run covers only the suites that PRs skip by default.
+          if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tests_dirs="reindex_port"
+            connector_dirs=""
           fi
 
           # Create JSON array with directory info
@@ -192,6 +251,8 @@ jobs:
   build-devcontainer-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     runs-on:
       [
         runs-on,
@@ -230,14 +291,18 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Devcontainer Docker image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: .devcontainer
           file: .devcontainer/Dockerfile
-          push: true
+          # Push by digest: the devcontainer image is content-stable, so
+          # per-run tags accumulated on a single ECR image digest until they
+          # hit the 1000-tags-per-image cap. Downstream jobs pull
+          # <repo>@<digest> via this job's `digest` output instead.
+          outputs: type=image,name=${{ env.RUNS_ON_ECR_CACHE }},push=true,push-by-digest=true
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
           provenance: false
@@ -268,6 +333,11 @@ jobs:
       - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-{1}-job-{2}', github.run_id, matrix.edition, strategy['job-index']) }}
       - extras=ecr-cache
+      # The default ~38GB volume is ~50% AMI baseline plus ~15GB of pulled
+      # images (devcontainer, model server, services) — it hovers at ~90%,
+      # which trips OpenSearch's high disk watermark and blocks index
+      # creation mid-run.
+      - volume=100gb
     timeout-minutes: 25
 
     strategy:
@@ -333,7 +403,6 @@ jobs:
           # EE-only config
           if [ "$EDITION" = "ee" ]; then
             cat <<EOF >> deployment/docker_compose/.env
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
           EOF
           fi
@@ -377,7 +446,7 @@ jobs:
       - name: Install Python deps
         uses: ./.github/actions/install-python-deps
         with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
@@ -454,10 +523,10 @@ jobs:
               -e TEST_WEB_HOSTNAME=test-runner \
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
-              -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
+              -e RUN_EE_TESTS=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
               -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
-              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
+              ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }} \
               $RUN_CMD
 
       # ------------------------------------------------------------
@@ -476,10 +545,23 @@ jobs:
         with:
           name: docker-all-logs-${{ matrix.edition }}-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
+
+      # The worker and beat logs, only when the tests fail or time out: a job
+      # that hits timeout-minutes counts as cancelled, not failed.
+      - name: Upload worker logs on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: worker-logs-${{ matrix.edition }}-${{ matrix.test-dir.name }}
+          path: ${{ github.workspace }}/backend/log/*.log
+          retention-days: 7
+          if-no-files-found: ignore
       # ------------------------------------------------------------
 
   onyx-lite-tests:
     needs: [build-devcontainer-image]
+    # The daily run covers only the reindex port suite.
+    if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
     permissions:
       id-token: write # Required for OIDC-based AWS credential exchange
       contents: read
@@ -489,6 +571,7 @@ jobs:
         runner=4cpu-linux-arm64,
         "run-id=${{ github.run_id }}-onyx-lite-tests",
         "extras=ecr-cache",
+        "volume=100gb",
       ]
     timeout-minutes: 10
 
@@ -512,7 +595,6 @@ jobs:
       - name: Create .env file for Onyx Lite Docker Compose
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -535,7 +617,7 @@ jobs:
       - name: Install Python deps
         uses: ./.github/actions/install-python-deps
         with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
@@ -559,13 +641,14 @@ jobs:
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
               -e DISABLE_VECTOR_DB=true \
+              -e DISABLE_TELEMETRY=true \
               -e FILE_STORE_BACKEND=postgres \
               -e CACHE_BACKEND=postgres \
               -e AUTH_BACKEND=postgres \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e ONYX_DEV_LICENSE \
-              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
+              ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }} \
               uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb
 
       - name: Dump all-container logs (onyx-lite)
@@ -590,12 +673,15 @@ jobs:
 
   multitenant-tests:
     needs: [build-model-server-image, build-devcontainer-image]
+    # The daily run covers only the reindex port suite.
+    if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
     runs-on:
       [
         runs-on,
         runner=8cpu-linux-arm64,
         "run-id=${{ github.run_id }}-multitenant-tests",
         "extras=ecr-cache",
+        "volume=100gb",
       ]
     timeout-minutes: 15
 
@@ -640,12 +726,11 @@ jobs:
       - name: Install Python deps
         uses: ./.github/actions/install-python-deps
         with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Multi-Tenant Integration Tests
         env:
-          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          DEVCONTAINER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
         run: |
           echo "Running multi-tenant integration tests..."
           docker run --rm --network onyx_default \
@@ -680,9 +765,7 @@ jobs:
             -e REQUIRE_EMAIL_VERIFICATION=false \
             -e DISABLE_TELEMETRY=true \
             -e DEV_MODE=true \
-            -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-            -e LICENSE_ENFORCEMENT_ENABLED=false \
-            ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
+            ${DEVCONTAINER_IMAGE} \
             uv run --no-sync pytest -v --tb=short -rs tests/integration/multitenant_tests
 
       - name: Dump all-container logs (multi-tenant)
@@ -697,6 +780,17 @@ jobs:
         with:
           name: docker-all-logs-multitenant
           path: ${{ github.workspace }}/docker-compose-multitenant.log
+
+      # The worker and beat logs, only when the tests fail or time out: a job
+      # that hits timeout-minutes counts as cancelled, not failed.
+      - name: Upload worker logs on failure (multi-tenant)
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: worker-logs-multitenant
+          path: ${{ github.workspace }}/backend/log/*.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Stop multi-tenant Docker containers
         if: always()
@@ -725,6 +819,7 @@ jobs:
           INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
           LITE_RESULT: ${{ needs.onyx-lite-tests.result }}
           MULTITENANT_RESULT: ${{ needs.multitenant-tests.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           # Fail closed if `changes` didn't succeed. Otherwise an empty
           # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
@@ -737,6 +832,11 @@ jobs:
           if [ "${RUN_TESTS}" != "true" ]; then
             echo "No relevant paths changed — required check passes."
             exit 0
+          fi
+          # The daily run skips the onyx-lite and multitenant jobs.
+          if [ "${EVENT_NAME}" = "schedule" ] || [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            LITE_RESULT=success
+            MULTITENANT_RESULT=success
           fi
           if [ "${INTEGRATION_RESULT}" != "success" ] \
              || [ "${LITE_RESULT}" != "success" ] \
@@ -768,3 +868,31 @@ jobs:
             -f context=ci/tested-base/integration \
             -f description="${DESCRIPTION:0:140}" \
             -f target_url="${RUN_URL}"
+
+  notify-slack-on-failure:
+    needs: [required]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-slim
+    environment: ci-protected
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Send Slack notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          details: |
+            *The daily reindex port run failed.*
+            Check the linked workflow run for the failed job.
+
+            *To reproduce locally:*
+            Start the Onyx services, then run:
+            `uv run --env-file .vscode/.env pytest backend/tests/integration/tests/reindex_port`
+          title: "🚨 Daily reindex port integration tests failed!"
+          ref-name: ${{ github.ref_name }}

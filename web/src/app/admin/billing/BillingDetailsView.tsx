@@ -25,7 +25,7 @@ import {
   LicenseStatus,
   PaymentMethodRequiredError,
   StripePortalFlowType,
-} from "@/lib/billing/interfaces";
+} from "@/lib/billing/types";
 import {
   createCustomerPortalSession,
   endTrial,
@@ -37,7 +37,7 @@ import { formatDateShort } from "@/lib/dateUtils";
 import { humanReadableFormatShort } from "@opal/time";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import useUsers from "@/hooks/useUsers";
 
 // ----------------------------------------------------------------------------

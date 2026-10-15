@@ -1,6 +1,7 @@
 """The user-facing provider listing holds at most one page of models per
 provider and says where the rest starts. GET /llm/provider/{id}/models serves
-the rest by offset or by name search, under the same access rules."""
+the rest by offset or by name search, under the same access rules. The admin
+listing does the same only when asked with page_models."""
 
 from onyx.llm.constants import LLM_PROVIDER_MODEL_PAGE_SIZE
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -84,6 +85,27 @@ def test_listing_marks_a_small_provider_complete(
     assert listed["next_model_configuration_offset"] is None
 
 
+def test_routers_always_land_on_the_first_page(
+    new_admin_user: DATestUser,
+) -> None:
+    """The picker only loads page one up front, so visible routers must sort
+    ahead of other visible models even when their names would sort last."""
+    model_names = [f"aaa-model-{i:05d}" for i in range(LLM_PROVIDER_MODEL_PAGE_SIZE)]
+    provider = LLMProviderManager.create(
+        user_performing_action=new_admin_user,
+        default_model_name="aaa-default",
+        model_names=model_names,
+        router_model_names=["zzz-router-auto"],
+        set_as_default=False,
+    )
+
+    listed = _listed_provider(new_admin_user, provider.id)
+    router = next(
+        mc for mc in listed["model_configurations"] if mc["name"] == "zzz-router-auto"
+    )
+    assert router["is_router"] is True
+
+
 def test_model_search_matches_unloaded_models(new_admin_user: DATestUser) -> None:
     model_names = [f"filler-{i:05d}" for i in range(LLM_PROVIDER_MODEL_PAGE_SIZE)] + [
         "zz-needle-alpha",
@@ -128,3 +150,47 @@ def test_model_page_denied_without_provider_access(
         headers=basic_user.headers,
     )
     assert response.status_code == 403
+
+
+def test_admin_listing_pages_models_only_when_asked(
+    new_admin_user: DATestUser,
+) -> None:
+    # Enough named models for one full page plus EXTRA_MODEL_COUNT past it,
+    # with the default sorting after all of them.
+    model_names = [
+        f"admin-model-{i:05d}"
+        for i in range(LLM_PROVIDER_MODEL_PAGE_SIZE + EXTRA_MODEL_COUNT)
+    ]
+    provider = LLMProviderManager.create(
+        user_performing_action=new_admin_user,
+        default_model_name="zzz-admin-default",
+        model_names=model_names,
+        set_as_default=True,
+    )
+    total_models = len(model_names) + 1
+
+    def admin_listing(query: str) -> dict:
+        response = client.get(
+            f"{API_SERVER_URL}/admin/llm/provider{query}",
+            headers=new_admin_user.headers,
+        )
+        response.raise_for_status()
+        return next(p for p in response.json()["providers"] if p["id"] == provider.id)
+
+    full = admin_listing("")
+    assert len(full["model_configurations"]) == total_models
+    assert full["next_model_configuration_offset"] is None
+
+    paged = admin_listing("?page_models=true")
+    names = [mc["name"] for mc in paged["model_configurations"]]
+    # The first page plus the pinned workspace default, which sorts last.
+    assert len(names) == LLM_PROVIDER_MODEL_PAGE_SIZE + 1
+    assert "zzz-admin-default" in names
+    assert paged["next_model_configuration_offset"] == LLM_PROVIDER_MODEL_PAGE_SIZE
+
+    by_id = client.get(
+        f"{API_SERVER_URL}/admin/llm/provider/{provider.id}",
+        headers=new_admin_user.headers,
+    )
+    by_id.raise_for_status()
+    assert len(by_id.json()["model_configurations"]) == total_models

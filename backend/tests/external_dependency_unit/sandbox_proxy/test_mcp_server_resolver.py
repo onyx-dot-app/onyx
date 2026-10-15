@@ -19,6 +19,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from mitmproxy import http
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
@@ -42,12 +43,10 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
-from onyx.sandbox_proxy.credential_injection import (
-    CredentialUnavailableError,
-    InjectionContext,
-)
-from onyx.sandbox_proxy.identity import ResolvedSandbox
+from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
+from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.server.features.mcp.credentials import extract_connection_data
 from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
@@ -780,3 +779,25 @@ def test_ungated_tool_call_never_gets_credentials(
             _request(_server_host(server), method="POST", raw_content=body),
             _ctx(user),
         )
+
+
+def test_ungated_upgrade_never_gets_credentials(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    user = create_test_user(db_session, "mcp_resolver_upgrade")
+    server = craft_server(
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        server,
+        MCPConnectionData(headers={"Authorization": "Bearer admin-token"}),
+    )
+    request = http.Request.make(
+        "GET",
+        server.server_url,
+        headers={"Connection": "Upgrade", "Upgrade": "websocket"},
+    )
+    with pytest.raises(CredentialUnavailableError, match="without a gate verdict"):
+        MCPServerResolver().resolve(request, _ctx(user))

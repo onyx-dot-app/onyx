@@ -13,9 +13,14 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckFinding,
+    CheckFindingKey,
+    CheckOutput,
+    CountFinding,
     CredentialCapability,
     compute_capability_verdicts,
 )
@@ -27,6 +32,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     INVALID_AUTHORITY_CODE,
     MISSING_CREDENTIAL_CODE,
@@ -62,6 +68,16 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
 )
 
 _CHECKS_BY_ID = {check.check_id: check for check in build_outlook_indexing_checks()}
+
+
+def _findings(output: CheckOutput | None) -> list[CheckFinding]:
+    assert output is not None
+    return output.findings
+
+
+def _advisories(output: CheckOutput | None) -> list[str]:
+    assert output is not None
+    return [advisory.message for advisory in output.advisories]
 
 
 def _gateway() -> MagicMock:
@@ -181,6 +197,119 @@ def test_listing_check_maps_401_to_expired_and_429_to_indeterminate() -> None:
 
 
 # ---------------------------------------------------------------------------
+# outlook_mailbox_count
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "config, applies",
+    [
+        (None, True),
+        ({}, True),
+        ({"mailboxes": [" "]}, True),
+        ({"mailboxes": ["a@x.com"]}, False),
+        ({"mailbox_groups": ["Sales"]}, False),
+    ],
+    ids=["no-config", "every-mailbox", "blank-entry", "mailboxes", "groups"],
+)
+def test_mailbox_count_applies_only_when_every_mailbox_is_walked(
+    config: dict[str, Any] | None, applies: bool
+) -> None:
+    result = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mailbox_count"]], _context(_gateway(), config)
+    )[0]
+
+    assert result.applicable is applies
+    if applies:
+        assert result.findings
+    else:
+        assert result.status == CapabilityCheckStatus.SKIPPED
+        assert result.findings == []
+
+
+def test_mailbox_count_counts_every_page_of_the_listing() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(
+            mailboxes=[mailbox(id="a"), mailbox(id="b")], next_link="https://next"
+        ),
+        OutlookMailboxPage(mailboxes=[], next_link="https://next-2"),
+        OutlookMailboxPage(mailboxes=[mailbox(id="c")]),
+    ]
+
+    findings = _findings(_CHECKS_BY_ID["outlook_mailbox_count"].run(_context(gateway)))
+
+    assert findings == [CountFinding(key=CheckFindingKey.READABLE_MAILBOXES, count=3)]
+    assert [
+        call.kwargs["next_link"] for call in gateway.list_mailbox_users.call_args_list
+    ] == [None, "https://next", "https://next-2"]
+
+
+def test_mailbox_count_stops_at_the_cap() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox(id=str(number)) for number in range(999)],
+        next_link="https://next",
+    )
+
+    findings = _findings(_CHECKS_BY_ID["outlook_mailbox_count"].run(_context(gateway)))
+
+    assert findings == [
+        CountFinding(
+            key=CheckFindingKey.READABLE_MAILBOXES,
+            count=MAX_FINDING_OPTIONS,
+            at_least=True,
+        )
+    ]
+    assert gateway.list_mailbox_users.call_count == 2
+
+
+def test_mailbox_count_is_indeterminate_when_the_listing_does_not_end() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[], next_link="https://next"
+    )
+
+    with pytest.raises(UnexpectedValidationError, match="did not end"):
+        _run("outlook_mailbox_count", _context(gateway))
+
+
+def test_mailbox_count_403_fails_and_leaves_the_verdict_alone() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = graph_error(
+        403, "Authorization_RequestDenied"
+    )
+
+    with pytest.raises(InsufficientPermissionsError, match="User.Read.All"):
+        _run("outlook_mailbox_count", _context(gateway))
+    assert _CHECKS_BY_ID["outlook_mailbox_count"].discovery is True
+    assert _CHECKS_BY_ID["outlook_mailbox_count"].required is False
+
+
+def test_mailbox_count_maps_401_to_expired_and_429_to_indeterminate() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = graph_error(
+        401, "InvalidAuthenticationToken"
+    )
+    with pytest.raises(CredentialExpiredError):
+        _run("outlook_mailbox_count", _context(gateway))
+
+    gateway.list_mailbox_users.side_effect = graph_error(429, "TooManyRequests")
+    with pytest.raises(UnexpectedValidationError):
+        _run("outlook_mailbox_count", _context(gateway))
+
+
+def test_only_the_mailbox_count_is_a_discovery_check() -> None:
+    checks = (
+        build_outlook_indexing_checks() + build_outlook_doc_permission_sync_checks()
+    )
+
+    assert {check.check_id for check in checks if check.discovery} == {
+        "outlook_mailbox_count"
+    }
+
+
+# ---------------------------------------------------------------------------
 # outlook_mail_read
 # ---------------------------------------------------------------------------
 
@@ -199,6 +328,74 @@ def test_mail_read_check_probes_the_first_configured_mailbox() -> None:
         mailbox_id=MAILBOX_ID, folder_id=INBOX_ID, page_size=1
     )
     gateway.read_any_message.assert_called_once_with(mailbox_id=MAILBOX_ID)
+
+
+def test_mail_read_check_fails_on_an_invalid_mailboxes_setting() -> None:
+    gateway = _gateway()
+
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(gateway, {"mailboxes": 42})
+    )
+
+    assert result.status is CapabilityCheckStatus.FAILED
+    assert "mailboxes" in result.message
+    gateway.read_any_message.assert_not_called()
+
+
+def test_mail_read_check_runs_on_a_config_less_run() -> None:
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(_gateway())
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+
+
+def test_mail_read_check_samples_from_the_configured_groups() -> None:
+    """With groups configured, the checks must not open a mailbox outside them."""
+    gateway = _gateway()
+    gateway.resolve_groups.return_value = [EntraGroup(id="g-1")]
+    gateway.list_group_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox(id="member")]
+    )
+
+    _run("outlook_mail_read", _context(gateway, {"mailbox_groups": ["Onyx Users"]}))
+
+    gateway.list_mailbox_users.assert_not_called()
+    assert gateway.list_group_mailbox_users.call_args.kwargs["group_id"] == "g-1"
+    assert gateway.probe_mailbox.call_args.kwargs["mailbox_id"] == "member"
+
+
+def test_mail_read_check_moves_on_to_the_next_group_when_the_first_is_denied() -> None:
+    gateway = _gateway()
+    gateway.resolve_groups.side_effect = [
+        [EntraGroup(id="g-1")],
+        [EntraGroup(id="g-2")],
+    ]
+    gateway.list_group_mailbox_users.side_effect = [
+        OutlookMailboxPage(mailboxes=[mailbox(id="denied")]),
+        OutlookMailboxPage(mailboxes=[mailbox(id="readable")]),
+    ]
+    gateway.probe_mailbox.side_effect = lambda *, mailbox_id: (
+        folder()
+        if mailbox_id == "readable"
+        else (_ for _ in ()).throw(graph_error(403))
+    )
+
+    _run(
+        "outlook_mail_read",
+        _context(gateway, {"mailbox_groups": ["Sales", "Onyx Users"]}),
+    )
+
+    assert gateway.read_any_message.call_args.kwargs["mailbox_id"] == "readable"
+
+
+def test_mail_read_check_names_the_group_permission_when_members_are_denied() -> None:
+    gateway = _gateway()
+    gateway.resolve_groups.return_value = [EntraGroup(id="g-1")]
+    gateway.list_group_mailbox_users.side_effect = graph_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="GroupMember.Read.All"):
+        _run("outlook_mail_read", _context(gateway, {"mailbox_groups": ["Sales"]}))
 
 
 def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:
@@ -262,29 +459,40 @@ def test_mail_read_check_lists_attachments_of_a_sample_that_has_them() -> None:
     gateway = _gateway()
     gateway.read_any_message.return_value = message(has_attachments=True)
 
-    _run("outlook_mail_read", _context(gateway))
+    output = _CHECKS_BY_ID["outlook_mail_read"].run(_context(gateway))
 
     gateway.list_message_attachments.assert_called_once_with(
         mailbox_id=MAILBOX_ID, message_id="msg-1", limit=1
     )
+    assert _advisories(output) == []
 
 
-def test_mail_read_check_passes_when_the_sample_vanishes_before_its_attachments() -> (
+def test_mail_read_check_advises_when_the_sample_vanishes_before_its_attachments() -> (
     None
 ):
     gateway = _gateway()
     gateway.read_any_message.return_value = message(has_attachments=True)
     gateway.list_message_attachments.side_effect = graph_error(404, "ErrorItemNotFound")
 
-    _run("outlook_mail_read", _context(gateway))
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(gateway)
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "not found" in advisory.message
+    assert "did not verify that the app can read attachments" in advisory.message
 
 
-def test_mail_read_check_skips_attachments_when_the_sample_has_none() -> None:
+def test_mail_read_check_advises_when_the_sample_has_no_attachments() -> None:
     gateway = _gateway()
 
-    _run("outlook_mail_read", _context(gateway))
+    output = _CHECKS_BY_ID["outlook_mail_read"].run(_context(gateway))
 
     gateway.list_message_attachments.assert_not_called()
+    (advisory,) = _advisories(output)
+    assert "no attachments" in advisory
+    assert "did not verify that the app can read attachments" in advisory
 
 
 def test_mail_read_check_maps_a_denied_attachment_listing() -> None:
@@ -296,14 +504,36 @@ def test_mail_read_check_maps_a_denied_attachment_listing() -> None:
         _run("outlook_mail_read", _context(gateway))
 
 
-def test_mail_read_check_is_indeterminate_for_a_mailbox_without_messages() -> None:
-    """An empty mailbox proves nothing about body access, so the check must
-    not report a pass."""
+def test_mail_read_check_passes_with_an_advisory_for_a_mailbox_without_messages() -> (
+    None
+):
+    """An empty mailbox proves the folder reads but not body access, so the
+    check passes and says what it did not verify."""
     gateway = _gateway()
     gateway.read_any_message.return_value = None
 
-    with pytest.raises(UnexpectedValidationError, match="holds no messages"):
-        _run("outlook_mail_read", _context(gateway))
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]],
+        _context(gateway, {"mailboxes": [MAILBOX_ADDRESS]}),
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert advisory.message.startswith(f"`{MAILBOX_ADDRESS}` holds no messages")
+    assert "message bodies" in advisory.message
+    gateway.list_message_attachments.assert_not_called()
+
+
+def test_mail_read_check_does_not_name_a_sampled_empty_mailbox() -> None:
+    """Advisories are not hidden by the findings setting, so a mailbox the
+    admin did not type must stay unnamed."""
+    gateway = _gateway()
+    gateway.read_any_message.return_value = None
+
+    (advisory,) = _advisories(_CHECKS_BY_ID["outlook_mail_read"].run(_context(gateway)))
+
+    assert advisory.startswith("The sampled mailbox holds no messages")
+    assert MAILBOX_ADDRESS not in advisory
 
 
 def test_mail_read_check_tells_read_basic_apart_from_read() -> None:
@@ -347,6 +577,50 @@ def test_mail_read_check_reports_a_configured_mailbox_that_does_not_exist() -> N
 
     with pytest.raises(ConnectorValidationError, match="MailboxNotEnabledForRESTAPI"):
         _run("outlook_mail_read", _context(gateway, {"mailboxes": [MAILBOX_ADDRESS]}))
+
+
+# ---------------------------------------------------------------------------
+# outlook_configured_groups
+# ---------------------------------------------------------------------------
+
+
+def test_groups_check_does_nothing_without_groups() -> None:
+    gateway = _gateway()
+
+    _run("outlook_configured_groups", _context(gateway, {"mailbox_groups": []}))
+
+    gateway.resolve_groups.assert_not_called()
+
+
+def test_groups_check_lists_every_group_that_does_not_resolve() -> None:
+    gateway = _gateway()
+    gateway.resolve_groups.side_effect = [
+        [],
+        [EntraGroup(id="g-1"), EntraGroup(id="g-2")],
+        [EntraGroup(id="g-3")],
+    ]
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        _run(
+            "outlook_configured_groups",
+            _context(gateway, {"mailbox_groups": ["Ghost", "Sales", "Onyx Users"]}),
+        )
+
+    message = str(exc_info.value)
+    assert "No group matches Ghost" in message
+    assert "More than one group is named Sales" in message
+    assert "Onyx Users" not in message
+
+
+def test_groups_check_maps_a_denied_listing_to_the_group_permission() -> None:
+    gateway = _gateway()
+    gateway.resolve_groups.side_effect = graph_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="GroupMember.Read.All"):
+        _run(
+            "outlook_configured_groups",
+            _context(gateway, {"mailbox_groups": ["Sales"]}),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +727,12 @@ def test_healthy_tenant_passes_indexing() -> None:
         _context(_gateway(), {"mailboxes": [MAILBOX_ADDRESS]}),
     )
 
-    assert all(result.status is CapabilityCheckStatus.PASSED for result in results)
+    # The tenant mailbox count does not apply to a config that lists mailboxes.
+    assert all(
+        result.status is CapabilityCheckStatus.PASSED
+        for result in results
+        if result.applicable
+    )
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
     assert verdicts[CredentialCapability.INDEXING] is CapabilityVerdict.PASSED
 
@@ -557,15 +836,29 @@ def test_calendar_check_moves_past_an_empty_calendar_and_needs_one_with_events()
         MAILBOX_ID,
     ]
 
+    gateway.list_mailbox_users.side_effect = None
     gateway.read_any_event.side_effect = None
     gateway.read_any_event.return_value = None
-    with pytest.raises(UnexpectedValidationError, match="no events"):
-        _run(
-            "outlook_calendar_read",
-            _context(
-                gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}
-            ),
-        )
+    with pytest.raises(UnexpectedValidationError, match="holds an event"):
+        _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+
+def test_calendar_check_passes_with_an_advisory_for_a_configured_empty_calendar() -> (
+    None
+):
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+    gateway.read_any_event.return_value = None
+
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_calendar_read"]],
+        _context(gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}),
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert advisory.message.startswith(f"`{MAILBOX_ADDRESS}` holds no events")
+    assert "event bodies" in advisory.message
 
 
 def test_calendar_check_names_the_missing_grant_on_403() -> None:

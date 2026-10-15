@@ -31,7 +31,7 @@ Interaction model:
 
 ### `TagItem`
 
-`TagItem` is `{ id: string; label: string; icon?: IconFunctionComponent; error?: boolean }`. `icon` leads the tag; `error` shows the warning indicator on it.
+`TagItem` is `{ id: string; label: string; icon?: IconFunctionComponent; error?: boolean; locked?: boolean }`. `icon` leads the tag; `error` shows the warning indicator on it; `locked` removes its remove button, so neither a click nor the keyboard can remove it. In `InputMultiSelect`, a locked tag outside the option set does not flag the error variant.
 
 ## Usage
 

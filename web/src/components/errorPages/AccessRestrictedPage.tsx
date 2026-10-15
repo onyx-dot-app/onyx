@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
-import { Button } from "@opal/components";
+import { Button, useCreateModal } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
+import DowngradeToCommunityModal from "@/sections/modals/DowngradeToCommunityModal";
+import { useUser } from "@/providers/UserProvider";
 import { logout } from "@/lib/users/svc";
 import { loginPath } from "@/lib/auth/paths";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -45,6 +47,8 @@ export default function AccessRestricted() {
   const { data: license } = useLicense();
   const settings = useSettings();
   const { appName } = settings;
+  const { isAdmin } = useUser();
+  const downgradeModal = useCreateModal();
 
   // Lands on the held login page: with SSO as the only way in, a reload would
   // sign the user straight back in through the IdP session.
@@ -176,7 +180,21 @@ export default function AccessRestricted() {
             <Button onClick={handleLogout}>
               {t("accessRestricted.logoutButton.label")}
             </Button>
+            {isAdmin && (
+              <Button
+                prominence="secondary"
+                onClick={() => downgradeModal.toggle(true)}
+              >
+                {t("accessRestricted.downgradeButton.label")}
+              </Button>
+            )}
           </div>
+
+          {downgradeModal.isOpen && (
+            <DowngradeToCommunityModal
+              onClose={() => downgradeModal.toggle(false)}
+            />
+          )}
         </>
       )}
 

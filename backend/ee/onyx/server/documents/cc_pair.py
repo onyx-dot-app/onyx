@@ -10,7 +10,9 @@ from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
     try_creating_external_group_sync_task,
 )
 from ee.onyx.db.cc_pair_data_access import (
+    assert_restricted_cc_pairs_keep_a_group,
     fetch_data_access_groups_for_cc_pair,
+    lock_cc_pairs_for_data_access__no_commit,
     set_cc_pair_data_access_groups__no_commit,
 )
 from ee.onyx.db.connector_manage_access import (
@@ -40,7 +42,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType, ConnectorManageRole, Permission
-from onyx.db.models import User
+from onyx.db.models import ConnectorCredentialPair, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
@@ -58,6 +60,14 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter(prefix="/manage")
+
+
+def _assert_perm_synced(cc_pair: ConnectorCredentialPair) -> None:
+    if not cc_pair.access_type.is_perm_synced():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Permission sync is only available for connectors with synced access.",
+        )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-permissions")
@@ -105,6 +115,7 @@ def sync_cc_pair(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
+    _assert_perm_synced(cc_pair)
 
     r = get_redis_client()
 
@@ -184,6 +195,7 @@ def sync_cc_pair_groups(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
+    _assert_perm_synced(cc_pair)
 
     r = get_redis_client()
 
@@ -278,12 +290,13 @@ def set_cc_pair_data_access(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
-    if cc_pair.access_type != AccessType.PRIVATE:
+    if cc_pair.access_type not in AccessType.data_access_types():
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Data-access groups can only be set on private connectors.",
+            "Data-access groups can only be set on private or restricted connectors.",
         )
 
+    lock_cc_pairs_for_data_access__no_commit(db_session, [cc_pair_id])
     visible_group_ids = get_visible_user_group_ids(user, db_session)
     set_cc_pair_data_access_groups__no_commit(
         db_session,
@@ -291,6 +304,7 @@ def set_cc_pair_data_access(
         requested_group_ids=set(request.group_ids),
         visible_group_ids=visible_group_ids,
     )
+    assert_restricted_cc_pairs_keep_a_group(db_session, [cc_pair_id])
     db_session.commit()
     return _to_cc_pair_data_access(db_session, cc_pair_id, visible_group_ids)
 

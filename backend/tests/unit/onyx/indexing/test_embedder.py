@@ -73,8 +73,8 @@ def test_saved_workload_identity_embeds_indexing_chunks_and_titles() -> None:
         result = embedder.embed_chunks([chunk])
 
     assert result[0].embeddings.full_embedding == [0.1, 0.2]
-    assert result[0].title_embedding == [0.1, 0.2]
-    assert client.aio.models.embed_content.call_count == 2
+    # Only the chunk text is embedded; titles get no separate embedding.
+    assert client.aio.models.embed_content.call_count == 1
     assert genai.call_args.kwargs["project"] == "vertex-project"
     assert genai.call_args.kwargs["location"] == "global"
 
@@ -104,7 +104,6 @@ def test_default_indexing_embedder_embed_chunks(
     # Mock the encode method of the embedding model
     mock_embedding_model.return_value.encode.side_effect = [
         [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],  # Main chunk embeddings
-        [[7.0, 8.0, 9.0]],  # Title embedding
     ]
 
     # Create test input
@@ -150,8 +149,6 @@ def test_default_indexing_embedder_embed_chunks(
         full_embedding=[1.0, 2.0, 3.0],
         mini_chunk_embeddings=[],
     )
-    assert result[0].title_embedding == [7.0, 8.0, 9.0]
-
     # Verify the embedding model was called exactly as follows
     mock_embedding_model.return_value.encode.assert_any_call(
         texts=[f"Title: {doc_summary}Test chunk{chunk_context}"],
@@ -160,10 +157,5 @@ def test_default_indexing_embedder_embed_chunks(
         tenant_id=None,
         request_id=None,
     )
-    # Same for title only embedding call
-    mock_embedding_model.return_value.encode.assert_any_call(
-        ["Test Document"],
-        text_type=EmbedTextType.PASSAGE,
-        tenant_id=None,
-        request_id=None,
-    )
+    # Titles get no separate embedding call.
+    assert mock_embedding_model.return_value.encode.call_count == 1

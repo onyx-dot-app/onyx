@@ -117,6 +117,8 @@ import {
 import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
+import CCPairIdsBackfillCard from "@/views/admin/IndexSettingsPage/CCPairIdsBackfillCard";
+import EmbeddingRateLimitCard from "@/views/admin/IndexSettingsPage/EmbeddingRateLimitCard";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -124,7 +126,8 @@ const route = ADMIN_ROUTES.INDEX_SETTINGS;
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 // Developer-facing log label only; the user-visible copy comes from `t`.
-const CONTEXTUAL_MODEL_UPDATE_LOG = "Failed to update Contextual Retrieval LLM";
+const CONTEXTUAL_FORWARD_APPLY_LOG =
+  "Failed to apply the Contextual Retrieval change";
 
 // Mirrors the backend's compute_wont_port_cc_pair_ids, so the modal shows the admin the
 // same set the server will delete. The two have to be changed together.
@@ -165,7 +168,7 @@ function CloudDisabled({
     : tooltipProp;
 
   return (
-    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="right">
+    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="end">
       {children}
     </Disabled>
   );
@@ -307,7 +310,7 @@ function ProviderGroup({
 
   const handleModelSelect = useCallback(
     (model: EmbeddingModel) => {
-      if (provider.deprecated) return;
+      if (model.deprecated) return;
       const state = getModelState(model);
 
       if (state === "selected" || state === "current") {
@@ -328,7 +331,6 @@ function ProviderGroup({
       onSelectModel,
       onDeselectModel,
       connectModal,
-      provider.deprecated,
       isCloud,
       setPendingConnectModel,
     ]
@@ -422,11 +424,6 @@ function ProviderGroup({
                         `[${provider.displayName}](${provider.docsLink})`
                       )
                     : provider.displayName
-                }
-                suffix={
-                  provider.deprecated
-                    ? t("providerGroup.deprecated.suffix")
-                    : undefined
                 }
                 sizePreset="secondary"
               />
@@ -527,6 +524,7 @@ function EmbeddingModelCard({
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
   const { appName } = useSettings();
+  const isDeprecated = model.deprecated;
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
@@ -535,9 +533,9 @@ function EmbeddingModelCard({
             prominence="tertiary"
             rightIcon={SvgArrowExchange}
             onClick={onSelect}
-            disabled={provider.deprecated}
+            disabled={isDeprecated}
             tooltip={
-              provider.deprecated
+              isDeprecated
                 ? t("modelCard.deprecated.connectTooltip")
                 : undefined
             }
@@ -550,11 +548,9 @@ function EmbeddingModelCard({
           <Button
             prominence="tertiary"
             onClick={onSelect}
-            disabled={provider.deprecated}
+            disabled={isDeprecated}
             tooltip={
-              provider.deprecated
-                ? t("modelCard.deprecated.selectTooltip")
-                : undefined
+              isDeprecated ? t("modelCard.deprecated.selectTooltip") : undefined
             }
           >
             {t("modelCard.selectButton.label")}
@@ -586,7 +582,7 @@ function EmbeddingModelCard({
   })();
 
   const isClickable =
-    !provider.deprecated &&
+    !isDeprecated &&
     (modelState === "unconnected" ||
       modelState === "connected" ||
       modelState === "current" ||
@@ -652,6 +648,8 @@ function toSwitchoverType(strategy: ApplyStrategy): SwitchoverType {
 interface IndexSettingsChanges {
   embeddingChanged: boolean;
   contextualToggleChanged: boolean;
+  /** Contextual Retrieval goes from on to off. */
+  contextualDisabled: boolean;
   /** Contextual Retrieval stays on and points at a different model. */
   contextualModelChanged: boolean;
   /** Part of the index mapping, so it always needs a re-index. */
@@ -679,6 +677,8 @@ function classifyChanges(
   const embeddingChanged = !isSameModelSelection(values, initialValues);
   const contextualToggleChanged =
     values.enable_contextual_rag !== initialValues.enable_contextual_rag;
+  const contextualDisabled: boolean =
+    initialValues.enable_contextual_rag && !values.enable_contextual_rag;
   const contextualModelChanged =
     values.enable_contextual_rag &&
     initialValues.enable_contextual_rag &&
@@ -690,6 +690,7 @@ function classifyChanges(
   return {
     embeddingChanged,
     contextualToggleChanged,
+    contextualDisabled,
     contextualModelChanged,
     quantizationChanged,
     imageChanged,
@@ -703,20 +704,22 @@ function classifyChanges(
 }
 
 /**
- * Which banner the staged changes get. An embedding or contextual-toggle
- * change needs a re-index; a contextual model change on its own offers the
- * forward-only pair; image processing on its own may skip re-indexing.
+ * Which banner the staged changes get. Contextual Retrieval switched off, or
+ * given a different model, can apply forward only. Image processing may skip
+ * the re-index. Everything else needs one.
  */
-type BannerMode = "reindex" | "contextualModelOnly" | "imageOnly";
+type BannerMode =
+  | "reindex"
+  | "contextualDisableOnly"
+  | "contextualModelOnly"
+  | "imageOnly";
 
 function bannerModeFor(changes: IndexSettingsChanges): BannerMode {
-  if (
-    changes.embeddingChanged ||
-    changes.contextualToggleChanged ||
-    changes.quantizationChanged
-  ) {
+  if (changes.embeddingChanged || changes.quantizationChanged) {
     return "reindex";
   }
+  if (changes.contextualDisabled) return "contextualDisableOnly";
+  if (changes.contextualToggleChanged) return "reindex";
   if (changes.contextualModelChanged) return "contextualModelOnly";
   if (changes.imageChanged) return "imageOnly";
   return "reindex";
@@ -735,6 +738,34 @@ function resolveApplyStrategy(
   return stored === null || stored === DO_NOT_REINDEX
     ? SwitchoverType.REINDEX
     : stored;
+}
+
+type BannerCopy =
+  | "contextualModelMissing"
+  | "contextualDisableOnly"
+  | "contextualModelOnly"
+  | "doNotReindex"
+  | "quantizationOnly"
+  | "reindex"
+  | "default";
+
+/** The `changesBanner.*` copy for the staged changes. Forward-only modes name their own copy. */
+function bannerCopyFor(
+  contextualRagModelMissing: boolean,
+  mode: BannerMode,
+  strategyCopy: "doNotReindex" | "reindex" | null,
+  quantizationOnly: boolean
+): BannerCopy {
+  if (contextualRagModelMissing) return "contextualModelMissing";
+  if (mode === "contextualDisableOnly" || mode === "contextualModelOnly") {
+    return mode;
+  }
+  // A quantization-only change copies the stored vectors instead of
+  // re-embedding, so it gets its own, faster wording.
+  if (strategyCopy === "reindex" && quantizationOnly) {
+    return "quantizationOnly";
+  }
+  return strategyCopy ?? "default";
 }
 
 type ImagePersistResult = "skipped" | "saved" | "failed";
@@ -1024,37 +1055,46 @@ export default function IndexSettingsPage() {
     [router]
   );
 
-  const applyContextualModelForward = useCallback(
+  // Applies to documents indexed from now on, without a re-index.
+  const applyContextualForward = useCallback(
     async (values: IndexSettingsFormValues): Promise<boolean> => {
+      const disabling: boolean = !values.enable_contextual_rag;
       const modelConfigurationId = values.contextual_rag_model_configuration_id;
-      if (!searchSettings || modelConfigurationId === null) return false;
+      if (!searchSettings) return false;
+      if (!disabling && modelConfigurationId === null) return false;
       // Image settings first: a failed save aborts before anything else moves.
       const image = await persistImageProcessing(values);
       if (image === "failed") return false;
 
+      const failedToast = disabling
+        ? t("toasts.contextualRetrievalDisableFailed")
+        : t("toasts.contextualModelUpdateFailed");
       try {
-        const response = await updateInferenceSettings({
-          ...searchSettings,
-          contextual_rag_model_configuration_id: modelConfigurationId,
-        });
+        const response = await updateInferenceSettings(
+          disabling
+            ? { ...searchSettings, enable_contextual_rag: false }
+            : {
+                ...searchSettings,
+                contextual_rag_model_configuration_id: modelConfigurationId,
+              }
+        );
         if (!response.ok) {
-          toast.error(
-            await parseErrorDetail(
-              response,
-              t("toasts.contextualModelUpdateFailed")
-            )
-          );
+          toast.error(await parseErrorDetail(response, failedToast));
           return false;
         }
 
         await mutate(SWR_KEYS.currentSearchSettings);
         commitImageProcessing(image);
         forwardOnlyModal.toggle(false);
-        toast.success(t("toasts.contextualModelUpdated"));
+        toast.success(
+          disabling
+            ? t("toasts.contextualRetrievalDisabled")
+            : t("toasts.contextualModelUpdated")
+        );
         return true;
       } catch (error) {
-        console.error(CONTEXTUAL_MODEL_UPDATE_LOG, error);
-        toast.error(t("toasts.contextualModelUpdateFailed"));
+        console.error(CONTEXTUAL_FORWARD_APPLY_LOG, error);
+        toast.error(failedToast);
         return false;
       }
     },
@@ -1255,7 +1295,11 @@ export default function IndexSettingsPage() {
               // A change undone by hand leaves Formik dirty but stages nothing.
               const hasChanges = dirty && changes.any;
               const bannerMode = bannerModeFor(changes);
-              const contextualModelOnlyChange =
+              const contextualDisableOnlyChange =
+                bannerMode === "contextualDisableOnly";
+              // Both offer the forward-only apply beside the rebuild.
+              const contextualForwardChange =
+                contextualDisableOnlyChange ||
                 bannerMode === "contextualModelOnly";
               const imageOnlyChange = bannerMode === "imageOnly";
               const effectiveStrategy = resolveApplyStrategy(
@@ -1274,6 +1318,21 @@ export default function IndexSettingsPage() {
               // them. Do Not Re-index touches no index, so it reads as info
               // rather than as the warning the re-index strategies carry.
               const stagedVariant = saveOnly ? "info" : "warning";
+              const quantizationOnlyChange: boolean =
+                changes.quantizationChanged &&
+                !changes.embeddingChanged &&
+                !changes.contextualToggleChanged &&
+                !changes.contextualModelChanged &&
+                !changes.imageChanged;
+              const bannerCopy = bannerCopyFor(
+                contextualRagModelMissing,
+                bannerMode,
+                strategyCopy,
+                quantizationOnlyChange
+              );
+              const forwardModalKey = contextualDisableOnlyChange
+                ? "disableForwardModal"
+                : "forwardOnlyModal";
               // The banner is reserved for indexing prompts: staged changes
               // and the contextual model a re-index needs. A captioning
               // model missing is a card-level setting warning, not a banner.
@@ -1291,9 +1350,8 @@ export default function IndexSettingsPage() {
                 changes.contextualModelChanged
                   ? "warning"
                   : undefined;
-              const quantizationCardBorder = changes.quantizationChanged
-                ? "warning"
-                : undefined;
+              const quantizationCardBorder: "warning" | undefined =
+                changes.quantizationChanged ? "warning" : undefined;
               const imageCardBorder = captioningModelMissing
                 ? "warning"
                 : changes.imageChanged
@@ -1402,7 +1460,7 @@ export default function IndexSettingsPage() {
                       : undefined
                   }
                 >
-                  {contextualModelOnlyChange
+                  {contextualForwardChange
                     ? t("actions.rebuildAll.label")
                     : saveOnly
                       ? t("actions.applyWithoutReindex.label")
@@ -1415,13 +1473,13 @@ export default function IndexSettingsPage() {
                   <forwardOnlyModal.Provider>
                     <ConfirmationModalLayout
                       icon={SvgArrowExchange}
-                      title={t("forwardOnlyModal.title")}
+                      title={t(`${forwardModalKey}.title`)}
                       submit={
                         <Button
                           disabled={applyBlocked}
                           onClick={async () => {
                             const updated =
-                              await applyContextualModelForward(values);
+                              await applyContextualForward(values);
                             if (updated) {
                               resetForm({ values });
                               setApplyStrategy(null);
@@ -1433,7 +1491,7 @@ export default function IndexSettingsPage() {
                       }
                     >
                       <Text font="main-ui-body" color="text-03" as="p">
-                        {t("forwardOnlyModal.description")}
+                        {t(`${forwardModalKey}.description`)}
                       </Text>
                     </ConfirmationModalLayout>
                   </forwardOnlyModal.Provider>
@@ -1510,6 +1568,8 @@ export default function IndexSettingsPage() {
                     </ConfirmationModalLayout>
                   </wontPortConsentModal.Provider>
 
+                  <CCPairIdsBackfillCard />
+
                   {isReindexing ? (
                     secondarySearchSettings?.use_port_flow ||
                     isPortBackfilling ? (
@@ -1577,35 +1637,13 @@ export default function IndexSettingsPage() {
                       >
                         <MessageCard
                           variant={bannerVariant}
-                          title={
-                            contextualRagModelMissing
-                              ? t("changesBanner.contextualModelMissing.title")
-                              : contextualModelOnlyChange
-                                ? t("changesBanner.contextualModelOnly.title")
-                                : strategyCopy === "doNotReindex"
-                                  ? t("changesBanner.doNotReindex.title")
-                                  : strategyCopy === "reindex"
-                                    ? t("changesBanner.reindex.title")
-                                    : t("changesBanner.default.title")
-                          }
+                          title={t(`changesBanner.${bannerCopy}.title`)}
                           description={markdown(
-                            contextualRagModelMissing
-                              ? t(
-                                  "changesBanner.contextualModelMissing.description"
-                                )
-                              : contextualModelOnlyChange
-                                ? t(
-                                    "changesBanner.contextualModelOnly.description"
-                                  )
-                                : strategyCopy === "doNotReindex"
-                                  ? t("changesBanner.doNotReindex.description")
-                                  : strategyCopy === "reindex"
-                                    ? t("changesBanner.reindex.description")
-                                    : t("changesBanner.default.description")
+                            t(`changesBanner.${bannerCopy}.description`)
                           )}
                           bottomChildren={
                             bannerActive ? (
-                              contextualModelOnlyChange ? (
+                              contextualForwardChange ? (
                                 <GeneralLayouts.Section
                                   flexDirection="row"
                                   alignItems="center"
@@ -2327,6 +2365,10 @@ export default function IndexSettingsPage() {
                       </GeneralLayouts.Section>
                     </GeneralLayouts.Section>
                   </Disabled>
+
+                  {/* Outside the re-index lock: the limit matters most during a re-index. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <EmbeddingRateLimitCard />
                 </>
               );
             }}

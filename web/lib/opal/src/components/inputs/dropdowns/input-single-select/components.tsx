@@ -1,6 +1,6 @@
 "use client";
 
-import { SingleDropdown } from "@opal/components/inputs/dropdowns/single/components";
+import { SingleSelectField } from "@opal/components/inputs/dropdowns/single/components";
 import type { InputSingleSelectProps } from "@opal/components/inputs/dropdowns/types";
 
 /**
@@ -11,7 +11,7 @@ import type { InputSingleSelectProps } from "@opal/components/inputs/dropdowns/t
  * type-in sibling is `InputSingleComboBox`.
  */
 function InputSingleSelect(props: InputSingleSelectProps) {
-  return <SingleDropdown {...props} trigger="button" />;
+  return <SingleSelectField {...props} trigger="button" />;
 }
 
 export { InputSingleSelect };

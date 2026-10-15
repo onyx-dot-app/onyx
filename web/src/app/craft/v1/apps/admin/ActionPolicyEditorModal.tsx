@@ -12,7 +12,7 @@ import {
   Text,
 } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
@@ -326,35 +326,34 @@ function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
         ]}
       />
 
-      <SimpleCollapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <SimpleCollapsible.Header
-          title={t("advanced.title")}
-          description={t("advanced.description")}
-        />
-        <SimpleCollapsible.Content>
-          <div className="flex flex-col gap-2">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-3"
-              >
-                <div className="flex flex-col">
-                  <Text font="main-ui-action">{item.name}</Text>
-                  <Text font="secondary-body" color="text-03">
-                    {item.description}
-                  </Text>
-                </div>
-                <PolicyToggle
-                  value={policies[item.id] ?? item.defaultPolicy}
-                  onChange={(value) =>
-                    onChange({ ...policies, [item.id]: value })
-                  }
-                />
+      <Collapsible
+        open={advancedOpen}
+        onOpenChange={setAdvancedOpen}
+        title={t("advanced.title")}
+        description={t("advanced.description")}
+      >
+        <div className="flex flex-col gap-2">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-3"
+            >
+              <div className="flex flex-col">
+                <Text font="main-ui-action">{item.name}</Text>
+                <Text font="secondary-body" color="text-03">
+                  {item.description}
+                </Text>
               </div>
-            ))}
-          </div>
-        </SimpleCollapsible.Content>
-      </SimpleCollapsible>
+              <PolicyToggle
+                value={policies[item.id] ?? item.defaultPolicy}
+                onChange={(value) =>
+                  onChange({ ...policies, [item.id]: value })
+                }
+              />
+            </div>
+          ))}
+        </div>
+      </Collapsible>
     </div>
   );
 }

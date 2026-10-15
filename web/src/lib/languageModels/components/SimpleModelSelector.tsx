@@ -1,18 +1,40 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect } from "@opal/components";
+import type {
+  SelectOption,
+  SelectOptions,
+} from "@opal/components/inputs/dropdowns/types";
+import { optionMatchesSearch } from "@opal/components/dropdown/model";
 import {
   buildModelSelectOptions,
   fromSelectValue,
   toSelectValue,
 } from "@/lib/languageModels/options";
 import { getModelIcon } from "@/lib/languageModels/utils";
-import type { ModelOptionProvider } from "@/lib/languageModels/types";
+import type {
+  ModelOptionProvider,
+  ModelPaging,
+} from "@/lib/languageModels/types";
 
 /** The select value of the Global Default row; `fromSelectValue` reads it as null. */
 const GLOBAL_DEFAULT_SELECT_VALUE = "global-default";
+
+/** A keystroke storm settles before a search leaves for the server. */
+export const SERVER_SEARCH_DEBOUNCE_MS = 300;
+
+/** True when the list's own filter would show at least one loaded row. */
+function hasLoadedMatch(options: SelectOptions, query: string): boolean {
+  const term = query.toLowerCase();
+  return options.some((item) =>
+    "options" in item
+      ? (item.title?.toLowerCase().includes(term) ?? false) ||
+        item.options.some((opt) => optionMatchesSearch(opt, term))
+      : optionMatchesSearch(item, term)
+  );
+}
 
 export interface GlobalDefaultRow {
   /** The model null resolves to, shown under the row's title. */
@@ -56,6 +78,9 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
    */
   globalDefault?: Nullable extends true ? GlobalDefaultRow : never;
   disabled?: boolean;
+  /** Pages a truncated listing in: the end of the list loads more models,
+   *  and a search no loaded model matches asks the server. */
+  modelPaging?: ModelPaging;
 }
 
 /**
@@ -73,9 +98,10 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   grouped = true,
   globalDefault,
   disabled,
+  modelPaging,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
-  const options = useMemo(() => {
+  const options = useMemo((): SelectOptions => {
     const models = buildModelSelectOptions(providers, { grouped });
     if (!globalDefault) return models;
     return [
@@ -88,6 +114,73 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       ...models,
     ];
   }, [providers, grouped, globalDefault, t]);
+
+  // Server search only when nothing loaded matches. The query is remembered
+  // so a merged page, which changes `modelPaging`, does not re-run it.
+  const [query, setQuery] = useState("");
+  const trimmedQuery = query.trim();
+  const currentQueryRef = useRef("");
+  const lastServerSearchRef = useRef("");
+  useEffect(() => {
+    currentQueryRef.current = trimmedQuery;
+    if (trimmedQuery === "") {
+      // A cleared or closed search forgets its server query, so the next
+      // one runs even after a listing refresh dropped the merged matches.
+      lastServerSearchRef.current = "";
+      return;
+    }
+    if (!modelPaging?.hasMore || hasLoadedMatch(options, trimmedQuery)) return;
+    if (lastServerSearchRef.current === trimmedQuery) return;
+    const handle = setTimeout(() => {
+      modelPaging
+        .search(trimmedQuery)
+        .then((searched) => {
+          // A search that lands after its query was cleared is not remembered.
+          if (searched && currentQueryRef.current === trimmedQuery) {
+            lastServerSearchRef.current = trimmedQuery;
+          }
+        })
+        .catch(console.error);
+    }, SERVER_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [modelPaging, trimmedQuery, options]);
+
+  // Which provider each row belongs to, so scrolling pages the providers
+  // whose rows are on show rather than one hidden behind a folded group.
+  const providerIdByValue = useMemo(() => {
+    const byValue = new Map<string, number>();
+    for (const provider of providers) {
+      for (const mc of provider.model_configurations) {
+        if (mc.id != null) byValue.set(String(mc.id), provider.id);
+      }
+    }
+    return byValue;
+  }, [providers]);
+
+  // The end of the list pages the next window: of the current server
+  // search's matches while searching, of a shown truncated provider otherwise.
+  const loadNextWindow = useCallback(
+    (shown: SelectOption[]) => {
+      if (!modelPaging || modelPaging.isLoading) return;
+      if (trimmedQuery !== "") {
+        if (
+          lastServerSearchRef.current === trimmedQuery &&
+          modelPaging.searchHasMore
+        ) {
+          modelPaging.loadMoreSearch().catch(console.error);
+        }
+        return;
+      }
+      if (!modelPaging.hasMore) return;
+      const shownProviderIds = [
+        ...new Set(
+          shown.flatMap((option) => providerIdByValue.get(option.value) ?? [])
+        ),
+      ];
+      modelPaging.loadMore(shownProviderIds).catch(console.error);
+    },
+    [modelPaging, trimmedQuery, providerIdByValue]
+  );
 
   // The Global Default row is what null shows as; otherwise a non-nullable
   // field's own value is its floor. Either way a re-pick is a no-op.
@@ -116,6 +209,8 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       }}
       placeholder={t("placeholder")}
       options={options}
+      onSearchChange={modelPaging ? setQuery : undefined}
+      onReachEnd={modelPaging ? loadNextWindow : undefined}
     />
   );
 }

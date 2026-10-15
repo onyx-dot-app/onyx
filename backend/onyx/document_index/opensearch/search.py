@@ -23,10 +23,8 @@ from onyx.document_index.opensearch.constants import (
     DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
     HYBRID_SEARCH_NORMALIZATION_PIPELINE,
-    HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
     LUCENE_SCALAR_QUANTIZATION,
     HybridSearchNormalizationPipeline,
-    HybridSearchSubqueryConfiguration,
 )
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
@@ -78,45 +76,15 @@ def _get_enforced_cc_pair_access(
 # The number and ordering of weights should match the query clauses. The values
 # of the weights should sum to 1.
 def _get_hybrid_search_normalization_weights() -> list[float]:
-    if (
-        HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-        is HybridSearchSubqueryConfiguration.TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-    ):
-        # Since the titles are included in the contents, the embedding matches
-        # are heavily downweighted as they act as a boost rather than an
-        # independent scoring component.
-        search_title_vector_weight = 0.1
-        search_content_vector_weight = 0.45
-        # Single keyword weight for both title and content (merged from former
-        # title keyword + content keyword).
-        search_keyword_weight = 0.45
-
-        # NOTE: It is critical that the order of these weights matches the order
-        # of the sub-queries in the hybrid search.
-        hybrid_search_normalization_weights = [
-            search_title_vector_weight,
-            search_content_vector_weight,
-            search_keyword_weight,
-        ]
-    elif (
-        HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-        is HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-    ):
-        search_content_vector_weight = 0.5
-        # Single keyword weight for both title and content (merged from former
-        # title keyword + content keyword).
-        search_keyword_weight = 0.5
-
-        # NOTE: It is critical that the order of these weights matches the order
-        # of the sub-queries in the hybrid search.
-        hybrid_search_normalization_weights = [
-            search_content_vector_weight,
-            search_keyword_weight,
-        ]
-    else:
-        raise ValueError(
-            f"Bug: Unhandled hybrid search subquery configuration: {HYBRID_SEARCH_SUBQUERY_CONFIGURATION}."
-        )
+    # NOTE: It is critical that the order of these weights matches the order
+    # of the sub-queries in the hybrid search.
+    search_content_vector_weight: float = 0.5
+    # Single keyword weight for both title and content.
+    search_keyword_weight: float = 0.5
+    hybrid_search_normalization_weights: list[float] = [
+        search_content_vector_weight,
+        search_keyword_weight,
+    ]
 
     assert sum(hybrid_search_normalization_weights) == 1.0, (
         "Bug: Hybrid search normalization weights do not sum to 1.0."
@@ -238,6 +206,7 @@ class DocumentQuery:
             include_hidden=include_hidden,
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -411,6 +380,7 @@ class DocumentQuery:
                 include_hidden=False,
                 access_control_list=index_filters.access_control_list,
                 cc_pair_access=filter_cc_pair_access,
+                restricted_cc_pair_guard=cc_pair_access,
                 source_types=index_filters.source_type or [],
                 tags=index_filters.tags or [],
                 document_sets=index_filters.document_set or [],
@@ -509,6 +479,7 @@ class DocumentQuery:
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -607,6 +578,7 @@ class DocumentQuery:
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -695,6 +667,7 @@ class DocumentQuery:
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -760,6 +733,7 @@ class DocumentQuery:
             include_hidden=False,
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -826,8 +800,8 @@ class DocumentQuery:
         The weights of each of these subqueries should be configured in a search
         pipeline.
 
-        The exact subqueries executed depend on the
-        HYBRID_SEARCH_SUBQUERY_CONFIGURATION setting.
+        The subqueries are a content vector similarity search and a combined
+        title and content keyword search.
 
         NOTE: For OpenSearch, 5 is the maximum number of query clauses allowed
         in a single hybrid query. Source:
@@ -864,37 +838,12 @@ class DocumentQuery:
         """
         # Build sub-queries for hybrid search. Order must match normalization
         # pipeline weights.
-        if (
-            HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-            is HybridSearchSubqueryConfiguration.TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-        ):
-            return [
-                DocumentQuery._get_title_vector_similarity_search_query(
-                    query_vector, vector_quantization, vector_candidates
-                ),
-                DocumentQuery._get_content_vector_similarity_search_query(
-                    query_vector, vector_quantization, vector_candidates
-                ),
-                DocumentQuery._get_title_content_combined_keyword_search_query(
-                    query_text
-                ),
-            ]
-        elif (
-            HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-            is HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-        ):
-            return [
-                DocumentQuery._get_content_vector_similarity_search_query(
-                    query_vector, vector_quantization, vector_candidates
-                ),
-                DocumentQuery._get_title_content_combined_keyword_search_query(
-                    query_text
-                ),
-            ]
-        else:
-            raise ValueError(
-                f"Bug: Unhandled hybrid search subquery configuration: {HYBRID_SEARCH_SUBQUERY_CONFIGURATION}"
-            )
+        return [
+            DocumentQuery._get_content_vector_similarity_search_query(
+                query_vector, vector_quantization, vector_candidates
+            ),
+            DocumentQuery._get_title_content_combined_keyword_search_query(query_text),
+        ]
 
     @staticmethod
     def _get_knn_field_query(
@@ -916,20 +865,6 @@ class DocumentQuery:
                 "oversample_factor": lucene_scalar_quantization.rescore_oversample_factor
             }
         return knn_field_query
-
-    @staticmethod
-    def _get_title_vector_similarity_search_query(
-        query_vector: list[float],
-        vector_quantization: VectorQuantization,
-        vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
-    ) -> dict[str, Any]:
-        return {
-            "knn": {
-                TITLE_VECTOR_FIELD_NAME: DocumentQuery._get_knn_field_query(
-                    query_vector, vector_quantization, vector_candidates
-                )
-            }
-        }
 
     @staticmethod
     def _get_content_vector_similarity_search_query(
@@ -1034,6 +969,7 @@ class DocumentQuery:
         hierarchy_node_ids: list[int] | None = None,
         # Operator-forced document-set scope (NAMES), applied as a standalone AND clause.
         forced_document_sets: list[str] | None = None,
+        restricted_cc_pair_guard: CCPairAccessFilter | None = None,
     ) -> list[dict[str, Any]]:
         """Returns filters to be passed into the "filter" key of a search query.
 
@@ -1060,6 +996,9 @@ class DocumentQuery:
             cc_pair_access: If not None (and access_control_list is not None),
                 replaces the access control list filter above with the
                 cc-pair access filter.
+            restricted_cc_pair_guard: Read only when the access control list
+                filter is used. Its hidden pairs are removed from that
+                filter; see _get_restricted_cc_pair_guard.
             source_types: If supplied, only documents of one of these source
                 types will be retrieved.
             tags: If supplied, only documents with an entry in their metadata
@@ -1218,6 +1157,50 @@ class DocumentQuery:
                     }
                 )
             return {"bool": {"should": visibility_clauses, "minimum_should_match": 1}}
+
+        def _get_restricted_cc_pair_guard(
+            guard: CCPairAccessFilter,
+        ) -> dict[str, Any]:
+            """The access control list filter cannot require a data-access
+            group, so it would show a SYNC_RESTRICTED pair's chunks to anyone
+            matching the source ACL. It would also show the chunks of a pair
+            awaiting its first permission sync, which can still be public.
+            This clause hides chunks of the hidden pairs, unless an open or
+            ACL pair of the chunk grants access.
+
+            Raises:
+                ValueError: A term list is longer than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+            """
+            granting_cc_pair_ids = sorted(
+                {*guard.open_cc_pair_ids, *guard.acl_cc_pair_ids}
+            )
+            for name, terms in (
+                ("hidden restricted cc-pair ids", guard.hidden_restricted_cc_pair_ids),
+                ("granting cc-pair ids", granting_cc_pair_ids),
+            ):
+                if len(terms) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                    raise ValueError(
+                        f"Too many {name}: {len(terms)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                    )
+            guard_clauses: list[dict[str, Any]] = [
+                {
+                    "bool": {
+                        "must_not": [
+                            {
+                                "terms": {
+                                    CC_PAIR_IDS_FIELD_NAME: guard.hidden_restricted_cc_pair_ids
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+            if granting_cc_pair_ids:
+                guard_clauses.append(
+                    {"terms": {CC_PAIR_IDS_FIELD_NAME: granting_cc_pair_ids}}
+                )
+            return {"bool": {"should": guard_clauses, "minimum_should_match": 1}}
 
         def _get_source_type_filter(
             source_types: list[DocumentSource],
@@ -1493,13 +1476,21 @@ class DocumentQuery:
             # one acl provided here is present in the document's acl list. If
             # there is explicitly no list provided, we make no restrictions on
             # the documents that can be retrieved.
-            filter_clauses.append(
-                _get_acl_visibility_filter(access_control_list)
-                if cc_pair_access is None
-                else _get_cc_pair_access_visibility_filter(
-                    cc_pair_access, access_control_list
+            if cc_pair_access is not None:
+                filter_clauses.append(
+                    _get_cc_pair_access_visibility_filter(
+                        cc_pair_access, access_control_list
+                    )
                 )
-            )
+            else:
+                filter_clauses.append(_get_acl_visibility_filter(access_control_list))
+                if (
+                    restricted_cc_pair_guard is not None
+                    and restricted_cc_pair_guard.hidden_restricted_cc_pair_ids
+                ):
+                    filter_clauses.append(
+                        _get_restricted_cc_pair_guard(restricted_cc_pair_guard)
+                    )
 
         if forced_document_sets:
             # Its own top-level AND clause (not merged into the OR-based

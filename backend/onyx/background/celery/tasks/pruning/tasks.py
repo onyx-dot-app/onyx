@@ -18,7 +18,10 @@ from onyx.background.celery.celery_redis import (
     celery_get_queued_task_ids,
     celery_get_unacked_task_ids,
 )
-from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
+from onyx.background.celery.celery_utils import (
+    SlimConnectorExtractionResult,
+    extract_ids_from_runnable_connector,
+)
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallbackBase
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
@@ -57,13 +60,19 @@ from onyx.db.enums import (
 )
 from onyx.db.hierarchy import (
     cleanup_unowned_hierarchy_nodes,
+    get_hierarchy_node_ids_with_ancestors,
     persist_hierarchy_nodes_for_cc_pair,
     remove_stale_hierarchy_node_cc_pair_entries,
+    source_has_document_hierarchy_nodes,
     update_document_parent_hierarchy_nodes,
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
-from onyx.db.sync_record import insert_sync_record, update_sync_record_status
+from onyx.db.sync_record import (
+    insert_sync_record,
+    record_sync_record_error,
+    update_sync_record_status,
+)
 from onyx.db.tag import delete_orphan_tags_batched
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import (
@@ -168,6 +177,40 @@ def _resolve_and_update_document_parents(
     )
 
 
+def _get_live_hierarchy_node_ids(
+    db_session: Session,
+    source: DocumentSource,
+    extraction_result: SlimConnectorExtractionResult,
+    yielded_node_ids: set[int],
+) -> set[int]:
+    """Hierarchy nodes the pair keeps after the prune. A full listing yields
+    every live node. A listing from a start omits unchanged folders, so the
+    nodes above a kept document count as live too: the document still lies
+    under them at the source. So does the node of a kept document that is
+    also a node (e.g. a Confluence page). A deleted or revoked folder holds
+    no kept document, so it is not live."""
+    if extraction_result.listed_from is None:
+        return yielded_node_ids
+    parent_raw_ids = {
+        raw_parent_id
+        for raw_parent_id in extraction_result.raw_id_to_parent.values()
+        if raw_parent_id is not None
+    }
+    return get_hierarchy_node_ids_with_ancestors(
+        db_session=db_session,
+        source=source,
+        raw_node_ids=parent_raw_ids,
+        node_ids=yielded_node_ids,
+        # One cheap check per prune saves a walk per batch of documents for a
+        # source whose documents are never nodes.
+        document_ids=(
+            set(extraction_result.raw_id_to_parent)
+            if source_has_document_hierarchy_nodes(db_session, source)
+            else set()
+        ),
+    )
+
+
 """Jobs / utils for kicking off pruning tasks."""
 
 
@@ -175,19 +218,23 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if pruning is due.
 
     Next pruning time is calculated as a delta from the last successful prune, or the
-    last successful indexing if pruning has never succeeded.
+    last successful indexing if pruning has never succeeded. A pending prune
+    request is due at once, without a prune frequency.
 
     TODO(rkuo): consider whether we should allow pruning to be immediately rescheduled
     if pruning fails (which is what it does now). A backoff could be reasonable.
     """
 
+    # skip pruning if not active; a pending request waits, e.g. until resume
+    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
+        return False
+
+    if cc_pair.prune_requested_at is not None:
+        return True
+
     # skip pruning if no prune frequency is set
     # pruning can still be forced via the API which will run a pruning task directly
     if not cc_pair.connector.prune_freq:
-        return False
-
-    # skip pruning if not active
-    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
         return False
 
     # skip pruning if the next scheduled prune time hasn't been reached yet
@@ -432,6 +479,9 @@ def try_creating_prune_generator_task(
             submitted=datetime.now(timezone.utc),
             started=None,
             celery_task_id=None,
+            # read after the refresh above, so a prune serves only requests
+            # committed before it was dispatched
+            prune_requested_at=cc_pair.prune_requested_at,
         )
         redis_connector.prune.set_fence(payload)
 
@@ -565,6 +615,7 @@ def connector_pruning_generator_task(
         connector_source: DocumentSource | None = None
         connector_type: str = ""
         is_connector_public: bool = False
+        indexing_start: float | None = None
         runnable_connector: BaseConnector | None = None
         all_indexed_document_ids: set[str] = set()
 
@@ -590,12 +641,21 @@ def connector_pruning_generator_task(
                 submitted=payload.submitted,
                 started=datetime.now(timezone.utc),
                 celery_task_id=payload.celery_task_id,
+                prune_requested_at=payload.prune_requested_at,
             )
             redis_connector.prune.set_fence(new_payload)
 
             connector_source = cc_pair.connector.source
             connector_type = connector_source.value
             is_connector_public = cc_pair.access_type == AccessType.PUBLIC
+            # A scheduled prune also removes documents older than the indexing
+            # start, where the listing can filter by it. Same conversion as
+            # the indexing run.
+            indexing_start = (
+                cc_pair.connector.indexing_start.timestamp()
+                if cc_pair.connector.indexing_start
+                else None
+            )
 
             task_logger.info(
                 f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={connector_source}"
@@ -634,7 +694,10 @@ def connector_pruning_generator_task(
 
         # Extract docs and hierarchy nodes from the source (no DB session held).
         extraction_result = extract_ids_from_runnable_connector(
-            runnable_connector, callback, connector_type=connector_type
+            runnable_connector,
+            callback,
+            connector_type=connector_type,
+            start=indexing_start,
         )
         all_connector_doc_ids = extraction_result.raw_id_to_parent
 
@@ -723,7 +786,12 @@ def connector_pruning_generator_task(
             redis_connector.prune.generator_complete = tasks_generated
 
             # --- Hierarchy node pruning ---
-            live_node_ids = {n.id for n in upserted_nodes}
+            live_node_ids = _get_live_hierarchy_node_ids(
+                db_session=db_session,
+                source=source,
+                extraction_result=extraction_result,
+                yielded_node_ids={n.id for n in upserted_nodes},
+            )
             stale_removed = remove_stale_hierarchy_node_cc_pair_entries(
                 db_session=db_session,
                 connector_id=connector_id,
@@ -766,10 +834,29 @@ def connector_pruning_generator_task(
         # them) and the next beat would re-enumerate and re-queue the whole set;
         # keeping the fence lets the monitor finalize the in-flight taskset, and
         # generator_failed makes it record a FAILED prune instead of a false success.
-        if redis_connector.prune.generator_complete is None:
-            redis_connector.prune.reset()
-        else:
+        fanned_out = redis_connector.prune.generator_complete is not None
+        if fanned_out:
+            # Marked first, so the monitor cannot finalize the taskset as a success meanwhile.
             redis_connector.prune.set_generator_failed()
+        # The error lands while the fence still holds, so a prune queued
+        # meanwhile cannot become the latest record and take it. A failed write
+        # must not keep the fence up.
+        try:
+            with get_session_with_current_tenant() as db_session:
+                record_sync_record_error(
+                    db_session,
+                    entity_id=cc_pair_id,
+                    sync_type=SyncType.PRUNING,
+                    error_message=format_error_for_logging(e),
+                    finish=not fanned_out,
+                )
+        except Exception:
+            task_logger.exception(
+                f"Pruning error not recorded: cc_pair={cc_pair_id} payload_id={payload_id}"
+            )
+        if not fanned_out:
+            # Nothing finalizes a prune that never fanned out, so it ends here.
+            redis_connector.prune.reset()
 
         raise e
     finally:
@@ -826,7 +913,12 @@ def monitor_ccpair_pruning_taskset(
             f"Connector pruning failed after fan-out: cc_pair={cc_pair_id} num_pruned={initial}"
         )
     else:
-        mark_ccpair_as_pruned(int(cc_pair_id), db_session)
+        payload = redis_connector.prune.payload
+        mark_ccpair_as_pruned(
+            cc_pair_id,
+            db_session,
+            served_prune_request_at=payload.prune_requested_at if payload else None,
+        )
         redis_connector.prune.clear_failure_backoff()
         task_logger.info(
             f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
@@ -849,7 +941,36 @@ def monitor_ccpair_pruning_taskset(
     # (mark_ccpair_as_pruned / update_sync_record_status commit internally),
     # so the per-batch commits of the drain are safe here.
     if initial > 0:
+        sweep_orphan_tags(r, db_session)
+
+
+def sweep_orphan_tags(r: TenantRedisClient, db_session: Session) -> None:
+    """Drains orphan tags unless a sweep for this tenant is already running.
+
+    A slow sweep outlives check_for_pruning's beat lock, so the next completed
+    prune would start a second one against the same rows. The running sweep
+    drains everything, so the later caller skips. The lock expires after an
+    hour, so a sweep past that may overlap once. The drain is idempotent."""
+    lock: RedisLock = r.lock(
+        OnyxRedisLocks.ORPHAN_TAG_SWEEP_LOCK,
+        timeout=CELERY_PRUNING_LOCK_TIMEOUT,
+    )
+    pending: str = OnyxRedisSignals.ORPHAN_TAG_SWEEP_PENDING
+    if not lock.acquire(blocking=False):
+        # The running sweep drains again before it releases the lock, so
+        # orphans created after its last query are not left for the next prune.
+        r.set(pending, 1, ex=CELERY_PRUNING_LOCK_TIMEOUT)
+        task_logger.info("Orphan tag sweep already running, skipping")
+        return
+
+    try:
+        r.delete(pending)
         delete_orphan_tags_batched(db_session)
+        while r.delete(pending):
+            delete_orphan_tags_batched(db_session)
+    finally:
+        if lock.owned():
+            lock.release()
 
 
 def validate_pruning_fences(

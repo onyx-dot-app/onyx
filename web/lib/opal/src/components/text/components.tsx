@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, RefCallback } from "react";
 // Canonical TextFont/TextColor unions, shared with mobile via the neutral
 // @onyx-ai/shared/contracts (not the RN-only /native).
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
@@ -65,6 +65,12 @@ interface TextBaseProps extends WithoutStyles<
    * sentences that embed inline components (e.g. next-intl `t.rich` output).
    */
   children?: string | RichStr | RichNodes;
+
+  /**
+   * Receives the rendered element, e.g. to measure whether the text
+   * overflows. A callback, since the element's type depends on `as`.
+   */
+  ref?: RefCallback<HTMLElement>;
 }
 
 /**
@@ -140,6 +146,7 @@ const COLOR_CONFIG: Record<TextColor, string | null> = {
   "status-success-01": "text-status-success-01",
   "status-success-02": "text-status-success-02",
   "status-success-05": "text-status-success-05",
+  "theme-amber-05": "text-theme-amber-05",
 };
 
 // ---------------------------------------------------------------------------

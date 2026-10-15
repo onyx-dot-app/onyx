@@ -1,0 +1,95 @@
+/* ============================================================================
+   Toast — a toast slides down into place as it arrives, and fades out before
+   its space closes as it leaves, so the toasts around it move smoothly.
+   ============================================================================ */
+
+/* The lift matches a pinned StickyBox: a drop-shadow follows the card's
+   rounded shape. The grid row is the toast's space in the stack. */
+.opal-toast {
+  display: grid;
+  /* minmax(0, 1fr): the column must not grow to fit a long title, or the
+     title's one-line clamp would never cut it off. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  width: 100%;
+  filter: drop-shadow(0px 2px 12px var(--shadow-02));
+  animation: opal-toast-open 200ms ease-out;
+}
+
+/* Leaving: fade at full height, then close the now-empty space. */
+.opal-toast[data-leaving] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  animation: opal-toast-leave 400ms ease-in-out;
+}
+
+/* No clipping: min-height 0 lets the row reach 0, and min-width 0 keeps a
+   long title from widening the toast. */
+.opal-toast-body {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The space between toasts lives here, not in a container gap, so it closes
+   with the toast that leaves. It slides down in step with the opening row,
+   so its bottom edge stays on the row's: the card comes in from the top. */
+.opal-toast-spacer {
+  padding-bottom: 0.5rem;
+  animation: opal-toast-slide-in 200ms ease-out;
+}
+
+@keyframes opal-toast-open {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+
+@keyframes opal-toast-slide-in {
+  from {
+    translate: 0 -100%;
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+
+@keyframes opal-toast-leave {
+  0% {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  50% {
+    grid-template-rows: 1fr;
+    opacity: 0;
+  }
+  100% {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
+/* The expand toggle's chevron points right, and turns down while open. */
+.opal-toast-chevron {
+  transition: rotate 200ms ease;
+}
+
+[aria-expanded="true"] .opal-toast-chevron {
+  rotate: 90deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-toast,
+  .opal-toast[data-leaving],
+  .opal-toast-spacer {
+    animation: none;
+  }
+
+  .opal-toast-chevron {
+    transition: none;
+  }
+}

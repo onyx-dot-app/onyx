@@ -50,6 +50,8 @@ class Reply(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     conditions: RequestConditions | None = None
     required: bool = True
+    # Hold the stream after its first text chunk until the test releases this gate.
+    pause_after_first_chunk: str | None = None
 
 
 class Conversation(BaseModel):

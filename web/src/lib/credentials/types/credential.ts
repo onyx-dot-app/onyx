@@ -1,5 +1,6 @@
 import type { SWRResponse } from "swr";
-import type { CredentialFieldValues } from "@/lib/credentials/types/fields";
+import type { CapabilityCheckResult } from "@/lib/connectors/checks/types";
+import type { CredentialSpec } from "@/lib/credentials/types/spec";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
 
@@ -21,26 +22,6 @@ export interface OAuthDetails {
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
 
-export interface AuthMethodOption<
-  TFields,
-  TAuthMethod extends string = string,
-> {
-  value: TAuthMethod;
-  label: string;
-  fields: TFields;
-  description?: string;
-  // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
-  disablePermSync?: boolean;
-}
-
-export interface CredentialTemplateWithAuth<
-  TFields,
-  TAuthMethod extends string = string,
-> {
-  authentication_method?: TAuthMethod;
-  authMethods?: AuthMethodOption<Partial<TFields>, TAuthMethod>[];
-}
-
 export interface CredentialBase<T> {
   credential_json: T;
   admin_public: boolean;
@@ -58,8 +39,15 @@ export interface Credential<T> extends CredentialBase<T> {
   id: number;
   user_id: string | null;
   user_email: string | null;
+  /** The creator's display name; null when they never set one. */
+  user_personal_name: string | null;
   time_created: string;
   time_updated: string;
+  /**
+   * Whether the requesting user owns the credential. Null when the response
+   * does not say (credentials nested in pair, group and document-set views).
+   */
+  is_owner?: boolean | null;
 }
 
 /**
@@ -69,6 +57,22 @@ export interface Credential<T> extends CredentialBase<T> {
  */
 export type AnyCredential = Credential<Record<string, unknown>>;
 
+/** A connector that uses a credential. */
+export interface CredentialUsage {
+  cc_pair_id: number;
+  cc_pair_name: string | null;
+  connector_id: number;
+  source: ValidSources;
+}
+
+/**
+ * A credential from a source's credential list, with the connectors that use
+ * it. `usages` holds only the connectors the current user can manage.
+ */
+export interface SimilarCredential extends AnyCredential {
+  usages: CredentialUsage[];
+}
+
 /**
  * What `useSourceCredentials` returns: every credential the current admin
  * can see for one source.
@@ -76,7 +80,7 @@ export type AnyCredential = Credential<Record<string, unknown>>;
  * `data` is undefined until the first response lands. The endpoint filters
  * by permission, so each entry is the caller's to edit and delete.
  */
-export type SourceCredentialsResult = SWRResponse<AnyCredential[], Error>;
+export type SourceCredentialsResult = SWRResponse<SimilarCredential[], Error>;
 
 /**
  * Everything one source needs in order to be authenticated against, from
@@ -90,7 +94,7 @@ export interface CredentialSetup {
   /** The source's name for prose and labels, falling back to its key. */
   displayName: string;
   /** Every credential this admin can see. Undefined until the first load. */
-  credentials: AnyCredential[] | undefined;
+  credentials: SimilarCredential[] | undefined;
   /**
    * Set when the credentials never loaded. A refresh that fails after a
    * success does not count, and neither do OAuth details that fail to load.
@@ -107,8 +111,8 @@ export interface CredentialSetup {
   methods: CredentialCreationMethod[];
   /** True when there is more than one way in, so each needs naming. */
   namesMethods: boolean;
-  /** The source's credential field template, absent for a source with none. */
-  template: CredentialFieldValues | undefined;
+  /** The source's credential spec, null for a source with none. */
+  spec: CredentialSpec | null;
   /** Whether this deployment offers the hosted Authorize flow for the source. */
   canAuthorize: boolean;
   /** The method whose creation form is showing, if any. */
@@ -134,6 +138,11 @@ export interface CredentialSetup {
     credential: AnyCredential,
     failureMessage: string
   ) => Promise<string | null>;
+  /** Saves a credential's sharing (and name when given), then refetches. Rejects when the save fails. */
+  saveSharing: (
+    credentialId: number,
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+  ) => Promise<SimilarCredential>;
   /** Refetches the credential list. */
   refresh: () => void;
   /** Opens the hosted OAuth popup. `invalidUrlMessage` is the caller's copy. */
@@ -156,3 +165,76 @@ export interface CredentialFieldSpec {
 export interface CredentialSchemaResponse {
   credentials: Record<string, CredentialFieldSpec>;
 }
+
+/** Where a credential's stored capability check run stands. */
+export type CredentialCheckRunStatus =
+  | "running"
+  | "completed"
+  | "failed_to_run";
+
+/**
+ * One stored capability report. `connector_id` is null for the report on the
+ * credential alone; `report` is the last completed run, kept while a re-run
+ * is running.
+ */
+export interface CredentialCheckReport {
+  credential_id: number;
+  connector_id: number | null;
+  run_status: CredentialCheckRunStatus;
+  run_started_at: string | null;
+  report: {
+    checked_at: string;
+    check_results: CapabilityCheckResult[];
+  } | null;
+  time_updated: string;
+}
+
+/** Who may reuse a new credential, applied when Create saves a draft. */
+export interface CredentialSharing {
+  admin_public: boolean;
+  curator_public?: boolean;
+  groups: number[];
+  name?: string | null;
+}
+
+/**
+ * A new account typed into the add-connector form. A check run saves it as
+ * the user's draft credential, and Create promotes that draft.
+ */
+export interface DraftCredential {
+  source: ValidSources;
+  /** The values as typed. */
+  credential_json: Record<string, unknown>;
+  sharing: CredentialSharing;
+}
+
+/**
+ * The form's credential: a saved one by id, or a typed account by its values.
+ * The form compares these, so a typed account keeps one reference while its
+ * values stay the same.
+ */
+export type CredentialRef =
+  | { credential_id: number }
+  | { credential_json: Record<string, unknown> };
+
+/** The draft credential a check run saved a typed account as. */
+export interface SavedDraftCredential {
+  credential_id: number;
+  /** The `credential_json` the draft holds, as `JSON.stringify` wrote it. */
+  sent_values: string;
+}
+
+/**
+ * The credential as a request body names it: a saved credential or draft by
+ * id, with a typed account's values only when the draft does not hold them
+ * yet. Spread into a request body.
+ */
+export type CredentialRequest =
+  | { credential_id: number; credential_json?: Record<string, unknown> }
+  | { credential_json: Record<string, unknown> };
+
+/**
+ * What the connector form's field callbacks read from the selected account:
+ * its values. A saved credential and a draft both have them.
+ */
+export type CredentialValues = Pick<Credential<any>, "credential_json">;

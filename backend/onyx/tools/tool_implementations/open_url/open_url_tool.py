@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
+from onyx.access.access import censor_chunks_for_user
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.context.search.models import (
@@ -24,6 +25,7 @@ from onyx.db.document import fetch_document_ids_by_links, filter_existing_docume
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OpenUrlDocuments,
@@ -406,7 +408,9 @@ def _convert_sections_to_llm_string_with_citations(
         total_chars += result_chars
 
     output = {"results": results}
-    return json.dumps(output, indent=2, ensure_ascii=False), citation_mapping
+    return json.dumps(
+        output, separators=(",", ":"), ensure_ascii=False
+    ), citation_mapping
 
 
 class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
@@ -493,28 +497,25 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         """
         return True
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        URLS_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": (
-                                "List of URLs to open and read, can be a single URL or multiple URLs. "
-                                "This will return the text content of the page(s)."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    URLS_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of URLs to open and read, can be a single URL or multiple URLs. "
+                            "This will return the text content of the page(s)."
+                        ),
                     },
-                    "required": [URLS_FIELD],
                 },
+                "required": [URLS_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         """Emit start packet to signal tool has started."""
@@ -821,10 +822,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         ]
 
         try:
-            chunks = self._document_index.id_based_retrieval(
-                chunk_requests=chunk_requests,
-                filters=filters,
-                batch_retrieval=True,
+            chunks = censor_chunks_for_user(
+                self._document_index.id_based_retrieval(
+                    chunk_requests=chunk_requests,
+                    filters=filters,
+                    batch_retrieval=True,
+                ),
+                self._user,
             )
         except Exception as exc:
             logger.warning(

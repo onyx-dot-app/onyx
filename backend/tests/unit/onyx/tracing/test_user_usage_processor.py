@@ -202,6 +202,40 @@ def test_batch_aggregates_cache_creation_tokens(
     assert aggregated[0].cache_creation_tokens == 30
 
 
+def test_grouped_calls_are_priced_per_call_not_on_the_sum(
+    processor: UserUsageTracingProcessor,
+    monkeypatch: pytest.MonkeyPatch,
+    recorded_calls: list[dict[str, Any]],
+) -> None:
+    """Two 60k-token calls aggregate to 120k — under/over a tier threshold.
+    Each call must price at its own size, or grouped calls pay tier rates no
+    single call earned."""
+    seen_prompts: list[int] = []
+
+    def _capture_cost(*_a: Any, **kwargs: Any) -> tuple[float, float]:
+        seen_prompts.append(kwargs["prompt_tokens"])
+        return 1.0, 2.0
+
+    monkeypatch.setattr(proc_mod, "compute_cost_cents", _capture_cost)
+
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        first = processor._capture(_generation_span(usage={"input_tokens": 60_000}))
+        second = processor._capture(_generation_span(usage={"input_tokens": 60_000}))
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    assert first is not None and second is not None
+    aggregated = processor._aggregate_batch([first, second])
+    assert len(aggregated) == 1
+
+    processor._write_record(MagicMock(), aggregated[0])
+
+    assert seen_prompts == [60_000, 60_000]
+    assert recorded_calls[0]["usage"].input_tokens == 120_000
+    assert recorded_calls[0]["usage"].cost_cents == pytest.approx(6.0)
+
+
 def test_records_system_usage_when_user_id_unset(
     processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
@@ -403,3 +437,33 @@ def test_flush_swallows_record_errors(
 
     processor.force_flush()
     assert recorded_calls == []
+
+
+def test_routed_model_prices_the_call_but_keeps_router_as_ledger_key(
+    monkeypatch: pytest.MonkeyPatch,
+    processor: UserUsageTracingProcessor,
+    recorded_calls: list[dict[str, Any]],
+) -> None:
+    priced: list[tuple[str, str | None]] = []
+
+    def _compute(**kwargs: Any) -> tuple[float, float]:
+        priced.append((kwargs["model"], kwargs["served_model"]))
+        return 1.0, 2.0
+
+    monkeypatch.setattr(proc_mod, "compute_cost_cents", _compute)
+    span = _generation_span(
+        model="openrouter/auto",
+        provider="openrouter",
+        usage={"input_tokens": 10, "output_tokens": 5},
+    )
+    span.span_data.routed_model = "deepseek/deepseek-v4-flash"
+
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        processor.on_span_end(span)
+        processor.shutdown()
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    assert priced == [("openrouter/auto", "deepseek/deepseek-v4-flash")]
+    assert recorded_calls[0]["usage"].model == "openrouter/auto"

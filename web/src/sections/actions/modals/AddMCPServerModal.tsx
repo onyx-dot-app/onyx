@@ -17,7 +17,7 @@ import {
 } from "@/lib/mcp/types";
 import { useModal } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { Button, Divider } from "@opal/components";
 import type { ModalCreationInterface } from "@opal/components";
@@ -202,7 +202,7 @@ export default function AddMCPServerModal({
                 >
                   <InputTypeInField
                     name="server_url"
-                    placeholder="https://your-mcp-server.com/mcp"
+                    placeholder={t("placeholders.mcpServerUrl")}
                   />
                 </InputVertical>
 

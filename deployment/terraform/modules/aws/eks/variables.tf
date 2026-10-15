@@ -295,3 +295,21 @@ variable "vpc_cni_addon_version" {
   description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (set CLUSTER_NAME, then: aws eks describe-addon --cluster-name \"$CLUSTER_NAME\" --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
   default     = "v1.20.4-eksbuild.2"
 }
+
+variable "iam_role_permissions_boundary" {
+  type        = string
+  description = "ARN of a permissions boundary to attach to every IAM role this module creates. Null attaches none. Needed when the caller may only create bounded roles."
+  default     = null
+}
+
+variable "iam_role_path" {
+  type        = string
+  description = "IAM path for every role this module creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
+  default     = null
+}
+
+variable "cluster_admin_principal_arn" {
+  type        = string
+  description = "IAM principal that gets cluster-admin (EKS access entry) and administers the cluster's KMS key. Null keeps the upstream default: whoever runs Terraform, which changes both when a different principal applies. For an SSO role, use the full path ARN (arn:aws:iam::<account>:role/aws-reserved/sso.amazonaws.com/<region>/AWSReservedSSO_...)."
+  default     = null
+}

@@ -13,10 +13,7 @@ from redis.lock import Lock as RedisLock
 from ee.onyx.background.celery.tasks.external_group_syncing.group_sync_utils import (
     mark_all_relevant_cc_pairs_as_external_group_synced,
 )
-from ee.onyx.db.connector_credential_pair import (
-    get_all_auto_sync_cc_pairs,
-    get_cc_pairs_by_source,
-)
+from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.external_perm import (
     ExternalUserGroup,
     mark_old_external_groups_as_stale,
@@ -40,6 +37,7 @@ from onyx.configs.constants import (
     CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
+    DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
@@ -49,16 +47,12 @@ from onyx.configs.constants import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import (
-    AccessType,
-    ConnectorCredentialPairStatus,
-    SyncStatus,
-    SyncType,
-)
+from onyx.db.enums import SyncStatus, SyncType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import (
     complete_external_group_sync_attempt,
     create_external_group_sync_attempt,
+    get_external_group_sync_retry_after,
     mark_external_group_sync_attempt_failed,
     mark_external_group_sync_attempt_in_progress,
 )
@@ -115,7 +109,7 @@ def _get_fence_validation_block_expiration() -> int:
     return int(base_expiration * beat_multiplier)
 
 
-def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
+def is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external group sync is due."""
 
     if not cc_pair.access_type.is_perm_synced():
@@ -124,9 +118,10 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
         )
         return False
 
-    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+    # A paused, invalid or deleting pair does not sync until it is active again.
+    if not cc_pair.status.is_active():
         task_logger.debug(
-            f"Skipping group sync for CC Pair {cc_pair.id} - CC Pair is being deleted"
+            f"Skipping group sync for CC Pair {cc_pair.id} - status is {cc_pair.status}"
         )
         return False
 
@@ -148,6 +143,14 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     # If the last sync is None, it has never been run so we run the sync
     last_ext_group_sync = cc_pair.last_time_external_group_sync
     if last_ext_group_sync is None:
+        return True
+
+    # A sync that completed before the pair began to wait for its first
+    # permission sync does not count, so the pair is not hidden for a period.
+    # This value is the completion time: a sync that started before the wait
+    # and completed after it counts. That narrow race is accepted.
+    pending_since = cc_pair.perm_sync_pending_since
+    if pending_since is not None and last_ext_group_sync < pending_since:
         return True
 
     source_sync_period = sync_config.group_sync_config.group_sync_frequency
@@ -187,30 +190,41 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
     try:
         cc_pair_ids_to_sync: list[int] = []
         with get_session_with_current_tenant() as db_session:
-            cc_pairs = get_all_auto_sync_cc_pairs(db_session)
-
-            # For some sources, we only want to sync one cc_pair per source type
-            for source in get_all_cc_pair_agnostic_group_sync_sources():
-                # These are ordered by cc_pair id so the first one is the one we want
-                cc_pairs_to_dedupe = get_cc_pairs_by_source(
-                    db_session,
-                    source,
-                    access_type=AccessType.SYNC,
-                    status=ConnectorCredentialPairStatus.ACTIVE,
-                )
-                # dedupe cc_pairs to only keep the first one
-                for cc_pair_to_remove in cc_pairs_to_dedupe[1:]:
-                    cc_pairs = [
-                        cc_pair
-                        for cc_pair in cc_pairs
-                        if cc_pair.id != cc_pair_to_remove.id
-                    ]
-
-            cc_pair_ids_to_sync.extend(
-                cc_pair.id
-                for cc_pair in cc_pairs
-                if _is_external_group_sync_due(cc_pair)
+            cc_pairs = sorted(
+                (
+                    cc_pair
+                    for cc_pair in get_all_auto_sync_cc_pairs(db_session)
+                    if cc_pair.status.is_active()
+                ),
+                key=lambda cc_pair: cc_pair.id,
             )
+
+            # For some sources, the active cc_pair with the lowest id syncs
+            # the groups for all cc_pairs of that source
+            agnostic_sources = set(get_all_cc_pair_agnostic_group_sync_sources())
+            seen_agnostic_sources: set[DocumentSource] = set()
+            now = datetime.now(timezone.utc)
+            for cc_pair in cc_pairs:
+                source = cc_pair.connector.source
+                if source in agnostic_sources:
+                    if source in seen_agnostic_sources:
+                        continue
+                    seen_agnostic_sources.add(source)
+
+                if not is_external_group_sync_due(cc_pair):
+                    continue
+
+                retry_after = get_external_group_sync_retry_after(
+                    cc_pair_id=cc_pair.id, db_session=db_session
+                )
+                if retry_after is not None and now < retry_after:
+                    task_logger.debug(
+                        f"Skipping group sync for CC Pair {cc_pair.id} - "
+                        f"backing off after failures until {retry_after}"
+                    )
+                    continue
+
+                cc_pair_ids_to_sync.append(cc_pair.id)
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
         # whenever external-group sync has any due cc_pairs to dispatch.
@@ -520,6 +534,11 @@ def _timed_perform_external_group_sync(
         )
         if cc_pair is None:
             raise ValueError(f"No connector credential pair found for id: {cc_pair_id}")
+
+        if not cc_pair.access_type.is_perm_synced():
+            msg = f"cc_pair={cc_pair_id} is not perm-synced: {cc_pair.access_type}"
+            _fail_external_group_sync_attempt(attempt_id, msg)
+            raise ValueError(msg)
 
         source_type = cc_pair.connector.source
         connector_type = source_type.value

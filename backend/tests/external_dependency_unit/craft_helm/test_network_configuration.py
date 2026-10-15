@@ -1,0 +1,133 @@
+"""Render Craft network configuration and enforce its security prerequisites."""
+
+import subprocess
+from typing import Any
+
+import pytest
+import yaml
+
+from tests.external_dependency_unit.craft_helm.rendering import render_chart
+
+
+@pytest.mark.parametrize("lockdown", [True, False])
+def test_without_iptables_network_policy_allows_only_proxy(lockdown: bool) -> None:
+    result = render_chart(
+        [
+            "--set",
+            f"sandboxPod.netAdminLockdown={str(lockdown).lower()}",
+            "--set",
+            "craft.dnsExtraCIDRs[0]=169.254.20.10/32",
+            "--set",
+            "craft.proxyExtraCIDRs[0]=10.0.5.6/32",
+        ]
+    )
+    assert result.returncode == 0, result.stderr
+    resources: list[dict[str, Any]] = [
+        resource for resource in yaml.safe_load_all(result.stdout) if resource
+    ]
+    policy = next(
+        resource
+        for resource in resources
+        if resource["kind"] == "NetworkPolicy"
+        and resource["metadata"]["name"].endswith("sandbox-egress")
+    )
+    rules = policy["spec"]["egress"]
+    assert len(rules) == 2
+    assert rules[0]["to"][0]["podSelector"]["matchLabels"] == {
+        "app.kubernetes.io/component": "sandbox-proxy"
+    }
+    assert rules[1]["to"] == [{"ipBlock": {"cidr": "10.0.5.6/32"}}]
+    assert all(rule["ports"] == [{"protocol": "TCP", "port": 8080}] for rule in rules)
+
+    # DNS policy selection stays fixed across upgrades in either direction.
+    dns_policy = next(
+        resource
+        for resource in resources
+        if resource["kind"] == "NetworkPolicy"
+        and resource["metadata"]["name"].endswith("sandbox-bootstrap-dns")
+    )
+    assert dns_policy["spec"]["podSelector"] == {
+        "matchLabels": {"app.kubernetes.io/component": "sandbox"},
+        "matchExpressions": [
+            {
+                "key": "onyx.app/net-admin-lockdown",
+                "operator": "NotIn",
+                "values": ["false"],
+            }
+        ],
+    }
+    assert dns_policy["spec"]["egress"][1]["to"] == [
+        {"ipBlock": {"cidr": "169.254.20.10/32"}}
+    ]
+
+
+@pytest.mark.parametrize("value", ["false", "true", "invalid"])
+def test_firewall_switch_rejects_strings(value: str) -> None:
+    result = render_chart(["--set-string", f"sandboxPod.netAdminLockdown={value}"])
+    assert result.returncode != 0
+    assert "sandboxPod.netAdminLockdown must be a boolean" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        "sandboxProxy.listenHost=::",
+        "sandboxProxy.allowGlobalClients=true",
+        "sandboxProxy.egressAllowIPv6=true",
+    ],
+)
+def test_ipv6_and_global_clients_require_internal_networks(setting: str) -> None:
+    result: subprocess.CompletedProcess[str] = render_chart(["--set", setting])
+
+    assert result.returncode != 0
+    assert "sandboxProxy.internalCIDRs must include" in result.stderr
+
+    result = render_chart(
+        ["--set", setting, "--set", "sandboxProxy.internalCIDRs[0]=2600:ffff::/64"]
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("listen_host", ["0.0.0.0", "::"])
+def test_sandbox_processes_share_the_configured_listener(listen_host: str) -> None:
+    result = render_chart(["--set-string", f"sandboxPod.listenHost={listen_host}"])
+    assert result.returncode == 0, result.stderr
+    resources: list[dict[str, Any]] = [
+        resource for resource in yaml.safe_load_all(result.stdout) if resource
+    ]
+    template: dict[str, Any] = next(
+        resource for resource in resources if resource["kind"] == "PodTemplate"
+    )
+    spec: dict[str, Any] = template["template"]["spec"]
+    containers: dict[str, dict[str, Any]] = {
+        container["name"]: container
+        for container in [*spec["containers"], *spec["initContainers"]]
+    }
+    for name in ("sandbox", "sidecar"):
+        listeners: list[dict[str, str]] = [
+            env
+            for env in containers[name]["env"]
+            if env["name"] == "SANDBOX_LISTEN_HOST"
+        ]
+        assert listeners == [{"name": "SANDBOX_LISTEN_HOST", "value": listen_host}]
+
+
+def test_default_proxy_preserves_ipv4_without_runtime_egress_flag() -> None:
+    result = render_chart()
+    assert result.returncode == 0, result.stderr
+    resources = [resource for resource in yaml.safe_load_all(result.stdout) if resource]
+    proxy: dict[str, Any] = next(
+        resource
+        for resource in resources
+        if resource["kind"] == "Deployment"
+        and resource["metadata"]["labels"].get("app.kubernetes.io/component")
+        == "sandbox-proxy"
+    )
+    env: dict[str, str | None] = {
+        entry["name"]: entry.get("value")
+        for entry in proxy["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert env["SANDBOX_PROXY_LISTEN_HOST"] == "0.0.0.0"
+    assert env["SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS"] == "false"
+    assert env["SANDBOX_PROXY_INTERNAL_CIDRS"] == ""
+    assert "SANDBOX_PROXY_EGRESS_ALLOW_IPV6" not in env

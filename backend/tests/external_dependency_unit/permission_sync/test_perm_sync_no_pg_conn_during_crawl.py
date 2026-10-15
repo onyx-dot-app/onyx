@@ -184,3 +184,31 @@ def test_failed_crawl_records_docs_synced_before_the_error(
     assert attempt.status == PermissionSyncStatus.FAILED
     assert attempt.total_docs_synced == 2
     assert attempt.docs_with_permission_errors == 0
+
+
+def test_sync_on_pair_that_left_perm_sync_fails_and_clears_fence(
+    synced_cc_pair: ConnectorCredentialPair, db_session: Session
+) -> None:
+    """A queued sync that starts after the pair left SYNC must not leave the
+    fence set, or every later sync of the pair reports "already in progress"."""
+    synced_cc_pair.access_type = AccessType.PRIVATE
+    db_session.commit()
+
+    def _fake_doc_sync(
+        cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+        fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
+        fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
+        callback: IndexingHeartbeatInterface | None,  # noqa: ARG001
+    ) -> Generator[ElementExternalAccess, None, None]:
+        raise AssertionError("doc sync must not run for a non-synced pair")
+        yield
+
+    _run_perm_sync(synced_cc_pair.id, _fake_doc_sync)
+
+    assert not RedisConnector(TEST_TENANT_ID, synced_cc_pair.id).permissions.fenced
+    db_session.expire_all()
+    attempt = get_latest_doc_permission_sync_attempt_for_cc_pair(
+        db_session, synced_cc_pair.id
+    )
+    assert attempt is not None
+    assert attempt.status == PermissionSyncStatus.FAILED

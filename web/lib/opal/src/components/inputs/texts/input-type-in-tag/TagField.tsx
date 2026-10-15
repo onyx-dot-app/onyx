@@ -23,6 +23,12 @@ interface TagItem {
 
   /** Shows the warning indicator on the tag. */
   error?: boolean;
+
+  /**
+   * The tag cannot be removed: it has no remove button, and the keyboard
+   * walk skips it.
+   */
+  locked?: boolean;
 }
 
 /** The props every chips-in-input field exposes to its callers. */
@@ -310,10 +316,14 @@ function TagField({
             error={tag.error}
             disabled={disabled}
             removeInTabOrder={false}
-            onRemove={() => {
-              onRemoveTag(tag.id);
-              focusField();
-            }}
+            onRemove={
+              tag.locked
+                ? undefined
+                : () => {
+                    onRemoveTag(tag.id);
+                    focusField();
+                  }
+            }
           />
         ))}
         {readOnly ? (

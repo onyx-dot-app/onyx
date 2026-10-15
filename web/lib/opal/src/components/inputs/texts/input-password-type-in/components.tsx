@@ -168,7 +168,7 @@ function InputPasswordTypeIn({
               variant={isRevealed ? "action" : undefined}
               prominence="tertiary"
               size="sm"
-              tooltipSide="left"
+              tooltipSide="start"
               tooltip={toggleLabel}
               aria-label={toggleLabel}
             />

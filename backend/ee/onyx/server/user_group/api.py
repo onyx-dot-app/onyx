@@ -75,7 +75,11 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorManageRole, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
-from onyx.db.user_group import assert_group_config_is_editable
+from onyx.db.user_group import (
+    assert_group_config_is_editable,
+    assert_group_permissions_editable,
+    group_permission_toggles_allowed,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
@@ -141,6 +145,7 @@ def list_user_groups(
                 is_user_groups_admin=is_user_groups_admin,
                 is_full_admin=is_full_admin,
                 is_default=user_group.is_default,
+                permission_toggles_allowed=group_permission_toggles_allowed(user_group),
             ),
         )
         for user_group in user_groups
@@ -178,6 +183,7 @@ def get_user_group(
                 user, Permission.FULL_ADMIN_PANEL_ACCESS
             ),
             is_default=user_group.is_default,
+            permission_toggles_allowed=group_permission_toggles_allowed(user_group),
         ),
     )
 
@@ -242,9 +248,7 @@ def set_user_group_permissions(
     group = fetch_user_group(db_session, user_group_id)
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
-    assert_group_config_is_editable(
-        db_session, user_group_id, "change the permissions of"
-    )
+    assert_group_permissions_editable(group, request.permissions)
 
     non_toggleable = [p for p in request.permissions if p in NON_TOGGLEABLE_PERMISSIONS]
     if non_toggleable:
@@ -415,7 +419,8 @@ def set_user_group_data_access_cc_pairs_endpoint(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroupDataAccessCCPairs:
-    """Sets the private connectors whose documents the group's members may read."""
+    """Sets the private and restricted connectors whose documents the group's
+    members may read."""
     try:
         cc_pair_ids = set_user_group_data_access_cc_pairs(
             db_session=db_session,

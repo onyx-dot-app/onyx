@@ -7,7 +7,8 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple, ToolCallSimple
-from onyx.coding_agent.mock_tools import (
+from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
+from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_CMD_KEY,
     BASH_TOOL_NAME,
     CODING_AGENT_QUERY_KEY,
@@ -15,9 +16,8 @@ from onyx.coding_agent.mock_tools import (
     GENERATE_ANSWER_TOOL_NAME,
     get_coding_agent_tool_definitions,
 )
-from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
 from onyx.configs.constants import MessageType
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.tool_definitions import (
     THINK_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
     THINK_TOOL_RESPONSE_TOKEN_COUNT,
@@ -25,6 +25,7 @@ from onyx.deep_research.dr_mock_tools import (
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
+from onyx.llm.model_request import serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.coding_agent.coding_agent import (
     CODING_AGENT_FINAL_ANSWER_PROMPT,
@@ -351,8 +352,10 @@ def run_coding_agent_call(
                     )
                     step_generator = run_llm_step_pkt_generator(
                         history=constructed_history,
-                        tool_definitions=get_coding_agent_tool_definitions(
-                            include_think_tool=not is_reasoning_model
+                        tool_definitions=serialize_tools(
+                            get_coding_agent_tool_definitions(
+                                include_think_tool=not is_reasoning_model
+                            )
                         ),
                         tool_choice=ToolChoiceOptions.REQUIRED,
                         llm=llm,

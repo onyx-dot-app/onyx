@@ -1,19 +1,43 @@
 from collections.abc import Callable
 from typing import Any
 
+from ee.onyx.external_permissions.linear.capability_checks import (
+    build_linear_doc_permission_sync_checks,
+    build_linear_group_sync_checks,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
-from onyx.connectors.capability_checks.models import CapabilityCheckContext
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheck,
+    CapabilityCheckContext,
+    CapabilityCheckResult,
+    CapabilityCheckStatus,
+)
+from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.hubspot.capability_checks import (
+    build_hubspot_doc_permission_sync_checks,
+)
+from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.linear.config import LinearConnectorConfig
+from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_doc_permission_sync_checks,
     build_onedrive_group_sync_checks,
 )
 from onyx.connectors.onedrive.connector import OneDriveConnector
+from onyx.connectors.sharepoint.capability_checks import (
+    build_sharepoint_doc_permission_sync_checks,
+    build_sharepoint_group_sync_checks,
+)
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.zoom.connector import ZoomConnector
 
@@ -59,19 +83,38 @@ def validate_box_perm_sync(connector: BoxConnector) -> None:
 
 
 def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
-    """
-    Validate that the connector is configured correctly for permissions syncing.
-
-    Two distinct permission surfaces are needed for SharePoint perm sync,
-    neither of which the non-perm-sync indexing path requires:
-      1. SharePoint REST 'Sites.FullControl.All' to enumerate RoleAssignments.
-      2. Microsoft Graph 'GroupMember.Read.All' (or equivalent) to expand
-         Azure AD groups attached to those RoleAssignments.
-    Probe both here so misconfigured apps fail fast at connector creation
-    instead of mid-index.
-    """
-    connector.probe_role_assignments_permission()
-    connector.probe_group_members_permission()
+    """Runs the named checks the way the runner does, so a check whose
+    setting is off stays skipped. A failed or inconclusive required check
+    raises, the way the old probes did."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.SHAREPOINT,
+        credential_json={},
+        connector=connector,
+        connector_specific_config={
+            "sites": connector.sites,
+            "excluded_sites": connector.excluded_sites,
+            "excluded_paths": connector.excluded_paths,
+            "include_site_pages": connector.include_site_pages,
+            "include_site_documents": connector.include_site_documents,
+            "treat_sharing_link_as_public": connector.treat_sharing_link_as_public,
+            "exhaustive_ad_enumeration": connector.exhaustive_ad_enumeration,
+            "authority_host": connector.authority_host,
+            "graph_api_host": connector.graph_api_host,
+        },
+        source_operations=connector.ops,
+    )
+    checks: list[CapabilityCheck] = (
+        build_sharepoint_doc_permission_sync_checks()
+        + build_sharepoint_group_sync_checks()
+    )
+    results: list[CapabilityCheckResult] = run_capability_checks(checks, context)
+    for result in results:
+        if not result.required:
+            continue
+        if result.status is CapabilityCheckStatus.FAILED:
+            raise ConnectorValidationError(result.message)
+        if result.status is CapabilityCheckStatus.INDETERMINATE:
+            raise UnexpectedValidationError(result.message)
 
 
 def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
@@ -89,15 +132,48 @@ def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
         check.run(context)
 
 
+def validate_linear_perm_sync(connector: LinearConnector) -> None:
+    """Scheduled syncs validate through here, not the named-check runner, so
+    the same checks run before each sync: a user who became a guest after
+    setup would otherwise hide every issue outside the guest's own teams."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.LINEAR,
+        credential_json={},
+        connector=connector,
+        connector_specific_config=LinearConnectorConfig(
+            team_keys=connector.team_keys, projects=connector.projects
+        ).model_dump(mode="json"),
+        source_operations=connector.ops,
+    )
+    for check in (
+        build_linear_doc_permission_sync_checks() + build_linear_group_sync_checks()
+    ):
+        check.run(context)
+
+
 def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
     """
     Permission sync reads each recording's share settings, its registered
     viewers and the account's sign-in rules, three scopes the indexing path
-    never touches. Probe them here so an app missing one fails at connector
-    creation instead of indexing every transcript as readable by its owner
-    alone.
+    never touches, and its group sync lists the account's users. Probe them
+    here so an app missing one fails at connector creation instead of indexing
+    every transcript as readable by its owner alone.
     """
     connector.probe_recording_access_permissions()
+
+
+def validate_hubspot_perm_sync(connector: HubSpotConnector) -> None:
+    """A missing scope fails the attempt with the refused call named, instead of
+    a sync that leaves every record hidden."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.HUBSPOT,
+        credential_json={},
+        connector=connector,
+        connector_specific_config=connector.settings.model_dump(),
+        source_operations=connector.ops,
+    )
+    for check in build_hubspot_doc_permission_sync_checks():
+        check.run(context)
 
 
 # The single source of truth for which connectors carry a real perm-sync probe:
@@ -110,6 +186,8 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     CanvasConnector: validate_canvas_perm_sync,
     ConfluenceConnector: validate_confluence_perm_sync,
     GoogleDriveConnector: validate_drive_perm_sync,
+    LinearConnector: validate_linear_perm_sync,
+    HubSpotConnector: validate_hubspot_perm_sync,
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
     ZoomConnector: validate_zoom_perm_sync,

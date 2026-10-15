@@ -157,7 +157,7 @@ def test_mcp_document_search_flow(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group permissions are Enterprise-only",
 )
 def test_mcp_search_respects_acl_filters(

@@ -46,6 +46,7 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import (
     ColoredFormatter,
     LoggerContextVars,
@@ -432,6 +433,7 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
 
 
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+    start_telemetry("worker")
     task_logger.info("worker_ready signal received.")
 
     # file based way to do readiness/liveness probes

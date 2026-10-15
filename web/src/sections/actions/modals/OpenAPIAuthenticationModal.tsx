@@ -460,7 +460,9 @@ export default function OpenAPIAuthenticationModal({
                               name="authorizationUrl"
                               value={values.authorizationUrl}
                               onChange={handleChange}
-                              placeholder="https://example.com/oauth/authorize"
+                              placeholder={t(
+                                "placeholders.oauthAuthorizationUrl"
+                              )}
                             />
                           </FormField.Control>
                           <FormField.Message
@@ -488,7 +490,7 @@ export default function OpenAPIAuthenticationModal({
                               name="tokenUrl"
                               value={values.tokenUrl}
                               onChange={handleChange}
-                              placeholder="https://example.com/oauth/access_token"
+                              placeholder={t("placeholders.oauthTokenUrl")}
                             />
                           </FormField.Control>
                           <FormField.Message

@@ -4,12 +4,26 @@
  *
  * The page renders every connector's configuration form through the shared
  * `RenderField`/`TextFormField` machinery, so text fields are addressable by
- * their config `name` (exposed as `data-testid`) and select fields by their
- * native `<select name=...>` element.
+ * their config `name` (exposed as `data-testid`) and select fields by the
+ * `InputSingleSelect` whose input carries that name as its id.
  */
 
-import { expect, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  type Locator,
+  type Page,
+  type Request,
+} from "@playwright/test";
+import { CHECKS_CARD_ID } from "@/lib/connectors/checks/constants";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
+import {
+  type MockConnectorChecksOptions,
+  mockPassingConnectorChecks,
+  runConnectorChecks,
+  startChecksButton,
+} from "@tests/e2e/utils/connectorChecks";
+
+const CREATE_URL = "**/api/manage/admin/connector-with-credential";
 
 export class ConnectorSetupPage {
   readonly page: Page;
@@ -17,19 +31,86 @@ export class ConnectorSetupPage {
   readonly pageTitle: Locator;
   readonly connectorNameInput: Locator;
   readonly createConnectorButton: Locator;
+  /** The "Document Access" picker: everyone, specific groups, or auto sync. */
+  readonly accessTypeSelect: Locator;
+  /** The group picker that follows a "Specific Groups" pick. */
+  readonly groupAccessPrompt: Locator;
+  /** Starts the connector checks, which the configuration waits for. */
+  readonly startChecksButton: Locator;
+  /** The results card of the connector checks. */
+  readonly checksCard: Locator;
+  /** The advisory Create opens when a non-required check failed. */
+  readonly failedChecksAdvisory: Locator;
+  readonly viewFailedChecksButton: Locator;
+  readonly createAnywayButton: Locator;
 
   constructor(page: Page, source: string) {
     this.page = page;
     this.source = source;
     this.pageTitle = page.locator('[aria-label="admin-page-title"]');
-    // Scoped: a credential form on the same page carries a name field too.
-    this.connectorNameInput = page
-      .getByTestId("connector-form")
-      .getByTestId("name");
+    // Its own test id: a credential form on the same page has a name field too.
+    this.connectorNameInput = page.getByTestId("connector-name");
     this.createConnectorButton = page.getByRole("button", {
-      name: "Connect",
+      name: "Create Connector",
       exact: true,
     });
+    this.accessTypeSelect = page.getByRole("combobox", {
+      name: "Document Access",
+    });
+    this.groupAccessPrompt = page.getByPlaceholder(
+      "Add groups to restrict access to this connector"
+    );
+    this.startChecksButton = startChecksButton(page);
+    this.checksCard = page.getByTestId(CHECKS_CARD_ID);
+    this.failedChecksAdvisory = page.getByRole("dialog", {
+      name: "Some content won't be indexed.",
+    });
+    this.viewFailedChecksButton = this.failedChecksAdvisory.getByRole(
+      "button",
+      { name: "View Failed Checks" }
+    );
+    this.createAnywayButton = this.failedChecksAdvisory.getByRole("button", {
+      name: "Create Connector Anyway",
+    });
+  }
+
+  /** Mock the connector checks without calling the source. Options add a failed non-required check. */
+  async mockChecks(options?: MockConnectorChecksOptions): Promise<void> {
+    await mockPassingConnectorChecks(this.page, options);
+  }
+
+  /** Run the connector checks and wait for the configuration to unlock. */
+  async runChecks(): Promise<void> {
+    await runConnectorChecks(this.page);
+  }
+
+  /** Answer Create's request with a 500, so no connector is made. */
+  async failCreateRequests(): Promise<void> {
+    await this.page.route(CREATE_URL, (route) =>
+      route.fulfill({ status: 500, json: { detail: "e2e" } })
+    );
+  }
+
+  /** Resolves with the next create request. */
+  waitForCreateRequest(): Promise<Request> {
+    return this.page.waitForRequest(CREATE_URL);
+  }
+
+  /** A check's row in the checks card, by its display name. */
+  checkRow(displayName: string): Locator {
+    return this.checksCard.getByText(displayName);
+  }
+
+  /** Fold the checks card down to its summary line. */
+  async foldChecksCard(): Promise<void> {
+    await this.checksCard.getByRole("button", { name: "Fold" }).click();
+  }
+
+  /** Scroll the page to its end, away from the checks card. */
+  async scrollToEnd(): Promise<void> {
+    await this.page
+      .locator("#page-wrapper-scroll-container")
+      .evaluate((el) => el.scrollTo(0, el.scrollHeight));
   }
 
   /** A single-line text field from the connector config, by its config name. */
@@ -37,19 +118,45 @@ export class ConnectorSetupPage {
     return this.page.getByTestId(fieldName);
   }
 
-  /** A select field from the connector config, by its config name. */
+  /** A select field's combobox from the connector config, by its config name. */
   selectField(fieldName: string): Locator {
-    return this.page.locator(`select[name="${fieldName}"]`);
+    return this.page.locator(`#${fieldName}`);
   }
 
-  /** The row for a credential in the credential section, by its name. */
-  credentialRow(credentialName: string): Locator {
-    return this.page.getByRole("row", { name: credentialName });
+  /** Open a select field and pick the option with this title. */
+  async pickOption(fieldName: string, title: string): Promise<void> {
+    await this.pick(this.selectField(fieldName), title);
   }
 
-  /** Pick a credential in the credential section by its name. */
-  async selectCredential(credentialName: string) {
-    await this.credentialRow(credentialName).getByRole("radio").click();
+  /** Open the access type picker and pick an option by its title. */
+  async pickAccessType(
+    title: "Everyone in Your Organization" | "Specific Groups"
+  ): Promise<void> {
+    await this.pick(this.accessTypeSelect, title);
+  }
+
+  private async pick(select: Locator, title: string): Promise<void> {
+    await select.click();
+    // An option's accessible name is its title followed by its description.
+    const startsWithTitle = new RegExp(
+      `^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`
+    );
+    await this.page.getByRole("option", { name: startsWithTitle }).click();
+  }
+
+  /**
+   * The card for a saved account in the credential section, by its id. The
+   * card is titled by its creator, so its name may not show.
+   */
+  credentialRow(credentialId: number): Locator {
+    return this.page.getByTestId(`authentication-account-${credentialId}`);
+  }
+
+  /** Pick a saved account in the credential section by its id. */
+  async selectCredential(credentialId: number) {
+    await this.credentialRow(credentialId)
+      .getByRole("button", { name: "Use Account" })
+      .click();
   }
 
   /**

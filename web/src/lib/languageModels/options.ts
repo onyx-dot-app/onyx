@@ -107,6 +107,7 @@ export function buildLlmOptions(
           reasoningEffortDefault: mc.reasoning_effort_default,
           temperatureDefault: mc.temperature_default,
           supportsImageInput: mc.supports_image_input || false,
+          isRouter: mc.is_router || false,
         });
       });
   });
@@ -328,6 +329,9 @@ export function buildModelSelectOptions(
               {
                 value: String(option.modelConfigurationId),
                 title: option.displayName,
+                // The raw model name is what admins type, and what a server
+                // name search matched, so it must also match here.
+                keywords: [option.modelName],
                 icon: getModelIcon(option.provider, option.modelName),
               },
             ]

@@ -31,7 +31,7 @@ from tests.integration.common_utils.test_models import (
 from tests.integration.tests.permissions._access_matrix import call_endpoint
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Manage roles need user groups, an enterprise-only capability",
 )
 

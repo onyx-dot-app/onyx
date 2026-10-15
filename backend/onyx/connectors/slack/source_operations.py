@@ -556,6 +556,7 @@ class SlackSourceOperations(SourceOperations):
 
     source = DocumentSource.SLACK
     sdk_modules = ("slack_sdk",)
+    config_keys = frozenset(SlackSourceOperationsConfig.model_fields)
 
     _cached_client: WebClient | None = None
     _cached_fast_client: WebClient | None = None
