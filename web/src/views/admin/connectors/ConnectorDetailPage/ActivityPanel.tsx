@@ -10,6 +10,7 @@ import {
   FilterButton,
   InputTypeIn,
   MessageCard,
+  ShadowDiv,
   Tag,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
@@ -177,17 +178,20 @@ export default function ActivityPanel({
         ? t("empty.title")
         : t(`empty.${shown}`);
 
-  // Full width once the page stacks its columns, the panel's own width beside them.
+  // Full width once the page stacks its columns. Beside them it pins 1.5rem under the settings header and fits the visible height, so a long list scrolls inside the panel instead of lengthening the page. 6rem is that gap plus the body's 4.5rem bottom padding, so the panel still fits when the page ends.
   return (
     <Section
       alignItems="stretch"
       width="full"
       height="fit"
-      className={cn("lg:max-w-104 lg:shrink-0", className)}
+      className={cn(
+        "lg:max-w-104 lg:shrink-0 lg:sticky lg:top-[calc(var(--settings-header-height,0px)_+_1.5rem)] lg:max-h-[calc(var(--settings-scroll-height,100dvh)_-_var(--settings-header-height,0px)_-_6rem)]",
+        className
+      )}
       data-testid="connector-activity"
     >
-      <Card border="solid" rounding={4} padding={2}>
-        <Section alignItems="stretch" gap={3} height="fit">
+      <Card border="solid" rounding={4} padding={2} height="full">
+        <Section alignItems="stretch" gap={3} height="fit" className="min-h-0">
           <Section alignItems="stretch" gap={1} height="fit">
             {title !== undefined && (
               <Section
@@ -283,32 +287,36 @@ export default function ActivityPanel({
             </Section>
           </Section>
 
-          {failed ? (
-            <MessageCard variant="error" title={t("loadError.title")} />
-          ) : loading ? (
-            <Section alignItems="stretch" gap={1} height="fit">
-              {Array.from({ length: LOADER_ROWS }, (_, index) => (
-                <CardLoader
-                  key={index}
-                  color="background-tint-00"
-                  border="none"
-                  rounding={2}
-                  padding={2}
-                />
-              ))}
+          <ShadowDiv shadowHeight={4}>
+            <Section alignItems="stretch" gap={3} height="fit">
+              {failed ? (
+                <MessageCard variant="error" title={t("loadError.title")} />
+              ) : loading ? (
+                <Section alignItems="stretch" gap={1} height="fit">
+                  {Array.from({ length: LOADER_ROWS }, (_, index) => (
+                    <CardLoader
+                      key={index}
+                      color="background-tint-00"
+                      border="none"
+                      rounding={2}
+                      padding={2}
+                    />
+                  ))}
+                </Section>
+              ) : empty ? (
+                <IllustrationContent title={emptyTitle} />
+              ) : (
+                groups.map((group) => (
+                  <GroupList
+                    key={group.group}
+                    state={group}
+                    resolving={resolving}
+                    onResolve={(item, errorIds) => void resolve(item, errorIds)}
+                  />
+                ))
+              )}
             </Section>
-          ) : empty ? (
-            <IllustrationContent title={emptyTitle} />
-          ) : (
-            groups.map((group) => (
-              <GroupList
-                key={group.group}
-                state={group}
-                resolving={resolving}
-                onResolve={(item, errorIds) => void resolve(item, errorIds)}
-              />
-            ))
-          )}
+          </ShadowDiv>
         </Section>
       </Card>
     </Section>
