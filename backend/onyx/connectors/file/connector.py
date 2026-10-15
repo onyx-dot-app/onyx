@@ -304,15 +304,11 @@ class LocalFileConnector(LoadConnector):
         zip_metadata_file_id: str | None = None,
         zip_metadata: dict[str, Any] | None = None,  # Deprecated, for backwards compat
         batch_size: int = INDEX_BATCH_SIZE,
-        # None follows SKIP_SPREADSHEET_CONTENT. User uploads pass False.
-        skip_spreadsheet_content: bool | None = None,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
-        self.skip_spreadsheet_content: bool = (
-            SKIP_SPREADSHEET_CONTENT
-            if skip_spreadsheet_content is None
-            else skip_spreadsheet_content
-        )
+        # Not an __init__ parameter, so it stays out of the connector config.
+        # The user file loader sets it to False to keep spreadsheet content.
+        self.skip_spreadsheet_content: bool = SKIP_SPREADSHEET_CONTENT
         self.batch_size = batch_size
         self.pdf_pass: str | None = None
         self._zip_metadata_file_id = zip_metadata_file_id

@@ -191,9 +191,9 @@ Synchronous, inside the request:
 Asynchronous, in `PROCESS_SINGLE_USER_FILE`
 (`tasks.py:process_user_file_impl`): loads the blob back through
 `LocalFileConnector` (`tasks.py:_load_user_file_documents`), then dispatches
-to one of the two consumption paths (§4.4). The loader passes
-`skip_spreadsheet_content=False`, so `SKIP_SPREADSHEET_CONTENT` never replaces a
-user file's spreadsheet content.
+to one of the two consumption paths (§4.4). The loader sets the connector's
+`skip_spreadsheet_content` to False, so `SKIP_SPREADSHEET_CONTENT` never replaces
+a user file's spreadsheet content.
 
 ### 4.3 Extraction
 

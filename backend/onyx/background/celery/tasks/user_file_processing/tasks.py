@@ -349,9 +349,10 @@ def _load_user_file_documents(
     connector = LocalFileConnector(
         file_locations=[file_id],
         file_names=[file_name] if file_name else None,
-        skip_spreadsheet_content=False,
     )
     connector.load_credentials({})
+    # User files keep their spreadsheet content regardless of the setting.
+    connector.skip_spreadsheet_content = False
 
     # User files aren't attempt-scoped, so the docfetching staging reapers don't cover them.
     staging_callback, staged_csv_ids = build_tracking_raw_file_callback(
