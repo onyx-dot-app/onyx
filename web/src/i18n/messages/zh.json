@@ -577,6 +577,10 @@
       "tokenUrl": {
         "label": "Token URL",
         "required": "必须填写 token URL"
+      },
+      "pkce": {
+        "label": "使用 PKCE",
+        "description": "仅当 OAuth 提供商支持使用 S256 质询方法的 PKCE 时启用。"
       }
     },
     "openApiCard": {

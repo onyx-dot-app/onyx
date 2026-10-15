@@ -577,6 +577,10 @@
       "tokenUrl": {
         "label": "عنوان URL للرمز",
         "required": "عنوان URL للرمز مطلوب"
+      },
+      "pkce": {
+        "label": "استخدام PKCE",
+        "description": "فعّل هذا الخيار فقط إذا كان موفّر OAuth يدعم PKCE بطريقة التحدي S256."
       }
     },
     "openApiCard": {

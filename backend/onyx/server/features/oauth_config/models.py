@@ -55,7 +55,6 @@ class OAuthInitiateResponse(BaseModel):
 
 class OAuthCallbackResponse(BaseModel):
     redirect_url: str
-    error: str | None = None
 
 
 class OAuthTokenStatus(BaseModel):

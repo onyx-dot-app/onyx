@@ -10,7 +10,7 @@ import {
   Divider,
   MessageCard,
   InputPasswordTypeIn,
-  Switch,
+  InputSwitch,
 } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
@@ -610,14 +610,15 @@ export default function OpenAPIAuthenticationModal({
                         <FormField name="supportsPkce">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex flex-col gap-1">
-                              <FormField.Label>Use PKCE</FormField.Label>
+                              <FormField.Label>
+                                {t("openApiAuthModal.pkce.label")}
+                              </FormField.Label>
                               <FormField.Description>
-                                Enable only when the OAuth provider supports
-                                PKCE with the S256 challenge method.
+                                {t("openApiAuthModal.pkce.description")}
                               </FormField.Description>
                             </div>
                             <FormField.Control asChild>
-                              <Switch
+                              <InputSwitch
                                 checked={values.supportsPkce}
                                 onCheckedChange={(checked) =>
                                   setFieldValue("supportsPkce", checked)

@@ -146,10 +146,8 @@ class OAuthTokenManager:
         data: dict[str, str] = {
             "grant_type": "refresh_token",
             "refresh_token": token_data["refresh_token"],
-            "client_id": self._unwrap_sensitive_str(self.oauth_config.client_id),
-            "client_secret": self._unwrap_sensitive_str(
-                self.oauth_config.client_secret
-            ),
+            "client_id": _unwrap_sensitive_str(self.oauth_config.client_id),
+            "client_secret": _unwrap_sensitive_str(self.oauth_config.client_secret),
         }
         validate_oauth_endpoint_url(self.oauth_config.token_url)
         response = requests.post(
@@ -200,72 +198,6 @@ class OAuthTokenManager:
         # Add 60 second buffer to avoid race conditions
         return int(time.time()) + 60 >= expires_at
 
-    def exchange_code_for_token(
-        self,
-        code: str,
-        redirect_uri: str,
-        *,
-        code_verifier: str | None = None,
-    ) -> dict[str, Any]:
-        """Exchange an authorization code, including a PKCE verifier when supplied."""
-        if (
-            self.oauth_config.client_id is None
-            or self.oauth_config.client_secret is None
-        ):
-            raise ValueError(
-                "OAuth client_id and client_secret are required for code exchange"
-            )
-
-        return exchange_oauth_code_for_token(
-            self.flow_params(self.oauth_config),
-            code,
-            redirect_uri,
-            code_verifier=code_verifier,
-        )
-
-    @staticmethod
-    def build_authorization_url(
-        oauth_config: OAuthConfig,
-        redirect_uri: str,
-        state: str,
-        *,
-        code_challenge: str | None = None,
-    ) -> str:
-        """Build an authorization URL, including a PKCE challenge when supplied."""
-        if oauth_config.client_id is None:
-            raise ValueError("OAuth client_id is required to build authorization URL")
-        return build_oauth_authorization_url(
-            OAuthTokenManager.flow_params(oauth_config),
-            redirect_uri,
-            state,
-            code_challenge=code_challenge,
-        )
-
-    @staticmethod
-    def flow_params(oauth_config: OAuthConfig) -> OAuthFlowParams:
-        """Return the protocol inputs represented by an OAuthConfig."""
-        if oauth_config.client_id is None:
-            raise ValueError("OAuth client_id is required")
-        client_secret = (
-            OAuthTokenManager._unwrap_sensitive_str(oauth_config.client_secret)
-            if oauth_config.client_secret is not None
-            else None
-        )
-        return OAuthFlowParams(
-            authorization_url=oauth_config.authorization_url,
-            token_url=oauth_config.token_url,
-            client_id=OAuthTokenManager._unwrap_sensitive_str(oauth_config.client_id),
-            client_secret=client_secret,
-            scopes=oauth_config.scopes,
-            additional_params=oauth_config.additional_params,
-        )
-
-    @staticmethod
-    def _unwrap_sensitive_str(value: SensitiveValue[str] | str) -> str:
-        if isinstance(value, SensitiveValue):
-            return value.get_value(apply_mask=False)  # ty: ignore[invalid-return-type]
-        return value
-
     @staticmethod
     def _unwrap_token_data(
         token_data: SensitiveValue[dict[str, Any]] | dict[str, Any],
@@ -275,3 +207,27 @@ class OAuthTokenManager:
                 apply_mask=False
             )
         return token_data
+
+
+def _unwrap_sensitive_str(value: SensitiveValue[str] | str) -> str:
+    if isinstance(value, SensitiveValue):
+        return value.get_value(apply_mask=False)  # ty: ignore[invalid-return-type]
+    return value
+
+
+def oauth_flow_params_from_config(oauth_config: OAuthConfig) -> OAuthFlowParams:
+    """Read protocol inputs without loading or changing a user's tokens."""
+    if oauth_config.client_id is None or oauth_config.client_secret is None:
+        raise ValueError("OAuth client_id and client_secret are required")
+    client_id = _unwrap_sensitive_str(oauth_config.client_id)
+    client_secret = _unwrap_sensitive_str(oauth_config.client_secret)
+    if not client_id:
+        raise ValueError("OAuth client_id is required")
+    return OAuthFlowParams(
+        authorization_url=oauth_config.authorization_url,
+        token_url=oauth_config.token_url,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=oauth_config.scopes,
+        additional_params=oauth_config.additional_params,
+    )

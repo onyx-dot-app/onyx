@@ -577,6 +577,10 @@
       "tokenUrl": {
         "label": "Token URL",
         "required": "Token URL은 필수입니다"
+      },
+      "pkce": {
+        "label": "PKCE 사용",
+        "description": "OAuth 제공업체가 S256 챌린지 방식의 PKCE를 지원하는 경우에만 활성화하세요."
       }
     },
     "openApiCard": {

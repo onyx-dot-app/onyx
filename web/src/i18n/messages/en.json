@@ -577,6 +577,10 @@
       "tokenUrl": {
         "label": "Token URL",
         "required": "Token URL is required"
+      },
+      "pkce": {
+        "label": "Use PKCE",
+        "description": "Enable only when the OAuth provider supports PKCE with the S256 challenge method."
       }
     },
     "openApiCard": {

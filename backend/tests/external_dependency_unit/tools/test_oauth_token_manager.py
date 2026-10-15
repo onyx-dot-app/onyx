@@ -18,11 +18,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.oauth_token_manager import (
     OAuthTokenManager,
     exchange_oauth_code_for_token,
+    oauth_flow_params_from_config,
 )
 from onyx.db.models import OAuthConfig
 from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
 from onyx.oauth.protocol import OAuthFlowParams, build_oauth_authorization_url
-from onyx.utils.sensitive import SensitiveValue
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -347,7 +347,6 @@ class TestOAuthTokenManagerCodeExchange:
     ) -> None:
         """Test successful code exchange"""
         oauth_config = _create_test_oauth_config(db_session)
-        user = create_test_user(db_session, "oauth_user")
 
         # Mock successful token exchange
         mock_response = Mock(spec=Response, status_code=200)
@@ -361,9 +360,10 @@ class TestOAuthTokenManagerCodeExchange:
         mock_response.raise_for_status = Mock()
         mock_post.return_value = mock_response
 
-        manager = OAuthTokenManager(oauth_config, user.id, db_session)
-        token_data = manager.exchange_code_for_token(
-            code="auth_code_123", redirect_uri="https://example.com/callback"
+        token_data = exchange_oauth_code_for_token(
+            oauth_flow_params_from_config(oauth_config),
+            code="auth_code_123",
+            redirect_uri="https://example.com/callback",
         )
 
         assert token_data["access_token"] == "new_access_token"
@@ -392,18 +392,17 @@ class TestOAuthTokenManagerCodeExchange:
     ) -> None:
         """Test that HTTP error during code exchange is raised"""
         oauth_config = _create_test_oauth_config(db_session)
-        user = create_test_user(db_session, "oauth_user")
 
         # Mock HTTP error
         mock_response = Mock(spec=Response, status_code=200)
         mock_response.raise_for_status.side_effect = HTTPError("Invalid code")
         mock_post.return_value = mock_response
 
-        manager = OAuthTokenManager(oauth_config, user.id, db_session)
-
         with pytest.raises(HTTPError):
-            manager.exchange_code_for_token(
-                code="invalid_code", redirect_uri="https://example.com/callback"
+            exchange_oauth_code_for_token(
+                oauth_flow_params_from_config(oauth_config),
+                code="invalid_code",
+                redirect_uri="https://example.com/callback",
             )
 
 
@@ -414,8 +413,8 @@ class TestOAuthTokenManagerURLBuilding:
         """Test building basic authorization URL"""
         oauth_config = _create_test_oauth_config(db_session)
 
-        url = OAuthTokenManager.build_authorization_url(
-            oauth_config=oauth_config,
+        url = build_oauth_authorization_url(
+            oauth_flow_params_from_config(oauth_config),
             redirect_uri="https://example.com/callback",
             state="random_state_123",
         )
@@ -443,8 +442,8 @@ class TestOAuthTokenManagerURLBuilding:
             db_session=db_session,
         )
 
-        url = OAuthTokenManager.build_authorization_url(
-            oauth_config=oauth_config,
+        url = build_oauth_authorization_url(
+            oauth_flow_params_from_config(oauth_config),
             redirect_uri="https://example.com/callback",
             state="state_456",
         )
@@ -466,8 +465,8 @@ class TestOAuthTokenManagerURLBuilding:
             db_session=db_session,
         )
 
-        url = OAuthTokenManager.build_authorization_url(
-            oauth_config=oauth_config,
+        url = build_oauth_authorization_url(
+            oauth_flow_params_from_config(oauth_config),
             redirect_uri="https://example.com/callback",
             state="state_789",
         )
@@ -491,8 +490,8 @@ class TestOAuthTokenManagerURLBuilding:
             db_session=db_session,
         )
 
-        url = OAuthTokenManager.build_authorization_url(
-            oauth_config=oauth_config,
+        url = build_oauth_authorization_url(
+            oauth_flow_params_from_config(oauth_config),
             redirect_uri="https://example.com/callback",
             state="state_xyz",
         )
@@ -500,22 +499,6 @@ class TestOAuthTokenManagerURLBuilding:
         # Should use & instead of ? since URL already has query params
         assert "foo=bar&" in url or "?foo=bar" in url
         assert "client_id=custom_client_id" in url
-
-
-class TestUnwrapSensitiveStr:
-    """Tests for _unwrap_sensitive_str static method"""
-
-    def test_unwrap_sensitive_str(self) -> None:
-        """Test that both SensitiveValue and plain str inputs are handled"""
-        # SensitiveValue input
-        sensitive = SensitiveValue[str](
-            encrypted_bytes=b"test_client_id",
-            decrypt_fn=lambda b: b.decode(),
-        )
-        assert OAuthTokenManager._unwrap_sensitive_str(sensitive) == "test_client_id"
-
-        # Plain str input
-        assert OAuthTokenManager._unwrap_sensitive_str("plain_string") == "plain_string"
 
 
 def _known_flow_params() -> OAuthFlowParams:

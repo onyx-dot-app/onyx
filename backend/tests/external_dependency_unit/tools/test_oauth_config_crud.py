@@ -85,6 +85,20 @@ class TestOAuthConfigCRUD:
         assert oauth_config.client_id is not None
         assert oauth_config.client_secret is not None
 
+    def test_pkce_setting_survives_partial_updates_and_can_be_disabled(
+        self, db_session: Session
+    ) -> None:
+        config = _create_test_oauth_config(db_session)
+        update_oauth_config(config.id, db_session, supports_pkce=True)
+        update_oauth_config(config.id, db_session, scopes=["read"])
+        db_session.expire_all()
+        enabled = get_oauth_config(config.id, db_session)
+        assert enabled is not None and enabled.supports_pkce is True
+        update_oauth_config(config.id, db_session, supports_pkce=False)
+        db_session.expire_all()
+        disabled = get_oauth_config(config.id, db_session)
+        assert disabled is not None and disabled.supports_pkce is False
+
     def test_get_oauth_config(self, db_session: Session) -> None:
         """Test retrieving an OAuth config by ID"""
         created_config = _create_test_oauth_config(db_session)

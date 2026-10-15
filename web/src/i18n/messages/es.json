@@ -577,6 +577,10 @@
       "tokenUrl": {
         "label": "URL del token",
         "required": "La URL del token es obligatoria"
+      },
+      "pkce": {
+        "label": "Usar PKCE",
+        "description": "Activa esta opción solo si el proveedor de OAuth admite PKCE con el método de desafío S256."
       }
     },
     "openApiCard": {

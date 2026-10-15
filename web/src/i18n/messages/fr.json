@@ -577,6 +577,10 @@
       "tokenUrl": {
         "label": "URL de jeton",
         "required": "L'URL de jeton est obligatoire"
+      },
+      "pkce": {
+        "label": "Utiliser PKCE",
+        "description": "Activez cette option uniquement si le fournisseur OAuth prend en charge PKCE avec la méthode de défi S256."
       }
     },
     "openApiCard": {

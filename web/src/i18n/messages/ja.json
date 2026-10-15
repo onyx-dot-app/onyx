@@ -577,6 +577,10 @@
       "tokenUrl": {
         "label": "トークン URL",
         "required": "トークン URL は必須です"
+      },
+      "pkce": {
+        "label": "PKCE を使用",
+        "description": "OAuth プロバイダーが S256 チャレンジ方式の PKCE に対応している場合のみ有効にしてください。"
       }
     },
     "openApiCard": {

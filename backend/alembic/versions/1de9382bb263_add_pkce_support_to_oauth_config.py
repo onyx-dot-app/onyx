@@ -1,7 +1,7 @@
 """Add PKCE support to OAuth config.
 
 Revision ID: 1de9382bb263
-Revises: 28bb08137807
+Revises: e7a3c1f5b2d4
 Create Date: 2026-08-21 17:24:08.945170
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "1de9382bb263"
-down_revision = "28bb08137807"
+down_revision = "e7a3c1f5b2d4"
 branch_labels = None
 depends_on = None
 

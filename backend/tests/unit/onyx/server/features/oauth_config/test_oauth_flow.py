@@ -8,15 +8,23 @@ from uuid import uuid4
 
 import pytest
 import requests
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth import oauth_token_manager
+from onyx.auth import oauth_token_manager, permissions
 from onyx.auth.pkce import compute_s256_challenge
+from onyx.auth.users import current_user
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import OAuthConfig, User
-from onyx.error_handling.exceptions import OnyxError
+from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.server.features.oauth_config import api as oauth_config_api
-from onyx.server.features.oauth_config.models import OAuthInitiateRequest
+from onyx.server.features.oauth_config.models import (
+    OAuthConfigCreate,
+    OAuthConfigUpdate,
+    OAuthInitiateRequest,
+)
 from tests.unit.fakes import FakeCache
 
 
@@ -171,12 +179,13 @@ def test_attempt_is_owner_bound_and_claimed_before_failed_exchange(
     token_post.assert_not_called()
 
     token_post.side_effect = requests.RequestException("provider unavailable")
-    oauth_config_api.handle_oauth_callback(
-        code="owner-code",
-        state=state,
-        db_session=db_session,
-        user=owner,
-    )
+    with pytest.raises(OnyxError, match="OAuth token exchange failed"):
+        oauth_config_api.handle_oauth_callback(
+            code="owner-code",
+            state=state,
+            db_session=db_session,
+            user=owner,
+        )
     assert token_post.call_count == 1
 
     with pytest.raises(
@@ -222,7 +231,7 @@ def test_initiate_rejects_additional_params_that_override_protocol_fields(
 
     with pytest.raises(
         OnyxError,
-        match="OAuth additional parameters cannot override: code_challenge, state",
+        match="cannot override.*code_challenge.*state",
     ):
         _initiate(oauth_config=oauth_config, user=user, db_session=db_session)
     token_post.assert_not_called()
@@ -240,3 +249,137 @@ def test_initiate_rejects_additional_params_that_override_protocol_fields(
 def test_initiate_request_rejects_unsafe_return_paths(return_path: str) -> None:
     with pytest.raises(ValidationError, match="safe internal path"):
         OAuthInitiateRequest(oauth_config_id=17, return_path=return_path)
+
+
+@pytest.mark.parametrize("credential", ["client_id", "client_secret"])
+@pytest.mark.parametrize("value", [None, ""])
+def test_cleared_credentials_reject_callback_before_exchange(
+    monkeypatch: pytest.MonkeyPatch, credential: str, value: str | None
+) -> None:
+    oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
+    state, _ = _initiate(oauth_config=oauth_config, user=user, db_session=db_session)
+    monkeypatch.setattr(oauth_config, credential, value)
+
+    with pytest.raises(OnyxError, match="configuration changed"):
+        oauth_config_api.handle_oauth_callback(
+            code="authorization-code", state=state, db_session=db_session, user=user
+        )
+    token_post.assert_not_called()
+    with pytest.raises(OnyxError, match="Invalid or expired"):
+        oauth_config_api.handle_oauth_callback(
+            code="authorization-code", state=state, db_session=db_session, user=user
+        )
+
+
+def test_action_resource_parameter_remains_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
+    oauth_config.additional_params = {"resource": "https://resource.example.com"}
+    state, query = _initiate(
+        oauth_config=oauth_config, user=user, db_session=db_session
+    )
+    assert query["resource"] == ["https://resource.example.com"]
+    result = oauth_config_api.handle_oauth_callback(
+        code="authorization-code", state=state, db_session=db_session, user=user
+    )
+    assert result.redirect_url == "/app?action=17"
+    assert token_post.call_count == 1
+
+
+@pytest.mark.parametrize("operation", ["create", "update", "initiate"])
+@pytest.mark.parametrize("query_override", [False, True])
+def test_invalid_authorization_configuration_is_rejected_before_storage(
+    monkeypatch: pytest.MonkeyPatch, operation: str, query_override: bool
+) -> None:
+    oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
+    authorization_url = oauth_config.authorization_url
+    additional_params = None
+    if query_override:
+        authorization_url += "?state=overridden-state"
+    else:
+        additional_params = {"state": "overridden-state"}
+    create_config = MagicMock()
+    update_config = MagicMock()
+    monkeypatch.setattr(oauth_config_api, "create_oauth_config", create_config)
+    monkeypatch.setattr(oauth_config_api, "update_oauth_config", update_config)
+    monkeypatch.setattr(oauth_config_api, "has_global_permission", lambda *_: True)
+    monkeypatch.setattr(
+        oauth_config_api, "validate_oauth_endpoint_url", lambda *_args, **_kwargs: None
+    )
+
+    with pytest.raises(OnyxError, match="cannot override.*state"):
+        if operation == "create":
+            oauth_config_api.create_oauth_config_endpoint(
+                OAuthConfigCreate(
+                    name="OAuth",
+                    authorization_url=authorization_url,
+                    token_url=oauth_config.token_url,
+                    client_id="client-id",
+                    client_secret="secret",
+                    additional_params=additional_params,
+                ),
+                db_session=db_session,
+                _=user,
+            )
+        elif operation == "update":
+            oauth_config_api.update_oauth_config_endpoint(
+                oauth_config.id,
+                OAuthConfigUpdate(
+                    authorization_url=authorization_url,
+                    additional_params=additional_params,
+                ),
+                db_session=db_session,
+                user=user,
+            )
+        else:
+            oauth_config.authorization_url = authorization_url
+            oauth_config.additional_params = additional_params
+            _initiate(oauth_config=oauth_config, user=user, db_session=db_session)
+    create_config.assert_not_called()
+    update_config.assert_not_called()
+    token_post.assert_not_called()
+
+
+def test_persistence_failure_is_not_reported_as_provider_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth_config, user, db_session, _ = _configure_flow(monkeypatch)
+    state, _ = _initiate(oauth_config=oauth_config, user=user, db_session=db_session)
+    monkeypatch.setattr(
+        oauth_config_api,
+        "upsert_user_oauth_token",
+        MagicMock(side_effect=RuntimeError("database unavailable")),
+    )
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        oauth_config_api.handle_oauth_callback(
+            code="authorization-code", state=state, db_session=db_session, user=user
+        )
+
+
+def test_provider_failure_returns_http_error_and_consumes_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
+    monkeypatch.setattr(
+        permissions, "has_permission", lambda *_: PermissionAuthority.GLOBAL
+    )
+    app = FastAPI()
+    register_onyx_exception_handlers(app)
+    app.include_router(oauth_config_api.router)
+    app.dependency_overrides[oauth_config_api.get_session] = lambda: db_session
+    app.dependency_overrides[current_user] = lambda: user
+    token_post.side_effect = requests.HTTPError("provider body contains secret")
+    with TestClient(app) as client:
+        started = client.post(
+            "/oauth-config/initiate", json={"oauth_config_id": oauth_config.id}
+        )
+        assert started.status_code == 200
+        params = {"state": started.json()["state"], "code": "authorization-code"}
+        failed = client.post("/oauth-config/callback", params=params)
+        assert failed.status_code == 502
+        assert failed.json()["error_code"] == "BAD_GATEWAY"
+        assert "secret" not in failed.text
+        replay = client.post("/oauth-config/callback", params=params)
+        assert replay.status_code == 400
+    assert token_post.call_count == 1

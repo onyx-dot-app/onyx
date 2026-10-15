@@ -1,14 +1,16 @@
 """API endpoints for OAuth configuration management."""
 
 import secrets
+from collections.abc import Mapping
 
-from fastapi import APIRouter, Depends, HTTPException
+import requests
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import (
-    OAuthTokenManager,
-    conflicting_authorization_params,
+    exchange_oauth_code_for_token,
+    oauth_flow_params_from_config,
     validate_oauth_endpoint_url,
 )
 from onyx.auth.permissions import has_global_permission, require_permission
@@ -40,6 +42,11 @@ from onyx.oauth.models import (
     PKCECodeVerifier,
     SafeOAuthReturnPath,
 )
+from onyx.oauth.protocol import (
+    OAuthFlowParams,
+    build_oauth_authorization_url,
+    validate_authorization_params,
+)
 from onyx.server.features.oauth_config.models import (
     OAuthCallbackResponse,
     OAuthConfigCreate,
@@ -56,7 +63,7 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin/oauth-config")
 router = APIRouter(prefix="/oauth-config")
 
-_OAUTH_CALLBACK_PATH = "/oauth-config/callback"
+_OAUTH_CALLBACK_URL = f"{WEB_DOMAIN}/oauth-config/callback"
 
 
 class _OAuthConfigAttemptPayload(BaseModel):
@@ -75,28 +82,23 @@ _AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
 )
 
 
-def _oauth_callback_url() -> str:
-    return f"{WEB_DOMAIN}{_OAUTH_CALLBACK_PATH}"
-
-
-def _oauth_config_fingerprint(oauth_config: OAuthConfig) -> str:
+def _oauth_config_fingerprint(params: OAuthFlowParams, supports_pkce: bool) -> str:
     return canonical_json_fingerprint(
         {
-            "redirect_uri": _oauth_callback_url(),
-            "flow": OAuthTokenManager.flow_params(oauth_config).model_dump(mode="json"),
-            "supports_pkce": oauth_config.supports_pkce,
+            "redirect_uri": _OAUTH_CALLBACK_URL,
+            "flow": params.model_dump(mode="json"),
+            "supports_pkce": supports_pkce,
         },
     )
 
 
-def _validate_additional_authorization_params(oauth_config: OAuthConfig) -> None:
-    reserved = conflicting_authorization_params(oauth_config.additional_params)
-    if reserved:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "OAuth additional parameters cannot override: "
-            f"{', '.join(sorted(reserved))}",
-        )
+def _validate_authorization_configuration(
+    authorization_url: str, additional_params: Mapping[str, object] | None
+) -> None:
+    try:
+        validate_authorization_params(authorization_url, additional_params)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
 
 
 def _oauth_config_to_snapshot(
@@ -164,6 +166,9 @@ def create_oauth_config_endpoint(
     """Create a new OAuth configuration. A scoped manager may create one and link it to an
     action they created; get/update/delete are then owner-or-admin."""
     _validate_oauth_endpoint_urls(oauth_data.authorization_url, oauth_data.token_url)
+    _validate_authorization_configuration(
+        oauth_data.authorization_url, oauth_data.additional_params
+    )
     try:
         oauth_config = create_oauth_config(
             name=oauth_data.name,
@@ -178,7 +183,7 @@ def create_oauth_config_endpoint(
         )
         return _oauth_config_to_snapshot(oauth_config, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
 
 @admin_router.get("")
@@ -235,6 +240,14 @@ def update_oauth_config_endpoint(
         if oauth_data.token_url is not None
         else existing_config.token_url,
     )
+    _validate_authorization_configuration(
+        oauth_data.authorization_url
+        if oauth_data.authorization_url is not None
+        else existing_config.authorization_url,
+        oauth_data.additional_params
+        if oauth_data.additional_params is not None
+        else existing_config.additional_params,
+    )
     try:
         updated_config = update_oauth_config(
             oauth_config_id=oauth_config_id,
@@ -252,7 +265,7 @@ def update_oauth_config_endpoint(
         )
         return _oauth_config_to_snapshot(updated_config, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e)) from e
 
 
 @admin_router.delete("/{oauth_config_id}")
@@ -275,7 +288,7 @@ def delete_oauth_config_endpoint(
         delete_oauth_config(oauth_config_id, db_session)
         return {"message": "OAuth configuration deleted successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e)) from e
 
 
 """User endpoints for OAuth flow"""
@@ -295,21 +308,27 @@ def initiate_oauth_flow(
     # Get OAuth config
     oauth_config = get_oauth_config(request.oauth_config_id, db_session)
     if not oauth_config:
-        raise HTTPException(
-            status_code=404,
-            detail=f"OAuth config with id {request.oauth_config_id} not found",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {request.oauth_config_id} not found",
         )
 
-    _validate_additional_authorization_params(oauth_config)
+    _validate_authorization_configuration(
+        oauth_config.authorization_url, oauth_config.additional_params
+    )
+    try:
+        params = oauth_flow_params_from_config(oauth_config)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
     code_verifier: str | None = None
     code_challenge: str | None = None
     if oauth_config.supports_pkce:
         code_verifier, code_challenge = generate_pkce_pair()
     state = generate_authorization_state()
 
-    authorization_url = OAuthTokenManager.build_authorization_url(
-        oauth_config,
-        _oauth_callback_url(),
+    authorization_url = build_oauth_authorization_url(
+        params,
+        _OAUTH_CALLBACK_URL,
         state,
         code_challenge=code_challenge,
     )
@@ -319,7 +338,9 @@ def initiate_oauth_flow(
         payload=_OAuthConfigAttemptPayload(
             oauth_config_id=oauth_config.id,
             return_path=request.return_path,
-            configuration_fingerprint=_oauth_config_fingerprint(oauth_config),
+            configuration_fingerprint=_oauth_config_fingerprint(
+                params, oauth_config.supports_pkce
+            ),
             code_verifier=code_verifier,
         ),
     )
@@ -349,9 +370,16 @@ def handle_oauth_callback(
             OnyxErrorCode.NOT_FOUND,
             f"OAuth config with id {payload.oauth_config_id} not found",
         )
+    try:
+        params = oauth_flow_params_from_config(oauth_config)
+    except ValueError as error:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "OAuth configuration changed while authorization was pending.",
+        ) from error
     if not secrets.compare_digest(
         payload.configuration_fingerprint,
-        _oauth_config_fingerprint(oauth_config),
+        _oauth_config_fingerprint(params, oauth_config.supports_pkce),
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -359,34 +387,21 @@ def handle_oauth_callback(
         )
 
     try:
-        # Exchange code for token
-        token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
-        token_data = token_manager.exchange_code_for_token(
+        token_data = exchange_oauth_code_for_token(
+            params,
             code,
-            _oauth_callback_url(),
+            _OAUTH_CALLBACK_URL,
             code_verifier=payload.code_verifier,
         )
+    except (requests.RequestException, ValueError) as error:
+        logger.warning("OAuth token exchange failed (%s)", type(error).__name__)
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "OAuth token exchange failed. Start authorization again.",
+        ) from error
 
-        # Store token
-        upsert_user_oauth_token(oauth_config.id, user.id, token_data, db_session)
-
-        # Return success with redirect
-        return OAuthCallbackResponse(
-            redirect_url=payload.return_path,
-        )
-
-    except ValueError as e:
-        logger.error("OAuth callback error: %s", e)
-        return OAuthCallbackResponse(
-            redirect_url="/chat",
-            error=str(e),
-        )
-    except Exception as e:
-        logger.error("Unexpected OAuth callback error: %s", e)
-        return OAuthCallbackResponse(
-            redirect_url="/chat",
-            error="An unexpected error occurred during OAuth callback",
-        )
+    upsert_user_oauth_token(oauth_config.id, user.id, token_data, db_session)
+    return OAuthCallbackResponse(redirect_url=payload.return_path)
 
 
 @router.delete("/{oauth_config_id}/token")
@@ -402,4 +417,4 @@ def revoke_oauth_token(
         delete_user_oauth_token(oauth_config_id, user.id, db_session)
         return {"message": "OAuth token revoked successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e)) from e
