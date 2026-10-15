@@ -87,6 +87,7 @@ def test_authorization_result_does_not_inherit_previous_grants_refresh_token(
 ) -> None:
     registration = _client_information("same-client")
     config_data: dict[str, Any] = {
+        "reauth_required": True,
         MCPOAuthKeys.CLIENT_INFO.value: registration.model_dump(mode="json"),
         MCPOAuthKeys.TOKENS.value: {
             "access_token": "existing-access-token",
@@ -112,6 +113,8 @@ def test_authorization_result_does_not_inherit_previous_grants_refresh_token(
         registration.model_dump(mode="json")
     )
     assert persisted[MCPOAuthKeys.TOKENS.value]["refresh_token"] is None
+
+    assert "reauth_required" not in config_data
 
 
 def test_authorization_result_rejects_a_replaced_client_registration(

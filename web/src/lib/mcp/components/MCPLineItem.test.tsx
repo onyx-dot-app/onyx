@@ -1,19 +1,19 @@
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import { ToolSnapshot } from "@/lib/tools/types";
 import {
+  type MCPAuthenticationServer,
+  MCPConnectionStatus,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
 } from "@/lib/mcp/types";
-import MCPLineItem, { MCPServer } from "@/lib/mcp/components/MCPLineItem";
+import MCPLineItem from "@/lib/mcp/components/MCPLineItem";
 
-const oauthServer: MCPServer = {
+const oauthServer: MCPAuthenticationServer = {
   id: 1,
   name: "Test MCP server",
-  owner_email: "owner@example.com",
-  server_url: "https://mcp.example.com",
   auth_type: MCPAuthenticationType.OAUTH,
   auth_performer: MCPAuthenticationPerformer.PER_USER,
-  user_can_authenticate: false,
+  connection_status: MCPConnectionStatus.NOT_CONNECTED,
 };
 
 const tool: ToolSnapshot = {

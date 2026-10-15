@@ -16,25 +16,15 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { ToolSnapshot } from "@/lib/tools/types";
 import {
+  type MCPAuthenticationServer,
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
 } from "@/lib/mcp/types";
+import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 
-export interface MCPServer {
-  id: number;
-  name: string;
-  owner_email: string;
-  server_url: string;
-  auth_type: MCPAuthenticationType;
-  auth_performer: MCPAuthenticationPerformer;
-  user_can_authenticate?: boolean;
-  auth_template?: any;
-  user_credentials?: Record<string, string>;
-}
-
 export interface MCPLineItemProps {
-  server: MCPServer;
+  server: MCPAuthenticationServer;
   isActive: boolean;
   onSelect: () => void;
   onAuthenticate: () => void;
@@ -54,9 +44,7 @@ export default function MCPLineItem({
   isAuthenticated,
   isLoading,
 }: MCPLineItemProps) {
-  const showAuthTrigger =
-    server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-    server.auth_type !== MCPAuthenticationType.NONE;
+  const showAuthTrigger = getMcpAuthenticationFlow(server) !== null;
 
   const canClickIntoServer = isAuthenticated && tools.length > 0;
   const showInlineReauth = showAuthTrigger && canClickIntoServer;
@@ -65,19 +53,19 @@ export default function MCPLineItem({
   function getServerIcon(): React.FunctionComponent<IconProps> {
     if (isLoading) return IconLoader;
     if (isAuthenticated) {
-      return (({ className }) => (
+      return ({ className }) => (
         <SvgCheck className={cn(className, "stroke-status-success-05")} />
-      )) as React.FunctionComponent<IconProps>;
+      );
     }
     if (server.auth_type === MCPAuthenticationType.NONE) return SvgServer;
     if (server.auth_performer === MCPAuthenticationPerformer.PER_USER) {
-      return (({ className }) => (
+      return ({ className }) => (
         <SvgKey className={cn(className, "stroke-status-warning-05")} />
-      )) as React.FunctionComponent<IconProps>;
+      );
     }
-    return (({ className }) => (
+    return ({ className }) => (
       <SvgLock className={cn(className, "stroke-status-error-05")} />
-    )) as React.FunctionComponent<IconProps>;
+    );
   }
 
   function handleClick() {

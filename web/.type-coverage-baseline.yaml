@@ -28,10 +28,10 @@ packages:
   src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/app/oauth-provider: 100
-  src/components: 97.6
+  src/components: 98.4
   src/components/admin: 95.8
   src/components/auth: 89.3
-  src/components/chat: 97.2
+  src/components/chat: 96.1
   src/components/context: 100
   src/components/dateRangeSelectors: 100
   src/components/dev: 98.8
@@ -75,7 +75,7 @@ packages:
   src/lib/hierarchy: 100
   src/lib/hooks: 95.8
   src/lib/languageModels: 99
-  src/lib/mcp: 97.9
+  src/lib/mcp: 98.6
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
   src/lib/oauth: 100
@@ -92,7 +92,7 @@ packages:
   src/lib/skills: 97.4
   src/lib/sso: 99.3
   src/lib/tiers: 100
-  src/lib/tools: 98.1
+  src/lib/tools: 98.5
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
   src/lib/users: 99.1

@@ -19,6 +19,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api
 from onyx.server.features.mcp.models import (
     MCPConnectionData,
+    MCPConnectionStatus,
     MCPToolCreateRequest,
     MCPUserOAuthConnectRequest,
 )
@@ -161,7 +162,11 @@ def test_token_expiry_controls_fast_path_without_dropping_oauth_state(
         api, "extract_connection_data", lambda *_args, **_kwargs: stored_data
     )
     monkeypatch.setattr(api, "update_connection_config", update_connection_config)
-    monkeypatch.setattr(api, "user_can_authenticate", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        api,
+        "user_connection_status",
+        lambda *_args, **_kwargs: MCPConnectionStatus.CONNECTED,
+    )
     monkeypatch.setattr(api, "start_auto_discovery_oauth_flow", start_flow)
 
     request = _request(server.id, force_reauthentication=force_reauthentication)

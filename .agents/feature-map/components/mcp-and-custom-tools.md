@@ -39,6 +39,54 @@ per-user credential (a personal API key, or a personal OAuth login), each user
 who wants to use it connects it themselves from the chat's MCP dropdown,
 separately from the admin's setup.
 
+Chat shows a **Tools need credentials** pill after Deep Research when an enabled
+tool needs a user connection. The pill is blue when all pending connections need
+first-time setup, and orange when any requires reauthentication. The modal lists actionable
+connections for the current agent, including the default Onyx agent. It uses
+`MCPConnectionPrompt` (`web/src/lib/mcp/components/MCPConnectionPrompt.tsx`).
+Its tooltip explains that tools remain unavailable until the user connects an
+account or adds credentials. Users can continue chatting without connecting.
+Shared admin credentials and pass-through OAuth without user header fields do not produce a connection prompt.
+Servers with required user header values can prompt with `NONE` or `PT_OAUTH`.
+
+The prompt and Actions menu share persona-scoped SWR data and connection handling
+through `useMcpAuthentication` in `web/src/lib/mcp/hooks.ts`.
+The hook exposes credential requests and submit/cancel actions; each UI owns its modal props. Shared authentication types live in
+`web/src/lib/mcp/types.ts`.
+Credential submission, completed chat responses, and window focus refresh this data.
+`connection_status` distinguishes `not_connected`, `connected`, and
+`reauth_required`. The modal shows **Connect** for initial setup and **Reconnect**
+for replacement credentials. Reconnect forces a fresh OAuth grant; successful
+credential entry replaces the user's stored credentials.
+The API always includes `connection_status`; it is null only without user context.
+The backend records confirmed OAuth `invalid_grant` and HTTP 401 rejection of
+user API tokens or required headers in the encrypted connection config. Rejections are marked
+only if stored credentials still match the failed request. Expired OAuth grants
+without refresh tokens also require reconnection. Temporary failures do not change
+the connection state. Successful replacement credentials clear the rejection marker;
+OAuth header edits and authorization attempts retain it until authorization succeeds.
+A new user connection does not inherit the admin connection's rejection history.
+For no-auth servers, missing required header values mean first-time setup, even
+with stored headers. A confirmed rejection still requires reauthentication.
+Pass-through OAuth rejection does not mark extra headers stale, since the failure
+may concern the user's Onyx login token.
+`connection_status` reports credential state, not whether a Connect button should appear.
+The client checks supported authentication flows
+with `getMcpAuthenticationFlow` in `web/src/lib/mcp/auth.ts`. It returns credential
+entry, OAuth, or no supported flow. Both chat entry points read connection state
+directly from `connection_status`.
+
+Credential entry replaces the connection list within the same dialog.
+A shared backdrop stays mounted across screens to prevent transition flashes.
+**Back to tools** returns to the list. Back, close, Escape, and outside clicks
+ask for confirmation before discarding edited credentials. The confirmation
+replaces the form in the same dialog; keeping edits restores the entered values.
+Unchanged forms can leave without confirmation. Submission blocks dismissal.
+Successful credential saves return to the list with the server marked connected.
+Credential fields scroll within the dialog on short screens; the submit button stays visible.
+OAuth connection controls stay busy until navigation leaves the page, or a request fails.
+
+
 **OpenAPI (custom) action.** The admin pastes an OpenAPI 3.x schema and,
 optionally, static headers. Every operation in the schema (identified by its
 `operationId`) becomes its own callable action. The admin can turn on
@@ -287,7 +335,7 @@ choice at server-creation time is what decides this, and it is visible on the
    (`mcp/oauth_flow.py`) depending on `oauth_provider_mode`. Either returns an
    `authorization_url` the frontend redirects the browser to, or reports
    `already_authenticated` if `credentials_usable` (valid, unexpired,
-   `user_can_authenticate`) and the caller did not force re-auth.
+   `user_connection_status == CONNECTED`) and the caller did not force re-auth.
 2. **Attempt tracking.** The pending flow's state (server id, connection
    config id, a fingerprint of the OAuth client info, the return path) is
    stored keyed by an opaque `state` value in
@@ -485,7 +533,7 @@ each operation and consumes state before exchanging the authorization code.
 | If your change… | Also check |
 |---|---|
 | adds a transport | `MCPTransport` enum, `client.py:_create_mcp_client_function_runner`'s branch on transport, `MCPTool.run`'s SSE-specific proactive-refresh branch (§4.2), the create-server frontend form |
-| changes credential scope (`auth_performer` handling) | `resolve_mcp_credentials` (§4.3), `requires_user_authentication`, `user_can_authenticate`, the MCP dropdown's per-user connect UI, and whether an existing shared credential must be migrated or invalidated |
+| changes credential scope (`auth_performer` handling) | `resolve_mcp_credentials` (§4.3), `requires_user_authentication`, `user_connection_status`, the MCP dropdown's per-user connect UI, and whether an existing shared credential must be migrated or invalidated |
 | changes name disambiguation | `_disambiguate_mcp_tool_names`, `MCPTool.use_disambiguated_name`, and any saved chat history that stored the pre- or post-disambiguation name (`[[tools-framework]]` §7's tool-rename row applies here too) |
 | changes the `Tool` discriminator (adds a fourth kind, or changes column semantics) | `[[tools-framework]]`'s `BUILT_IN_TOOL_MAP`/dispatch, `get_tools` (`db/tools.py`, its `only_openapi`/`only_connected_mcp` filters), `_upsert_db_tools`, `create_tool__no_commit` |
 | changes `passthrough_auth` or per-tool OAuth resolution order | `tool_constructor.py`'s priority-1-then-2 logic (§4.5 step 5-6), `_validate_auth_settings` (`tool/api.py`) |

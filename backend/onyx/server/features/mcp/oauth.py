@@ -448,6 +448,7 @@ class OnyxTokenStorage(TokenStorage):
                 preserve_existing_refresh_token=preserve_existing_refresh_token,
             )
             config_data[MCPOAuthKeys.TOKENS.value] = persisted_token_dict
+            config_data.pop("reauth_required", None)
             token_expires_at_before_refresh = config_data.get(
                 MCPOAuthKeys.TOKEN_EXPIRES_AT.value
             )
@@ -519,6 +520,7 @@ class OnyxTokenStorage(TokenStorage):
                 or stored_tokens.get("refresh_token") != redeemed_refresh_token
             ):
                 return False
+            config_data["reauth_required"] = True
             config_data.pop(MCPOAuthKeys.TOKENS.value, None)
             config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
             config_data["headers"] = {

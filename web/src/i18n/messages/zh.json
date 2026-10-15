@@ -11381,6 +11381,40 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "工具需要凭据（{count}）",
+        "tooltip": "连接你的账户或添加凭据后，才能使用某些工具。"
+      },
+      "modal": {
+        "title": "连接工具",
+        "description": "添加你的凭据，即可在 Onyx 中使用这些工具。",
+        "hint": "你可以在不连接这些工具的情况下继续聊天，但智能体的功能可能会受到限制。"
+      },
+      "connect": {
+        "label": "连接",
+        "accessibleLabel": "连接 {server}"
+      },
+      "reconnect": {
+        "label": "重新连接",
+        "accessibleLabel": "重新连接 {server}"
+      },
+      "connecting": {
+        "label": "正在连接…"
+      },
+      "connected": {
+        "label": "已连接"
+      },
+      "required": {
+        "label": "需要凭据"
+      },
+      "done": {
+        "label": "完成"
+      },
+      "error": {
+        "description": "无法连接。请重试。"
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
@@ -11827,6 +11861,9 @@
         "credentials": {
           "text": "您的凭据将由服务器验证，并安全存储。"
         }
+      },
+      "backButton": {
+        "label": "返回工具列表"
       }
     },
     "messages": {

@@ -2,15 +2,24 @@ import json
 import time
 from typing import Any
 
+from httpx import HTTPStatusError
 from mcp.client.auth import OAuthClientProvider
 from pydantic import JsonValue
 
 from onyx.chat.emitter import Emitter
-from onyx.db.enums import MCPAuthenticationType, MCPTransport
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import (
+    MCPAuthenticationType,
+    MCPTransport,
+)
+from onyx.db.mcp import mark_connection_config_reauth_required
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.llm.models import ToolDefinition
 from onyx.server.features.mcp.client import call_mcp_tool
-from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
+from onyx.server.features.mcp.credentials import (
+    ResolvedMCPCredentials,
+    uses_user_managed_headers,
+)
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPServerConnection,
@@ -72,6 +81,26 @@ def _tool_result_value(text: str) -> JsonValue:
     return parsed if isinstance(parsed, dict | list) else text
 
 
+def _has_unauthorized_response(error: BaseException) -> bool:
+    """Inspect transport exceptions without treating error messages as auth evidence."""
+    pending = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, HTTPStatusError) and current.response.status_code == 401:
+            return True
+        if isinstance(current, BaseExceptionGroup):
+            pending.extend(current.exceptions)
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        elif current.__context__ is not None and not current.__suppress_context__:
+            pending.append(current.__context__)
+    return False
+
+
 def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
     # Azure OpenAI rejects object schemas that omit `properties` with
     # "object schema missing properties". MCP servers (e.g. AWS Knowledge MCP's
@@ -106,6 +135,7 @@ class MCPTool(Tool[None]):
 
         self._id = tool_id
         self.mcp_server = MCPServerConnection.model_validate(mcp_server)
+        self._auth_performer = mcp_server.auth_performer
         self._user_id = user_id
         self._additional_headers = additional_headers or {}
         self._resolved_credentials = (
@@ -300,11 +330,33 @@ class MCPTool(Tool[None]):
             return response
 
         except Exception as e:
+            credentials = self._resolved_credentials
+            unauthorized_response = _has_unauthorized_response(e)
+            if (
+                unauthorized_response
+                and credentials.connection_config_id is not None
+                and uses_user_managed_headers(
+                    self.mcp_server.auth_type,
+                    self._auth_performer,
+                    credentials.auth_template,
+                )
+            ):
+                try:
+                    with get_session_with_current_tenant() as db_session:
+                        mark_connection_config_reauth_required(
+                            credentials.connection_config_id,
+                            credentials.connection_data,
+                            db_session,
+                        )
+                except Exception:
+                    logger.exception("Could not record rejected MCP credentials")
             error_str = str(e).lower()
             logger.error("Failed to execute MCP tool '%s': %s", self._name, e)
 
-            is_auth_error = isinstance(e, MCPReauthenticationRequired) or any(
-                indicator in error_str for indicator in _AUTH_ERROR_INDICATORS
+            is_auth_error = (
+                unauthorized_response
+                or isinstance(e, MCPReauthenticationRequired)
+                or any(indicator in error_str for indicator in _AUTH_ERROR_INDICATORS)
             )
 
             if is_auth_error:

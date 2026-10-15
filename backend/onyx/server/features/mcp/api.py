@@ -93,13 +93,14 @@ from onyx.server.features.mcp.credentials import (
     mcp_token_expired,
     requires_user_authentication,
     resolve_mcp_credentials,
-    user_can_authenticate,
+    user_connection_status,
 )
 from onyx.server.features.mcp.models import (
     AUTO_SUBSTITUTED_PLACEHOLDER_KEYS,
     MCPApiKeyResponse,
     MCPAuthTemplate,
     MCPConnectionData,
+    MCPConnectionStatus,
     MCPOAuthCallbackResponse,
     MCPOAuthKeys,
     MCPServer,
@@ -749,12 +750,13 @@ async def _connect_oauth(
     credentials_usable = bool(
         oauth_credentials_unchanged
         and not mcp_token_expired(existing_user_data)
-        and user_can_authenticate(
+        and user_connection_status(
             mcp_server,
             user,
             db,
             user_configs={mcp_server.id: connection_config},
         )
+        == MCPConnectionStatus.CONNECTED
     )
     auth_template = get_mcp_auth_template(mcp_server)
     if auth_template is not None and auth_template.required_fields:
@@ -780,6 +782,8 @@ async def _connect_oauth(
         user_config_data["headers"] = existing_user_data.get("headers", {})
         if substitutions := existing_user_data.get(HEADER_SUBSTITUTIONS):
             user_config_data[HEADER_SUBSTITUTIONS] = substitutions
+        if existing_user_data.get("reauth_required"):
+            user_config_data["reauth_required"] = True
         if oauth_credentials_unchanged:
             for key in (
                 MCPOAuthKeys.TOKENS.value,
@@ -1046,8 +1050,16 @@ def save_user_credentials(
 
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
         existing_config = get_user_connection_config(server_id, email, db_session)
-        source_config = existing_config or mcp_server.admin_connection_config
-        source_data = extract_connection_data(source_config, apply_mask=False)
+        existing_user_data = extract_connection_data(existing_config, apply_mask=False)
+        source_data = (
+            existing_user_data
+            if existing_config is not None
+            else extract_connection_data(
+                mcp_server.admin_connection_config, apply_mask=False
+            )
+        )
+        if existing_user_data.get("reauth_required"):
+            config_data["reauth_required"] = True
         for oauth_key in MCPOAuthKeys:
             field_key: Literal[
                 "client_info", "tokens", "metadata", "token_expires_at"
@@ -1198,7 +1210,6 @@ def _db_mcp_server_to_api_mcp_server(
     request_user: User | None,
     include_auth_config: bool = False,
     permissions: dict[str, bool] | None = None,
-    craft_connected: bool | None = None,
     user_configs: Mapping[int, MCPConnectionConfig] | None = None,
 ) -> MCPServer:
     """Convert database MCP server to API model.
@@ -1213,7 +1224,7 @@ def _db_mcp_server_to_api_mcp_server(
 
     # Check if user has authentication configured and extract credentials
     auth_performer = db_server.auth_performer
-    can_authenticate: bool | None = None
+    connection_status: MCPConnectionStatus | None = None
     user_credentials = None
     admin_credentials = None
     is_owner_or_admin = request_user is not None and (
@@ -1231,7 +1242,7 @@ def _db_mcp_server_to_api_mcp_server(
         else get_user_connection_config(db_server.id, email, db)
     )
     if request_user is not None:
-        can_authenticate = user_can_authenticate(
+        connection_status = user_connection_status(
             db_server,
             request_user,
             db,
@@ -1308,8 +1319,7 @@ def _db_mcp_server_to_api_mcp_server(
         oauth_token_endpoint=db_server.oauth_token_endpoint,
         oauth_scopes_override=db_server.oauth_scopes_override,
         oauth_additional_auth_params=db_server.oauth_additional_auth_params,
-        user_can_authenticate=can_authenticate,
-        craft_connected=craft_connected,
+        connection_status=connection_status,
         status=db_server.status,
         is_public=db_server.is_public,
         groups=[group.id for group in db_server.user_groups],
@@ -1405,18 +1415,15 @@ def get_craft_mcp_servers_for_user(
     user_configs = get_user_connection_configs(
         [s.id for s in db_mcp_servers], user.email, db
     )
-    mcp_servers = [
-        _db_mcp_server_to_api_mcp_server(
-            db_server,
-            db,
-            request_user=user,
-            craft_connected=user_can_authenticate(
-                db_server, user, db, user_configs=user_configs
-            ),
-            user_configs=user_configs,
+    mcp_servers = []
+    for db_server in db_mcp_servers:
+        server = _db_mcp_server_to_api_mcp_server(
+            db_server, db, request_user=user, user_configs=user_configs
         )
-        for db_server in db_mcp_servers
-    ]
+        server.craft_connected = (
+            server.connection_status == MCPConnectionStatus.CONNECTED
+        )
+        mcp_servers.append(server)
     return MCPServersResponse(mcp_servers=mcp_servers)
 
 
@@ -2599,7 +2606,7 @@ def create_mcp_server_simple(
         oauth_token_endpoint=mcp_server.oauth_token_endpoint,
         oauth_scopes_override=mcp_server.oauth_scopes_override,
         oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
-        user_can_authenticate=False,  # No credentials resolved yet
+        connection_status=MCPConnectionStatus.NOT_CONNECTED,
         status=mcp_server.status,
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],

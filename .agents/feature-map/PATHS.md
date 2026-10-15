@@ -173,6 +173,9 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `web/src/app/app/` | chat-frontend |
+| `web/src/lib/mcp/` | mcp-and-custom-tools |
+| `web/src/lib/tools/components/ToolsPopover.tsx` | mcp-and-custom-tools, chat-frontend |
+| `web/src/sections/input/AppInputBar.tsx` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |

@@ -11381,6 +11381,40 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "Tools benötigen Zugangsdaten ({count})",
+        "tooltip": "Einige Tools sind erst verfügbar, wenn Sie Ihr Konto verbinden oder Zugangsdaten hinzufügen."
+      },
+      "modal": {
+        "title": "Tools verbinden",
+        "description": "Geben Sie Ihre Zugangsdaten ein, um diese Tools in Onyx zu verwenden.",
+        "hint": "Sie können weiterchatten, ohne diese Tools zu verbinden. Die Funktionen Ihres Agenten sind dann möglicherweise eingeschränkt."
+      },
+      "connect": {
+        "label": "Verbinden",
+        "accessibleLabel": "{server} verbinden"
+      },
+      "reconnect": {
+        "label": "Erneut verbinden",
+        "accessibleLabel": "{server} erneut verbinden"
+      },
+      "connecting": {
+        "label": "Verbindung wird hergestellt…"
+      },
+      "connected": {
+        "label": "Verbunden"
+      },
+      "required": {
+        "label": "Zugangsdaten erforderlich"
+      },
+      "done": {
+        "label": "Fertig"
+      },
+      "error": {
+        "description": "Verbindung fehlgeschlagen. Versuchen Sie es erneut."
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {Eine Datei ist fehlgeschlagen und wurde entfernt: {names}} other {Dateien sind fehlgeschlagen und wurden entfernt: {names}}}"
@@ -11827,6 +11861,9 @@
         "credentials": {
           "text": "Ihre Anmeldedaten werden beim Server validiert und sicher gespeichert."
         }
+      },
+      "backButton": {
+        "label": "Zurück zu den Tools"
       }
     },
     "messages": {

@@ -1,7 +1,7 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import {
@@ -15,7 +15,11 @@ import { SvgActions, SvgKey, SvgSliders } from "@opal/icons";
 
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { MinimalAgent } from "@/lib/agents/types";
-import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
+import MCPUserCredentialsModal from "@/lib/mcp/components/MCPUserCredentialsModal";
+import { useMcpAuthentication } from "@/lib/mcp/hooks";
+import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
+import { MCPConnectionStatus } from "@/lib/mcp/types";
+import { toast } from "@opal/layouts";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { hasPermission } from "@/lib/permissions/utils";
@@ -27,21 +31,12 @@ import {
   type ToolConfigurationHandle,
 } from "@/lib/tools/hooks";
 import { ToolsPopoverProvider } from "@/lib/tools/providers";
-import { MCPLineItem, type MCPServer } from "@/lib/mcp/components";
+import { MCPLineItem } from "@/lib/mcp/components";
 import SourcesView from "@/lib/tools/components/SourcesView";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import ToolLineItem from "@/lib/tools/components/ToolLineItem";
 import { SecondaryViewState } from "@/lib/tools/types";
-import {
-  MCPAuthenticationType,
-  MCPAuthenticationPerformer,
-} from "@/lib/mcp/types";
 import { Permission } from "@/lib/types";
-import {
-  getMCPUserOAuthNavigationUrl,
-  saveMCPUserCredentials,
-  startMCPUserOAuth,
-} from "@/lib/mcp/svc";
 import { useUser } from "@/providers/UserProvider";
 
 /**
@@ -78,36 +73,24 @@ export default function ToolsPopover({
   );
   const [searchTerm, setSearchTerm] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
-  const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const { llmProviders, isLoading: isLLMLoading } = useLanguageModelsForAgent(
     agent.id
   );
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
-  // Store MCP server auth/loading state (tools are part of agent.tools)
-  const [mcpServerData, setMcpServerData] = useState<{
-    [serverId: number]: {
-      isAuthenticated: boolean;
-      isLoading: boolean;
-    };
-  }>({});
+  const {
+    servers: mcpServers,
+    authenticate: handleServerAuthentication,
+    loadingServerId,
+    authenticationError,
+    credentialRequest,
+    cancelCredentialRequest,
+    submitCredentials,
+  } = useMcpAuthentication(agent.id, hasAnyProvider);
 
-  const [mcpApiKeyModal, setMcpApiKeyModal] = useState<{
-    isOpen: boolean;
-    serverId: number | null;
-    serverName: string;
-    authTemplate?: any;
-    onSuccess?: () => void;
-    isAuthenticated?: boolean;
-    existingCredentials?: Record<string, string>;
-  }>({
-    isOpen: false,
-    serverId: null,
-    serverName: "",
-    authTemplate: undefined,
-    onSuccess: undefined,
-    isAuthenticated: false,
-  });
+  useEffect(() => {
+    if (authenticationError) toast.error(authenticationError.message);
+  }, [authenticationError]);
 
   const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
@@ -167,152 +150,6 @@ export default function ToolsPopover({
     return true;
   });
 
-  // Fetch MCP servers for the agent on mount
-  useEffect(() => {
-    if (agent == null || agent.id == null || !hasAnyProvider) return;
-
-    const abortController = new AbortController();
-
-    const fetchMCPServers = async () => {
-      try {
-        const response = await fetch(`/api/mcp/servers/persona/${agent.id}`, {
-          signal: abortController.signal,
-        });
-        if (response.ok) {
-          const data = await response.json();
-          const servers = data.mcp_servers || [];
-          setMcpServers(servers);
-          // Seed auth/loading state based on response
-          setMcpServerData((prev) => {
-            const next: typeof prev = { ...prev };
-            servers.forEach((s: MCPServer) => {
-              next[s.id] = {
-                isAuthenticated: !!s.user_can_authenticate,
-                isLoading: false,
-              };
-            });
-            return next;
-          });
-        }
-      } catch (error) {
-        if (abortController.signal.aborted) {
-          return;
-        }
-        console.error("Error fetching MCP servers:", error);
-      }
-    };
-
-    fetchMCPServers();
-
-    return () => {
-      abortController.abort();
-    };
-  }, [agent?.id, hasAnyProvider]);
-
-  // Handle MCP authentication
-  const handleMCPAuthenticate = async (
-    serverId: number,
-    authType: MCPAuthenticationType,
-    forceReauthentication = false
-  ) => {
-    if (authType === MCPAuthenticationType.OAUTH) {
-      const updateLoadingState = (loading: boolean) => {
-        setMcpServerData((prev) => {
-          const previous = prev[serverId] ?? {
-            isAuthenticated: false,
-            isLoading: false,
-          };
-          return {
-            ...prev,
-            [serverId]: {
-              ...previous,
-              isLoading: loading,
-            },
-          };
-        });
-      };
-
-      updateLoadingState(true);
-      try {
-        const oauthStart = await startMCPUserOAuth(
-          serverId,
-          window.location.pathname + window.location.search,
-          { forceReauthentication }
-        );
-        window.location.href = getMCPUserOAuthNavigationUrl(oauthStart);
-      } catch (error) {
-        console.error("Error initiating OAuth:", error);
-        updateLoadingState(false);
-        throw error;
-      }
-    }
-  };
-
-  // Both submit paths are the same request; the API-key form just names its
-  // one field. `saveMCPUserCredentials` owns the endpoint and its errors.
-  const handleMCPApiKeySubmit = (serverId: number, apiKey: string) =>
-    saveMCPUserCredentials(serverId, { api_key: apiKey });
-
-  const handleMCPCredentialsSubmit = (
-    serverId: number,
-    credentials: Record<string, string>
-  ) => saveMCPUserCredentials(serverId, credentials);
-
-  const handleServerAuthentication = (
-    server: MCPServer,
-    forceReauthentication = false
-  ) => {
-    const authType = server.auth_type;
-    const performer = server.auth_performer;
-    const requiresHeaderValues =
-      (server.auth_template?.required_fields.length ?? 0) > 0;
-
-    if (!requiresHeaderValues && authType === MCPAuthenticationType.OAUTH) {
-      void handleMCPAuthenticate(
-        server.id,
-        MCPAuthenticationType.OAUTH,
-        forceReauthentication
-      ).catch(() => undefined);
-      return;
-    }
-    if (
-      !requiresHeaderValues &&
-      (authType === MCPAuthenticationType.NONE ||
-        performer === MCPAuthenticationPerformer.ADMIN)
-    ) {
-      return;
-    }
-    if (requiresHeaderValues || authType === MCPAuthenticationType.API_TOKEN) {
-      setMcpApiKeyModal({
-        isOpen: true,
-        serverId: server.id,
-        serverName: server.name,
-        authTemplate: server.auth_template,
-        onSuccess: async () => {
-          if (authType === MCPAuthenticationType.OAUTH) {
-            await handleMCPAuthenticate(
-              server.id,
-              MCPAuthenticationType.OAUTH,
-              forceReauthentication
-            );
-            return;
-          }
-          // Update the authentication state after successful credential submission
-          setMcpServerData((prev) => ({
-            ...prev,
-            [server.id]: {
-              ...prev[server.id],
-              isAuthenticated: true,
-              isLoading: false,
-            },
-          }));
-        },
-        isAuthenticated: server.user_can_authenticate,
-        existingCredentials: server.user_credentials,
-      });
-    }
-  };
-
   // Filter tools based on search term
   const filteredTools = displayTools.filter((tool) => {
     if (!searchTerm) return true;
@@ -350,18 +187,11 @@ export default function ToolsPopover({
           (t) => t.mcp_server_id === Number(selectedMcpServerId)
         )
       : [];
-  const selectedMcpServerData = selectedMcpServer
-    ? mcpServerData[selectedMcpServer.id]
-    : undefined;
-  const isActiveServerAuthenticated =
-    selectedMcpServerData?.isAuthenticated ??
-    !!selectedMcpServer?.user_can_authenticate;
   const showActiveReauthRow =
     !!selectedMcpServer &&
     selectedMcpTools.length > 0 &&
-    selectedMcpServer.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-    selectedMcpServer.auth_type !== MCPAuthenticationType.NONE &&
-    isActiveServerAuthenticated;
+    getMcpAuthenticationFlow(selectedMcpServer) !== null &&
+    selectedMcpServer.connection_status === MCPConnectionStatus.CONNECTED;
 
   const mcpToggleItems: SwitchListItem[] = selectedMcpTools.map((tool) => ({
     id: tool.id.toString(),
@@ -403,9 +233,9 @@ export default function ToolsPopover({
 
   const mcpFooter = showActiveReauthRow ? (
     <LineItemButton
-      disabled={selectedMcpServerData?.isLoading}
+      disabled={loadingServerId === selectedMcpServer?.id}
       onClick={handleFooterReauthClick}
-      icon={selectedMcpServerData?.isLoading ? IconLoader : SvgKey}
+      icon={loadingServerId === selectedMcpServer?.id ? IconLoader : SvgKey}
       title={t("toolsPopover.reauthenticate.label")}
       sizePreset="main-ui"
       variant="section"
@@ -432,11 +262,6 @@ export default function ToolsPopover({
 
         // MCP Servers
         ...filteredMCPServers.map((server) => {
-          const serverData = mcpServerData[server.id] || {
-            isAuthenticated: !!server.user_can_authenticate,
-            isLoading: false,
-          };
-
           // Tools for this server come from assistant.tools
           const serverTools = agent.tools.filter(
             (t) => t.mcp_server_id === Number(server.id)
@@ -452,8 +277,10 @@ export default function ToolsPopover({
               isActive={selectedMcpServerId === server.id}
               tools={serverTools}
               enabledTools={enabledTools}
-              isAuthenticated={serverData.isAuthenticated}
-              isLoading={serverData.isLoading}
+              isAuthenticated={
+                server.connection_status === MCPConnectionStatus.CONNECTED
+              }
+              isLoading={loadingServerId === server.id}
               onSelect={() =>
                 setSecondaryView({
                   type: "mcp",
@@ -536,29 +363,12 @@ export default function ToolsPopover({
         </Popover.Content>
       </Popover>
 
-      {/* MCP API Key Modal */}
-      {mcpApiKeyModal.isOpen && (
-        <MCPApiKeyModal
-          isOpen={mcpApiKeyModal.isOpen}
-          onClose={() =>
-            setMcpApiKeyModal({
-              isOpen: false,
-              serverId: null,
-              serverName: "",
-              authTemplate: undefined,
-              onSuccess: undefined,
-              isAuthenticated: false,
-              existingCredentials: undefined,
-            })
-          }
-          serverName={mcpApiKeyModal.serverName}
-          serverId={mcpApiKeyModal.serverId ?? 0}
-          authTemplate={mcpApiKeyModal.authTemplate}
-          onSubmit={handleMCPApiKeySubmit}
-          onSubmitCredentials={handleMCPCredentialsSubmit}
-          onSuccess={mcpApiKeyModal.onSuccess}
-          isAuthenticated={mcpApiKeyModal.isAuthenticated}
-          existingCredentials={mcpApiKeyModal.existingCredentials}
+      {credentialRequest && (
+        <MCPUserCredentialsModal
+          key={credentialRequest.server.id}
+          server={credentialRequest.server}
+          onClose={cancelCredentialRequest}
+          onSubmit={submitCredentials}
         />
       )}
     </ToolsPopoverProvider>

@@ -11381,6 +11381,40 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "도구에 인증 정보가 필요합니다 ({count})",
+        "tooltip": "일부 도구는 계정을 연결하거나 인증 정보를 추가해야 사용할 수 있습니다."
+      },
+      "modal": {
+        "title": "도구 연결",
+        "description": "Onyx에서 도구를 사용하려면 인증 정보를 추가하세요.",
+        "hint": "도구를 연결하지 않아도 채팅을 계속할 수 있지만, 에이전트의 기능이 제한될 수 있습니다."
+      },
+      "connect": {
+        "label": "연결",
+        "accessibleLabel": "{server} 연결"
+      },
+      "reconnect": {
+        "label": "다시 연결",
+        "accessibleLabel": "{server} 다시 연결"
+      },
+      "connecting": {
+        "label": "연결 중…"
+      },
+      "connected": {
+        "label": "연결됨"
+      },
+      "required": {
+        "label": "인증 정보 필요"
+      },
+      "done": {
+        "label": "완료"
+      },
+      "error": {
+        "description": "연결할 수 없습니다. 다시 시도하세요."
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {파일 처리에 실패하여 제거되었습니다: {names}} other {파일 처리에 실패하여 제거되었습니다: {names}}}"
@@ -11827,6 +11861,9 @@
         "credentials": {
           "text": "자격 증명은 서버에서 검증한 후 안전하게 저장됩니다."
         }
+      },
+      "backButton": {
+        "label": "도구로 돌아가기"
       }
     },
     "messages": {

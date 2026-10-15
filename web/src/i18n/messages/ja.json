@@ -11381,6 +11381,40 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "ツールに認証情報が必要です（{count}）",
+        "tooltip": "一部のツールは、アカウントを接続するか認証情報を追加するまで使用できません。"
+      },
+      "modal": {
+        "title": "ツールを接続",
+        "description": "Onyxでこれらのツールを使用するには、認証情報を追加してください。",
+        "hint": "これらのツールを接続しなくてもチャットを続けられますが、エージェントの機能が制限される場合があります。"
+      },
+      "connect": {
+        "label": "接続",
+        "accessibleLabel": "{server}に接続"
+      },
+      "reconnect": {
+        "label": "再接続",
+        "accessibleLabel": "{server} に再接続"
+      },
+      "connecting": {
+        "label": "接続中…"
+      },
+      "connected": {
+        "label": "接続済み"
+      },
+      "required": {
+        "label": "認証情報が必要です"
+      },
+      "done": {
+        "label": "完了"
+      },
+      "error": {
+        "description": "接続できませんでした。もう一度お試しください。"
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {ファイルの処理に失敗したため削除しました：{names}} other {ファイルの処理に失敗したため削除しました：{names}}}"
@@ -11827,6 +11861,9 @@
         "credentials": {
           "text": "認証情報はサーバーで検証され、安全に保管されます。"
         }
+      },
+      "backButton": {
+        "label": "ツールに戻る"
       }
     },
     "messages": {

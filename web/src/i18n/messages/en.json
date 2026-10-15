@@ -11381,6 +11381,40 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "Tools need credentials ({count})",
+        "tooltip": "Some tools are unavailable until you connect your account or add credentials."
+      },
+      "modal": {
+        "title": "Connect tools",
+        "description": "Add your credentials to use these tools in Onyx.",
+        "hint": "You can keep chatting without connecting these tools, but your agent may have limited capabilities."
+      },
+      "connect": {
+        "label": "Connect",
+        "accessibleLabel": "Connect {server}"
+      },
+      "reconnect": {
+        "label": "Reconnect",
+        "accessibleLabel": "Reconnect {server}"
+      },
+      "connecting": {
+        "label": "Connecting…"
+      },
+      "connected": {
+        "label": "Connected"
+      },
+      "required": {
+        "label": "Credentials required"
+      },
+      "done": {
+        "label": "Done"
+      },
+      "error": {
+        "description": "Could not connect. Try again."
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {File failed and was removed: {names}} other {Files failed and were removed: {names}}}"
@@ -11827,6 +11861,9 @@
         "credentials": {
           "text": "Your Credentials will be validated against the server and stored securely."
         }
+      },
+      "backButton": {
+        "label": "Back to tools"
       }
     },
     "messages": {
