@@ -461,6 +461,10 @@ change rejects pending callbacks before any token exchange. The same resolved
 configuration supplies URLs, scopes, and PKCE settings. Refresh requires the
 resolved token URL; it cannot fall back to an unresolved spec template.
 
+`OAuthExternalAppProvider.extract_credentials` maps standard OAuth token responses for GitHub and Zendesk.
+Providers with different fields or nested tokens override this mapping.
+Absent refresh fields remain omitted, so refresh merging preserves stored values.
+
 Refresh is lazy and happens at the credential-injection seam, not on a
 schedule: `ExternalAppResolver.resolve` calls `ensure_fresh_credentials`
 (`external_apps/token_refresh.py`) before rendering headers. It is a fast

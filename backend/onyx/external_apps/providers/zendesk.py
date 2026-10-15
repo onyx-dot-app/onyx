@@ -54,15 +54,16 @@ def normalise_subdomain(raw: object) -> str:
     return value
 
 
-def _routes(method: str, *paths: str) -> tuple[RestRoute, ...]:
+def _routes(methods: str | tuple[str, ...], *paths: str) -> tuple[RestRoute, ...]:
     """Recognition rules for ``paths``, each also in the ``.json`` suffix form
     Zendesk accepts interchangeably. A path ending in a ``{placeholder}`` needs
     no twin — the placeholder already matches ``123.json``."""
     routes: list[RestRoute] = []
-    for path in paths:
-        routes.append(RestRoute(method=method, path=path))
-        if not path.endswith("}"):
-            routes.append(RestRoute(method=method, path=f"{path}.json"))
+    for method in (methods,) if isinstance(methods, str) else methods:
+        for path in paths:
+            routes.append(RestRoute(method=method, path=path))
+            if not path.endswith("}"):
+                routes.append(RestRoute(method=method, path=f"{path}.json"))
     return tuple(routes)
 
 
@@ -258,13 +259,9 @@ _ENDPOINTS: list[EndpointSpec] = [
         id=ZendeskAction.HELP_CENTER_WRITE,
         normalised_name="Write Help Center content",
         description="Create, edit, publish, or delete Help Center content.",
-        matches=tuple(
-            route
-            for method in ("POST", "PUT", "PATCH", "DELETE")
-            for route in _routes(
-                method,
-                "/api/v2/help_center/{resource...}",
-            )
+        matches=_routes(
+            ("POST", "PUT", "PATCH", "DELETE"),
+            "/api/v2/help_center/{resource...}",
         ),
         default_policy=EndpointPolicy.ASK,
     ),
@@ -283,14 +280,10 @@ _ENDPOINTS: list[EndpointSpec] = [
         id=ZendeskAction.SIDE_CONVERSATIONS_WRITE,
         normalised_name="Write side conversations",
         description="Start, reply to, or update side conversations, including messages to external recipients.",
-        matches=tuple(
-            route
-            for method in ("POST", "PUT", "PATCH", "DELETE")
-            for route in _routes(
-                method,
-                "/api/v2/tickets/{ticket_id}/side_conversations",
-                "/api/v2/tickets/{ticket_id}/side_conversations/{resource...}",
-            )
+        matches=_routes(
+            ("POST", "PUT", "PATCH", "DELETE"),
+            "/api/v2/tickets/{ticket_id}/side_conversations",
+            "/api/v2/tickets/{ticket_id}/side_conversations/{resource...}",
         ),
         default_policy=EndpointPolicy.ASK,
     ),
@@ -309,14 +302,10 @@ _ENDPOINTS: list[EndpointSpec] = [
         id=ZendeskAction.MACROS_WRITE,
         normalised_name="Write macros",
         description="Create, edit, or delete saved replies and macro actions.",
-        matches=tuple(
-            route
-            for method in ("POST", "PUT", "PATCH", "DELETE")
-            for route in _routes(
-                method,
-                "/api/v2/macros",
-                "/api/v2/macros/{resource...}",
-            )
+        matches=_routes(
+            ("POST", "PUT", "PATCH", "DELETE"),
+            "/api/v2/macros",
+            "/api/v2/macros/{resource...}",
         ),
         default_policy=EndpointPolicy.ASK,
     ),
@@ -472,21 +461,3 @@ class ZendeskProvider(OAuthExternalAppProvider):
             # Re-stated per refresh; Zendesk rotates the refresh token with it.
             "expires_in": _ACCESS_TOKEN_TTL_SECONDS,
         }
-
-    def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
-        access_token = response_data.get("access_token")
-        if not access_token:
-            raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
-                "Zendesk OAuth response did not contain an access token.",
-            )
-        creds: dict[str, Any] = {
-            "access_token": access_token,
-            "token_type": response_data.get("token_type"),
-            "scope": response_data.get("scope"),
-        }
-        # Absent for a legacy client, which reads as a non-expiring token.
-        for key in ("refresh_token", "expires_in"):
-            if response_data.get(key):
-                creds[key] = response_data[key]
-        return creds

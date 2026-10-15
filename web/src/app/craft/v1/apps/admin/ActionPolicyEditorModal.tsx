@@ -309,11 +309,6 @@ function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
     }
   }, [bulkValue]);
 
-  // Apply one policy to every item (the simple, non-advanced control).
-  function applyBulk(policy: EndpointPolicy) {
-    onChange(Object.fromEntries(items.map((item) => [item.id, policy])));
-  }
-
   return (
     <div className="flex flex-col gap-2 pt-2">
       <Text font="main-ui-action">{t("permissions.title")}</Text>
@@ -324,14 +319,15 @@ function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
       <InputSingleSelect
         value={bulkValue}
         onValueChange={(value) => {
-          if (value === "DEFAULT") {
+          if (value === "DEFAULT" || value === "ALWAYS" || value === "ASK") {
             onChange(
               Object.fromEntries(
-                items.map((item) => [item.id, item.defaultPolicy])
+                items.map((item) => [
+                  item.id,
+                  value === "DEFAULT" ? item.defaultPolicy : value,
+                ])
               )
             );
-          } else if (value === "ALWAYS" || value === "ASK") {
-            applyBulk(value);
           }
         }}
         defaultOption="DEFAULT"

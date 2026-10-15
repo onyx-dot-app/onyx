@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Mapping
 from typing import Any, ClassVar
 
@@ -6,6 +6,8 @@ import requests
 from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import ExternalAppType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.oauth.protocol import build_authorization_code_token_body
@@ -277,7 +279,8 @@ class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
 
 class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     """A provider whose users authenticate via OAuth 2.0. Subclasses supply an
-    :class:`OAuthProviderSpec` and implement :meth:`extract_credentials`.
+    :class:`OAuthProviderSpec`. Override :meth:`extract_credentials` for a
+    nonstandard token response.
 
     :meth:`refresh_credentials` is a template method: a divergent provider
     overrides one hook (`build_refresh_request`, `classify_token_response`) or
@@ -306,12 +309,27 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         """Resolve account-specific URLs while preserving the provider's OAuth settings."""
         return self.spec.oauth
 
-    @abstractmethod
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
-        """Map a successful token response (initial grant *or* refresh) to the
-        credentials to persist for the user (e.g. pull the user access token out
-        of Slack's nested ``authed_user``). Raise ``OnyxError`` if the expected
-        token is absent."""
+        """Map standard OAuth token fields for both initial grants and refreshes.
+
+        Override for provider-specific fields or nested tokens such as Slack's.
+        Omit absent refresh fields so refresh merging preserves stored values.
+        """
+        access_token = response_data.get("access_token")
+        if not access_token:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"{self.spec.app_name} OAuth response did not contain an access token.",
+            )
+        credentials: dict[str, Any] = {
+            "access_token": access_token,
+            "token_type": response_data.get("token_type"),
+            "scope": response_data.get("scope"),
+        }
+        for key in ("refresh_token", "expires_in"):
+            if response_data.get(key):
+                credentials[key] = response_data[key]
+        return credentials
 
     def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
         """The scopes the user granted, from the connect-time token response, or
