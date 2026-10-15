@@ -42,35 +42,44 @@ def upgrade() -> None:
     bind.commit()
     with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.exec_driver_sql(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
-        quoted_schema = conn.dialect.identifier_preparer.quote_identifier(schema)
-        for name, statement in (
-            (
-                "ix_chat_session_spawned_by_message_id",
-                'CREATE INDEX CONCURRENTLY "ix_chat_session_spawned_by_message_id" '
-                f"ON {quoted_schema}.chat_session (spawned_by_message_id)",
-            ),
-            (
-                "ix_chat_message_invoking_tool_call_id",
-                'CREATE INDEX CONCURRENTLY "ix_chat_message_invoking_tool_call_id" '
-                f"ON {quoted_schema}.chat_message (invoking_tool_call_id)",
-            ),
-        ):
-            qualified_name = f'{quoted_schema}."{name}"'
-            state = _index_state(conn, qualified_name)
-            if state is True:
-                continue
-            if state is False:
-                conn.exec_driver_sql(f"DROP INDEX CONCURRENTLY {qualified_name}")
-            conn.exec_driver_sql(statement)
+        # A plain SET outlives the transaction on this connection. Reset it so a
+        # pooled connection does not carry the timeout to its next user.
+        try:
+            _build_indexes_and_validate(conn, schema)
+        finally:
+            conn.exec_driver_sql("RESET lock_timeout")
 
-        # Validate only after releasing the initial ALTER TABLE locks.
-        for table, constraint in (
-            ("chat_session", "fk_chat_session_spawned_by_message"),
-            ("chat_message", "fk_chat_message_invocation"),
-        ):
-            conn.exec_driver_sql(
-                f"ALTER TABLE {quoted_schema}.{table} VALIDATE CONSTRAINT {constraint}"
-            )
+
+def _build_indexes_and_validate(conn: sa.engine.Connection, schema: str) -> None:
+    quoted_schema = conn.dialect.identifier_preparer.quote_identifier(schema)
+    for name, statement in (
+        (
+            "ix_chat_session_spawned_by_message_id",
+            'CREATE INDEX CONCURRENTLY "ix_chat_session_spawned_by_message_id" '
+            f"ON {quoted_schema}.chat_session (spawned_by_message_id)",
+        ),
+        (
+            "ix_chat_message_invoking_tool_call_id",
+            'CREATE INDEX CONCURRENTLY "ix_chat_message_invoking_tool_call_id" '
+            f"ON {quoted_schema}.chat_message (invoking_tool_call_id)",
+        ),
+    ):
+        qualified_name = f'{quoted_schema}."{name}"'
+        state = _index_state(conn, qualified_name)
+        if state is True:
+            continue
+        if state is False:
+            conn.exec_driver_sql(f"DROP INDEX CONCURRENTLY {qualified_name}")
+        conn.exec_driver_sql(statement)
+
+    # Validate only after releasing the initial ALTER TABLE locks.
+    for table, constraint in (
+        ("chat_session", "fk_chat_session_spawned_by_message"),
+        ("chat_message", "fk_chat_message_invocation"),
+    ):
+        conn.exec_driver_sql(
+            f"ALTER TABLE {quoted_schema}.{table} VALIDATE CONSTRAINT {constraint}"
+        )
 
 
 def _add_execution_metadata() -> None:
