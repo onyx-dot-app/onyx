@@ -6854,7 +6854,9 @@
         },
         "actions": {
           "manage": "Administrar",
-          "manageFederated": "Administrar conector federado"
+          "manageFederated": "Administrar conector federado",
+          "expand": "Ver detalles",
+          "collapse": "Ocultar detalles"
         },
         "federated": {
           "tag": "Federado"

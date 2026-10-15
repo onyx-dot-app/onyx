@@ -6854,7 +6854,9 @@
         },
         "actions": {
           "manage": "إدارة",
-          "manageFederated": "إدارة الموصل الموحد"
+          "manageFederated": "إدارة الموصل الموحد",
+          "expand": "عرض التفاصيل",
+          "collapse": "إخفاء التفاصيل"
         },
         "federated": {
           "tag": "موحد"

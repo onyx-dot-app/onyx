@@ -6854,7 +6854,9 @@
         },
         "actions": {
           "manage": "관리",
-          "manageFederated": "페더레이션 커넥터 관리"
+          "manageFederated": "페더레이션 커넥터 관리",
+          "expand": "세부 정보 보기",
+          "collapse": "세부 정보 숨기기"
         },
         "federated": {
           "tag": "페더레이션"

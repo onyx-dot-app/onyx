@@ -84,10 +84,16 @@ export interface RunsCardProps {
   ccPairId: number;
   /** Shows the cancel action on running or queued index attempts. */
   canOperate: boolean;
+  /** Renders the list without its own card, for a card that already frames it. */
+  embedded?: boolean;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
-export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
+export default function RunsCard({
+  ccPairId,
+  canOperate,
+  embedded = false,
+}: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const [page, setPage] = useState(1);
@@ -146,7 +152,16 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
       return;
     }
     toast.success(t("toasts.canceled"));
-    await Promise.all([mutate(key), mutate(buildCCPairInfoUrl(ccPairId))]);
+    // The status page lists this pair's summary too, so its list refreshes with the runs.
+    await Promise.all([
+      mutate(key),
+      mutate(buildCCPairInfoUrl(ccPairId)),
+      mutate(
+        (cached) =>
+          typeof cached === "string" &&
+          cached.startsWith(SWR_KEYS.indexMonitoringConnectorsPrefix)
+      ),
+    ]);
   }
 
   const kinds = data?.kinds ?? ["indexing"];
@@ -162,8 +177,8 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
     picked.since !== null ||
     search !== "";
 
-  return (
-    <Card border="solid" rounding={4} padding={2} data-testid="connector-runs">
+  const body = (
+    <>
       {logRun !== null && (
         <ExceptionTraceModal
           onOutsideClick={() => setLogRun(null)}
@@ -361,6 +376,18 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
           />
         )}
       </Section>
+    </>
+  );
+  if (embedded) {
+    return (
+      <Section alignItems="stretch" height="fit" data-testid="connector-runs">
+        {body}
+      </Section>
+    );
+  }
+  return (
+    <Card border="solid" rounding={4} padding={2} data-testid="connector-runs">
+      {body}
     </Card>
   );
 }

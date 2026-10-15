@@ -6854,7 +6854,9 @@
         },
         "actions": {
           "manage": "管理",
-          "manageFederated": "管理联合连接器"
+          "manageFederated": "管理联合连接器",
+          "expand": "查看详情",
+          "collapse": "隐藏详情"
         },
         "federated": {
           "tag": "联合"
