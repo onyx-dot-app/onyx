@@ -101,17 +101,11 @@ def test_public_search_explicit_model_bypasses_selection_default() -> None:
         ] == ["explicit-key"]
 
 
-@pytest.mark.parametrize("configured", [False, True])
-def test_public_search_does_not_check_unused_primary_provider(
-    configured: bool,
-) -> None:
+def test_public_search_defers_unused_primary_provider_check_to_tool() -> None:
     primary, selection = MagicMock(), MagicMock()
-    primary.config.api_key = "primary-key"
-    selection.config.api_key = "selection-key"
-    resolved = selection if configured else primary
     with (
         public_search_dependencies(primary) as constructor,
-        patch.object(api, "get_search_selection_llm", return_value=resolved),
+        patch.object(api, "get_search_selection_llm", return_value=selection),
         patch.object(api, "check_llm_cost_limit_for_provider") as cost,
     ):
         api.search(
@@ -119,11 +113,9 @@ def test_public_search_does_not_check_unused_primary_provider(
             MagicMock(),
             MagicMock(),
         )
+        assert constructor.call_args.kwargs["primary_llm_cost_checked"] is False
+        assert constructor.call_args.kwargs["selection_llm_factory"]() is selection
         cost.assert_not_called()
-        assert constructor.call_args.kwargs["selection_llm_factory"]() is resolved
-        assert [
-            call.kwargs["llm_provider_api_key"] for call in cost.call_args_list
-        ] == ([] if configured else ["primary-key"])
 
 
 @pytest.mark.parametrize("configured", [False, True])

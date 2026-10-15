@@ -11,6 +11,7 @@ directly — a lighter-weight flow with optional query expansion.
 """
 
 import json
+from functools import partial
 from typing import cast
 
 from fastapi import APIRouter, Depends
@@ -40,7 +41,6 @@ from onyx.llm.factory import (
     get_search_selection_llm,
     llm_from_provider,
 )
-from onyx.llm.interfaces import LLM
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     SearchRequest,
@@ -160,16 +160,6 @@ def search(
             llm_provider_api_key=llm.config.api_key,
         )
 
-    def resolve_selection_llm() -> LLM:
-        selection_llm = get_search_selection_llm(fallback=llm)
-        if selection_llm is llm and not primary_provider_checked:
-            check_llm_cost_limit_for_provider(
-                db_session=db_session,
-                tenant_id=get_current_tenant_id(),
-                llm_provider_api_key=selection_llm.config.api_key,
-            )
-        return selection_llm
-
     # 3. Build filters. The public time_cutoff maps onto the internal
     # updated_at_range lower bound; TimeRange coerces naive bounds to UTC.
     base_filters = BaseFilters(
@@ -206,7 +196,12 @@ def search(
         user=user,
         persona_search_info=persona_search_info,
         llm=llm,
-        selection_llm_factory=resolve_selection_llm if not request.provider else None,
+        selection_llm_factory=(
+            partial(get_search_selection_llm, fallback=llm)
+            if not request.provider
+            else None
+        ),
+        primary_llm_cost_checked=primary_provider_checked,
         document_index=document_index,
         user_selected_filters=base_filters,
         project_id_filter=None,

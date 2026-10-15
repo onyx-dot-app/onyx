@@ -168,6 +168,7 @@ resolves it lazily for section selection and relevance classification, after
 retrieval returns sections. Rewrites, filters, the answer client, and other tools
 keep the supplied `llm`. Constructing tools, exposing schemas, or finding no
 results does not resolve SEARCH_SELECTION or check its provider budget.
+If the factory raises, search logs a warning and selects with the supplied `llm`.
 The independent CHAT_NAMING default is not used by search tools.
 
 For each `db_tool_model` in `persona.tools`, in order:

@@ -29,6 +29,7 @@ def _make_tool(
     user_selected_filters: BaseFilters | None = None,
     auto_detect_filters: bool = True,
     selection_llm_factory: MagicMock | None = None,
+    primary_llm_cost_checked: bool = True,
 ) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
@@ -43,6 +44,7 @@ def _make_tool(
         enable_slack_search=False,
         auto_detect_filters=auto_detect_filters,
         selection_llm_factory=selection_llm_factory,
+        primary_llm_cost_checked=primary_llm_cost_checked,
     )
 
 
@@ -114,8 +116,8 @@ def test_empty_search_never_resolves_selection_model() -> None:
     resolver.assert_not_called()
 
 
-def test_slack_search_checks_primary_budget_before_utility_calls() -> None:
-    tool = _make_tool(auto_detect_filters=False)
+def test_slack_search_over_primary_budget_skips_only_slack_lane() -> None:
+    tool = _make_tool(auto_detect_filters=False, primary_llm_cost_checked=False)
     tool.enable_slack_search = True
     tool.llm.config.api_key = "primary-key"
     error = OnyxError(OnyxErrorCode.RATE_LIMITED, "Provider budget exceeded")
@@ -125,7 +127,6 @@ def test_slack_search_checks_primary_budget_before_utility_calls() -> None:
         ),
         patch(f"{MODULE}.check_llm_cost_limit_for_provider", side_effect=error) as cost,
         patch.object(tool, "_run_slack_search") as slack,
-        pytest.raises(OnyxError, match="Provider budget exceeded"),
     ):
         _run(tool, connected_sources=[DocumentSource.SLACK], skip_query_expansion=True)
 

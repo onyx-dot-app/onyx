@@ -33,14 +33,15 @@ def test_search_tool_resolves_selection_client_once_on_first_access(
     resolver.assert_called_once_with()
 
 
-def test_search_tool_defers_selection_failure_until_evidence_selection() -> None:
+def test_search_tool_falls_back_to_primary_when_selection_unavailable() -> None:
+    primary = MagicMock()
     resolver = MagicMock(side_effect=ValueError("utility budget exceeded"))
     tool = SearchTool(
         tool_id=1,
         emitter=MagicMock(),
         user=MagicMock(),
         persona_search_info=MagicMock(),
-        llm=MagicMock(),
+        llm=primary,
         document_index=MagicMock(),
         user_selected_filters=None,
         project_id_filter=None,
@@ -50,8 +51,8 @@ def test_search_tool_defers_selection_failure_until_evidence_selection() -> None
     assert tool.tool_definition().name == "internal_search"
     _ = tool.llm
     resolver.assert_not_called()
-    with pytest.raises(ValueError, match="utility budget exceeded"):
-        _ = tool.selection_llm
+    assert tool.selection_llm is primary
+    assert tool.enforce_selection_input_budget is False
 
 
 def test_search_rewrites_and_filters_never_resolve_selection_client() -> None:

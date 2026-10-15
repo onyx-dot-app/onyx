@@ -239,10 +239,14 @@ selection provider. An unset SEARCH_SELECTION returns the same session client,
 never CHAT_NAMING. The public Search API honors explicit provider/model requests for
 both clients; otherwise only selection uses SEARCH_SELECTION. The EE Search UI
 likewise keeps rewrites on the default chat client and resolves selection lazily.
-If that lazy check raises `OnyxError` during streaming, the EE endpoint sends a
-`SearchErrorPacket` instead of aborting the connection.
-Before scheduling a Slack lane, `SearchTool.run` checks the primary provider's
-cost limit. This also covers API searches with query expansion and automatic filters disabled.
+If EE selection resolution fails, for example on a cost limit, the endpoint still
+returns the documents with `llm_selected_doc_ids` unset.
+If the chat or API selection factory fails, `SearchTool` logs a warning and selects
+with the primary client. Chat checks the primary provider's cost limit at turn
+start. The public Search API skips that check when query expansion and automatic
+filters are off and passes `primary_llm_cost_checked=False`. The tool then checks
+the primary provider before the first Slack lane or selection call that uses it.
+If the check fails before a Slack lane, search skips only that lane.
 
 `_trim_sections_by_tokens` (`search_tool.py`) first drops sections once a token
 budget (`max_llm_chunks * DOC_EMBEDDING_CONTEXT_SIZE * SELECTION_TOKEN_BUDGET_MULTIPLIER`,

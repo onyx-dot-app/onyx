@@ -304,6 +304,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         auto_detect_filters: bool = True,
         enforce_selection_input_budget: bool = False,
         selection_llm_factory: Callable[[], LLM] | None = None,
+        primary_llm_cost_checked: bool = True,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -311,6 +312,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.persona_search_info = persona_search_info
         self.llm = llm
         self._selection_llm_factory = selection_llm_factory
+        self._primary_llm_cost_checked = primary_llm_cost_checked
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
         self.project_id_filter = project_id_filter
@@ -328,11 +330,32 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         self._id = tool_id
 
+    def _check_primary_llm_cost(self) -> None:
+        if self._primary_llm_cost_checked:
+            return
+        with get_session_with_current_tenant() as usage_session:
+            check_llm_cost_limit_for_provider(
+                db_session=usage_session,
+                tenant_id=get_current_tenant_id(),
+                llm_provider_api_key=self.llm.config.api_key,
+            )
+        self._primary_llm_cost_checked = True
+
     @cached_property
     def selection_llm(self) -> LLM:
-        return (
-            self._selection_llm_factory() if self._selection_llm_factory else self.llm
-        )
+        if self._selection_llm_factory is not None:
+            try:
+                selection_llm = self._selection_llm_factory()
+            except Exception:
+                logger.warning(
+                    "Search selection model unavailable, using the primary model",
+                    exc_info=True,
+                )
+            else:
+                if selection_llm is not self.llm:
+                    return selection_llm
+        self._check_primary_llm_cost()
+        return self.llm
 
     @property
     def enforce_selection_input_budget(self) -> bool:
@@ -1081,13 +1104,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This avoids the query multiplication problem where each index query
         # would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
-        if slack_access_token and override_kwargs.original_query:
-            with get_session_with_current_tenant() as usage_session:
-                check_llm_cost_limit_for_provider(
-                    db_session=usage_session,
-                    tenant_id=get_current_tenant_id(),
-                    llm_provider_api_key=self.llm.config.api_key,
+        run_slack_search = bool(slack_access_token and override_kwargs.original_query)
+        if run_slack_search:
+            try:
+                self._check_primary_llm_cost()
+            except Exception:
+                logger.warning(
+                    "Skipping Slack search: primary model cost check failed",
+                    exc_info=True,
                 )
+                run_slack_search = False
+        if run_slack_search:
             search_functions.append(
                 (
                     self._run_slack_search,
