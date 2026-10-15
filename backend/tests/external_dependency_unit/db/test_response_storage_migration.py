@@ -18,6 +18,7 @@ from sqlalchemy import (
     select,
     text,
 )
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
@@ -34,9 +35,9 @@ from onyx.db.models import ChatMessage, ChatSession, ToolCall
 from onyx.db.tools import create_tool_call_no_commit
 
 
-def test_response_items_upgrade_downgrade_upgrade(db_session: Session) -> None:
+def test_response_items_upgrade_downgrade_upgrade(isolated_engine: Engine) -> None:
     schema = f"response_items_{uuid4().hex}"
-    with db_session.connection().engine.connect() as connection:
+    with isolated_engine.connect() as connection:
         try:
             connection.execute(CreateSchema(schema))
             connection.execute(
