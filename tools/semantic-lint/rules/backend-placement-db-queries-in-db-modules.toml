@@ -88,12 +88,12 @@ code = '''
 '''
 
 [calibration]
-threshold = 0.9000
-precision = 0.2000
+threshold = 0.8500
+precision = 0.5000
 recall = 1.0000
 positives = 7
-negatives = 10974
-tune_precision_lower = 0.0747
+negatives = 2000
+tune_precision_lower = 0.2553
 jev_model = "jev-1.13.0"
 evaluated_on = 2026-10-15
-seal = "sha256:3ababa2f4b7ad4054c380262919155694a477927062c0682422e37058b31610b"
+seal = "sha256:d63a456c352eea9a4157ee704f12d2529eaa248e4b8defcaddfea85aa57fa18d"
