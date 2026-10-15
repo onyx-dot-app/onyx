@@ -13,6 +13,9 @@ down_revision = "6b4e821c0a93"
 branch_labels = None
 depends_on = None
 
+# Match the existing concurrent-index migration; a retry repairs invalid indexes.
+LOCK_TIMEOUT = "60s"
+
 
 def _index_state(conn: sa.engine.Connection, qualified_name: str) -> bool | None:
     """An interrupted concurrent build can leave an invalid index."""
@@ -28,8 +31,8 @@ def _index_state(conn: sa.engine.Connection, qualified_name: str) -> bool | None
 def upgrade() -> None:
     bind = op.get_bind()
     schema: str = bind.execute(sa.text("SELECT current_schema()")).scalar_one()
-    # The metadata phase commits together; its final column identifies a retry.
-    if "run_id" not in {
+    # The metadata phase commits together; the invocation column identifies a retry.
+    if "invoking_tool_call_id" not in {
         column["name"]
         for column in sa.inspect(bind).get_columns("chat_message", schema=schema)
     }:
@@ -38,6 +41,7 @@ def upgrade() -> None:
     # env.py owns the transaction, so Alembic's autocommit_block cannot be used.
     bind.commit()
     with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
         quoted_schema = conn.dialect.identifier_preparer.quote_identifier(schema)
         for name, statement in (
             (
@@ -50,11 +54,6 @@ def upgrade() -> None:
                 'CREATE INDEX CONCURRENTLY "ix_chat_message_invoking_tool_call_id" '
                 f"ON {quoted_schema}.chat_message (invoking_tool_call_id)",
             ),
-            (
-                "uq_chat_message_run_id",
-                'CREATE UNIQUE INDEX CONCURRENTLY "uq_chat_message_run_id" '
-                f"ON {quoted_schema}.chat_message (run_id)",
-            ),
         ):
             qualified_name = f'{quoted_schema}."{name}"'
             state = _index_state(conn, qualified_name)
@@ -64,16 +63,6 @@ def upgrade() -> None:
                 conn.exec_driver_sql(f"DROP INDEX CONCURRENTLY {qualified_name}")
             conn.exec_driver_sql(statement)
 
-        if not any(
-            constraint["name"] == "uq_chat_message_run_id"
-            for constraint in sa.inspect(conn).get_unique_constraints(
-                "chat_message", schema=schema
-            )
-        ):
-            conn.exec_driver_sql(
-                f"ALTER TABLE {quoted_schema}.chat_message ADD CONSTRAINT "
-                "uq_chat_message_run_id UNIQUE USING INDEX uq_chat_message_run_id"
-            )
         # Validate only after releasing the initial ALTER TABLE locks.
         for table, constraint in (
             ("chat_session", "fk_chat_session_spawned_by_message"),
@@ -115,7 +104,9 @@ def _add_execution_metadata() -> None:
         "tool_call",
         ["invoking_tool_call_id"],
         ["id"],
-        ondelete="CASCADE",
+        # Child-session cascades must finish before checking invocation provenance.
+        deferrable=True,
+        initially="DEFERRED",
         postgresql_not_valid=True,
     )
     for column in (
@@ -123,13 +114,9 @@ def _add_execution_metadata() -> None:
         sa.Column("result", postgresql.JSONB(), nullable=True),
     ):
         op.add_column("tool_call", column)
-    op.add_column("chat_message", sa.Column("run_id", sa.String(), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_constraint("uq_chat_message_run_id", "chat_message", type_="unique")
-    op.drop_column("chat_message", "run_id")
-
     # The public answer projections remain readable by the original schema.
     op.execute("""
         UPDATE tool_call SET tool_call_response = result->>'content'
@@ -137,6 +124,7 @@ def downgrade() -> None:
     """)
     op.execute("DELETE FROM chat_session WHERE spawned_by_message_id IS NOT NULL")
     op.execute("DELETE FROM tool_call WHERE tool_id IS NULL")
+    op.execute("SET CONSTRAINTS fk_chat_message_invocation IMMEDIATE")
     op.alter_column("tool_call", "tool_id", existing_type=sa.Integer(), nullable=False)
     for column in (
         "response_status",
