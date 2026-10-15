@@ -14,13 +14,13 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
-    add_model_to_flow,
     fetch_default_chat_naming_model,
     fetch_default_contextual_rag_model,
     fetch_default_craft_model,
     fetch_default_vision_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
+    update_default_chat_naming_provider,
     update_default_contextual_model,
     update_default_craft_provider,
     update_default_provider,
@@ -359,33 +359,9 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         db_session: Session,
         provider_name: str,
     ) -> None:
-        """CHAT_NAMING is the third pointer flow, so the filter must cover it.
-
-        update_default_chat_naming_provider cannot reach this state on its own:
-        it calls _update_default_model, which needs a CHAT_NAMING row that no
-        upsert path creates, so setting this default always fails. That is a
-        separate bug. Seed the row directly so this test exercises the
-        reconciliation filter rather than the broken setter.
-        """
+        """CHAT_NAMING is the third pointer flow, so the filter must cover it."""
         provider = _create_test_provider(db_session, provider_name)
-        model_config = next(
-            mc for mc in provider.model_configurations if mc.name == "gpt-4o-mini"
-        )
-        assert model_config.id is not None
-        add_model_to_flow(
-            db_session=db_session,
-            model_configuration_id=model_config.id,
-            flow_type=LLMModelFlowType.CHAT_NAMING,
-        )
-        flow = db_session.scalar(
-            select(LLMModelFlow).where(
-                LLMModelFlow.model_configuration_id == model_config.id,
-                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING,
-            )
-        )
-        assert flow is not None
-        flow.is_default = True
-        db_session.commit()
+        update_default_chat_naming_provider(provider.id, "gpt-4o-mini", db_session)
         assert fetch_default_chat_naming_model(db_session) is not None
 
         self._update_provider(db_session, provider.id, provider_name)
@@ -393,6 +369,57 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         default_naming = fetch_default_chat_naming_model(db_session)
         assert default_naming is not None
         assert default_naming.name == "gpt-4o-mini"
+
+
+class TestSetChatNamingDefault:
+    """No provider upsert creates a CHAT_NAMING row, so the setter must create
+    it itself, as the CRAFT and CONTEXTUAL_RAG setters do."""
+
+    def test_sets_the_default_on_a_fresh_provider(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+
+        update_default_chat_naming_provider(provider.id, "gpt-4o-mini", db_session)
+
+        default_naming = fetch_default_chat_naming_model(db_session)
+        assert default_naming is not None
+        assert default_naming.name == "gpt-4o-mini"
+
+    def test_switching_the_model_moves_the_default(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_chat_naming_provider(provider.id, "gpt-4o-mini", db_session)
+
+        update_default_chat_naming_provider(provider.id, "gpt-4o", db_session)
+
+        default_naming = fetch_default_chat_naming_model(db_session)
+        assert default_naming is not None
+        assert default_naming.name == "gpt-4o"
+        defaults = db_session.scalars(
+            select(LLMModelFlow).where(
+                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING,
+                LLMModelFlow.is_default == True,  # noqa: E712
+            )
+        ).all()
+        assert len(defaults) == 1
+
+    def test_unknown_model_is_refused(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+
+        with pytest.raises(ValueError, match="is not a valid model"):
+            update_default_chat_naming_provider(
+                provider.id, "no-such-model", db_session
+            )
 
 
 class TestEveryFlowDefaultIsGuarded:
