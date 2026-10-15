@@ -159,7 +159,6 @@ def test_chat_optout_blocks_default_chat_but_preserves_custom_agent(
     monkeypatch: pytest.MonkeyPatch,
     persona_id: int,
 ) -> None:
-    from onyx.chat.emitter import Emitter
     from onyx.llm.interfaces import LLM
     from onyx.tools import tool_constructor
     from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
@@ -189,7 +188,6 @@ def test_chat_optout_blocks_default_chat_but_preserves_custom_agent(
         result = tool_constructor._construct_tools_impl(
             configuration,
             db_session,
-            MagicMock(spec=Emitter),
             user,
             MagicMock(spec=LLM),
             allowed_tool_ids=[tool.id],
