@@ -42,6 +42,9 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.utils import test_llm
+from onyx.server.documents.connector_file_ownership import (
+    file_ids_deletable_with_connector,
+)
 from onyx.server.documents.models import (
     ConnectorCredentialPairIdentifier,
     PaginatedReturn,
@@ -198,8 +201,18 @@ def create_deletion_attempt_for_connector_id(
 
     if cc_pair.connector.source == DocumentSource.FILE:
         connector = cc_pair.connector
+        file_ids = connector.connector_specific_config.get("file_locations", [])
+        deletable = file_ids_deletable_with_connector(
+            db_session, connector.id, file_ids
+        )
+        if skipped := [file_id for file_id in file_ids if file_id not in deletable]:
+            logger.warning(
+                "Deleting connector %s keeps files it does not own: %s",
+                connector.id,
+                skipped,
+            )
         file_store = get_default_file_store()
-        for file_id in connector.connector_specific_config.get("file_locations", []):
+        for file_id in deletable:
             file_store.delete_file(file_id)
 
 

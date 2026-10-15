@@ -49,6 +49,23 @@ class FileRecordNotFoundError(RuntimeError):
     """
 
 
+class FileOriginConflictError(RuntimeError):
+    """A save named an existing file of another origin."""
+
+
+def assert_file_id_writable(
+    file_id: str, file_origin: FileOrigin, db_session: Session
+) -> None:
+    """A caller-chosen id may only overwrite a file of the same origin, so no
+    writer can take over another feature's file by naming its id."""
+    existing = get_filerecord_by_file_id_optional(file_id, db_session)
+    if existing is not None and existing.file_origin != file_origin:
+        raise FileOriginConflictError(
+            f"File {file_id!r} exists with origin {existing.file_origin.value}; "
+            f"a {file_origin.value} file cannot overwrite it."
+        )
+
+
 def get_filerecord_by_file_id(
     file_id: str,
     db_session: Session,

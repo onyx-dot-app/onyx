@@ -18,6 +18,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant_if_none,
 )
 from onyx.db.file_record import (
+    assert_file_id_writable,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_optional,
@@ -215,6 +216,9 @@ class AzureBlobBackedFileStore(FileStore):
 
         if file_id is None:
             file_id = str(uuid.uuid4())
+        else:
+            with get_session_with_current_tenant_if_none(db_session) as session:
+                assert_file_id_writable(file_id, file_origin, session)
 
         client = self._get_blob_service_client()
         object_key = self._get_object_key(file_id)

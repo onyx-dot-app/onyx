@@ -1,3 +1,5 @@
+from onyx.configs.constants import FileOrigin
+
 MAX_IN_MEMORY_SIZE = 30 * 1024 * 1024  # 30MB
 STANDARD_CHUNK_SIZE = 10 * 1024 * 1024  # 10MB chunks
 
@@ -10,3 +12,10 @@ CONTENT_SHA256_METADATA_KEY = "content_sha256"
 # Marks a file uploaded during a connector edit. Apply removes the mark; the
 # cleanup task deletes marked files after they expire.
 STAGED_FOR_CC_PAIR_METADATA_KEY = "staged_for_cc_pair_id"
+# Records the user who uploaded a connector file.
+UPLOADED_BY_USER_ID_METADATA_KEY = "uploaded_by_user_id"
+
+# The origins of uploaded files that a connector config may name.
+CONNECTOR_UPLOAD_ORIGINS = frozenset(
+    {FileOrigin.CONNECTOR, FileOrigin.CONNECTOR_FILE_UPLOAD}
+)

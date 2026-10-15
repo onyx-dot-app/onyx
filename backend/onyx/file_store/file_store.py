@@ -32,6 +32,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant_if_none,
 )
 from onyx.db.file_record import (
+    assert_file_id_writable,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_optional,
@@ -281,6 +282,9 @@ class FileStore(ABC):
 
         Returns:
             The unique ID of the file that was saved.
+
+        Raises:
+            FileOriginConflictError: ``file_id`` names a file of another origin.
         """
         raise NotImplementedError
 
@@ -566,6 +570,9 @@ class S3BackedFileStore(FileStore):
     ) -> str:
         if file_id is None:
             file_id = str(uuid.uuid4())
+        else:
+            with get_session_with_current_tenant_if_none(db_session) as session:
+                assert_file_id_writable(file_id, file_origin, session)
 
         s3_client = self._get_s3_client()
         bucket_name = self._get_bucket_name()

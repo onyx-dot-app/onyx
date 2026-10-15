@@ -20,6 +20,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, ChatSessionSharedStatus
+from onyx.db.file_record import update_filerecord_origin
 from onyx.db.models import ChatSession, Document, ToolCall
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
@@ -589,18 +590,21 @@ def _seed_non_tabular_file_connector_cc_pair(
     )
 
 
-def _save_non_tabular_file_bytes(file_id: str, file_origin: FileOrigin) -> None:
-    """Save bytes under the exact `file_id` listed in the cc_pair's
-    `file_locations`. Can't reuse `_seed_connector_file` because that
-    stamps `Document.file_id` and would bypass the fallback under test."""
-    file_store = get_default_file_store()
-    file_store.save_file(
-        content=io.BytesIO(_CONNECTOR_FILE_BYTES),
-        display_name="non_tabular.txt",
-        file_origin=file_origin,
-        file_type="text/plain",
-        file_id=file_id,
-    )
+def _upload_non_tabular_file(admin_user: DATestUser, file_origin: FileOrigin) -> str:
+    """Upload the bytes as the admin, so a connector config may name them.
+    Can't reuse `_seed_connector_file` because that stamps `Document.file_id`
+    and would bypass the fallback under test. Another origin stands for a
+    legacy row."""
+    file_id = FileManager.upload_connector_file(
+        "non_tabular.txt", _CONNECTOR_FILE_BYTES, admin_user, "text/plain"
+    ).file_paths[0]
+    if file_origin != FileOrigin.CONNECTOR_FILE_UPLOAD:
+        with get_session_with_current_tenant() as db_session:
+            update_filerecord_origin(
+                file_id, FileOrigin.CONNECTOR_FILE_UPLOAD, file_origin, db_session
+            )
+            db_session.commit()
+    return file_id
 
 
 @pytest.mark.parametrize("file_origin", _NON_TABULAR_FILE_ORIGINS)
@@ -614,7 +618,7 @@ def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
     basic_user: DATestUser = UserManager.create(name="non_tabular_basic")
     api_key = APIKeyManager.create(user_performing_action=admin_user)
 
-    file_id = str(uuid4())
+    file_id = _upload_non_tabular_file(admin_user, file_origin)
     public_cc_pair = _seed_non_tabular_file_connector_cc_pair(
         admin_user=admin_user,
         file_id=file_id,
@@ -628,7 +632,6 @@ def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
         content="non-tabular body text",
         api_key=api_key,
     )
-    _save_non_tabular_file_bytes(file_id, file_origin)
 
     for user in (admin_user, basic_user):
         response = client.get(
@@ -654,7 +657,7 @@ def test_non_tabular_connector_file_denied_for_users_without_access(
     basic_user: DATestUser = UserManager.create(name="non_tabular_priv_basic")
     api_key = APIKeyManager.create(user_performing_action=admin_user)
 
-    file_id = str(uuid4())
+    file_id = _upload_non_tabular_file(admin_user, file_origin)
     private_cc_pair = _seed_non_tabular_file_connector_cc_pair(
         admin_user=admin_user,
         file_id=file_id,
@@ -665,7 +668,6 @@ def test_non_tabular_connector_file_denied_for_users_without_access(
         content="non-tabular private content",
         api_key=api_key,
     )
-    _save_non_tabular_file_bytes(file_id, file_origin)
 
     basic_response = client.get(
         f"{API_SERVER_URL}/chat/file/{file_id}",

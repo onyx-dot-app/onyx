@@ -2,7 +2,6 @@ import math
 import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, quote, urljoin, urlparse
 
@@ -19,7 +18,10 @@ from onyx.configs.constants import FileOrigin
 from onyx.file_processing.extract_file_text import extract_file_text, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_processing.html_utils import format_document_soup
-from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.file_processing.image_utils import (
+    remote_image_file_id,
+    store_image_and_create_section,
+)
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
@@ -128,7 +130,12 @@ def process_attachment(
 
         # Process image attachments
         if media_type.startswith("image/"):
-            return _process_image_attachment(attachment, raw_bytes, media_type)
+            wiki_base = (source_operations.connector_specific_config or {}).get(
+                "wiki_base", ""
+            )
+            return _process_image_attachment(
+                attachment, raw_bytes, media_type, str(wiki_base)
+            )
 
         # Process document attachments
         try:
@@ -161,13 +168,16 @@ def _process_image_attachment(
     attachment: dict[str, Any],
     raw_bytes: bytes,
     media_type: str,
+    wiki_base: str,
 ) -> AttachmentProcessingResult:
     """Process an image attachment by saving it without generating a summary."""
     try:
         # Use the standardized image storage and section creation
         section, file_name = store_image_and_create_section(
             image_data=raw_bytes,
-            file_id=Path(attachment["id"]).name,
+            file_id=remote_image_file_id(
+                "confluence", wiki_base, str(attachment["id"])
+            ),
             display_name=attachment["title"],
             media_type=media_type,
             file_origin=FileOrigin.CONNECTOR,

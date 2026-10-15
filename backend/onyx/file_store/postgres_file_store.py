@@ -27,6 +27,7 @@ from onyx.db.file_content import (
 )
 from onyx.db.file_record import (
     FileRecordNotFoundError,
+    assert_file_id_writable,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_optional,
@@ -128,6 +129,7 @@ class PostgresBackedFileStore(FileStore):
         file_id: str | None = None,
         db_session: Session | None = None,
     ) -> str:
+        caller_chose_id = file_id is not None
         if file_id is None:
             file_id = str(uuid.uuid4())
 
@@ -135,6 +137,8 @@ class PostgresBackedFileStore(FileStore):
         created_lo = False
 
         with get_session_with_current_tenant_if_none(db_session) as session:
+            if caller_chose_id:
+                assert_file_id_writable(file_id, file_origin, session)
             raw_conn, oid = None, None
             try:
                 raw_conn = _get_raw_connection(session)

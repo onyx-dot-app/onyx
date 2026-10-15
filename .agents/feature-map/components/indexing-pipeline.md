@@ -267,6 +267,7 @@ calls `index_doc_batch`, which:
    `MAX_DOCUMENT_CHARS`.
 2. `_apply_document_ingestion_hook` runs the EE `DOCUMENT_INGESTION` hook, which can
    rewrite a document's sections or drop it (`hooks/points/document_ingestion.py`).
+   An image section in the response must name an image sent for that document.
 3. `adapter.prepare` -> `index_doc_batch_prepare` -> `get_docs_to_update`: a
    **two-gate dedup**. Gate 1 (timestamp) skips a document whose `doc_updated_at`
    hasn't advanced past what's stored, with no hashing. Gate 2 (content hash)
@@ -412,7 +413,8 @@ attempt for the same cc-pair, `get_latest_valid_checkpoint` looks back through u
 `_NUM_RECENT_ATTEMPTS_TO_CONSIDER = 50` recent attempts for one whose poll window
 matches exactly and whose status `should_reuse_checkpoint()` (`FAILED`, `CANCELED`,
 or `INTERRUPTED`, but not a successful terminal state, which always starts a fresh
-window), then loads that attempt's checkpoint blob. If 50 consecutive attempts made
+window), then loads that attempt's checkpoint blob. A blob whose origin is not
+`INDEXING_CHECKPOINT` is refused, and the run starts clean. If 50 consecutive attempts made
 no progress at all, the checkpoint is discarded and the run starts from scratch
 rather than replaying a permanently stuck cursor.
 

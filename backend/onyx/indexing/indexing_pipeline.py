@@ -1309,9 +1309,19 @@ def _apply_document_ingestion_hook(
                 "Document ingestion hook dropped document doc_id=%r: %s", doc.id, reason
             )
             return None
+        # The hook may only reference the images it was sent for this doc.
+        sent_image_ids = {
+            s.image_file_id for s in doc.sections if isinstance(s, ImageSection)
+        }
         new_sections: list[TextSection | ImageSection] = []
         for s in hook_result.sections:
             if s.image_file_id is not None:
+                if s.image_file_id not in sent_image_ids:
+                    logger.warning(
+                        "Document ingestion hook returned an image_file_id it was not sent for doc_id=%r — skipping section.",
+                        doc.id,
+                    )
+                    continue
                 new_sections.append(
                     ImageSection(image_file_id=s.image_file_id, link=s.link)
                 )

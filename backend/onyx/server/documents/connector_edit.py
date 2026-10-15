@@ -70,6 +70,9 @@ from onyx.server.documents.connector_edit_models import (
     ConnectorEditPlanResponse,
     ConnectorEditProposal,
 )
+from onyx.server.documents.connector_file_ownership import (
+    assert_connector_file_ids_owned,
+)
 from onyx.server.documents.file_connector_staging import stage_file_connector_upload
 from onyx.server.documents.models import FileUploadResponse
 from onyx.server.utils_vector_db import require_vector_db
@@ -132,6 +135,13 @@ def _authorize_proposed_state(
 ) -> None:
     """The creation gates that depend on the proposed state. The access rules
     themselves (``validate_pairing_access``) run in planning and in apply."""
+    assert_connector_file_ids_owned(
+        db_session,
+        user,
+        current.source,
+        proposed.connector_specific_config,
+        current.connector_specific_config,
+    )
     if proposed.credential_id != current.credential_id:
         _fetch_new_credential(db_session, user, current, proposed.credential_id)
 
@@ -323,6 +333,13 @@ def start_cc_pair_edit_checks(
     with GET /manage/admin/connector-checks/runs/{run_id}. Writes no report."""
     _authorize_pair_edit(db_session, user, cc_pair_id)
     current = fetch_current_pair_state(db_session, cc_pair_id)
+    assert_connector_file_ids_owned(
+        db_session,
+        user,
+        current.source,
+        request.connector_specific_config,
+        current.connector_specific_config,
+    )
     credential = (
         _fetch_new_credential(db_session, user, current, request.credential_id)
         if request.credential_id is not None
@@ -362,5 +379,5 @@ def stage_cc_pair_edit_files(
     ids and the merged metadata file id."""
     _authorize_pair_edit(db_session, user, cc_pair_id)
     return stage_file_connector_upload(
-        db_session, cc_pair_id, files, draft_zip_metadata_file_id
+        db_session, cc_pair_id, files, draft_zip_metadata_file_id, user.id
     )

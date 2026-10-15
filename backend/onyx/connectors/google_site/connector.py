@@ -5,11 +5,12 @@ from typing import Any, cast
 from bs4 import BeautifulSoup, Tag
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
 from onyx.connectors.models import Document, HierarchyNode, TextSection
 from onyx.file_processing.extract_file_text import load_files_from_zip, read_text_file
 from onyx.file_processing.html_utils import web_html_cleanup
+from onyx.file_store.constants import CONNECTOR_UPLOAD_ORIGINS
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -45,6 +46,10 @@ def find_google_sites_page_path_from_navbar(
     return None
 
 
+# Uploads from August 2025 to April 2026 have origin OTHER.
+_ZIP_ORIGINS = CONNECTOR_UPLOAD_ORIGINS | {FileOrigin.OTHER}
+
+
 class GoogleSitesConnector(LoadConnector):
     def __init__(
         self,
@@ -62,7 +67,14 @@ class GoogleSitesConnector(LoadConnector):
     def load_from_state(self) -> GenerateDocumentsOutput:
         documents: list[Document | HierarchyNode] = []
 
-        file_content_io = get_default_file_store().read_file(self.zip_path, mode="b")
+        file_store = get_default_file_store()
+        record = file_store.read_file_record(self.zip_path)
+        if record.file_origin not in _ZIP_ORIGINS:
+            raise ValueError(
+                f"{self.zip_path} has origin {record.file_origin.value}, not a "
+                "connector upload"
+            )
+        file_content_io = file_store.read_file(self.zip_path, mode="b")
 
         # load the HTML files
         files = load_files_from_zip(file_content_io)
