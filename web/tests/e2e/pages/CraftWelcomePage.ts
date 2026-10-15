@@ -39,6 +39,15 @@ export class CraftWelcomePage {
     await expect(this.introHeading).not.toBeVisible();
   }
 
+  async dismissIntroIfPresentAndExpectReady(): Promise<void> {
+    const intro = this.page.getByRole("dialog", { name: "Meet Craft" });
+    await expect(intro.or(this.messageInput).first()).toBeVisible();
+    if (await intro.isVisible()) {
+      await intro.getByRole("button", { name: "Close", exact: true }).click();
+    }
+    await this.expectInputEnabled();
+  }
+
   providerCard(name: string): Locator {
     return this.llmSetup.getByText(name, { exact: true });
   }

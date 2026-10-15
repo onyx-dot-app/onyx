@@ -228,6 +228,48 @@ def test_ci_kubectl_matches_the_test_cluster_version() -> None:
     assert workflow["env"]["KUBECTL_VERSION"] == node_version
 
 
+def test_ci_uses_the_production_sandbox_dependencies() -> None:
+    images = _workflow()["jobs"]["build-images"]["strategy"]["matrix"]["include"]
+    sandbox = next(image for image in images if image["image"] == "sandbox")
+    assert sandbox["extra_build_args"] == "ENABLE_SKILLS=true"
+
+
+def test_ci_retains_named_results_and_successful_stdout_receipts() -> None:
+    steps = _workflow()["jobs"]["craft-k8s-tests"]["steps"]
+    test_index, test = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("name", "").startswith("Run Craft K8s tests")
+    )
+    command = test["run"]
+    assert (
+        '--junitxml="${RUNNER_TEMP}/craft-k8s-results/${{ matrix.test-file.name }}.xml"'
+        in command
+    )
+    assert "-o junit_family=xunit1" in command
+    assert "-o junit_logging=system-out" in command
+    assert "-o junit_log_passing_tests=true" in command
+    upload_index, upload = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("name") == "Upload Craft K8s results"
+    )
+    assert upload_index == test_index + 1
+    assert upload["if"] == "always()"
+    assert upload["uses"] == (
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    )
+    assert upload["with"] == {
+        "name": (
+            "craft-k8s-results-${{ matrix.test-file.name }}-"
+            "${{ github.run_id }}-${{ github.run_attempt }}"
+        ),
+        "path": "${{ runner.temp }}/craft-k8s-results/${{ matrix.test-file.name }}.xml",
+        "if-no-files-found": "ignore",
+        "retention-days": 7,
+    }
+
+
 def test_ci_result_artifacts_are_unique_per_run_attempt() -> None:
     uploads = [
         step

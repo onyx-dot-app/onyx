@@ -7,15 +7,22 @@ cannot see: the dev-resource origin gate and basePath serving.
 from __future__ import annotations
 
 import shlex
+from uuid import uuid4
 
 import pytest
+from httpx import URL
 from kubernetes import client
 
+from onyx.db.enums import SharingScope
 from onyx.server.features.build.configs import (
     SANDBOX_NAMESPACE,
 )
 from onyx.server.features.build.sandbox.manager import SandboxManager
+from onyx.server.features.build.session.models import WebappInfo
 from tests.common.craft.payloads import default_llm_config
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client as http_client
+from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
     PoolSession,
@@ -108,6 +115,91 @@ def test_dev_resources_not_blocked_by_origin_gate(
     # so a 403 means Origin/sec-fetch-* leaked through the proxy or the
     # allowlist regressed on a Next upgrade.
     assert resp.status_code != 403, resp.text[:500]
+
+
+def test_private_artifact_and_preview_deny_another_authenticated_user(
+    ready_webapp_session: PoolSession,
+    pool_api_user: DATestUser,
+    k8s_admin_user: DATestUser,
+    k8s_client: client.CoreV1Api,
+) -> None:
+    """Private HTTP bytes stay owner-only after the owner's grant is cached."""
+    session_id = ready_webapp_session.session_id
+    assert pool_api_user.id != k8s_admin_user.id
+    viewer = http_client.get(
+        f"{API_SERVER_URL}/me",
+        headers=k8s_admin_user.headers,
+        cookies=k8s_admin_user.cookies,
+        follow_redirects=False,
+    )
+    assert viewer.status_code == 200
+    assert viewer.json()["id"] == k8s_admin_user.id
+    BuildSessionManager.set_sharing(pool_api_user, session_id, SharingScope.PRIVATE)
+    marker = f"craft-private-owner-{uuid4().hex}\n".encode()
+    session_root = f"/workspace/sessions/{session_id}"
+    paths = ("outputs/owner-only.txt", "outputs/web/public/owner-only.txt")
+    write_script = (
+        "from pathlib import Path; import os; "
+        "assert os.getuid() == os.getgid() == 1000; "
+        f"root = Path({session_root!r}); data = bytes.fromhex({marker.hex()!r}); "
+        f"paths = {paths!r}; "
+        "[(root / path).parent.mkdir(parents=True, exist_ok=True) for path in paths]; "
+        "[(root / path).write_bytes(data) for path in paths]"
+    )
+    try:
+        pod_exec(
+            k8s_client,
+            ready_webapp_session.pod_name,
+            SANDBOX_NAMESPACE,
+            f"python3 -c {shlex.quote(write_script)}",
+        )
+        assert (
+            BuildSessionManager.download_artifact(pool_api_user, session_id, paths[0])
+            == marker
+        )
+        base = f"{API_SERVER_URL}/build/sessions/{session_id}"
+        info_response = http_client.get(
+            f"{base}/webapp-info",
+            headers=pool_api_user.headers,
+            cookies=pool_api_user.cookies,
+            follow_redirects=False,
+        )
+        assert info_response.status_code == 200
+        info = WebappInfo.model_validate(info_response.json())
+        assert info.has_webapp is True and info.ready is True
+        assert info.sharing_scope == SharingScope.PRIVATE
+        assert info.webapp_url is not None
+        assert URL(info.webapp_url).path == f"/api/build/sessions/{session_id}/webapp"
+        preview = proxy_get(pool_api_user, str(session_id), "owner-only.txt")
+        assert preview.status_code == 200
+        assert preview.content == marker
+        for route in (
+            "artifacts/outputs/owner-only.txt",
+            "webapp-info",
+            "webapp/owner-only.txt",
+        ):
+            denial = http_client.get(
+                f"{base}/{route}",
+                headers=k8s_admin_user.headers,
+                cookies=k8s_admin_user.cookies,
+                follow_redirects=False,
+            )
+            assert denial.status_code == 404, f"{route} returned {denial.status_code}"
+            assert marker not in denial.content, route
+        assert (
+            BuildSessionManager.download_artifact(pool_api_user, session_id, paths[0])
+            == marker
+        )
+        preview_after_denials = proxy_get(
+            pool_api_user, str(session_id), "owner-only.txt"
+        )
+        assert preview_after_denials.status_code == 200
+        assert preview_after_denials.content == marker
+    finally:
+        try:
+            BuildSessionManager.delete_file(pool_api_user, session_id, paths[0])
+        finally:
+            BuildSessionManager.delete_file(pool_api_user, session_id, paths[1])
 
 
 def test_cleanup_stops_nextjs_and_reuses_its_preview_port(

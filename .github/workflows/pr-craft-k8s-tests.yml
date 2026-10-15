@@ -335,11 +335,7 @@ jobs:
           - image: sandbox
             context: ./backend/onyx/server/features/build/sandbox/image
             file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
-            # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
-            # so skip LibreOffice et al. to keep the CI image lean. Browser stays
-            # on (ENABLE_BROWSER defaults true) — chromium is lighter and the
-            # browser integration test needs it.
-            extra_build_args: "ENABLE_SKILLS=false"
+            extra_build_args: "ENABLE_SKILLS=true"
             target: ""
           - image: backend
             context: ./backend
@@ -847,11 +843,23 @@ jobs:
         run: |
           py.test \
             --durations=8 \
-            -o junit_family=xunit2 \
+            --junitxml="${RUNNER_TEMP}/craft-k8s-results/${{ matrix.test-file.name }}.xml" \
+            -o junit_family=xunit1 \
+            -o junit_logging=system-out \
+            -o junit_log_passing_tests=true \
             -v \
             --ff \
             -m "not nightly" \
             "${{ matrix.test-file.path }}"
+
+      - name: Upload Craft K8s results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: craft-k8s-results-${{ matrix.test-file.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/craft-k8s-results/${{ matrix.test-file.name }}.xml
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Setup Bun for Craft browser acceptance
         if: matrix.test-file.name == 'session_provisioning_api'

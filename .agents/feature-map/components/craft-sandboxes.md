@@ -329,6 +329,12 @@ Run only the gates that match the change:
   `product_only=true` dispatches run only the session/browser setup probe with
   a distinct status name. They do not qualify the migration; the full suite
   must run afterward. Pull requests and default dispatches retain all shards.
+  CI builds the sandbox with `ENABLE_SKILLS=true` so the production document
+  shard exercises the Office, PDF, JavaScript, and native image dependencies.
+  Each shard uploads JUnit XML with exact test names, receipt properties, and
+  successful stdout. The report uses `xunit1` for `record_property` compatibility
+  and excludes captured stderr and pytest logs. Report artifact names include
+  the shard, run ID, and run attempt.
   Workflow configuration checks do not prove RunsOn capacity or live acceptance.
 - Craft frontend E2E that starts a session, streams a turn, writes files,
   serves a preview, snapshots, restores, and reaps.
