@@ -49,6 +49,8 @@ jobs:
         env:
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Optional. A gateway that serves the TypeSafe systemone API.
+          JEV_BASE_URL: ${{ vars.JEV_BASE_URL }}
         run: |
           set -euo pipefail
           if [ -z "${TYPESAFE_API_KEY}" ] || [ -z "${OPENAI_API_KEY}" ]; then

@@ -2,9 +2,7 @@
 
 import json
 import math
-import tempfile
 import unittest
-from pathlib import Path
 
 from semantic_lint.evaluate import (
     CachedJev,
@@ -14,10 +12,12 @@ from semantic_lint.evaluate import (
     Split,
     build_cases,
     choose_threshold,
+    run_eval,
     split_of,
     wilson_lower,
 )
 from semantic_lint.registry import (
+    SETTINGS_FILE,
     CalibrationPolicy,
     CommentId,
     RuleId,
@@ -119,40 +119,53 @@ class CachedJevTest(RulesDirTest):
 
 
 class BuildCasesTest(RulesDirTest):
-    def test_labels_windows_from_the_review_time_diff(self) -> None:
-        registry = load_registry(self.rules_dir)
-        with tempfile.TemporaryDirectory() as temp:
-            seed = Path(temp)
-            (seed / "review_diffs").mkdir()
-            (seed / "review_diffs" / "4242_c0ffee.json").write_text(
-                json.dumps(
-                    {
-                        "files": [
-                            {"filename": PATH, "status": "x", "patch": REVIEW_PATCH}
-                        ]
-                    }
-                )
+    def setUp(self) -> None:
+        super().setUp()
+        seed = self.rules_dir / "seed"
+        (seed / "review_diffs").mkdir(parents=True)
+        (seed / "review_diffs" / "4242_c0ffee.json").write_text(
+            json.dumps(
+                {"files": [{"filename": PATH, "status": "x", "patch": REVIEW_PATCH}]}
             )
-            rows = [
-                # A source of the rule, on the `pass` line of the first hunk.
-                _comment(3344414001, "@@ -10,2 +10,4 @@\n     try:\n+        pass"),
-                # The comment the rule shows Jev as a flag example.
-                _comment(2528675138, "@@ -40,1 +43,2 @@\n+    return int(text)"),
-                # Comments whose lines no longer exist at this commit.
-                _comment(2496441566, "@@ -1,1 +1,2 @@\n+        return []"),
-                _comment(3624910226, "@@ -1,1 +1,2 @@\n+        provider_id = -1"),
-            ]
-            (seed / "pull_comments.jsonl").write_text(
-                "".join(json.dumps(row) + "\n" for row in rows)
-            )
-            data = EvalData(seed / "cache", [seed], "onyx-dot-app/onyx")
+        )
+        rows = [
+            # A source of the rule, on the `pass` line of the first hunk.
+            _comment(3344414001, "@@ -10,2 +10,4 @@\n     try:\n+        pass"),
+            # The comment the rule shows Jev as a flag example.
+            _comment(2528675138, "@@ -40,1 +43,2 @@\n+    return int(text)"),
+            # Comments whose lines no longer exist at this commit.
+            _comment(2496441566, "@@ -1,1 +1,2 @@\n+        return []"),
+            _comment(3624910226, "@@ -1,1 +1,2 @@\n+        provider_id = -1"),
+        ]
+        (seed / "pull_comments.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in rows)
+        )
+        self.data: EvalData = EvalData(seed / "cache", [seed], "onyx-dot-app/onyx")
 
-            cases, unanchored = build_cases(registry, data)
+    def test_labels_windows_from_the_review_time_diff(self) -> None:
+        cases, unanchored = build_cases(load_registry(self.rules_dir), self.data)
 
         rule_id = RuleId(RULE_ID)
         self.assertEqual([case.label(rule_id) for case in cases], [POS, None, NEG])
         self.assertIn(CommentId(2496441566), unanchored)
         self.assertNotIn(CommentId(3344414001), unanchored)
+
+    def test_samples_negatives_but_keeps_positives(self) -> None:
+        settings = self.rules_dir / SETTINGS_FILE
+        settings.write_text(
+            settings.read_text().replace(
+                "max_negatives_per_rule = 2000", "max_negatives_per_rule = 0"
+            )
+        )
+        jev = FakeJev(0.7)
+
+        [result], _ = run_eval(
+            load_registry(self.rules_dir), None, self.data, jev, write=False
+        )
+
+        self.assertEqual(len(jev.asked), 1)
+        self.assertEqual((result.positives, result.negatives), (1, 0))
+        self.assertEqual(result.negatives_in_scope, 1)
 
 
 if __name__ == "__main__":

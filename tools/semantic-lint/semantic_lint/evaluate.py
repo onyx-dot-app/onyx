@@ -108,6 +108,7 @@ class Case:
     pr: int
     split: Split
     positive_for: frozenset[RuleId]
+    near_miss_for: frozenset[RuleId]
     excluded_for: frozenset[RuleId]
 
     def label(self, rule_id: RuleId) -> Label | None:
@@ -260,6 +261,9 @@ def build_cases(
                     pr=pr,
                     split=split,
                     positive_for=frozenset(r.id for r in rules if r.sources & here),
+                    near_miss_for=frozenset(
+                        r.id for r in rules if r.near_misses & here
+                    ),
                     excluded_for=frozenset(r.id for r in rules if shown[r.id] & here),
                 )
             )
@@ -389,6 +393,8 @@ class RuleResult:
     rule: Rule
     scored: tuple[Scored, ...]
     calibration: Calibration | None
+    # In-scope negatives before sampling. `negatives` counts the sample.
+    negatives_in_scope: int
     # Source comments with no window at their commit (code changed, or deleted).
     unanchored_sources: int
     tune: Point | None
@@ -427,20 +433,53 @@ def run_eval(
     """
     selected = full.only(rule_ids) if rule_ids else full
     cases, unanchored = build_cases(full, data)
-    screening = screen([case.window for case in cases], selected, jev)
+    samples = {rule.id: _sample(rule, cases, full.settings) for rule in selected.rules}
+    asks: dict[str, set[RuleId]] = {}
+    for rule_id, (sampled, _) in samples.items():
+        for case in sampled:
+            asks.setdefault(case.window.id, set()).add(rule_id)
+    windows = {case.window.id: case.window for case in cases if case.window.id in asks}
+    screening = screen(list(windows.values()), selected, jev, only=asks)
     scores: dict[tuple[str, RuleId], float] = {
         (score.window_id, score.rule_id): score.p for score in screening.scores
     }
     results = [
-        _result(rule, cases, scores, unanchored, full.settings, write)
+        _result(rule, *samples[rule.id], scores, unanchored, full.settings, write)
         for rule in selected.rules
     ]
     return results, screening.usage
 
 
+def _sample(
+    rule: Rule, cases: Sequence[Case], settings: Settings
+) -> tuple[list[Case], int]:
+    """The rule's labeled in-scope cases with negatives capped, and the uncapped count.
+
+    Positives and near misses are always kept. Other negatives are the first
+    `max_negatives_per_rule` by window id, a hash, so rules with the same scope
+    share their sample and its Jev requests.
+    """
+    in_scope = [
+        case
+        for case in cases
+        if rule.scope.covers(case.window.path)
+        and not settings.ignores(case.window.path)
+        and case.label(rule.id) is not None
+    ]
+    kept: list[Case] = []
+    others: list[Case] = []
+    for case in in_scope:
+        positive = case.label(rule.id) is Label.POSITIVE
+        (kept if positive or rule.id in case.near_miss_for else others).append(case)
+    others.sort(key=lambda case: case.window.id)
+    negatives = len(in_scope) - sum(c.label(rule.id) is Label.POSITIVE for c in kept)
+    return kept + others[: settings.eval.max_negatives_per_rule], negatives
+
+
 def _result(
     rule: Rule,
     cases: Sequence[Case],
+    negatives_in_scope: int,
     scores: Mapping[tuple[str, RuleId], float],
     unanchored: frozenset[CommentId],
     settings: Settings,
@@ -481,6 +520,7 @@ def _result(
         rule=rule,
         scored=scored,
         calibration=calibration,
+        negatives_in_scope=negatives_in_scope,
         unanchored_sources=len(rule.sources & unanchored),
         tune=chosen,
         report=report,

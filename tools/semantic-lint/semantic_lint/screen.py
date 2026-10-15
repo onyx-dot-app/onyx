@@ -11,10 +11,11 @@ model it was measured with are unchanged.
 
 import hashlib
 import json
+import os
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence, Set
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
@@ -44,7 +45,11 @@ __all__ = [
     "seal",
 ]
 
-JEV_URL: str = "https://api.typesafe.ai/v1/systemone"
+# A gateway that speaks the same systemone request and response can stand in.
+JEV_BASE_URL: str = (
+    os.environ.get("JEV_BASE_URL") or "https://api.typesafe.ai"
+).rstrip("/")
+JEV_URL: str = f"{JEV_BASE_URL}/v1/systemone"
 # Bump when the state or the question payload changes shape. Every seal
 # includes it, so a bump deactivates every rule until eval reruns.
 STATE_FORMAT: int = 1
@@ -271,8 +276,15 @@ class Jev:
         raise AssertionError("unreachable")
 
 
-def screen(windows: Sequence[Window], registry: Registry, jev: Jev) -> Screening:
+def screen(
+    windows: Sequence[Window],
+    registry: Registry,
+    jev: Jev,
+    only: Mapping[str, Set[RuleId]] | None = None,
+) -> Screening:
     """Score every (window, rule) pair where the rule's scope covers the window.
+
+    With `only`, a window is asked just the rules listed under its id.
 
     The first failed request fails the screening.
     """
@@ -282,7 +294,13 @@ def screen(windows: Sequence[Window], registry: Registry, jev: Jev) -> Screening
         (window, chunk)
         for window in windows
         for chunk in batched(
-            registry.in_scope(window.path), MAX_QUESTIONS_PER_REQUEST, strict=False
+            [
+                rule
+                for rule in registry.in_scope(window.path)
+                if only is None or rule.id in only.get(window.id, ())
+            ],
+            MAX_QUESTIONS_PER_REQUEST,
+            strict=False,
         )
     ]
     with ThreadPoolExecutor(PARALLEL_REQUESTS) as pool:

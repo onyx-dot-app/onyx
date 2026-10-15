@@ -87,7 +87,7 @@ def _eval(registry: Registry, args: argparse.Namespace) -> int:
     rule_ids = [RuleId(rule_id) for rule_id in args.rule]
     results, usage = run_eval(registry, rule_ids, data, jev, args.write)
     print(
-        f"{'rule':<52} {'pos':>4} {'neg':>6} {'thr':>5}  "
+        f"{'rule':<52} {'pos':>4} {'neg':>6} {'of':>6} {'thr':>5}  "
         f"{'tune P':>6} {'lower':>5} {'R':>5}  {'report P':>8} {'R':>5}  mode"
     )
     for result in results:
@@ -108,10 +108,11 @@ def _result_row(result: RuleResult) -> str:
     if calibration is None or tune is None or report is None:
         return (
             f"{result.rule.id:<52} {result.positives:>4} {result.negatives:>6} "
-            f"{'-':>5}  too few tune positives"
+            f"{result.negatives_in_scope:>6} {'-':>5}  too few tune positives"
         )
     return (
         f"{result.rule.id:<52} {result.positives:>4} {result.negatives:>6} "
+        f"{result.negatives_in_scope:>6} "
         f"{calibration.threshold:>5.2f}  {_rate(tune.precision):>6} "
         f"{_rate(calibration.tune_precision_lower):>5} {_rate(tune.recall):>5}  "
         f"{_rate(report.precision):>8} {_rate(report.recall):>5}  {result.mode.value}"

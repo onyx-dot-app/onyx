@@ -138,6 +138,11 @@ report_percent = 30
 fix = 0.5
 nit = 0.6
 
+[eval]
+# Negatives eval screens per rule, a deterministic sample by window id. Positives
+# and near misses are always kept. Precision is an estimate on this sample.
+max_negatives_per_rule = 2000
+
 [prices]
 jev_input = 0.042
 llm_input = 0.25

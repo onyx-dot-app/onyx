@@ -23,6 +23,7 @@ __all__ = [
     "CalibrationPolicy",
     "CleanExample",
     "CommentId",
+    "EvalSettings",
     "Family",
     "FlagExample",
     "LlmSettings",
@@ -204,6 +205,12 @@ class CalibrationPolicy:
 
 
 @dataclass(frozen=True)
+class EvalSettings:
+    # Sampled negatives per rule, so eval cost stays flat as the corpus grows.
+    max_negatives_per_rule: int
+
+
+@dataclass(frozen=True)
 class Prices:
     """USD per 1M tokens, for the cost line of the run summary."""
 
@@ -221,6 +228,7 @@ class Settings:
     budget: Budget
     llm: LlmSettings
     calibration: CalibrationPolicy
+    eval: EvalSettings
     prices: Prices
 
     def ignores(self, path: str) -> bool:
@@ -435,6 +443,7 @@ def _parse_settings(table: _Table) -> Settings:
     llm = table.table("llm")
     calibration = table.table("calibration")
     min_precision = calibration.table("min_precision")
+    evaluation = table.table("eval")
     prices = table.table("prices")
     settings = Settings(
         jev_model=table.text("jev_model"),
@@ -469,6 +478,11 @@ def _parse_settings(table: _Table) -> Settings:
                         for severity in Severity
                     }
                 ),
+            )
+        ),
+        eval=evaluation.done(
+            EvalSettings(
+                max_negatives_per_rule=evaluation.integer("max_negatives_per_rule")
             )
         ),
         prices=prices.done(
