@@ -13,7 +13,6 @@ def test_search_tool_resolves_selection_client_once_on_first_access(
     resolver = MagicMock(return_value=fast if configured else fallback)
     tool = SearchTool(
         tool_id=1,
-        emitter=MagicMock(),
         user=MagicMock(),
         persona_search_info=MagicMock(),
         llm=fallback,
@@ -38,7 +37,6 @@ def test_search_tool_falls_back_to_primary_when_selection_unavailable() -> None:
     resolver = MagicMock(side_effect=ValueError("utility budget exceeded"))
     tool = SearchTool(
         tool_id=1,
-        emitter=MagicMock(),
         user=MagicMock(),
         persona_search_info=MagicMock(),
         llm=primary,
@@ -60,7 +58,6 @@ def test_search_rewrites_and_filters_never_resolve_selection_client() -> None:
     resolver = MagicMock(side_effect=ValueError("selection model unavailable"))
     tool = SearchTool(
         tool_id=1,
-        emitter=MagicMock(),
         user=MagicMock(),
         persona_search_info=MagicMock(),
         llm=primary,

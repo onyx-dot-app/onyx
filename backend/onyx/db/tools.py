@@ -4,11 +4,11 @@ from uuid import UUID
 
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
-from onyx.configs.constants import DEFAULT_PERSONA_ID
 from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.permissions import has_permission
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.chat import session_descendants
 from onyx.db.constants import UNSET, UnsetType
