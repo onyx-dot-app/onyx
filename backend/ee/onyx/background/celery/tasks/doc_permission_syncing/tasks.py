@@ -686,7 +686,7 @@ def connector_permission_sync_generator_task(
                 renew=partial(_renew_doc_permission_sync_lease, attempt_id, progress),
                 interval=PERMISSION_SYNC_HEARTBEAT_INTERVAL,
                 max_silence=PERMISSION_SYNC_LEASE_SELF_EXPIRY,
-                max_duration=JOB_TIMEOUT + PERMISSION_SYNC_LEASE_OVERRUN,
+                max_duration=PERMISSION_SYNC_TIMEOUT + PERMISSION_SYNC_LEASE_OVERRUN,
             )
             heartbeat.start()
 

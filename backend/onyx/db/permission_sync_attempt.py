@@ -540,7 +540,7 @@ def _renew_lease(
     model: _AttemptModel,
     attempt_id: int,
     db_session: Session,
-    progress_values: dict[str, Any],
+    progress_values: dict[str, int | datetime | None],
 ) -> bool:
     renewed = db_session.execute(
         update(model)
@@ -594,7 +594,7 @@ def renew_doc_permission_sync_attempt_lease(
     """Renews the lease of a running attempt and writes its progress. Returns
     False when the attempt is no longer IN_PROGRESS, which means the caller has
     lost it."""
-    progress_values: dict[str, Any] = {}
+    progress_values: dict[str, int | datetime | None] = {}
     if progress is not None:
         progress_values = {
             "total_docs_synced": progress.total_docs_synced,
@@ -614,7 +614,7 @@ def renew_external_group_sync_attempt_lease(
     """Renews the lease of a running attempt and writes its progress. Returns
     False when the attempt is no longer IN_PROGRESS, which means the caller has
     lost it."""
-    progress_values: dict[str, Any] = {}
+    progress_values: dict[str, int | datetime | None] = {}
     if progress is not None:
         progress_values = {
             "total_users_processed": progress.total_users_processed,
