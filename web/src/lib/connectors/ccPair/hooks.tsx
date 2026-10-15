@@ -5,7 +5,11 @@ import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import useSWRInfinite from "swr/infinite";
-import { resolveCCPairRuns, setCCPairStatus } from "@/lib/ccPair";
+import {
+  resolveCCPairRuns,
+  resolveMatchingRuns,
+  setCCPairStatus,
+} from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type {
@@ -301,13 +305,18 @@ export function useActivityItems(
   };
 }
 
-function refreshFeeds(item: ActivityItem) {
+const ANY_PAIR_FEED = /^\/api\/manage\/admin\/cc-pair\/\d+\/(errors|runs\?)/;
+
+/** Refetches the pair's feeds and the fleet feed, or, for null, every pair's. */
+function refreshFeeds(ccPairId: number | null) {
   return mutate(
     (key) =>
       typeof key === "string" &&
-      (key.startsWith(SWR_KEYS.ccPairIndexingErrors(item.ccPairId)) ||
-        key.startsWith(SWR_KEYS.ccPairRunsPrefix(item.ccPairId)) ||
-        key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix))
+      (key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix) ||
+        (ccPairId === null
+          ? ANY_PAIR_FEED.test(key)
+          : key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId)) ||
+            key.startsWith(SWR_KEYS.ccPairRunsPrefix(ccPairId))))
   );
 }
 
@@ -336,7 +345,7 @@ export function useResolveRunErrors() {
           tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
         );
       }
-      await refreshFeeds(item);
+      await refreshFeeds(item.ccPairId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("targetedReindexFailed", { message }));
@@ -354,7 +363,7 @@ export function useResolveRunErrors() {
         { kind: item.run.kind, attempt_id: item.run.attempt.id },
       ]);
       toast.success(tToasts("runResolved"));
-      await refreshFeeds(item);
+      await refreshFeeds(item.ccPairId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("runResolveFailed", { message }));
@@ -363,5 +372,31 @@ export function useResolveRunErrors() {
     }
   }
 
-  return { resolving, resolve, resolveRun };
+  // Marks every open run of the level the panel lists for the search resolved.
+  async function resolveMatching(
+    scope: ActivityScope,
+    level: "failures" | "errors",
+    q: string
+  ) {
+    if (resolving) return;
+    setResolving(true);
+    const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+    try {
+      const count = await resolveMatchingRuns(ccPairId, {
+        level,
+        q: q || null,
+        since: null,
+        kinds: null,
+      });
+      toast.success(tToasts("runsResolved", { count }));
+      await refreshFeeds(ccPairId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("runResolveFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  return { resolving, resolve, resolveRun, resolveMatching };
 }

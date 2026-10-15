@@ -27,7 +27,10 @@ from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.cc_pair_run_resolution import resolve_runs__no_commit
-from onyx.db.cc_pair_runs import get_resolvable_runs
+from onyx.db.cc_pair_runs import (
+    get_resolvable_runs,
+    resolve_matching_runs__no_commit,
+)
 from onyx.db.cc_pair_runs_models import CCPairRunFilter
 from onyx.db.connector import fetch_connector_by_id, set_connector_check_frequency
 from onyx.db.connector_credential_pair import (
@@ -94,6 +97,7 @@ from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.cc_pair_runs_feed import (
     connector_supports_targeted_reindex,
     fetch_run_feed,
+    open_level_filter,
 )
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.credential import credential_ids_to_mask
@@ -101,6 +105,7 @@ from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_br
 from onyx.server.documents.models import (
     CCPairFullInfo,
     CCPairHierarchyBreakdown,
+    CCPairRunsResolveMatchingRequest,
     CCPairRunsResolveRequest,
     CCPairRunsResolveResponse,
     CCPairRunsResponse,
@@ -387,6 +392,54 @@ def resolve_cc_pair_runs(
         },
     )
     return CCPairRunsResolveResponse(resolved_count=len(wanted))
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/runs/resolve-matching")
+def resolve_matching_cc_pair_runs(
+    cc_pair_id: int,
+    request: CCPairRunsResolveMatchingRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveResponse:
+    """Marks every open run of a level that the pair's feed lists for the
+    filter resolved, and returns how many it marked."""
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this connector",
+        )
+    cc_pair = get_readable_connector_credential_pair_for_user(
+        cc_pair_id, db_session, user
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
+    kinds = [
+        kind
+        for kind in _cc_pair_run_kinds(db_session, cc_pair)
+        if request.kinds is None or kind in request.kinds
+    ]
+    run_filter = open_level_filter(
+        request, [cc_pair_id], cc_pair.connector.source, set()
+    )
+    resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filter, user.id)
+    db_session.commit()
+    count = sum(resolved.values())
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"resolved_matching_runs": count},
+    )
+    return CCPairRunsResolveResponse(resolved_count=count)
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/throughput")

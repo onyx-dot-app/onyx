@@ -13,7 +13,7 @@ from onyx.db.cc_pair_runs import (
     get_cc_pair_run_page,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
-from onyx.db.enums import CCPairRunKind
+from onyx.db.enums import CCPairRunErrors, CCPairRunKind, CCPairRunStatusGroup
 from onyx.db.index_attempt import (
     get_error_counts_for_index_attempts,
     get_open_doc_error_counts_for_index_attempts,
@@ -25,6 +25,8 @@ from onyx.server.documents.models import (
     CCPairIndexRun,
     CCPairPruneRun,
     CCPairRun,
+    CCPairRunLevel,
+    CCPairRunsResolveMatchingRequest,
     CheckRunSnapshot,
     DocPermissionSyncAttemptSnapshot,
     ExternalGroupSyncAttemptSnapshot,
@@ -129,4 +131,38 @@ def fetch_run_feed(
             if groups is None or group in groups
         ),
         status_counts=status_counts,
+    )
+
+
+def open_level_filter(
+    request: CCPairRunsResolveMatchingRequest,
+    cc_pair_ids: list[int],
+    source: DocumentSource | None,
+    shared_sources: set[DocumentSource],
+) -> CCPairRunFilter:
+    """The filter the activity panel lists a level's open runs with."""
+    query = (request.q or "").strip() or None
+    if request.level is CCPairRunLevel.FAILURES:
+        status_groups = {CCPairRunStatusGroup.FAILED}
+        errors = None
+        # A search lists superseded failures too, so they resolve with the rest.
+        superseded = None if query else False
+    else:
+        status_groups = {
+            CCPairRunStatusGroup.RUNNING,
+            CCPairRunStatusGroup.SUCCEEDED,
+            CCPairRunStatusGroup.CANCELED,
+        }
+        errors = CCPairRunErrors.UNRESOLVED
+        superseded = None
+    return CCPairRunFilter(
+        cc_pair_ids=cc_pair_ids,
+        source=source,
+        shared_sources=shared_sources,
+        since=request.since,
+        error_query=query,
+        status_groups=status_groups,
+        errors=errors,
+        superseded=superseded,
+        resolved=False,
     )

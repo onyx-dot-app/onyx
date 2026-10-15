@@ -79,3 +79,34 @@ export async function resolveCCPairRuns(
     throw new Error(detail);
   }
 }
+
+/** The open runs of one activity level, narrowed as the runs feed narrows them. */
+export interface CCPairRunsMatchingFilter {
+  level: "failures" | "errors";
+  q: string | null;
+  since: string | null;
+  kinds: CCPairRunKind[] | null;
+}
+
+/** Marks every open run the filter matches resolved, on the pair or, for null, on every pair the caller operates. Returns how many. */
+export async function resolveMatchingRuns(
+  ccPairId: number | null,
+  filter: CCPairRunsMatchingFilter
+): Promise<number> {
+  const response = await fetch(
+    ccPairId === null
+      ? "/api/manage/admin/index-monitoring/runs/resolve"
+      : `/api/manage/admin/cc-pair/${ccPairId}/runs/resolve-matching`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(filter),
+    }
+  );
+  if (!response.ok) {
+    const { detail }: ErrorResponseBody = await response.json();
+    throw new Error(detail);
+  }
+  const { resolved_count }: { resolved_count: number } = await response.json();
+  return resolved_count;
+}

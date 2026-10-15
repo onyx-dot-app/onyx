@@ -3,9 +3,11 @@ document permission syncs, group syncs, prunes, connector checks) is windowed
 and searched the same way, and one union pages every kind newest first, so no
 page loads the runs before it."""
 
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
 from typing import TypeVar
+from uuid import UUID
 
 from sqlalchemy import (
     ColumnElement,
@@ -21,6 +23,8 @@ from sqlalchemy import (
     select,
     union_all,
 )
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 
 from onyx.db.cc_pair_run_resolution import run_is_resolved
@@ -38,6 +42,7 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     CapabilityCheckRun,
+    CCPairRunResolution,
     Connector,
     ConnectorCredentialPair,
     DocPermissionSyncAttempt,
@@ -596,6 +601,38 @@ def get_resolvable_runs(
             for found_id, found_pair in db_session.execute(stmt).all():
                 found[(kind, found_id)] = found_pair
     return found
+
+
+def resolve_matching_runs__no_commit(
+    db_session: Session,
+    kinds: list[CCPairRunKind],
+    run_filter: CCPairRunFilter,
+    user_id: UUID | None,
+) -> dict[int, int]:
+    """Marks every run of ``kinds`` the filter keeps resolved, one INSERT from
+    SELECT per kind, and returns how many it marked per pair. A run resolved
+    before keeps its first resolution and is not counted."""
+    resolved: Counter[int] = Counter()
+    for kind in kinds:
+        run_id, pair_id = _id_and_pair_columns(kind)
+        matching = _runs_of_kind(kind, run_filter, True).with_only_columns(
+            literal(kind.value),
+            run_id,
+            pair_id,
+            # Typed, since Postgres reads an untyped NULL in a SELECT as text.
+            cast(literal(user_id, PGUUID(as_uuid=True)), PGUUID(as_uuid=True)),
+        )
+        stmt = (
+            insert(CCPairRunResolution)
+            .from_select(
+                ["run_kind", "attempt_id", "cc_pair_id", "resolved_by_user_id"],
+                matching,
+            )
+            .on_conflict_do_nothing(index_elements=["run_kind", "attempt_id"])
+            .returning(CCPairRunResolution.cc_pair_id)
+        )
+        resolved.update(db_session.scalars(stmt).all())
+    return dict(resolved)
 
 
 def _status_column(kind: CCPairRunKind) -> InstrumentedAttribute:

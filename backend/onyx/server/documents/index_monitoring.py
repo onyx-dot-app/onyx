@@ -13,7 +13,10 @@ from onyx.auth.permissions import (
     require_permission,
 )
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
-from onyx.db.cc_pair_runs import count_pairs_indexing
+from onyx.db.cc_pair_runs import (
+    count_pairs_indexing,
+    resolve_matching_runs__no_commit,
+)
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
@@ -43,10 +46,13 @@ from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
 from onyx.server.documents.cc_pair_runs_feed import (
     connector_supports_targeted_reindex,
     fetch_run_feed,
+    open_level_filter,
 )
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.models import (
     CCPairRef,
+    CCPairRunsResolveMatchingRequest,
+    CCPairRunsResolveResponse,
     CCPairThroughputWindow,
     ConnectorCredentialPairIdentifier,
     IndexAttemptSnapshot,
@@ -58,6 +64,12 @@ from onyx.server.documents.models import (
     IndexingRunsResponse,
 )
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 router = APIRouter(prefix="/manage/admin/index-monitoring")
@@ -395,6 +407,52 @@ def _pair_of_run(
     if sibling is None:
         raise ValueError(f"{kind.value} run {run_id} names no readable pair")
     return sibling
+
+
+@router.post("/runs/resolve")
+def resolve_indexing_runs(
+    request: CCPairRunsResolveMatchingRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveResponse:
+    """Marks every open run of a level that the fleet feed lists for the
+    filter resolved, on the pairs the caller operates, and returns how many."""
+    pairs = _readable_cc_pairs(db_session, user)
+    operate_ids = _managed_ids(
+        db_session,
+        user,
+        set(pairs),
+        CCPairAccessLevel.OPERATE,
+        has_global_permission(user, Permission.MANAGE_CONNECTORS),
+    )
+    if not operate_ids:
+        return CCPairRunsResolveResponse(resolved_count=0)
+    operated_sources = {
+        pairs[cc_pair_id].connector.source for cc_pair_id in operate_ids
+    }
+    run_filter = open_level_filter(
+        request,
+        sorted(operate_ids),
+        None,
+        _shared_group_sync_sources() & operated_sources,
+    )
+    kinds = [
+        kind for kind in CCPairRunKind if request.kinds is None or kind in request.kinds
+    ]
+    resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filter, user.id)
+    db_session.commit()
+    for cc_pair_id, count in resolved.items():
+        emit_audit_event(
+            AuditAction.CC_PAIR_UPDATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="cc_pair",
+            resource_id=cc_pair_id,
+            extra={"resolved_matching_runs": count},
+        )
+    return CCPairRunsResolveResponse(resolved_count=sum(resolved.values()))
 
 
 @router.get("/runs")

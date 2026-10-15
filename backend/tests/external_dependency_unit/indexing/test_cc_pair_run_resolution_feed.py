@@ -1,10 +1,12 @@
 """Coverage for run resolution: a resolved failed index attempt and a resolved
 failed permission sync leave the failures feed and show under resolved with
 their status kept, a resolved run with open document errors moves the same way
-within the errors level, and only a caller who operates the pair resolves."""
+within the errors level, and only a caller who operates the pair resolves. A
+fleet batch resolve marks only the matching runs of the pairs the caller operates."""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -33,9 +35,15 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.cc_pair import get_cc_pair_runs, resolve_cc_pair_runs
+from onyx.server.documents.index_monitoring import (
+    get_indexing_runs,
+    resolve_indexing_runs,
+)
 from onyx.server.documents.models import (
     CCPairIndexRun,
     CCPairRunKey,
+    CCPairRunLevel,
+    CCPairRunsResolveMatchingRequest,
     CCPairRunsResolveRequest,
     CCPairRunsResponse,
 )
@@ -100,6 +108,7 @@ def _index_attempt(
     cc_pair: ConnectorCredentialPair,
     minutes: int,
     status: IndexingStatus,
+    error_msg: str | None = None,
 ) -> IndexAttempt:
     attempt = IndexAttempt(
         connector_credential_pair_id=cc_pair.id,
@@ -107,6 +116,7 @@ def _index_attempt(
         from_beginning=False,
         status=status,
         time_started=_T0 + timedelta(minutes=minutes),
+        error_msg=error_msg,
     )
     db_session.add(attempt)
     db_session.flush()
@@ -252,3 +262,99 @@ def test_resolve_refuses_a_caller_who_cannot_operate_the_pair(
     assert _keys(live) == [key]
     delete_test_user(db_session, reader)
     db_session.commit()
+
+
+def _fleet_pair(
+    db_session: Session, name: str, access_type: AccessType, creator: User
+) -> ConnectorCredentialPair:
+    connector = Connector(
+        name="Resolution Fleet Connector",
+        source=DocumentSource.GOOGLE_DRIVE,
+        input_type=InputType.POLL,
+        connector_specific_config={},
+        refresh_freq=None,
+    )
+    db_session.add(connector)
+    db_session.flush()
+    credential = Credential(credential_json={}, user_id=creator.id, admin_public=True)
+    db_session.add(credential)
+    db_session.flush()
+    pair = ConnectorCredentialPair(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        name=name,
+        status=ConnectorCredentialPairStatus.ACTIVE,
+        access_type=access_type,
+        creator_id=creator.id,
+    )
+    db_session.add(pair)
+    db_session.commit()
+    return pair
+
+
+@pytest.fixture
+def fleet_pairs(
+    db_session: Session,
+) -> Generator[
+    tuple[User, ConnectorCredentialPair, ConnectorCredentialPair], None, None
+]:
+    """A scoped user who operates their own private pair and only reads a public one."""
+    scoped = create_test_user(db_session, "resolution_scoped")
+    owner = create_test_user(db_session, "resolution_fleet_owner")
+    operated = _fleet_pair(
+        db_session, "Resolution Operated Pair", AccessType.PRIVATE, scoped
+    )
+    read_only = _fleet_pair(
+        db_session, "Resolution Read Only Pair", AccessType.PUBLIC, owner
+    )
+    yield scoped, operated, read_only
+    db_session.rollback()
+    for pair in (operated, read_only):
+        db_session.query(IndexAttempt).filter(
+            IndexAttempt.connector_credential_pair_id == pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+        cleanup_cc_pair(db_session, pair)
+    delete_test_user(db_session, scoped)
+    delete_test_user(db_session, owner)
+    db_session.commit()
+
+
+def test_fleet_batch_resolve_marks_only_the_operated_pairs_matching_runs(
+    db_session: Session,
+    admin: User,
+    fleet_pairs: tuple[User, ConnectorCredentialPair, ConnectorCredentialPair],
+) -> None:
+    scoped, operated, read_only = fleet_pairs
+    # Earlier runs leave rows behind, so the runs carry a mark the batch searches by.
+    mark = f"resolution-batch-{uuid4().hex}"
+    first = _index_attempt(db_session, operated, 0, IndexingStatus.FAILED, mark)
+    second = _index_attempt(db_session, operated, 1, IndexingStatus.FAILED, mark)
+    other = _index_attempt(db_session, read_only, 2, IndexingStatus.FAILED, mark)
+
+    response = resolve_indexing_runs(
+        request=CCPairRunsResolveMatchingRequest(level=CCPairRunLevel.FAILURES, q=mark),
+        user=scoped,
+        db_session=db_session,
+    )
+
+    assert response.resolved_count == 2
+
+    def fleet(resolved: bool) -> list[int]:
+        feed = get_indexing_runs(
+            page_num=0,
+            page_size=10,
+            since=None,
+            kinds=None,
+            status_groups=_FAILED,
+            q=mark,
+            errors=None,
+            superseded=None,
+            resolved=resolved,
+            user=admin,
+            db_session=db_session,
+        )
+        return [item.run.attempt.id for item in feed.items]
+
+    assert fleet(False) == [other.id]
+    assert fleet(True) == [second.id, first.id]

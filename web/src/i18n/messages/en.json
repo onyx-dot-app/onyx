@@ -2350,7 +2350,8 @@
         "checkFrequencyUpdated": "Connector check frequency updated successfully",
         "checkFrequencyUpdateFailed": "Failed to update connector check frequency",
         "runResolved": "Marked resolved.",
-        "runResolveFailed": "Could not resolve: {message}"
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "Marked {count, plural, one {# run} other {# runs}} resolved."
       },
       "backButton": {
         "label": "All Connectors"
@@ -2664,6 +2665,13 @@
           "resolve": "Resolve",
           "reindex": "Reindex failed docs",
           "resolveWithoutReindex": "Resolve without reindex"
+        },
+        "resolveAll": {
+          "button": "Resolve all shown",
+          "title": "Resolve all shown runs?",
+          "description": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved. They keep their status and move under resolved.",
+          "fleetDescription": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved, on the connectors you operate. They keep their status and move under resolved.",
+          "confirm": "Resolve all"
         }
       },
       "stageDetails": {

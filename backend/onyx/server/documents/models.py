@@ -739,6 +739,22 @@ class CCPairRunsResolveRequest(BaseModel):
     runs: list[CCPairRunKey] = Field(max_length=500)
 
 
+class CCPairRunLevel(str, Enum):
+    """An activity panel level that holds open runs."""
+
+    FAILURES = "failures"
+    ERRORS = "errors"
+
+
+class CCPairRunsResolveMatchingRequest(BaseModel):
+    """The open runs of one activity level, narrowed as the runs feed narrows them."""
+
+    level: CCPairRunLevel
+    q: str | None = Field(default=None, max_length=200)
+    since: datetime | None = None
+    kinds: list[CCPairRunKind] | None = None
+
+
 class CCPairRunsResolveResponse(BaseModel):
     resolved_count: int
 

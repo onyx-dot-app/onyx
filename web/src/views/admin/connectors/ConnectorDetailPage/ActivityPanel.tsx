@@ -13,11 +13,17 @@ import {
   Tag,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
-import { Content, IllustrationContent, Section } from "@opal/layouts";
+import {
+  ConfirmationModalLayout,
+  Content,
+  IllustrationContent,
+  Section,
+} from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
 import {
   SvgActivity,
   SvgAlertTriangle,
+  SvgCheckAll,
   SvgEye,
   SvgFold,
   SvgXCircle,
@@ -146,7 +152,9 @@ export default function ActivityPanel({
   const [shown, setShown] = useState<Shown>("all");
   // Adds the resolved and superseded runs of the levels shown.
   const [showResolved, setShowResolved] = useState(false);
-  const { resolving, resolve, resolveRun } = useResolveRunErrors();
+  const [confirmingResolveAll, setConfirmingResolveAll] = useState(false);
+  const { resolving, resolve, resolveRun, resolveMatching } =
+    useResolveRunErrors();
   // The fleet panel lists every run. A pair's page has its run list for that.
   const shownOptions: Shown[] =
     scope === "fleet"
@@ -204,6 +212,15 @@ export default function ActivityPanel({
   const empty = groups.every(
     (group) => group.loaded && group.runs.length === 0
   );
+  // Resolves the open runs of the one level shown, as the search narrows them.
+  const resolvableLevel =
+    shown === "failures" ? failures : shown === "errors" ? errors : null;
+  const resolveAllLevel =
+    shown === "failures" || shown === "errors" ? shown : null;
+  const mayResolveRuns =
+    scope === "fleet"
+      ? [...failures.runs, ...errors.runs].some((item) => item.canResolveRuns)
+      : scope.canResolveRuns;
   const emptyTitle =
     search !== ""
       ? t("empty.filtered")
@@ -281,7 +298,7 @@ export default function ActivityPanel({
             </Section>
             <Section
               flexDirection="row"
-              justifyContent="start"
+              justifyContent="between"
               gap={1}
               height="fit"
               wrap
@@ -330,6 +347,20 @@ export default function ActivityPanel({
                   ]}
                 />
               </Dropdown>
+              {mayResolveRuns && (
+                <Button
+                  icon={SvgCheckAll}
+                  prominence="tertiary"
+                  disabled={
+                    resolving ||
+                    resolvableLevel === null ||
+                    resolvableLevel.runs.length === 0
+                  }
+                  onClick={() => setConfirmingResolveAll(true)}
+                >
+                  {t("resolveAll.button")}
+                </Button>
+              )}
             </Section>
           </Section>
 
@@ -362,6 +393,31 @@ export default function ActivityPanel({
           )}
         </Section>
       </Card>
+      {confirmingResolveAll &&
+        resolvableLevel !== null &&
+        resolveAllLevel !== null && (
+          <ConfirmationModalLayout
+            icon={SvgCheckAll}
+            title={t("resolveAll.title")}
+            onClose={() => setConfirmingResolveAll(false)}
+            submit={
+              <Button
+                onClick={() => {
+                  setConfirmingResolveAll(false);
+                  void resolveMatching(scope, resolveAllLevel, search);
+                }}
+              >
+                {t("resolveAll.confirm")}
+              </Button>
+            }
+          >
+            {scope === "fleet"
+              ? t("resolveAll.fleetDescription", {
+                  count: resolvableLevel.total,
+                })
+              : t("resolveAll.description", { count: resolvableLevel.total })}
+          </ConfirmationModalLayout>
+        )}
     </Section>
   );
 }
