@@ -44,6 +44,7 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     normalized_request_path,
     parse_target,
 )
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.server.features.mcp.credentials import (
     MCPCredentialsError,
     mcp_token_expired,
@@ -75,6 +76,19 @@ class MCPServerResolver(CredentialResolver):
             TTLCache(maxsize=10_000, ttl=cache_ttl_s)
         )
 
+    def allows_destination(
+        self, sandbox: ResolvedSandbox, scheme: str, host: str, port: int
+    ) -> bool:
+        """Allow only origins enabled for Craft and accessible to this user."""
+        return scheme in {"http", "https"} and bool(
+            host_targets(
+                self._user_targets(sandbox.tenant_id, sandbox.user_id),
+                scheme,
+                host,
+                port,
+            )
+        )
+
     def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
         # A request the external-app matcher attributed belongs to that resolver
         # on a shared host (MCP servers aren't in that catalog) — defer. An MCP
@@ -102,7 +116,7 @@ class MCPServerResolver(CredentialResolver):
         # call (or anything unclassifiable) reaching injection ungated means the
         # evaluator failed and the gate fell open — fail closed here so no
         # invocation ever forwards with credentials but without a verdict.
-        classification = classify_mcp_request(request.method or "", request.raw_content)
+        classification = classify_mcp_request(request)
         if classification.kind is not McpRpcKind.PLUMBING:
             raise CredentialUnavailableError(
                 f"non-plumbing MCP request on {request.host} reached credential "

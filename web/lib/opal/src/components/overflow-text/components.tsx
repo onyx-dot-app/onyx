@@ -29,9 +29,12 @@ function OverflowText({
   const [element, setElement] = useState<HTMLElement | null>(null);
   const overflowing = useOverflow(element);
 
+  // Suppressed rather than dropped: dropping the tooltip changes the tree's
+  // shape, which remounts the text and loses the element the measure reads.
   return (
     <Tooltip
-      tooltip={overflowing ? children : undefined}
+      tooltip={children}
+      suppressed={!overflowing}
       side="top"
       align="start"
     >

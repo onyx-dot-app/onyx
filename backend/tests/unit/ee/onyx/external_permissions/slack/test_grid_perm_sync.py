@@ -287,6 +287,33 @@ class TestFetchChannelPermissionsGrid:
                 == "C_INCLUDED"
             )
 
+    def test_channel_filter_matches_channel_ids(self) -> None:
+        slack_client = MagicMock()
+        included = _channel("CINCLUDED01", name="renamed", is_private=True)
+        excluded = _channel("CEXCLUDED01", name="excluded", is_private=True)
+        with patch(
+            "ee.onyx.external_permissions.slack.doc_sync.get_channels"
+        ) as mock_get:
+            mock_get.side_effect = [[], [included, excluded]]  # public, private
+            slack_client.list_channel_members.return_value = iter(
+                [SlackChannelMembersPage(members=["U1"])]
+            )
+            workspace_perm = _fetch_workspace_permissions({"U1": "u1@x.com"})
+            # The typed name keeps its case: an id is matched as given.
+            result = _fetch_channel_permissions(
+                slack_client=slack_client,
+                workspace_permissions=workspace_perm,
+                user_id_to_email_map={"U1": "u1@x.com"},
+                channels_to_include=["CINCLUDED01"],
+            )
+
+            assert set(result) == {"CINCLUDED01"}
+            slack_client.list_channel_members.assert_called_once()
+            assert (
+                slack_client.list_channel_members.call_args.kwargs["channel_id"]
+                == "CINCLUDED01"
+            )
+
     def test_channel_filter_skips_missing_included_channels(self) -> None:
         slack_client = MagicMock()
         included = _channel("C_INCLUDED", name="included", is_private=True)

@@ -42,7 +42,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType, ConnectorManageRole, Permission
-from onyx.db.models import User
+from onyx.db.models import ConnectorCredentialPair, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
@@ -60,6 +60,14 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter(prefix="/manage")
+
+
+def _assert_perm_synced(cc_pair: ConnectorCredentialPair) -> None:
+    if not cc_pair.access_type.is_perm_synced():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Permission sync is only available for connectors with synced access.",
+        )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-permissions")
@@ -107,6 +115,7 @@ def sync_cc_pair(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
+    _assert_perm_synced(cc_pair)
 
     r = get_redis_client()
 
@@ -186,6 +195,7 @@ def sync_cc_pair_groups(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
+    _assert_perm_synced(cc_pair)
 
     r = get_redis_client()
 

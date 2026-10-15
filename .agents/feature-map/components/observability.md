@@ -244,6 +244,18 @@ progress. If `USER_USAGE_TRACKING_ENABLED` is true, `setup_tracing` also
 registers `tracing/processors/user_usage_processor.py:UserUsageTracingProcessor`
 directly via `add_trace_processor`, independent of Braintrust/Langfuse.
 
+A span opened with no trace in scope becomes a `NoOpSpan` and reaches no
+processor (`framework/provider.py:create_span`), so every entry point that runs
+LLM work must open a root trace first. Today those are `chat/llm_loop.py`
+(`run_llm_loop`), `deep_research/dr_loop.py`, `chat/compression.py`,
+`server/query_and_chat/chat_backend.py` (`chat_session_naming`),
+`server/features/build/session/naming.py`, `indexing/indexing_pipeline.py`,
+`indexing/port_reembed.py`, `server/gateway/tracing.py:llm_gateway_trace`, and
+`server/features/search/api.py` (`search_api`, with an `internal_search`
+function span around `SearchTool.run` so the trace shape matches chat's). Trace
+metadata uses `framework/create.py:ChatTraceMetadata` where a chat session
+exists and `SearchTraceMetadata` (tenant, user, persona) where none does.
+
 ### 4.4 The two instrumentation entry points
 
 - `tracing/llm_utils.py:llm_generation_span(llm, flow, ...)`: for any call that
@@ -337,7 +349,9 @@ questions:
   specific model call cost, computed per-token from the vendored price table (`llm/price_table/`), with
   admin-configurable overrides (`server/features/usage/api.py:upsert_cost_override`,
   backed by `llm/cost_overrides.py`). This is what `UserUsageTracingProcessor`
-  writes on every priced generation span.
+  writes on every priced generation span. When `GenerationSpanData.routed_model`
+  is set (a router such as `openrouter/auto` served another model), the span is
+  priced by that served model while `UserUsage.model` keeps the router name.
 - **Tenant usage limiting** (`db/usage.py`, `TenantUsage`): a cloud-only
   rolling-window counter (LLM cost, chunks indexed, API calls) checked against
   a hard limit via `db/usage.py:check_usage_limit`, independent of the
@@ -428,6 +442,12 @@ row identity and update time, so the fleet service drops repeated events. Index 
 reads. The intervals are constants in `utils/fleet_telemetry.py`
 (`COLLECTION_INTERVAL_SECONDS` and the others); the fleet service cannot change
 them.
+
+Connector document counts use `db/document.py:get_document_counts_for_cc_pairs`,
+the same query as the connector admin page. It counts indexed document links for
+each connector and credential pair. Pending links do not count. The collector
+batches the capped inventory under its statement timeout; it does not read the
+legacy `ConnectorCredentialPair.total_docs_indexed` counter.
 
 **Identity.** `utils/fleet_telemetry.py:deployment_key` returns the stored key
 (`db/fleet_enrollment.py:get_or_create_deployment_key`). Under `MULTI_TENANT`, it

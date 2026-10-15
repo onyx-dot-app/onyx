@@ -10,9 +10,8 @@ stage timing aggregates) without creating a circular import.
 
 The ordering of `IndexAttemptStage` members is intentional and represents
 the natural temporal order of the pipeline (docfetching first, then
-docprocessing). Both the API ordering and the frontend "Pipeline order"
-sort rely on this ordering, so do not reorder members without updating
-those consumers.
+docprocessing). Both the API ordering and the frontend's stage list rely on
+this ordering, so do not reorder members without updating those consumers.
 """
 
 from enum import Enum as PyEnum
@@ -23,7 +22,7 @@ class IndexAttemptStage(str, PyEnum):
 
     Member declaration order matches the natural temporal order of the
     pipeline (docfetching first, then docprocessing). Both backend
-    serialization and frontend "Pipeline order" display rely on this.
+    serialization and the frontend's stage list rely on this.
     """
 
     # --- Docfetching (one process per attempt) ---
@@ -44,6 +43,9 @@ class IndexAttemptStage(str, PyEnum):
     CHUNKING = "CHUNKING"
     CONTEXTUAL_RAG = "CONTEXTUAL_RAG"
     EMBEDDING = "EMBEDDING"
+    # Parts of EMBEDDING, summed over embedding threads, so they can exceed it.
+    EMBEDDING_RATE_LIMIT_WAIT = "EMBEDDING_RATE_LIMIT_WAIT"
+    EMBEDDING_PROVIDER_THROTTLE_WAIT = "EMBEDDING_PROVIDER_THROTTLE_WAIT"
     DOC_LOCK_ACQUIRE_WAIT = "DOC_LOCK_ACQUIRE_WAIT"
     ENRICHMENT_PREP = "ENRICHMENT_PREP"
     VECTOR_DB_WRITE = "VECTOR_DB_WRITE"
@@ -93,6 +95,8 @@ STAGE_SCOPE: dict[IndexAttemptStage, StageScope] = {
     IndexAttemptStage.CHUNKING: StageScope.BATCH_LEVEL,
     IndexAttemptStage.CONTEXTUAL_RAG: StageScope.BATCH_LEVEL,
     IndexAttemptStage.EMBEDDING: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.EMBEDDING_RATE_LIMIT_WAIT: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.EMBEDDING_PROVIDER_THROTTLE_WAIT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.ENRICHMENT_PREP: StageScope.BATCH_LEVEL,
     IndexAttemptStage.VECTOR_DB_WRITE: StageScope.BATCH_LEVEL,

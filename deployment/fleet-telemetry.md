@@ -34,6 +34,7 @@ inside the Cloud deployment.
 | `attempt` counters | Indexing: documents fetched, chunks embedded and written, errors, durations | Summed for 30 seconds |
 | `connector`, `tenant_domain`, `license` | Collector: connector settings and counts, signup email domains, license presence | On change, and every 6 hours |
 | `attempt`, `stage`, `job` | Collector: index attempts, stage timings, sync and migration jobs that changed | Every 5 minutes |
+| `heartbeat` deployment fields | API: Standard or Lite; collector: whether a configured connector has an indexed document | Every 5 minutes |
 | `queue` | Celery queue depths, from the queue monitor | Every 10 minutes |
 | `resource` (OpenSearch) | Cluster status, shard counts, and pressure flags, from the resource health check | With each check |
 
@@ -44,6 +45,16 @@ Repeated calls and nested research calls share one classification. Model compari
 The server emits one query event when execution ends, even if the client disconnects and reconnects.
 Cancellation freezes usage at the server's stop point. Search-mode requests leave this chat classification unset.
 Outcome remains separate from tool usage. Deploy the receiving server's optional `tool_usage` field before this instrumentation.
+
+Connector document counts use the same query as the connector admin page. They count indexed
+document links for each connector and credential pair, excluding pending links. Counts follow
+indexing and deletion directly; they do not use the pair's legacy stored counter.
+
+Only the API reports deployment type, using `DISABLE_VECTOR_DB` to distinguish Lite from Standard.
+Workers and standalone collectors omit type because their settings can differ from the API's.
+The connector flag checks indexed document links for existing connector/credential pairs, excluding
+the seeded upload connector. Empty connectors and raw library uploads do not qualify. The check
+is independent of the 1000-row inventory cap and remains subject to the statement timeout.
 
 Onyx never sends names, paths, URLs, email addresses, user IDs, document content, query text, or
 error messages. Each event type has a list of permitted keys. A value must be a number, a boolean,

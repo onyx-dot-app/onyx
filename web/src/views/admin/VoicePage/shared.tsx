@@ -66,6 +66,7 @@ export function VoiceProviderSetupModal({
   onSuccess,
 }: VoiceProviderSetupModalProps) {
   const t = useTranslations("admin.voice");
+  const tPlaceholders = useTranslations("common.placeholders");
   const tInputSelect = useTranslations("common.inputSelect");
   const { appName } = useSettings();
   const onClose = useModalClose();
@@ -336,7 +337,7 @@ export function VoiceProviderSetupModal({
                     >
                       <InputTypeInField
                         name="target_uri"
-                        placeholder="https://your_resource_region.tts.speech.microsoft.com/"
+                        placeholder={tPlaceholders("azure.speechEndpoint")}
                       />
                     </InputVertical>
                   )}
@@ -388,7 +389,7 @@ export function VoiceProviderSetupModal({
                       <InputTypeInField
                         name="stt_languages"
                         // oxlint-disable-next-line i18n/no-raw-jsx-text -- locale-code example, not copy
-                        placeholder="en-US, fr-FR"
+                        placeholder={t("placeholders.languages")}
                       />
                     </InputVertical>
                   )}

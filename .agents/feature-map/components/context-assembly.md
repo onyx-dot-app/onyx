@@ -190,6 +190,13 @@ code preserves it. Project files (and persona-attached files) load through
 become history messages in `chat_utils.py:convert_chat_history`, one message per
 text file, tagged with `file_id`.
 
+`chat_utils.py:load_all_chat_files` reads attachment token counts and processing
+status on the caller thread before starting content workers. Workers receive
+scalar values, so they cannot share the caller's database session. Plaintext
+loading stays parallel, with at most 16 workers; raw bytes stay lazy. While a
+file is processing or indexing, inline extraction does not replace the worker's
+canonical plaintext.
+
 - **User-uploaded files** (attached to a single message) are a "point in time"
   inclusion. They stay where they were uploaded in the message history and, as
   the conversation grows past them, they drift toward the truncation boundary

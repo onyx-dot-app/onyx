@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -33,6 +33,7 @@ from onyx.db.llm import (
 from onyx.db.models import (
     BuildSession,
     Sandbox,
+    ScheduledTask,
     Skill,
     Skill__UserGroup,
     User,
@@ -177,10 +178,13 @@ def test_user(
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
+    user_id = user.id
     yield user
-    # Release uncommitted locks before the separate-session delete cascades from this user.
     db_session.rollback()
-    _best_effort_delete(User, [user.id])
+    # Remove recurring jobs even if the later best-effort user cleanup fails.
+    db_session.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user_id))
+    db_session.commit()
+    _best_effort_delete(User, [user_id])
 
 
 @pytest.fixture(scope="function")

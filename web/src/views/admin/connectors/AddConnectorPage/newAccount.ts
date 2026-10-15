@@ -1,5 +1,5 @@
 import { getIn } from "formik";
-import { ValidSources } from "@/lib/connectors/types/source";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import type {
   CredentialSpec,
   CredentialValidationMessages,
@@ -9,6 +9,7 @@ import {
   createValidationSchema,
   getCredentialSpec,
   initialCredentialValues,
+  isOwnSetupMethod,
   realmFields,
 } from "@/lib/credentials/utils";
 import {
@@ -33,26 +34,13 @@ export type NewAccountValues = ShareAccountFormValues & {
 
 export type NewAccountSchema = ReturnType<typeof createValidationSchema>;
 
-/** Sources with their own account setup instead of typed fields. */
-const OWN_ACCOUNT_SETUP: ReadonlySet<ValidSources> = new Set([
-  ValidSources.GoogleDrive,
-  ValidSources.Gmail,
-]);
-
 /**
  * The source's credential spec when a new account is typed into the form;
- * `null` when it is not: Google Drive and Gmail set accounts up their own
- * way, and a file field (a key file) cannot be sent as typed values yet, so
- * those still save an account through the account form.
+ * `null` for a source with no credential. A file field is typed in too: a
+ * .pfx certificate as the file's base64 text, a Google key as its JSON text.
  */
 export function typedAccountSpec(source: ValidSources): CredentialSpec | null {
-  if (OWN_ACCOUNT_SETUP.has(source)) return null;
-  const spec = getCredentialSpec(source);
-  if (!spec) return null;
-  const hasFile = Object.values(spec.fields).some(
-    (field) => field.kind === "file"
-  );
-  return hasFile ? null : spec;
+  return getCredentialSpec(source) ?? null;
 }
 
 /**
@@ -109,6 +97,12 @@ export function typedDraft(
     spec === null ||
     schema === null ||
     values === undefined ||
+    isOwnSetupMethod(
+      spec,
+      typeof values.authentication_method === "string"
+        ? values.authentication_method
+        : undefined
+    ) ||
     !schema.isValidSync(values)
   ) {
     return null;

@@ -4,13 +4,15 @@ This module contains all CRUD operations for both DocPermissionSyncAttempt
 and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
+from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import ColumnElement, delete, func, select
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.connector_edit_requests import request_retry_delay
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.models import (
     Connector,
@@ -22,6 +24,9 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
+
+# Enough consecutive failures to reach the longest retry delay.
+_GROUP_SYNC_BACKOFF_LOOKBACK = 8
 
 
 # =============================================================================
@@ -95,22 +100,6 @@ def get_latest_doc_permission_sync_attempt_for_cc_pair(
         .order_by(DocPermissionSyncAttempt.time_created.desc())
         .limit(1)
     ).scalar_one_or_none()
-
-
-def get_recent_doc_permission_sync_attempts_for_cc_pair(
-    cc_pair_id: int,
-    limit: int,
-    db_session: Session,
-) -> list[DocPermissionSyncAttempt]:
-    """Get recent doc permission sync attempts for a cc pair, most recent first."""
-    return list(
-        db_session.execute(
-            select(DocPermissionSyncAttempt)
-            .where(DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id)
-            .order_by(DocPermissionSyncAttempt.time_created.desc())
-            .limit(limit)
-        ).scalars()
-    )
 
 
 def mark_doc_permission_sync_attempt_in_progress(
@@ -319,62 +308,58 @@ def get_recent_external_group_sync_attempts_for_cc_pair(
     )
 
 
-def get_relevant_external_group_sync_attempts_for_cc_pair(
+def get_external_group_sync_retry_after(
     cc_pair_id: int,
-    source: DocumentSource,
-    limit: int,
     db_session: Session,
-) -> list[ExternalGroupPermissionSyncAttempt]:
-    """Returns the group sync attempts a user looking at this cc-pair would
-    expect to see, most recent first.
+) -> datetime | None:
+    """The time before which the beat must not start the pair's group sync
+    again, from its consecutive FAILED attempts. None when the latest finished
+    attempt did not fail. A manual sync ignores this, and its success clears
+    it."""
+    attempts = get_recent_external_group_sync_attempts_for_cc_pair(
+        cc_pair_id=cc_pair_id,
+        limit=_GROUP_SYNC_BACKOFF_LOOKBACK,
+        db_session=db_session,
+    )
+    failure_count = 0
+    last_failed_at: datetime | None = None
+    for attempt in attempts:
+        if not attempt.status.is_terminal():
+            continue
+        if attempt.status != PermissionSyncStatus.FAILED:
+            break
+        failure_count += 1
+        if last_failed_at is None:
+            last_failed_at = attempt.time_finished or attempt.time_created
 
-    For sources whose group sync runs at the source level rather than the
-    cc-pair level (Confluence, Jira — see
-    ``source_group_sync_is_cc_pair_agnostic``), a single sync run is intended
-    to cover every cc-pair sharing that source but is logged against
-    whichever cc-pair triggered it. Filtering strictly by ``cc_pair_id``
-    would hide attempts that are conceptually relevant — so we widen the
-    query to the source for those cases.
+    if last_failed_at is None:
+        return None
+    return last_failed_at + request_retry_delay(failure_count)
 
-    For all other sources, this is equivalent to filtering by ``cc_pair_id``.
 
-    Caveat: deployments with multiple independent instances of the same
-    source (e.g. two distinct Confluence sites) will get a merged view here.
-    Properly scoping per-instance is an existing architectural limitation.
-
-    Callers are expected to have already authorized the cc-pair and
-    resolved its ``source``; we trust both inputs and avoid re-fetching.
-    """
+def relevant_external_group_sync_attempts_filter(
+    cc_pair_id: int, source: DocumentSource
+) -> ColumnElement[bool]:
+    """A pair's group sync attempts. A source whose group sync covers all its pairs
+    logs each run against one pair, so this widens to every pair of that source.
+    Two sites of one source therefore share one history."""
     is_agnostic: bool = fetch_ee_implementation_or_noop(
         "onyx.external_permissions.sync_params",
         "source_group_sync_is_cc_pair_agnostic",
         noop_return_value=False,
     )(source)
-
-    stmt = select(ExternalGroupPermissionSyncAttempt)
-    if is_agnostic:
-        sibling_cc_pair_ids_stmt = (
-            select(ConnectorCredentialPair.id)
-            .join(ConnectorCredentialPair.connector)
-            .where(Connector.source == source)
-        )
-        stmt = stmt.where(
-            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(
-                sibling_cc_pair_ids_stmt
-            )
-        )
-    else:
-        stmt = stmt.where(
+    if not is_agnostic:
+        return (
             ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
             == cc_pair_id
         )
-
-    return list(
-        db_session.execute(
-            stmt.order_by(ExternalGroupPermissionSyncAttempt.time_created.desc()).limit(
-                limit
-            )
-        ).scalars()
+    sibling_cc_pair_ids_stmt = (
+        select(ConnectorCredentialPair.id)
+        .join(ConnectorCredentialPair.connector)
+        .where(Connector.source == source)
+    )
+    return ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(
+        sibling_cc_pair_ids_stmt
     )
 
 

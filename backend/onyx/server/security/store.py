@@ -370,13 +370,14 @@ def invalidate_security_cache(tenant_id: str) -> None:
         _CACHE.pop(tenant_id, None)
 
 
-def get_security_settings() -> SecuritySettings:
+def get_security_settings(*, allow_fallback: bool = True) -> SecuritySettings:
     """Effective, env-merged, immutable settings for the current tenant.
 
     Pre-tenant safe: returns env defaults (uncached) when there is no real
     tenant schema to read from. DB errors fall back to env defaults so a
     Postgres outage never bricks the auth path. Returned ``SecuritySettings``
-    is frozen.
+    is frozen. Set ``allow_fallback=False`` for authorization decisions that
+    must reject missing tenant context or failed settings reads.
     """
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     # In multi-tenant the shared/default schema carries no per-tenant
@@ -384,6 +385,10 @@ def get_security_settings() -> SecuritySettings:
     # (registration, login for an email with no tenant) and pre-resolution
     # requests land here; fall back to env defaults rather than a doomed query.
     if tenant_id is None or (MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA):
+        if not allow_fallback:
+            raise RuntimeError(
+                "Tenant context is required for strict security settings"
+            )
         return _build_env_defaults()
 
     with _CACHE_LOCK:
@@ -393,6 +398,8 @@ def get_security_settings() -> SecuritySettings:
         try:
             effective = merge_with_env(_load_raw_overrides_unlocked())
         except Exception as e:
+            if not allow_fallback:
+                raise
             logger.error("Failed to load security settings, using env defaults: %s", e)
             return _build_env_defaults()
         _CACHE[tenant_id] = effective

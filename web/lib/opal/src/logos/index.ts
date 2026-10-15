@@ -7,6 +7,7 @@ export { default as SvgAzure } from "@opal/logos/azure";
 export { default as SvgBifrost } from "@opal/logos/bifrost";
 export { default as SvgBitbucket } from "@opal/logos/bitbucket";
 export { default as SvgBookStack } from "@opal/logos/bookstack";
+export { default as SvgBox } from "@opal/logos/box";
 export { default as SvgBraintrust } from "@opal/logos/braintrust";
 export { default as SvgBrave } from "@opal/logos/brave";
 export { default as SvgCanvas } from "@opal/logos/canvas";

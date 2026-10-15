@@ -14,6 +14,7 @@ from mcp.shared.auth import (
 from pydantic import AnyUrl
 from starlette.requests import Request
 
+from onyx.db import mcp as mcp_db
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -138,7 +139,7 @@ def _install_callback_dependencies(
     attempt_store.consume.return_value = SimpleNamespace(payload=flow)
     monkeypatch.setattr(api, "mcp_oauth_attempt_store", lambda: attempt_store)
     monkeypatch.setattr(api, "get_mcp_server_by_id", lambda *_args: server)
-    monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_args: True)
+    monkeypatch.setattr(mcp_db, "user_can_access_mcp_server", lambda *_args: True)
     monkeypatch.setattr(api, "get_user_connection_config", lambda *_args: user_config)
     monkeypatch.setattr(
         api,
@@ -232,8 +233,8 @@ def test_callback_rechecks_server_authorization_before_exchanging_code(
     user, db_session, _, hot_reload = _install_callback_dependencies(
         monkeypatch, server, flow
     )
-    monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_args: False)
-    monkeypatch.setattr(api, "can_manage_mcp_server", lambda *_args: False)
+    monkeypatch.setattr(mcp_db, "user_can_access_mcp_server", lambda *_args: False)
+    monkeypatch.setattr(mcp_db, "can_manage_mcp_server", lambda *_args: False)
     complete_flow = AsyncMock()
     monkeypatch.setattr(api, "complete_mcp_oauth_authorization", complete_flow)
 
@@ -258,8 +259,8 @@ def test_callback_allows_server_manager_without_server_access(
     server = _server()
     flow = _flow(server)
     user, db_session, _, _ = _install_callback_dependencies(monkeypatch, server, flow)
-    monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_args: False)
-    monkeypatch.setattr(api, "can_manage_mcp_server", lambda *_args: True)
+    monkeypatch.setattr(mcp_db, "user_can_access_mcp_server", lambda *_args: False)
+    monkeypatch.setattr(mcp_db, "can_manage_mcp_server", lambda *_args: True)
     complete_flow = AsyncMock()
     monkeypatch.setattr(api, "complete_mcp_oauth_authorization", complete_flow)
 

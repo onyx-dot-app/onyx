@@ -43,6 +43,9 @@ class HierarchyBreakdownSection(BaseModel):
     # Keys (see ``ConnectorConfig.hierarchy_node_key``) of the nodes that the
     # config names. Each one shows, also when no document is under it.
     expected_node_keys: tuple[str, ...] = ()
+    # The config field the expected keys come from. The status page lists the
+    # section in place of that field's row.
+    config_field: str | None = None
     # False shows only the expected nodes of this type.
     include_unexpected_nodes: bool = True
     # True matches the expected keys to the node keys without regard to case.

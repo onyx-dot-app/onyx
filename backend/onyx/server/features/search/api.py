@@ -50,6 +50,12 @@ from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tracing.framework.create import (
+    SearchTraceMetadata,
+    function_span,
+    trace,
+)
+from onyx.tracing.framework.spans import SpanError
 from onyx.utils.fleet_query_telemetry import telemetry_query
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -188,24 +194,46 @@ def search(
         auto_detect_filters=load_settings().auto_detect_search_filters is not False,
     )
 
-    # 7. Run search
-    tool_response = search_tool.run(
-        placement=Placement(turn_index=0),
-        override_kwargs=SearchToolOverrideKwargs(
-            starting_citation_num=1,
-            original_query=request.query,
-            skip_query_expansion=request.skip_query_expansion,
-            include_link=True,
-            message_history=request.message_history
-            or [
-                ChatMinimalTextMessage(
-                    message=request.query,
-                    message_type=MessageType.USER,
-                ),
-            ],
+    # 7. Run search. Chat opens the trace in the LLM loop and the tool span in
+    # the tool runner; this endpoint reaches SearchTool directly, so without both
+    # here every generation span the pipeline raises is a NoOpSpan.
+    with (
+        trace(
+            "search_api",
+            metadata=SearchTraceMetadata(
+                user_id=str(user.id),
+                persona_id=request.persona_id,
+            ).model_dump(),
         ),
-        queries=[request.query],
-    )
+        function_span(SearchTool.NAME) as tool_span,
+    ):
+        tool_span.span_data.input = request.query
+        try:
+            tool_response = search_tool.run(
+                placement=Placement(turn_index=0),
+                override_kwargs=SearchToolOverrideKwargs(
+                    starting_citation_num=1,
+                    original_query=request.query,
+                    skip_query_expansion=request.skip_query_expansion,
+                    include_link=True,
+                    message_history=request.message_history
+                    or [
+                        ChatMinimalTextMessage(
+                            message=request.query,
+                            message_type=MessageType.USER,
+                        ),
+                    ],
+                ),
+                queries=[request.query],
+            )
+        except Exception as e:
+            # Type only: provider errors can carry credentials, and nothing
+            # redacts them on this path.
+            tool_span.set_error(
+                SpanError(message=f"{type(e).__name__}: search failed", data=None)
+            )
+            raise
+        tool_span.span_data.output = tool_response.llm_facing_response
 
     # 8. Map LLM-facing JSON entries to SearchResults (one per merged section).
     llm_facing_text = tool_response.llm_facing_response

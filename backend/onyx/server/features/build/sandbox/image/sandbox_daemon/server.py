@@ -209,6 +209,7 @@ async def outputs_manifest(
         manifest = await asyncio.to_thread(
             build_outputs_manifest,
             payload.session_id,
+            payload.include_web,
         )
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"outputs manifest OS error: {e}")

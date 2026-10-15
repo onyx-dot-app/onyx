@@ -372,3 +372,14 @@ def test_prepuller_can_be_disabled() -> None:
 
 def test_prepuller_absent_when_craft_disabled() -> None:
     assert _renders_nothing(["--set-string", "configMap.ENABLE_CRAFT=false"])
+
+
+@pytest.mark.parametrize("runtime_class", ["", "gvisor", "kata"])
+def test_prepuller_uses_sandbox_runtime_class(runtime_class: str) -> None:
+    args = ["--set-string", f"sandboxPod.runtimeClassName={runtime_class}"]
+    sandbox = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE, args))
+    assert (
+        _prepuller_pod_spec(args).get("runtimeClassName")
+        == (sandbox["template"]["spec"].get("runtimeClassName"))
+        == (runtime_class or None)
+    )

@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any, cast
 from urllib.parse import urlparse
 
+import regex
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import override
 
@@ -468,34 +469,96 @@ def filter_channels(
 
     if channels_to_include:
         if not include_regex_enabled:
+            channels_to_include = normalize_channel_entries(channels_to_include)
             _validate_channels_exist(all_channels, channels_to_include)
         filtered_channels = [
             channel
             for channel in filtered_channels
-            if _channel_name_matches(
-                channel["name"], channels_to_include, include_regex_enabled
+            if _channel_matches(
+                channel,
+                channels_to_include,
+                include_regex_enabled,
+                match_on_timeout=False,
             )
         ]
 
-    # unlike includes, exclude names aren't validated — excluding a missing channel is harmless
+    # unlike includes, exclude entries aren't validated: excluding a missing channel is harmless
     if channels_to_exclude:
+        if not exclude_regex_enabled:
+            channels_to_exclude = normalize_channel_entries(channels_to_exclude)
         filtered_channels = [
             channel
             for channel in filtered_channels
-            if not _channel_name_matches(
-                channel["name"], channels_to_exclude, exclude_regex_enabled
+            if not _channel_matches(
+                channel,
+                channels_to_exclude,
+                exclude_regex_enabled,
+                match_on_timeout=True,
             )
         ]
 
     return filtered_channels
 
 
-def _channel_name_matches(
-    channel_name: str, patterns: list[str], regex_enabled: bool
+# A channel id: a type letter, then uppercase letters and digits. A channel
+# name is lowercase, so the two never collide.
+_CHANNEL_ID_PATTERN = re.compile(r"[CGD][A-Z0-9]{8,}")
+
+
+def normalize_channel_entries(entries: list[str]) -> list[str]:
+    """Exact config entries as Slack stores them: an id as given, a typed name
+    lowercase without its leading ``#``."""
+    return [
+        entry
+        if _CHANNEL_ID_PATTERN.fullmatch(entry)
+        else entry.removeprefix("#").lower()
+        for entry in entries
+    ]
+
+
+# Channel patterns come from the connector config; bound each match so a
+# backtracking pattern cannot pin the worker.
+_CHANNEL_REGEX_TIMEOUT_SECONDS = 0.05
+
+
+def _channel_regex_matches(pattern: str, name: str, match_on_timeout: bool) -> bool:
+    try:
+        return (
+            regex.fullmatch(
+                pattern,
+                name,
+                concurrent=True,
+                timeout=_CHANNEL_REGEX_TIMEOUT_SECONDS,
+            )
+            is not None
+        )
+    except TimeoutError:
+        logger.warning(
+            "Slack channel regex '%s' timed out on channel '%s'", pattern, name
+        )
+        return match_on_timeout
+
+
+def _channel_matches(
+    channel: ChannelType,
+    patterns: list[str],
+    regex_enabled: bool,
+    match_on_timeout: bool,
 ) -> bool:
+    """An exact entry names the channel by id, which survives a rename, or by
+    name. A regex matches the name only. A regex that times out counts as
+    ``match_on_timeout``, so a slow exclude still excludes."""
     if regex_enabled:
-        return any(re.fullmatch(pattern, channel_name) for pattern in patterns)
-    return channel_name in patterns
+        return any(
+            _channel_regex_matches(pattern, channel["name"], match_on_timeout)
+            for pattern in patterns
+        )
+    return channel["id"] in patterns or channel["name"] in patterns
+
+
+def channel_keys(channels: list[ChannelType]) -> set[str]:
+    """Every string an exact config entry may use for one of ``channels``."""
+    return {key for channel in channels for key in (channel["id"], channel["name"])}
 
 
 def _validate_channels_exist(
@@ -503,9 +566,10 @@ def _validate_channels_exist(
 ) -> None:
     # fail loudly on an unknown channel so the user knows one of the
     # channels they've specified is typo'd or private
+    known_channels = channel_keys(all_channels)
     all_channel_names = {channel["name"] for channel in all_channels}
     for channel in channels_to_include:
-        if channel not in all_channel_names:
+        if channel not in known_channels:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
                 f"Available channels (Showing {len(all_channel_names)} of "
@@ -517,8 +581,8 @@ def _validate_channels_exist(
 def validate_channel_regexes(patterns: list[str] | None, label: str) -> None:
     for pattern in patterns or []:
         try:
-            re.compile(pattern)
-        except re.error as e:
+            regex.compile(pattern)
+        except regex.error as e:
             raise ConnectorValidationError(
                 f"Invalid {label} regex '{pattern}': {e}"
             ) from e

@@ -70,7 +70,10 @@ deletion units.
 | POST | `/manage/admin/connector-with-mock-credential` | `create_connector_with_mock_credential`; `?paused=true` creates the pair paused and starts no indexing | `server/documents/connector.py` |
 | DELETE | `/manage/admin/connector/{connector_id}` | `delete_connector_by_id` | `server/documents/connector.py` |
 | POST | `/manage/admin/connector/run-once` | | Triggers one manual index attempt. |
-| POST | `/manage/admin/connector/indexing-status` | | Backs the indexing status admin page. |
+| POST | `/manage/admin/connector/indexing-status` | | Pairs grouped by source with per-source pages; backs the Index Settings page's connector list. |
+| GET | `/manage/admin/index-monitoring/overview` | `get_indexing_overview` | `server/documents/index_monitoring.py`. The indexing status page's overview card: how many readable pairs index now and are active, the documents indexed in a window (`1h`, `12h`, `24h`, `7d`) against the documents held, and the window's throughput across them. |
+| GET | `/manage/admin/index-monitoring/connectors` | `get_indexing_connectors` | `server/documents/index_monitoring.py`. The indexing status page's list: the readable pairs with their latest index attempt, each in one of five buckets (indexing, failed, paused, scheduled, indexed), sorted by bucket then name, searched by name and filtered by bucket, with the bucket counts and, for admins, the federated connectors. |
+| GET | `/manage/admin/index-monitoring/runs` | `get_indexing_runs` | `server/documents/index_monitoring.py`. The readable pairs' index attempts and permission syncs as one feed, newest first, with the same filters as a pair's `/runs`; each run names its pair and whether the caller may resolve its document errors. Backs the status page's Activities card. |
 | POST | `/manage/connector-request` | | Public "request a connector" form. |
 | POST | `/manage/credential`, `POST /manage/credential/private-key` | `create_credential_from_model` | `server/documents/credential.py` |
 | GET | `/manage/credential`, `/manage/credential/{id}` | `list_credentials`, `get_credential_by_id` | `server/documents/credential.py` |
@@ -88,7 +91,10 @@ deletion units.
 | PUT | `/manage/admin/cc-pair/{id}/status` | `update_cc_pair_status` | Pause/resume only. |
 | PUT | `/manage/admin/cc-pair/{id}/name`, `PUT .../property` | | |
 | POST | `/manage/admin/cc-pair/{id}/prune` | `prune_cc_pair` | |
-| GET | `/manage/admin/cc-pair/{id}/index-attempts`, `.../errors`, `.../permission-sync-attempts`, `.../external-group-sync-attempts`, `.../get-docs-sync-status` | | Status surfaces for one cc-pair. |
+| GET | `/manage/admin/cc-pair/{id}/index-attempts`, `.../get-docs-sync-status` | | Status surfaces for one cc-pair. |
+| GET | `/manage/admin/cc-pair/{id}/errors` | `get_cc_pair_indexing_errors` | The pair's indexing errors, newest first, paged. `include_resolved` adds resolved ones, `index_attempt_id` keeps one attempt's, and `q` matches the message or document id. |
+| GET | `/manage/admin/cc-pair/{id}/runs` | `get_cc_pair_runs` | The pair's index attempts plus, for a perm-synced pair, its document permission and group syncs, as one feed newest first. One SQL union pages it (`db/cc_pair_runs.py`). Filters: time window, kinds, status groups, error text (an index attempt's document errors included), and `errors` (runs with open document errors, runs whose document errors were all resolved, or runs with none). Status counts ignore the status filter and honor the rest. A source whose group sync covers all its pairs shows that source's group syncs on every pair. |
+| POST | `/manage/admin/index-attempt/{id}/cancel` | `cancel_index_attempt` | Cancels one running or queued attempt. Needs `CCPairAccessLevel.OPERATE`. Shares the pause route's cancel helper. |
 | GET | `/manage/admin/cc-pair/{id}/hierarchy-breakdown` | `get_cc_pair_hierarchy_breakdown` | `server/documents/hierarchy_breakdown.py`. Node type → `{raw_node_id, display_name, link, doc_count}` rows: the pair's indexed documents in each node's subtree. `other_doc_count`: the indexed documents in no listed node's subtree. `null` until a full index run of the pair succeeds (under any search settings). Computed live; a separate route so the detail page stays fast. See [[connectors]] §4.9. |
 | POST | `/manage/admin/deletion-attempt` | `create_deletion_attempt_for_connector_id` | `server/manage/administrative.py`. **The real deletion trigger.** Needs `CCPairAccessLevel.EDIT` on the pair. |
 | POST, GET | `/manage/admin/indexing/targeted-reindex`, `/manage/admin/indexing/targeted-reindex/{job_id}` | `server/documents/targeted_reindex.py` | Reindex only the documents that previously failed, and read the job. |

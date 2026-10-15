@@ -46,7 +46,6 @@ from tests.common.craft.payloads import default_action_entries
 from tests.external_dependency_unit.craft.db_helpers import (
     make_external_app,
     make_skill,
-    make_user,
 )
 
 
@@ -101,10 +100,11 @@ def _seed_task(
 
 def test_grants_returned_for_running_run(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    user = make_user(db_session)
+    user = test_user
     bs = build_session_with_user(user=user)
     app_a, app_b = _make_app(db_session), _make_app(db_session)
     server_id = _make_mcp_server(db_session, user)
@@ -149,13 +149,14 @@ def test_grants_returned_for_running_run(
 )
 def test_no_grants_for_non_running_run(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
     status: ScheduledTaskRunStatus,
 ) -> None:
     """A finished scheduled session (interactive follow-up turns) parks as
     usual — the RUNNING filter is the load-bearing scope guard."""
-    user = make_user(db_session)
+    user = test_user
     bs = build_session_with_user(user=user)
     task = _seed_task(
         db_session, user, pre_approved_external_app_ids=[_make_app(db_session)]
@@ -180,11 +181,12 @@ def test_no_grants_for_non_running_run(
 
 def test_no_grants_for_interactive_session(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
     """Sessions with no run row (interactive origin) never match."""
-    user = make_user(db_session)
+    user = test_user
     bs = build_session_with_user(user=user)
 
     assert (
@@ -199,10 +201,11 @@ def test_no_grants_for_interactive_session(
 
 def test_insert_pre_decided_row(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    user = make_user(db_session)
+    user = test_user
     bs = build_session_with_user(user=user)
     app_id = _make_app(db_session)
 
@@ -227,10 +230,11 @@ def test_insert_pre_decided_row(
 
 def test_insert_default_row_stays_pending(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    user = make_user(db_session)
+    user = test_user
     bs = build_session_with_user(user=user)
     app_id = _make_app(db_session)
 
@@ -258,11 +262,12 @@ def test_insert_default_row_stays_pending(
 
 def test_prompt_change_preserves_grants(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """Grants are explicit state surfaced as checkboxes in the editor: a
     prompt edit that omits ``pre_approved_external_app_ids`` leaves them untouched."""
-    user = make_user(db_session)
+    user = test_user
     app = _make_app(db_session)
     task = _seed_task(
         db_session, user, pre_approved_external_app_ids=[app], prompt="orig"
@@ -281,11 +286,12 @@ def test_prompt_change_preserves_grants(
 
 def test_supplied_grants_replace_existing(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """Supplying ``pre_approved_external_app_ids`` replaces the set wholesale —
     dropping omitted apps and adding new ones."""
-    user = make_user(db_session)
+    user = test_user
     app_a, app_b = _make_app(db_session), _make_app(db_session)
     task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_a])
 
@@ -302,12 +308,13 @@ def test_supplied_grants_replace_existing(
 
 def test_resubmitting_existing_grant_is_idempotent(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """Re-submitting an already-granted app must not orphan+reinsert the same
     (task, app) unique key in one flush (which Postgres rejects). The editor
     re-sends current grants on every save, so this is the common path."""
-    user = make_user(db_session)
+    user = test_user
     app_a, app_b = _make_app(db_session), _make_app(db_session)
     task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_a])
 
@@ -324,11 +331,12 @@ def test_resubmitting_existing_grant_is_idempotent(
 
 def test_mcp_grants_survive_external_app_replacement(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
     """Each target kind has independent replacement semantics and reaches the gate."""
-    user = make_user(db_session)
+    user = test_user
     bs = build_session_with_user(user=user)
     app_a, app_b = _make_app(db_session), _make_app(db_session)
     server_a = _make_mcp_server(db_session, user)
@@ -385,9 +393,10 @@ def test_mcp_grants_survive_external_app_replacement(
 
 def test_create_stores_each_grant_once(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
+    user = test_user
     app_a, app_b = _make_app(db_session), _make_app(db_session)
     server_id = _make_mcp_server(db_session, user)
     task = _seed_task(
@@ -413,11 +422,12 @@ def test_create_stores_each_grant_once(
 
 def test_deleting_app_drops_grants(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """``external_app_id`` is ``ON DELETE CASCADE``: removing an app drops its
     grant rows — a grant on a removed app is meaningless."""
-    user = make_user(db_session)
+    user = test_user
     app_id = _make_app(db_session)
     task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_id])
     assert task.pre_approved_external_app_ids == [app_id]
@@ -439,13 +449,14 @@ def test_deleting_app_drops_grants(
 
 def test_deleting_app_nulls_action_approval_fk(
     db_session: Session,
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
     """``action_approval.gated_app_id`` is ``ON DELETE SET NULL``: an audit row
     survives app deletion with the FK cleared, not cascaded away. Deleting the
     app cascades its gated_app row away, which nulls the approval's FK."""
-    user = make_user(db_session)
+    user = test_user
     bs = build_session_with_user(user=user)
     app_id = _make_app(db_session)
     row = insert_action_approval(

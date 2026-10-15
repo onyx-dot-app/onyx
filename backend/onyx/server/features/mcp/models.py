@@ -198,6 +198,8 @@ class MCPAuthTemplate(BaseModel):
         for name, template in self.headers.items():
             value = template
             for key, replacement in substitutions.items():
+                if key in AUTO_SUBSTITUTED_PLACEHOLDER_KEYS:
+                    continue
                 value = value.replace(f"{{{key}}}", replacement)
             headers[name] = apply_auto_substitutions(value, user_email=user_email)
         return headers

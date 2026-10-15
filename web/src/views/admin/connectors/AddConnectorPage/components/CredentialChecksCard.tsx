@@ -1,7 +1,8 @@
 "use client";
 
 import type { CredentialRef } from "@/lib/credentials/types";
-import { useCallback, useMemo, useState } from "react";
+import { CHECKS_CARD_ID } from "@/lib/connectors/checks/constants";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import { ContentAction, Section } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
@@ -56,7 +57,7 @@ import { useSettings } from "@/lib/settings/hooks";
 type CheckLineState = Exclude<DraftCheckStateKind, "not_applicable">;
 
 /** One check as a line of the card, finished or not. */
-type CheckLine = Pick<
+export type CheckLine = Pick<
   DraftCheckState,
   | "capability"
   | "check_id"
@@ -219,6 +220,34 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
   );
 }
 
+export interface CheckLineGroupsProps {
+  lines: CheckLine[];
+}
+/** The lines grouped by outcome, blocking failures first. Empty groups are left out. */
+export function CheckLineGroups({ lines }: CheckLineGroupsProps) {
+  const groups = useMemo(
+    () =>
+      GROUPS.map((group) => ({
+        label: group.label,
+        checks: lines.filter((line) =>
+          (group.states as readonly CheckLineState[]).includes(line.state)
+        ),
+      })).filter((group) => group.checks.length > 0),
+    [lines]
+  );
+  return (
+    <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
+      {groups.map((group) => (
+        <CheckGroup
+          key={group.label}
+          label={group.label}
+          checks={group.checks}
+        />
+      ))}
+    </Section>
+  );
+}
+
 /**
  * The results card, grouped by outcome like a pull request's checks panel.
  * The ring and the title count every check, so a run fills them in as checks
@@ -247,11 +276,15 @@ interface CheckCardViewProps {
   inProgressCount: number;
   /** Checks waiting on a form field before they can run. */
   expectedCount: number;
+  /** Starts folded, showing only the summary line. */
+  defaultCollapsed?: boolean;
   /** The run's checks, counted per state. */
   stateCounts: Record<DraftCheckStateKind, number>;
   onRerun: () => void;
+  /** Each increment opens the card and scrolls it into view. */
+  expandRequest?: number;
 }
-function CheckCardView({
+export function CheckCardView({
   status,
   results,
   openChecks,
@@ -259,12 +292,21 @@ function CheckCardView({
   expectedCount,
   stateCounts,
   onRerun,
+  defaultCollapsed = false,
+  expandRequest = 0,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
   // The same "Re-run Checks" label the saved account cards use.
   const tAccount = useTranslations("admin.connectorsList.add.account");
   const format = useFormatter();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const cardRef = useRef<HTMLDivElement>(null);
+  // The card can outgrow the viewport. Centered, its failed rows still show.
+  useEffect(() => {
+    if (expandRequest === 0) return;
+    setCollapsed(false);
+    cardRef.current?.scrollIntoView({ block: "center" });
+  }, [expandRequest]);
 
   const lines: CheckLine[] = useMemo(
     () => [
@@ -276,16 +318,6 @@ function CheckCardView({
       ),
     ],
     [results, openChecks]
-  );
-  const groups = useMemo(
-    () =>
-      GROUPS.map((group) => ({
-        label: group.label,
-        checks: lines.filter((line) =>
-          (group.states as readonly CheckLineState[]).includes(line.state)
-        ),
-      })).filter((group) => group.checks.length > 0),
-    [lines]
   );
   // Failed required checks block the form or Create.
   const requiredFailed: number = lines.filter(
@@ -430,6 +462,8 @@ function CheckCardView({
       padding={2}
       passive={!collapsed}
       onClick={collapsed ? () => setCollapsed(false) : undefined}
+      ref={cardRef}
+      data-testid={CHECKS_CARD_ID}
     >
       <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
         {header}
@@ -451,20 +485,7 @@ function CheckCardView({
             className="pt-1"
           >
             {hasRows ? (
-              <Section
-                justifyContent="start"
-                alignItems="stretch"
-                height="fit"
-                gap={0}
-              >
-                {groups.map((group) => (
-                  <CheckGroup
-                    key={group.label}
-                    label={group.label}
-                    checks={group.checks}
-                  />
-                ))}
-              </Section>
+              <CheckLineGroups lines={lines} />
             ) : (
               !notice && (
                 <Text font="main-ui-body" color="text-03">
@@ -499,6 +520,8 @@ export interface CredentialChecksCardProps {
   onStart?: () => void;
   /** Set when the form edits this pair: the checks are dry runs of it. */
   ccPairId?: number | null;
+  /** Each increment opens the results card and scrolls it into view. */
+  expandRequest?: number;
 }
 export default function CredentialChecksCard({
   source,
@@ -506,6 +529,7 @@ export default function CredentialChecksCard({
   locked,
   onStart,
   ccPairId = null,
+  expandRequest = 0,
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
@@ -551,6 +575,7 @@ export default function CredentialChecksCard({
       expectedCount={checks.expectedCount}
       stateCounts={checks.stateCounts}
       onRerun={checks.rerun}
+      expandRequest={expandRequest}
     />
   );
 }

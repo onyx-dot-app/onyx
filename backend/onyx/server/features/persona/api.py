@@ -755,17 +755,15 @@ def get_persona(
             f"Agent with ID {persona_id} does not exist",
         ) from e
 
-    # Validate and clear the model override if the referenced model is no longer
-    # accessible to this persona (e.g. provider was restricted after the persona was saved).
+    snapshot = FullPersonaSnapshot.from_model(persona)
+    # Hide a pinned model this viewer cannot use. The check is viewer-relative, so
+    # it changes only the response, never the stored agent.
     if persona.default_model_configuration_id:
         valid_ids = get_valid_model_configuration_ids_for_persona(
             persona, user, db_session
         )
         if persona.default_model_configuration_id not in valid_ids:
-            persona.default_model_configuration_id = None
-            db_session.commit()
-
-    snapshot = FullPersonaSnapshot.from_model(persona)
+            snapshot.default_model_configuration_id = None
     if user is not None:
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids

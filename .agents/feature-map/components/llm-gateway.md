@@ -80,8 +80,9 @@ gates, plus the workspace setting, exist.
 
 `Permission.USE_LLM_GATEWAY` (`"use:llm_gateway"`,
 `backend/onyx/db/enums.py`) is a selectable PAT scope
-(`backend/onyx/server/pat/models.py`, `SELECTABLE_PAT_SCOPES`), gated
-in the UI at `min_tier=LLM_GATEWAY_MIN_TIER` (Business). It is also implied
+(`backend/onyx/server/pat/models.py`, `SELECTABLE_PAT_SCOPES`) with
+`min_tier=LLM_GATEWAY_MIN_TIER` (Business): below that tier `GET /user/pats/scopes`
+omits it and minting it fails with `FEATURE_NOT_AVAILABLE`. It is also implied
 by `Permission.BASIC_ACCESS` and by `Permission.CRAFT_SANDBOX`
 (`backend/onyx/auth/permissions.py`, `IMPLIED_PERMISSIONS`). GATE 1 therefore
 accepts users whose permissions include `BASIC_ACCESS`, and Craft PATs with the

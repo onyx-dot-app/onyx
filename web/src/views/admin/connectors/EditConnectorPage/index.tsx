@@ -15,14 +15,10 @@ import { SvgAlertCircle } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
-import type { CCPairFullInfo } from "@/lib/connectors/types";
+import type { CCPairDataAccess, CCPairFullInfo } from "@/lib/connectors/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { usesDataAccessGroups } from "@/lib/connectors/edit/prefill";
 import { AddConnectorForm } from "@/views/admin/connectors/AddConnectorPage/components/AddConnectorWrapper";
-
-interface CCPairDataAccess {
-  groups: { id: number }[];
-}
 
 export interface EditConnectorPageProps {
   /** The source in the URL; it must match the pair's source. */

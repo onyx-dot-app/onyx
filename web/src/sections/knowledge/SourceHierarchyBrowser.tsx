@@ -8,6 +8,7 @@ import React, {
   useRef,
 } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import {
@@ -33,7 +34,6 @@ import {
   SvgArrowUpDown,
   SvgFilter,
 } from "@opal/icons";
-import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources } from "@/lib/connectors/types/source";
 import {
   HierarchyNodeSummary,

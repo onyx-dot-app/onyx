@@ -42,9 +42,9 @@ from onyx.server.gateway.models import (
     AnthropicErrorEvent,
     AnthropicMessagesRequest,
 )
+from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import trace
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 from onyx.utils.headers import build_llm_extra_headers
@@ -256,7 +256,7 @@ def _streaming_error_event(status_code: int, body: bytes) -> AnthropicErrorEvent
 
 
 def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
+    return llm_gateway_trace(flow, model)
 
 
 def handle_anthropic_passthrough(

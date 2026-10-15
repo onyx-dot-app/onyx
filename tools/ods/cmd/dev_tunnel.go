@@ -14,6 +14,7 @@ import (
 )
 
 func newDevTunnelCommand() *cobra.Command {
+	var bindAll bool
 	cmd := &cobra.Command{
 		Use:   "tunnel <port|host:container>",
 		Short: "Tunnel a devcontainer port to the host",
@@ -23,6 +24,9 @@ Runs socat on the host and forwards each accepted connection into the
 devcontainer via ` + "`docker exec socat`" + `, which connects to
 127.0.0.1:<container-port> inside the container.  Routing via loopback
 sidesteps the devcontainer's default-deny inbound firewall.
+
+The host side listens on 127.0.0.1 only. Pass --bind-all to listen on every
+interface, which lets other machines on your networks reach the port.
 
 Runs in the foreground — Ctrl-C tears the tunnel down.
 
@@ -35,9 +39,11 @@ Examples:
 			if err != nil {
 				log.Fatalf("Invalid port spec %q: %v", args[0], err)
 			}
-			runDevTunnel(hostPort, containerPort)
+			runDevTunnel(hostPort, containerPort, bindAll)
 		},
 	}
+
+	cmd.Flags().BoolVar(&bindAll, "bind-all", false, "Listen on all host interfaces instead of 127.0.0.1")
 
 	return cmd
 }
@@ -77,7 +83,7 @@ func parsePort(s string) (int, error) {
 	return p, nil
 }
 
-func runDevTunnel(hostPort, containerPort int) {
+func runDevTunnel(hostPort, containerPort int, bindAll bool) {
 	root, err := paths.GitRoot()
 	if err != nil {
 		log.Fatalf("Failed to find git root: %v", err)
@@ -95,10 +101,17 @@ func runDevTunnel(hostPort, containerPort int) {
 		log.Fatal("No running devcontainer found — run `ods dev up` first")
 	}
 
-	log.Infof("Tunneling host :%d -> devcontainer :%d (Ctrl-C to stop)", hostPort, containerPort)
+	listen := fmt.Sprintf("TCP-LISTEN:%d,fork,reuseaddr,bind=127.0.0.1", hostPort)
+	hostAddr := "127.0.0.1"
+	if bindAll {
+		listen = fmt.Sprintf("TCP-LISTEN:%d,fork,reuseaddr", hostPort)
+		hostAddr = "all interfaces"
+		log.Warnf("--bind-all: host port %d is reachable from other machines", hostPort)
+	}
+	log.Infof("Tunneling host %s:%d -> devcontainer :%d (Ctrl-C to stop)", hostAddr, hostPort, containerPort)
 
 	socatArgs := []string{
-		fmt.Sprintf("TCP-LISTEN:%d,fork,reuseaddr", hostPort),
+		listen,
 		fmt.Sprintf("SYSTEM:docker exec -i %s socat - TCP\\:127.0.0.1\\:%d", containerID, containerPort),
 	}
 

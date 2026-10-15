@@ -2,6 +2,8 @@ import type {
   Credential,
   CredentialBase,
   CredentialCheckReport,
+  CredentialFieldValues,
+  CredentialFormValues,
   CredentialRequest,
   CredentialSharing,
   CredentialWithPrivateKey,
@@ -151,22 +153,46 @@ export function linkCredential(
   );
 }
 
-export function updateCredential(credentialId: number, newDetails: any) {
-  const name = newDetails.name;
-  const details = Object.fromEntries(
-    Object.entries(newDetails).filter(
+/** The stored fields a form submits, without blanks, so an untouched secret keeps its value. */
+function changedFields(values: CredentialFormValues): CredentialFieldValues {
+  return Object.fromEntries(
+    Object.entries(values).filter(
       ([key, value]) => key !== CREDENTIAL_NAME && value !== ""
     )
   );
+}
+
+export function updateCredential(
+  credentialId: number,
+  values: CredentialFormValues
+): Promise<Response> {
   return fetch(`/api/manage/admin/credential/${credentialId}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: name,
-      credential_json: details,
+      name: values.name,
+      credential_json: changedFields(values),
     }),
+  });
+}
+
+export function updateCredentialWithPrivateKey(
+  credentialId: number,
+  values: CredentialFormValues,
+  privateKey: TypedFile
+): Promise<Response> {
+  const formData = new FormData();
+  formData.append(CREDENTIAL_NAME, values.name);
+  formData.append(CREDENTIAL_JSON, JSON.stringify(changedFields(values)));
+  formData.append(CREDENTIAL_UPLOADED_FILE, privateKey.file);
+  formData.append(CREDENTIAL_FIELD_KEY, privateKey.fieldKey);
+  formData.append(
+    CREDENTIAL_TYPE_DEFINITION_KEY,
+    privateKey.typeDefinition.category
+  );
+  return fetch(`/api/manage/admin/credential/private-key/${credentialId}`, {
+    method: "PUT",
+    body: formData,
   });
 }
 
@@ -182,50 +208,6 @@ export function updateCredentialSharing(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(sharing),
-  });
-}
-
-export function updateCredentialWithPrivateKey(
-  credentialId: number,
-  newDetails: any,
-  privateKey: TypedFile
-) {
-  const name = newDetails.name;
-  const details = Object.fromEntries(
-    Object.entries(newDetails).filter(
-      ([key, value]) => key !== CREDENTIAL_NAME && value !== ""
-    )
-  );
-  const formData = new FormData();
-  formData.append(CREDENTIAL_NAME, name);
-  formData.append(CREDENTIAL_JSON, JSON.stringify(details));
-  formData.append(CREDENTIAL_UPLOADED_FILE, privateKey.file);
-  formData.append(CREDENTIAL_FIELD_KEY, privateKey.fieldKey);
-  formData.append(
-    CREDENTIAL_TYPE_DEFINITION_KEY,
-    privateKey.typeDefinition.category
-  );
-  return fetch(`/api/manage/admin/credential/private-key/${credentialId}`, {
-    method: "PUT",
-    body: formData,
-  });
-}
-
-export function swapCredential(
-  newCredentialId: number,
-  connectorId: number,
-  accessType: AccessType
-) {
-  return fetch(`/api/manage/admin/credential/swap`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      new_credential_id: newCredentialId,
-      connector_id: connectorId,
-      access_type: accessType,
-    }),
   });
 }
 
@@ -277,18 +259,21 @@ export async function submitCredential<T>(
 }
 
 /**
- * Starts the capability checks on a saved credential alone. The run happens
- * on a worker; poll `SWR_KEYS.credentialCheckReports` for its report.
+ * Runs the credential's checks, or those of its pairing with `connectorId`.
+ * The run happens on a worker. Poll `SWR_KEYS.credentialCheckReports` for it.
  */
 export async function startCredentialCheckRun(
-  credentialId: number
+  credentialId: number,
+  connectorId: number | null = null
 ): Promise<CredentialCheckReport> {
   const response = await fetch(
     `/api/manage/admin/credential/${credentialId}/capability-check`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify(
+        connectorId === null ? {} : { connector_id: connectorId }
+      ),
     }
   );
   if (!response.ok) {

@@ -57,6 +57,7 @@ class _UsageRecord:
     user_id: str | None
     system_attribution: SystemUsageAttribution | None
     model: str
+    routed_model: str | None
     flow: str
     provider: str | None
     incognito: bool
@@ -166,6 +167,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             user_id=user_id,
             system_attribution=(_system_attribution(flow) if user_id is None else None),
             model=model,
+            routed_model=data.routed_model,
             flow=flow,
             provider=provider,
             incognito=incognito_mode is not None,
@@ -232,6 +234,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                 str | None,
                 SystemUsageAttribution | None,
                 str,
+                str | None,
                 str,
                 str | None,
                 bool,
@@ -245,6 +248,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                 record.user_id,
                 record.system_attribution,
                 record.model,
+                record.routed_model,
                 record.flow,
                 record.provider,
                 record.incognito,
@@ -299,6 +303,7 @@ class UserUsageTracingProcessor(TracingProcessor):
         for p_in, p_out, p_read, p_write, p_images in parts:
             part_in, part_out = compute_cost_cents(
                 model=record.model,
+                served_model=record.routed_model,
                 provider=record.provider,
                 prompt_tokens=p_in,
                 completion_tokens=p_out,

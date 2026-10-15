@@ -3,6 +3,7 @@ package auditcmd
 import (
 	"encoding/json"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -16,6 +17,7 @@ type AuditAlertOptions struct {
 	Scope     string
 	KeepOpen  bool
 	DryRun    bool
+	Failing   string
 }
 
 // newAuditAlertCommand creates the `ods audit alert` subcommand.
@@ -41,7 +43,8 @@ advisory closes its issue.
 Prints the alerts that need announcing (new packages and new advisories) to
 stdout as a JSON array, also when a later issue change fails and the command
 exits non-zero. --dry-run reads the open issues and prints the alerts but
-changes nothing.`,
+changes nothing. --failing also writes every alert still blocking in this run,
+announced or not, which "ods audit announce" reads.`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			exitOnError(runAuditAlert(opts, cmd.OutOrStdout()))
@@ -53,21 +56,32 @@ changes nothing.`,
 	cmd.Flags().StringVar(&opts.Scope, "scope", "main", "Branch the results came from, which keys the issues and fix branches")
 	cmd.Flags().BoolVar(&opts.KeepOpen, "keep-open", false, "Close no issue, for a run that skipped a scan")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Print the alerts without changing any issue")
+	cmd.Flags().StringVar(&opts.Failing, "failing", "", "Also write every blocking alert of the run to this JSON file")
 	_ = cmd.MarkFlagRequired("results")
 
 	return cmd
 }
 
 func runAuditAlert(opts *AuditAlertOptions, stdout io.Writer) error {
-	alerts, syncErr := audit.SyncAlerts(audit.SyncAlertsOptions{
+	res, syncErr := audit.Sync(audit.SyncAlertsOptions{
 		ResultFiles: opts.Results,
 		IgnoreURL:   opts.IgnoreURL,
 		Scope:       opts.Scope,
 		KeepOpen:    opts.KeepOpen,
 		DryRun:      opts.DryRun,
 	})
+	alerts := res.Announce
 	if alerts == nil {
 		alerts = []audit.Alert{}
+	}
+	if opts.Failing != "" {
+		failing := res.Failing
+		if failing == nil {
+			failing = []audit.Alert{}
+		}
+		if err := writeJSONFile(opts.Failing, failing); err != nil {
+			return err
+		}
 	}
 	// Print the recorded alerts even after a failed sync, so they still get
 	// announced.
@@ -80,4 +94,12 @@ func runAuditAlert(opts *AuditAlertOptions, stdout io.Writer) error {
 		return failf("Alert sync failed: %v", syncErr)
 	}
 	return nil
+}
+
+func writeJSONFile(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0644)
 }

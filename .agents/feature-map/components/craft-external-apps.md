@@ -14,7 +14,7 @@
 **Edition:** CE, with a Cloud-only lockdown on built-in credential editing (see `[[craft-admin]]`)
 **Owns:**
 `backend/onyx/sandbox_proxy/` (`server.py`, `request_evaluator.py`,
-`credential_injection.py`, `approval_cache.py`, `sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`,
+`credential_injection.py`, `approval_cache.py`, `destination_policy.py`, `sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`,
 `sandbox_identity/docker.py`, `certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`, `certificate_authority/docker.py`, `errors.py`,
 `logging_utils.py`, `mcp_jsonrpc.py`, `addons/gate.py`, `resolvers/external_app.py`,
 `resolvers/mcp_server.py`, `resolvers/mcp_matching.py`, `resolvers/onyx_pat.py`),
@@ -92,7 +92,7 @@ time.
 | `SANDBOX_BACKEND` (`SandboxBackend.KUBERNETES`/`DOCKER`) | `configs.py` | Selects `K8sSecretCAStore`/`K8sInformerLookup` vs. `FileCAStore`/`DockerEventsLookup` (`sandbox_proxy/certificate_authority/bootstrap.py:build_ca_store`, `sandbox_proxy/sandbox_identity/resolution.py:build_ip_lookup`). |
 | `SANDBOX_PROXY_CA_SECRET`, `SANDBOX_PROXY_CA_CONFIGMAP`, `SANDBOX_PROXY_NAMESPACE` | `configs.py` | K8s CA persistence and cross-namespace projection targets (`certificate_authority/kubernetes.py`). |
 | `SANDBOX_PROXY_CA_VOLUME_PATH` | `configs.py` | Docker CA persistence volume (`certificate_authority/docker.py`). |
-| `ONYX_SERVER_URL` | `configs.py` | The one internal host the proxy allows through the destination-block, and the host the `OnyxPatResolver` claims (`gate.py:_parse_api_server`, `resolvers/onyx_pat.py`). |
+| `ONYX_SERVER_URL` | `configs.py` | The configured internal API host the proxy allows through the destination-block, and the host the `OnyxPatResolver` claims (`gate.py:_parse_api_server`, `resolvers/onyx_pat.py`). |
 | `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | `configs.py` | How long the proxy parks a request awaiting an `ASK` decision before claiming `EXPIRED` (`gate.py:_await_decision`). |
 | `MCP_SESSION_TAG_HEADER` | `configs.py` | Header opencode's in-process MCP client uses to carry the session tag (`gate.py:_extract_session_tag`). |
 | `PARSER_MAX_BODY_BYTES` | `sandbox_proxy/addons/gate.py` (constant, not env) | 32 MiB request-body cap; see §9. |
@@ -101,7 +101,13 @@ time.
 The proxy requires `SANDBOX_PROXY_INTERNAL_CIDRS` at startup when the listener
 uses IPv6 or global clients are enabled. Invalid CIDRs also prevent startup.
 Internal destinations remain blocked for HTTP and CONNECT. The exact
-`ONYX_SERVER_URL` host and port remain the only internal destination exception.
+`ONYX_SERVER_URL` host and port remain an internal destination exception.
+Craft-enabled MCP servers also permit their exact scheme, host, and port for
+users with access in the sandbox tenant. The resolver caches access for 30 seconds.
+Lookup failures deny access. The tenant’s SSRF Protection setting applies to the addresses used for the connection.
+This exception uses `get_security_settings(allow_fallback=False)`; failed reads cannot substitute environment defaults.
+Raw TCP forwarding is disabled. Path, credential, and action checks still apply.
+MCP requests cannot upgrade to WebSocket or other protocols that bypass HTTP action checks.
 Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
 Use listeners and Services in that address family: IPv4 remains the default;
 IPv6 listeners support IPv6-only deployments. Switching an IPv4-primary
@@ -183,9 +189,25 @@ sandbox process (opencode / a tool call)
      sandbox_proxy/addons/gate.py:GateAddon.http_connect
   │
 2. Destination checks and address pinning
-     is_destination_blocked(config, host, port) rejects non-global addresses
-     and configured internal CIDRs, except ONYX_SERVER_URL's exact host:port.
+     resolve_destination applies one policy across all three hooks.
+     For new connections, it resolves DNS once. For reused connections, it checks
+     their addresses. Public addresses and ONYX_SERVER_URL's exact host:port pass.
+     Other addresses require an accessible Craft MCP origin.
+     CONNECT checks HTTPS; requests check their scheme. Upstream sockets check TLS
+     or the accepted CONNECT origin before allowing internal MCP addresses.
+     For internal addresses, resolve_destination identifies the source sandbox,
+     checks exact MCP origin access, and reads tenant SSRF settings without fallback.
+     resolve_destination applies these settings to the original DNS answers,
+     including embedded IPv4, with the shared URL validator.
+     Public and Onyx destinations do not require MCP or tenant-settings reads.
+     Only these validated addresses are pinned.
+     Raw TCP forwarding is disabled, so CONNECT payloads must pass HTTP checks.
      http_connect and request check destinations before processing traffic.
+     The gate records approved addresses for pending upstream connections, then
+     replaces them with the actual peer address when connected. Each request checks
+     matching pool candidates because mitmproxy selects the connection after request().
+     Disconnects and connection failures remove these records. This stores connection
+     facts, not access decisions, so policy changes apply to reused sockets.
      server_connect resolves and validates all answers again, then pins the
      upstream TCP connection to those addresses through UpstreamEventLoop.
      No new hostname lookup occurs between validation and connection.
@@ -362,7 +384,7 @@ process's memory and the encrypted DB columns
 `Sandbox.encrypted_pat`, all `EncryptedJson`/`SensitiveValue`). A sandbox
 attempting to curl the credential-issuing DB or the proxy's own control
 plane directly, rather than through a matched app request, would be a
-request to an internal address and blocked by `is_destination_blocked`
+request to an internal address and blocked by `resolve_destination`
 (§4.1 step 2) before it ever reached anything that could answer.
 
 ### 4.5 Approvals
@@ -520,6 +542,7 @@ they can never disagree about which server owns a request; see
    (`request_evaluator.py:_mcp_tool_actions`), never a silent pass-through.
 7. **The upstream socket must use only validated destination addresses.**
    `http_connect` and `request` reject forbidden destinations early.
+   Requests recheck pending and connected upstream addresses under current policy.
    `server_connect` calls `resolve_destination` and rejects the entire answer
    set if any address is forbidden. `pin_destination` and `UpstreamEventLoop`
    use those approved addresses for the TCP connection without another DNS

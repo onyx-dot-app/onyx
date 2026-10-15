@@ -166,7 +166,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
               value={inputRate}
               prefixText="$"
               inputMode="decimal"
-              placeholder="3.00"
+              placeholder={t("placeholders.inputCost")}
               onChange={(e: ChangeEvent<HTMLInputElement>) =>
                 setInputRate(e.target.value)
               }
@@ -180,7 +180,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
               value={outputRate}
               prefixText="$"
               inputMode="decimal"
-              placeholder="15.00"
+              placeholder={t("placeholders.outputCost")}
               onChange={(e: ChangeEvent<HTMLInputElement>) =>
                 setOutputRate(e.target.value)
               }

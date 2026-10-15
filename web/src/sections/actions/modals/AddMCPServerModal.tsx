@@ -202,7 +202,7 @@ export default function AddMCPServerModal({
                 >
                   <InputTypeInField
                     name="server_url"
-                    placeholder="https://your-mcp-server.com/mcp"
+                    placeholder={t("placeholders.mcpServerUrl")}
                   />
                 </InputVertical>
 

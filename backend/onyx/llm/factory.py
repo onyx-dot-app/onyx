@@ -350,6 +350,7 @@ def llm_from_provider(
         supports_reasoning=(
             model_configuration.supports_reasoning if model_configuration else False
         ),
+        is_router=model_configuration.is_router if model_configuration else False,
     )
 
 
@@ -422,6 +423,7 @@ def get_llm(
     reasoning_effort_max: ReasoningEffort | None = None,
     supports_reasoning: bool = False,
     supports_images: bool | None = None,
+    is_router: bool = False,
 ) -> LitellmLLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -461,6 +463,7 @@ def get_llm(
         reasoning_effort_max=reasoning_effort_max,
         supports_reasoning=supports_reasoning,
         supports_images=supports_images,
+        is_router=is_router,
     )
 
 

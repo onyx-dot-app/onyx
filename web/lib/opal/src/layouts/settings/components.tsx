@@ -3,12 +3,15 @@
 import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
 import { Divider, Button, Spacer } from "@opal/components";
+import type { TagProps } from "@opal/components";
 import type {
   IconFunctionComponent,
   RichStr,
   SizeVariants,
+  Spacing,
   WithoutStyles,
 } from "@opal/types";
+import { spacingToRem } from "@opal/shared";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
@@ -18,19 +21,20 @@ import { useOpalStrings } from "@opal/strings";
 // ---------------------------------------------------------------------------
 
 const widthClasses: Record<
-  Extract<SizeVariants, "sm" | "md" | "lg" | "full">,
+  Extract<SizeVariants, "sm" | "md" | "lg" | "xl" | "full">,
   string
 > = {
   sm: "w-[min(var(--app-container-sm),100%)]",
   md: "w-[min(var(--app-container-md),100%)]",
   lg: "w-[min(var(--app-container-lg),100%)]",
+  xl: "w-[min(var(--app-container-xl),100%)]",
   full: "w-(--app-container-full)",
 };
 
 interface SettingsRootProps extends WithoutStyles<
   React.HtmlHTMLAttributes<HTMLDivElement>
 > {
-  width?: Extract<SizeVariants, "sm" | "md" | "lg" | "full">;
+  width?: Extract<SizeVariants, "sm" | "md" | "lg" | "xl" | "full">;
 }
 
 /**
@@ -62,6 +66,12 @@ export interface SettingsHeaderProps {
   moreIcon2?: IconFunctionComponent;
   title: string | RichStr;
   description?: string | RichStr;
+  /** Tag inline after the description, e.g. a status. */
+  descriptionTag?: TagProps;
+  /** The title can be edited in place, as `Content` does it. */
+  editable?: boolean;
+  /** Called when the user commits a title edit. */
+  onTitleChange?: (newTitle: string) => void;
   children?: React.ReactNode;
   /**
    * Controls on the right of the title block, left to right. The header lays
@@ -88,6 +98,9 @@ function SettingsHeader({
   moreIcon2,
   title,
   description,
+  descriptionTag,
+  editable,
+  onTitleChange,
   children,
   actions,
   cancel,
@@ -129,7 +142,7 @@ function SettingsHeader({
     <div
       ref={headerRef}
       className={cn(
-        "w-full",
+        "w-full -mb-6",
         isSticky && "sticky top-0 z-settings-header bg-background-tint-01"
       )}
     >
@@ -144,6 +157,9 @@ function SettingsHeader({
               moreIcon2={moreIcon2}
               title={title}
               description={description}
+              descriptionTag={descriptionTag}
+              editable={editable}
+              onTitleChange={onTitleChange}
               sizePreset="headline"
               variant="heading"
             />
@@ -171,6 +187,8 @@ function SettingsHeader({
       ) : (
         <Spacer rem={0.5} />
       )}
+      {/* The header paints the body's top gap (its -mb-6 pulls the body up under it), so a pinned header leaves no unpainted band where scrolled content can show. */}
+      <Spacer rem={1.5} />
 
       {isSticky && (
         <div
@@ -192,11 +210,18 @@ function SettingsHeader({
 // Body
 // ---------------------------------------------------------------------------
 
-function SettingsBody(
-  props: WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>>
-) {
+type SettingsBodyProps = WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>> & {
+  /** Space between sections, as a spacing step (`N / 4` rem). @default 8 */
+  gap?: Spacing;
+};
+
+function SettingsBody({ gap = 8, ...props }: SettingsBodyProps) {
   return (
-    <div className="pt-6 pb-18 px-4 flex flex-col gap-8 w-full" {...props} />
+    <div
+      className="pt-6 pb-18 px-4 flex flex-col w-full"
+      style={{ gap: spacingToRem(gap) }}
+      {...props}
+    />
   );
 }
 

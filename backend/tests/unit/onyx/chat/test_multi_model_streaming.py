@@ -187,35 +187,71 @@ class TestSetPreferredResponseValidation:
                 db, user_message_id=1, preferred_assistant_message_id=2
             )
 
-    def test_assistant_not_child_of_user(self) -> None:
+    @pytest.mark.parametrize(
+        "message_type,same_session,parent_id,error",
+        [
+            (MessageType.USER, True, 1, "not an assistant message"),
+            (MessageType.SYSTEM, True, 1, "not an assistant message"),
+            (MessageType.ASSISTANT, False, 1, "not in the same chat session"),
+            (MessageType.ASSISTANT, True, 999, "not a child"),
+        ],
+    )
+    def test_invalid_response_leaves_selection_unchanged(
+        self,
+        message_type: MessageType,
+        same_session: bool,
+        parent_id: int,
+        error: str,
+    ) -> None:
         db = MagicMock()
-        user_msg = MagicMock()
-        user_msg.message_type = MessageType.USER
+        session_id = uuid4()
+        user_msg = ChatMessage(
+            id=1,
+            message_type=MessageType.USER,
+            chat_session_id=session_id,
+            preferred_response_id=3,
+            latest_child_message_id=3,
+        )
+        candidate = ChatMessage(
+            id=2,
+            message_type=message_type,
+            chat_session_id=session_id if same_session else uuid4(),
+            parent_message_id=parent_id,
+        )
+        db.get.side_effect = [user_msg, candidate]
 
-        assistant_msg = MagicMock()
-        assistant_msg.parent_message_id = 999  # different parent
-
-        db.get.side_effect = [user_msg, assistant_msg]
-
-        with pytest.raises(ValueError, match="not a child"):
+        with pytest.raises(ValueError, match=error):
             set_preferred_response(
                 db, user_message_id=1, preferred_assistant_message_id=2
             )
 
+        assert user_msg.preferred_response_id == 3
+        assert user_msg.latest_child_message_id == 3
+        db.commit.assert_not_called()
+
     def test_valid_call_sets_preferred_response_id(self) -> None:
         db = MagicMock()
-        user_msg = MagicMock()
-        user_msg.message_type = MessageType.USER
-
-        assistant_msg = MagicMock()
-        assistant_msg.parent_message_id = 1  # correct parent
-
+        session_id = uuid4()
+        user_msg = ChatMessage(
+            id=1,
+            message_type=MessageType.USER,
+            chat_session_id=session_id,
+            preferred_response_id=3,
+            latest_child_message_id=3,
+        )
+        assistant_msg = ChatMessage(
+            id=2,
+            message_type=MessageType.ASSISTANT,
+            chat_session_id=session_id,
+            parent_message_id=1,
+        )
         db.get.side_effect = [user_msg, assistant_msg]
 
         set_preferred_response(db, user_message_id=1, preferred_assistant_message_id=2)
 
         assert user_msg.preferred_response_id == 2
         assert user_msg.latest_child_message_id == 2
+        db.commit.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------

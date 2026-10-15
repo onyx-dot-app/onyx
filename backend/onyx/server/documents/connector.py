@@ -424,8 +424,8 @@ def upload_files(
 
                 # Validate the zip by opening it (catches corrupt/non-zip files)
                 with zipfile.ZipFile(file.file, "r") as zf:
+                    assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                     if unzip:
-                        assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                         unzipped_bytes: int
                         zip_metadata_file_id, unzipped_bytes = (
                             save_zip_metadata_to_file_store(
@@ -847,6 +847,7 @@ def update_connector_files(
         connector_specific_config=updated_config,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
         indexing_start=connector.indexing_start,
     )
 
@@ -1997,6 +1998,7 @@ def update_connector_from_model(
         connector_specific_config=updated_connector.connector_specific_config,
         refresh_freq=updated_connector.refresh_freq,
         prune_freq=updated_connector.prune_freq,
+        check_freq=updated_connector.check_freq,
         credential_ids=[
             association.credential.id for association in updated_connector.credentials
         ],
@@ -2272,6 +2274,7 @@ def get_connector_by_id(
         connector_specific_config=connector.connector_specific_config,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
         credential_ids=[
             association.credential.id for association in connector.credentials
         ],

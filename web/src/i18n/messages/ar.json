@@ -809,6 +809,12 @@
         "ariaLabel": "البحث في الأدوات",
         "placeholder": "البحث في الأدوات…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://khadim-mcp.com/mcp"
     }
   },
   "admin": {
@@ -819,6 +825,9 @@
         },
         "messaging": {
           "label": "المراسلة"
+        },
+        "meetings": {
+          "label": "الاجتماعات"
         },
         "sales": {
           "label": "المبيعات والتسويق"
@@ -2033,23 +2042,11 @@
           "days": "{count, plural, one {# يوم} other {# أيام}}",
           "hours": "{count, plural, one {# ساعة} other {# ساعات}}",
           "minutes": "{count, plural, one {# دقيقة} other {# دقائق}}"
-        },
-        "indexingStart": {
-          "label": "بدء الفهرسة"
-        },
-        "pruningFrequency": {
-          "label": "تكرار التقليم"
-        },
-        "refreshFrequency": {
-          "label": "تكرار التحديث"
         }
       },
       "configItem": {
         "booleanFalse": "خطأ",
         "booleanTrue": "صحيح",
-        "edit": {
-          "tooltip": "تعديل"
-        },
         "showAll": {
           "label": "عرض الكل ({count} عناصر)"
         },
@@ -2073,53 +2070,10 @@
         "description": "حدث هذا الخطأ أثناء محاولة حذف الموصل. يمكنك إعادة محاولة الحذف بالنقر على زر \"حذف\".",
         "title": "خطأ في الحذف"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "المستندات المتزامنة",
-          "errorMessage": "رسالة الخطأ",
-          "permissionErrors": "أخطاء الأذونات",
-          "status": "الحالة",
-          "timeStarted": "وقت البدء"
-        },
-        "empty": {
-          "description": "تُجدول عمليات مزامنة أذونات المستندات في الخلفية. قد تستغرق بعض الوقت للظهور. جرّب التحديث خلال 30 ثانية تقريبًا.",
-          "title": "لا توجد محاولات مزامنة أذونات مستندات بعد"
-        },
-        "errorModal": {
-          "title": "خطأ في مزامنة أذونات المستندات"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "راجع <link>مستنداتنا</link> لمزيد من المعلومات حول إعداد هذا الموصّل."
         }
-      },
-      "errorsModal": {
-        "columns": {
-          "documentId": "معرّف الفشل",
-          "errorMessage": "رسالة الخطأ",
-          "status": "الحالة",
-          "time": "الوقت"
-        },
-        "description": "فيما يلي الأخطاء التي حدثت أثناء الفهرسة. يمثل كل صف مستندًا أو كيانًا فشل.",
-        "empty": {
-          "description": "لم يتم العثور على أخطاء في هذه الصفحة"
-        },
-        "fullReindex": {
-          "description": "انقر على الزر أدناه لبدء إعادة فهرسة كاملة لمحاولة حل هذه الأخطاء. قد تستغرق إعادة الفهرسة الكاملة وقتًا أطول بكثير من التحديث العادي."
-        },
-        "resolveAllButton": {
-          "label": "حل الكل"
-        },
-        "status": {
-          "resolved": "محلول",
-          "unresolved": "غير محلول"
-        },
-        "targetedReindex": {
-          "description": "انقر على الزر أدناه لإعادة جلب المستندات الفاشلة فقط. أسرع بكثير من إعادة الفهرسة الكاملة."
-        },
-        "title": "أخطاء الفهرسة",
-        "unknownDocument": "غير معروف"
       },
       "fileManagement": {
         "addFilesButton": {
@@ -2181,23 +2135,6 @@
           "heading": "{multiple, select, true {الملفات المحددة} other {الملف المحدد}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "رسالة الخطأ",
-          "groups": "المجموعات",
-          "memberships": "العضويات",
-          "status": "الحالة",
-          "timeStarted": "وقت البدء",
-          "users": "المستخدمون"
-        },
-        "empty": {
-          "description": "تُجدول عمليات مزامنة عضويات المجموعات في الخلفية. قد تستغرق بعض الوقت للظهور. جرّب التحديث خلال 30 ثانية تقريبًا.",
-          "title": "لا توجد محاولات مزامنة عضويات مجموعات بعد"
-        },
-        "errorModal": {
-          "title": "خطأ في مزامنة عضويات المجموعات"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "يحتفظ الجميع بالوصول المتزامن من المصدر.",
@@ -2219,38 +2156,6 @@
           "title": "تقييد الوصول بالمجموعات"
         }
       },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "رسالة الخطأ",
-          "newDocs": "المستندات الجديدة",
-          "status": "الحالة",
-          "timeStarted": "وقت البدء",
-          "totalDocs": "إجمالي المستندات",
-          "totalDocsTooltip": "إجمالي عدد المستندات المستبدلة في الفهرس خلال محاولة الفهرسة هذه"
-        },
-        "docsPerMinute": "{rate} مستند / دقيقة",
-        "docsRemoved": "(كما أُزيل {count} مستندًا اكتُشف حذفها في المصدر)",
-        "empty": {
-          "description": "تُجدول محاولات الفهرسة في الخلفية وقد تستغرق بعض الوقت للظهور. جرّب تحديث الصفحة خلال 30 ثانية تقريبًا!",
-          "title": "لم تُجدول محاولات فهرسة بعد"
-        },
-        "noAdditionalDocs": "لم تُعالج مستندات إضافية",
-        "reindexTooltip": {
-          "completed": "كانت محاولة الفهرسة هذه إعادة فهرسة كاملة. تمت مزامنة جميع المستندات من المصدر إلى النظام.",
-          "inProgress": "محاولة الفهرسة هذه إعادة فهرسة كاملة. تجري مزامنة جميع المستندات من المصدر إلى النظام."
-        },
-        "stageMetricsButton": {
-          "tooltip": "عرض مقاييس المراحل"
-        },
-        "viewTrace": {
-          "ariaLabel": "عرض التتبع الكامل"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "واجهنا بعض المشكلات أثناء معالجة بعض المستندات. <details>عرض التفاصيل.</details>",
-        "resolvingStatus": "جارٍ حل الإخفاقات",
-        "title": "فشلت فهرسة بعض المستندات"
-      },
       "invalidState": {
         "description": "هذا الموصل في حالة غير صالحة. يرجى تحديث بيانات الاعتماد أو إنشاء موصل جديد قبل إعادة الفهرسة.",
         "title": "حالة موصل غير صالحة"
@@ -2267,7 +2172,6 @@
           }
         },
         "reIndex": {
-          "label": "إعادة الفهرسة",
           "tooltip": {
             "indexing": "لا يمكن إعادة الفهرسة أثناء وجود فهرسة قيد التنفيذ",
             "invalid": "أصلح إعدادات الموصل قبل إعادة الفهرسة",
@@ -2276,45 +2180,28 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "إيقاف مؤقت"
+            "label": "إيقاف الفهرسة مؤقتًا",
+            "description": "إلغاء كل عمليات الفهرسة والمزامنة الجارية والمستقبلية."
           },
           "resume": {
-            "label": "استئناف"
+            "label": "استئناف الفهرسة",
+            "description": "السماح بعمليات الفهرسة والمزامنة المجدولة مجددًا."
           },
           "tooltip": {
             "updating": "تحديث الحالة قيد التنفيذ"
           }
         },
         "trigger": {
-          "label": "إدارة"
+          "label": "إدارة الفهرسة"
+        },
+        "updateIndex": {
+          "label": "تحديث الفهرس",
+          "description": "جلب التحديثات وفهرسة المستندات منذ آخر عملية فهرسة ناجحة."
+        },
+        "fullReindex": {
+          "label": "إعادة فهرسة كاملة",
+          "description": "إعادة فهرسة كل المستندات من المصدر. قد يستغرق ذلك ساعات أو أيامًا حسب حجم المحتوى."
         }
-      },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "ملغاة"
-        },
-        "completedWithErrors": {
-          "label": "اكتملت مع أخطاء"
-        },
-        "failed": {
-          "label": "فشلت"
-        },
-        "fallback": {
-          "label": "لم تبدأ"
-        },
-        "inProgress": {
-          "label": "قيد التنفيذ"
-        },
-        "notStarted": {
-          "label": "مجدولة"
-        },
-        "success": {
-          "label": "نجحت"
-        }
-      },
-      "pruningFrequencyModal": {
-        "description": "عدد مرات تقليم الموصل (بالساعات)",
-        "title": "تكرار التقليم"
       },
       "reEnableModal": {
         "actionButton": {
@@ -2323,247 +2210,133 @@
         "additionalDetails": "سبق تعليم هذا الموصل كغير صالح. يرجى التحقق من صحة إعداداتك قبل إعادة التفعيل. هل أنت متأكد من رغبتك في المتابعة؟",
         "entityType": "موصل غير صالح"
       },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "سيؤدي هذا إلى إعادة فهرسة كاملة لجميع المستندات من المصدر.",
-          "note": "<strong>ملاحظة:</strong> بحسب عدد المستندات المخزنة في المصدر، قد يستغرق هذا وقتًا طويلًا."
-        },
-        "fullReindexButton": {
-          "label": "تشغيل إعادة فهرسة كاملة"
-        },
-        "title": "تشغيل الفهرسة",
-        "update": {
-          "description": "سيجلب هذا ويفهرس جميع المستندات التي تغيرت أو أُضيفت منذ آخر عملية فهرسة ناجحة."
-        },
-        "updateButton": {
-          "label": "تشغيل التحديث"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "عدد مرات تحديث الموصل (بالدقائق)",
-        "title": "تكرار التحديث"
-      },
-      "sections": {
-        "advanced": {
-          "title": "متقدم"
-        },
-        "advancedConfiguration": {
-          "title": "تهيئة متقدمة"
-        },
-        "connectorConfiguration": {
-          "title": "تهيئة الموصل"
-        },
-        "credential": {
-          "title": "بيانات الاعتماد"
-        },
-        "indexing": {
-          "title": "الفهرسة"
-        },
-        "indexingAttempts": {
-          "title": "محاولات الفهرسة"
-        }
-      },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "إخفاء التكلفة الإضافية للمحاولة"
-          },
-          "showButton": {
-            "label": "عرض التكلفة الإضافية للمحاولة"
-          }
-        },
-        "batchTotal": {
-          "empty": "لا توجد دفعات مكتملة بعد",
-          "summary": "متوسط الدفعة: {avgLabel}، {count, plural, one {دفعة واحدة} other {# دفعات}} — التوزيع موضح أدناه."
-        },
-        "empty": {
-          "description": "لم تُسجل بيانات توقيت للمراحل لهذه المحاولة بعد. المحاولات الأقدم التي جرت قبل نشر أدوات قياس المراحل لن تحتوي على مقاييس."
-        },
         "loadError": {
-          "description": "تعذّر تحميل بيانات توقيت المراحل لهذه المحاولة. يعمل خط المعالجة حتى عندما يكون تسجيل المقاييس غير متاح، لذا لا يشير هذا إلى مشكلة في عملية الفهرسة نفسها.",
           "title": "فشل تحميل مقاييس المراحل"
         },
-        "loading": "جارٍ تحميل مقاييس المراحل…",
         "perBatch": {
-          "columns": {
-            "avgTime": "متوسط الوقت",
-            "calls": "الاستدعاءات",
-            "max": "الأقصى",
-            "min": "الأدنى",
-            "stage": "المرحلة",
-            "totalTime": "إجمالي الوقت"
-          },
           "empty": "لم تُسجل بيانات مراحل لكل دفعة."
-        },
-        "sort": {
-          "label": "الترتيب:",
-          "pipelineOrder": {
-            "label": "ترتيب خط المعالجة"
-          },
-          "timeTaken": {
-            "label": "الوقت المستغرق"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "يقرأ الدفعة من التخزين الكائني إلى ذاكرة العامل.",
             "label": "تحميل الدفعة"
           },
           "batchTotal": {
-            "description": "إجمالي الوقت الفعلي المنقضي لمعالجة دفعة واحدة من البداية إلى النهاية.",
             "label": "إجمالي الدفعة"
           },
           "batchUnaccounted": {
-            "description": "وقت الدفعة غير المنسوب إلى أي مرحلة مسماة. القيمة الكبيرة تشير إلى نقص في أدوات القياس.",
             "label": "غير محسوب"
           },
           "checkpointLoad": {
-            "description": "يحمّل نقطة التحقق المحفوظة لتستأنف المحاولة من حيث توقف التشغيل السابق.",
             "label": "تحميل نقطة التحقق"
           },
           "chunking": {
-            "description": "يقسّم كل مستند إلى الأجزاء التي تُضمَّن وتُفهرَس.",
             "label": "التقسيم"
           },
           "connectorFetch": {
-            "description": "الوقت الذي يقضيه الموصل في استدعاء واجهة API للمصدر وإنتاج المستندات الخام.",
             "label": "جلب الموصل"
           },
           "connectorValidation": {
-            "description": "يتحقق من أن الموصل مهيأ بشكل صحيح ويمكن الوصول إليه قبل بدء الجلب.",
             "label": "التحقق من الموصل"
           },
           "contextualRag": {
-            "description": "يولّد ملخصات سياق لكل جزء باستخدام LLM لتحسين جودة الاسترجاع.",
             "label": "RAG السياقي"
           },
           "coordLockAcquireWait": {
-            "description": "ينتظر قفل التنسيق الذي يحمي عدادات التقدم المشتركة للمحاولة.",
             "label": "انتظار قفل التنسيق"
           },
           "coordinationUpdate": {
-            "description": "يحدّث عدادات تقدم المحاولة لتعكس الواجهة الدفعة المكتملة.",
             "label": "تحديث التنسيق"
           },
           "docBatchEnqueue": {
-            "description": "ينشر الدفعة المخزنة في طابور Celery ليلتقطها عامل معالجة المستندات.",
             "label": "إدراج دفعة المستندات في الطابور"
           },
           "docBatchStore": {
-            "description": "يحفظ دفعة المستندات المجلوبة في التخزين الكائني لعمال معالجة المستندات.",
             "label": "تخزين دفعة المستندات"
           },
           "docDbPrepare": {
-            "description": "يحدد المستندات الجديدة أو المحدّثة ويجهّز صفوف قاعدة البيانات.",
             "label": "تجهيز قاعدة بيانات المستندات"
           },
           "docLockAcquireWait": {
-            "description": "ينتظر أقفال المستندات الفردية حتى لا تكتب المحاولات المتزامنة المستند نفسه.",
             "label": "انتظار قفل المستند"
           },
           "docprocessingSetup": {
-            "description": "يجهّز العامل: يحمّل إعدادات البحث ونموذج التضمين وعملاء الفهرس.",
             "label": "إعداد معالجة المستندات"
           },
           "embedding": {
-            "description": "يستدعي نموذج التضمين لتحويل الأجزاء إلى متجهات. عادةً أبطأ مرحلة.",
             "label": "التضمين"
           },
           "enrichmentPrep": {
-            "description": "يرفق التحكم في الوصول والتعزيزات والبيانات الوصفية الأخرى بكل جزء قبل الكتابة.",
             "label": "تجهيز الإثراء"
           },
           "finalization": {
-            "description": "ينظف موارد العامل ويحرر الدفعة بعد اكتمال المعالجة.",
             "label": "الإنهاء"
           },
           "gcCollect": {
-            "description": "الوقت المستغرق في جمع القمامة الصريح بين الدفعات.",
             "label": "جمع القمامة"
           },
           "hierarchyUpsert": {
-            "description": "يكتب تسلسل المجلدات أو المساحات للمصدر حتى يمكن تصفية المستندات حسب الموقع.",
             "label": "تحديث التسلسل الهرمي"
           },
           "imageProcessing": {
-            "description": "يستخرج الصور ويلخصها حتى يصبح محتواها نصًا قابلًا للبحث.",
             "label": "معالجة الصور"
           },
           "permissionValidation": {
-            "description": "يؤكد أن بيانات الاعتماد لديها الأذونات المطلوبة لقراءة مستندات المصدر.",
             "label": "التحقق من الأذونات"
           },
           "postIndexDbUpdate": {
-            "description": "يحدّث صفوف المستندات في Postgres بعد نجاح الكتابة في الفهرس.",
             "label": "تحديث قاعدة البيانات بعد الفهرسة"
           },
           "queueWait": {
-            "description": "الوقت الذي تنتظره الدفعة في الطابور قبل أن يبدأها عامل معالجة المستندات.",
             "label": "انتظار الطابور"
           },
           "vectorDbWrite": {
-            "description": "يكتب الأجزاء المضمَّنة في فهرس المستندات.",
             "label": "الكتابة في قاعدة المتجهات"
+          },
+          "embeddingRateLimitWait": {
+            "label": "انتظار حد معدل التضمين",
+            "description": "الوقت الذي انتظرته طلبات التضمين بسبب حد المعدل المحدد في إعدادات الفهرس. جزء من التضمين، ومجموع عبر خيوط التضمين."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "انتظار تقييد المزوّد",
+            "description": "الوقت الذي انتظرته طلبات التضمين بعد أن قيّدها مزوّد التضمين. جزء من التضمين، ومجموع عبر خيوط التضمين."
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "توقيتات كل دفعة وكل محاولة لمحاولة الفهرسة هذه.",
-        "title": "مقاييس مراحل الفهرسة"
       },
       "statusCard": {
         "documentsIndexed": {
           "label": "المستندات المفهرسة"
         },
-        "indexingSpeed": "({speed} مستند / دقيقة)",
+        "indexingSpeed": "{speed} مستند/دقيقة",
         "lastIndexed": {
-          "label": "آخر فهرسة"
+          "value": "آخر فهرسة {when}"
         },
-        "lastSynced": {
-          "label": "آخر مزامنة"
+        "title": "حالة الفهرسة",
+        "documents": {
+          "label": "الأخيرة / الإجمالي",
+          "total": "/ {total}"
         },
-        "permissionSyncing": {
-          "label": "مزامنة الأذونات"
+        "throughput": {
+          "ariaLabel": "المستندات المفهرسة بمرور الوقت",
+          "tooltip": "{count, plural, one {# مستند} other {# مستندات}}",
+          "loadError": "تعذر تحميل الرسم البياني."
         },
-        "status": {
-          "label": "الحالة"
-        }
-      },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "عرض رسالة الخطأ الكاملة"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "مزامنة أذونات المستندات",
-          "notApplicableDescription": "لا يستخدم هذا الموصل مهمة منفصلة لمزامنة أذونات المستندات."
-        },
-        "groupMembership": {
-          "label": "مزامنة عضويات المجموعات",
-          "notApplicableDescription": "لا يستخدم هذا الموصل مهمة منفصلة لمزامنة عضويات المجموعات."
-        },
-        "indexing": {
-          "label": "الفهرسة"
-        },
-        "loadError": {
-          "title": "فشل تحميل محاولات المزامنة"
-        },
-        "notApplicable": {
-          "title": "غير منطبق"
+        "hold": {
+          "checks_running": "جارٍ تشغيل فحوصات ما قبل الفهرسة",
+          "checks_failed_to_run": "متوقف: تعذر تشغيل الفحوصات",
+          "required_checks_failed": "متوقف: فشلت فحوصات مطلوبة",
+          "start": "بدء الفهرسة",
+          "released": "بدأت الفهرسة",
+          "releaseFailed": "تعذر بدء الفهرسة",
+          "viewChecks": "عرض فحوصات الموصل"
         }
       },
       "toasts": {
         "completeReindexStarted": "بدأت إعادة الفهرسة الكاملة بنجاح",
-        "completeReindexStarting": "جارٍ بدء إعادة الفهرسة الكاملة...",
         "deletionScheduleFailed": "فشلت جدولة حذف الموصل - {message}",
-        "indexingProcessStartFailed": "فشل بدء عملية الفهرسة",
         "indexingStartFailed": "فشل بدء الفهرسة",
         "indexingStartUnexpectedError": "حدث خطأ غير متوقع أثناء محاولة بدء الفهرسة",
         "indexingUpdateStarted": "بدأ تحديث الفهرسة بنجاح",
-        "indexingUpdateStarting": "جارٍ بدء تحديث الفهرسة...",
-        "invalidPruningFrequency": "تكرار تقليم غير صالح: يجب أن يكون رقمًا صالحًا",
-        "invalidRefreshFrequency": "تكرار تحديث غير صالح: يجب أن يكون عددًا صحيحًا",
         "nameUpdateFailed": "فشل تحديث اسم الموصل",
         "nameUpdated": "تم تحديث اسم الموصل بنجاح",
         "noUnresolvedErrors": "لا توجد أخطاء غير محلولة لإعادة المحاولة.",
@@ -2572,7 +2345,323 @@
         "refreshFrequencyUpdateFailed": "فشل تحديث تكرار تحديث الموصل",
         "refreshFrequencyUpdated": "تم تحديث تكرار تحديث الموصل بنجاح",
         "targetedReindexFailed": "فشلت إعادة الفهرسة الموجهة: {message}",
-        "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات."
+        "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات.",
+        "checkFrequencyUpdated": "تم تحديث معدل فحص الموصّل بنجاح",
+        "checkFrequencyUpdateFailed": "فشل تحديث معدل فحص الموصّل"
+      },
+      "backButton": {
+        "label": "كل الموصلات"
+      },
+      "account": {
+        "title": "حساب المصادقة",
+        "editButton": {
+          "label": "تعديل الحساب"
+        }
+      },
+      "configuration": {
+        "title": "إعدادات الفهرسة",
+        "description": "{source} • {count, plural, one {# إعداد} other {# إعدادات}}",
+        "editButton": {
+          "label": "تعديل الإعدادات"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {مجلد} other {مجلدات}}",
+            "source": "{count, plural, one {مصدر} other {مصادر}}",
+            "stub": "{count, plural, one {عقدة} other {عقد}}",
+            "shared_drive": "{count, plural, one {مساحة تخزين مشتركة} other {مساحات تخزين مشتركة}}",
+            "my_drive": "{count, plural, one {ملفاتي} other {ملفاتي}}",
+            "space": "{count, plural, one {مساحة} other {مساحات}}",
+            "page": "{count, plural, one {صفحة} other {صفحات}}",
+            "project": "{count, plural, one {مشروع} other {مشاريع}}",
+            "database": "{count, plural, one {قاعدة بيانات} other {قواعد بيانات}}",
+            "workspace": "{count, plural, one {مساحة عمل} other {مساحات عمل}}",
+            "site": "{count, plural, one {موقع} other {مواقع}}",
+            "drive": "{count, plural, one {مكتبة مستندات} other {مكتبات مستندات}}",
+            "channel": "{count, plural, one {قناة} other {قنوات}}",
+            "mailbox": "{count, plural, one {صندوق بريد} other {صناديق بريد}}"
+          },
+          "counts": {
+            "folder": "{count, plural, one {# مجلد} other {# مجلدات}}",
+            "source": "{count, plural, one {# مصدر} other {# مصادر}}",
+            "stub": "{count, plural, one {# عقدة} other {# عقد}}",
+            "shared_drive": "{count, plural, one {# مساحة تخزين مشتركة} other {# مساحات تخزين مشتركة}}",
+            "my_drive": "{count, plural, one {# ملفاتي} other {# ملفاتي}}",
+            "space": "{count, plural, one {# مساحة} other {# مساحات}}",
+            "page": "{count, plural, one {# صفحة} other {# صفحات}}",
+            "project": "{count, plural, one {# مشروع} other {# مشاريع}}",
+            "database": "{count, plural, one {# قاعدة بيانات} other {# قواعد بيانات}}",
+            "workspace": "{count, plural, one {# مساحة عمل} other {# مساحات عمل}}",
+            "site": "{count, plural, one {# موقع} other {# مواقع}}",
+            "drive": "{count, plural, one {# مكتبة مستندات} other {# مكتبات مستندات}}",
+            "channel": "{count, plural, one {# قناة} other {# قنوات}}",
+            "mailbox": "{count, plural, one {# صندوق بريد} other {# صناديق بريد}}"
+          },
+          "notIndexed": "غير مفهرس",
+          "other": "مستندات أخرى",
+          "loadError": "تعذر تحميل توزيع المستندات.",
+          "open": "فتح في المصدر",
+          "empty": "لم تتم فهرسة أي مستندات بعد.",
+          "unavailable": "متاح بعد أول عملية فهرسة ناجحة.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {مستند} two {مستندان} few {مستندات} many {مستندًا} other {مستند}}"
+        },
+        "summary": "{realm} • {counts}"
+      },
+      "sharing": {
+        "title": "إعدادات المشاركة",
+        "summary": {
+          "everyone": "المستندات مشاركة مع **الجميع**",
+          "groups": "المستندات مشاركة مع **{count, plural, one {# مجموعة} other {# مجموعات}}**",
+          "sync": "الوصول إلى المستندات **متزامن مع {source}**",
+          "managedByAdmins": "يديرها **المسؤولون**",
+          "managedByGroups": "تديرها **{count, plural, one {# مجموعة} other {# مجموعات}}**",
+          "syncRestricted": "الوصول إلى المستندات **متزامن مع {source}**، مقيد بـ **{count, plural, one {# مجموعة} other {# مجموعات}}**",
+          "groupsPending": "المستندات مشاركة مع **مجموعات محددة**",
+          "syncRestrictedPending": "الوصول إلى المستندات **متزامن مع {source}**، مقيد بـ **مجموعات محددة**"
+        },
+        "manageAccess": {
+          "title": "صلاحية إدارة الموصل",
+          "unavailable": "لا يمكنك معرفة من يدير هذا الموصل."
+        },
+        "editButton": {
+          "label": "تعديل الوصول"
+        },
+        "groupsUnavailable": "تعذر تحميل المجموعات."
+      },
+      "schedule": {
+        "refresh": "تحديث كل **{every}**",
+        "prune": "تنقية كل **{every}**",
+        "checks": "تشغيل الفحوصات كل **{every}**"
+      },
+      "runs": {
+        "kinds": {
+          "label": "نوع التشغيل",
+          "all": "كل الأنواع",
+          "indexing": "فهرسة المستندات",
+          "doc_permission_sync": "مزامنة الأذونات",
+          "group_sync": "مزامنة عضوية المجموعات",
+          "pruning": "تقليم المستندات",
+          "checks": "فحوصات الموصّل"
+        },
+        "detail": {
+          "queued": "في قائمة الانتظار",
+          "running": "قيد التشغيل",
+          "rate": "{rate} مستند/دقيقة",
+          "finished": "{time} ({minutes, number} دقيقة)"
+        },
+        "actions": {
+          "stages": "عرض مقاييس المراحل",
+          "cancel": "إلغاء",
+          "logs": "عرض السجلات",
+          "checks": "عرض نتائج الفحوصات"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
+          "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
+        },
+        "figures": {
+          "indexed": "مفهرس",
+          "synced": "متزامن",
+          "memberships": "عضويات",
+          "removed": "تمت إزالتها",
+          "checks": "فحوصات تم تشغيلها"
+        },
+        "counts": {
+          "newDocs": "{count, plural, one {مستند جديد واحد} other {# مستندات جديدة}}",
+          "updatedDocs": "المستندات المحدثة",
+          "removedDocs": "{count, plural, one {تمت إزالة مستند واحد} other {تمت إزالة # مستندات}}",
+          "users": "{count, plural, one {مستخدم واحد} other {# مستخدمين}}",
+          "groups": "{count, plural, one {مجموعة واحدة} other {# مجموعات}}",
+          "running": "{count, plural, one {تشغيل واحد قيد التنفيذ} other {# عمليات تشغيل قيد التنفيذ}}",
+          "succeeded": "{count, plural, one {نجح تشغيل واحد} other {نجحت # عمليات تشغيل}}",
+          "failed": "{count, plural, one {فشل تشغيل واحد} other {فشلت # عمليات تشغيل}}",
+          "passedChecks": "{count, plural, one {نجح فحص واحد} other {نجح # فحوصات}}",
+          "failedChecks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
+          "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}"
+        },
+        "search": {
+          "placeholder": "البحث في عمليات الفهرسة..."
+        },
+        "window": {
+          "label": "النطاق الزمني",
+          "all": "كل الأوقات",
+          "h1": "آخر ساعة",
+          "h12": "آخر 12 ساعة",
+          "h24": "آخر 24 ساعة",
+          "d7": "آخر 7 أيام",
+          "d30": "آخر 30 يومًا"
+        },
+        "statusGroups": {
+          "label": "الحالة",
+          "all": "كل الحالات",
+          "running": "قيد التشغيل",
+          "succeeded": "ناجح",
+          "failed": "فشل",
+          "canceled": "ملغى"
+        },
+        "loadError": {
+          "title": "تعذر تحميل عمليات التشغيل."
+        },
+        "empty": {
+          "title": "لا توجد عمليات تشغيل بعد",
+          "filteredTitle": "لا توجد عمليات تشغيل تطابق هذه المرشحات.",
+          "description": "تتم جدولة عمليات التشغيل في الخلفية وقد يستغرق ظهورها بعض الوقت."
+        },
+        "units": "{count, plural, one {تشغيل} other {عمليات تشغيل}}",
+        "errorModal": {
+          "indexing": "خطأ في تشغيل الفهرسة",
+          "doc_permission_sync": "خطأ في مزامنة أذونات المستندات",
+          "group_sync": "خطأ في مزامنة عضوية المجموعات",
+          "pruning": "خطأ في تقليم المستندات",
+          "checks": "خطأ في فحوصات الموصّل"
+        },
+        "toasts": {
+          "canceled": "يجري إلغاء التشغيل.",
+          "cancelFailed": "تعذر إلغاء التشغيل. حاول مرة أخرى."
+        },
+        "checkResults": {
+          "title": "فحوصات الموصّل",
+          "close": "إغلاق",
+          "count": "({count})"
+        }
+      },
+      "activity": {
+        "search": {
+          "placeholder": "البحث في سجل النشاط..."
+        },
+        "counts": {
+          "failures": "{count, plural, zero {لا توجد عمليات فاشلة} one {عملية واحدة فشلت} two {عمليتان فشلتا} few {# عمليات فشلت} many {# عملية فشلت} other {# عملية فشلت}}",
+          "errors": "{count, plural, zero {لا توجد عمليات بها أخطاء مستندات} one {عملية واحدة بها أخطاء مستندات} two {عمليتان بهما أخطاء مستندات} few {# عمليات بها أخطاء مستندات} many {# عملية بها أخطاء مستندات} other {# عملية بها أخطاء مستندات}}"
+        },
+        "filter": {
+          "label": "عرض",
+          "all": "كل المستويات",
+          "failures": "الإخفاقات",
+          "errors": "الأخطاء",
+          "other": "أخرى"
+        },
+        "resolved": {
+          "label": "تم حلها"
+        },
+        "groups": {
+          "failures": "{count, plural, zero {لا إخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",
+          "errors": "{count, plural, zero {لا أخطاء} one {خطأ واحد} two {خطآن} few {# أخطاء} many {# خطأً} other {# خطأ}}",
+          "resolved": "{count, plural, zero {لا شيء تم حله} one {واحد تم حله} two {اثنان تم حلهما} few {# تم حلها} many {# تم حلها} other {# تم حلها}}",
+          "other": "أخرى"
+        },
+        "title": {
+          "indexing": {
+            "failed": "فشلت الفهرسة",
+            "running": "الفهرسة جارية مع أخطاء",
+            "stopped": "توقفت الفهرسة مع أخطاء",
+            "errors": "اكتملت الفهرسة مع أخطاء",
+            "resolved": "تم حل أخطاء الفهرسة",
+            "succeeded": "اكتملت الفهرسة بنجاح",
+            "inProgress": "الفهرسة قيد التنفيذ",
+            "canceled": "توقفت الفهرسة"
+          },
+          "doc_permission_sync": {
+            "failed": "فشلت مزامنة الأذونات",
+            "running": "مزامنة الأذونات جارية مع أخطاء",
+            "stopped": "توقفت مزامنة الأذونات مع أخطاء",
+            "errors": "تمت مزامنة الأذونات مع أخطاء",
+            "resolved": "تم حل أخطاء مزامنة الأذونات",
+            "succeeded": "تمت مزامنة الأذونات بنجاح",
+            "inProgress": "جارٍ مزامنة الأذونات",
+            "canceled": "توقفت مزامنة الأذونات"
+          },
+          "group_sync": {
+            "failed": "فشلت مزامنة عضوية المجموعات",
+            "running": "مزامنة عضوية المجموعات جارية مع أخطاء",
+            "stopped": "توقفت مزامنة عضوية المجموعات مع أخطاء",
+            "errors": "تمت مزامنة عضوية المجموعات مع أخطاء",
+            "resolved": "تم حل أخطاء مزامنة عضوية المجموعات",
+            "succeeded": "تمت مزامنة عضويات المجموعات بنجاح",
+            "inProgress": "جارٍ مزامنة عضويات المجموعات",
+            "canceled": "توقفت مزامنة المجموعات"
+          },
+          "pruning": {
+            "failed": "فشل التقليم",
+            "running": "التقليم قيد التنفيذ مع وجود أخطاء",
+            "stopped": "توقف التقليم مع وجود أخطاء",
+            "errors": "اكتمل التقليم مع وجود أخطاء",
+            "resolved": "تم حل أخطاء التقليم",
+            "succeeded": "اكتمل التقليم بنجاح",
+            "inProgress": "التقليم قيد التنفيذ",
+            "canceled": "توقف التقليم"
+          },
+          "checks": {
+            "failed": "فشلت فحوصات الموصّل",
+            "running": "فحوصات الموصّل قيد التنفيذ مع وجود أخطاء",
+            "stopped": "توقفت فحوصات الموصّل مع وجود أخطاء",
+            "errors": "اكتملت فحوصات الموصّل مع وجود أخطاء",
+            "resolved": "تم حل أخطاء فحوصات الموصّل",
+            "succeeded": "نجحت فحوصات الموصّل",
+            "inProgress": "فحوصات الموصّل قيد التنفيذ",
+            "canceled": "توقفت فحوصات الموصّل"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, zero {لم تتم فهرسة أي مستند} one {تمت فهرسة مستند واحد} two {تمت فهرسة مستندين} few {تمت فهرسة # مستندات} many {تمت فهرسة # مستندًا} other {تمت فهرسة # مستند}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
+          "doc_permission_sync": "{count, plural, zero {لم تتم مزامنة أي مستند} one {تمت مزامنة مستند واحد} two {تمت مزامنة مستندين} few {تمت مزامنة # مستندات} many {تمت مزامنة # مستندًا} other {تمت مزامنة # مستند}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
+          "group_sync": "{count, plural, zero {لم تتم مزامنة أي عضوية} one {تمت مزامنة عضوية واحدة} two {تمت مزامنة عضويتين} few {تمت مزامنة # عضويات} many {تمت مزامنة # عضوية} other {تمت مزامنة # عضوية}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
+          "pruning": "{count, plural, one {تمت إزالة مستند واحد} other {تمت إزالة # مستندات}}. مدة التقليم {minutes, plural, one {دقيقة واحدة} other {# دقائق}}.",
+          "checks": "{count, plural, one {تم تشغيل فحص واحد} other {تم تشغيل # فحوصات}}. مدة الفحص {minutes, plural, one {دقيقة واحدة} other {# دقائق}}.",
+          "checksFailed": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}."
+        },
+        "tags": {
+          "stackTrace": "تتبع المكدس",
+          "indexing": "{count, plural, zero {لم يفشل أي مستند} one {فشل مستند واحد} two {فشل مستندان} few {فشلت # مستندات} many {فشل # مستندًا} other {فشل # مستند}}",
+          "doc_permission_sync": "{count, plural, zero {لم تفشل مزامنة أي مستند} one {فشلت مزامنة مستند واحد} two {فشلت مزامنة مستندين} few {فشلت مزامنة # مستندات} many {فشلت مزامنة # مستندًا} other {فشلت مزامنة # مستند}}",
+          "group_sync": "{count, plural, zero {لم تفشل مزامنة أي مجموعة} one {فشلت مزامنة مجموعة واحدة} two {فشلت مزامنة مجموعتين} few {فشلت مزامنة # مجموعات} many {فشلت مزامنة # مجموعة} other {فشلت مزامنة # مجموعة}}",
+          "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}",
+          "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
+          "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
+        },
+        "more": "عرض المزيد",
+        "empty": {
+          "title": "لا توجد إخفاقات أو أخطاء",
+          "resolved": "لا توجد أخطاء تم حلها",
+          "filtered": "لا شيء يطابق هذا البحث.",
+          "failures": "لا توجد إخفاقات",
+          "errors": "لا توجد أخطاء",
+          "other": "لا توجد عمليات تشغيل أخرى"
+        },
+        "loadError": {
+          "title": "تعذر تحميل النشاط."
+        },
+        "docs": {
+          "title": "المستندات الفاشلة",
+          "search": {
+            "placeholder": "البحث في الملفات..."
+          },
+          "resolveAll": "حل الكل",
+          "resolveOne": "حل هذا المستند",
+          "more": "المزيد",
+          "less": "أقل",
+          "unknownDocument": "مستند غير معروف",
+          "empty": "لا توجد أخطاء مستندات مفتوحة",
+          "loadError": "تعذر تحميل المستندات الفاشلة.",
+          "open": "فتح المستند"
+        },
+        "trace": {
+          "runId": "معرّف التشغيل: {id}",
+          "copy": "نسخ تتبع المكدس"
+        },
+        "actions": {
+          "resolve": "حل"
+        }
+      },
+      "stageDetails": {
+        "title": "تفاصيل المراحل",
+        "calls": "الدفعات",
+        "averageTime": "متوسط الوقت",
+        "maxTime": "أقصى وقت",
+        "uneven": {
+          "tooltip": "تتفاوت أوقات الدفعات كثيرًا في هذه المرحلة"
+        },
+        "close": "إغلاق تفاصيل المراحل"
       }
     },
     "connectorTitle": {
@@ -2741,6 +2830,10 @@
             "label": "حذف الحساب",
             "inUseTooltip": "لا يمكن حذف بيانات الاعتماد هذه لأن هناك موصلات أخرى تستخدمها."
           },
+          "updateButton": {
+            "label": "تحديث بيانات الاعتماد",
+            "tooltip": "يغيّر القيم المحفوظة لكل موصل يستخدم هذا الحساب."
+          },
           "usedBy": {
             "label": "مستخدم في {count, plural, zero {# موصلات} one {موصل واحد} two {موصلين} few {# موصلات} many {# موصلًا} other {# موصل}}"
           },
@@ -2800,19 +2893,12 @@
         "fieldInvalid": "تحقق من «{field}»: {detail}",
         "rejected": "لا يمكن استخدام بيانات الاعتماد هذه مع هذه الإعدادات. {detail}"
       },
-      "credentialsLoadError": {
-        "title": "فشل تحميل بيانات الاعتماد."
-      },
       "field": {
         "optionalSuffix": {
           "label": "اختياري"
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "تم إنشاء بيانات اعتماد Google Drive. أدرها أو ألغها من قائمة بيانات الاعتماد.",
-          "title": "اكتملت المصادقة"
-        },
         "authFailed": {
           "toast": "فشلت المصادقة مع Google Drive - {error}"
         },
@@ -2820,58 +2906,15 @@
           "label": "المصادقة عبر Google Drive",
           "pendingLabel": "جارٍ المصادقة..."
         },
-        "createButton": {
-          "label": "إنشاء بيانات اعتماد",
-          "pendingLabel": "جارٍ الإنشاء..."
-        },
-        "credentialsLoadError": {
-          "title": "فشل تحميل بيانات اعتماد Google Drive."
-        },
-        "invalidFile": {
-          "toast": "ملف غير صالح - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "ملف غير صالح - كان المتوقع مفتاح JSON لحساب خدمة"
-        },
-        "missingServiceAccountKey": {
-          "toast": "يرجى رفع مفتاح حساب خدمة قبل إنشاء بيانات الاعتماد"
-        },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Drive الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth",
           "sharedScopesNote": "يطلب Google الوصول إلى Google Drive وGmail معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Google Drive فقط، ألغِ تحديد نطاقات Gmail في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
-        },
-        "primaryAdmin": {
-          "description": "أدخل بريد مسؤول أو مالك مؤسسة Google التي تملك حسابات Google Drive المراد فهرستها.",
-          "invalidEmail": "يجب أن يكون بريدًا إلكترونيًا صالحًا",
-          "label": "بريد المسؤول الرئيسي",
-          "placeholder": "admin@yourcompany.com",
-          "required": "مطلوب"
-        },
-        "section": {
-          "title": "مصادقة Google Drive"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "فشل إنشاء بيانات اعتماد حساب الخدمة - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "تم إنشاء بيانات اعتماد حساب الخدمة بنجاح"
-        },
-        "serviceAccountOption": {
-          "title": "الخيار 2: حساب خدمة"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "ارفع أو الصق مفتاح JSON لحساب الخدمة"
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "تم إنشاء بيانات اعتماد Gmail. أدرها أو ألغها من قائمة بيانات الاعتماد.",
-          "title": "اكتملت المصادقة"
-        },
         "authFailed": {
           "toast": "فشلت المصادقة مع Gmail - {error}"
         },
@@ -2879,51 +2922,12 @@
           "label": "المصادقة عبر Gmail",
           "pendingLabel": "جارٍ المصادقة..."
         },
-        "createButton": {
-          "label": "إنشاء بيانات اعتماد",
-          "pendingLabel": "جارٍ الإنشاء..."
-        },
-        "credentialsLoadError": {
-          "title": "فشل تحميل بيانات اعتماد Gmail."
-        },
-        "invalidFile": {
-          "toast": "ملف غير صالح - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "ملف غير صالح - كان المتوقع مفتاح JSON لحساب خدمة"
-        },
-        "missingServiceAccountKey": {
-          "toast": "يرجى رفع مفتاح حساب خدمة قبل إنشاء بيانات الاعتماد"
-        },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Gmail الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth",
           "sharedScopesNote": "يطلب Google الوصول إلى Gmail وGoogle Drive معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Gmail فقط، ألغِ تحديد نطاقات Google Drive في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
-        },
-        "primaryAdmin": {
-          "description": "أدخل بريد مسؤول أو مالك مؤسسة Google التي تملك حسابات Gmail المراد فهرستها.",
-          "invalidEmail": "يجب أن يكون بريدًا إلكترونيًا صالحًا",
-          "label": "بريد المسؤول الرئيسي",
-          "placeholder": "admin@yourcompany.com",
-          "required": "مطلوب"
-        },
-        "section": {
-          "title": "مصادقة Gmail"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "فشل إنشاء بيانات اعتماد حساب الخدمة - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "تم إنشاء بيانات اعتماد حساب الخدمة بنجاح"
-        },
-        "serviceAccountOption": {
-          "title": "الخيار 2: حساب خدمة"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "ارفع أو الصق مفتاح JSON لحساب الخدمة"
         }
       },
       "header": {
@@ -3082,6 +3086,10 @@
         "units": {
           "hours": "ساعات",
           "minutes": "دقائق"
+        },
+        "checkFrequency": {
+          "title": "تشغيل الفحوصات كل",
+          "description": "يتحقق من الاتصال وقدراته وسلامته."
         }
       },
       "settings": {
@@ -3134,6 +3142,1109 @@
           "title": "صلاحيات إدارة الموصل"
         },
         "title": "إعدادات الموصل"
+      },
+      "optionsListInput": {
+        "placeholder": "اختر {label} من القائمة أو أدخله"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "تفعيل معالجة مرفقات الصفحات بما فيها الصور والمستندات",
+              "label": "تضمين المرفقات"
+            },
+            "scoped_token": {
+              "label": "هذا رمز API ذو نطاقات",
+              "description": "تتطلب الرموز ذات النطاقات التوجيه عبر بوابة API الخاصة بـ Atlassian. اتركه معطلاً للرموز التقليدية."
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "معرّفات الاجتماعات",
+              "description": "تتم فهرسة كل اجتماع متكرر حسب كل موعد على حدة. يعيد Zoom المواعيد خلال آخر 15 شهرًا فقط، لذلك لا يمكن الوصول إلى المواعيد الأقدم عبر معرّف الاجتماع. لفهرسة سجل أقدم، حدّد النطاق بالبريد الإلكتروني للمضيف أو بمجموعة Zoom بدلاً من ذلك، فكلاهما بلا هذا الحد."
+            },
+            "webinar_ids": {
+              "label": "معرّفات الندوات عبر الإنترنت",
+              "description": "تتطلب الندوات عبر الإنترنت أيضًا الإضافة Webinar مفعّلة للمضيف. وعلى عكس معرّفات الاجتماعات، لا يوجد حد 15 شهرًا لسجل الندوات."
+            },
+            "host_emails": {
+              "label": "البريد الإلكتروني للمضيفين",
+              "description": "فهرسة كل جلسة يستضيفها هؤلاء الأشخاص، من الأنواع المحددة أدناه. يُبلَّغ عن البريد الإلكتروني الذي لا يطابق أي مستخدم Zoom كخطأ فهرسة بدلاً من تجاهله بصمت."
+            },
+            "group_id": {
+              "label": "معرّف مجموعة Zoom",
+              "description": "فهرسة كل جلسة يستضيفها أعضاء مجموعة Zoom واحدة، من الأنواع المحددة أدناه. يعيد Zoom قراءة قائمة الأعضاء عند كل تشغيل، لذلك يُلتقط المنضمون والمغادرون دون تعديل هذا الموصل."
+            },
+            "include_meetings": {
+              "label": "تضمين الاجتماعات",
+              "description": "ينطبق على البريد الإلكتروني للمضيفين ومجموعة Zoom. قوائم المعرّفات أعلاه تحدد بالفعل نوع كل معرّف."
+            },
+            "include_webinars": {
+              "label": "تضمين الندوات عبر الإنترنت",
+              "description": "ينطبق على البريد الإلكتروني للمضيفين ومجموعة Zoom. تتطلب الندوات عبر الإنترنت أيضًا الإضافة Webinar مفعّلة للمضيف."
+            },
+            "treat_link_access_as_public": {
+              "label": "اعتبار الوصول عبر الرابط عامًا",
+              "description": "يهم فقط مع مزامنة الأذونات. عند التفعيل، يكون التسجيل الذي وصول الرابط فيه \"أي شخص لديه الرابط\" أو قاعدة تسجيل الدخول مرئيًا لجميع مستخدمي Onyx، وقاعدة النطاق مرئية لمستخدمي تلك النطاقات. عند التعطيل، يكون كل نص مرئيًا لمالك التسجيل وحده، لأن Zoom لا يستطيع تحديد من ضمن \"الأشخاص الذين لديهم حق الوصول\"."
+            },
+            "plan_tier": {
+              "label": "خطة Zoom",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "يحدد سرعة استدعاء هذا الموصل لـ Zoom. اختر `pro` لحساب Pro، و`business_plus` لحسابات Business وEducation وEnterprise وPartner."
+            },
+            "rate_limit_percent": {
+              "label": "حد معدل طلبات Zoom API",
+              "description": "نسبة مئوية صحيحة من 1 إلى 100 من حد معدل Zoom للحساب يمكن لهذا الموصل استهلاكها. القيمة الفارغة تعني 50، مما يترك مجالاً لتكاملات Zoom الأخرى لدى العميل. كل موصل Zoom ينظم وتيرته بنفسه ولا يرى الموصلات الأخرى، لذلك يستهلك موصلان على حساب Zoom واحد هذه النسبة لكل منهما، فقسّمها إذا شغّلت عدة موصلات."
+            }
+          },
+          "description": "تهيئة موصل Zoom",
+          "subtext": "يفهرس نص التسجيل السحابي لكل جلسة Zoom، ضمن خطة Zoom Pro أو أعلى. تُتخطى الجلسة التي لم تُسجَّل سحابيًا قط. حدّد تاريخ بدء الفهرسة ضمن خيارات متقدمة. يسرد Zoom التسجيلات شهرًا واحدًا لكل طلب، لذلك بدونه يطلب الزحف الأول كل شهر وصولاً إلى 2013 ويستهلك حصة API لحسابك على سنوات لا تحتوي شيئًا."
+        },
+        "web": {
+          "description": "تهيئة موصل الويب",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي",
+              "placeholder": "https://example.com"
+            },
+            "web_connector_type": {
+              "label": "طريقة الاستخراج",
+              "options": {
+                "recursive": "تكراري",
+                "single": "صفحة واحدة",
+                "sitemap": "خريطة الموقع"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "التمرير قبل الاستخراج",
+              "description": "فعّله إذا كان الموقع يتطلب التمرير لتحميل المحتوى المطلوب"
+            },
+            "url_rewrites": {
+              "label": "إعادة كتابة عناوين URL",
+              "description": "أعد كتابة عناوين URL للمستندات قبل التخزين. مفيد عند الزحف عبر نسخة داخلية مع تخزين الروابط العامة الأصلية، مثلاً https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "بادئة URL المصدر",
+              "rightLabel": "بادئة الاستبدال",
+              "leftPlaceholder": "https://mirat-dakhiliya.example.com",
+              "rightPlaceholder": "https://docs.example.com"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "تهيئة موصل LumApps",
+          "fields": {
+            "base_url": {
+              "label": "عنوان API الأساسي (مضيف الخلية)",
+              "description": "مضيف الخلية/API في LumApps لديك، مثل https://go-cell-005.api.lumapps.com (وليس موقع المستندات api.lumapps.com)."
+            },
+            "organization_id": {
+              "label": "معرّف المؤسسة",
+              "description": "معرّف مؤسسة LumApps لديك (رقمي)."
+            },
+            "instance_ids": {
+              "label": "معرّفات النُّسخ (المواقع)",
+              "description": "قصر الفهرسة على معرّفات نُسخ/مواقع محددة. اتركه فارغًا لفهرسة كل المحتوى المرئي لمستخدم الخدمة."
+            },
+            "custom_content_types": {
+              "label": "معرّفات أنواع المحتوى المخصصة",
+              "description": "قصر الفهرسة على معرّفات أنواع محتوى مخصصة محددة. اتركه فارغًا لفهرسة جميع أنواع المحتوى."
+            },
+            "lang": {
+              "label": "اللغة",
+              "description": "اللغة المستخدمة لعنوان المحتوى ونصه وتسميات البيانات الوصفية (ISO 639-1، مثل en وfr)."
+            }
+          }
+        },
+        "github": {
+          "description": "تهيئة موصل GitHub",
+          "fields": {
+            "github_base_url": {
+              "label": "عنوان URL لخادم GitHub Enterprise",
+              "description": "اتركه فارغًا لـ github.com.",
+              "placeholder": "https://github.example.com"
+            },
+            "repo_owner": {
+              "label": "مالك المستودع"
+            },
+            "github_mode": {
+              "label": "محتوى GitHub المراد فهرسته",
+              "tabs": {
+                "repo": {
+                  "label": "مستودع محدد"
+                },
+                "everything": {
+                  "label": "كل شيء"
+                }
+              }
+            },
+            "repositories": {
+              "label": "اسم المستودع (أو أسماؤها)",
+              "description": "لعدة مستودعات، أدخل الأسماء مفصولة بفواصل (مثل repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع المستودعات التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "include_prs": {
+              "label": "تضمين طلبات السحب",
+              "description": "فهرسة طلبات السحب من المستودعات"
+            },
+            "include_issues": {
+              "label": "تضمين المشكلات",
+              "description": "فهرسة المشكلات من المستودعات"
+            },
+            "include_files": {
+              "label": "تضمين المستندات",
+              "description": "فهرسة المستندات النصية (markdown والنصوص وغيرها) من المستودعات"
+            },
+            "branch": {
+              "label": "الفرع",
+              "description": "الفرع الذي تُفهرس منه المستندات (مثل gh-pages). اتركه فارغًا لاستخدام الفرع الافتراضي لكل مستودع. ينطبق فقط عند تفعيل \"تضمين المستندات\". بعد تغييره في موصل موجود، شغّل إعادة فهرسة لالتقاط الفرع الجديد فورًا."
+            }
+          }
+        },
+        "testrail": {
+          "description": "تهيئة موصل TestRail",
+          "fields": {
+            "testrail_base_url": {
+              "label": "عنوان URL الأساسي لـ TestRail",
+              "placeholder": "https://acme.testrail.io"
+            },
+            "project_ids": {
+              "label": "معرّفات المشاريع",
+              "description": "قائمة مفصولة بفواصل بمعرّفات مشاريع TestRail المراد فهرستها (مثل 1 أو 1,2,3). اتركها فارغة لفهرسة جميع المشاريع."
+            },
+            "cases_page_size": {
+              "label": "حجم صفحة الحالات",
+              "description": "عدد حالات الاختبار المراد جلبها في كل صفحة من TestRail API (الافتراضي: 250)"
+            },
+            "max_pages": {
+              "label": "الحد الأقصى للصفحات",
+              "description": "الحد الأقصى لعدد الصفحات المجلوبة لمنع الحلقات اللانهائية (الافتراضي: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "حد أحرف المستند للتخطي",
+              "description": "تخطي فهرسة حالات الاختبار التي تتجاوز حد الأحرف هذا (الافتراضي: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "تهيئة موصل GitLab",
+          "fields": {
+            "gitlab_url": {
+              "label": "عنوان URL لـ GitLab",
+              "placeholder": "https://gitlab.com"
+            },
+            "project_owner": {
+              "label": "مالك المشروع"
+            },
+            "project_name": {
+              "label": "اسم المشروع"
+            },
+            "include_mrs": {
+              "label": "تضمين طلبات الدمج",
+              "description": "فهرسة طلبات الدمج من المستودعات"
+            },
+            "include_issues": {
+              "label": "تضمين المشكلات",
+              "description": "فهرسة المشكلات من المستودعات"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "تهيئة موصل Bitbucket",
+          "subtext": "تهيئة موصل Bitbucket (السحابة فقط). يمكنك فهرسة مساحة عمل أو مشاريع أو مستودعات محددة.",
+          "fields": {
+            "workspace": {
+              "label": "مساحة العمل",
+              "description": "مساحة عمل Bitbucket المراد فهرستها (مثل \"atlassian\" من https://bitbucket.org/atlassian/workspace )."
+            },
+            "bitbucket_mode": {
+              "label": "محتوى Bitbucket المراد فهرسته",
+              "tabs": {
+                "repo": {
+                  "label": "مستودعات محددة"
+                },
+                "project": {
+                  "label": "المشروع (أو المشاريع)"
+                },
+                "workspace": {
+                  "label": "مساحة العمل"
+                }
+              }
+            },
+            "repositories": {
+              "label": "معرّفات المستودعات (Slugs)",
+              "description": "لعدة مستودعات، أدخل المعرّفات مفصولة بفواصل (مثل repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "مفتاح المشروع (أو مفاتيحها)",
+              "description": "مفتاح مشروع Bitbucket واحد أو أكثر (مفصولة بفواصل) لفهرسة جميع المستودعات في تلك المشاريع (مثل PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "مساحة العمل",
+              "description": "سيفهرس هذا الموصل جميع المستودعات في مساحة العمل."
+            }
+          }
+        },
+        "gitbook": {
+          "description": "تهيئة موصل GitBook",
+          "fields": {
+            "space_id": {
+              "label": "معرّف المساحة",
+              "description": "معرّف مساحة GitBook المراد فهرستها. يمكن العثور عليه في عنوان URL لصفحة داخل المساحة. مثلاً، إذا كان عنوانك `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`، فمعرّف مساحتك هو `8JkzVx8QCIGRrmxhGHU8`."
+            }
+          }
+        },
+        "google_drive": {
+          "description": "تهيئة موصل Google Drive",
+          "fields": {
+            "credential_kind": {
+              "label": "نوع بيانات الاعتماد"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "عام"
+                },
+                "Specific": {
+                  "label": "محدد"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "تضمين المحركات المشتركة",
+              "description": {
+                "oauth": "سيتيح هذا لـ Onyx فهرسة كل شيء في المحركات المشتركة التي يمكنك الوصول إليها.",
+                "serviceAccount": "سيتيح هذا لـ Onyx فهرسة كل شيء في المحركات المشتركة لمؤسستك."
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "تضمين My Drive",
+                "serviceAccount": "تضمين My Drive لدى الجميع"
+              },
+              "description": {
+                "oauth": "سيتيح هذا لـ Onyx فهرسة كل شيء في My Drive الخاص بك.",
+                "serviceAccount": "سيتيح هذا لـ Onyx فهرسة كل شيء في My Drive لدى الجميع."
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "سيتيح هذا لـ Onyx فهرسة جميع الملفات المشتركة معك.",
+              "label": "تضمين كل الملفات المشتركة معك"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "أدخل قائمة مفصولة بفواصل بعناوين URL للمحرك المشترك الذي تريد فهرسته. يجب أن تملك حق الوصول إلى هذه المحركات المشتركة.",
+                "serviceAccount": "أدخل قائمة مفصولة بفواصل بعناوين URL للمحرك المشترك الذي تريد فهرسته."
+              },
+              "label": "عناوين URL للمحركات المشتركة"
+            },
+            "shared_folder_urls": {
+              "description": "أدخل قائمة مفصولة بفواصل بعناوين URL لأي مجلدات تريد فهرستها. ستُفهرس الملفات الموجودة في هذه المجلدات (وجميع المجلدات الفرعية).",
+              "label": "عناوين URL للمجلدات"
+            },
+            "my_drive_emails": {
+              "description": "أدخل قائمة مفصولة بفواصل بالبريد الإلكتروني للمستخدمين الذين تريد فهرسة MyDrive الخاص بهم.",
+              "label": "البريد الإلكتروني لـ My Drive"
+            },
+            "specific_user_emails": {
+              "description": "أدخل قائمة مفصولة بفواصل بالبريد الإلكتروني لمستخدمين محددين للفهرسة. سيُفهرس هذا الملفات التي يمكن لهؤلاء المستخدمين الوصول إليها فقط.",
+              "label": "البريد الإلكتروني لمستخدمين محددين"
+            },
+            "exclude_domain_link_only": {
+              "label": "إخفاء الملفات المتاحة عبر رابط النطاق فقط",
+              "description": "عند التفعيل، يتخطى Onyx الملفات المشتركة على نطاق واسع (النطاق أو العامة) لكنها تتطلب الرابط للوصول."
+            }
+          }
+        },
+        "gmail": {
+          "description": "تهيئة موصل Gmail"
+        },
+        "bookstack": {
+          "description": "تهيئة موصل Bookstack",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "عنوان URL الأساسي لـ BookStack",
+              "placeholder": "https://bookstack.example.com"
+            }
+          }
+        },
+        "outline": {
+          "description": "تهيئة موصل Outline",
+          "fields": {
+            "outline_base_url": {
+              "label": "عنوان URL الأساسي لـ Outline",
+              "placeholder": "https://app.getoutline.com"
+            }
+          }
+        },
+        "confluence": {
+          "description": "تهيئة موصل Confluence",
+          "fields": {
+            "is_cloud": {
+              "label": "سحابي",
+              "description": "اختر Confluence Cloud لموقع على atlassian.net، أو Confluence Data Center لموقع Confluence Server أو Data Center مستضاف ذاتيًا."
+            },
+            "wiki_base": {
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://nitaquk.atlassian.net/wiki"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "space": {
+                  "label": "مساحة"
+                },
+                "page": {
+                  "label": "صفحة"
+                },
+                "cql": {
+                  "label": "استعلام CQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع الصفحات التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "space": {
+              "label": "مفتاح المساحة",
+              "description": "مفتاح مساحة Confluence المراد فهرستها (مثل `KB`)."
+            },
+            "page_id": {
+              "label": "معرّف الصفحة",
+              "description": "معرّف صفحة محددة للفهرسة (مثل `131368`)"
+            },
+            "index_recursively": {
+              "label": "فهرسة تكرارية",
+              "description": "عند تفعيل هذا الخيار، سنفهرس الصفحة المحددة بمعرّف الصفحة وجميع صفحاتها الفرعية."
+            },
+            "cql_query": {
+              "label": "استعلام CQL",
+              "description": "مهم: ندعم حاليًا فقط استعلامات CQL التي تعيد كائنات من النوع \"page\". هذا يعني أن كل استعلام CQL يجب أن يحتوي على \"type=page\" كمرشح النوع الوحيد. ومن المهم أيضًا ألا تُستخدم مرشحات \"lastModified\" لأنها تسبب مشكلات في منطق استطلاع الموصل. لا تستخدم ORDER BY لأن الموصل يحدد ترتيب الفرز بنفسه. سنجلب مع ذلك جميع المرفقات والتعليقات للصفحات التي يعيدها استعلام CQL. ستُستبدل أي مرشحات \"lastmodified\". راجع [توثيق CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) من Atlassian لمزيد من التفاصيل."
+            }
+          }
+        },
+        "jira": {
+          "description": "تهيئة موصل Jira",
+          "subtext": "حدّد محتوى Jira المراد فهرسته. يمكنك فهرسة كل شيء أو تحديد مشروع معين.",
+          "fields": {
+            "jira_base_url": {
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://nitaquk.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "project": {
+                  "label": "مشروع"
+                },
+                "jql": {
+                  "label": "استعلام JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع المسائل التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع محدد للفهرسة (مثل \"PROJ\")."
+            },
+            "jql_query": {
+              "label": "استعلام JQL",
+              "description": "استعلام JQL مخصص لتصفية مسائل Jira.\n\nمهم: لا تضمّن أي مرشحات زمنية في استعلام JQL لأنها تتعارض مع منطق الموصل. كذلك لا تضمّن عبارات ORDER BY.\n\nراجع [توثيق JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) من Atlassian لمزيد من التفاصيل حول الصيغة."
+            },
+            "comment_email_blacklist": {
+              "label": "قائمة حظر البريد الإلكتروني للتعليقات",
+              "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "salesforce": {
+          "description": "تهيئة موصل Salesforce",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "نوع التهيئة",
+              "tabs": {
+                "simple": {
+                  "label": "بسيط"
+                },
+                "advanced": {
+                  "label": "متقدم"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "الكائنات المطلوبة",
+              "description": "حدّد أنواع كائنات Salesforce التي تريد فهرستها. إذا لم تكن متأكدًا، فلا تحدد أي كائنات وسيفهرس Onyx افتراضيًا حسب \"Account\".\n\nتلميح: استخدم صيغة المفرد لاسم الكائن (مثل \"Opportunity\" بدلاً من \"Opportunities\")."
+            },
+            "custom_query_config": {
+              "label": "تهيئة الاستعلام المخصص",
+              "description": "أدخل تهيئة JSON تحدد بدقة الحقول والكائنات الفرعية المراد فهرستها. يمنحك هذا تحكمًا كاملاً في بنية البيانات.\n\nمثال: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n[اطّلع على مستنداتنا]({docsAdminsPath}/connectors/official/salesforce) لمزيد من التفاصيل."
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "تهيئة موصل SharePoint",
+          "fields": {
+            "sites": {
+              "label": "المواقع",
+              "description": "- إذا لم تُحدد مواقع، فستُفهرس جميع المواقع في مؤسستك (يتطلب الإذن `Sites.Read.All`).\n- تحديد `https://onyxai.sharepoint.com/sites/support` مثلاً يفهرس هذا الموقع فقط.\n- تحديد `https://onyxai.sharepoint.com/sites/support/subfolder` مثلاً يفهرس هذا المجلد فقط.\n- لفهرسة المواقع الشخصية للمستخدمين، استخدم [موصل OneDrive]({docsAdminsPath}/connectors/official/onedrive).\n- يعمل تحديد المواقع حاليًا مع نُسخ SharePoint التي تستخدم الإنجليزية أو الإسبانية أو الألمانية. تواصل مع فريق Onyx إذا احتجت إلى دعم لغة أخرى."
+            },
+            "include_site_documents": {
+              "label": "فهرسة المستندات",
+              "description": "فهرسة مستندات جميع مكتبات SharePoint أو مجلداتها المحددة أعلاه."
+            },
+            "include_site_pages": {
+              "label": "فهرسة مواقع ASPX",
+              "description": "فهرسة صفحات aspx لجميع مواقع SharePoint المحددة أعلاه، حتى إذا حُددت مكتبة أو مجلد."
+            },
+            "treat_sharing_link_as_public": {
+              "label": "اعتبار روابط المشاركة عامة",
+              "description": "عند التفعيل، تُعامل المستندات التي لها رابط مشاركة (مجهول أو على مستوى المؤسسة) على أنها عامة (مرئية لجميع مستخدمي Onyx). عند التعطيل، لا يرى المستند إلا المستخدمون والمجموعات الذين لديهم تعيينات أدوار صريحة."
+            },
+            "excluded_sites": {
+              "label": "المواقع المستبعدة",
+              "description": "عناوين URL للمواقع أو أنماط glob المراد استبعادها من الفهرسة. لن تُفهرس المواقع المطابقة أبدًا، حتى لو ظهرت في قائمة المواقع أعلاه. أمثلة: `https://contoso.sharepoint.com/sites/archive` (مطابقة تامة)، `*://*/sites/archive-*` (نمط glob)."
+            },
+            "excluded_paths": {
+              "label": "المسارات المستبعدة",
+              "description": "أنماط glob لمسارات الملفات المراد استبعادها من الفهرسة داخل مكتبات المستندات. تُطابق الأنماط مع المسار النسبي الكامل واسم الملف معًا. أمثلة: `*.tmp` (ملفات مؤقتة)، `~$*` (ملفات قفل Office)، `Archive/*` (مجلد)."
+            },
+            "authority_host": {
+              "label": "مضيف جهة المصادقة",
+              "description": "مضيف جهة هوية Microsoft المستخدم للمصادقة. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "مضيف Graph API",
+              "description": "مضيف Microsoft Graph API. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://graph.microsoft.us"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "لاحقة نطاق SharePoint",
+              "description": "لاحقة النطاق لمواقع SharePoint (مثل sharepoint.com). في معظم عمليات النشر، اتركها على الإعداد الافتراضي. لـ GCC High، استخدم sharepoint.us"
+            }
+          }
+        },
+        "teams": {
+          "description": "تهيئة موصل Teams",
+          "fields": {
+            "teams": {
+              "label": "الفرق",
+              "description": "حدّد 0 أو أكثر من الفرق للفهرسة. مثلاً، تحديد الفريق \"Support\" للمؤسسة \"onyxai\" يجعلنا نفهرس فقط الرسائل المرسلة في القنوات التابعة للفريق \"Support\". إذا لم تُحدد فرق، فستُفهرس جميع الفرق في مؤسستك."
+            },
+            "include_attachments": {
+              "description": "فهرسة الملفات في تبويب الملفات لكل قناة كمستندات مستقلة، مع القرّاء الذين يمنحهم SharePoint حق الوصول إليها. يتطلب بيانات اعتماد شهادة، وFiles.Read.All أو Sites.Read.All على Graph، وSites.FullControl.All على SharePoint API لقراءة قرّاء كل ملف. مع Sites.Selected، امنح التطبيق تحكمًا كاملاً في موقع كل قناة."
+            },
+            "include_inline_images": {
+              "label": "تضمين الصور المضمّنة",
+              "description": "فهرسة الصور الملصقة في رسائل القناة مع سلسلتها. لا يتطلب أي إذن إضافي. لا يُنزَّل شيء ما دام استخراج الصور وتحليلها معطلاً في إعدادات البحث."
+            },
+            "include_meeting_transcripts": {
+              "label": "تضمين نصوص الاجتماعات",
+              "description": "فهرسة نصوص الاجتماعات المجدولة كمستندات مستقلة، يمكن للمنظّم والحاضرين قراءتها. يتطلب أذونات التطبيق OnlineMeetingTranscript.Read.All وOnlineMeetings.Read.All وUser.Read.All، وإعداد المستأجر الذي يسمح لـ Graph API بالوصول إلى النصوص، وسياسة وصول للتطبيق ممنوحة للمنظّمين. اجتماعات القنوات غير مشمولة. تُفهرس نصوص آخر ستة أشهر، ويغادر النص الفهرس حين يصبح أقدم من ذلك."
+            },
+            "include_meeting_chats": {
+              "label": "تضمين محادثات الاجتماعات",
+              "description": "فهرسة ما يكتبه الأشخاص في محادثة اجتماع مجدول، بمستند لكل يوم، يمكن لأعضاء المحادثة قراءته. يتطلب أذونات التطبيق Chat.Read.All وUser.Read.All. يشمل الاجتماعات المنظَّمة في هذا المستأجر: لا تتيح Microsoft محادثة اجتماع نظّمته مؤسسة أخرى."
+            },
+            "meeting_organizers": {
+              "label": "منظّمو الاجتماعات",
+              "description": "أسماء المستخدمين الأساسية (UPN) للمنظّمين الذين تُفهرس نصوص اجتماعاتهم ومحادثاتها. اتركه فارغًا لتضمين كل مستخدم مفعّل لديه ترخيص Teams."
+            },
+            "authority_host": {
+              "label": "مضيف جهة المصادقة",
+              "description": "مضيف جهة هوية Microsoft المستخدم للمصادقة. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "مضيف Graph API",
+              "description": "مضيف Microsoft Graph API. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://graph.microsoft.us"
+            }
+          }
+        },
+        "outlook": {
+          "description": "تهيئة موصل Outlook",
+          "fields": {
+            "mailboxes": {
+              "label": "صناديق البريد",
+              "description": "أسماء المستخدمين الأساسية أو عناوين البريد الإلكتروني الأساسية لصناديق البريد المراد فهرستها. اترك هذا الحقل ومجموعات صناديق البريد فارغين لفهرسة كل صندوق بريد يمكن لتسجيل التطبيق فتحه. لا تُلتقط صناديق البريد المشتركة تلقائيًا أبدًا ويجب إدراجها هنا."
+            },
+            "mailbox_groups": {
+              "label": "مجموعات صناديق البريد",
+              "description": "الأسماء المعروضة أو معرّفات الكائنات لمجموعات Entra. يُفهرس صندوق بريد كل عضو، بما في ذلك أعضاء المجموعات المتداخلة، بحيث يمكن حصر المستأجر في الأشخاص الذين يستخدمون Onyx. يتطلب إذن التطبيق GroupMember.Read.All."
+            },
+            "include_attachments": {
+              "description": "فهرسة نص مرفقات الملفات. تُتخطى الصور المضمّنة والعناصر المتداخلة وروابط السحابة."
+            },
+            "include_calendar": {
+              "label": "تضمين التقويم",
+              "description": "فهرسة تقويم كل صندوق بريد إضافة إلى بريده. يتطلب إذن التطبيق Calendars.Read."
+            },
+            "excluded_folders": {
+              "label": "المجلدات المستبعدة",
+              "description": "أسماء المجلدات المراد تخطيها في كل صندوق بريد، إضافة إلى Junk Email وDeleted Items وDrafts وOutbox التي تُتخطى دائمًا."
+            },
+            "calendar_past_days": {
+              "label": "أيام التقويم الماضية",
+              "description": "يُستخدم عند تفعيل تضمين التقويم. إلى أي مدى يمتد نطاق التقويم إلى الماضي. تغادر الأحداث الأقدم من ذلك الفهرس عند التنقية التالية مع تقدم النطاق. يتطلب توسيعه لاحقًا إعادة فهرسة، لأن الأحداث غير المتغيرة لا تعود إلى الفهرس من تلقاء نفسها."
+            },
+            "calendar_future_days": {
+              "label": "أيام التقويم المستقبلية",
+              "description": "يُستخدم عند تفعيل تضمين التقويم. إلى أي مدى يمتد نطاق التقويم إلى المستقبل. يتطلب توسيعه لاحقًا إعادة فهرسة، لأن الأحداث غير المتغيرة لا تعود إلى الفهرس من تلقاء نفسها."
+            },
+            "authority_host": {
+              "label": "مضيف جهة المصادقة",
+              "description": "مضيف جهة هوية Microsoft المستخدم للمصادقة. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "مضيف Graph API",
+              "description": "مضيف Microsoft Graph API. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://graph.microsoft.us"
+            }
+          }
+        },
+        "discourse": {
+          "description": "تهيئة موصل Discourse",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي"
+            },
+            "categories": {
+              "label": "الفئات"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "تهيئة موصل Drupal Wiki",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي",
+              "description": "عنوان URL الأساسي لنسخة Drupal Wiki لديك (مثل https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "محتوى Drupal Wiki المراد فهرسته",
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "specific": {
+                  "label": "مساحات/صفحات محددة"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع المساحات التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "spaces": {
+              "label": "معرّفات المساحات",
+              "description": "حدّد معرّف مساحة واحدًا أو أكثر للفهرسة. القيم الرقمية فقط مسموحة."
+            },
+            "pages": {
+              "label": "معرّفات الصفحات",
+              "description": "حدّد معرّف صفحة واحدًا أو أكثر للفهرسة. القيم الرقمية فقط مسموحة."
+            }
+          }
+        },
+        "axero": {
+          "description": "تهيئة موصل Axero",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي لـ Axero",
+              "placeholder": "https://axero.example.com"
+            },
+            "spaces": {
+              "label": "المساحات",
+              "description": "حدّد صفر مساحة أو أكثر للفهرسة (بمعرّفات المساحات). إذا لم تُحدد معرّفات مساحات، فستُفهرس جميع المساحات."
+            }
+          }
+        },
+        "productboard": {
+          "description": "تهيئة موصل Productboard"
+        },
+        "slack": {
+          "description": "تهيئة موصل Slack",
+          "fields": {
+            "channels": {
+              "label": "القنوات",
+              "description": "حدّد 0 أو أكثر من القنوات للفهرسة. اختر قناة من القائمة لتتبعها بالمعرّف حتى لا تكسر إعادة التسمية الفهرسة، أو اكتب اسم قناة لا تعرضها القائمة، مثل قناة خاصة دُعي إليها الروبوت. إذا لم تُحدد قنوات، فستُفهرس جميع القنوات في مساحة عملك."
+            },
+            "channel_regex_enabled": {
+              "label": "تفعيل Regex للقنوات",
+              "description": "عند التفعيل، سنعامل \"القنوات\" المحددة أعلاه كتعبيرات نمطية. ستُجلب رسائل القناة بواسطة الموصل إذا طابق اسم القناة بالكامل أيًا من التعبيرات النمطية المحددة.\n\nمثلاً، تحديد `.*-support.*` كـ \"قناة\" يجعل الموصل يضمّن أي قنوات يحتوي اسمها على \"-support\"."
+            },
+            "exclude_channels": {
+              "label": "القنوات المراد استبعادها",
+              "description": "حدّد 0 أو أكثر من القنوات للاستبعاد. يُطبَّق الاستبعاد بعد مرشح \"القنوات\" أعلاه، لذلك تُستبعد القناة المطابقة لكليهما. إذا لم تُحدد قنوات، فلا يُستبعد شيء."
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "تفعيل Regex لاستبعاد القنوات",
+              "description": "عند التفعيل، سنعامل \"القنوات المراد استبعادها\" المحددة أعلاه كتعبيرات نمطية. تُستبعد القناة إذا طابق اسمها بالكامل أيًا من التعبيرات النمطية المحددة.\n\nمثلاً، تحديد `.*-alerts` كـ \"قناة مستبعدة\" يجعل الموصل يتخطى أي قنوات ينتهي اسمها بـ \"-alerts\"."
+            },
+            "include_bot_messages": {
+              "label": "تضمين رسائل الروبوتات",
+              "description": "عند التفعيل، تُفهرس رسائل الروبوتات والتطبيقات. مفيد للقنوات التي تعتمد أساسًا على الروبوتات (مثل تحديثات CRM والملاحظات الآلية)."
+            }
+          }
+        },
+        "slab": {
+          "description": "تهيئة موصل Slab",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي",
+              "description": "حدّد عنوان URL الأساسي لفريق Slab لديك. سيبدو شيئًا مثل: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "تهيئة موصل Guru"
+        },
+        "gong": {
+          "description": "تهيئة موصل Gong",
+          "fields": {
+            "gong_base_url": {
+              "label": "عنوان URL الأساسي لـ Gong API",
+              "description": "القيمة الافتراضية `https://api.gong.io`.",
+              "placeholder": "https://api.gong.io"
+            },
+            "workspaces": {
+              "label": "مساحات العمل",
+              "description": "حدّد 0 أو أكثر من مساحات العمل للفهرسة. أدخل معرّف مساحة العمل أو اسمها الدقيق من Gong. إذا لم تُحدد مساحات عمل، فستُفهرس نصوص جميع مساحات العمل."
+            }
+          }
+        },
+        "loopio": {
+          "description": "تهيئة موصل Loopio",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "النطاق الفرعي لـ Loopio",
+              "description": "النطاق الفرعي لموقع Loopio لديك، مثل `acme` في `acme.loopio.com`.",
+              "placeholder": "acme"
+            },
+            "loopio_stack_name": {
+              "label": "اسم مكدّس Loopio",
+              "description": "يجب أن يطابق الاسم في Library Management تمامًا. اتركه فارغًا إذا أردت فهرسة جميع المكدّسات"
+            }
+          }
+        },
+        "file": {
+          "description": "تهيئة موصل الملفات",
+          "fields": {
+            "file_locations": {
+              "label": "الملفات"
+            }
+          }
+        },
+        "zulip": {
+          "description": "تهيئة موصل Zulip",
+          "fields": {
+            "realm_name": {
+              "label": "اسم النطاق (Realm)"
+            },
+            "realm_url": {
+              "label": "عنوان URL للنطاق (Realm)"
+            }
+          }
+        },
+        "coda": {
+          "description": "تهيئة موصل Coda"
+        },
+        "notion": {
+          "description": "تهيئة موصل Notion",
+          "fields": {
+            "root_page_id": {
+              "label": "معرّف الصفحة الجذر",
+              "description": "إذا حُدد، فستُفهرس الصفحة المحددة مع جميع صفحاتها الفرعية فقط. إذا تُرك فارغًا، فستُفهرس جميع الصفحات التي مُنح التكامل حق الوصول إليها."
+            }
+          }
+        },
+        "hubspot": {
+          "description": "تهيئة موصل HubSpot",
+          "fields": {
+            "object_types": {
+              "label": "أنواع الكائنات",
+              "options": {
+                "tickets": "التذاكر",
+                "companies": "الشركات",
+                "deals": "الصفقات",
+                "contacts": "جهات الاتصال"
+              },
+              "description": "اختر أنواع كائنات HubSpot المراد فهرستها. تُحدد جميع الأنواع افتراضيًا."
+            }
+          }
+        },
+        "document360": {
+          "description": "تهيئة موصل Document360",
+          "fields": {
+            "workspace": {
+              "label": "مساحة العمل"
+            },
+            "categories": {
+              "label": "الفئات",
+              "description": "حدّد 0 أو أكثر من الفئات للفهرسة. مثلاً، تحديد الفئة \"Help\" يجعلنا نفهرس فقط كل المحتوى داخل الفئة \"Help\". إذا لم تُحدد فئات، فستُفهرس جميع الفئات في مساحة عملك."
+            }
+          }
+        },
+        "clickup": {
+          "description": "تهيئة موصل ClickUp",
+          "fields": {
+            "connector_type": {
+              "label": "نوع الموصل",
+              "options": {
+                "list": "قائمة",
+                "folder": "مجلد",
+                "space": "مساحة",
+                "workspace": "مساحة عمل"
+              }
+            },
+            "connector_ids": {
+              "label": "معرّفات الموصل",
+              "description": "حدّد 0 أو أكثر من المعرّفات للفهرسة منها."
+            },
+            "retrieve_task_comments": {
+              "label": "جلب تعليقات المهام",
+              "description": "عند التحديد، ستُجلب أيضًا جميع تعليقات كل مهمة وتُفهرس."
+            }
+          }
+        },
+        "google_sites": {
+          "description": "تهيئة موصل Google Sites",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي",
+              "placeholder": "https://sites.google.com/view/mawqieuk"
+            },
+            "file_locations": {
+              "label": "تصدير الموقع",
+              "description": "ارفع ملف `.zip` يحتوي على HTML لموقع Google Site الخاص بك."
+            }
+          }
+        },
+        "zendesk": {
+          "description": "تهيئة موصل Zendesk",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "النطاق الفرعي لـ Zendesk",
+              "description": "النطاق الفرعي لموقع Zendesk لديك، مثل `acme` في `acme.zendesk.com`.",
+              "placeholder": "acme"
+            },
+            "content_type": {
+              "label": "نوع المحتوى",
+              "options": {
+                "articles": "المقالات",
+                "tickets": "التذاكر"
+              }
+            },
+            "calls_per_minute": {
+              "label": "استدعاءات API في الدقيقة",
+              "description": "يحدد عدد استدعاءات Zendesk API التي يمكن لهذا الموصل إجراؤها في الدقيقة (ينطبق على هذا الموصل فقط). راجع القيم الافتراضية: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "تهيئة موصل Box",
+          "fields": {
+            "folder_ids": {
+              "label": "المجلدات",
+              "description": "معرّفات مجلدات Box أو عناوين URL للمجلدات (مثل https://app.box.com/folder/123456789) المراد فهرستها. اتركه فارغًا لفهرسة كل ما يراه المستخدم المصادَق."
+            },
+            "include_web_links": {
+              "label": "تضمين روابط الويب",
+              "description": "فهرسة روابط الويب في Box (الإشارات المرجعية) أيضًا كمستندات خفيفة."
+            }
+          }
+        },
+        "dropbox": {
+          "description": "تهيئة موصل Dropbox"
+        },
+        "s3": {
+          "description": "تهيئة موصل S3",
+          "fields": {
+            "bucket_name": {
+              "label": "اسم الحاوية"
+            },
+            "prefix": {
+              "label": "البادئة"
+            },
+            "region_name": {
+              "label": "منطقة AWS",
+              "description": "منطقة AWS للحاوية (مثل us-east-1). مطلوبة للحاويات في أقسام غير افتراضية مثل GovCloud (us-gov-west-1)؛ وإلا يُستخدم تحديد المنطقة الافتراضي."
+            },
+            "bucket_type": {
+              "label": "نوع الحاوية"
+            }
+          }
+        },
+        "r2": {
+          "description": "تهيئة موصل R2",
+          "fields": {
+            "bucket_name": {
+              "label": "اسم الحاوية"
+            },
+            "prefix": {
+              "label": "البادئة"
+            },
+            "european_residency": {
+              "label": "إقامة البيانات في الاتحاد الأوروبي",
+              "description": "حدّد هذا المربع إذا كانت إقامة البيانات في الاتحاد الأوروبي مفعّلة لحاويتك."
+            },
+            "bucket_type": {
+              "label": "نوع الحاوية"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "تهيئة موصل Google Cloud Storage",
+          "fields": {
+            "bucket_name": {
+              "label": "اسم الحاوية",
+              "description": "اسم حاوية GCS المراد فهرستها، مثل my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "بادئة المسار"
+            },
+            "bucket_type": {
+              "label": "نوع الحاوية"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "تهيئة موصل OCI Storage",
+          "fields": {
+            "bucket_name": {
+              "label": "اسم الحاوية"
+            },
+            "prefix": {
+              "label": "البادئة"
+            },
+            "bucket_type": {
+              "label": "نوع الحاوية"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "تهيئة موصل Wikipedia",
+          "fields": {
+            "language_code": {
+              "label": "رمز اللغة",
+              "description": "أدخل رمز لغة Wikipedia صالحًا (مثل \"en\" و\"es\")"
+            },
+            "categories": {
+              "label": "الفئات المراد فهرستها",
+              "description": "حدّد 0 أو أكثر من أسماء الفئات للفهرسة. في معظم مواقع Wikipedia، هذه صفحات باسم بالصيغة \"Category: XYZ\" وهي قوائم لصفحات/فئات أخرى. حدّد اسم الفئة فقط، وليس عنوان URL الخاص بها."
+            },
+            "pages": {
+              "label": "الصفحات",
+              "description": "حدّد 0 أو أكثر من أسماء الصفحات للفهرسة."
+            },
+            "recurse_depth": {
+              "label": "عمق التكرار",
+              "description": "عند فهرسة فئات لها فئات فرعية، يحدد هذا عدد المستويات المراد فهرستها. حدّد 0 لفهرسة الفئة نفسها فقط (أي بلا تكرار). حدّد -1 لعمق تكرار غير محدود. لاحظ أن الفئة قد تحتوي نفسها ضمن تبعياتها في حالات نادرة، مما يسبب حلقة لا نهائية. استخدم -1 فقط إذا كنت واثقًا من أن هذا لن يحدث."
+            }
+          }
+        },
+        "xenforo": {
+          "description": "تهيئة موصل Xenforo",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL",
+              "description": "عنوان URL لمنتدى XenForo v2.2 المراد فهرسته. يمكن أن يكون لوحة أو موضوعًا."
+            }
+          }
+        },
+        "asana": {
+          "description": "تهيئة موصل Asana",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "معرّف مساحة العمل",
+              "description": "معرّف مساحة عمل Asana المراد فهرستها. يمكنك العثور عليه في https://app.asana.com/api/1.0/workspaces. وهو رقم يشبه 1234567890123456."
+            },
+            "asana_project_ids": {
+              "label": "معرّفات المشاريع",
+              "description": "معرّفات مشاريع Asana محددة للفهرسة، مفصولة بفواصل. اتركها فارغة لفهرسة جميع المشاريع في مساحة العمل. مثال: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "معرّف الفريق",
+              "description": "معرّف فريق يُستخدم للوصول إلى المهام المرئية للفريق. يتيح هذا فهرسة المهام المرئية للفريق إضافة إلى المهام العامة. اتركه فارغًا إذا لم ترغب في استخدام هذه الميزة."
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "تهيئة موصل MediaWiki",
+          "fields": {
+            "language_code": {
+              "label": "رمز اللغة",
+              "description": "أدخل رمز لغة MediaWiki صالحًا (مثل \"en\" و\"es\")"
+            },
+            "hostname": {
+              "label": "عنوان URL لموقع MediaWiki"
+            },
+            "categories": {
+              "label": "الفئات المراد فهرستها",
+              "description": "حدّد 0 أو أكثر من أسماء الفئات للفهرسة. في معظم مواقع MediaWiki، هذه صفحات باسم بالصيغة \"Category: XYZ\" وهي قوائم لصفحات/فئات أخرى. حدّد اسم الفئة فقط، وليس عنوان URL الخاص بها."
+            },
+            "pages": {
+              "label": "الصفحات",
+              "description": "حدّد 0 أو أكثر من أسماء الصفحات للفهرسة. حدّد اسم الصفحة فقط، وليس عنوان URL الخاص بها."
+            },
+            "recurse_depth": {
+              "label": "عمق التكرار",
+              "description": "عند فهرسة فئات لها فئات فرعية، يحدد هذا عدد المستويات المراد فهرستها. حدّد 0 لفهرسة الفئة نفسها فقط (أي بلا تكرار). حدّد -1 لعمق تكرار غير محدود. لاحظ أن الفئة قد تحتوي نفسها ضمن تبعياتها في حالات نادرة، مما يسبب حلقة لا نهائية. استخدم -1 فقط إذا كنت واثقًا من أن هذا لن يحدث."
+            }
+          }
+        },
+        "discord": {
+          "description": "تهيئة موصل Discord",
+          "fields": {
+            "server_ids": {
+              "label": "معرّفات الخوادم",
+              "description": "حدّد 0 أو أكثر من معرّفات الخوادم لتضمينها. ستُستخدم القنوات داخلها فقط للفهرسة"
+            },
+            "channel_names": {
+              "label": "القنوات",
+              "description": "حدّد 0 أو أكثر من القنوات للفهرسة. مثلاً، تحديد القناة \"support\" يجعلنا نفهرس فقط كل المحتوى داخل القناة \"#support\". إذا لم تُحدد قنوات، فستُفهرس جميع القنوات التي يملك الروبوت حق الوصول إليها."
+            },
+            "start_date": {
+              "label": "تاريخ البدء",
+              "description": "ستُفهرس الرسائل بعد هذا التاريخ فقط. الصيغة: YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "تهيئة موصل Freshdesk",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "نطاق Freshdesk",
+              "description": "النطاق الفرعي لموقع Freshdesk لديك، مثل `acme` في `acme.freshdesk.com`.",
+              "placeholder": "acme"
+            }
+          }
+        },
+        "fireflies": {
+          "description": "تهيئة موصل Fireflies"
+        },
+        "braintrust": {
+          "description": "تهيئة موصل Braintrust",
+          "fields": {
+            "project_name": {
+              "label": "اسم المشروع",
+              "description": "فهرسة المطالبات ومجموعات البيانات والتجارب من هذا المشروع فقط. اتركه فارغًا لفهرسة المؤسسة بأكملها."
+            },
+            "experiment_row_lookback_days": {
+              "label": "فترة الرجوع لصفوف التجارب (بالأيام)",
+              "description": "فهرسة نتائج كل صف للتجارب المنشأة خلال هذا العدد من الأيام فقط. تُفهرس ملخصات التجارب دائمًا. حدّد 0 لفهرسة الصفوف لجميع التجارب."
+            }
+          }
+        },
+        "canvas": {
+          "description": "تهيئة موصل Canvas",
+          "fields": {
+            "canvas_base_url": {
+              "label": "عنوان URL الأساسي لـ Canvas",
+              "description": "مثل https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "تهيئة موصل Egnyte",
+          "fields": {
+            "domain": {
+              "label": "نطاق Egnyte",
+              "description": "النطاق الفرعي لموقع Egnyte لديك، مثل `acme` في `acme.egnyte.com`.",
+              "placeholder": "acme"
+            },
+            "folder_path": {
+              "label": "مسار المجلد",
+              "description": "مسار المجلد المراد فهرسته (مثل \"/Shared/Documents\"). اتركه فارغًا لفهرسة كل شيء."
+            }
+          }
+        },
+        "airtable": {
+          "description": "تهيئة موصل Airtable",
+          "fields": {
+            "airtable_scope": {
+              "label": "محتوى Airtable المراد فهرسته",
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "specific": {
+                  "label": "جدول محدد"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "كل شيء",
+              "description": "سيكتشف هذا الموصل تلقائيًا جميع القواعد والجداول التي يمكن لرمز API الخاص بك الوصول إليها ويفهرسها."
+            },
+            "airtable_url": {
+              "label": "عنوان URL لـ Airtable",
+              "description": "الصق عنوان URL من متصفحك أثناء عرض الجدول، مثل https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "معرّف المشاركة",
+              "description": "اختياري. إذا أردت أن تستخدم روابط السجلات عنوان URL لعرض مشترك، فضع معرّف المشاركة هنا، مثل shrkfjEzDmLaDtK83."
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "اعتبار جميع الحقول عدا المرفقات بيانات وصفية",
+              "description": "اختر هذا إذا كان المحتوى الأساسي للفهرسة هو المرفقات وكانت جميع الأعمدة الأخرى بيانات وصفية لهذه المرفقات."
+            }
+          }
+        },
+        "highspot": {
+          "description": "تهيئة موصل Highspot",
+          "fields": {
+            "highspot_url": {
+              "label": "عنوان URL لـ Highspot",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
+            },
+            "highspot_scope": {
+              "label": "محتوى Highspot المراد فهرسته",
+              "tabs": {
+                "spots": {
+                  "label": "Spots محددة"
+                },
+                "everything": {
+                  "label": "كل شيء"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "اسم Spot (أو أسماؤها)",
+              "description": "لعدة Spots، أدخل كل Spot على حدة."
+            },
+            "everything": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع الـ Spots التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            }
+          }
+        },
+        "imap": {
+          "description": "تهيئة موصل البريد الإلكتروني",
+          "fields": {
+            "host": {
+              "label": "مضيف خادم IMAP",
+              "description": "اسم مضيف خادم IMAP (مثل imap.gmail.com وoutlook.office365.com)"
+            },
+            "port": {
+              "label": "منفذ خادم IMAP",
+              "description": "منفذ خادم IMAP (الافتراضي: 993 لـ SSL)"
+            },
+            "mailboxes": {
+              "label": "صناديق البريد",
+              "description": "حدّد صناديق البريد المراد فهرستها (مثل INBOX وSent وDrafts). اتركه فارغًا لفهرسة جميع صناديق البريد."
+            }
+          }
+        }
       }
     },
     "costOverrides": {
@@ -3196,6 +4307,10 @@
         "saveFailed": "فشل حفظ التجاوز: {message}",
         "saved": "حُفظ السعر للنموذج {model}.",
         "unknownError": "خطأ غير معروف"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -3390,9 +4505,6 @@
         },
         "createdOnBy": {
           "label": "تم الإنشاء في <i>{date}</i> بواسطة <i>{email}</i>"
-        },
-        "unnamed": {
-          "label": "بيانات الاعتماد رقم {id}"
         }
       },
       "create": {
@@ -3447,23 +4559,6 @@
         },
         "confirmTitle": "تأكيد الحذف"
       },
-      "edit": {
-        "name": {
-          "label": "الاسم (اختياري):"
-        },
-        "permissions": {
-          "note": "تأكد من التحديث إلى بيانات اعتماد ذات الأذونات المناسبة!"
-        },
-        "resetButton": {
-          "label": "إعادة تعيين التغييرات"
-        },
-        "updateButton": {
-          "label": "تحديث"
-        },
-        "updateError": {
-          "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
-        }
-      },
       "displayNames": {
         "accessKeyId": "معرّف مفتاح الوصول إلى {source}",
         "secretAccessKey": "مفتاح الوصول السري إلى {source}",
@@ -3503,11 +4598,12 @@
         "namespace": "مساحة أسماء {source}",
         "region": "منطقة {source}",
         "portalId": "معرّف بوابة {source}",
-        "oauthTokens": "رموز {source} OAuth",
         "isSandbox": "بيئة تجريبية (Sandbox)",
         "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
         "zuliprcContent": "محتوى Zuliprc",
-        "authenticationMethod": "طريقة المصادقة"
+        "authenticationMethod": "طريقة المصادقة",
+        "primaryAdminEmail": "البريد الإلكتروني للمسؤول الرئيسي",
+        "serviceAccountKey": "مفتاح حساب الخدمة"
       },
       "hints": {
         "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
@@ -3516,8 +4612,9 @@
         "jiraUserEmail": "مطلوب لـ Jira Cloud.",
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
-        "pfxFile": "ملف PFX.",
-        "testrailBaseUrl": "مثل https://yourcompany.testrail.io."
+        "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
+        "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق."
       },
       "methods": {
         "labels": {
@@ -3526,7 +4623,9 @@
           "certificate": "الشهادة",
           "accessKeyAndSecret": "مفتاح الوصول والسر",
           "iamRole": "دور IAM",
-          "assumeRole": "تولّي الدور"
+          "assumeRole": "تولّي الدور",
+          "serviceAccount": "حساب الخدمة",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint سر العميل للمصادقة. ستحتاج إلى تقديم معرّف العميل وسر العميل.",
@@ -3538,34 +4637,12 @@
           "s3AssumeRole": "إذا اخترت هذا الوضع، فسيتولّى مثيل Amazon EC2 دوره الحالي للوصول إلى S3. لا حاجة إلى بيانات اعتماد إضافية."
         }
       },
-      "modal": {
-        "createTitle": "إنشاء بيانات اعتماد {source}",
-        "editTitle": "تعديل بيانات الاعتماد",
-        "updateTitle": "تحديث بيانات الاعتماد"
-      },
-      "modify": {
-        "createButton": {
-          "label": "إنشاء"
-        },
-        "instructions": {
-          "message": "حدد بيانات اعتماد حسب الحاجة! تأكد من تحديد بيانات اعتماد ذات الأذونات المناسبة لهذا الموصّل!"
-        },
-        "selectButton": {
-          "label": "تحديد"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "اتصال"
         },
         "connectError": {
           "title": "تعذر الاتصال"
-        },
-        "redirectFailed": {
-          "message": "تعذر إعادة توجيهك لتسجيل الدخول باستخدام {source}. يرجى المحاولة مرة أخرى."
-        },
-        "retryButton": {
-          "label": "إعادة المحاولة"
         },
         "signIn": {
           "description": "يتطلب {appName} نطاقات للقراءة فقط.",
@@ -3575,44 +4652,28 @@
           "message": "تعذر بدء OAuth"
         }
       },
-      "swap": {
-        "error": {
-          "toast": "مشكلة في تبديل بيانات الاعتماد: {detail}"
-        },
-        "success": {
-          "toast": "تم تبديل بيانات الاعتماد بنجاح!"
-        }
+      "validation": {
+        "authMethodRequired": "يُرجى اختيار طريقة المصادقة",
+        "empty": "لا يمكن ترك {field} فارغًا",
+        "fileRequired": "يُرجى اختيار ملف {field}",
+        "invalidEmail": "يُرجى إدخال بريد إلكتروني صالح في {field}",
+        "required": "يُرجى إدخال {field}"
       },
-      "table": {
-        "actions": {
-          "label": "الإجراءات"
-        },
-        "created": {
-          "header": "تاريخ الإنشاء"
-        },
-        "edit": {
-          "ariaLabel": "تعديل بيانات الاعتماد"
-        },
-        "empty": {
-          "message": "لا توجد بيانات اعتماد لهذا الموصّل!"
-        },
-        "id": {
-          "header": "المعرّف"
-        },
-        "lastUpdated": {
-          "header": "آخر تحديث"
-        },
+      "edit": {
         "name": {
-          "header": "الاسم"
+          "label": "الاسم (اختياري):"
         },
-        "select": {
-          "label": "تحديد"
+        "permissions": {
+          "note": "تأكد من التحديث إلى بيانات اعتماد ذات الأذونات المناسبة!"
         },
-        "selected": {
-          "badge": "محدد"
+        "resetButton": {
+          "label": "إعادة تعيين التغييرات"
         },
-        "untitled": {
-          "label": "بدون عنوان"
+        "updateButton": {
+          "label": "تحديث"
+        },
+        "updateError": {
+          "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
         }
       },
       "update": {
@@ -3623,12 +4684,8 @@
           "toast": "تم تحديث بيانات الاعتماد"
         }
       },
-      "validation": {
-        "authMethodRequired": "يُرجى اختيار طريقة المصادقة",
-        "empty": "لا يمكن ترك {field} فارغًا",
-        "fileRequired": "يُرجى اختيار ملف {field}",
-        "invalidEmail": "يُرجى إدخال بريد إلكتروني صالح في {field}",
-        "required": "يُرجى إدخال {field}"
+      "modal": {
+        "editTitle": "تعديل بيانات الاعتماد"
       }
     },
     "customAnalytics": {
@@ -4706,6 +5763,9 @@
           "name": "أساسي",
           "description": "المجموعة الافتراضية لجميع المستخدمين بأذونات أساسية."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -4979,6 +6039,9 @@
           "name": "معالجة الاستعلامات",
           "description": "يعمل على كل استعلام مستخدم قبل دخوله المسار. يتيح إعادة كتابة الاستعلامات أو تصفيتها أو رفضها."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://nuqtat-nihayat-api.com"
       }
     },
     "imageGeneration": {
@@ -5697,152 +6760,106 @@
           "description": "أعد تحميل الصفحة للمحاولة مرة أخرى.",
           "title": "تعذّر تحميل تحديث الوصول حسب الموصل"
         }
+      },
+      "embeddingRateLimit": {
+        "title": "حد معدل طلبات التضمين",
+        "description": "يحدّ عدد طلبات التضمين التي ترسلها الفهرسة خلال نافذة زمنية، عبر جميع عمّال الفهرسة. عند بلوغ الحد، تنتظر الفهرسة ثم تحاول مرة أخرى بدلًا من الفشل، فيأخذ العمّال عملًا جديدًا أقل. لا تفشل الدفعة إلا إذا طال انتظارها. لا تخضع استعلامات البحث للحد.",
+        "requests": {
+          "title": "الطلبات لكل نافذة",
+          "description": "اتركه فارغًا لعدم وضع حد.",
+          "placeholder": "بلا حد"
+        },
+        "period": {
+          "title": "طول النافذة",
+          "description": "مثلًا، 60 لحد في الدقيقة.",
+          "suffix": "(ثوانٍ)"
+        },
+        "restoreDefault": "استعادة الافتراضي",
+        "validation": {
+          "requests": "أدخل عددًا صحيحًا من 1 إلى {max, number}، أو اترك الحقل فارغًا لعدم وضع حد.",
+          "period": "أدخل عددًا صحيحًا من الثواني من 1 إلى {max, number}."
+        },
+        "toasts": {
+          "saved": "تم حفظ حد المعدل.",
+          "failed": "تعذّر حفظ حد المعدل."
+        }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "موروث من {source}"
-          },
-          "organizationPublic": {
-            "label": "عام للمؤسسة"
-          },
-          "private": {
-            "label": "خاص"
-          }
+      "connectorCreated": {
+        "toast": "تم إنشاء الموصل بنجاح"
+      },
+      "overview": {
+        "connectors": {
+          "caption": "قيد الفهرسة / النشطة",
+          "label": "الموصلات"
         },
-        "connectorCreated": {
-          "toast": "تم إنشاء الموصل بنجاح"
+        "documents": {
+          "caption": "المفهرسة مؤخرًا / الإجمالي",
+          "label": "المستندات"
         },
-        "empty": {
-          "message": "يبدو أنه ليس لديك أي موصلات معدّة بعد. زر صفحة [إضافة موصل](/admin/connectors) للبدء!"
+        "ratio": {
+          "whole": "/ {whole}"
         },
-        "federated": {
-          "access": {
-            "label": "وصول موحّد"
-          },
-          "indexed": {
-            "label": "مفهرس"
-          },
-          "notApplicable": {
-            "label": "غير منطبق"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "مزامنة تلقائية"
-            },
-            "private": {
-              "label": "خاص"
-            },
-            "public": {
-              "label": "عام"
-            },
-            "title": "نوع الوصول"
-          },
-          "applyButton": {
-            "label": "تطبيق"
-          },
-          "docCount": {
-            "placeholder": "العدد",
-            "title": "عدد المستندات"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "اكتملت مع أخطاء"
-            },
-            "failed": {
-              "label": "فشلت"
-            },
-            "inProgress": {
-              "label": "قيد التنفيذ"
-            },
-            "interrupted": {
-              "label": "متقطعة"
-            },
-            "notStarted": {
-              "label": "لم تبدأ"
-            },
-            "success": {
-              "label": "نجحت"
-            },
-            "title": "آخر حالة"
-          },
-          "title": "تصفية الموصلات"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "الوصول: {values}"
-          },
-          "clearBadge": {
-            "label": "مسح"
-          },
-          "docsAnyBadge": {
-            "label": "المستندات {operator} أي"
-          },
-          "docsBadge": {
-            "label": "المستندات {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "الحالة: {values}"
-          }
-        },
-        "loadError": {
-          "message": "خطأ في تحميل حالة الفهرسة."
-        },
-        "manageConnector": {
-          "tooltip": "إدارة الموصل"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "إدارة الموصل الموحّد"
-        },
+        "loadError": "تعذر تحميل النظرة العامة."
+      },
+      "activities": {
+        "title": "الأنشطة",
+        "history": "سجل النشاط الكامل",
+        "viewLogs": "عرض سجل النشاط",
+        "panel": {
+          "title": "سجل النشاط",
+          "close": "إخفاء سجل النشاط"
+        }
+      },
+      "list": {
         "search": {
           "placeholder": "البحث في الموصلات..."
         },
-        "summary": {
-          "activeConnectors": {
-            "label": "الموصلات النشطة"
-          },
-          "publicConnectors": {
-            "label": "الموصلات العامة"
-          },
-          "totalConnectors": {
-            "label": "إجمالي الموصلات"
-          },
-          "totalDocsIndexed": {
-            "label": "إجمالي المستندات المفهرسة"
-          }
+        "statusFilter": {
+          "label": "الحالة",
+          "all": "كل الحالات"
         },
-        "table": {
-          "allCaughtUp": {
-            "label": "كل شيء محدّث! لا مزيد من الموصلات لعرضها"
-          },
-          "lastIndexed": {
-            "header": "آخر فهرسة"
-          },
-          "name": {
-            "header": "الاسم"
-          },
-          "permissions": {
-            "header": "الأذونات / الوصول"
-          },
-          "status": {
-            "header": "الحالة"
-          },
-          "totalDocs": {
-            "header": "إجمالي المستندات"
-          }
+        "counts": {
+          "indexed": "{count, plural, one {موصل واحد مفهرس} other {# موصلات مفهرسة}}",
+          "indexing": "{count, plural, one {موصل واحد قيد الفهرسة} other {# موصلات قيد الفهرسة}}",
+          "failed": "{count, plural, one {موصل واحد فشل} other {# موصلات فشلت}}",
+          "paused": "{count, plural, one {موصل واحد متوقف مؤقتًا} other {# موصلات متوقفة مؤقتًا}}"
         },
-        "toggleAll": {
-          "collapse": {
-            "label": "طي الكل"
-          },
-          "expand": {
-            "label": "توسيع الكل"
-          }
-        }
+        "access": {
+          "public": "عام",
+          "private": "خاص",
+          "sync": "مزامنة تلقائية",
+          "sync_restricted": "مزامنة تلقائية، مقيدة"
+        },
+        "detail": {
+          "queued": "الترتيب {position, selectordinal, other {#}} في قائمة الانتظار",
+          "lastIndexed": "آخر فهرسة {when}",
+          "neverIndexed": "لم تتم الفهرسة بعد"
+        },
+        "docs": {
+          "label": "مستندات",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "إدارة",
+          "manageFederated": "إدارة الموصل الموحد",
+          "expand": "عرض التفاصيل",
+          "collapse": "إخفاء التفاصيل"
+        },
+        "federated": {
+          "tag": "موحد"
+        },
+        "empty": {
+          "title": "لا توجد موصلات بعد",
+          "description": "انتقل إلى صفحة [إضافة موصل](/admin/connectors) للبدء.",
+          "filteredTitle": "لا توجد موصلات تطابق هذه المرشحات."
+        },
+        "loadError": "تعذر تحميل الموصلات.",
+        "units": "{count, plural, one {موصل} other {موصلات}}"
       }
     },
     "languageModels": {
@@ -7030,6 +8047,11 @@
         "securitySettingsUpdated": "تم تحديث إعدادات الأمان",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "settingsUpdated": "تم تحديث الإعدادات"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -7710,7 +8732,8 @@
           },
           "nameField": {
             "description": "معرّف فريد بأحرف صغيرة يُستخدم في رابط تسجيل الدخول. لا يمكن تغييره لاحقًا.",
-            "title": "الاسم"
+            "title": "الاسم",
+            "placeholder": "sharika-a"
           },
           "providerTypeField": {
             "description": "البروتوكول الذي يصادق به هذا الموفر.",
@@ -7780,7 +8803,8 @@
         },
         "openidConfigUrl": {
           "label": "عنوان URL لإعدادات OpenID",
-          "description": "عنوان URL لمستند اكتشاف OpenID Connect الخاص بموفّر الهوية."
+          "description": "عنوان URL لمستند اكتشاف OpenID Connect الخاص بموفّر الهوية.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "اشتراط مطالبة البريد الإلكتروني الموثّق",
@@ -7788,27 +8812,33 @@
         },
         "idpEntityId": {
           "label": "معرّف كيان موفّر الهوية",
-          "description": "معرّف كيان موفّر الهوية (المُصدِر)."
+          "description": "معرّف كيان موفّر الهوية (المُصدِر).",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "عنوان URL لتسجيل الدخول الموحّد لموفّر الهوية",
-          "description": "نقطة نهاية موفّر الهوية التي تستقبل طلبات تسجيل الدخول."
+          "description": "نقطة نهاية موفّر الهوية التي تستقبل طلبات تسجيل الدخول.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "شهادة X.509 لموفّر الهوية",
-          "description": "شهادة التوقيع لموفّر الهوية، تُستخدم للتحقق من التأكيدات."
+          "description": "شهادة التوقيع لموفّر الهوية، تُستخدم للتحقق من التأكيدات.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "معرّف كيان موفّر الخدمة",
-          "description": "معرّف كيان هذا المثيل، المسجّل لدى موفّر الهوية."
+          "description": "معرّف كيان هذا المثيل، المسجّل لدى موفّر الهوية.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "شهادة X.509 لموفّر الخدمة",
-          "description": "فقط إذا كان هذا المثيل يوقّع الطلبات أو يفكّ تشفير التأكيدات."
+          "description": "فقط إذا كان هذا المثيل يوقّع الطلبات أو يفكّ تشفير التأكيدات.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "المفتاح الخاص لموفّر الخدمة",
-          "description": "المفتاح الخاص المرتبط بشهادة موفّر الخدمة. يُخزَّن مشفّرًا."
+          "description": "المفتاح الخاص المرتبط بشهادة موفّر الخدمة. يُخزَّن مشفّرًا.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "سمة البريد الإلكتروني",
@@ -7972,6 +9002,9 @@
         "deleted": {
           "message": "تم حذف الإجابة القياسية {id}"
         }
+      },
+      "placeholders": {
+        "matchRegex": "تذكرة\\s*(?:تقنية|دعم)"
       }
     },
     "status": {
@@ -7981,18 +9014,22 @@
         "deleting": "جارٍ الحذف",
         "error": "خطأ",
         "failed": "فشلت",
-        "inProgress": "قيد التنفيذ",
         "indexed": "مفهرس",
         "indexing": "جارٍ الفهرسة",
         "initialIndexing": "فهرسة أولية",
         "interrupted": "متقطعة",
         "invalid": "غير صالحة",
         "invalidConnectorTooltip": "الموصل في حالة غير صالحة. يرجى تحديث بيانات الاعتماد أو إنشاء موصل جديد.",
-        "none": "بدون",
         "notStarted": "لم تبدأ",
         "paused": "موقوف مؤقتًا",
         "scheduled": "مجدولة",
-        "succeeded": "نجحت"
+        "synced": "تمت المزامنة",
+        "syncing": "جارٍ المزامنة",
+        "pruning": "جارٍ التقليم",
+        "pruned": "تم التقليم",
+        "checking": "جارٍ الفحص",
+        "passed": "ناجح",
+        "failedToRun": "تعذر التشغيل"
       }
     },
     "systemInfo": {
@@ -8135,6 +9172,9 @@
         "logo": {
           "alt": "الشعار"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -8358,11 +9398,13 @@
             },
             "project": {
               "label": "اسم المشروع",
-              "description": "اسم مشروع Braintrust الذي تُسجَّل فيه التتبعات."
+              "description": "اسم مشروع Braintrust الذي تُسجَّل فيه التتبعات.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "عنوان URL لواجهة API",
-              "description": "الافتراضي هو منطقة الولايات المتحدة. الصق عنوان URL لواجهة Braintrust API للمناطق الأخرى أو الاستضافة الذاتية."
+              "description": "الافتراضي هو منطقة الولايات المتحدة. الصق عنوان URL لواجهة Braintrust API للمناطق الأخرى أو الاستضافة الذاتية.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -8379,7 +9421,8 @@
             },
             "host": {
               "label": "عنوان URL الأساسي لواجهة API",
-              "description": "الافتراضي هو منطقة الاتحاد الأوروبي. الصق عنوان URL الأساسي لـ Langfuse للمناطق الأخرى أو الاستضافة الذاتية."
+              "description": "الافتراضي هو منطقة الاتحاد الأوروبي. الصق عنوان URL الأساسي لـ Langfuse للمناطق الأخرى أو الاستضافة الذاتية.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -8936,6 +9979,9 @@
       },
       "unexpectedError": {
         "message": "حدث خطأ غير متوقع."
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -9052,11 +10098,14 @@
         },
         "searxngBaseUrl": {
           "label": "عنوان URL الأساسي لـ SearXNG",
-          "description": "الصق عنوان URL الأساسي لـ [مثيل SearXNG](https://docs.searxng.org/admin/installation.html) الخاص بك."
+          "description": "الصق عنوان URL الأساسي لـ [مثيل SearXNG](https://docs.searxng.org/admin/installation.html) الخاص بك.",
+          "placeholder": "https://searxng-mithal.com"
         },
         "firecrawlBaseUrl": {
           "label": "عنوان URL الأساسي لواجهة API",
-          "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك."
+          "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -9137,6 +10186,17 @@
         "completed": "اكتملت عمليات التحقق.",
         "inProgress": "عمليات التحقق قيد التنفيذ...",
         "waiting": "بانتظار إعدادات الموصل..."
+      },
+      "advisory": {
+        "title": "لن تتم فهرسة بعض المحتوى.",
+        "description": "**{count, plural, one {فشل # فحص غير مطلوب للموصل.} other {فشل # فحوصات غير مطلوبة للموصل.}}** لن تمنع فهرسة الموصل بالكامل، لكن المحتوى المتأثر لن تتم فهرسته.",
+        "proceed": "لا يزال بإمكانك إنشاء الموصل ومعالجة هذه المشكلات لاحقًا.",
+        "viewButton": {
+          "label": "عرض الفحوصات الفاشلة"
+        },
+        "proceedButton": {
+          "label": "إنشاء الموصل على أي حال"
+        }
       }
     },
     "connectorEdit": {
@@ -11292,18 +12352,6 @@
           "label": "تعديل"
         }
       },
-      "editProperty": {
-        "header": {
-          "title": "تعديل {property}"
-        },
-        "submitButton": {
-          "label": "تحديث الخاصية",
-          "loadingLabel": "جارٍ التحديث..."
-        },
-        "valueInput": {
-          "placeholder": "قيمة الخاصية"
-        }
-      },
       "feedback": {
         "additionalDetails": {
           "dislikePlaceholder": "ما الذي لم يعجبك في هذه الإجابة؟",
@@ -11864,12 +12912,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {اختر ملفات} other {اختر ملفًا}}"
-      },
-      "prompt": "{multiple, select, true {أو اسحب الملفات وأفلتها هنا.} other {أو اسحب ملفًا وأفلته هنا.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "إضافة جديد"
@@ -12405,6 +13447,31 @@
         "label": "ترقية الخطة"
       },
       "availableFor": "متاح في {plan}"
+    },
+    "placeholders": {
+      "email": "albarid@sharikatuk.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://mawriduk.cognitiveservices.azure.com/openai/deployments/ism-alnashr/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://mawriduk.cognitiveservices.azure.com/openai/deployments/ism-alnashr/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://ism_almawrid.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://mintaqat_almawrid.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://bawwabat-bifrost.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://wakil-litellm.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "mashrue-vertex",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -12588,7 +13655,10 @@
           }
         },
         "saveButton": "حفظ",
-        "savingButton": "جارٍ الحفظ…"
+        "savingButton": "جارٍ الحفظ…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "التطبيق «{appName}» لديه بالفعل مهارة مرتبطة باسم «{skillName}». ارفع مهارة باسم مختلف."
@@ -12771,22 +13841,6 @@
         "label": "اربط بياناتك"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "جارٍ صنع مساحة عملك...",
-        "enchanting": "جارٍ السحر بالتعويذات...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "جارٍ جمع الموارد...",
-        "miningDependencies": "جارٍ التنقيب عن التبعيات...",
-        "placingBlocks": "جارٍ وضع المكعبات...",
-        "punchingWood": "جارٍ تكسير الخشب...",
-        "smeltingCode": "جارٍ صهر الشيفرة...",
-        "worldGenerated": "اكتمل إنشاء العالم..."
-      },
-      "tagline": {
-        "label": "جارٍ صنع فكرتك الرائعة التالية..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "مسح"
@@ -12876,6 +13930,12 @@
       "csv": {
         "truncated": "المعاينة محدودة بـ {rows, number} صف و{columns, number} عمود و{cells, number} خلية. نزّل الملف الأصلي للحصول على جميع البيانات.",
         "malformed": "يحتوي ملف CSV هذا على حقل غير صالح بين علامتي اقتباس. نزّل الملف الأصلي لفحصه."
+      },
+      "imageTooLarge": {
+        "description": "هذه الصورة كبيرة جدًا للمعاينة. نزّل الملف الأصلي لفتحه."
+      },
+      "unsupported": {
+        "description": "لا يمكن معاينة هذا الملف. نزّل الملف الأصلي لفتحه."
       }
     },
     "filesTab": {
@@ -12892,9 +13952,37 @@
       "preparing": {
         "description": "جارٍ إعداد بيئة التطوير الخاصة بك",
         "title": "جارٍ تجهيز بيئة الاختبار..."
+      },
+      "download": {
+        "label": "تنزيل"
+      },
+      "partial": {
+        "label": "تعذر تحميل بعض المجلدات. حدّث للمحاولة مرة أخرى."
+      },
+      "noMatches": {
+        "label": "لا توجد ملفات مطابقة"
+      },
+      "previousPage": {
+        "label": "الصفحة السابقة"
+      },
+      "nextPage": {
+        "label": "الصفحة التالية"
+      },
+      "page": {
+        "label": "الصفحة {page} من {total}"
+      },
+      "upload": {
+        "label": "رفع ملفات",
+        "error": "تعذر رفع الملفات. حاول مرة أخرى."
+      },
+      "emptyDirectory": {
+        "label": "لا توجد ملفات في هذا المجلد"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "خلفية متباينة"
+      },
       "error": {
         "description": "تعذّر عرض الصورة",
         "title": "فشل تحميل الصورة"
@@ -12904,9 +13992,6 @@
       },
       "preview": {
         "ariaLabel": "معاينة {name}"
-      },
-      "background": {
-        "contrast": "خلفية متباينة"
       }
     },
     "inputBar": {
@@ -13064,6 +14149,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "عناصر التحكم في PDF"
+      },
+      "thumbnails": {
+        "toggle": "إظهار الصور المصغّرة للصفحات أو إخفاؤها",
+        "resize": "تغيير حجم الصور المصغّرة للصفحات",
+        "label": "الصور المصغّرة للصفحات"
+      },
+      "page": {
+        "previous": "الصفحة السابقة",
+        "next": "الصفحة التالية",
+        "counter": "{current} / {total}",
+        "preview": "معاينة الصفحة {page}",
+        "select": "الانتقال إلى الصفحة {page}"
+      },
+      "zoom": {
+        "out": "تصغير",
+        "in": "تكبير",
+        "label": "التكبير",
+        "fitWidth": "ملاءمة العرض",
+        "fitPage": "ملاءمة الصفحة"
+      },
       "error": {
         "description": "تعذّر تحميل ملف PDF.",
         "title": "تعذّرت معاينة ملف PDF"
@@ -13076,6 +14183,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "عناصر التحكم في العرض التقديمي"
+      },
+      "thumbnails": {
+        "toggle": "إظهار الصور المصغّرة للشرائح أو إخفاؤها"
+      },
+      "resize": {
+        "ariaLabel": "تغيير حجم الصور المصغّرة للشرائح"
+      },
       "slides": {
         "label": "الشرائح"
       },
@@ -13086,7 +14202,7 @@
         "label": "الشريحة التالية"
       },
       "converting": {
-        "label": "جارٍ تحويل العرض التقديمي..."
+        "label": "جارٍ إعداد المعاينة..."
       },
       "empty": {
         "label": "لا توجد شرائح في هذا العرض التقديمي"
@@ -13099,9 +14215,6 @@
       },
       "slide": {
         "counter": "الشريحة {current} من {total}"
-      },
-      "resize": {
-        "ariaLabel": "تغيير حجم الصور المصغّرة للشرائح"
       }
     },
     "previewTab": {
@@ -13535,7 +14648,8 @@
         "ariaLabel": "نسخ الرابط: {url}"
       },
       "downloadFile": {
-        "tooltip": "تنزيل الملف"
+        "tooltip": "تنزيل الملف",
+        "label": "تنزيل"
       },
       "export": {
         "button": "تصدير إلى ‎.docx",
@@ -13605,6 +14719,170 @@
     "welcome": {
       "input": {
         "placeholder": "حلّل بياناتي وأنشئ لوحة معلومات..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "كل الملفات"
+      },
+      "browser": {
+        "label": "التطبيقات"
+      },
+      "list": {
+        "label": "علامات تبويب المخرجات"
+      },
+      "close": {
+        "label": "إغلاق {name}"
+      },
+      "reordered": {
+        "label": "نُقلت علامة التبويب إلى الموضع {position} من {count}"
+      },
+      "open": {
+        "label": "فتح علامة تبويب"
+      },
+      "outputs": {
+        "label": "المخرجات"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "عاين تطبيقك"
+      },
+      "home": {
+        "title": "التطبيقات",
+        "action": "التطبيقات"
+      },
+      "checking": {
+        "label": "جارٍ التحقق من تطبيقات الويب"
+      },
+      "failed": {
+        "description": "تعذر التحقق من تطبيقات الويب المحلية. أعد التحميل للمحاولة مرة أخرى."
+      },
+      "unavailable": {
+        "description": "تطبيق الويب غير متاح. استعد البيئة المعزولة أو أعد التحميل للمحاولة مرة أخرى.",
+        "label": "غير متاح"
+      },
+      "empty": {
+        "title": "لا توجد تطبيقات ويب متاحة",
+        "description": "تظهر التطبيقات المحلية هنا عند تشغيلها."
+      },
+      "starting": {
+        "label": "جارٍ بدء تطبيق الويب"
+      },
+      "loading": {
+        "label": "جارٍ تحميل تطبيق الويب"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "فتح المخرجات"
+      },
+      "close": {
+        "ariaLabel": "إغلاق المخرجات"
+      },
+      "expand": {
+        "ariaLabel": "توسيع المخرجات"
+      },
+      "restore": {
+        "ariaLabel": "استعادة حجم المخرجات"
+      },
+      "resize": {
+        "ariaLabel": "تغيير حجم المخرجات"
+      },
+      "files": {
+        "search": {
+          "placeholder": "البحث عن ملفات"
+        },
+        "location": {
+          "label": "كل الملفات في بيئة الاختبار"
+        }
+      },
+      "browser": {
+        "placeholder": "تطبيقات الويب في مساحة الاختبار"
+      },
+      "reload": {
+        "file": "إعادة تحميل الملف",
+        "files": "تحديث الملفات",
+        "browser": "تحديث تطبيقات الويب",
+        "unavailable": "استعد البيئة المعزولة للتحديث"
+      },
+      "export": {
+        "failed": "تعذر تصدير هذا الملف. حاول مرة أخرى."
+      },
+      "empty": {
+        "title": "اختر عرض مساحة العمل"
+      },
+      "status": {
+        "provisioning": "جارٍ تهيئة البيئة المعزولة",
+        "running": "البيئة المعزولة قيد التشغيل",
+        "sleeping": "البيئة المعزولة في وضع السكون",
+        "restoring": "جارٍ استعادة الجلسة",
+        "terminated": "انتهت البيئة المعزولة",
+        "failed": "فشلت البيئة المعزولة",
+        "ready": "البيئة المعزولة جاهزة",
+        "loading": "جارٍ البحث عن البيئة المعزولة"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "وضع علامة تمت المشاهدة على الكل",
+        "error": "تعذّر وضع علامة تمت المشاهدة على المخرجات. حاول مرة أخرى."
+      },
+      "home": {
+        "description": "الملفات التي أنشأها وكيلك"
+      },
+      "empty": {
+        "description": "ستظهر هنا الملفات التي ينشئها وكيلك."
+      },
+      "loading": {
+        "label": "جارٍ تحميل المخرجات…"
+      },
+      "unavailable": {
+        "description": "ستظهر المخرجات عندما تصبح بيئة الاختبار جاهزة."
+      },
+      "error": {
+        "description": "تعذر تحديث المخرجات. حاول مرة أخرى."
+      },
+      "incomplete": {
+        "description": "تعذر تحميل بعض المخرجات."
+      },
+      "filter": {
+        "label": "نوع الملف",
+        "all": "الكل",
+        "folders": "المجلدات",
+        "noExtension": "بدون امتداد"
+      },
+      "folders": {
+        "ariaLabel": "مجلدات المخرجات",
+        "root": "المخرجات"
+      },
+      "filtered": {
+        "empty": "لا توجد مخرجات مطابقة"
+      },
+      "search": {
+        "placeholder": "البحث في المخرجات"
+      },
+      "scope": {
+        "turn": "مخرجات الجولة {turn, number}",
+        "all": "جميع المخرجات"
+      },
+      "unseen": "جديد أو محدّث"
+    },
+    "turnOutputs": {
+      "showAll": "عرض كل المخرجات ({count})",
+      "app": "تطبيق",
+      "unavailable": "لم يعد متاحًا",
+      "appTitle": "معاينة تطبيقك"
+    },
+    "upgrade": {
+      "title": "يتطلب Craft خطة الأعمال",
+      "adminDescription": "يتوفر Craft في خطتي الأعمال والمؤسسات. لا يتم دعمه في إصدار المجتمع حتى يتم دمج Craft في الدردشة الرئيسية.",
+      "userDescription": "يتوفر Craft في خطتي الأعمال والمؤسسات. اطلب من المسؤول الترقية لاستخدام Craft.",
+      "backToChat": {
+        "label": "العودة إلى الدردشة"
+      },
+      "viewPlans": {
+        "label": "عرض الخطط"
       }
     }
   },
@@ -13945,8 +15223,19 @@
       "year": "السنة"
     },
     "inputFile": {
-      "attachFile": "إرفاق ملف",
       "clearFile": "مسح الملف"
+    },
+    "inputMultiUpload": {
+      "placeholder": "أضف ملفات…",
+      "dropToAdd": "أفلت الملفات هنا لإضافتها",
+      "dropToAddMore": "أفلت هنا لإضافة مزيد من الملفات"
+    },
+    "inputUpload": {
+      "placeholder": "أضف ملفًا…",
+      "pasted": "نص ملصق",
+      "attached": "تم إرفاق ملف",
+      "dropToAdd": "أفلت الملف هنا لإضافته",
+      "dropToReplace": "أفلت هنا لاستبدال الملف"
     },
     "inputImage": {
       "alt": "صورة",
@@ -14636,7 +15925,8 @@
         "title": "الوكلاء"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "الأعمال"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"
@@ -15128,6 +16418,9 @@
         "transferredToast": {
           "message": "تم نقل الملكية."
         }
+      },
+      "placeholders": {
+        "githubRepository": "almalik/almustawdae أو https://github.com/almalik/almustawdae"
       }
     },
     "page": {

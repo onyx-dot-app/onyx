@@ -1,158 +1,86 @@
-import React from "react";
-import { fireEvent } from "@testing-library/react";
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
-import { copyText } from "@opal/utils";
-import UrlBar from "./UrlBar";
+import { fireEvent, render, screen } from "@tests/setup/test-utils";
+import UrlBar from "@/app/craft/components/output-panel/UrlBar";
 
-jest.mock("@opal/utils", () => {
-  const actual = jest.requireActual("@opal/utils");
-  return {
-    ...actual,
-    copyText: jest.fn(),
-  };
+jest.mock("@/app/craft/components/ShareButton", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
+it("keeps one leading reload and prevents repeated requests while pending", () => {
+  const onRefresh = jest.fn();
+  const { rerender } = render(
+    <UrlBar
+      displayUrl="outputs/report.md"
+      onRefresh={onRefresh}
+      refreshLabel="Reload file"
+    />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Reload file" }));
+  expect(onRefresh).toHaveBeenCalledTimes(1);
+  rerender(
+    <UrlBar
+      displayUrl="outputs/report.md"
+      onRefresh={onRefresh}
+      refreshLabel="Reload file"
+      isRefreshing
+      isUserRefreshing
+    />
+  );
+  expect(screen.getByRole("button", { name: "Reload file" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Reload file" })).toHaveAttribute(
+    "aria-busy",
+    "true"
+  );
 });
 
-describe("UrlBar", () => {
-  beforeEach(() => {
-    (copyText as jest.Mock).mockReset();
-    (copyText as jest.Mock).mockResolvedValue(undefined);
-  });
+it("dims background refreshes and spins only for user reloads", () => {
+  const props = { displayUrl: "", onRefresh: jest.fn(), isRefreshing: true };
+  const { container, rerender } = render(<UrlBar {...props} />);
+  expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
+  expect(container.querySelector(".motion-safe\\:animate-spin")).toBeNull();
+  rerender(<UrlBar {...props} isUserRefreshing />);
+  expect(container.querySelector(".motion-safe\\:animate-spin")).not.toBeNull();
+});
 
-  test("shows and disables a spinner while refreshing", () => {
-    const onRefresh = jest.fn();
-    render(
-      <UrlBar
-        displayUrl="sandbox://"
-        showNavigation
-        onRefresh={onRefresh}
-        isRefreshing
-      />
-    );
-
-    const refreshButton = screen.getByRole("button", { name: "Refresh" });
-    expect(refreshButton).toBeDisabled();
-    expect(refreshButton).toHaveAttribute("aria-busy", "true");
-    expect(refreshButton.querySelector("svg")).toHaveClass("animate-spin");
-  });
-
-  test("contains long preview URLs inside the URL bar and copies them", async () => {
-    const user = setupUser();
-    const longPreviewUrl =
-      "https://craft-preview.onyx.app/sessions/session-with-a-very-long-id/apps/generated-webapp/routes/deeply/nested/path/with/an-unbroken-segment-that-would-otherwise-overflow-the-url-bar?query=another-unbroken-value-that-keeps-going";
-
-    render(
-      <UrlBar
-        displayUrl={longPreviewUrl}
-        previewUrl={longPreviewUrl}
-        showNavigation
-        canGoBack
-        canGoForward
-        onBack={jest.fn()}
-        onForward={jest.fn()}
-        onRefresh={jest.fn()}
-        sessionId="session-with-a-very-long-id"
-      />
-    );
-
-    const urlText = screen.getByText(longPreviewUrl);
-    const copyButton = screen.getByRole("button", {
-      name: `Copy URL: ${longPreviewUrl}`,
-    });
-    const textWrapper = screen.getByTestId("url-text-wrapper");
-    const urlPill = screen.getByTestId("url-bar-pill");
-    const openButton = screen.getByRole("button", {
-      name: "open in a new tab",
-    });
-
-    expect(urlText.tagName).toBe("P");
-    expect(urlText).toHaveClass("truncate");
-    expect(copyButton).toHaveClass(
-      "block",
-      "w-full",
-      "min-w-0",
-      "cursor-pointer"
-    );
-    expect(textWrapper).toHaveClass("min-w-0", "flex-1", "overflow-hidden");
-    expect(urlPill).toHaveClass("min-w-0", "flex-1");
-    expect(openButton).toHaveAttribute("data-copy-state", "idle");
-    expect(
-      screen.getByRole("button", { name: "Share webapp" })
-    ).toBeInTheDocument();
-
-    await user.hover(copyButton);
-    await waitFor(() => {
-      expect(screen.getAllByText(longPreviewUrl).length).toBeGreaterThan(1);
-    });
-
-    await user.click(copyButton);
-    expect(copyText).toHaveBeenCalledWith(longPreviewUrl);
-    await waitFor(() => {
-      expect(openButton).toHaveAttribute("data-copy-state", "copied");
-    });
-    const copiedIcon = openButton.querySelector("svg");
-    expect(copiedIcon).toBeInTheDocument();
-    fireEvent.animationEnd(copiedIcon!);
-    await waitFor(() => {
-      expect(openButton).toHaveAttribute("data-copy-state", "idle");
-    });
-    expect(
-      screen.getByRole("button", { name: "open in a new tab" })
-    ).toBeInTheDocument();
-
-    await user.hover(openButton);
-    await waitFor(() => {
-      expect(screen.getAllByText("open in a new tab").length).toBeGreaterThan(
-        0
-      );
-    });
-    expect(screen.queryByText("Copied URL")).not.toBeInTheDocument();
-  });
-
-  test("resets copy feedback when the displayed URL changes", async () => {
-    const user = setupUser();
-    const firstPreviewUrl = "https://craft-preview.onyx.app/sessions/first";
-    const secondPreviewUrl = "https://craft-preview.onyx.app/sessions/second";
-    const { rerender } = render(
-      <UrlBar displayUrl={firstPreviewUrl} previewUrl={firstPreviewUrl} />
-    );
-
-    await user.click(
-      screen.getByRole("button", {
-        name: `Copy URL: ${firstPreviewUrl}`,
-      })
-    );
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "open in a new tab" })
-      ).toHaveAttribute("data-copy-state", "copied");
-    });
-
-    rerender(
-      <UrlBar displayUrl={secondPreviewUrl} previewUrl={secondPreviewUrl} />
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "open in a new tab" })
-      ).toHaveAttribute("data-copy-state", "idle");
-    });
-    expect(
-      screen.getByRole("button", {
-        name: `Copy URL: ${secondPreviewUrl}`,
-      })
-    ).toBeInTheDocument();
-  });
-
-  test.each(["no-sandbox://", "artifacts://"])(
-    "does not copy internal display URL %s",
-    async (internalUrl) => {
-      render(<UrlBar displayUrl={internalUrl} />);
-
-      expect(screen.getByText(internalUrl)).toHaveClass("truncate");
-      expect(
-        screen.queryByRole("button", { name: `Copy URL: ${internalUrl}` })
-      ).not.toBeInTheDocument();
-      expect(copyText).not.toHaveBeenCalled();
-    }
+it("keeps Files search input mounted and editable when inventory refreshes", () => {
+  const change = jest.fn();
+  const { rerender } = render(
+    <UrlBar
+      displayUrl=""
+      searchValue="report"
+      onSearchChange={change}
+      placeholder="Search files"
+    />
   );
+  const input = screen.getByRole("textbox", { name: "Search files" });
+  input.focus();
+  fireEvent.change(input, { target: { value: "reports" } });
+  expect(change).toHaveBeenCalledWith("reports");
+  rerender(
+    <UrlBar
+      displayUrl=""
+      searchValue="reports"
+      onSearchChange={change}
+      placeholder="Search files"
+      isRefreshing
+    />
+  );
+  expect(screen.getByRole("textbox", { name: "Search files" })).toBe(input);
+  expect(input).toHaveFocus();
+});
+
+it("uses original download separately from document export", () => {
+  const raw = jest.fn();
+  const exportFile = jest.fn();
+  render(
+    <UrlBar
+      displayUrl="outputs/report.md"
+      onDownloadRaw={raw}
+      onDownload={exportFile}
+    />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Download file" }));
+  fireEvent.click(screen.getByRole("button", { name: "Export to .docx" }));
+  expect(raw).toHaveBeenCalledTimes(1);
+  expect(exportFile).toHaveBeenCalledTimes(1);
 });
