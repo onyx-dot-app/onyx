@@ -43,7 +43,7 @@ The `<button>` is the track, 32×18px. A wrapping `<div>` pads it by 1px vertica
 | Disabled off | `background-neutral-04` | `background-neutral-03`       |
 | Disabled on  | `action-selection-03`   | `background-neutral-03`       |
 
-Hover and keyboard focus (`:focus-visible`) both darken the track by one step. There is no focus border.
+Hover and keyboard focus (`:focus-visible`) both darken the track by one step. There is no focus border. A disabled switch that keeps focus (see below) gets the same darkening on its track; its thumb keeps the disabled colour.
 
 ## Focus
 

@@ -36,6 +36,14 @@
   border: 1px solid transparent;
   cursor: not-allowed !important;
 }
+/* A switch disabled while its change saves keeps focus, so it needs a
+   focus look too. The disabled thumb still marks it as disabled. */
+.switch-disabled:focus-visible {
+  background-color: var(--background-tint-04);
+}
+.switch-disabled-checked:focus-visible {
+  background-color: var(--action-selection-04);
+}
 
 .switch-thumb {
   background-color: var(--background-neutral-light-00);
