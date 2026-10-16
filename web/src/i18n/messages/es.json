@@ -2547,13 +2547,11 @@
           "failures": "Fallos",
           "errors": "Errores",
           "other": "Otros",
-          "showResolved": "Show resolved",
-          "withResolved": "{level}, with resolved"
+          "resolved": "Resuelto"
         },
         "groups": {
           "failures": "{count, plural, one {# fallo} other {# fallos}}",
           "errors": "{count, plural, one {# error} other {# errores}}",
-          "resolved": "{count, plural, one {# resuelto} other {# resueltos}}",
           "other": "Otros"
         },
         "title": {
@@ -2629,7 +2627,7 @@
           "resolvedDocs": "{count, plural, one {# documento resuelto} other {# documentos resueltos}}",
           "pruning": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
           "checks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
-          "resolvedOn": "Resolved {date}"
+          "resolved": "Resuelto"
         },
         "more": "Mostrar más",
         "empty": {
@@ -2661,9 +2659,7 @@
           "copy": "Copiar el seguimiento de pila"
         },
         "actions": {
-          "resolve": "Resolver",
-          "reindex": "Reindex failed docs",
-          "resolveWithoutReindex": "Resolve without reindex"
+          "resolve": "Resolver"
         }
       },
       "stageDetails": {

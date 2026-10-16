@@ -2547,13 +2547,11 @@
           "failures": "Fehlschläge",
           "errors": "Fehler",
           "other": "Sonstige",
-          "showResolved": "Show resolved",
-          "withResolved": "{level}, with resolved"
+          "resolved": "Behoben"
         },
         "groups": {
           "failures": "{count, plural, one {# Fehlschlag} other {# Fehlschläge}}",
           "errors": "{count, plural, one {# Fehler} other {# Fehler}}",
-          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}",
           "other": "Sonstige"
         },
         "title": {
@@ -2629,7 +2627,7 @@
           "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
-          "resolvedOn": "Resolved {date}"
+          "resolved": "Behoben"
         },
         "more": "Mehr anzeigen",
         "empty": {
@@ -2661,9 +2659,7 @@
           "copy": "Stacktrace kopieren"
         },
         "actions": {
-          "resolve": "Beheben",
-          "reindex": "Reindex failed docs",
-          "resolveWithoutReindex": "Resolve without reindex"
+          "resolve": "Beheben"
         }
       },
       "stageDetails": {

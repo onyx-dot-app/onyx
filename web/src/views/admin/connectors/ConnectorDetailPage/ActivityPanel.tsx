@@ -10,6 +10,7 @@ import {
   FilterButton,
   InputTypeIn,
   MessageCard,
+  SelectButton,
   ShadowDiv,
   Tag,
 } from "@opal/components";
@@ -20,6 +21,7 @@ import {
   SvgActivity,
   SvgAlertTriangle,
   SvgEye,
+  SvgEyeClosed,
   SvgFold,
   SvgXCircle,
 } from "@opal/icons";
@@ -76,34 +78,44 @@ export function ActivityCountTags({
 
 interface GroupListProps {
   state: ActivityGroupState;
+  /** The level's resolved runs, listed after its open ones. */
+  closedState: ActivityGroupState | null;
   resolving: boolean;
   onResolve: (item: ActivityItem, errorIds: number[] | null) => void;
   onResolveRun: (item: ActivityItem) => void;
 }
 function GroupList({
   state,
+  closedState,
   resolving,
   onResolve,
   onResolveRun,
 }: GroupListProps) {
   const t = useTranslations("admin.connector.activity");
-  if (state.runs.length === 0) return null;
+  const closedRuns = closedState?.runs ?? [];
+  if (state.runs.length === 0 && closedRuns.length === 0) return null;
+  // Open runs page in first, so a level's resolved runs stay at its end.
+  const more = state.hasMore
+    ? state.more
+    : closedState?.hasMore
+      ? closedState.more
+      : null;
+  const items = [
+    ...state.runs.map((item) => ({ item, closed: false })),
+    ...(state.hasMore
+      ? []
+      : closedRuns.map((item) => ({ item, closed: true }))),
+  ];
   return (
     <Section alignItems="stretch" gap={1} height="fit">
-      <Divider
-        title={
-          state.closed
-            ? t("groups.resolved", { count: state.total })
-            : t(`groups.${state.group}`, { count: state.total })
-        }
-      />
-      {state.runs.map((item) => (
+      <Divider title={t(`groups.${state.group}`, { count: state.total })} />
+      {items.map(({ item, closed }) => (
         <ActivityCard
           key={`${item.run.kind}-${item.run.attempt.id}`}
           ccPairId={item.ccPairId}
           run={item.run}
           group={state.group}
-          closed={state.closed}
+          closed={closed}
           connector={item.connector}
           canResolve={item.canResolve}
           canResolveRuns={item.canResolveRuns}
@@ -112,9 +124,9 @@ function GroupList({
           onResolveRun={() => onResolveRun(item)}
         />
       ))}
-      {state.hasMore && (
+      {more !== null && (
         <Section alignItems="center" height="fit">
-          <Button prominence="tertiary" size="xs" onClick={state.more}>
+          <Button prominence="tertiary" size="xs" onClick={more}>
             {t("more")}
           </Button>
         </Section>
@@ -145,7 +157,7 @@ export default function ActivityPanel({
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   const [shown, setShown] = useState<Shown>("all");
-  // Adds the resolved and superseded runs of the levels shown.
+  // Adds the resolved and superseded runs to the end of each level shown.
   const [showResolved, setShowResolved] = useState(false);
   const { resolving, resolve, resolveRun } = useResolveRunErrors();
   // The fleet panel lists every run. A pair's page has its run list for that.
@@ -197,8 +209,15 @@ export default function ActivityPanel({
     isShown("other"),
     RUNS_POLL_MS
   );
-  const groups = [failures, closedFailures, errors, closedErrors, other].filter(
-    (group) => isShown(group.group) && (showResolved || !group.closed)
+  const levels = [
+    { state: failures, closedState: showResolved ? closedFailures : null },
+    { state: errors, closedState: showResolved ? closedErrors : null },
+    { state: other, closedState: null },
+  ].filter((level) => isShown(level.state.group));
+  const groups = levels.flatMap((level) =>
+    level.closedState === null
+      ? [level.state]
+      : [level.state, level.closedState]
   );
   const loading = groups.some((group) => group.isLoading && !group.loaded);
   const failed = groups.some((group) => group.failed);
@@ -294,17 +313,10 @@ export default function ActivityPanel({
                 <Dropdown.Trigger asChild>
                   <FilterButton
                     icon={SvgActivity}
-                    active={shown !== "all" || showResolved}
-                    onClear={() => {
-                      setShown("all");
-                      setShowResolved(false);
-                    }}
+                    active={shown !== "all"}
+                    onClear={() => setShown("all")}
                   >
-                    {showResolved
-                      ? t("filter.withResolved", {
-                          level: t(`filter.${shown}`),
-                        })
-                      : t(`filter.${shown}`)}
+                    {t(`filter.${shown}`)}
                   </FilterButton>
                 </Dropdown.Trigger>
                 <Dropdown.Data
@@ -317,23 +329,21 @@ export default function ActivityPanel({
                       ) ?? "all"
                     )
                   }
-                  items={[
-                    ...shownOptions.map((candidate) => ({
-                      kind: "option" as const,
-                      value: candidate,
-                      title: t(`filter.${candidate}`),
-                    })),
-                    {
-                      kind: "toggle" as const,
-                      id: "show-resolved",
-                      icon: SvgEye,
-                      title: t("filter.showResolved"),
-                      checked: showResolved,
-                      onCheckedChange: setShowResolved,
-                    },
-                  ]}
+                  items={shownOptions.map((candidate) => ({
+                    kind: "option" as const,
+                    value: candidate,
+                    title: t(`filter.${candidate}`),
+                  }))}
                 />
               </Dropdown>
+              <SelectButton
+                variant="select-filter"
+                icon={showResolved ? SvgEye : SvgEyeClosed}
+                state={showResolved ? "selected" : "empty"}
+                onClick={() => setShowResolved((value) => !value)}
+              >
+                {t("filter.resolved")}
+              </SelectButton>
             </Section>
           </Section>
 
@@ -356,10 +366,11 @@ export default function ActivityPanel({
               ) : empty ? (
                 <IllustrationContent title={emptyTitle} />
               ) : (
-                groups.map((group) => (
+                levels.map((level) => (
                   <GroupList
-                    key={`${group.group}-${group.closed}`}
-                    state={group}
+                    key={level.state.group}
+                    state={level.state}
+                    closedState={level.closedState}
                     resolving={resolving}
                     onResolve={(item, errorIds) => void resolve(item, errorIds)}
                     onResolveRun={(item) => void resolveRun(item)}

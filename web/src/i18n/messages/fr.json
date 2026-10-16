@@ -2547,13 +2547,11 @@
           "failures": "Échecs",
           "errors": "Erreurs",
           "other": "Autres",
-          "showResolved": "Show resolved",
-          "withResolved": "{level}, with resolved"
+          "resolved": "Résolu"
         },
         "groups": {
           "failures": "{count, plural, one {# échec} other {# échecs}}",
           "errors": "{count, plural, one {# erreur} other {# erreurs}}",
-          "resolved": "{count, plural, one {# résolue} other {# résolues}}",
           "other": "Autres"
         },
         "title": {
@@ -2629,7 +2627,7 @@
           "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
-          "resolvedOn": "Resolved {date}"
+          "resolved": "Résolu"
         },
         "more": "Afficher plus",
         "empty": {
@@ -2661,9 +2659,7 @@
           "copy": "Copier la trace de la pile"
         },
         "actions": {
-          "resolve": "Résoudre",
-          "reindex": "Reindex failed docs",
-          "resolveWithoutReindex": "Resolve without reindex"
+          "resolve": "Résoudre"
         }
       },
       "stageDetails": {
