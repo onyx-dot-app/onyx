@@ -7,13 +7,13 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
-from sqlalchemy.orm import Session
+from sqlalchemy.engine import Engine
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 
-def test_checkpoint_upgrade_downgrade_upgrade(db_session: Session) -> None:
+def test_checkpoint_upgrade_downgrade_upgrade(isolated_engine: Engine) -> None:
     schema = f"response_checkpoint_{uuid4().hex}"
-    with db_session.connection().engine.connect() as connection:
+    with isolated_engine.connect() as connection:
         try:
             connection.execute(CreateSchema(schema))
             connection.execute(

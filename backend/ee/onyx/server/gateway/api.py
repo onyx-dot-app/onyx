@@ -122,7 +122,6 @@ from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -153,10 +152,6 @@ router = APIRouter(
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
 )
-
-
-def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return llm_gateway_trace(flow, model)
 
 
 def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
@@ -347,7 +342,7 @@ def _stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -421,7 +416,7 @@ def handle_chat_completion(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
@@ -646,7 +641,7 @@ def _responses_stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -801,7 +796,7 @@ def handle_responses_request(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
@@ -1147,7 +1142,7 @@ def _anthropic_stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -1353,7 +1348,7 @@ def handle_anthropic_messages(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,

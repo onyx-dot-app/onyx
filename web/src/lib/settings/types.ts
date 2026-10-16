@@ -1,5 +1,6 @@
 import { Tier } from "@/lib/tiers/types";
 import type { Notification } from "@/lib/notifications/interfaces";
+import type { Locale } from "@/i18n/config";
 
 export enum ApplicationStatus {
   PAYMENT_REMINDER = "payment_reminder",
@@ -76,6 +77,9 @@ export interface Settings {
 
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
+
+  // Workspace UI language for users without a stored language of their own.
+  default_language: Locale;
 
   // Workspace-wide switch for the LLM gateway (direct model API access via
   // /api/gateway). When false, all gateway routes reject requests.

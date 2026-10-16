@@ -66,18 +66,18 @@ class AuthorizationAttemptStore(Generic[PayloadT]):
         *,
         owner_id: str,
         payload: PayloadT,
-        state: str | None = None,
+        state: str,
     ) -> AuthorizationAttempt[PayloadT]:
         """Persist a new attempt.
 
-        When supplied, ``state`` must come from a cryptographically secure
+        ``state`` must come from a cryptographically secure
         generator. Its entropy cannot be established through format validation.
         """
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=self._ttl_seconds)
         attempt = self._attempt_type(
             namespace=self._namespace,
             owner_id=owner_id,
-            state=state if state is not None else generate_authorization_state(),
+            state=state,
             expires_at=expires_at,
             payload=payload,
         )
@@ -101,7 +101,7 @@ class AuthorizationAttemptStore(Generic[PayloadT]):
     ) -> AuthorizationAttempt[PayloadT]:
         stored = self._cache_backend_provider().getdel(self._key(owner_id, state))
         if stored is None:
-            raise _invalid_attempt_error()
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, _INVALID_ATTEMPT_MESSAGE)
 
         try:
             attempt = self._attempt_type.model_validate_json(stored)
@@ -110,7 +110,9 @@ class AuthorizationAttemptStore(Generic[PayloadT]):
                 "Rejected malformed OAuth authorization attempt (%s)",
                 type(error).__name__,
             )
-            raise _invalid_attempt_error() from error
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, _INVALID_ATTEMPT_MESSAGE
+            ) from error
 
         if (
             attempt.namespace != self._namespace
@@ -118,7 +120,7 @@ class AuthorizationAttemptStore(Generic[PayloadT]):
             or not secrets.compare_digest(attempt.state, state)
             or attempt.expires_at <= datetime.now(timezone.utc)
         ):
-            raise _invalid_attempt_error()
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, _INVALID_ATTEMPT_MESSAGE)
         return attempt
 
     def _key(self, owner_id: str, state: str) -> str:
@@ -130,7 +132,3 @@ class AuthorizationAttemptStore(Generic[PayloadT]):
 def generate_authorization_state() -> str:
     """Generate a 256-bit, URL-safe OAuth state value."""
     return secrets.token_urlsafe(32)
-
-
-def _invalid_attempt_error() -> OnyxError:
-    return OnyxError(OnyxErrorCode.INVALID_INPUT, _INVALID_ATTEMPT_MESSAGE)

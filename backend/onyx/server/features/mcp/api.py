@@ -125,9 +125,9 @@ from onyx.server.features.mcp.oauth import (
     make_oauth_provider,
 )
 from onyx.server.features.mcp.oauth_flow import (
+    MCP_OAUTH_ATTEMPTS,
     OAuthAlreadyAuthenticated,
     OAuthAuthorizationRedirect,
-    mcp_oauth_attempt_store,
     start_auto_discovery_oauth_flow,
     start_known_provider_oauth_flow,
     validate_mcp_oauth_flow_configuration,
@@ -909,14 +909,10 @@ async def process_oauth_callback(
     if not state:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Missing state parameter")
 
-    flow = (
-        mcp_oauth_attempt_store()
-        .consume(
-            owner_id=user_id,
-            state=state,
-        )
-        .payload
-    )
+    flow = MCP_OAUTH_ATTEMPTS.consume(
+        owner_id=user_id,
+        state=state,
+    ).payload
     logger.info(
         "OAuth callback: claimed flow for user_id=%s tenant=%s server_id=%s",
         user_id,

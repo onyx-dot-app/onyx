@@ -41,13 +41,14 @@ from onyx.db.document import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     IndexReclaimStatus,
+    LLMModelFlowType,
     Permission,
     SwitchoverType,
     VectorQuantization,
 )
 from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
 from onyx.db.llm import (
-    fetch_default_contextual_rag_model,
+    fetch_default_model,
     update_default_contextual_model,
     update_no_default_contextual_rag_provider,
 )
@@ -1006,7 +1007,7 @@ def validate_contextual_rag_model(
     if model_configuration_id is None:
         if (
             enable_contextual_rag
-            and fetch_default_contextual_rag_model(db_session) is None
+            and fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG) is None
         ):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,

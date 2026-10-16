@@ -64,7 +64,7 @@ from onyx.db.index_attempt import (
     count_index_attempts_for_cc_pair,
     get_error_counts_for_index_attempts,
     get_index_attempt,
-    get_index_attempt_errors_for_cc_pair,
+    get_index_attempt_errors_with_document_names_for_cc_pair,
     get_latest_index_attempt_for_cc_pair_id,
     get_latest_successful_index_attempt_for_cc_pair_id,
     get_open_doc_error_counts_for_index_attempts,
@@ -942,7 +942,7 @@ def get_cc_pair_indexing_errors(
         query=query,
     )
 
-    index_attempt_errors = get_index_attempt_errors_for_cc_pair(
+    index_attempt_errors = get_index_attempt_errors_with_document_names_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
         unresolved_only=not include_resolved,
@@ -952,7 +952,10 @@ def get_cc_pair_indexing_errors(
         query=query,
     )
     return PaginatedReturn(
-        items=[IndexAttemptErrorPydantic.from_model(e) for e in index_attempt_errors],
+        items=[
+            IndexAttemptErrorPydantic.from_model(error, document_name=name)
+            for error, name in index_attempt_errors
+        ],
         total_items=total_count,
     )
 

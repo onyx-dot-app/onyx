@@ -32,4 +32,5 @@ export const autoSyncConfigBySource: Record<
   zoom: {},
   linear: {},
   hubspot: {},
+  youtrack: {},
 };

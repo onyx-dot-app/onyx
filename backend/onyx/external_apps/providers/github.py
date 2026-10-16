@@ -7,8 +7,6 @@ from onyx.configs.app_configs import (
     EXT_APP_GITHUB_CLIENT_SECRET,
 )
 from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
     EndpointSpec,
     ExternalAppAction,
@@ -288,23 +286,3 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         if isinstance(body, dict) and body.get("error"):
             return str(body["error"])
         return token_response_error(response, body)
-
-    def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
-        access_token = response_data.get("access_token")
-        if not access_token:
-            raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
-                "GitHub OAuth response did not contain an access token.",
-            )
-        creds: dict[str, Any] = {
-            "access_token": access_token,
-            "scope": response_data.get("scope"),
-            "token_type": response_data.get("token_type"),
-        }
-        # Present only when the OAuth app has expiring user tokens enabled
-        # (GitHub Apps); classic OAuth app tokens don't expire and omit these.
-        if response_data.get("refresh_token"):
-            creds["refresh_token"] = response_data["refresh_token"]
-        if response_data.get("expires_in"):
-            creds["expires_in"] = response_data["expires_in"]
-        return creds

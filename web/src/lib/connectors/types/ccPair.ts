@@ -302,6 +302,8 @@ export interface IndexAttemptError {
 
   document_id: string | null;
   document_link: string | null;
+  /** The indexed document's title, `null` until the document lands. */
+  document_name: string | null;
 
   entity_id: string | null;
   failed_time_range_start: string | null;

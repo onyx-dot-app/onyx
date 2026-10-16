@@ -321,9 +321,10 @@ force off.
 
 ### 4.7 Cost and usage
 
-Every generation handler opens `_gateway_trace(flow, model)` (a `trace("llm_gateway",
-...)`) and an `llm_generation_span(llm, flow=flow, ...)`
-(`api.py:_gateway_trace`, repeated in both passthrough modules).
+Every generation handler opens `llm_gateway_trace(flow, model)` from
+`backend/onyx/server/gateway/tracing.py` and an
+`llm_generation_span(llm, flow=flow, ...)`. The shared trace helper calls
+`trace("llm_gateway", ...)` and tags Craft requests with their session ID.
 `gateway_list_models` and `gateway_anthropic_count_tokens` open neither, so
 metadata and token-count requests are not usage-metered. `flow` is
 the `LLMFlow` GATE 2 resolved: `LLMFlow.LLM_GATEWAY` for a directly-scoped
@@ -379,7 +380,7 @@ copies the calling thread's `contextvars.Context` into the new thread before
 starting it. The worker function (`_stream_worker`,
 `_responses_stream_worker`, `_anthropic_stream_worker`,
 `_openai_passthrough_stream_worker`, `_passthrough_stream_worker`) opens its
-own `_gateway_trace` and `llm_generation_span` **inside that thread**, with
+own `llm_gateway_trace` and `llm_generation_span` **inside that thread**, with
 an explicit comment repeated at every call site: *"Runs on its own thread
 after the endpoint has returned the StreamingResponse, so the trace must be
 opened here rather than in the endpoint for the generation span to see an
@@ -432,7 +433,7 @@ records the span before signalling `_STREAM_END`.
    `is_craft_enabled_for_user` also passes; it must never fall through to the
    plain `LLMFlow.LLM_GATEWAY` path (§4.2).
 4. **Every call must be metered and tagged.** Every generation handler, translation and
-   passthrough, streaming and non-streaming, opens a `_gateway_trace` plus an
+   passthrough, streaming and non-streaming, opens a `llm_gateway_trace` plus an
    `llm_generation_span`/manual `_track_llm_cost` call. A new endpoint or a
    new passthrough branch that skips this loses its span (translation
    path: `llm.invoke_raw` and `llm.stream_raw` open no span, see
@@ -497,11 +498,11 @@ records the span before signalling `_STREAM_END`.
 
 | If your change… | Also check |
 |---|---|
-| adds an endpoint or a new dialect | wire it through both GATE 1 (`require_permission(Permission.USE_LLM_GATEWAY)`) and GATE 2 (`_authorize_gateway_request`); add `check_token_rate_limits` and resolve through `_resolve_metered_gateway_model` unless the endpoint generates nothing; open a `_gateway_trace`/`llm_generation_span` or call `_track_llm_cost` manually if it bypasses `LLM.invoke_raw`/`.stream_raw` |
+| adds an endpoint or a new dialect | wire it through both GATE 1 (`require_permission(Permission.USE_LLM_GATEWAY)`) and GATE 2 (`_authorize_gateway_request`); add `check_token_rate_limits` and resolve through `_resolve_metered_gateway_model` unless the endpoint generates nothing; open a `llm_gateway_trace`/`llm_generation_span` or call `_track_llm_cost` manually if it bypasses `LLM.invoke_raw`/`.stream_raw` |
 | changes scope checks (`gateway_request_flow`, `IMPLIED_PERMISSIONS`) | re-verify the asymmetry in §4.2 still holds: a bare `USE_LLM_GATEWAY` grant must not require Craft enablement, and a `CRAFT_SANDBOX` token must still require it; re-run `backend/tests/unit/onyx/server/features/craft/test_craft_gateway.py` |
 | changes the `llm_gateway_enabled` check (`_authorize_gateway_request`, `_validate_assignable_scopes`, `list_selectable_scopes`) | re-verify it still fails closed on a settings-read error, still exempts Craft sandbox traffic, and still blocks both new PAT minting and existing-PAT gateway calls; re-run `backend/tests/unit/ee/onyx/server/gateway/test_llm_gateway_api.py` and `backend/tests/unit/onyx/server/pat/test_pat_api.py` |
 | changes model resolution (`resolve_gateway_model`, the `<provider_id>/<model_name>` wire format) | `model_catalog.py:build_gateway_model_catalog` (the id format `GET /v1/models` returns must still round-trip), and `onyx/server/features/build/session/llm_config.py` which parses the same id format for Craft's stored selection |
-| changes metering (`_gateway_trace`, `_track_llm_cost`, the `LLMFlow` tags) | [[observability]]'s dashboard grouping, and `backend/tests/integration/tests/streaming_endpoints/test_gateway_usage_tracking.py`, which asserts `user_usage` actually increases after a gateway call |
+| changes metering (`llm_gateway_trace`, `_track_llm_cost`, the `LLMFlow` tags) | [[observability]]'s dashboard grouping, and `backend/tests/integration/tests/streaming_endpoints/test_gateway_usage_tracking.py`, which asserts `user_usage` actually increases after a gateway call |
 | changes streaming (`stream_bridge.py`, either stream worker) | the contextvars-copy-then-open-span-in-thread pattern (§4.9) must be preserved for any new streaming branch; a naive `async def` generator that opens a span before yielding will silently produce untagged or cross-request-contaminated spans |
 | changes `store`/persistence handling on the OpenAI passthrough | re-confirm `store=False` is still forced and `previous_response_id`/`conversation` are still refused (§4.6); this is a cross-user data exposure risk under the shared organization key, not just a correctness nit |
 | changes tier gating (`PATH_PREFIX_MIN_TIER`, `LLM_GATEWAY_MIN_TIER`) | `ee/onyx/configs/license_enforcement_config.py`'s longest-prefix-wins ordering, and any nested path that should resolve to a stricter tier than `/gateway` itself |
