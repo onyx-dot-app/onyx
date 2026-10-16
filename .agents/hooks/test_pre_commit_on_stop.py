@@ -82,6 +82,31 @@ class PreCommitOnStopTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("prompt snapshot", json.loads(result.stdout)["systemMessage"])
 
+    def test_restored_config_does_not_check_an_older_turn(self) -> None:
+        config = self.repo / ".pre-commit-config.yaml"
+        config.write_text("repos: []\n")
+        bin_dir = self.repo / "bin"
+        bin_dir.mkdir()
+        call_log = self.repo / "pre-commit-call.txt"
+        executable = bin_dir / "pre-commit"
+        executable.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{call_log}'\n")
+        executable.chmod(0o755)
+        path = f"{bin_dir}:/usr/bin:/bin"
+
+        self.assertEqual(self.run_hook("UserPromptSubmit", path=path).returncode, 0)
+        (self.repo / "old.txt").write_text("older turn\n")
+        config.unlink()
+        missing = self.run_hook("UserPromptSubmit", path=path)
+        self.assertIn("pre-commit config", json.loads(missing.stdout)["systemMessage"])
+        (self.repo / "new.txt").write_text("current turn\n")
+        config.write_text("repos: []\n")
+
+        result = self.run_hook("Stop", path=path)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("new.txt", call_log.read_text().splitlines())
+        self.assertNotIn("old.txt", call_log.read_text().splitlines())
+
     def test_missing_pre_commit_reports_coverage_gap(self) -> None:
         (self.repo / ".pre-commit-config.yaml").write_text("repos: []\n")
         reminder = self.repo / ".agents" / "feature-map" / "stale_docs.py"

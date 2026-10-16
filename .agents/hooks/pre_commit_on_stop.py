@@ -214,12 +214,13 @@ def main() -> int:
                 Path(payload.get("cwd") or os.getcwd()), "rev-parse", "--show-toplevel"
             ).strip()
         )
+        if payload.get("hook_event_name") == "UserPromptSubmit":
+            _record_turn_start(repo, session)
         if not (repo / ".pre-commit-config.yaml").is_file():
             return _notice(
                 "Project pre-commit config is missing at the Git root; turn checks did not run."
             )
         if payload.get("hook_event_name") == "UserPromptSubmit":
-            _record_turn_start(repo, session)
             return 0
         turn = _turn_changes(repo, session)
     except (subprocess.CalledProcessError, OSError):
