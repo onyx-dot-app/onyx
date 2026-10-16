@@ -1,7 +1,7 @@
 """record failed group and prune counts
 
 Revision ID: c7e1a2f4b9d3
-Revises: b034d72b7abe
+Revises: b034d72b7abe, c3d9a1f4b7e2
 Create Date: 2026-10-16 20:40:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "c7e1a2f4b9d3"
-down_revision = "b034d72b7abe"
+down_revision = ("b034d72b7abe", "c3d9a1f4b7e2")
 branch_labels = None
 depends_on = None
 

@@ -3076,6 +3076,31 @@ class IndexAttemptError(Base):
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
 
 
+class CCPairRunResolution(Base):
+    """A failed run, or a run with errors, an admin marked resolved. It keeps
+    its status: the feed only moves it out of the open failures and errors."""
+
+    __tablename__ = "cc_pair_run_resolution"
+
+    # A CCPairRunKind value. A run id is unique only within its kind's table.
+    run_kind: Mapped[str] = mapped_column(String, primary_key=True)
+    attempt_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    resolved_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # None when the system resolved it.
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+
 class IndexAttemptStageMetric(Base):
     """Per-stage timing aggregate for an `IndexAttempt`.
 

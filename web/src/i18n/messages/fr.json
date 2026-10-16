@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "Pages et communautés de l'intranet"
         },
+        "youtrack": {
+          "description": "Suivi des tickets et gestion de projets"
+        },
         "canvas": {
           "description": "Cours, pages et annonces"
         },
@@ -2277,89 +2280,24 @@
         "perBatch": {
           "empty": "Aucune donnée d'étape par lot enregistrée."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Chargement du lot"
+        "buckets": {
+          "fetchSource": {
+            "label": "Récupération de la source"
           },
-          "batchTotal": {
-            "label": "Total du lot"
-          },
-          "batchUnaccounted": {
-            "label": "Non attribué"
-          },
-          "checkpointLoad": {
-            "label": "Chargement du point de reprise"
+          "batchPreProcessing": {
+            "label": "Prétraitement des lots"
           },
           "chunking": {
             "label": "Segmentation"
           },
-          "connectorFetch": {
-            "label": "Récupération par le connecteur"
-          },
-          "connectorValidation": {
-            "label": "Validation du connecteur"
-          },
-          "contextualRag": {
-            "label": "RAG contextuel"
-          },
-          "coordLockAcquireWait": {
-            "label": "Attente du verrou de coordination"
-          },
-          "coordinationUpdate": {
-            "label": "Mise à jour de la coordination"
-          },
-          "docBatchEnqueue": {
-            "label": "Mise en file du lot de documents"
-          },
-          "docBatchStore": {
-            "label": "Enregistrement du lot de documents"
-          },
-          "docDbPrepare": {
-            "label": "Préparation DB des documents"
-          },
-          "docLockAcquireWait": {
-            "label": "Attente du verrou de document"
-          },
-          "docprocessingSetup": {
-            "label": "Configuration du docprocessing"
-          },
           "embedding": {
             "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "Préparation de l'enrichissement"
-          },
-          "finalization": {
-            "label": "Finalisation"
-          },
-          "gcCollect": {
-            "label": "Garbage collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Upsert de la hiérarchie"
-          },
-          "imageProcessing": {
-            "label": "Traitement des images"
-          },
-          "permissionValidation": {
-            "label": "Validation des autorisations"
-          },
-          "postIndexDbUpdate": {
-            "label": "Mise à jour DB après indexation"
-          },
-          "queueWait": {
-            "label": "Attente en file"
           },
           "vectorDbWrite": {
             "label": "Écriture DB vectorielle"
           },
-          "embeddingRateLimitWait": {
-            "label": "Attente de la limite d'embedding",
-            "description": "Temps d'attente des requêtes d'embedding pour la limite définie dans les paramètres d'index. Fait partie d'Embedding, additionné sur les threads d'embedding."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Attente de limitation du fournisseur",
-            "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          "postProcessing": {
+            "label": "Post-traitement"
           }
         }
       },
@@ -2379,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "Documents indexés au fil du temps",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
-          "loadError": "Le graphique n'a pas pu être chargé."
+          "loadError": "Le graphique n'a pas pu être chargé.",
+          "rangeFilter": "Exécutions créées dans cette tranche du graphique"
         },
         "hold": {
           "checks_running": "Vérifications préalables en cours",
@@ -2407,7 +2346,10 @@
         "targetedReindexFailed": "Échec de la réindexation ciblée : {message}",
         "targetedReindexSubmitted": "Réindexation ciblée envoyée pour {count, plural, one {# document} other {# documents}}. Les erreurs disparaîtront de la liste au fur et à mesure de la réindexation des documents.",
         "checkFrequencyUpdated": "Fréquence de vérification du connecteur mise à jour",
-        "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur"
+        "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "{count, plural, one {# exécution marquée comme résolue} other {# exécutions marquées comme résolues}}."
       },
       "backButton": {
         "label": "Tous les connecteurs"
@@ -2540,6 +2482,7 @@
           "running": "{count, plural, one {# exécution en cours} other {# exécutions en cours}}",
           "succeeded": "{count, plural, one {# exécution réussie} other {# exécutions réussies}}",
           "failed": "{count, plural, one {# exécution en échec} other {# exécutions en échec}}",
+          "canceled": "{count, plural, one {# exécution annulée} other {# exécutions annulées}}",
           "passedChecks": "{count, plural, one {# vérification réussie} other {# vérifications réussies}}",
           "failedChecks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
           "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}"
@@ -2603,15 +2546,12 @@
           "all": "Tous les niveaux",
           "failures": "Échecs",
           "errors": "Erreurs",
-          "other": "Autres"
-        },
-        "resolved": {
-          "label": "Résolues"
+          "other": "Autres",
+          "resolved": "Résolu"
         },
         "groups": {
           "failures": "{count, plural, one {# échec} other {# échecs}}",
           "errors": "{count, plural, one {# erreur} other {# erreurs}}",
-          "resolved": "{count, plural, one {# résolue} other {# résolues}}",
           "other": "Autres"
         },
         "title": {
@@ -2681,12 +2621,12 @@
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
-          "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}"
+          "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
+          "resolved": "Résolu"
         },
         "more": "Afficher plus",
         "empty": {
           "title": "Aucune activité récente",
-          "resolved": "Aucune erreur résolue",
           "filtered": "Rien ne correspond à cette recherche.",
           "failures": "Aucun échec",
           "errors": "Aucune erreur",
@@ -2710,20 +2650,34 @@
           "open": "Ouvrir le document"
         },
         "trace": {
-          "header": "Trace de la pile • ID d'exécution : {id}",
+          "runId": "• ID d'exécution : {id}",
           "copy": "Copier la trace de la pile"
         },
         "actions": {
           "resolve": "Résoudre"
+        },
+        "resolveAll": {
+          "button": "Résoudre tout l’affichage",
+          "title": "Résoudre toutes les exécutions affichées ?",
+          "description": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel. Elles conservent leur statut et passent dans les éléments résolus.",
+          "fleetDescription": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel, sur les connecteurs que vous gérez. Elles conservent leur statut et passent dans les éléments résolus.",
+          "confirm": "Tout résoudre"
         }
       },
       "stageDetails": {
         "title": "Détails des étapes",
+        "heading": {
+          "top": "Détails",
+          "bottom": "des étapes"
+        },
         "calls": "Lots",
         "averageTime": "Temps moyen",
         "maxTime": "Temps max",
         "uneven": {
           "tooltip": "Les temps par lot varient fortement pour cette étape"
+        },
+        "clipped": {
+          "label": "Barre tronquée : le maximum dépasse l’échelle"
         },
         "close": "Fermer les détails des étapes"
       }
@@ -3320,6 +3274,19 @@
             "lang": {
               "label": "Langue",
               "description": "Langue utilisée pour le titre et le corps du contenu et pour les libellés de métadonnées (ISO 639-1, par ex. en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "Configurer le connecteur YouTrack",
+          "fields": {
+            "base_url": {
+              "label": "URL de YouTrack",
+              "description": "Votre adresse YouTrack, par ex. https://example.youtrack.cloud. Pour YouTrack Server, incluez le chemin de contexte, par ex. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projets",
+              "description": "Noms courts des projets à indexer (par ex. ABC). Laissez vide pour indexer tous les projets que le jeton peut lire."
             }
           }
         },
@@ -4675,6 +4642,7 @@
         "gongBaseUrl": "Facultatif. Pour les données hors des États-Unis, indiquez l'hôte de votre région, par exemple https://[region].api.gong.io.",
         "jiraUserEmail": "Obligatoire pour Jira Cloud.",
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
+        "youtrackToken": "Un jeton permanent d'un utilisateur YouTrack qui peut lire tous les projets à indexer. Créez-le dans votre profil YouTrack, sous Sécurité du compte.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
@@ -6869,7 +6837,7 @@
       "activities": {
         "title": "Activités",
         "history": "Historique complet de l'activité",
-        "viewLogs": "Voir l'historique de l'activité",
+        "viewLogs": "Afficher les journaux",
         "panel": {
           "title": "Historique de l'activité",
           "close": "Masquer l'historique de l'activité"
@@ -10338,8 +10306,25 @@
         },
         "validation": {
           "title": "Validation",
-          "blocks": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer.",
-          "warns": "Certaines vérifications facultatives ont échoué. Vous pouvez quand même appliquer.",
+          "unchanged": "Les paramètres qui nécessitent une validation n'ont pas changé.",
+          "outcome": {
+            "failed": {
+              "title": "Échec de la validation",
+              "description": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer."
+            },
+            "warnings": {
+              "title": "Validation réussie avec des avertissements",
+              "description": "Certaines vérifications facultatives ont échoué ou n'ont pas pu être vérifiées. Vous pouvez quand même appliquer."
+            },
+            "incomplete": {
+              "title": "La validation n'est pas terminée",
+              "description": "Les vérifications terminées ont réussi. Vous pouvez quand même appliquer."
+            },
+            "passed": {
+              "title": "Validation réussie",
+              "description": "Les nouveaux paramètres ont réussi toutes les vérifications."
+            }
+          },
           "error": {
             "title": "Les paramètres ne sont pas valides"
           }

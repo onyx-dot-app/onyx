@@ -3,9 +3,11 @@ document permission syncs, group syncs, prunes, connector checks) is windowed
 and searched the same way, and one union pages every kind newest first, so no
 page loads the runs before it."""
 
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
 from typing import TypeVar
+from uuid import UUID
 
 from sqlalchemy import (
     ColumnElement,
@@ -21,8 +23,11 @@ from sqlalchemy import (
     select,
     union_all,
 )
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 
+from onyx.db.cc_pair_run_resolution import run_is_resolved
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import (
     CapabilityCheckRunStatus,
@@ -37,6 +42,7 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     CapabilityCheckRun,
+    CCPairRunResolution,
     Connector,
     ConnectorCredentialPair,
     DocPermissionSyncAttempt,
@@ -48,6 +54,7 @@ from onyx.db.models import (
 )
 from onyx.db.permission_sync_attempt import (
     relevant_external_group_sync_attempts_filter,
+    source_group_sync_is_cc_pair_agnostic,
 )
 
 # Keyed by value, so a value two status enums share must group the same way.
@@ -82,6 +89,25 @@ _RunT = TypeVar(
 )
 
 
+def _later(
+    newer_time: InstrumentedAttribute[datetime],
+    newer_id: InstrumentedAttribute[int],
+    time_created: InstrumentedAttribute[datetime],
+    run_id: InstrumentedAttribute[int],
+) -> ColumnElement[bool]:
+    """Whether a run comes after another in the feed's newest-first order."""
+    return or_(
+        newer_time > time_created, and_(newer_time == time_created, newer_id > run_id)
+    )
+
+
+def _no_item_errors(run_filter: CCPairRunFilter) -> ColumnElement[bool] | None:
+    """The ``errors`` filter for a kind that records no per-item errors."""
+    if run_filter.errors in (None, CCPairRunErrors.NONE):
+        return None
+    return false()
+
+
 def _narrowed(
     stmt: Select,
     run_filter: CCPairRunFilter,
@@ -90,9 +116,37 @@ def _narrowed(
     status: InstrumentedAttribute[_StatusT],
     statuses: type[_StatusT],
     with_status_filter: bool,
+    matches_errors: ColumnElement[bool] | None,
+    has_newer_run: ColumnElement[bool],
+    is_resolved: ColumnElement[bool],
 ) -> Select:
+    """Applies the filter's shared axes. ``matches_errors`` is the kind's
+    ``errors`` filter, ``has_newer_run`` says a newer run of the kind
+    follows the run on the same history, and ``is_resolved`` says an admin
+    resolved the run."""
+    failed = [
+        s for s in statuses if _STATUS_GROUPS[s.value] is CCPairRunStatusGroup.FAILED
+    ]
+    superseded = and_(status.in_(failed), has_newer_run)
+    # A True closed-item axis widens what ``errors`` keeps, a False one narrows it.
+    widened = [] if matches_errors is None else [matches_errors]
+    narrowed: list[ColumnElement[bool]] = []
+    for wanted, clause in (
+        (run_filter.superseded, superseded),
+        (run_filter.resolved, is_resolved),
+    ):
+        if wanted is True:
+            widened.append(clause)
+        elif wanted is False:
+            narrowed.append(~clause)
+    if widened:
+        stmt = stmt.where(or_(*widened))
+    if narrowed:
+        stmt = stmt.where(*narrowed)
     if run_filter.since is not None:
         stmt = stmt.where(time_created >= run_filter.since)
+    if run_filter.until is not None:
+        stmt = stmt.where(time_created < run_filter.until)
     if run_filter.error_query:
         stmt = stmt.where(matches_error(run_filter.error_query))
     groups = run_filter.status_groups
@@ -141,6 +195,45 @@ def _group_sync_scope(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
     )
 
 
+def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
+    """A newer group sync on the run's history: its pair's, or its source's when
+    the source logs one sync for all its pairs, as ``_group_sync_scope`` reads."""
+    ids = run_filter.cc_pair_ids
+    if len(ids) == 1 and run_filter.source is not None:
+        shared = (
+            {run_filter.source}
+            if source_group_sync_is_cc_pair_agnostic(run_filter.source)
+            else set()
+        )
+    else:
+        shared = run_filter.shared_sources
+    run = ExternalGroupPermissionSyncAttempt
+    newer = aliased(ExternalGroupPermissionSyncAttempt)
+    later = _later(newer.time_created, newer.id, run.time_created, run.id)
+    same_pair = newer.connector_credential_pair_id == run.connector_credential_pair_id
+    if not shared:
+        return exists().where(same_pair, later)
+    # Flat joins, since a nested subquery would not correlate to the run.
+    run_pair = aliased(ConnectorCredentialPair)
+    run_connector = aliased(Connector)
+    newer_pair = aliased(ConnectorCredentialPair)
+    newer_connector = aliased(Connector)
+    return exists().where(
+        run_pair.id == run.connector_credential_pair_id,
+        run_connector.id == run_pair.connector_id,
+        newer_pair.id == newer.connector_credential_pair_id,
+        newer_connector.id == newer_pair.connector_id,
+        later,
+        or_(
+            same_pair,
+            and_(
+                run_connector.source.in_(shared),
+                newer_connector.source == run_connector.source,
+            ),
+        ),
+    )
+
+
 def _index_attempt_runs(
     run_filter: CCPairRunFilter, with_status_filter: bool
 ) -> Select:
@@ -152,15 +245,27 @@ def _index_attempt_runs(
     )
     own_errors = exists().where(IndexAttemptError.index_attempt_id == IndexAttempt.id)
     unresolved = own_errors.where(IndexAttemptError.is_resolved.is_(False))
+    matches_errors: ColumnElement[bool] | None
     match run_filter.errors:
         case CCPairRunErrors.UNRESOLVED:
-            stmt = stmt.where(unresolved)
+            matches_errors = unresolved
         case CCPairRunErrors.RESOLVED:
-            stmt = stmt.where(own_errors, ~unresolved)
+            matches_errors = and_(own_errors, ~unresolved)
         case CCPairRunErrors.NONE:
-            stmt = stmt.where(~own_errors)
+            matches_errors = ~own_errors
         case None:
-            pass
+            matches_errors = None
+    # A run under another model or a targeted reindex leaves this model's
+    # failure open.
+    newer = aliased(IndexAttempt)
+    has_newer_run = exists().where(
+        newer.connector_credential_pair_id == IndexAttempt.connector_credential_pair_id,
+        newer.search_settings_id == IndexAttempt.search_settings_id,
+        newer.targeted_reindex_job_id.is_(None),
+        _later(
+            newer.time_created, newer.id, IndexAttempt.time_created, IndexAttempt.id
+        ),
+    )
 
     # A search also reads the attempt's document errors, which carry the
     # message when the attempt itself finished without one.
@@ -180,6 +285,9 @@ def _index_attempt_runs(
         IndexAttempt.status,
         IndexingStatus,
         with_status_filter,
+        matches_errors,
+        has_newer_run,
+        run_is_resolved(CCPairRunKind.INDEXING, IndexAttempt.id),
     )
 
 
@@ -193,15 +301,27 @@ def _doc_permission_sync_runs(
     )
     # A sync counts the documents it could not read, and nothing resolves them.
     unreadable = func.coalesce(DocPermissionSyncAttempt.docs_with_permission_errors, 0)
+    matches_errors: ColumnElement[bool] | None
     match run_filter.errors:
         case CCPairRunErrors.UNRESOLVED:
-            stmt = stmt.where(unreadable > 0)
+            matches_errors = unreadable > 0
         case CCPairRunErrors.RESOLVED:
-            stmt = stmt.where(false())
+            matches_errors = false()
         case CCPairRunErrors.NONE:
-            stmt = stmt.where(unreadable == 0)
+            matches_errors = unreadable == 0
         case None:
-            pass
+            matches_errors = None
+    newer = aliased(DocPermissionSyncAttempt)
+    has_newer_run = exists().where(
+        newer.connector_credential_pair_id
+        == DocPermissionSyncAttempt.connector_credential_pair_id,
+        _later(
+            newer.time_created,
+            newer.id,
+            DocPermissionSyncAttempt.time_created,
+            DocPermissionSyncAttempt.id,
+        ),
+    )
     return _narrowed(
         stmt,
         run_filter,
@@ -212,30 +332,30 @@ def _doc_permission_sync_runs(
         DocPermissionSyncAttempt.status,
         PermissionSyncStatus,
         with_status_filter,
+        matches_errors,
+        has_newer_run,
+        run_is_resolved(CCPairRunKind.DOC_PERMISSION_SYNC, DocPermissionSyncAttempt.id),
     )
 
 
-def _by_failed_count(
-    stmt: Select, run_filter: CCPairRunFilter, failed: InstrumentedAttribute[int]
-) -> Select:
-    """Narrows runs by a count of items that failed. Nothing resolves these failures."""
+def _failed_count_errors(
+    run_filter: CCPairRunFilter, failed: InstrumentedAttribute[int]
+) -> ColumnElement[bool] | None:
+    """The ``errors`` filter for a kind that counts failed items. Nothing resolves these failures."""
     match run_filter.errors:
         case CCPairRunErrors.UNRESOLVED:
-            return stmt.where(failed > 0)
+            return failed > 0
         case CCPairRunErrors.RESOLVED:
-            return stmt.where(false())
+            return false()
         case CCPairRunErrors.NONE:
-            return stmt.where(failed == 0)
+            return failed == 0
         case None:
-            return stmt
+            return None
 
 
 def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
     stmt = select(ExternalGroupPermissionSyncAttempt).where(
         _group_sync_scope(run_filter)
-    )
-    stmt = _by_failed_count(
-        stmt, run_filter, ExternalGroupPermissionSyncAttempt.total_groups_failed
     )
     return _narrowed(
         stmt,
@@ -247,6 +367,13 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
         ExternalGroupPermissionSyncAttempt.status,
         PermissionSyncStatus,
         with_status_filter,
+        _failed_count_errors(
+            run_filter, ExternalGroupPermissionSyncAttempt.total_groups_failed
+        ),
+        _group_sync_has_newer_run(run_filter),
+        run_is_resolved(
+            CCPairRunKind.GROUP_SYNC, ExternalGroupPermissionSyncAttempt.id
+        ),
     )
 
 
@@ -255,7 +382,14 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.entity_id.in_(run_filter.cc_pair_ids),
         SyncRecord.sync_type == SyncType.PRUNING,
     )
-    stmt = _by_failed_count(stmt, run_filter, SyncRecord.num_docs_failed)
+    newer = aliased(SyncRecord)
+    has_newer_run = exists().where(
+        newer.entity_id == SyncRecord.entity_id,
+        newer.sync_type == SyncType.PRUNING,
+        _later(
+            newer.sync_start_time, newer.id, SyncRecord.sync_start_time, SyncRecord.id
+        ),
+    )
     return _narrowed(
         stmt,
         run_filter,
@@ -264,6 +398,9 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.sync_status,
         SyncStatus,
         with_status_filter,
+        _failed_count_errors(run_filter, SyncRecord.num_docs_failed),
+        has_newer_run,
+        run_is_resolved(CCPairRunKind.PRUNING, SyncRecord.id),
     )
 
 
@@ -288,8 +425,17 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         )
         .where(ConnectorCredentialPair.id.in_(run_filter.cc_pair_ids))
     )
-    if run_filter.errors not in (None, CCPairRunErrors.NONE):
-        stmt = stmt.where(false())
+    newer = aliased(CapabilityCheckRun)
+    has_newer_run = exists().where(
+        newer.credential_id == CapabilityCheckRun.credential_id,
+        newer.connector_id == CapabilityCheckRun.connector_id,
+        _later(
+            newer.time_created,
+            newer.id,
+            CapabilityCheckRun.time_created,
+            CapabilityCheckRun.id,
+        ),
+    )
     return _narrowed(
         stmt,
         run_filter,
@@ -309,6 +455,9 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         CapabilityCheckRun.status,
         CapabilityCheckRunStatus,
         with_status_filter,
+        _no_item_errors(run_filter),
+        has_newer_run,
+        run_is_resolved(CCPairRunKind.CHECKS, CapabilityCheckRun.id),
     )
 
 
@@ -413,6 +562,106 @@ def get_cc_pair_run_page(
         prune_runs=prune_runs,
         check_runs=check_runs,
     )
+
+
+def _id_and_pair_columns(
+    kind: CCPairRunKind,
+) -> tuple[
+    InstrumentedAttribute[int],
+    InstrumentedAttribute[int] | InstrumentedAttribute[int | None],
+]:
+    match kind:
+        case CCPairRunKind.INDEXING:
+            return IndexAttempt.id, IndexAttempt.connector_credential_pair_id
+        case CCPairRunKind.DOC_PERMISSION_SYNC:
+            return (
+                DocPermissionSyncAttempt.id,
+                DocPermissionSyncAttempt.connector_credential_pair_id,
+            )
+        case CCPairRunKind.GROUP_SYNC:
+            return (
+                ExternalGroupPermissionSyncAttempt.id,
+                ExternalGroupPermissionSyncAttempt.connector_credential_pair_id,
+            )
+        case CCPairRunKind.PRUNING:
+            return SyncRecord.id, SyncRecord.entity_id
+        case CCPairRunKind.CHECKS:
+            # The check runs' query joins the pair on credential and connector.
+            return CapabilityCheckRun.id, ConnectorCredentialPair.id
+
+
+def get_resolvable_runs(
+    db_session: Session,
+    kinds: list[CCPairRunKind],
+    run_filter: CCPairRunFilter,
+    runs: list[tuple[CCPairRunKind, int]],
+) -> dict[tuple[CCPairRunKind, int], int]:
+    """The runs among ``runs`` in the feed of ``kinds`` that failed or hold
+    open errors, each with the pair it ran on. Only those have something to
+    resolve."""
+    found: dict[tuple[CCPairRunKind, int], int] = {}
+    open_items = (
+        run_filter.model_copy(update={"status_groups": {CCPairRunStatusGroup.FAILED}}),
+        run_filter.model_copy(update={"errors": CCPairRunErrors.UNRESOLVED}),
+    )
+    for kind in kinds:
+        ids = [run_id for run_kind, run_id in runs if run_kind == kind]
+        if not ids:
+            continue
+        run_id, pair_id = _id_and_pair_columns(kind)
+        for narrowed in open_items:
+            stmt = (
+                _runs_of_kind(kind, narrowed, True)
+                .with_only_columns(run_id, pair_id)
+                .where(run_id.in_(ids))
+            )
+            for found_id, found_pair in db_session.execute(stmt).all():
+                found[(kind, found_id)] = found_pair
+    return found
+
+
+def count_matching_runs(
+    db_session: Session, kinds: list[CCPairRunKind], run_filter: CCPairRunFilter
+) -> int:
+    """How many runs of ``kinds`` the filter keeps, which is what
+    ``resolve_matching_runs__no_commit`` marks for the same filter."""
+    total = 0
+    for kind in kinds:
+        matching = _runs_of_kind(kind, run_filter, True).subquery()
+        total += db_session.scalar(select(func.count()).select_from(matching)) or 0
+    return total
+
+
+def resolve_matching_runs__no_commit(
+    db_session: Session,
+    kinds: list[CCPairRunKind],
+    run_filter: CCPairRunFilter,
+    user_id: UUID | None,
+) -> dict[int, int]:
+    """Marks every run of ``kinds`` the filter keeps resolved, one INSERT from
+    SELECT per kind, and returns how many it marked per pair. A run resolved
+    before keeps its first resolution and is not counted."""
+    resolved: Counter[int] = Counter()
+    for kind in kinds:
+        run_id, pair_id = _id_and_pair_columns(kind)
+        matching = _runs_of_kind(kind, run_filter, True).with_only_columns(
+            literal(kind.value),
+            run_id,
+            pair_id,
+            # Typed, since Postgres reads an untyped NULL in a SELECT as text.
+            cast(literal(user_id, PGUUID(as_uuid=True)), PGUUID(as_uuid=True)),
+        )
+        stmt = (
+            insert(CCPairRunResolution)
+            .from_select(
+                ["run_kind", "attempt_id", "cc_pair_id", "resolved_by_user_id"],
+                matching,
+            )
+            .on_conflict_do_nothing(index_elements=["run_kind", "attempt_id"])
+            .returning(CCPairRunResolution.cc_pair_id)
+        )
+        resolved.update(db_session.scalars(stmt).all())
+    return dict(resolved)
 
 
 def _status_column(kind: CCPairRunKind) -> InstrumentedAttribute:

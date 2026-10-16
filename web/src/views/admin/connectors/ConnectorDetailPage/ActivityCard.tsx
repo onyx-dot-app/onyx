@@ -2,13 +2,21 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Popover, Tag, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  Popover,
+  SelectButton,
+  Tag,
+  Text,
+} from "@opal/components";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgAlertTriangle,
   SvgCheckAll,
   SvgCheckCircle,
+  SvgCheckSquare,
   SvgFiles,
   SvgTextLines,
   SvgUserShield,
@@ -31,6 +39,7 @@ import {
   RUN_KIND_ICONS,
   RUN_TIME_FORMAT,
   isActive,
+  isFailed,
   runErrorMessage,
   runMinutes,
   runMoved,
@@ -44,6 +53,7 @@ const GROUP_STYLE: Record<
     color: CardColor;
     icon: IconFunctionComponent;
     stroke: string;
+    closedStroke: string;
     /** The 1px edge a hovered or selected card takes, in the level's 02 color. */
     outline: string;
   }
@@ -52,24 +62,21 @@ const GROUP_STYLE: Record<
     color: "status-error-00",
     icon: SvgXOctagon,
     stroke: "stroke-status-error-05",
+    closedStroke: "stroke-status-error-02",
     outline: "outline-status-error-02",
   },
   errors: {
     color: "status-warning-00",
     icon: SvgAlertTriangle,
     stroke: "stroke-status-warning-05",
+    closedStroke: "stroke-status-warning-02",
     outline: "outline-status-warning-02",
   },
   other: {
     color: "background-tint-00",
     icon: SvgCheckCircle,
     stroke: "stroke-status-success-05",
-    outline: "outline-border-01",
-  },
-  resolved: {
-    color: "background-tint-01",
-    icon: SvgCheckCircle,
-    stroke: "stroke-status-success-05",
+    closedStroke: "stroke-status-success-02",
     outline: "outline-border-01",
   },
 };
@@ -93,16 +100,21 @@ type CardState =
   | "canceled"
   | "succeeded";
 
-/** The title's state key: how the run stands in its group. */
-function cardState(run: CCPairRun, group: ActivityGroup): CardState {
+/** The title's state key: how the run stands in its group. A run an admin resolved reads as it did when open. */
+function cardState(
+  run: CCPairRun,
+  group: ActivityGroup,
+  closed: boolean
+): CardState {
   const stopped =
     run.attempt.status === "canceled" || run.attempt.status === "interrupted";
+  // Closed without a resolution: superseded, or every document error resolved.
+  const closedBySystem = closed && run.resolved_at === null;
   switch (group) {
     case "failures":
-      return "failed";
-    case "resolved":
-      return "resolved";
+      return closedBySystem ? "resolved" : "failed";
     case "errors":
+      if (closedBySystem) return "resolved";
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
@@ -115,12 +127,18 @@ export interface ActivityCardProps {
   ccPairId: number;
   run: CCPairRun;
   group: ActivityGroup;
+  /** The run is resolved or superseded: it keeps its level's icon, with every element faded. */
+  closed: boolean;
   /** Names the pair in place of the run's kind, for a feed across pairs. */
   connector?: CCPairRef;
   /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
   canResolve: boolean;
-  /** Resolves these errors of the run, or every open one when `null`. */
+  /** Whether the viewer may mark the run resolved. */
+  canResolveRuns: boolean;
+  /** Resolves these errors of the run by a targeted reindex, or every open one when `null`. */
   onResolve: (errorIds: number[] | null) => void;
+  /** Marks the run resolved without a reindex. */
+  onResolveRun: () => void;
   /** A resolve is in flight, so the resolve actions wait for it. */
   resolving: boolean;
 }
@@ -130,14 +148,15 @@ export default function ActivityCard({
   ccPairId,
   run,
   group,
+  closed,
   connector,
   canResolve,
+  canResolveRuns,
   onResolve,
+  onResolveRun,
   resolving,
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
-  const tRuns = useTranslations("admin.connector.runs");
-  const format = useFormatter();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [openPopover, setOpenPopover] = useState<"trace" | "items" | null>(
@@ -148,6 +167,8 @@ export default function ActivityCard({
     setOpenPopover((current) =>
       open ? popover : current === popover ? null : current
     );
+  const tRuns = useTranslations("admin.connector.runs");
+  const format = useFormatter();
   const active = isActive(run);
   const style = GROUP_STYLE[group];
   const StatusIcon = active ? IconLoader : style.icon;
@@ -167,10 +188,14 @@ export default function ActivityCard({
   const resolvable = canResolve && listsDocs;
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
+  const state = cardState(run, group, closed);
+  const resolvesRun = canResolveRuns && !closed && group !== "other";
+  const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
-  if (group === "failures") {
+  // A failure a newer run superseded still explains itself.
+  if (isFailed(run)) {
     description =
       runErrorMessage(run) ??
       (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
@@ -181,9 +206,11 @@ export default function ActivityCard({
     });
   }
   const docsLabel =
-    group === "resolved"
+    state === "resolved"
       ? t("tags.resolvedDocs", { count: warnings })
       : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
+
+  const pillIconColor = closed ? undefined : "orange";
 
   // The outline draws the edge inside the card, so hovering does not shift the list.
   return (
@@ -204,7 +231,13 @@ export default function ActivityCard({
       }}
     >
       <Card
-        color={hovered && !selected ? "background-tint-02" : style.color}
+        color={
+          hovered && !selected
+            ? "background-tint-02"
+            : closed
+              ? "background-tint-01"
+              : style.color
+        }
         border="none"
         rounding={2}
         padding={1}
@@ -227,7 +260,13 @@ export default function ActivityCard({
             >
               <StatusIcon
                 size={16}
-                className={active ? "stroke-status-info-05" : style.stroke}
+                className={
+                  active
+                    ? "stroke-status-info-05"
+                    : closed
+                      ? style.closedStroke
+                      : style.stroke
+                }
               />
             </Section>
             <Section
@@ -243,7 +282,11 @@ export default function ActivityCard({
                 gap={1}
                 height="fit"
               >
-                <Text font="secondary-mono" color="text-03">
+                <Text
+                  font="secondary-mono"
+                  color={mutedColor}
+                  wordWrap="whitespace-nowrap"
+                >
                   {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
                 </Text>
                 <Section
@@ -261,25 +304,32 @@ export default function ActivityCard({
                       color="purple"
                     />
                   )}
-                  <Text font="secondary-body" color="text-03" maxLines={1}>
+                  <Text font="secondary-body" color={mutedColor} maxLines={1}>
                     {identity}
                   </Text>
                   <IdentityIcon size={12} className="stroke-text-02" />
                 </Section>
               </Section>
               <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
-                <Text font="main-ui-body" color="text-04">
-                  {t(`title.${run.kind}.${cardState(run, group)}`)}
+                <Text
+                  font="main-ui-body"
+                  color={closed ? "text-03" : "text-04"}
+                >
+                  {t(`title.${run.kind}.${state}`)}
                 </Text>
                 {description !== null && (
-                  <Text font="secondary-body" color="text-03" maxLines={3}>
+                  <Text font="secondary-body" color={mutedColor} maxLines={3}>
                     {description}
                   </Text>
                 )}
               </Section>
             </Section>
           </Section>
-          {(trace !== null || warnings > 0 || listsChecks) && (
+          {(trace !== null ||
+            warnings > 0 ||
+            listsChecks ||
+            closed ||
+            resolvesRun) && (
             <Section
               flexDirection="row"
               justifyContent="between"
@@ -318,7 +368,7 @@ export default function ActivityCard({
                     <Popover.Trigger asChild>
                       <Tag
                         icon={WARNING_ICONS.indexing}
-                        iconColor="orange"
+                        iconColor={pillIconColor}
                         title={docsLabel}
                         size="md"
                         onClick={() => {}}
@@ -337,7 +387,7 @@ export default function ActivityCard({
                     <Popover.Trigger asChild>
                       <Tag
                         icon={WARNING_ICONS.checks}
-                        iconColor="orange"
+                        iconColor={pillIconColor}
                         title={docsLabel}
                         size="md"
                         onClick={() => {}}
@@ -349,32 +399,44 @@ export default function ActivityCard({
                   warnings > 0 && (
                     <Tag
                       icon={WARNING_ICONS[run.kind]}
-                      iconColor="orange"
+                      iconColor={pillIconColor}
                       title={docsLabel}
                       size="md"
                     />
                   )
                 )}
               </Section>
-              {/* Hidden with opacity, not unmounted, so Tab can still reach it. */}
-              {resolvable && (
-                <Section
-                  width="fit"
-                  height="fit"
-                  className={cn(
-                    !(hovered || focused || selected) && "opacity-0"
-                  )}
+              {closed ? (
+                <SelectButton
+                  variant="select-heavy"
+                  state="selected"
+                  rightIcon={SvgCheckSquare}
+                  size="xs"
                 >
-                  <Button
-                    rightIcon={SvgCheckAll}
-                    prominence="tertiary"
-                    size="xs"
-                    disabled={resolving}
-                    onClick={() => onResolve(null)}
+                  {t("tags.resolved")}
+                </SelectButton>
+              ) : (
+                resolvesRun && (
+                  // Only on hover, focus or an open pill, so an open list reads as its runs. Opacity keeps it in the tab order.
+                  <Section
+                    width="fit"
+                    height="fit"
+                    className={cn(
+                      "transition-opacity",
+                      !(hovered || focused || selected) && "opacity-0"
+                    )}
                   >
-                    {t("actions.resolve")}
-                  </Button>
-                </Section>
+                    <Button
+                      rightIcon={SvgCheckAll}
+                      prominence="tertiary"
+                      size="xs"
+                      disabled={resolving}
+                      onClick={onResolveRun}
+                    >
+                      {t("actions.resolve")}
+                    </Button>
+                  </Section>
+                )
               )}
             </Section>
           )}

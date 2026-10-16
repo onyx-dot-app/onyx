@@ -261,20 +261,27 @@ export interface CCPairHierarchyBreakdown {
 export type CCPairRunErrors = "unresolved" | "resolved" | "none";
 
 /** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
-export type CCPairRun =
-  | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
-  | {
-      kind: "doc_permission_sync";
-      time_created: string;
-      attempt: DocPermissionSyncAttemptSnapshot;
-    }
-  | {
-      kind: "group_sync";
-      time_created: string;
-      attempt: ExternalGroupSyncAttemptSnapshot;
-    }
-  | { kind: "pruning"; time_created: string; attempt: PruneRunSnapshot }
-  | { kind: "checks"; time_created: string; attempt: CheckRunSnapshot };
+/** When an admin resolved the run, on every run. A resolved run keeps its status. */
+interface CCPairRunResolution {
+  resolved_at: string | null;
+}
+
+export type CCPairRun = CCPairRunResolution &
+  (
+    | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
+    | {
+        kind: "doc_permission_sync";
+        time_created: string;
+        attempt: DocPermissionSyncAttemptSnapshot;
+      }
+    | {
+        kind: "group_sync";
+        time_created: string;
+        attempt: ExternalGroupSyncAttemptSnapshot;
+      }
+    | { kind: "pruning"; time_created: string; attempt: PruneRunSnapshot }
+    | { kind: "checks"; time_created: string; attempt: CheckRunSnapshot }
+  );
 
 /** Mirrors `CCPairRunsResponse`. `status_counts` ignores the status filter. */
 export interface CCPairRunsResponse {
@@ -284,18 +291,27 @@ export interface CCPairRunsResponse {
   status_counts: Record<CCPairRunStatusGroup, number>;
 }
 
+/** An activity level that holds open runs, as the batch resolve routes take it. */
+export type CCPairRunLevel = "failures" | "errors";
+
 /** The run list's query, as `GET /admin/cc-pair/{id}/runs` takes it. */
 export interface CCPairRunsQuery {
   pageNum: number;
   pageSize: number;
   /** ISO time. Runs created before it are left out. */
   since: string | null;
+  /** ISO time. Runs created at or after it are left out. */
+  until: string | null;
   kinds: CCPairRunKind[] | null;
   statusGroups: CCPairRunStatusGroup[] | null;
   /** Matched against error messages. */
   q: string;
   /** Keeps only runs with document errors, open or resolved, or only runs without any. */
   errors: CCPairRunErrors | null;
+  /** Leaves out (`false`) or keeps only (`true`) the failed runs a newer run of their kind followed. With `errors`, `true` keeps the runs either matches. */
+  superseded: boolean | null;
+  /** Reads the runs an admin resolved the way `superseded` reads the superseded ones. */
+  resolved: boolean | null;
 }
 
 export interface IndexAttemptError {
@@ -304,6 +320,8 @@ export interface IndexAttemptError {
 
   document_id: string | null;
   document_link: string | null;
+  /** The indexed document's title, `null` until the document lands. */
+  document_name: string | null;
 
   entity_id: string | null;
   failed_time_range_start: string | null;
