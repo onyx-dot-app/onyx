@@ -216,24 +216,6 @@ CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
-# Held for one connector's whole document permission sync and refreshed every
-# quarter of the generic beat TTL, so it must not be set below that TTL. A
-# connector silent longer than this loses it, so large tenants raise it.
-CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
-    "CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT",
-    3600,
-    minimum=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-)
-
-# While this lock is held, duplicate dispatches for the same cc_pair exit
-# immediately. Deployments whose group syncs legitimately run for hours should
-# raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
-# stack concurrent crawls on one heavy worker; a worker that dies mid-sync
-# leaves the lock stuck for at most this TTL.
-CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
-    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT", 300
-)
-
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
 # How long a queued user-file task is valid before workers discard it.
@@ -572,10 +554,6 @@ class OnyxRedisLocks:
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
-    CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
-        "da_lock:connector_doc_permissions_sync"
-    )
-    CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
     ORPHAN_TAG_SWEEP_LOCK = "da_lock:orphan_tag_sweep"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
@@ -616,12 +594,6 @@ class OnyxRedisLocks:
 
 class OnyxRedisSignals:
     BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
-    BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES = (
-        "signal:block_validate_external_group_sync_fences"
-    )
-    BLOCK_VALIDATE_PERMISSION_SYNC_FENCES = (
-        "signal:block_validate_permission_sync_fences"
-    )
     BLOCK_PRUNING = "signal:block_pruning"
     # Set by a sweep that skipped because another one held the lock.
     ORPHAN_TAG_SWEEP_PENDING = "signal:orphan_tag_sweep_pending"
