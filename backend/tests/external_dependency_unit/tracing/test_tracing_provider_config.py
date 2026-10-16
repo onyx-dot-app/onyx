@@ -14,6 +14,7 @@ from onyx.db.tracing import (
     fetch_tracing_provider,
     upsert_tracing_provider,
 )
+from onyx.server.manage.api_token.models import ExistingApiToken, NewApiToken
 from onyx.tracing import provider_config
 from onyx.tracing.provider_config import resolve_effective_tracing_config
 from shared_configs.enums import TracingProviderType
@@ -34,8 +35,7 @@ def clean_tracing_table(db_session: Session) -> Generator[None, None, None]:
 def test_encrypted_roundtrip_and_masking(db_session: Session) -> None:
     upsert_tracing_provider(
         provider_type=TracingProviderType.BRAINTRUST,
-        api_key="bt-secret-key",
-        api_key_changed=True,
+        api_key=NewApiToken(value="bt-secret-key"),
         config={"project": "MyProject"},
         db_session=db_session,
     )
@@ -50,21 +50,22 @@ def test_encrypted_roundtrip_and_masking(db_session: Session) -> None:
     assert "bt-secret-key" not in masked
 
 
-def test_api_key_changed_false_preserves_stored_key(db_session: Session) -> None:
+def test_existing_token_keeps_stored_key(db_session: Session) -> None:
     upsert_tracing_provider(
         provider_type=TracingProviderType.BRAINTRUST,
-        api_key="original-key",
-        api_key_changed=True,
+        api_key=NewApiToken(value="original-key"),
         config={"project": "P1"},
         db_session=db_session,
     )
     db_session.commit()
+    original = fetch_tracing_provider(TracingProviderType.BRAINTRUST, db_session)
+    assert original is not None and original.api_token_id is not None
+    token_id = original.api_token_id
 
-    # Update non-secret config without re-sending the key.
+    # Update non-secret config and keep the key the row already has.
     upsert_tracing_provider(
         provider_type=TracingProviderType.BRAINTRUST,
-        api_key=None,
-        api_key_changed=False,
+        api_key=ExistingApiToken(id=token_id),
         config={"project": "P2"},
         db_session=db_session,
     )
@@ -73,6 +74,7 @@ def test_api_key_changed_false_preserves_stored_key(db_session: Session) -> None
     row = fetch_tracing_provider(TracingProviderType.BRAINTRUST, db_session)
     assert row is not None
     assert row.api_key is not None
+    assert row.api_token_id == token_id
     assert row.api_key.get_value(apply_mask=False) == "original-key"
     assert (row.config or {}).get("project") == "P2"
 
@@ -95,8 +97,7 @@ def test_db_row_overrides_env(
 
     upsert_tracing_provider(
         provider_type=TracingProviderType.BRAINTRUST,
-        api_key="db-key",
-        api_key_changed=True,
+        api_key=NewApiToken(value="db-key"),
         config={"project": "DbProject"},
         db_session=db_session,
     )
@@ -115,8 +116,7 @@ def test_disabled_row_turns_provider_off_even_with_env(
 
     upsert_tracing_provider(
         provider_type=TracingProviderType.BRAINTRUST,
-        api_key="db-key",
-        api_key_changed=True,
+        api_key=NewApiToken(value="db-key"),
         config={"project": "DbProject"},
         enabled=False,
         db_session=db_session,
@@ -136,19 +136,19 @@ def test_langfuse_requires_both_keys(
     # Secret key present but public key missing from config -> not enabled.
     upsert_tracing_provider(
         provider_type=TracingProviderType.LANGFUSE,
-        api_key="lf-secret",
-        api_key_changed=True,
+        api_key=NewApiToken(value="lf-secret"),
         config={"host": "https://cloud.langfuse.com"},
         db_session=db_session,
     )
     db_session.commit()
     assert resolve_effective_tracing_config().langfuse is None
+    row = fetch_tracing_provider(TracingProviderType.LANGFUSE, db_session)
+    assert row is not None and row.api_token_id is not None
 
     # Add the public key -> now enabled.
     upsert_tracing_provider(
         provider_type=TracingProviderType.LANGFUSE,
-        api_key=None,
-        api_key_changed=False,
+        api_key=ExistingApiToken(id=row.api_token_id),
         config={"public_key": "lf-public", "host": "https://cloud.langfuse.com"},
         db_session=db_session,
     )

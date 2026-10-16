@@ -4089,9 +4089,10 @@ class TracingProviderConfig(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     provider_type: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     config: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -4110,6 +4111,10 @@ class TracingProviderConfig(Base):
             f"<TracingProviderConfig(provider_type='{self.provider_type}', "
             f"enabled={self.enabled})>"
         )
+
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
 
 
 class DocumentSet(Base):

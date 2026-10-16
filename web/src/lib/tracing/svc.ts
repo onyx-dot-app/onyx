@@ -1,34 +1,21 @@
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { parseErrorDetail } from "@/lib/fetcher";
 import type { TracingProviderType } from "@/lib/tracing/types";
 
 const TRACING_PROVIDERS_URL = SWR_KEYS.tracingProviders;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-async function parseErrorDetail(
-  res: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 export interface ConnectTracingProviderArgs {
   providerType: TracingProviderType;
-  apiKey: string;
-  apiKeyChanged: boolean;
-  hasStoredKey: boolean;
+  /** The key to send, or `null` when the field is empty. */
+  apiKey: ApiTokenValue | undefined;
   config: Record<string, string>;
 }
 
 export async function connectTracingProvider({
   providerType,
   apiKey,
-  apiKeyChanged,
-  hasStoredKey,
   config,
 }: ConnectTracingProviderArgs): Promise<void> {
   // Validate the credentials against the provider before persisting them.
@@ -37,8 +24,7 @@ export async function connectTracingProvider({
     headers: JSON_HEADERS,
     body: JSON.stringify({
       provider_type: providerType,
-      api_key: apiKeyChanged ? apiKey : null,
-      use_stored_key: !apiKeyChanged && hasStoredKey,
+      api_key: apiKey,
       config,
     }),
   });
@@ -53,8 +39,7 @@ export async function connectTracingProvider({
     headers: JSON_HEADERS,
     body: JSON.stringify({
       provider_type: providerType,
-      api_key: apiKeyChanged ? apiKey : null,
-      api_key_changed: apiKeyChanged,
+      api_key: apiKey,
       config,
       enabled: true,
     }),
@@ -76,9 +61,8 @@ export async function disconnectTracingProvider(
     headers: JSON_HEADERS,
     body: JSON.stringify({
       provider_type: providerType,
-      api_key: null,
       // Clear any stored credential rather than keeping it on a disabled row.
-      api_key_changed: true,
+      api_key: null,
       config,
       enabled: false,
     }),

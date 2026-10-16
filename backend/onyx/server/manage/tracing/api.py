@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.db.api_token import peek_api_token_value
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import TracingProviderConfig, User
@@ -14,6 +15,11 @@ from onyx.db.tracing import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import (
+    ExistingApiToken,
+    NewApiToken,
+    keep_omitted_api_token,
+)
 from onyx.server.manage.tracing.models import (
     TracingProviderTestRequest,
     TracingProviderUpsertRequest,
@@ -81,6 +87,7 @@ def _build_view(
             masked_api_key=(
                 row.api_key.get_value(apply_mask=True) if row.api_key else None
             ),
+            api_token_id=row.api_token_id,
         )
     if is_connected:
         return TracingProviderView(
@@ -118,10 +125,14 @@ def upsert_tracing_provider_endpoint(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TracingProviderView:
+    existing = fetch_tracing_provider(request.provider_type, db_session)
     upsert_tracing_provider(
         provider_type=request.provider_type,
-        api_key=request.api_key,
-        api_key_changed=request.api_key_changed,
+        api_key=keep_omitted_api_token(
+            request.api_key,
+            was_sent="api_key" in request.model_fields_set,
+            current_token_id=existing.api_token_id if existing else None,
+        ),
         config=request.config,
         enabled=request.enabled,
         updated_by_user_id=user.id if user else None,
@@ -154,15 +165,21 @@ def test_tracing_provider(
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     config = request.config or {}
-    api_key = request.api_key
-    if request.use_stored_key:
-        row = fetch_tracing_provider(request.provider_type, db_session)
-        if row is None or not row.api_key:
-            raise OnyxError(
-                OnyxErrorCode.NOT_FOUND,
-                "No stored key found for this provider.",
-            )
-        api_key = row.api_key.get_value(apply_mask=False)
+    row = fetch_tracing_provider(request.provider_type, db_session)
+    current_token_id = row.api_token_id if row else None
+    api_key = peek_api_token_value(
+        db_session,
+        request.api_key,
+        platform=request.provider_type.value,
+        base_url=None,
+        current_token_id=current_token_id,
+    )
+    if (
+        row is not None
+        and isinstance(request.api_key, ExistingApiToken)
+        and request.api_key.id == current_token_id
+    ):
+        # Testing the saved key: fill in the saved settings the form omits.
         config = {**(row.config or {}), **config}
 
     try:
@@ -198,8 +215,7 @@ def adopt_env_tracing_provider(
 
     upsert_tracing_provider(
         provider_type=provider_type,
-        api_key=api_key,
-        api_key_changed=True,
+        api_key=NewApiToken(value=api_key),
         config=config,
         enabled=True,
         updated_by_user_id=user.id if user else None,

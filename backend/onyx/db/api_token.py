@@ -21,6 +21,7 @@ from onyx.db.models import (
     InternetSearchProvider,
     LLMProvider,
     ModelConfiguration,
+    TracingProviderConfig,
     VoiceProvider,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -305,6 +306,14 @@ def get_api_token_usages(
         "web_content_provider",
         InternetContentProvider.api_token_id,
         InternetContentProvider.name,
+    )
+
+    _add_named_usages(
+        db_session,
+        usages,
+        "tracing_provider",
+        TracingProviderConfig.api_token_id,
+        TracingProviderConfig.provider_type,
     )
 
     return usages
