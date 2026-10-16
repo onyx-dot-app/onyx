@@ -11,6 +11,8 @@ class ActionPolicyView(BaseModel):
     normalised_name: str
     description: str
     state: EndpointPolicy
+    method: str | None = None
+    path: str | None = None
 
 
 class OrgCredentialFieldDescriptor(BaseModel):

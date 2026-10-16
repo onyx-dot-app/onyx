@@ -164,7 +164,7 @@ describe("Apps associated-skill setup notice", () => {
     mockEndpoints();
   });
 
-  it("guides a connected user when no associated skill is selected", () => {
+  it("guides users of available apps when no associated skill is selected", () => {
     mockUseUserSkills.mockReturnValue({
       data: skills(false, true),
       refresh: mockRefreshSkills,
@@ -173,7 +173,9 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.getByText("Connected · not all associated skills are enabled")
+      screen.getByText(
+        "Configured by your admin · not all associated skills are enabled"
+      )
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Skill setup required")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
@@ -191,7 +193,9 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.queryByText("Connected · not all associated skills are enabled")
+      screen.queryByText(
+        "Configured by your admin · not all associated skills are enabled"
+      )
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Review skills" })
@@ -226,7 +230,9 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.getByText("Connected · not all associated skills are enabled")
+      screen.getByText(
+        "Configured by your admin · not all associated skills are enabled"
+      )
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
       "href",
@@ -293,8 +299,10 @@ describe("Apps vs MCP servers", () => {
     expect(
       activeTab().queryByLabelText("Skill setup required")
     ).not.toBeInTheDocument();
-    // Still listed as connected — the row's presence is the status.
-    expect(activeTab().getAllByText("Connected").length).toBeGreaterThan(0);
+    expect(
+      activeTab().getByText("Configured by your admin")
+    ).toBeInTheDocument();
+    expect(activeTab().queryByText("Connected")).not.toBeInTheDocument();
     expect(
       activeTab().queryByText(/Not available for your account/)
     ).not.toBeInTheDocument();
@@ -340,7 +348,7 @@ describe("Apps vs MCP servers", () => {
     }
   });
 
-  it("shows login-token apps without credential or disconnect actions", () => {
+  it("distinguishes available apps from personal connections without showing connection actions", () => {
     mockEndpoints([
       appFixture({
         id: 1,
@@ -363,11 +371,36 @@ describe("Apps vs MCP servers", () => {
     render(<ExternalAppsPage />);
 
     expect(
+      activeTab().getByText("Configured by your admin")
+    ).toBeInTheDocument();
+    expect(activeTab().queryByText("Connected")).not.toBeInTheDocument();
+    expect(
       activeTab().getByText("Not available for your account — ask an admin")
     ).toBeInTheDocument();
     expect(
       activeTab().queryByRole("button", { name: /Connect|Disconnect/ })
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the connected status for a personal OAuth connection", () => {
+    mockEndpoints([
+      appFixture({
+        id: 1,
+        name: "Personal API",
+        app_type: "CUSTOM",
+        credential_keys: [],
+        authenticated: true,
+        supports_oauth: true,
+      }),
+    ]);
+    render(<ExternalAppsPage />);
+    expect(activeTab().getByText("Connected")).toBeInTheDocument();
+    expect(
+      activeTab().queryByText("Configured by your admin")
+    ).not.toBeInTheDocument();
+    expect(
+      activeTab().getByRole("button", { name: "Disconnect" })
+    ).toBeInTheDocument();
   });
 
   it("leads with connected cards, then orders the rest by name", () => {

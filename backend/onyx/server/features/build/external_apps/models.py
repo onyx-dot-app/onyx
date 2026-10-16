@@ -60,7 +60,7 @@ class UpdateExternalAppRequest(BaseModel):
     # When present, atomically replaces only the app's custom-skill
     # associations. System-managed built-in associations are preserved.
     associated_skill_ids: list[UUID] | None = None
-    # Full-replace stored overrides when present (empty clears); None leaves them.
+    # Merge supplied policies; choosing the default removes a stored override.
     action_policies: dict[str, EndpointPolicy] | None = None
 
 
@@ -81,8 +81,10 @@ class ExternalAppAdminResponse(BaseModel):
     organization_credentials: dict[str, Any]
     # Sorted `{placeholder}` names in the auth-template values.
     credential_placeholder_keys: list[str]
+    # Admin intent; a disabled source action can still make enabled false.
+    available_in_craft: bool
     enabled: bool
-    # The merged per-action policy view (built-in apps; empty for custom).
+    # The merged policy view for built-in apps and linked OpenAPI operations.
     actions: list[ActionPolicyView]
     associated_skills: list[ExternalAppAssociatedSkill]
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;

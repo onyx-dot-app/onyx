@@ -4,6 +4,8 @@
 
 A composite component that wraps `Interactive.Stateful > Interactive.Container > ContentAction` into a single API. Use it for selectable list rows such as model pickers, menu items, or any row that acts like a button.
 
+`color="danger"` keeps the normal interactive title color and uses a danger icon. Disabled rows dim both.
+
 ## Architecture
 
 ```

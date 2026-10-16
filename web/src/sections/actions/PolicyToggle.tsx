@@ -26,6 +26,7 @@ export default function PolicyToggle({ value, onChange }: PolicyToggleProps) {
         <Button
           key={option.value}
           size="xs"
+          aria-pressed={value === option.value}
           prominence={value === option.value ? "primary" : "tertiary"}
           onClick={() => onChange(option.value)}
         >

@@ -337,6 +337,11 @@ function statusLine(
   t: ReturnType<typeof useTranslations<"craft.apps.page">>
 ): string {
   if (app.authenticated) {
+    if (app.connectMode === null) {
+      return needsSkillSetup
+        ? t("status.adminConfiguredNeedsSkills")
+        : t("status.adminConfigured");
+    }
     return needsSkillSetup
       ? t("status.connectedNeedsSkills")
       : t("status.connected");

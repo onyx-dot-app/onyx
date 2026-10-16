@@ -41,7 +41,6 @@ export default function OpenApiActionCard({
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const deleteModal = useCreateModal();
-
   const canEdit = can(tool, "edit");
   const canDelete = can(tool, "delete");
   const canToggle = can(tool, "toggle");
@@ -80,9 +79,7 @@ export default function OpenApiActionCard({
   // Compute generic ActionStatus for the OpenAPI tool
   const status = isDisconnected
     ? ActionStatus.DISCONNECTED
-    : hasAuthConfigured
-      ? ActionStatus.CONNECTED
-      : ActionStatus.PENDING;
+    : ActionStatus.CONNECTED;
 
   const handleConnectionUpdate = useCallback(
     async (shouldEnable: boolean) => {
@@ -175,6 +172,11 @@ export default function OpenApiActionCard({
         description={tool.description}
         icon={SvgServer}
         status={status}
+        statusLabel={
+          !isDisconnected && !hasAuthConfigured
+            ? t("addOpenApiModal.authStatus.noAuthTitle")
+            : undefined
+        }
         actions={actionsComponent}
         onRename={canEdit ? handleRename : undefined}
         isExpanded={isToolsExpanded}
@@ -218,8 +220,12 @@ export default function OpenApiActionCard({
             <Button
               variant="danger"
               onClick={async () => {
-                await onDelete(tool);
-                deleteModal.toggle(false);
+                try {
+                  await onDelete(tool);
+                  deleteModal.toggle(false);
+                } catch {
+                  // The caller reports the failure; retain the dialog for retry.
+                }
               }}
             >
               {t("openApiCard.deleteModal.submitButton.label")}

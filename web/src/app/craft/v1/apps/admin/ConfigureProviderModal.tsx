@@ -16,6 +16,7 @@ import {
 import {
   createBuiltInExternalApp,
   updateExternalApp,
+  type UpdateExternalAppBody,
 } from "@/app/craft/services/externalAppsService";
 import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
 import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSkillsStepModal";
@@ -37,8 +38,9 @@ import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 const NAME_KEY = "__name";
 
 interface ConfigureProviderModalProps {
+  mode?: "configuration" | "permissions";
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => Promise<void> | void;
   descriptor: BuiltInExternalAppDescriptor;
   /** Null → create new instance; non-null → edit existing row. */
   existingApp: ExternalAppAdminResponse | null;
@@ -51,7 +53,10 @@ export default function ConfigureProviderModal({
   onSaved,
   descriptor,
   existingApp,
+  mode,
 }: ConfigureProviderModalProps) {
+  const showPolicies = mode !== "configuration";
+  const showConfiguration = mode !== "permissions";
   const t = useTranslations("craft.apps.configureProvider");
   const tApps = useTranslations("craft.apps");
   const router = useRouter();
@@ -62,36 +67,36 @@ export default function ConfigureProviderModal({
   const [selectedSkillIds, setSelectedSkillIds] =
     useSyncedAssociatedSkillIds(existingApp);
   const existingAssociationDirty =
+    showConfiguration &&
     existingApp !== null &&
     !isEqual(
       new Set(selectedSkillIds),
       new Set(existingApp.associated_skills.map((skill) => skill.id))
     );
-  const associationPatch = existingAssociationDirty
-    ? { associated_skill_ids: selectedSkillIds }
-    : {};
-  // Managed built-ins (cloud): Onyx owns creds/config, so the modal only edits
-  // policies — cred fields are hidden and the backend ignores them anyway.
+  // Onyx owns managed credentials; admins can edit policies and skill associations.
   const managed = existingApp?.is_onyx_managed ?? false;
 
-  const fields: EditorField[] = managed
-    ? []
-    : [
-        {
-          key: NAME_KEY,
-          label: t("fields.name.label"),
-          description: t("fields.name.description", { name: descriptor.name }),
-          placeholder: descriptor.name,
-          secret: false,
-        },
-        ...descriptor.required_org_credential_fields.map((field) => ({
-          key: field.key,
-          label: field.label,
-          description: field.description,
-          placeholder: field.label,
-          secret: field.secret,
-        })),
-      ];
+  const fields: EditorField[] =
+    managed || !showConfiguration
+      ? []
+      : [
+          {
+            key: NAME_KEY,
+            label: t("fields.name.label"),
+            description: t("fields.name.description", {
+              name: descriptor.name,
+            }),
+            placeholder: descriptor.name,
+            secret: false,
+          },
+          ...descriptor.required_org_credential_fields.map((field) => ({
+            key: field.key,
+            label: field.label,
+            description: field.description,
+            placeholder: field.label,
+            secret: field.secret,
+          })),
+        ];
 
   const initialFieldValues: Record<string, string> = {
     [NAME_KEY]: existingApp?.name ?? descriptor.name,
@@ -108,56 +113,62 @@ export default function ConfigureProviderModal({
   for (const action of existingApp?.actions ?? []) {
     storedPolicies[action.action_id] = action.state;
   }
-  const initialPolicies = Object.fromEntries(
-    descriptor.actions.map((action): [string, EndpointPolicy] => [
-      action.action_id,
-      storedPolicies[action.action_id] ?? action.default_policy,
-    ])
+  const [initialPolicies] = useState(() =>
+    showPolicies
+      ? Object.fromEntries(
+          descriptor.actions.map((action): [string, EndpointPolicy] => [
+            action.action_id,
+            storedPolicies[action.action_id] ?? action.default_policy,
+          ])
+        )
+      : {}
   );
 
   async function save(
     values: Record<string, string>,
     policies: Record<string, EndpointPolicy>
   ) {
-    if (managed && existingApp) {
-      // Managed: only policies are persisted; a partial PATCH leaves the rest.
-      await updateExternalApp(existingApp.id, {
-        action_policies: policies,
-        ...associationPatch,
-      });
-    } else {
-      const credentialValues = Object.fromEntries(
-        descriptor.required_org_credential_fields.map((field) => [
-          field.key,
-          values[field.key] ?? "",
-        ])
-      );
-      const shared = {
-        name: (values[NAME_KEY] ?? "").trim(),
-        upstream_url_patterns: descriptor.upstream_url_patterns,
-        auth_template: descriptor.auth_template,
-        action_policies: policies,
-      };
-      if (existingApp) {
-        // Merge creds so non-credential metadata survives a credential edit.
-        await updateExternalApp(existingApp.id, {
-          ...shared,
+    const credentialValues = Object.fromEntries(
+      descriptor.required_org_credential_fields.map((field) => [
+        field.key,
+        values[field.key] ?? "",
+      ])
+    );
+    const configuration = {
+      name: (values[NAME_KEY] ?? "").trim(),
+      upstream_url_patterns: descriptor.upstream_url_patterns,
+      auth_template: descriptor.auth_template,
+    };
+    if (existingApp) {
+      const update: UpdateExternalAppBody = {};
+      if (showPolicies) {
+        update.action_policies = Object.fromEntries(
+          Object.entries(policies).filter(
+            ([id, value]) => initialPolicies[id] !== value
+          )
+        );
+      }
+      if (showConfiguration && !managed) {
+        Object.assign(update, configuration, {
           organization_credentials: {
             ...existingApp.organization_credentials,
             ...credentialValues,
           },
-          ...associationPatch,
         });
-      } else {
-        const created = await createBuiltInExternalApp({
-          ...shared,
-          app_type: descriptor.app_type,
-          organization_credentials: credentialValues,
-        });
-        setCreatedApp(created);
       }
+      if (existingAssociationDirty)
+        update.associated_skill_ids = selectedSkillIds;
+      await updateExternalApp(existingApp.id, update);
+    } else {
+      const created = await createBuiltInExternalApp({
+        ...configuration,
+        action_policies: policies,
+        app_type: descriptor.app_type,
+        organization_credentials: credentialValues,
+      });
+      setCreatedApp(created);
     }
-    onSaved();
+    await onSaved();
   }
 
   function navigateToSkillEditor(draftId?: string) {
@@ -229,11 +240,18 @@ export default function ConfigureProviderModal({
           : t("addTitle", { name: descriptor.name })
       }
       description={
-        managed ? t("managedDescription") : descriptor.setup_instructions
+        mode === "permissions"
+          ? t("permissionsDescription")
+          : managed
+            ? mode === "configuration"
+              ? t("managedConfigurationDescription")
+              : t("managedDescription")
+            : descriptor.setup_instructions
       }
-      note={managed ? t("managedNote") : undefined}
+      note={managed && mode !== "configuration" ? t("managedNote") : undefined}
       fields={fields}
-      initialFieldValues={initialFieldValues}
+      initialFieldValues={showConfiguration ? initialFieldValues : {}}
+      showPolicies={showPolicies}
       policyItems={descriptor.actions.map((action) => ({
         id: action.action_id,
         name: action.normalised_name,
@@ -248,7 +266,7 @@ export default function ConfigureProviderModal({
       onSave={save}
       closeAfterSave={existingApp !== null}
       bodyAfterPolicies={
-        existingApp
+        existingApp && showConfiguration
           ? (requestLeave) => (
               <>
                 <Divider />

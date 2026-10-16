@@ -63,6 +63,7 @@ const CUSTOM_APP: ExternalAppAdminResponse = {
   actions: [],
   associated_skills: [],
   is_onyx_managed: false,
+  available_in_craft: true,
 };
 
 function renderExistingApp({

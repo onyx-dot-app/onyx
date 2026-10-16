@@ -13,9 +13,8 @@ import {
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { cn } from "@opal/utils";
-// TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
 import { ConfirmationModalLayout, toast } from "@opal/layouts";
-import { SvgEdit, SvgMoreHorizontal, SvgTrash } from "@opal/icons";
+import { SvgMoreHorizontal, SvgTrash } from "@opal/icons";
 import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/types";
 
 interface IntegrationCardProps {
@@ -31,7 +30,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
     warnings,
     enabled,
     toggleEnabled,
-    edit,
+    menuActions,
     remove,
   } = integration;
   const t = useTranslations("admin.externalApps");
@@ -56,17 +55,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
   }
 
   const menuItems: DropdownMenuItem[] = [
-    ...(edit
-      ? [
-          {
-            kind: "action" as const,
-            id: "edit",
-            icon: SvgEdit,
-            title: t("card.editAction.label"),
-            onSelect: edit,
-          },
-        ]
-      : []),
+    ...menuActions.map((action) => ({ kind: "action" as const, ...action })),
     ...(remove
       ? [
           {
@@ -82,76 +71,34 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
   ];
 
   return (
-    <Hoverable.Root group="integration-row">
+    <Hoverable.Root group="integration-card" width="full">
       <Card color="background-tint-00" border="solid" rounding={4}>
-        <div className="flex items-center gap-3 w-full">
-          {/* Off rows read as inert at a glance; controls keep full opacity. */}
-          <div
-            className={cn(
-              "flex items-center gap-3 flex-1 min-w-0",
-              !enabled && "opacity-60"
-            )}
-          >
-            <Logo className="w-8 h-8 shrink-0" />
-            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <Text font="main-ui-action">{name}</Text>
-                {isCustom && (
-                  <Tag title={t("card.customTag.label")} color="purple" />
-                )}
-                {warnings.map((warning) => (
-                  <Tag key={warning} title={warning} color="amber" error />
-                ))}
+        <div className="flex flex-col gap-3 w-full">
+          <div className="flex items-center justify-between gap-3">
+            <div
+              className={cn(
+                "flex items-center gap-3 min-w-0 flex-1",
+                !enabled && "opacity-60"
+              )}
+            >
+              <Logo className="w-8 h-8 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <Text font="main-ui-action" maxLines={2} title={name}>
+                  {name}
+                </Text>
               </div>
-              <Text font="secondary-body" color="text-03">
-                {facts.join(" · ")}
-              </Text>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {integration.sourceHref && (
-              <Button href={integration.sourceHref} prominence="secondary">
-                {t("card.openApiSource.label")}
-              </Button>
-            )}
-            {/* Toggles org-wide availability, never a single member's
-                connection; the label fades in on hover or focus. */}
-            <Hoverable.Item group="integration-row" variant="appear-on-hover">
-              <Text
-                font="secondary-body"
-                color="text-03"
-                wordWrap="whitespace-nowrap"
-              >
-                {t("card.availableInCraft.label")}
-              </Text>
-            </Hoverable.Item>
-            <InputSwitch
-              checked={enabled}
-              onCheckedChange={() =>
-                toggleEnabled &&
-                run(
-                  toggleEnabled,
-                  enabled
-                    ? t("card.toasts.disableFailed", { name })
-                    : t("card.toasts.enableFailed", { name })
-                )
-              }
-              disabled={isMutating || !toggleEnabled}
-              aria-label={
-                enabled
-                  ? t("card.toggle.disableAriaLabel", { name })
-                  : t("card.toggle.enableAriaLabel", { name })
-              }
-            />
-            {/* Secondary actions live in an overflow menu at the card's edge.
-                Every row renders the trigger, so the switch position is
-                uniform whether or not a row can be edited or deleted. */}
-            <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
+            <Dropdown
+              open={menuOpen}
+              onOpenChange={setMenuOpen}
+              width={60}
+              align="start"
+            >
               <Dropdown.Trigger asChild>
                 <Button
                   prominence="tertiary"
                   icon={SvgMoreHorizontal}
-                  disabled={isMutating || (!edit && !remove)}
+                  disabled={isMutating || (menuActions.length === 0 && !remove)}
                   aria-label={t("card.actionsButton.ariaLabel", { name })}
                 />
               </Dropdown.Trigger>
@@ -161,6 +108,55 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
               />
             </Dropdown>
           </div>
+          <div className="flex items-center justify-between gap-3">
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0",
+                !enabled && "opacity-60"
+              )}
+            >
+              {isCustom && (
+                <Tag title={t("card.customTag.label")} color="purple" />
+              )}
+              <Text font="secondary-body" color="text-03">
+                {facts.join(" · ")}
+              </Text>
+            </div>
+            <div className="flex shrink-0 items-center justify-end gap-2">
+              <Hoverable.Item
+                group="integration-card"
+                variant="appear-on-hover"
+              >
+                <Text font="secondary-body" color="text-03">
+                  {t("card.availableInCraft.label")}
+                </Text>
+              </Hoverable.Item>
+              <InputSwitch
+                checked={enabled}
+                onCheckedChange={() =>
+                  run(
+                    toggleEnabled,
+                    enabled
+                      ? t("card.toasts.disableFailed", { name })
+                      : t("card.toasts.enableFailed", { name })
+                  )
+                }
+                disabled={isMutating}
+                aria-label={
+                  enabled
+                    ? t("card.toggle.disableAriaLabel", { name })
+                    : t("card.toggle.enableAriaLabel", { name })
+                }
+              />
+            </div>
+          </div>
+          {warnings.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {warnings.map((warning) => (
+                <Tag key={warning} title={warning} color="amber" error />
+              ))}
+            </div>
+          )}
         </div>
         {confirmingRemoval && remove && (
           <ConfirmationModalLayout

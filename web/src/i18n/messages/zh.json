@@ -182,11 +182,11 @@
       },
       "authStatus": {
         "configuredTitle": "已配置身份验证",
-        "enabledTitle": "已验证身份并启用",
         "headersDescription": "已配置自定义身份验证请求头",
         "oauthDescription": "已配置 OAuth 身份验证",
-        "oauthNamedDescription": "已通过 {name} 连接 OAuth",
-        "passthroughDescription": "已启用透传身份验证"
+        "oauthNamedDescription": "已通过 {name} 配置 OAuth",
+        "passthroughDescription": "已启用透传身份验证",
+        "noAuthTitle": "尚未配置身份验证"
       },
       "cancelButton": {
         "label": "取消"
@@ -206,7 +206,7 @@
       },
       "editConfigsButton": {
         "disabledTooltip": "只有该操作的创建者或管理员才能管理身份验证",
-        "label": "编辑配置"
+        "label": "配置身份验证"
       },
       "editHeader": {
         "description": "更新此操作的 OpenAPI 架构。",
@@ -655,7 +655,8 @@
         "renameFailed": "重命名 OpenAPI 操作失败",
         "toolDeleted": "{name} 删除成功。",
         "toolDisconnected": "{name} 已断开连接。"
-      }
+      },
+      "loadError": "无法加载此 OpenAPI 操作。请关闭对话框并重试。"
     },
     "perUserAuth": {
       "credentialField": {
@@ -5338,8 +5339,17 @@
           "disableAriaLabel": "禁用 {name}",
           "enableAriaLabel": "启用 {name}"
         },
-        "openApiSource": {
-          "label": "管理 OpenAPI 操作"
+        "manageOpenApi": {
+          "label": "管理 OpenAPI 应用"
+        },
+        "manageBuiltIn": {
+          "label": "管理内置应用"
+        },
+        "manageMcp": {
+          "label": "管理 MCP 服务器"
+        },
+        "editPermissions": {
+          "label": "编辑权限"
         }
       },
       "facts": {
@@ -5351,7 +5361,8 @@
         "perUserCredentials": "按用户凭证",
         "providedByOnyx": "由 Onyx 提供",
         "tools": "{count, plural, one {# 个工具} other {# 个工具}}",
-        "upstreamPatterns": "{count, plural, one {# 个上游模式} other {# 个上游模式}}"
+        "upstreamPatterns": "{count, plural, one {# 个上游模式} other {# 个上游模式}}",
+        "openApiAction": "OpenAPI 操作"
       },
       "loading": {
         "label": "正在加载…"
@@ -5386,7 +5397,8 @@
       },
       "warnings": {
         "invalidSkill": "无效技能",
-        "providerUnavailable": "提供商不可用"
+        "providerUnavailable": "提供商不可用",
+        "sourceActionDisabled": "源操作已禁用"
       }
     },
     "federated": {
@@ -13633,6 +13645,10 @@
         "modal": {
           "description": "让整个组织都可以使用某个集成。内置提供商附带可教 Craft 智能体使用方法的操作；已配置的提供商不会列出。",
           "title": "添加应用"
+        },
+        "openApiHint": {
+          "label": "已有 OpenAPI 规范？配置操作并在 Craft 中启用。",
+          "openActionsButton": "打开 OpenAPI 操作"
         }
       },
       "associatedSkills": {
@@ -13700,7 +13716,9 @@
         },
         "managedDescription": "由 Onyx 提供，请配置智能体可以执行的操作。",
         "managedNote": "此应用由 Onyx 提供，凭据由系统代管。请在下方选择智能体可以执行的操作。用户可从“应用”页面连接它。",
-        "saveButton": "保存"
+        "saveButton": "保存",
+        "permissionsDescription": "选择 Craft 智能体可以执行的操作。",
+        "managedConfigurationDescription": "Onyx 管理此应用的凭据。您可以在下方管理其关联技能。"
       },
       "customApp": {
         "cancelButton": "取消",
@@ -13819,7 +13837,9 @@
           "connectedNeedsSkills": "已连接 · 并非所有关联技能都已启用",
           "notAvailable": "您的账户不可用，请咨询管理员",
           "skillWarningAriaLabel": "需要设置技能",
-          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。"
+          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。",
+          "adminConfigured": "已由管理员配置",
+          "adminConfiguredNeedsSkills": "已由管理员配置 · 部分关联技能尚未启用"
         }
       },
       "policyEditor": {
@@ -13860,6 +13880,12 @@
           "connectFailedTitle": "无法连接"
         },
         "title": "连接 {name}"
+      },
+      "openApiPolicy": {
+        "title": "{name} 的权限",
+        "description": "选择 Craft 智能体何时可以调用各个 API 操作。这些设置不会更改聊天操作。",
+        "emptyPolicies": "没有可用的 API 操作。请在“管理 OpenAPI 应用”中检查配置。",
+        "saveButton": "保存"
       }
     },
     "artifactsTab": {

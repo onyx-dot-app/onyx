@@ -41,8 +41,8 @@ import { EmptyMessageCard } from "@opal/components";
 
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
-  onSuccess?: (tool: ToolSnapshot) => void;
-  onUpdate?: (tool: ToolSnapshot) => void;
+  onSuccess?: (tool: ToolSnapshot) => Promise<void> | void;
+  onUpdate?: (tool: ToolSnapshot) => Promise<void> | void;
   existingTool?: ToolSnapshot | null;
   onClose?: () => void;
   onEditAuthentication?: (tool: ToolSnapshot) => void;
@@ -206,10 +206,6 @@ function FormContent({
     return "";
   }, [existingTool, hasOAuthConfig, hasCustomHeaders, hasPassthroughAuth, t]);
 
-  const showAuthenticationStatus = Boolean(
-    isEditMode && existingTool?.enabled && hasAuthenticationConfigured
-  );
-
   const handleEditAuthenticationClick = useCallback(() => {
     if (!existingTool || !onEditAuthentication) {
       return;
@@ -345,6 +341,7 @@ function FormContent({
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2">
               <InputCheckbox
+                aria-label={t("addOpenApiModal.craft.label")}
                 checked={values.availableInCraft}
                 disabled={isSubmitting}
                 onCheckedChange={(checked) =>
@@ -361,7 +358,7 @@ function FormContent({
           </div>
         )}
 
-        {showAuthenticationStatus && (
+        {isEditMode && (
           <Section
             flexDirection="row"
             justifyContent="between"
@@ -375,11 +372,13 @@ function FormContent({
                 alignItems="center"
                 width="fit"
               >
-                <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+                {hasAuthenticationConfigured && (
+                  <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+                )}
                 <Text>
-                  {existingTool?.enabled
-                    ? t("addOpenApiModal.authStatus.enabledTitle")
-                    : t("addOpenApiModal.authStatus.configuredTitle")}
+                  {hasAuthenticationConfigured
+                    ? t("addOpenApiModal.authStatus.configuredTitle")
+                    : t("addOpenApiModal.authStatus.noAuthTitle")}
                 </Text>
               </Section>
               {authenticationDescription && (
@@ -394,18 +393,20 @@ function FormContent({
               alignItems="center"
               width="fit"
             >
-              <Button
-                icon={SvgUnplug}
-                prominence="tertiary"
-                type="button"
-                tooltip={t("addOpenApiModal.disableButton.tooltip")}
-                onClick={() => {
-                  if (!existingTool || !onDisconnectTool) {
-                    return;
-                  }
-                  onDisconnectTool(existingTool);
-                }}
-              />
+              {existingTool?.enabled && onDisconnectTool && (
+                <Button
+                  icon={SvgUnplug}
+                  prominence="tertiary"
+                  type="button"
+                  tooltip={t("addOpenApiModal.disableButton.tooltip")}
+                  onClick={() => {
+                    if (!existingTool || !onDisconnectTool) {
+                      return;
+                    }
+                    onDisconnectTool(existingTool);
+                  }}
+                />
+              )}
               <Button
                 disabled={!onEditAuthentication || !canEditAuthentication}
                 tooltip={
@@ -525,10 +526,10 @@ export default function AddOpenAPIActionModal({
           toast.error(response.error);
         } else {
           toast.success(t("addOpenApiModal.toasts.actionUpdated"));
-          handleClose();
           if (response.data && onUpdate) {
-            onUpdate(response.data);
+            await onUpdate(response.data);
           }
+          handleClose();
         }
       } catch (error) {
         console.error("Error updating OpenAPI action:", error);
@@ -553,7 +554,7 @@ export default function AddOpenAPIActionModal({
         toast.success(t("addOpenApiModal.toasts.actionCreated"));
         handleClose();
         if (response.data && onSuccess) {
-          onSuccess(response.data);
+          await onSuccess(response.data);
         }
       }
     } catch (error) {

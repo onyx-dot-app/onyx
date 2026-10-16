@@ -38,6 +38,7 @@ export interface EditorField {
 }
 
 interface ActionPolicyEditorModalProps {
+  showPolicies?: boolean;
   /** Alternate view rendered inside the same modal surface. It remains
    * mounted while the discard confirmation is visible so local draft state
    * survives cancellation. */
@@ -80,6 +81,7 @@ interface ActionPolicyEditorModalProps {
  * policy items and supply the save call; the UI is identical for both.
  * Mount it only while open — initial values are read once. */
 export default function ActionPolicyEditorModal({
+  showPolicies = true,
   alternateContent,
   alternateContentConfirmationOpen = false,
   isAdditionalContentDirty = false,
@@ -113,15 +115,19 @@ export default function ActionPolicyEditorModal({
   const fieldsFilled = fields.every(
     (field) => (fieldValues[field.key] ?? "").trim().length > 0
   );
-  const fieldsDirty = !isEqual(fieldValues, initialFieldValues);
-  const policiesDirty = !isEqual(policies, initialPolicies);
+  const [baseline] = useState(() => ({
+    fields: initialFieldValues,
+    policies: initialPolicies,
+  }));
+  const fieldsDirty = !isEqual(fieldValues, baseline.fields);
+  const policiesDirty = !isEqual(policies, baseline.policies);
   const isDirty = fieldsDirty || policiesDirty || isAdditionalContentDirty;
   const unsavedChanges = useUnsavedChangesGuard({ isDirty });
   const confirmationOpen =
     alternateContentConfirmationOpen || unsavedChanges.confirmationOpen;
   const canSave =
     fieldsFilled &&
-    policyItems !== undefined &&
+    (!showPolicies || policyItems !== undefined) &&
     !isSaving &&
     (allowPristineSave || isDirty);
 
@@ -218,21 +224,22 @@ export default function ActionPolicyEditorModal({
                   );
                 })}
 
-                {policyItems === undefined ? (
-                  <Text font="main-content-body" color="text-03">
-                    {t("loading.label")}
-                  </Text>
-                ) : policyItems.length === 0 ? (
-                  <Text font="secondary-body" color="text-03">
-                    {emptyPoliciesMessage}
-                  </Text>
-                ) : (
-                  <PolicyEditor
-                    items={policyItems}
-                    policies={policies}
-                    onChange={setPolicies}
-                  />
-                )}
+                {showPolicies &&
+                  (policyItems === undefined ? (
+                    <Text font="main-content-body" color="text-03">
+                      {t("loading.label")}
+                    </Text>
+                  ) : policyItems.length === 0 ? (
+                    <Text font="secondary-body" color="text-03">
+                      {emptyPoliciesMessage}
+                    </Text>
+                  ) : (
+                    <PolicyEditor
+                      items={policyItems}
+                      policies={policies}
+                      onChange={setPolicies}
+                    />
+                  ))}
 
                 {bodyAfterPolicies?.(unsavedChanges.requestLeave)}
 

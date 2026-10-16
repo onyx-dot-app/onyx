@@ -2,12 +2,12 @@
 
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
+import { Button, Text as OpalText } from "@opal/components";
 import { cn } from "@opal/utils";
 import { ActionStatus } from "@/lib/tools/types";
 import Text from "@/refresh-components/texts/Text";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import type { IconProps } from "@opal/types";
+import type { IconProps, RichStr } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
@@ -17,6 +17,7 @@ interface ActionCardHeaderProps {
   description: string;
   icon: React.FunctionComponent<IconProps>;
   status: ActionStatus;
+  statusLabel?: string | RichStr;
   onEdit?: () => void;
   onRename?: (newName: string) => Promise<void>;
 }
@@ -26,6 +27,7 @@ function ActionCardHeader({
   description,
   icon: Icon,
   status,
+  statusLabel,
   onEdit,
   onRename,
 }: ActionCardHeaderProps) {
@@ -96,25 +98,18 @@ function ActionCardHeader({
               </Truncated>
             </div>
           )}
-          {isPending && !isRenaming && (
-            <Text
-              as="p"
-              mainUiMuted
-              text03
-              className="shrink-0 whitespace-nowrap"
+          {!isRenaming && (statusLabel || isPending || isDisconnected) && (
+            <OpalText
+              font="main-ui-muted"
+              color={isDisconnected ? "text-02" : "text-03"}
             >
-              {t("cardHeader.notAuthenticated.label")}
-            </Text>
-          )}
-          {isDisconnected && !isRenaming && (
-            <Text
-              as="p"
-              mainUiMuted
-              text02
-              className="shrink-0 whitespace-nowrap"
-            >
-              {t("cardHeader.disconnected.label")}
-            </Text>
+              {statusLabel ??
+                t(
+                  isPending
+                    ? "cardHeader.notAuthenticated.label"
+                    : "cardHeader.disconnected.label"
+                )}
+            </OpalText>
           )}
           {showRenameIcon && (
             <Hoverable.Item group="action-card" variant="appear-on-hover">

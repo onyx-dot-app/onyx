@@ -7,7 +7,11 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.credentials import build_auth_headers
-from onyx.external_apps.openapi import openapi_auth_configuration, openapi_url_patterns
+from onyx.external_apps.openapi import (
+    openapi_action_catalog,
+    openapi_auth_configuration,
+    openapi_url_patterns,
+)
 from onyx.external_apps.url_glob import UrlGlob
 
 
@@ -144,3 +148,27 @@ def test_non_string_server_url_rejected_as_invalid_input(url: Any) -> None:
     schema["servers"][0]["url"] = url
     with pytest.raises(OnyxError, match="must be strings"):
         openapi_url_patterns(schema)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["items", "/a/../items", "/%69tems", "/items?x=1", "/items#x", "/items/{tail...}"],
+)
+def test_policy_catalog_rejects_ambiguous_paths(path: str) -> None:
+    schema = _schema("https://api.example.com/v1")
+    operation = schema["paths"].pop("/items")
+    schema["paths"][path] = operation
+    with pytest.raises(OnyxError, match="canonical OpenAPI paths"):
+        openapi_action_catalog(schema)
+
+
+def test_policy_identity_uses_canonical_destination_and_not_operation_name() -> None:
+    schema = _schema("https://API.example.com:443/v1/")
+    before = openapi_action_catalog(schema)[0]
+    schema["paths"]["/items"]["get"]["operationId"] = "renamed"
+    after = openapi_action_catalog(schema)[0]
+    assert before.id == after.id == "GET https://api.example.com/v1/items"
+    assert before.normalised_name != after.normalised_name
+    schema["paths"]["/items"]["get"]["servers"] = [{"url": "https://other.example.com"}]
+    with pytest.raises(OnyxError, match="operation-level"):
+        openapi_action_catalog(schema)

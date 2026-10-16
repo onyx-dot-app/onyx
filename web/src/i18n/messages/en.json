@@ -182,11 +182,11 @@
       },
       "authStatus": {
         "configuredTitle": "Authentication configured",
-        "enabledTitle": "Authenticated & Enabled",
         "headersDescription": "Custom authentication headers configured",
         "oauthDescription": "OAuth authentication configured",
-        "oauthNamedDescription": "OAuth connected via {name}",
-        "passthroughDescription": "Passthrough authentication enabled"
+        "oauthNamedDescription": "OAuth configured via {name}",
+        "passthroughDescription": "Passthrough authentication enabled",
+        "noAuthTitle": "No authentication configured"
       },
       "cancelButton": {
         "label": "Cancel"
@@ -206,7 +206,7 @@
       },
       "editConfigsButton": {
         "disabledTooltip": "Only the action's creator or an admin can manage authentication",
-        "label": "Edit Configs"
+        "label": "Configure authentication"
       },
       "editHeader": {
         "description": "Update the OpenAPI schema for this action.",
@@ -655,7 +655,8 @@
         "renameFailed": "Failed to rename OpenAPI action",
         "toolDeleted": "{name} deleted successfully.",
         "toolDisconnected": "{name} has been disconnected."
-      }
+      },
+      "loadError": "Could not load this OpenAPI action. Close this dialog and try again."
     },
     "perUserAuth": {
       "credentialField": {
@@ -5338,8 +5339,17 @@
           "disableAriaLabel": "Disable {name}",
           "enableAriaLabel": "Enable {name}"
         },
-        "openApiSource": {
-          "label": "Manage OpenAPI action"
+        "manageOpenApi": {
+          "label": "Manage OpenAPI app"
+        },
+        "manageBuiltIn": {
+          "label": "Manage built-in app"
+        },
+        "manageMcp": {
+          "label": "Manage MCP servers"
+        },
+        "editPermissions": {
+          "label": "Edit permissions"
         }
       },
       "facts": {
@@ -5351,7 +5361,8 @@
         "perUserCredentials": "per-user credentials",
         "providedByOnyx": "provided by Onyx",
         "tools": "{count, plural, one {# tool} other {# tools}}",
-        "upstreamPatterns": "{count, plural, one {# upstream pattern} other {# upstream patterns}}"
+        "upstreamPatterns": "{count, plural, one {# upstream pattern} other {# upstream patterns}}",
+        "openApiAction": "OpenAPI action"
       },
       "loading": {
         "label": "Loading…"
@@ -5386,7 +5397,8 @@
       },
       "warnings": {
         "invalidSkill": "invalid skill",
-        "providerUnavailable": "provider unavailable"
+        "providerUnavailable": "provider unavailable",
+        "sourceActionDisabled": "Source action is disabled"
       }
     },
     "federated": {
@@ -13633,6 +13645,10 @@
         "modal": {
           "description": "Make an integration available to your whole organization. Built-in providers come with actions that teach the Craft agent how to use them; already-configured providers are not listed.",
           "title": "Add an app"
+        },
+        "openApiHint": {
+          "label": "Have an OpenAPI spec? Set up an action and enable it for Craft.",
+          "openActionsButton": "Open OpenAPI Actions"
         }
       },
       "associatedSkills": {
@@ -13700,7 +13716,9 @@
         },
         "managedDescription": "Provided by Onyx — configure what the agent may do.",
         "managedNote": "This app is provided by Onyx — credentials are managed for you. Choose what the agent may do below. Users connect it from the Apps page.",
-        "saveButton": "Save"
+        "saveButton": "Save",
+        "permissionsDescription": "Choose which actions Craft agents can run.",
+        "managedConfigurationDescription": "Onyx manages this app’s credentials. You can manage its associated skills below."
       },
       "customApp": {
         "cancelButton": "Cancel",
@@ -13819,7 +13837,9 @@
           "connectedNeedsSkills": "Connected · not all associated skills are enabled",
           "notAvailable": "Not available for your account — ask an admin",
           "skillWarningAriaLabel": "Skill setup required",
-          "skillWarningTooltip": "Not all associated skills are enabled. This app may not work correctly."
+          "skillWarningTooltip": "Not all associated skills are enabled. This app may not work correctly.",
+          "adminConfigured": "Configured by your admin",
+          "adminConfiguredNeedsSkills": "Configured by your admin · not all associated skills are enabled"
         }
       },
       "policyEditor": {
@@ -13860,6 +13880,12 @@
           "connectFailedTitle": "Couldn't connect"
         },
         "title": "Connect {name}"
+      },
+      "openApiPolicy": {
+        "title": "Permissions for {name}",
+        "description": "Choose when Craft agents can call each API operation. These settings do not change Chat actions.",
+        "emptyPolicies": "No API operations are available. Check the configuration under Manage OpenAPI app.",
+        "saveButton": "Save"
       }
     },
     "artifactsTab": {

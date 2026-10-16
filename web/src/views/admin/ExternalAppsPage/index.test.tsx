@@ -19,26 +19,60 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import { MCPServer, MCPServerStatus } from "@/lib/mcp/types";
 import * as externalAppsService from "@/app/craft/services/externalAppsService";
+import { updateCustomTool } from "@/lib/tools/svc";
 import * as mcpService from "@/lib/mcp/svc";
 
 jest.mock("swr", () => ({
   __esModule: true,
   ...jest.requireActual("swr"),
   default: jest.fn(),
+  useSWRConfig: () => ({
+    ...jest.requireActual("swr").useSWRConfig(),
+    mutate: mockInvalidate,
+  }),
 }));
 
 jest.mock("@/app/craft/services/externalAppsService");
 jest.mock("@/lib/mcp/svc");
+jest.mock("@/lib/tools/svc");
+jest.mock("@/sections/actions/McpServerDialogs", () => ({
+  __esModule: true,
+  default: ({ initialServer }: { initialServer: MCPServer }) => (
+    <div
+      role="dialog"
+      aria-label="MCP configuration"
+      data-server-name={initialServer.name}
+    />
+  ),
+}));
+jest.mock("@/app/craft/v1/apps/admin/McpServerPolicyModal", () => ({
+  __esModule: true,
+  default: () => <div role="dialog" aria-label="MCP permissions" />,
+}));
+jest.mock("@/sections/actions/OpenApiActionEditor", () => ({
+  __esModule: true,
+  default: ({ name }: { name: string }) => (
+    <div role="dialog" aria-label={`Source ${name}`} />
+  ),
+}));
+jest.mock("@/app/craft/v1/apps/admin/OpenApiAppPolicyModal", () => ({
+  __esModule: true,
+  default: ({ app }: { app: ExternalAppAdminResponse }) => (
+    <div role="dialog" aria-label={app.name} />
+  ),
+}));
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn(), replace: mockRouterReplace }),
+  useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
   useSearchParams: () => mockSearchParams,
   usePathname: () => "/admin/craft/apps",
 }));
 
 const mockUseSWR = useSWR as jest.MockedFunction<typeof useSWR>;
 const mockMutateApps = jest.fn();
+const mockInvalidate = jest.fn();
 const mockRouterReplace = jest.fn();
+const mockRouterPush = jest.fn();
 let mockSearchParams = new URLSearchParams();
 
 const APP: ExternalAppAdminResponse = {
@@ -53,6 +87,7 @@ const APP: ExternalAppAdminResponse = {
   actions: [],
   associated_skills: [],
   is_onyx_managed: false,
+  available_in_craft: true,
 };
 
 const SLACK_DESCRIPTOR: BuiltInExternalAppDescriptor = {
@@ -130,21 +165,121 @@ describe("ExternalAppsPage", () => {
     jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue(APP);
   });
 
-  it("manages linked OpenAPI apps through their source action", () => {
-    mockSWRData({ apps: [{ ...APP, openapi_tool_id: 42 }] });
-    mockSearchParams = new URLSearchParams({ editAppId: "1" });
+  it.each([
+    { label: "Edit permissions", dialog: "Custom app" },
+    { label: "Manage OpenAPI app", dialog: "Source Custom app" },
+  ])(
+    "opens the linked OpenAPI $label dialog in place",
+    async ({ label, dialog }) => {
+      const user = setupUser();
+      mockSWRData({ apps: [{ ...APP, openapi_tool_id: 42 }] });
+      mockSearchParams = new URLSearchParams({ editAppId: "1" });
+      render(<ExternalAppsPage />);
 
+      expect(appSwitch()).toBeEnabled();
+      expect(screen.getByText("OpenAPI action")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/no credentials|no custom skills|upstream patterns/)
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "Custom app actions" })
+      );
+      expect(
+        screen.queryByRole("menuitem", { name: "Delete" })
+      ).not.toBeInTheDocument();
+      await user.click(screen.getByRole("menuitem", { name: label }));
+      expect(screen.getByRole("dialog", { name: dialog })).toBeInTheDocument();
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    { label: "Manage MCP servers", dialog: "MCP configuration" },
+    { label: "Edit permissions", dialog: "MCP permissions" },
+  ])("opens MCP $label in place", async ({ label, dialog }) => {
+    const user = setupUser();
+    mockSWRData({ servers: [MCP_SERVER] });
+    render(<ExternalAppsPage />);
+    await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
+    await user.click(
+      screen.getByRole("button", { name: `${MCP_SERVER.name} actions` })
+    );
+    await user.click(screen.getByRole("menuitem", { name: label }));
+    expect(screen.getByRole("dialog", { name: dialog })).toBeInTheDocument();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it("keeps the open MCP manager synchronized with refreshed source data", async () => {
+    const user = setupUser();
+    mockSWRData({ servers: [MCP_SERVER] });
+    const { rerender } = render(<ExternalAppsPage />);
+    await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
+    await user.click(
+      screen.getByRole("button", { name: `${MCP_SERVER.name} actions` })
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Manage MCP servers" })
+    );
+    mockSWRData({ servers: [{ ...MCP_SERVER, name: "Updated server" }] });
+    rerender(<ExternalAppsPage />);
+    expect(
+      screen.getByRole("dialog", { name: "MCP configuration" })
+    ).toHaveAttribute("data-server-name", "Updated server");
+    mockSWRData({ servers: [] });
+    rerender(<ExternalAppsPage />);
+    expect(
+      screen.queryByRole("dialog", { name: "MCP configuration" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels built-in policy editing as Edit permissions", async () => {
+    const user = setupUser();
+    mockSWRData({
+      apps: [{ ...APP, app_type: "SLACK", name: "Slack" }],
+      descriptors: [SLACK_DESCRIPTOR],
+    });
+    render(<ExternalAppsPage />);
+    await user.click(screen.getByRole("button", { name: "Slack actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Manage built-in app" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Edit permissions" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Edit" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("updates source Craft availability even when the source action is disabled", async () => {
+    const user = setupUser();
+    mockSWRData({
+      apps: [
+        {
+          ...APP,
+          openapi_tool_id: 42,
+          enabled: false,
+          available_in_craft: true,
+        },
+      ],
+    });
+    jest
+      .mocked(updateCustomTool)
+      .mockResolvedValue({ data: null, error: null });
     render(<ExternalAppsPage />);
 
-    expect(
-      screen.getByRole("link", { name: "Manage OpenAPI action" })
-    ).toHaveAttribute("href", "/admin/openapi-actions?toolId=42");
-    expect(appSwitch()).toBeDisabled();
-    expect(screen.queryByText(/no credentials/)).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Custom app actions" })
-    ).toBeDisabled();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(appSwitch()).toBeChecked();
+    expect(screen.getByText("Source action is disabled")).toBeInTheDocument();
+    await user.click(appSwitch());
+    await waitFor(() =>
+      expect(updateCustomTool).toHaveBeenCalledWith(42, {
+        available_in_craft: false,
+      })
+    );
+    expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
+    expect(mockMutateApps).toHaveBeenCalled();
+    expect(mockInvalidate).toHaveBeenCalledWith(SWR_KEYS.openApiTools);
   });
 
   it("keeps app controls disabled until the refreshed app state arrives", async () => {
@@ -239,6 +374,9 @@ describe("ExternalAppsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Add app" }));
     const catalog = screen.getByRole("dialog");
+    expect(
+      within(catalog).getByRole("link", { name: "Open OpenAPI Actions" })
+    ).toHaveAttribute("href", "/admin/openapi-actions");
     expect(within(catalog).getByText("Slack")).toBeInTheDocument();
     expect(within(catalog).getByText("Custom app")).toBeInTheDocument();
 

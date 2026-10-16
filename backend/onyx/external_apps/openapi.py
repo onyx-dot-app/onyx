@@ -5,8 +5,10 @@ from urllib.parse import urlsplit, urlunsplit
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.actions import CatalogAction, RestRoute
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    MethodSpec,
     openapi_to_method_specs,
     openapi_to_url,
 )
@@ -14,8 +16,10 @@ from onyx.utils.headers import HeaderItemDict, is_valid_header_name
 from onyx.utils.url import normalized_request_path
 
 
-def openapi_url_patterns(definition: dict[str, Any]) -> list[str]:
-    """Use the same server as the chat action, scoped to its base path."""
+def _parse_openapi_action(
+    definition: dict[str, Any],
+) -> tuple[str, list[MethodSpec]]:
+    """Validate the shared server and operations, returning their parsed values."""
     try:
         value = openapi_to_url(definition)
         methods = openapi_to_method_specs(definition)
@@ -53,13 +57,51 @@ def openapi_url_patterns(definition: dict[str, Any]) -> list[str]:
         host = f"[{host}]"
     if port is not None and (parsed.scheme, port) not in {("http", 80), ("https", 443)}:
         host = f"{host}:{port}"
-    base = urlunsplit((parsed.scheme, host, parsed.path.rstrip("/") or "/", "", ""))
+    return urlunsplit((parsed.scheme, host, parsed.path.rstrip("/"), "", "")), methods
+
+
+def openapi_url_patterns(definition: dict[str, Any]) -> list[str]:
+    """Use the same server as the chat action, scoped to its base path."""
+    base, _ = _parse_openapi_action(definition)
+    if not urlsplit(base).path:
+        base += "/"
     return sorted(
         {
             UrlGlob.parse(pattern).value
             for pattern in (base, f"{base}?*", f"{base.rstrip('/')}/*")
         }
     )
+
+
+def openapi_action_catalog(definition: dict[str, Any]) -> list[CatalogAction]:
+    """Bind each policy to its destination and route, independent of operation names."""
+    base, operations = _parse_openapi_action(definition)
+    base_path = urlsplit(base).path
+    actions: list[CatalogAction] = []
+    for operation in operations:
+        path = operation.path
+        if (
+            not path.startswith("/")
+            or normalized_request_path(path) != (path.rstrip("/") or "/")
+            or any(character in path for character in "?#\\")
+            or "...}" in path
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Craft requires canonical OpenAPI paths without queries, fragments, or wildcard parameters.",
+            )
+        method = operation.method.upper()
+        actions.append(
+            CatalogAction(
+                id=f"{method} {base}{path}",
+                normalised_name=operation.raw_name,
+                description=operation.summary,
+                matches=(RestRoute(method=method, path=f"{base_path}{path}"),),
+                method=method,
+                path=path,
+            )
+        )
+    return actions
 
 
 def openapi_auth_configuration(

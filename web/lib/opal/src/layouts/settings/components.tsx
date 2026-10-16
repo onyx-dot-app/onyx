@@ -149,8 +149,8 @@ function SettingsHeader({
       <Spacer rem={3.25} />
 
       <div className="flex flex-col gap-6 px-4">
-        <div className="flex w-full items-start justify-between gap-4">
-          <div aria-label="admin-page-title">
+        <div className="flex w-full flex-col items-start justify-between gap-4 sm:flex-row">
+          <div className="min-w-0" aria-label="admin-page-title">
             <Content
               icon={Icon}
               moreIcon1={moreIcon1}
@@ -165,7 +165,7 @@ function SettingsHeader({
             />
           </div>
           {hasActions && (
-            <div className="flex shrink-0 items-start justify-end gap-2">
+            <div className="flex shrink-0 flex-wrap items-start justify-end gap-2">
               {onCancel && (
                 <Button prominence="secondary" onClick={onCancel}>
                   {strings.settingsHeaderCancel}

@@ -1,3 +1,4 @@
+import re
 from enum import Enum
 from typing import Annotated, Literal
 
@@ -21,8 +22,8 @@ class RestRoute(BaseModel):
     """Recognises a REST request as an action by HTTP method + path.
 
     ``path`` is a template compared segment-by-segment against the request path
-    (see ``path_matches``): a ``{name}`` segment matches exactly one path
-    segment (a resource id), a trailing ``{name...}`` segment matches one or
+    (see ``path_matches``): ``{name}`` matches non-empty text within one path
+    segment, a trailing ``{name...}`` segment matches one or
     more remaining segments (for slash-bearing tails like a file path or a
     ``heads/feature/x`` ref), literal segments must match verbatim, and a single
     trailing slash is ignored. Placeholders name the resource for readability;
@@ -48,18 +49,24 @@ class RestRoute(BaseModel):
 
 
 def _segment_matches(expected: str, actual: str) -> bool:
-    """One template segment vs one path segment: a ``{name}`` placeholder
-    matches any single non-empty segment, a literal must match exactly."""
-    if expected.startswith("{") and expected.endswith("}"):
-        return bool(actual)  # a placeholder requires a non-empty segment
-    return expected == actual
+    """Match placeholders within a segment, including forms like ``{id}.json``."""
+    if "{" not in expected:
+        return expected == actual
+    if re.fullmatch(r"\{[^{}]+\}", expected):
+        return bool(actual)
+    parts = re.split(r"(\{[^{}]+\})", expected)
+    pattern = "".join(
+        "[^/]+" if part.startswith("{") and part.endswith("}") else re.escape(part)
+        for part in parts
+    )
+    return re.fullmatch(pattern, actual) is not None
 
 
 def path_matches(template: str, path: str) -> bool:
     """Whether request ``path`` matches a ``RestRoute.path`` template.
 
-    Segments (split on ``/``) are compared positionally: a ``{name}`` segment
-    matches any single non-empty segment, a literal segment must match exactly.
+    Segments (split on ``/``) are compared positionally: ``{name}`` matches
+    non-empty text within a segment, while literal text must match exactly.
     A trailing ``{name...}`` segment matches one *or more* remaining segments,
     for tails that are themselves slash-bearing (a ``contents`` file path, a
     ``heads/feature/x`` ref). A single trailing slash on either side is ignored.
@@ -103,23 +110,27 @@ class GraphQLOp(BaseModel):
 MatchRule = Annotated[RestRoute | GraphQLOp, Field(discriminator="kind")]
 
 
-class EndpointSpec(BaseModel):
-    """One logical action a provider can take, owned by code. Binds a stable
-    ``id`` ↔ admin display ↔ recognition rules."""
+class CatalogAction(BaseModel):
+    """An action's stable identity, display strings, and request recognition rules."""
 
     model_config = ConfigDict(frozen=True)
 
-    # Stable, namespaced id as a provider-specific enum member (e.g.
-    # ``SlackAction.MESSAGES_READ`` → "slack.messages.read"). ``InstanceOf``
-    # accepts any ``ExternalAppAction`` subclass member while rejecting bare
-    # strings, so catalogs can't drift onto untyped ids.
-    id: InstanceOf[ExternalAppAction]
+    id: str
     normalised_name: str
     description: str
     matches: tuple[MatchRule, ...]
     # The policy a freshly-created built-in app starts this action at, unless the
     # admin overrides it.
     default_policy: EndpointPolicy = EndpointPolicy.ASK
+    # Source metadata for OpenAPI explorer rows; recognition uses matches.
+    method: str | None = None
+    path: str | None = None
+
+
+class EndpointSpec(CatalogAction):
+    """A built-in provider action, whose identity must be a typed enum member."""
+
+    id: InstanceOf[ExternalAppAction]
     # Set when the action needs a scope only a self-hosted deployment requests,
     # which drops it from the cloud catalog (``registry.get_endpoint_catalog``).
     requires_self_hosted_scope: bool = False

@@ -12,13 +12,13 @@ import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 
 interface McpServerPolicyModalProps {
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => Promise<void> | void;
   server: MCPServer;
 }
 
 /** Edit dialog for an MCP server's Craft tool policies: maps the server's
- * enabled tools into the shared editor. Server config itself (URL, auth, tool
- * refresh) lives on the MCP actions page. */
+ * enabled tools into the shared editor. The shared MCP management dialog owns
+ * server configuration, authentication, and tool refresh. */
 export default function McpServerPolicyModal({
   onClose,
   onSaved,
@@ -38,7 +38,7 @@ export default function McpServerPolicyModal({
     // Send the full map; the backend drops default (ASK) entries so the stored
     // set stays sparse regardless of which client wrote it.
     await updateMCPServer(server.id, { tool_policies: policies });
-    onSaved();
+    await onSaved();
   }
 
   return (

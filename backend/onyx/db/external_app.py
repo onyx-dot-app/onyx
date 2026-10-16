@@ -16,6 +16,7 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.gated_app import (
+    get_action_policies,
     get_or_create_gated_app_id,
     replace_action_policies__no_commit,
 )
@@ -32,8 +33,16 @@ from onyx.db.users import fetch_user_by_id
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.openapi import openapi_auth_configuration, openapi_url_patterns
-from onyx.external_apps.providers.registry import PROVIDERS, get_provider_for_app
+from onyx.external_apps.openapi import (
+    openapi_action_catalog,
+    openapi_auth_configuration,
+    openapi_url_patterns,
+)
+from onyx.external_apps.providers.registry import (
+    PROVIDERS,
+    get_provider_for_app,
+    resolve_action_overrides,
+)
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.encryption import is_masked_credential
 from onyx.utils.logger import setup_logger
@@ -220,7 +229,7 @@ def get_connectable_apps_for_user(
     return [
         app
         for app in get_external_apps(
-            db_session, enabled_only=True, include_openapi_auth=True
+            db_session, enabled_only=True, include_openapi_tool=True
         )
         if not (
             app.openapi_tool is not None
@@ -279,7 +288,7 @@ def get_external_apps(
     db_session: Session,
     *,
     enabled_only: bool = False,
-    include_openapi_auth: bool = False,
+    include_openapi_tool: bool = False,
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
@@ -288,7 +297,7 @@ def get_external_apps(
     )
     if enabled_only:
         stmt = stmt.where(ExternalApp.enabled.is_(True))
-    if include_openapi_auth:
+    if include_openapi_tool:
         stmt = stmt.options(
             selectinload(ExternalApp.openapi_tool).joinedload(Tool.oauth_config)
         )
@@ -712,6 +721,7 @@ def sync_openapi_external_app__no_commit(db_session: Session, tool: Tool) -> Non
     app = tool.craft_external_app
     if not tool.available_in_craft:
         if app is not None:
+            app.name = tool.name
             app.enabled = False
         db_session.flush()
         return
@@ -721,6 +731,7 @@ def sync_openapi_external_app__no_commit(db_session: Session, tool: Tool) -> Non
             "Craft requires an OpenAPI action definition.",
         )
     patterns = openapi_url_patterns(tool.openapi_schema)
+    openapi_action_catalog(tool.openapi_schema)
     template, credentials = openapi_auth_configuration(tool.custom_headers)
     if app is None:
         app = create_external_app(
@@ -743,6 +754,11 @@ def sync_openapi_external_app__no_commit(db_session: Session, tool: Tool) -> Non
         )
         set_external_app_organization_credentials(db_session, app, credentials)
     app.enabled = tool.enabled
+    stored = get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id)
+    if stored:
+        _write_policies__no_commit(
+            db_session, app, resolve_action_overrides(app, None, stored)
+        )
     db_session.flush()
 
 

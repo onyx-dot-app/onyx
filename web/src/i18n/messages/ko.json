@@ -182,11 +182,11 @@
       },
       "authStatus": {
         "configuredTitle": "인증 구성됨",
-        "enabledTitle": "인증 및 활성화됨",
         "headersDescription": "사용자 지정 인증 헤더 구성됨",
         "oauthDescription": "OAuth 인증 구성됨",
-        "oauthNamedDescription": "{name}을(를) 통해 OAuth 연결됨",
-        "passthroughDescription": "패스스루 인증 활성화됨"
+        "oauthNamedDescription": "{name}을(를) 통해 OAuth 구성됨",
+        "passthroughDescription": "패스스루 인증 활성화됨",
+        "noAuthTitle": "인증이 구성되지 않았습니다"
       },
       "cancelButton": {
         "label": "취소"
@@ -206,7 +206,7 @@
       },
       "editConfigsButton": {
         "disabledTooltip": "액션을 만든 사용자 또는 관리자만 인증을 관리할 수 있습니다",
-        "label": "설정 편집"
+        "label": "인증 구성"
       },
       "editHeader": {
         "description": "이 액션의 OpenAPI 스키마를 업데이트합니다.",
@@ -655,7 +655,8 @@
         "renameFailed": "OpenAPI 액션 이름을 변경하지 못했습니다",
         "toolDeleted": "{name}을(를) 삭제했습니다.",
         "toolDisconnected": "{name}의 연결이 해제되었습니다."
-      }
+      },
+      "loadError": "이 OpenAPI 작업을 불러오지 못했습니다. 대화 상자를 닫고 다시 시도하세요."
     },
     "perUserAuth": {
       "credentialField": {
@@ -5338,8 +5339,17 @@
           "disableAriaLabel": "{name} 비활성화",
           "enableAriaLabel": "{name} 활성화"
         },
-        "openApiSource": {
-          "label": "OpenAPI 작업 관리"
+        "manageOpenApi": {
+          "label": "OpenAPI 앱 관리"
+        },
+        "manageBuiltIn": {
+          "label": "기본 제공 앱 관리"
+        },
+        "manageMcp": {
+          "label": "MCP 서버 관리"
+        },
+        "editPermissions": {
+          "label": "권한 편집"
         }
       },
       "facts": {
@@ -5351,7 +5361,8 @@
         "perUserCredentials": "사용자별 자격 증명",
         "providedByOnyx": "Onyx 제공",
         "tools": "{count, plural, one {도구 #개} other {도구 #개}}",
-        "upstreamPatterns": "{count, plural, one {업스트림 패턴 #개} other {업스트림 패턴 #개}}"
+        "upstreamPatterns": "{count, plural, one {업스트림 패턴 #개} other {업스트림 패턴 #개}}",
+        "openApiAction": "OpenAPI 작업"
       },
       "loading": {
         "label": "불러오는 중…"
@@ -5386,7 +5397,8 @@
       },
       "warnings": {
         "invalidSkill": "잘못된 스킬",
-        "providerUnavailable": "제공업체 사용 불가"
+        "providerUnavailable": "제공업체 사용 불가",
+        "sourceActionDisabled": "원본 작업이 비활성화되어 있습니다"
       }
     },
     "federated": {
@@ -13633,6 +13645,10 @@
         "modal": {
           "description": "조직 전체에서 사용할 통합을 추가하세요. 기본 제공 제공업체에는 Craft 에이전트에게 사용법을 알려주는 작업이 포함되어 있습니다. 이미 구성된 제공업체는 표시되지 않습니다.",
           "title": "앱 추가"
+        },
+        "openApiHint": {
+          "label": "OpenAPI 사양이 있나요? 작업을 설정하고 Craft에서 활성화하세요.",
+          "openActionsButton": "OpenAPI 작업 열기"
         }
       },
       "associatedSkills": {
@@ -13700,7 +13716,9 @@
         },
         "managedDescription": "Onyx에서 제공합니다. 에이전트가 할 수 있는 작업을 구성하세요.",
         "managedNote": "이 앱은 Onyx에서 제공하며 자격 증명은 자동으로 관리됩니다. 아래에서 에이전트가 할 수 있는 작업을 선택하세요. 사용자는 앱 페이지에서 연결합니다.",
-        "saveButton": "저장"
+        "saveButton": "저장",
+        "permissionsDescription": "Craft 에이전트가 실행할 수 있는 작업을 선택하세요.",
+        "managedConfigurationDescription": "Onyx가 이 앱의 자격 증명을 관리합니다. 아래에서 연결된 스킬을 관리할 수 있습니다."
       },
       "customApp": {
         "cancelButton": "취소",
@@ -13819,7 +13837,9 @@
           "connectedNeedsSkills": "연결됨 · 일부 연결된 스킬이 비활성화되어 있습니다",
           "notAvailable": "회원님 계정에서는 사용할 수 없습니다. 관리자에게 문의하세요",
           "skillWarningAriaLabel": "스킬 설정 필요",
-          "skillWarningTooltip": "일부 연결된 스킬이 비활성화되어 있습니다. 이 앱이 올바르게 작동하지 않을 수 있습니다."
+          "skillWarningTooltip": "일부 연결된 스킬이 비활성화되어 있습니다. 이 앱이 올바르게 작동하지 않을 수 있습니다.",
+          "adminConfigured": "관리자가 구성함",
+          "adminConfiguredNeedsSkills": "관리자가 구성함 · 일부 연결된 스킬이 활성화되지 않았습니다"
         }
       },
       "policyEditor": {
@@ -13860,6 +13880,12 @@
           "connectFailedTitle": "연결할 수 없습니다"
         },
         "title": "{name} 연결"
+      },
+      "openApiPolicy": {
+        "title": "{name} 권한",
+        "description": "Craft 에이전트가 각 API 작업을 호출할 수 있는 조건을 선택하세요. 이 설정은 채팅 작업을 변경하지 않습니다.",
+        "emptyPolicies": "사용 가능한 API 작업이 없습니다. OpenAPI 앱 관리에서 설정을 확인하세요.",
+        "saveButton": "저장"
       }
     },
     "artifactsTab": {

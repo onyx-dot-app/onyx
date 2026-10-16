@@ -95,6 +95,7 @@ const APP: ExternalAppAdminResponse = {
     { id: "custom-skill", name: "slack-workflow", is_valid: true },
   ],
   is_onyx_managed: false,
+  available_in_craft: true,
 };
 
 function renderExistingProvider(onClose = jest.fn()) {
@@ -116,6 +117,70 @@ describe("ConfigureProviderModal", () => {
       data: { builtins: [], customs: [] },
       isLoading: false,
     });
+  });
+
+  it("saves configuration without submitting Craft policies", async () => {
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={DESCRIPTOR}
+        existingApp={APP}
+        mode="configuration"
+      />
+    );
+    expect(screen.queryByText("Permissions")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Token"), {
+      target: { value: "updated-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(7, {
+        name: "Slack",
+        upstream_url_patterns: DESCRIPTOR.upstream_url_patterns,
+        auth_template: DESCRIPTOR.auth_template,
+        organization_credentials: { token: "updated-token" },
+      })
+    );
+  });
+
+  it("saves permissions without submitting credentials or skill associations", async () => {
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={{
+          ...DESCRIPTOR,
+          actions: [
+            {
+              action_id: "read",
+              normalised_name: "Read",
+              description: "Read items",
+              default_policy: "ASK",
+            },
+            {
+              action_id: "write",
+              normalised_name: "Write",
+              description: "Write items",
+              default_policy: "ALWAYS",
+            },
+          ],
+        }}
+        existingApp={APP}
+        mode="permissions"
+      />
+    );
+    expect(screen.queryByPlaceholderText("Token")).not.toBeInTheDocument();
+    expect(screen.queryByText("slack-workflow")).not.toBeInTheDocument();
+    const denyRead = screen.getAllByRole("button", { name: "Deny" })[0];
+    if (!denyRead) throw new Error("Missing read policy control");
+    fireEvent.click(denyRead);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(7, {
+        action_policies: { read: "DENY" },
+      })
+    );
   });
 
   it("omits unchanged associations from a provider settings update", async () => {

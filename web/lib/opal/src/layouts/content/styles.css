@@ -101,6 +101,11 @@
   --content-foreground-icon: var(--interactive-foreground-icon);
 }
 
+/* Danger menu rows keep the normal action title; only the icon signals danger. */
+.interactive[data-line-item-button] [data-content-color="danger"] {
+  color: inherit;
+}
+
 /* A title override on an interactive Content holds at rest only: any
    hover, press, focus, selection or disabled state on the surface drops
    back to the inherited interactive foreground. */

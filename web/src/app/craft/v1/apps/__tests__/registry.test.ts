@@ -33,6 +33,7 @@ function configuredApp(
     actions: [],
     associated_skills: [],
     is_onyx_managed: false,
+    available_in_craft: true,
     ...overrides,
   };
 }

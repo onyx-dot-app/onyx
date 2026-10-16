@@ -6,7 +6,7 @@ import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@opal/utils";
 import { ActionStatus } from "@/lib/tools/types";
-import type { IconProps } from "@opal/types";
+import type { IconProps, RichStr } from "@opal/types";
 import { SvgServer } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 
@@ -18,6 +18,7 @@ export interface ActionCardProps {
 
   // Status
   status: ActionStatus;
+  statusLabel?: string | RichStr;
 
   // Header actions (right side of header)
   actions: React.ReactNode;
@@ -57,6 +58,7 @@ export default function ActionCard({
   description,
   icon,
   status,
+  statusLabel,
   actions,
   onEdit,
   onRename,
@@ -123,6 +125,7 @@ export default function ActionCard({
               description={description}
               icon={icon || SvgServer}
               status={status}
+              statusLabel={statusLabel}
               onEdit={onEdit}
               onRename={onRename}
             />

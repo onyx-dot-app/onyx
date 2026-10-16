@@ -182,11 +182,11 @@
       },
       "authStatus": {
         "configuredTitle": "Autenticación configurada",
-        "enabledTitle": "Autenticado y activado",
         "headersDescription": "Cabeceras de autenticación personalizadas configuradas",
         "oauthDescription": "Autenticación con OAuth configurada",
-        "oauthNamedDescription": "OAuth conectado a través de {name}",
-        "passthroughDescription": "Autenticación de paso directo activada"
+        "oauthNamedDescription": "OAuth configurado mediante {name}",
+        "passthroughDescription": "Autenticación de paso directo activada",
+        "noAuthTitle": "No se ha configurado la autenticación"
       },
       "cancelButton": {
         "label": "Cancelar"
@@ -206,7 +206,7 @@
       },
       "editConfigsButton": {
         "disabledTooltip": "Solo el creador de la acción o un administrador pueden gestionar la autenticación",
-        "label": "Editar la configuración"
+        "label": "Configurar autenticación"
       },
       "editHeader": {
         "description": "Actualiza el esquema de OpenAPI de esta acción.",
@@ -655,7 +655,8 @@
         "renameFailed": "No se pudo renombrar la acción de OpenAPI",
         "toolDeleted": "{name} se eliminó correctamente.",
         "toolDisconnected": "{name} se ha desconectado."
-      }
+      },
+      "loadError": "No se pudo cargar esta acción de OpenAPI. Cierra el diálogo e inténtalo de nuevo."
     },
     "perUserAuth": {
       "credentialField": {
@@ -5338,8 +5339,17 @@
           "disableAriaLabel": "Desactivar {name}",
           "enableAriaLabel": "Activar {name}"
         },
-        "openApiSource": {
-          "label": "Administrar acción OpenAPI"
+        "manageOpenApi": {
+          "label": "Gestionar app OpenAPI"
+        },
+        "manageBuiltIn": {
+          "label": "Gestionar app integrada"
+        },
+        "manageMcp": {
+          "label": "Gestionar servidores MCP"
+        },
+        "editPermissions": {
+          "label": "Editar permisos"
         }
       },
       "facts": {
@@ -5351,7 +5361,8 @@
         "perUserCredentials": "credenciales por usuario",
         "providedByOnyx": "proporcionada por Onyx",
         "tools": "{count, plural, one {# herramienta} other {# herramientas}}",
-        "upstreamPatterns": "{count, plural, one {# patrón upstream} other {# patrones upstream}}"
+        "upstreamPatterns": "{count, plural, one {# patrón upstream} other {# patrones upstream}}",
+        "openApiAction": "Acción OpenAPI"
       },
       "loading": {
         "label": "Cargando…"
@@ -5386,7 +5397,8 @@
       },
       "warnings": {
         "invalidSkill": "habilidad no válida",
-        "providerUnavailable": "proveedor no disponible"
+        "providerUnavailable": "proveedor no disponible",
+        "sourceActionDisabled": "La acción de origen está deshabilitada"
       }
     },
     "federated": {
@@ -13633,6 +13645,10 @@
         "modal": {
           "description": "Pon una integración a disposición de toda tu organización. Los proveedores integrados incluyen acciones que enseñan al agente de Craft a usarlos; los proveedores ya configurados no aparecen en la lista.",
           "title": "Añadir una app"
+        },
+        "openApiHint": {
+          "label": "¿Tienes una especificación OpenAPI? Configura una acción y habilítala para Craft.",
+          "openActionsButton": "Abrir acciones OpenAPI"
         }
       },
       "associatedSkills": {
@@ -13700,7 +13716,9 @@
         },
         "managedDescription": "Proporcionado por Onyx: configura qué puede hacer el agente.",
         "managedNote": "Esta app la proporciona Onyx: las credenciales se gestionan por ti. Elige abajo qué puede hacer el agente. Los usuarios la conectan desde la página de Apps.",
-        "saveButton": "Guardar"
+        "saveButton": "Guardar",
+        "permissionsDescription": "Elige qué acciones pueden ejecutar los agentes de Craft.",
+        "managedConfigurationDescription": "Onyx gestiona las credenciales de esta app. Puedes gestionar sus habilidades asociadas a continuación."
       },
       "customApp": {
         "cancelButton": "Cancelar",
@@ -13819,7 +13837,9 @@
           "connectedNeedsSkills": "Conectada · no todas las habilidades asociadas están habilitadas",
           "notAvailable": "No disponible para tu cuenta: consulta a un administrador",
           "skillWarningAriaLabel": "Se requiere configurar las habilidades",
-          "skillWarningTooltip": "No todas las habilidades asociadas están habilitadas. Puede que esta app no funcione correctamente."
+          "skillWarningTooltip": "No todas las habilidades asociadas están habilitadas. Puede que esta app no funcione correctamente.",
+          "adminConfigured": "Configurado por tu administrador",
+          "adminConfiguredNeedsSkills": "Configurado por tu administrador · no todas las habilidades asociadas están habilitadas"
         }
       },
       "policyEditor": {
@@ -13860,6 +13880,12 @@
           "connectFailedTitle": "No se pudo conectar"
         },
         "title": "Conectar {name}"
+      },
+      "openApiPolicy": {
+        "title": "Permisos de {name}",
+        "description": "Elige cuándo los agentes de Craft pueden llamar a cada operación de API. Estos ajustes no cambian las acciones del chat.",
+        "emptyPolicies": "No hay operaciones de API disponibles. Revisa la configuración en Gestionar app OpenAPI.",
+        "saveButton": "Guardar"
       }
     },
     "artifactsTab": {

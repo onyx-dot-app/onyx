@@ -15,7 +15,7 @@ import pytest
 from mitmproxy import http
 
 from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalApp, Tool
 from onyx.external_apps.matching.engine import (
     AmbiguousExternalAppTargetError,
     resolve_app_for_url,
@@ -91,6 +91,57 @@ def test_openapi_overlap_denies_before_resolving_credentials(
     monkeypatch.setattr(request_evaluator, "app_is_available", credentials)
     result = ExternalAppRequestEvaluator().evaluate(
         http.Request.make("GET", "https://slack.com/api/test"), "tenant", uuid4()
+    )
+    assert result is not None
+    assert result.governing_action.policy is EndpointPolicy.DENY
+    credentials.assert_not_called()
+
+
+@pytest.mark.parametrize("failure_point", ["recognize_actions", "app_is_available"])
+@pytest.mark.parametrize("source_owned", [True, False])
+def test_evaluation_failure_denies_only_source_owned_apps(
+    monkeypatch: pytest.MonkeyPatch, failure_point: str, source_owned: bool
+) -> None:
+    app = _app(["https://example.com/api/*"])
+    app.id = 1
+    app.openapi_tool_id = 2 if source_owned else None
+    monkeypatch.setattr(request_evaluator, "get_session_with_tenant", MagicMock())
+    monkeypatch.setattr(request_evaluator, "get_external_apps", lambda *_a, **_k: [app])
+    monkeypatch.setattr(
+        request_evaluator, "recognize_actions", MagicMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        request_evaluator, "app_is_available", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        request_evaluator, failure_point, MagicMock(side_effect=RuntimeError("failure"))
+    )
+    request = http.Request.make("GET", "https://example.com/api/items")
+    evaluator = ExternalAppRequestEvaluator()
+    if not source_owned:
+        with pytest.raises(RuntimeError, match="failure"):
+            evaluator.evaluate(request, "tenant", uuid4())
+        return
+    result = evaluator.evaluate(request, "tenant", uuid4())
+    assert result is not None
+    assert result.target.id == app.id
+    assert result.governing_action.policy is EndpointPolicy.DENY
+    assert result.governing_action.action_type == "openapi.unclassifiable"
+
+
+def test_legacy_invalid_openapi_schema_denies_before_credential_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app(["https://example.com/api/*"])
+    app.id = 1
+    app.openapi_tool_id = 2
+    app.openapi_tool = Tool(openapi_schema={}, available_in_craft=True)
+    monkeypatch.setattr(request_evaluator, "get_session_with_tenant", MagicMock())
+    monkeypatch.setattr(request_evaluator, "get_external_apps", lambda *_a, **_k: [app])
+    credentials = MagicMock(return_value=True)
+    monkeypatch.setattr(request_evaluator, "app_is_available", credentials)
+    result = ExternalAppRequestEvaluator().evaluate(
+        http.Request.make("GET", "https://example.com/api/items"), "tenant", uuid4()
     )
     assert result is not None
     assert result.governing_action.policy is EndpointPolicy.DENY

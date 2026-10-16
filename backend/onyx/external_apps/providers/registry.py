@@ -8,7 +8,8 @@ from onyx.external_apps.models import (
     EndpointDescriptor,
     OrgCredentialFieldDescriptor,
 )
-from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.external_apps.openapi import openapi_action_catalog
+from onyx.external_apps.providers.actions import CatalogAction, EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider, OnyxManagedExtApp
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
@@ -114,11 +115,25 @@ def _descriptor_for(
     )
 
 
-def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
-    """The action catalog for an app_type (empty for CUSTOM / unregistered),
-    minus the actions the OAuth grant in force can't cover. Every consumer
-    (admin view, policy resolution, the runtime gate) funnels through here, so
-    none of them can offer an action the grant won't authorize."""
+def get_endpoint_catalog(
+    app: ExternalAppType | ExternalApp,
+) -> list[CatalogAction]:
+    """Read source operations or the provider's scope-filtered action catalog.
+
+    Standalone custom apps have no catalog. Admin views, policy writes, and
+    runtime matching share this lookup so they recognize the same actions.
+    """
+    if isinstance(app, ExternalApp):
+        tool = app.openapi_tool
+        if tool is not None and tool.openapi_schema is not None:
+            try:
+                return openapi_action_catalog(tool.openapi_schema)
+            except OnyxError:
+                if tool.available_in_craft:
+                    raise
+                # Unpublished actions can use schemas unsupported by Craft.
+                return []
+    app_type = app.app_type if isinstance(app, ExternalApp) else app
     provider = PROVIDERS.get(app_type)
     if provider is None:
         return []
@@ -141,7 +156,7 @@ def withheld_on_cloud(app_type: ExternalAppType) -> list[EndpointSpec]:
 
 
 def effective_policy(
-    endpoint: EndpointSpec,
+    endpoint: CatalogAction,
     stored: dict[str, EndpointPolicy],
 ) -> EndpointPolicy:
     """Policy in force for ``endpoint``: the admin's stored override, else the
@@ -151,25 +166,8 @@ def effective_policy(
     return stored.get(endpoint.id, endpoint.default_policy)
 
 
-def validate_action_policies(
-    app_type: ExternalAppType,
-    policies: dict[str, EndpointPolicy],
-) -> dict[str, EndpointPolicy]:
-    """Validate admin-submitted ``{action_id: policy}`` against the provider
-    catalog: reject any id that doesn't exist for this ``app_type``. Returns the
-    validated map unchanged."""
-    valid_ids = {endpoint.id for endpoint in get_endpoint_catalog(app_type)}
-    for action_id in policies:
-        if action_id not in valid_ids:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Unknown action '{action_id}' for app type {app_type.value}.",
-            )
-    return policies
-
-
 def resolve_action_overrides(
-    app_type: ExternalAppType,
+    app: ExternalAppType | ExternalApp,
     requested: dict[str, EndpointPolicy] | None,
     existing: dict[str, EndpointPolicy],
 ) -> dict[str, EndpointPolicy]:
@@ -185,12 +183,17 @@ def resolve_action_overrides(
     next write). Raises if ``requested`` names an action id outside the catalog.
     """
     catalog_defaults: dict[str, EndpointPolicy] = {
-        endpoint.id: endpoint.default_policy
-        for endpoint in get_endpoint_catalog(app_type)
+        endpoint.id: endpoint.default_policy for endpoint in get_endpoint_catalog(app)
     }
     merged = dict(existing)
     if requested is not None:
-        merged.update(validate_action_policies(app_type, requested))
+        for action_id in requested:
+            if action_id not in catalog_defaults:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Unknown action '{action_id}' for this app.",
+                )
+        merged.update(requested)
     return {
         action_id: policy
         for action_id, policy in merged.items()
@@ -199,7 +202,7 @@ def resolve_action_overrides(
 
 
 def action_policy_views(
-    app_type: ExternalAppType,
+    app: ExternalAppType | ExternalApp,
     stored: dict[str, EndpointPolicy],
 ) -> list[ActionPolicyView]:
     """Merge the catalog with the admin's stored overrides: each action's
@@ -212,8 +215,10 @@ def action_policy_views(
             normalised_name=endpoint.normalised_name,
             description=endpoint.description,
             state=effective_policy(endpoint, stored),
+            method=endpoint.method,
+            path=endpoint.path,
         )
-        for endpoint in get_endpoint_catalog(app_type)
+        for endpoint in get_endpoint_catalog(app)
     ]
 
 

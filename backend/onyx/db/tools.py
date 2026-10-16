@@ -112,7 +112,7 @@ def get_tools_by_ids(
         return []
     stmt = select(Tool).where(Tool.id.in_(tool_ids)).order_by(Tool.id)
     if for_update:
-        stmt = stmt.with_for_update()
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return list(db_session.scalars(stmt).all())
 
 
@@ -121,7 +121,7 @@ def get_tool_by_id(
 ) -> Tool:
     stmt = select(Tool).where(Tool.id == tool_id)
     if for_update:
-        stmt = stmt.with_for_update()
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     tool = db_session.scalar(stmt)
     if not tool:
         raise ValueError("Tool by specified id does not exist")

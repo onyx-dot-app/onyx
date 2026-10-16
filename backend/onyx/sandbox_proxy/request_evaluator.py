@@ -1,8 +1,8 @@
 """Classify an intercepted HTTPS request into a gated action.
 
-The gate addon treats both a `None` return and any matcher exception as
-"not gated" — the real security boundary is the proxy's iptables egress
-lockdown, not this heuristic.
+The gate addon treats a `None` return and uncaught matcher exceptions as
+"not gated". Once attributed, OpenAPI and MCP requests fail closed when
+their policy cannot be evaluated.
 """
 
 import json
@@ -120,12 +120,30 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
                 path=(request.path or "").split("?", 1)[0],
                 body=request.raw_content,
             )
-            matched_actions = apply_credential_gate(
-                app,
-                proxied,
-                recognize_actions(db, app, proxied),
-                is_available=app_is_available(db, app, user_id),
-            )
+            try:
+                matched_actions = apply_credential_gate(
+                    app,
+                    proxied,
+                    recognize_actions(db, app, proxied),
+                    is_available=app_is_available(db, app, user_id),
+                )
+            except Exception:
+                if app.openapi_tool_id is None:
+                    raise
+                logger.exception("OpenAPI policy evaluation failed app_id=%s", app.id)
+                matched_actions = AllMatchedActions(
+                    target=GatedTarget(
+                        kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=app.name
+                    ),
+                    actions=(
+                        MatchedAction(
+                            action_type="openapi.unclassifiable",
+                            display_name="API policy unavailable",
+                            description="An admin must check this OpenAPI action before Craft can use it.",
+                            policy=EndpointPolicy.DENY,
+                        ),
+                    ),
+                )
             if matched_actions is None:
                 return None
 

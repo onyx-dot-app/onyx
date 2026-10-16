@@ -9,7 +9,10 @@ import {
   ExternalAppType,
 } from "@/app/craft/v1/apps/registry";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
-import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
+import {
+  OAUTH_POPUP_MESSAGE_SOURCE,
+  type OAuthPopupMessage,
+} from "@/app/craft/types/setupRequests";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
 async function readErrorDetail(
@@ -74,14 +77,14 @@ export async function createCustomExternalApp(
   return res.json();
 }
 
-interface UpdateExternalAppBody {
+export interface UpdateExternalAppBody {
   // Every field is optional; omit to leave the stored value untouched.
   enabled?: boolean;
   name?: string;
   upstream_url_patterns?: string[];
   auth_template?: Record<string, string>;
   organization_credentials?: Record<string, string>;
-  // Full replace when present; omit to leave stored policies untouched.
+  // Merge changed action policies; omit to leave stored policies untouched.
   action_policies?: Record<string, EndpointPolicy>;
   // Full replacement of the app's custom-skill associations. Provider-owned
   // built-in skills are preserved by the backend.
@@ -90,8 +93,8 @@ interface UpdateExternalAppBody {
 
 /**
  * Partial update of any app (PATCH /admin/apps/{id}). For Onyx-managed built-ins
- * the gateway-config fields are ignored server-side (only policies
- * apply).
+ * gateway-config fields are ignored; availability, policies, and skill links
+ * remain editable.
  */
 export async function updateExternalApp(
   id: number,
@@ -210,7 +213,10 @@ export async function disconnectUserFromApp(
 export function completeExternalAppOAuthPopup(externalAppId: number): boolean {
   if (!window.opener) return false;
   window.opener.postMessage(
-    { source: OAUTH_POPUP_MESSAGE_SOURCE, externalAppId },
+    {
+      source: OAUTH_POPUP_MESSAGE_SOURCE,
+      externalAppId,
+    } satisfies OAuthPopupMessage,
     window.location.origin
   );
   window.close();

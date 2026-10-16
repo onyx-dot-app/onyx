@@ -182,11 +182,11 @@
       },
       "authStatus": {
         "configuredTitle": "تم تهيئة المصادقة",
-        "enabledTitle": "تمت المصادقة والتفعيل",
         "headersDescription": "تم تهيئة ترويسات مصادقة مخصصة",
         "oauthDescription": "تم تهيئة مصادقة OAuth",
-        "oauthNamedDescription": "OAuth متصل عبر {name}",
-        "passthroughDescription": "تم تفعيل مصادقة التمرير المباشر"
+        "oauthNamedDescription": "تمت تهيئة OAuth عبر {name}",
+        "passthroughDescription": "تم تفعيل مصادقة التمرير المباشر",
+        "noAuthTitle": "لم تتم تهيئة المصادقة"
       },
       "cancelButton": {
         "label": "إلغاء"
@@ -206,7 +206,7 @@
       },
       "editConfigsButton": {
         "disabledTooltip": "يمكن لمنشئ الإجراء أو المسؤول فقط إدارة المصادقة",
-        "label": "تعديل الإعدادات"
+        "label": "تهيئة المصادقة"
       },
       "editHeader": {
         "description": "حدّث مخطط OpenAPI لهذا الإجراء.",
@@ -655,7 +655,8 @@
         "renameFailed": "فشلت إعادة تسمية إجراء OpenAPI",
         "toolDeleted": "تم حذف {name} بنجاح.",
         "toolDisconnected": "تم قطع الاتصال بـ {name}."
-      }
+      },
+      "loadError": "تعذر تحميل إجراء OpenAPI هذا. أغلق مربع الحوار وحاول مرة أخرى."
     },
     "perUserAuth": {
       "credentialField": {
@@ -5338,8 +5339,17 @@
           "disableAriaLabel": "تعطيل {name}",
           "enableAriaLabel": "تفعيل {name}"
         },
-        "openApiSource": {
-          "label": "إدارة إجراء OpenAPI"
+        "manageOpenApi": {
+          "label": "إدارة تطبيق OpenAPI"
+        },
+        "manageBuiltIn": {
+          "label": "إدارة التطبيق المدمج"
+        },
+        "manageMcp": {
+          "label": "إدارة خوادم MCP"
+        },
+        "editPermissions": {
+          "label": "تعديل الأذونات"
         }
       },
       "facts": {
@@ -5351,7 +5361,8 @@
         "perUserCredentials": "بيانات اعتماد لكل مستخدم",
         "providedByOnyx": "مقدَّم من Onyx",
         "tools": "{count, plural, one {# أداة} other {# أدوات}}",
-        "upstreamPatterns": "{count, plural, one {# نمط منبع} other {# أنماط منبع}}"
+        "upstreamPatterns": "{count, plural, one {# نمط منبع} other {# أنماط منبع}}",
+        "openApiAction": "إجراء OpenAPI"
       },
       "loading": {
         "label": "جارٍ التحميل…"
@@ -5386,7 +5397,8 @@
       },
       "warnings": {
         "invalidSkill": "مهارة غير صالحة",
-        "providerUnavailable": "الموفر غير متاح"
+        "providerUnavailable": "الموفر غير متاح",
+        "sourceActionDisabled": "الإجراء المصدر معطّل"
       }
     },
     "federated": {
@@ -13633,6 +13645,10 @@
         "modal": {
           "description": "أتح تكاملًا لمؤسستك بأكملها. يأتي المزوّدون المدمجون بإجراءات تعلّم وكيل Craft كيفية استخدامها؛ ولا يتم إدراج المزوّدين الذين تم إعدادهم بالفعل.",
           "title": "إضافة تطبيق"
+        },
+        "openApiHint": {
+          "label": "هل لديك مواصفة OpenAPI؟ أعدّ إجراءً وفعّله في Craft.",
+          "openActionsButton": "فتح إجراءات OpenAPI"
         }
       },
       "associatedSkills": {
@@ -13700,7 +13716,9 @@
         },
         "managedDescription": "مقدَّم من Onyx: قم بإعداد ما يمكن للوكيل فعله.",
         "managedNote": "هذا التطبيق مقدَّم من Onyx، وتُدار بيانات الاعتماد نيابةً عنك. اختر أدناه ما يمكن للوكيل فعله. يقوم المستخدمون بتوصيله من صفحة التطبيقات.",
-        "saveButton": "حفظ"
+        "saveButton": "حفظ",
+        "permissionsDescription": "اختر الإجراءات التي يمكن لوكلاء Craft تنفيذها.",
+        "managedConfigurationDescription": "تدير Onyx بيانات اعتماد هذا التطبيق. يمكنك إدارة المهارات المرتبطة به أدناه."
       },
       "customApp": {
         "cancelButton": "إلغاء",
@@ -13819,7 +13837,9 @@
           "connectedNeedsSkills": "متصل · ليست كل المهارات المرتبطة مفعّلة",
           "notAvailable": "غير متاح لحسابك، اسأل أحد المسؤولين",
           "skillWarningAriaLabel": "مطلوب إعداد المهارات",
-          "skillWarningTooltip": "ليست كل المهارات المرتبطة مفعّلة. قد لا يعمل هذا التطبيق بشكل صحيح."
+          "skillWarningTooltip": "ليست كل المهارات المرتبطة مفعّلة. قد لا يعمل هذا التطبيق بشكل صحيح.",
+          "adminConfigured": "تم الإعداد بواسطة المسؤول",
+          "adminConfiguredNeedsSkills": "تم الإعداد بواسطة المسؤول · ليست كل المهارات المرتبطة مفعّلة"
         }
       },
       "policyEditor": {
@@ -13860,6 +13880,12 @@
           "connectFailedTitle": "تعذّر الاتصال"
         },
         "title": "توصيل {name}"
+      },
+      "openApiPolicy": {
+        "title": "أذونات {name}",
+        "description": "اختر متى يمكن لوكلاء Craft استدعاء كل عملية API. لا تغير هذه الإعدادات إجراءات الدردشة.",
+        "emptyPolicies": "لا توجد عمليات API متاحة. تحقق من الإعدادات ضمن إدارة تطبيق OpenAPI.",
+        "saveButton": "حفظ"
       }
     },
     "artifactsTab": {

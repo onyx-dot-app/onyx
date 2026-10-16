@@ -262,6 +262,7 @@ function LineItemButton({
       disabled={disabled}
     >
       <Interactive.Container
+        data-line-item-button=""
         width={width}
         size="fit"
         rounding={rounding}

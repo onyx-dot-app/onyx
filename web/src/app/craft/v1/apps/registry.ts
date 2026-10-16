@@ -70,6 +70,8 @@ export interface EndpointDescriptor {
 }
 
 export interface ActionPolicyView {
+  method?: string | null;
+  path?: string | null;
   action_id: string;
   normalised_name: string;
   description: string;
@@ -87,6 +89,7 @@ export interface BuiltInExternalAppDescriptor {
 }
 
 export interface ExternalAppAdminResponse {
+  available_in_craft: boolean;
   openapi_tool_id?: number | null;
   id: number;
   name: string;

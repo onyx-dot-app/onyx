@@ -182,11 +182,11 @@
       },
       "authStatus": {
         "configuredTitle": "認証を設定済み",
-        "enabledTitle": "認証済み・有効",
         "headersDescription": "カスタム認証ヘッダーを設定済み",
         "oauthDescription": "OAuth 認証を設定済み",
-        "oauthNamedDescription": "{name} 経由で OAuth 接続済み",
-        "passthroughDescription": "パススルー認証が有効です"
+        "oauthNamedDescription": "{name} 経由で OAuth を設定済み",
+        "passthroughDescription": "パススルー認証が有効です",
+        "noAuthTitle": "認証は未設定です"
       },
       "cancelButton": {
         "label": "キャンセル"
@@ -206,7 +206,7 @@
       },
       "editConfigsButton": {
         "disabledTooltip": "認証を管理できるのは、アクションの作成者または管理者のみです",
-        "label": "設定を編集"
+        "label": "認証を設定"
       },
       "editHeader": {
         "description": "このアクションの OpenAPI スキーマを更新します。",
@@ -655,7 +655,8 @@
         "renameFailed": "OpenAPI アクションの名前の変更に失敗しました",
         "toolDeleted": "{name} を削除しました。",
         "toolDisconnected": "{name} を切断しました。"
-      }
+      },
+      "loadError": "この OpenAPI アクションを読み込めませんでした。ダイアログを閉じて、もう一度お試しください。"
     },
     "perUserAuth": {
       "credentialField": {
@@ -5338,8 +5339,17 @@
           "disableAriaLabel": "{name} を無効にする",
           "enableAriaLabel": "{name} を有効にする"
         },
-        "openApiSource": {
-          "label": "OpenAPI アクションを管理"
+        "manageOpenApi": {
+          "label": "OpenAPI アプリを管理"
+        },
+        "manageBuiltIn": {
+          "label": "組み込みアプリを管理"
+        },
+        "manageMcp": {
+          "label": "MCP サーバーを管理"
+        },
+        "editPermissions": {
+          "label": "権限を編集"
         }
       },
       "facts": {
@@ -5351,7 +5361,8 @@
         "perUserCredentials": "ユーザーごとの認証情報",
         "providedByOnyx": "Onyx が提供",
         "tools": "{count, plural, one {ツール # 個} other {ツール # 個}}",
-        "upstreamPatterns": "{count, plural, one {アップストリームパターン # 件} other {アップストリームパターン # 件}}"
+        "upstreamPatterns": "{count, plural, one {アップストリームパターン # 件} other {アップストリームパターン # 件}}",
+        "openApiAction": "OpenAPI アクション"
       },
       "loading": {
         "label": "読み込んでいます…"
@@ -5386,7 +5397,8 @@
       },
       "warnings": {
         "invalidSkill": "無効なスキル",
-        "providerUnavailable": "プロバイダーを利用できません"
+        "providerUnavailable": "プロバイダーを利用できません",
+        "sourceActionDisabled": "元のアクションが無効です"
       }
     },
     "federated": {
@@ -13633,6 +13645,10 @@
         "modal": {
           "description": "組織全体で使えるインテグレーションを追加します。組み込みプロバイダーには Craft エージェントに使い方を教えるアクションが付属しています。設定済みのプロバイダーは表示されません。",
           "title": "アプリを追加"
+        },
+        "openApiHint": {
+          "label": "OpenAPI 仕様をお持ちですか？アクションを設定し、Craft で有効にしてください。",
+          "openActionsButton": "OpenAPI アクションを開く"
         }
       },
       "associatedSkills": {
@@ -13700,7 +13716,9 @@
         },
         "managedDescription": "Onyx が提供。エージェントに許可する操作を設定してください。",
         "managedNote": "このアプリは Onyx が提供し、認証情報は自動的に管理されます。以下でエージェントに許可する操作を選択してください。ユーザーはアプリページから接続します。",
-        "saveButton": "保存"
+        "saveButton": "保存",
+        "permissionsDescription": "Craft エージェントが実行できるアクションを選択します。",
+        "managedConfigurationDescription": "このアプリの認証情報は Onyx が管理します。関連スキルは以下で管理できます。"
       },
       "customApp": {
         "cancelButton": "キャンセル",
@@ -13819,7 +13837,9 @@
           "connectedNeedsSkills": "接続済み · 一部の関連スキルが無効です",
           "notAvailable": "お使いのアカウントでは利用できません。管理者にお問い合わせください",
           "skillWarningAriaLabel": "スキルの設定が必要です",
-          "skillWarningTooltip": "一部の関連スキルが無効です。このアプリは正しく動作しない可能性があります。"
+          "skillWarningTooltip": "一部の関連スキルが無効です。このアプリは正しく動作しない可能性があります。",
+          "adminConfigured": "管理者が設定済み",
+          "adminConfiguredNeedsSkills": "管理者が設定済み · 一部の関連スキルが有効になっていません"
         }
       },
       "policyEditor": {
@@ -13860,6 +13880,12 @@
           "connectFailedTitle": "接続できませんでした"
         },
         "title": "{name} を接続"
+      },
+      "openApiPolicy": {
+        "title": "{name} の権限",
+        "description": "Craft エージェントが各 API 操作を呼び出せる条件を選択します。チャットのアクションは変更されません。",
+        "emptyPolicies": "API 操作がありません。「OpenAPI アプリを管理」で設定を確認してください。",
+        "saveButton": "保存"
       }
     },
     "artifactsTab": {

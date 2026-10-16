@@ -205,9 +205,13 @@ def recognize_actions(
     the caller's job (see ``apply_credential_gate``). ``payload`` is left empty here; refill
     it via ``model_copy``.
     """
+    if app.openapi_tool_id is not None:
+        request = request.model_copy(
+            update={"path": normalized_request_path(request.path)}
+        )
     context = MatchContext(request)
     stored = get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id)
-    catalog = get_endpoint_catalog(app.app_type)
+    catalog = get_endpoint_catalog(app)
     matched = [
         MatchedAction(
             action_type=endpoint.id,

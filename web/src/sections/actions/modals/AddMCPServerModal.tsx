@@ -21,7 +21,6 @@ import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { Button, Divider } from "@opal/components";
-import type { ModalCreationInterface } from "@opal/components";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -30,9 +29,7 @@ import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
   activeServer: MCPServer | null;
-  setActiveServer: (server: MCPServer | null) => void;
-  disconnectModal: ModalCreationInterface;
-  manageServerModal: ModalCreationInterface;
+  onDisconnect: (serverId: number) => void;
   onServerCreated?: (server: MCPServer) => void;
   handleAuthenticate: (serverId: number) => void;
   mutateMcpServers?: () => Promise<void>;
@@ -41,8 +38,7 @@ interface AddMCPServerModalProps {
 export default function AddMCPServerModal({
   skipOverlay = false,
   activeServer,
-  disconnectModal,
-  manageServerModal,
+  onDisconnect,
   onServerCreated,
   handleAuthenticate,
   mutateMcpServers,
@@ -68,9 +64,7 @@ export default function AddMCPServerModal({
   // Handler for disconnect button
   const handleDisconnectClick = () => {
     if (activeServer) {
-      // Server stays the same, just toggle modals
-      manageServerModal.toggle(false);
-      disconnectModal.toggle(true);
+      onDisconnect(activeServer.id);
     }
   };
 
@@ -264,14 +258,13 @@ export default function AddMCPServerModal({
                           prominence="tertiary"
                           type="button"
                           tooltip={t("addMcpModal.disconnectButton.tooltip")}
+                          aria-label={t("addMcpModal.disconnectButton.tooltip")}
                           onClick={handleDisconnectClick}
                         />
                         <Button
                           prominence="secondary"
                           type="button"
                           onClick={() => {
-                            // Close this modal and open the auth modal for this server
-                            toggle(false);
                             handleAuthenticate(server.id);
                           }}
                         >

@@ -525,6 +525,8 @@ they can never disagree about which server owns a request; see
 ### OpenAPI-owned apps
 
 An OpenAPI action can publish a custom app without creating skills or importing tools.
+Manage Apps can toggle the source action's `available_in_craft` through the existing custom-tool update endpoint.
+Admin snapshots distinguish this requested setting from effective `enabled` state when the source action is disabled.
 `external_apps/openapi.py` uses the existing OpenAPI parser to select the action's single root server.
 Craft rejects operation-level server overrides, which chat actions do not apply.
 Credentials cover the server's origin and base path, including descendant paths.
@@ -543,9 +545,19 @@ Connection status checks token presence and expiry or refreshability without con
 Craft starts `/oauth-config/initiate` and returns through `/oauth-config/callback` to the Craft Apps page.
 The Apps page checks connection status before completing the popup. Disconnect revokes the shared custom-action connection.
 Passthrough apps use the caller's Onyx login token and have no separate connection form.
+The Apps page labels apps without a personal connection as **Configured by your admin**.
+This includes no-auth, organization-managed credentials, and available passthrough apps or MCP servers.
+This status describes configuration; it does not verify authentication with the upstream service.
+**Connected** identifies a personal OAuth or credential connection. Skill-setup warnings remain visible in either case.
 Missing required OAuth or passthrough credentials block requests, even when shared headers exist.
 OAuth takes precedence over passthrough and replaces any shared Authorization header.
-Requests use the existing custom-app approval flow, with `ASK` as the default.
+OpenAPI operations form a dynamic action catalog for the existing approval flow, with `ASK` as the default.
+Full admins set per-operation `ALWAYS`, `ASK`, or `DENY` policies through **Edit permissions** on the Craft Apps page.
+The existing admin app response exposes these actions, and its policy update endpoint saves their overrides.
+Policy identities bind the destination server, HTTP method, and path template.
+Operation names remain display labels; renaming a label does not reset its policy.
+Changing the server or route creates a different policy identity and does not reuse existing approval grants.
+Requests within the server scope that match no operation retain the whole-domain `ASK` fallback.
 If multiple enabled apps match a URL and one belongs to OpenAPI, the proxy denies the request.
 Before injection, the proxy repeats attribution for every app, including checks for new OpenAPI overlaps.
 The check runs after token refresh in a fresh database session and compares the source authentication settings.
@@ -633,7 +645,8 @@ This prevents an approval or refresh wait from using credentials after the desti
    security boundary, not the matcher.** A bug in `recognize_actions` must
    not become a way to reach an internal address or bypass the CA/identity
    layers; it only affects whether a request looks like an app action versus
-   general internet traffic. An explicit ambiguous OpenAPI URL match produces `DENY`;
+   general internet traffic. OpenAPI catalog or recognition failures produce `DENY` after app attribution.
+   An explicit ambiguous OpenAPI URL match also produces `DENY`;
    credential injection repeats this attribution check. MCP is different. After `McpRequestEvaluator`
    attributes a request to a server, an exception from
    `classify_mcp_request` becomes a synthetic `DENY` (fail closed).

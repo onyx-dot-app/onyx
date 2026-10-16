@@ -107,6 +107,20 @@ or clearing the checkbox disables its app. Deleting the action deletes its app.
 Full admin access is required to change an action with a linked Craft app, even when disabled.
 Craft users still need API documentation or endpoint context to use the API.
 
+Craft Manage Apps can change the source action's Craft availability without enabling the action itself.
+Its **Edit permissions** menu item opens Craft's per-operation policy editor.
+**Manage OpenAPI app** opens the shared OpenAPI configuration dialog in place.
+`web/src/sections/actions/OpenApiActionDialogs.tsx` owns the schema, authentication, and disconnect flow for both pages.
+Existing actions expose authentication settings even when disabled or configured without authentication.
+Authentication labels describe saved configuration, not a verified user connection.
+
+Full admins set Craft policies for individual operations on the Craft Apps page.
+The controls reuse Craft's **Ask**, **Auto-approve**, and **Deny** policies.
+They govern sandbox requests. The main OpenAPI action list has no approval controls because Chat has no approval flow.
+Policies use the linked external app's existing action-policy API and storage.
+Each policy identifies the destination server, HTTP method, and path template.
+Changing the destination or route therefore does not transfer an old allowance to the new operation.
+
 Once created, either kind of tool is attached to a persona (agent) the same
 way a built-in tool is, and shows up in chat as a tool call block. If the
 server is down or a credential is missing, the user sees a tool-call error
@@ -122,6 +136,14 @@ inline, not a broken turn.
 |---|---|---|
 | `/admin/mcp-actions` | `web/src/app/admin/mcp-actions/page.tsx` | `MCPPageContent` (`web/src/sections/actions/MCPPageContent.tsx`) |
 | `/admin/openapi-actions` | `web/src/app/admin/openapi-actions/page.tsx` | `OpenApiPageContent` (`web/src/sections/actions/OpenApiPageContent.tsx`) |
+
+Craft Apps and the main MCP Actions page share source management through
+`McpServerDialogs` (`web/src/sections/actions/McpServerDialogs.tsx`). The controller owns configuration,
+authentication, disconnect, deletion, and creation transitions.
+Successful changes refresh the calling page before the workflow closes.
+Non-OAuth authentication refreshes tools in place. OAuth keeps the existing
+return route to MCP Actions, whose query handler fetches tools once.
+Craft's separate **Edit permissions** menu changes only tool approval policies.
 
 ### HTTP endpoints, MCP (`backend/onyx/server/features/mcp/api.py`, prefixes `/mcp` and `/admin/mcp`)
 

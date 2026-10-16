@@ -4,14 +4,14 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Button, Card, Tabs, Text } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { SvgArrowLeft, SvgPlus, SvgSettings } from "@opal/icons";
-import { MCPServer, MCPServersResponse } from "@/lib/mcp/types";
+import { MCPServersResponse } from "@/lib/mcp/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
@@ -21,6 +21,9 @@ import {
 import AddAppCatalogModal from "@/app/craft/v1/apps/admin/AddAppCatalogModal";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
+import McpServerDialogs from "@/sections/actions/McpServerDialogs";
+import OpenApiActionEditor from "@/sections/actions/OpenApiActionEditor";
+import OpenApiAppPolicyModal from "@/app/craft/v1/apps/admin/OpenApiAppPolicyModal";
 import McpServerPolicyModal from "@/app/craft/v1/apps/admin/McpServerPolicyModal";
 import {
   ConnectableKind,
@@ -37,7 +40,17 @@ import {
 } from "@/views/admin/ExternalAppsPage/integrations";
 import IntegrationCard from "@/views/admin/ExternalAppsPage/IntegrationCard";
 
+interface SourceEditorSelection {
+  kind:
+    | "openapi-configuration"
+    | "openapi-permissions"
+    | "mcp-configuration"
+    | "mcp-permissions";
+  id: number;
+}
+
 interface ModalState {
+  mode?: "configuration" | "permissions";
   descriptor: BuiltInExternalAppDescriptor;
   existingApp: ExternalAppAdminResponse | null;
 }
@@ -103,6 +116,7 @@ function AppsAdminContent({
 }: AppsAdminContentProps) {
   const t = useTranslations("admin.externalApps");
   const router = useRouter();
+  const { mutate } = useSWRConfig();
   const searchParams = useSearchParams();
   const { data: descriptors } = useSWR<BuiltInExternalAppDescriptor[]>(
     SWR_KEYS.buildExternalAppsBuiltInOptions,
@@ -126,7 +140,8 @@ function AppsAdminContent({
   const [customModal, setCustomModal] = useState<{
     existingApp: ExternalAppAdminResponse | null;
   } | null>(null);
-  const [editServer, setEditServer] = useState<MCPServer | null>(null);
+  const [sourceEditor, setSourceEditor] =
+    useState<SourceEditorSelection | null>(null);
   const [dismissedDeepLink, setDismissedDeepLink] = useState<string | null>(
     null
   );
@@ -157,6 +172,10 @@ function AppsAdminContent({
   const deepLinkedDescriptor = deepLinkedApp
     ? descriptorByAppType.get(deepLinkedApp.app_type)
     : undefined;
+  const selectedServer = mcpData?.mcp_servers.find(
+    (server) => server.id === sourceEditor?.id
+  );
+  const selectedApp = apps?.find((app) => app.id === sourceEditor?.id);
   const activeCustomModal =
     customModal ??
     (deepLinkedApp?.app_type === "CUSTOM" &&
@@ -166,7 +185,11 @@ function AppsAdminContent({
   const activeProviderModal =
     modalState ??
     (deepLinkedApp && deepLinkedDescriptor
-      ? { descriptor: deepLinkedDescriptor, existingApp: deepLinkedApp }
+      ? {
+          descriptor: deepLinkedDescriptor,
+          existingApp: deepLinkedApp,
+          mode: "configuration" as const,
+        }
       : null);
 
   function closeAppModal() {
@@ -187,6 +210,13 @@ function AppsAdminContent({
       noCustomSkills: t("facts.noCustomSkills"),
       invalidSkill: t("warnings.invalidSkill"),
       providerUnavailable: t("warnings.providerUnavailable"),
+      sourceActionDisabled: t("warnings.sourceActionDisabled"),
+      openApiAction: t("facts.openApiAction"),
+      editAction: t("card.editAction.label"),
+      editPermissions: t("card.editPermissions.label"),
+      manageOpenApi: t("card.manageOpenApi.label"),
+      manageBuiltIn: t("card.manageBuiltIn.label"),
+      manageMcp: t("card.manageMcp.label"),
       upstreamPatternCount: (count) => t("facts.upstreamPatterns", { count }),
       actionCount: (count) => t("facts.actions", { count }),
       customSkillCount: (count) => t("facts.customSkills", { count }),
@@ -205,12 +235,27 @@ function AppsAdminContent({
             app,
             descriptorByAppType.get(app.app_type),
             {
-              onEdit: (descriptor) =>
-                setModalState({ descriptor, existingApp: app }),
-              onEditCustom: (customApp) =>
-                setCustomModal({ existingApp: customApp }),
+              onEdit: (descriptor, mode) =>
+                setModalState({ descriptor, existingApp: app, mode }),
+              onManageOpenApi: (app) =>
+                setSourceEditor({ kind: "openapi-configuration", id: app.id }),
+              onEditCustom: (customApp) => {
+                if (customApp.openapi_tool_id != null) {
+                  setSourceEditor({
+                    kind: "openapi-permissions",
+                    id: customApp.id,
+                  });
+                } else {
+                  setCustomModal({ existingApp: customApp });
+                }
+              },
               onChange: async () => {
-                await mutateApps();
+                await Promise.all([
+                  mutateApps(),
+                  ...(app.openapi_tool_id != null
+                    ? [mutate(SWR_KEYS.openApiTools)]
+                    : []),
+                ]);
               },
             },
             integrationLabels
@@ -222,7 +267,10 @@ function AppsAdminContent({
           mcpServerToIntegration(
             server,
             {
-              onEdit: () => setEditServer(server),
+              onEdit: () =>
+                setSourceEditor({ kind: "mcp-permissions", id: server.id }),
+              onManage: () =>
+                setSourceEditor({ kind: "mcp-configuration", id: server.id }),
               onChange: async () => {
                 await mutateMcp();
               },
@@ -237,6 +285,7 @@ function AppsAdminContent({
       mcpData,
       descriptorByAppType,
       mutateApps,
+      mutate,
       mutateMcp,
       integrationLabels,
     ]
@@ -358,7 +407,10 @@ function AppsAdminContent({
             activeProviderModal.descriptor.app_type
           }
           onClose={closeAppModal}
-          onSaved={() => mutateApps()}
+          onSaved={async () => {
+            await mutateApps();
+          }}
+          mode={activeProviderModal.mode}
           descriptor={activeProviderModal.descriptor}
           existingApp={activeProviderModal.existingApp}
         />
@@ -368,17 +420,53 @@ function AppsAdminContent({
         <CreateCustomAppModal
           key={activeCustomModal.existingApp?.id ?? "new"}
           onClose={closeAppModal}
-          onSaved={() => mutateApps()}
+          onSaved={async () => {
+            await mutateApps();
+          }}
           existingApp={activeCustomModal.existingApp}
         />
       )}
 
-      {editServer && (
+      {sourceEditor?.kind === "openapi-permissions" && selectedApp && (
+        <OpenApiAppPolicyModal
+          key={selectedApp.id}
+          app={selectedApp}
+          onClose={() => setSourceEditor(null)}
+          onChanged={async () => {
+            await mutateApps();
+          }}
+        />
+      )}
+      {sourceEditor?.kind === "openapi-configuration" &&
+        selectedApp?.openapi_tool_id != null && (
+          <OpenApiActionEditor
+            key={selectedApp.id}
+            toolId={selectedApp.openapi_tool_id}
+            name={selectedApp.name}
+            onClose={() => setSourceEditor(null)}
+            onChanged={async () => {
+              await mutateApps();
+            }}
+          />
+        )}
+      {sourceEditor?.kind === "mcp-configuration" && selectedServer && (
+        <McpServerDialogs
+          servers={mcpData?.mcp_servers ?? []}
+          initialServer={selectedServer}
+          onClosed={() => setSourceEditor(null)}
+          onChanged={async () => {
+            await mutateMcp();
+          }}
+        />
+      )}
+      {sourceEditor?.kind === "mcp-permissions" && selectedServer && (
         <McpServerPolicyModal
-          key={editServer.id}
-          onClose={() => setEditServer(null)}
-          onSaved={() => mutateMcp()}
-          server={editServer}
+          key={selectedServer.id}
+          server={selectedServer}
+          onClose={() => setSourceEditor(null)}
+          onSaved={async () => {
+            await mutateMcp();
+          }}
         />
       )}
     </div>
@@ -430,9 +518,11 @@ function IntegrationPanel({
         </Text>
         {blurbAction}
       </div>
-      {integrations.map((integration) => (
-        <IntegrationCard key={integration.key} integration={integration} />
-      ))}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+        {integrations.map((integration) => (
+          <IntegrationCard key={integration.key} integration={integration} />
+        ))}
+      </div>
     </div>
   );
 }

@@ -131,3 +131,33 @@ describe("ActionPolicyEditorModal permissions", () => {
     );
   });
 });
+
+it("keeps its opening baseline when parent data refreshes", () => {
+  const props = {
+    onClose: jest.fn(),
+    title: "App settings",
+    description: "Configure this app",
+    fields: [],
+    initialFieldValues: {},
+    policyItems: ITEMS,
+    emptyPoliciesMessage: "No actions",
+    saveLabel: "Save",
+    onSave: jest.fn(),
+  };
+  const { rerender } = render(
+    <ActionPolicyEditorModal
+      {...props}
+      initialPolicies={{ read: "ALWAYS", write: "ASK" }}
+    />
+  );
+  rerender(
+    <ActionPolicyEditorModal
+      {...props}
+      initialPolicies={{ read: "DENY", write: "DENY" }}
+    />
+  );
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "Permissions" })).toHaveValue(
+    "Default"
+  );
+});

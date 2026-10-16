@@ -34,6 +34,7 @@ from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.oauth_config import delete_user_oauth_token, get_user_oauth_token
 from onyx.db.skill import affected_user_ids_for_skill
+from onyx.db.tools import get_tool_by_id
 from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -63,10 +64,12 @@ from onyx.server.features.build.external_apps.models import (
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from onyx.utils.encryption import mask_string
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
+logger = setup_logger()
 
 admin_router = APIRouter()
 
@@ -88,6 +91,14 @@ def _to_admin_response(
 ) -> ExternalAppAdminResponse:
     # ``stored`` is the app's per-action policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
+    try:
+        actions = action_policy_views(app, stored)
+    except OnyxError:
+        if app.openapi_tool_id is None:
+            raise
+        # Legacy source schemas may predate Craft's route validation.
+        logger.warning("Invalid OpenAPI policy catalog for app_id=%s", app.id)
+        actions = []
     return ExternalAppAdminResponse(
         id=app.id,
         openapi_tool_id=app.openapi_tool_id,
@@ -103,8 +114,13 @@ def _to_admin_response(
         credential_placeholder_keys=(
             [] if managed else sorted(placeholders_in_template(app.auth_template))
         ),
+        available_in_craft=(
+            app.openapi_tool.available_in_craft
+            if app.openapi_tool is not None
+            else app.enabled
+        ),
         enabled=app.enabled,
-        actions=action_policy_views(app.app_type, stored),
+        actions=actions,
         associated_skills=[
             ExternalAppAssociatedSkill(
                 id=skill.id,
@@ -226,6 +242,9 @@ def update_external_app_admin(
     are Onyx-owned and ignored — only ``enabled`` and ``action_policies`` apply.
     """
     app = _get_app_or_404(db_session, external_app_id)
+    if app.openapi_tool_id is not None:
+        # Source edits take this lock before syncing the gateway and policies.
+        get_tool_by_id(app.openapi_tool_id, db_session, for_update=True)
     if app.openapi_tool_id is not None and any(
         value is not None
         for value in (
@@ -254,7 +273,7 @@ def update_external_app_admin(
             UrlGlob.parse(pattern)
 
     action_policies = resolve_action_overrides(
-        app.app_type,
+        app,
         request.action_policies,
         get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_id),
     )
@@ -346,7 +365,7 @@ def list_external_apps_admin(
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppAdminResponse]:
     """List all external apps with admin-only fields (org credentials, auth template)."""
-    apps = get_external_apps(db_session=db_session)
+    apps = get_external_apps(db_session=db_session, include_openapi_tool=True)
     # One policy query per app; admin app lists are small.
     return [
         _to_admin_response(
@@ -476,7 +495,7 @@ def list_external_apps(
     exposed.
     """
     apps = get_external_apps(
-        db_session=db_session, enabled_only=True, include_openapi_auth=True
+        db_session=db_session, enabled_only=True, include_openapi_tool=True
     )
     user_creds_by_app = get_user_credentials_by_app_id(
         db_session=db_session, user_id=user.id

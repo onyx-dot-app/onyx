@@ -19,7 +19,7 @@ interface AddAppCatalogModalProps {
 }
 
 /** Catalog of everything an admin can grant to Craft: the remaining built-in
- * providers, a custom app, and a pointer to MCP servers (managed in Actions). */
+ * providers, a custom app, and OpenAPI or MCP actions. */
 export default function AddAppCatalogModal({
   onClose,
   descriptors,
@@ -55,7 +55,19 @@ export default function AddAppCatalogModal({
               />
             </div>
             <Divider />
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Text font="secondary-body" color="text-03">
+                {t("openApiHint.label")}
+              </Text>
+              <Button
+                prominence="tertiary"
+                href={ADMIN_ROUTES.OPENAPI_ACTIONS.path}
+                icon={SvgSettings}
+              >
+                {t("openApiHint.openActionsButton")}
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Text font="secondary-body" color="text-03">
                 {t("mcpHint.label")}
               </Text>

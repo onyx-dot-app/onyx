@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SvgSlack } from "@opal/logos";
-import { SvgPlug } from "@opal/icons";
+import { SvgPlug, SvgEdit } from "@opal/icons";
 import IntegrationCard from "@/views/admin/ExternalAppsPage/IntegrationCard";
 import type { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/types";
 
@@ -13,7 +13,9 @@ const APP: ConfiguredIntegration = {
   warnings: [],
   enabled: true,
   toggleEnabled: async () => {},
-  edit: () => {},
+  menuActions: [
+    { id: "edit", title: "Edit", icon: SvgEdit, onSelect: () => {} },
+  ],
   remove: { run: async () => {}, retainedCustomSkillCount: 2 },
 };
 
@@ -66,7 +68,7 @@ export const OrphanedProvider: Story = {
     integration: {
       ...APP,
       warnings: ["invalid skill", "provider unavailable"],
-      edit: null,
+      menuActions: [],
     },
   },
 };
@@ -98,5 +100,5 @@ export const McpServer: Story = {
 
 /** No available actions: the ⋯ trigger renders disabled to keep alignment. */
 export const NoActions: Story = {
-  args: { integration: { ...APP, edit: null, remove: null } },
+  args: { integration: { ...APP, menuActions: [], remove: null } },
 };

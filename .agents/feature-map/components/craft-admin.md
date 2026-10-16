@@ -48,9 +48,19 @@ credentials, so the admin can only toggle them on and set policy. Custom apps
 on Cloud keep a normal credential form, as does a built-in whose OAuth client
 cannot be Onyx-owned because it is registered per customer account (Zendesk).
 
-OpenAPI actions enabled in Craft appear as custom apps. Their configuration link
-returns to OpenAPI setup, which owns their URLs, authentication, and availability.
-Admins cannot edit or delete these linked apps through the Craft app API.
+OpenAPI actions enabled in Craft appear as custom apps.
+**Manage OpenAPI app** opens the shared source configuration dialog without leaving Manage Apps.
+**Edit permissions** opens Craft's shared editor with per-operation **Auto-approve**, **Ask**, and **Deny** controls.
+Built-ins separate **Manage built-in app** (configuration and skills) from **Edit permissions** (Craft permissions).
+MCP menus separate **Manage MCP servers** (the shared management dialog, opened in place) from **Edit permissions**.
+Delete appears only when the app supports deletion. The availability label appears left of the switch on hover or focus.
+Apps and MCP servers use a two-column card grid on wide screens and one column on narrow screens.
+The Craft availability switch updates the source action's `available_in_craft` setting.
+OpenAPI setup still owns URLs, authentication, and overall action enablement.
+The admin app response exposes `available_in_craft` as the requested setting and `enabled` as effective availability.
+A disabled source action shows a warning; changing Craft availability does not enable the source action.
+Admins can update linked app policies through the Craft app API; source configuration and deletion remain source-owned.
+Craft policies apply to sandbox API requests and do not govern main Chat actions.
 Linked apps do not accept skill associations. See [[mcp-and-custom-tools]].
 
 On **Preferences**, the admin sets a workspace default model for Craft
@@ -293,10 +303,11 @@ not cover:
    OAuth uses the caller's custom-action token; passthrough uses their Onyx login token.
    An org-credentialed app needs no per-user row. Disabling an app does not
    delete stored user credentials.
-3. **A connected app's `DENY`-policied action is blocked before any upstream
-   connection for that action, not just hidden from the agent's tool list.**
+3. **A connected app's `DENY`-policied action is blocked before forwarding
+   the request, not just hidden from the agent's tool list.**
    The gate addon (`sandbox_proxy/addons/gate.py`) returns `http_403` before
    forwarding; it does not rely on the agent choosing not to attempt the call.
+   Mitmproxy can open the upstream TLS connection before this check.
 4. **General internet egress from a sandbox is not the same guarantee as
    "admin-approved."** Requests that match no connected app's
    `upstream_url_patterns` get no verdict from `ExternalAppRequestEvaluator`.

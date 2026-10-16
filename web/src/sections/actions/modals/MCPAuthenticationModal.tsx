@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import useSWR, { KeyedMutator } from "swr";
+import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { Modal } from "@opal/components";
@@ -33,7 +33,6 @@ import {
   MCPTransportType,
   MCPServerStatus,
   MCPServer,
-  MCPServersResponse,
   MCPAuthTemplate,
 } from "@/lib/mcp/types";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
@@ -51,7 +50,7 @@ interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;
   skipOverlay?: boolean;
   onTriggerFetchTools?: (serverId: number) => Promise<void> | void;
-  mutateMcpServers: KeyedMutator<MCPServersResponse>;
+  onChanged: () => Promise<void>;
 }
 
 export interface MCPAuthFormValues {
@@ -98,7 +97,7 @@ export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
   onTriggerFetchTools,
-  mutateMcpServers,
+  onChanged,
 }: MCPAuthenticationModalProps) {
   const t = useTranslations("actions");
   const { appName } = useSettings();
@@ -486,7 +485,7 @@ export default function MCPAuthenticationModal({
         if (!oauthResponse.ok) {
           const error = await oauthResponse.json();
           // Refresh server list so latest status is visible after auth failure
-          await mutateMcpServers();
+          await onChanged();
           toggle(false);
           throw new Error(
             t("mcpAuthModal.errors.oauthInitFailed", { detail: error.detail })
@@ -499,7 +498,7 @@ export default function MCPAuthenticationModal({
       } else {
         // For non-OAuth authentication, trigger tools fetch in-place (no hard navigation)
         if (onTriggerFetchTools) {
-          onTriggerFetchTools(mcpServer.id);
+          await onTriggerFetchTools(mcpServer.id);
         } else {
           // Fallback to previous behavior if parent didn't provide handler
           window.location.href = `${ADMIN_ROUTES.MCP_ACTIONS.path}/?server_id=${mcpServer.id}&trigger_fetch=true`;
@@ -509,7 +508,7 @@ export default function MCPAuthenticationModal({
     } catch (error) {
       console.error("Error saving authentication:", error);
       // Ensure UI reflects latest status after any auth/config failure
-      await mutateMcpServers();
+      await onChanged();
       toast.error(
         error instanceof Error
           ? error.message

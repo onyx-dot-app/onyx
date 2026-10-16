@@ -15,11 +15,13 @@ export interface ConfiguredIntegration {
   /** Problem chips (invalid skill, orphaned provider); empty when healthy. */
   warnings: string[];
   enabled: boolean;
-  sourceHref?: string;
-  /** Null when availability is managed by the source action. */
-  toggleEnabled: (() => Promise<void>) | null;
-  /** Null → no Edit action (e.g. orphaned app types). */
-  edit: (() => void) | null;
+  toggleEnabled: () => Promise<void>;
+  menuActions: {
+    id: string;
+    title: string;
+    icon: IconFunctionComponent;
+    onSelect: () => void;
+  }[];
   /** Null → not deletable (MCP servers, Onyx-managed apps). */
   remove: {
     run: () => Promise<void>;
