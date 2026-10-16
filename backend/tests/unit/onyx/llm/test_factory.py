@@ -17,8 +17,8 @@ from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
     _build_provider_extra_headers,
-    get_chat_naming_llm,
     get_default_llm,
+    get_default_utility_llm,
     get_llm,
     get_llm_for_persona,
     get_search_selection_llm,
@@ -116,7 +116,10 @@ def test_search_selection_unset_preserves_fallback_instance() -> None:
 @pytest.mark.parametrize(
     ("resolve", "flow_type"),
     [
-        (get_chat_naming_llm, LLMModelFlowType.CHAT_NAMING),
+        (
+            partial(get_default_utility_llm, LLMModelFlowType.CHAT_NAMING),
+            LLMModelFlowType.CHAT_NAMING,
+        ),
         (get_search_selection_llm, LLMModelFlowType.SEARCH_SELECTION),
     ],
 )
@@ -185,23 +188,13 @@ def test_search_selection_unset_does_not_use_naming_designation() -> None:
     cost.assert_not_called()
 
 
-@pytest.mark.parametrize("naming_set", [False, True])
-def test_chat_naming_resolves_only_its_own_designation(naming_set: bool) -> None:
-    naming_llm = MagicMock(spec=LLM) if naming_set else None
-    headers = {"X-Request-ID": "naming-request"}
-    policy_fn = partial(incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY)
-    with patch(
-        "onyx.llm.factory._get_default_utility_llm",
-        side_effect=[naming_llm, MagicMock(spec=LLM)],
-    ) as resolve:
-        assert (
-            get_chat_naming_llm(additional_headers=headers, policy_fn=policy_fn)
-            is naming_llm
-        )
-    resolve.assert_called_once_with(LLMModelFlowType.CHAT_NAMING, headers, policy_fn)
-
-
-@pytest.mark.parametrize("resolve", [get_chat_naming_llm, get_search_selection_llm])
+@pytest.mark.parametrize(
+    "resolve",
+    [
+        partial(get_default_utility_llm, LLMModelFlowType.CHAT_NAMING),
+        get_search_selection_llm,
+    ],
+)
 def test_utility_llm_preserves_selected_dated_model_configuration(
     resolve: Callable[..., LLM | None],
 ) -> None:
@@ -514,7 +507,7 @@ class TestPolicyFnForwarding:
     def test_get_default_llm_forwards(self) -> None:
         with (
             patch("onyx.llm.factory.get_session_with_current_tenant"),
-            patch("onyx.llm.factory.fetch_default_llm_model", return_value=MagicMock()),
+            patch("onyx.llm.factory.fetch_default_model", return_value=MagicMock()),
             patch("onyx.llm.factory.LLMProviderView"),
             patch("onyx.llm.factory.llm_from_provider") as mock_from_provider,
         ):

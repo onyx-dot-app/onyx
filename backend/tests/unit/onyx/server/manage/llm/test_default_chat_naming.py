@@ -40,7 +40,7 @@ def test_manage_llms_permission_can_set_and_clear_chat_naming(
 
     with (
         patch("onyx.auth.permissions.has_permission", side_effect=permission_for_user),
-        patch.object(api, "update_default_chat_naming_provider") as set_default,
+        patch.object(api, "update_default_pointer_model") as set_default,
         patch.object(api, "update_no_default_chat_naming_provider") as clear_default,
         patch.object(api, "invalidate_provider_listing_cache") as invalidate,
     ):
@@ -50,7 +50,8 @@ def test_manage_llms_permission_can_set_and_clear_chat_naming(
         )
         assert (response.status_code, response.json()) == (200, None)
         assert set_default.call_args.kwargs["provider_id"] == 7
-        assert set_default.call_args.kwargs["chat_naming_model"] == "gpt-5-nano"
+        assert set_default.call_args.kwargs["model_name"] == "gpt-5-nano"
+        assert set_default.call_args.kwargs["flow_type"] == LLMModelFlowType.CHAT_NAMING
         assert isinstance(set_default.call_args.kwargs["db_session"], MagicMock)
 
         response = client.delete("/admin/llm/default-chat-naming")
@@ -80,7 +81,7 @@ def test_chat_naming_mutation_rejects_users_without_manage_llms(
             "onyx.auth.permissions.has_permission",
             return_value=PermissionAuthority.NONE,
         ),
-        patch.object(api, "update_default_chat_naming_provider") as set_default,
+        patch.object(api, "update_default_pointer_model") as set_default,
         patch.object(api, "update_no_default_chat_naming_provider") as clear_default,
     ):
         response = client.request(
@@ -104,7 +105,7 @@ def test_invalid_chat_naming_selection_returns_a_validation_error(
         ),
         patch.object(
             api,
-            "update_default_chat_naming_provider",
+            "update_default_pointer_model",
             side_effect=ValueError("Unknown model"),
         ),
         patch.object(api, "invalidate_provider_listing_cache") as invalidate,
@@ -168,11 +169,11 @@ def _provider_with_chat_naming() -> tuple[
 @pytest.fixture
 def listing_defaults() -> Generator[None, None, None]:
     with (
-        patch.object(api, "fetch_default_llm_model", return_value=None),
-        patch.object(api, "fetch_default_vision_model", return_value=None),
-        patch.object(api, "fetch_default_chat_naming_model", return_value=None),
-        patch.object(api, "fetch_default_craft_model", return_value=None),
-        patch.object(api, "fetch_default_search_selection_model", return_value=None),
+        patch.object(
+            api,
+            "fetch_default_model",
+            return_value=None,
+        ),
         patch.object(api, "has_global_permission", return_value=False),
         patch.object(api, "fetch_user_group_ids", return_value=set()),
         patch.object(
@@ -190,7 +191,13 @@ def test_admin_listing_pins_hidden_chat_naming_and_masks_credentials() -> None:
     provider, visible, naming = _provider_with_chat_naming()
     with (
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
-        patch.object(api, "fetch_default_chat_naming_model", return_value=naming),
+        patch.object(
+            api,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {LLMModelFlowType.CHAT_NAMING: naming}.get(
+                flow
+            ),
+        ),
         patch.object(
             api,
             "fetch_model_configurations_page",
@@ -232,7 +239,13 @@ def test_user_listings_do_not_publish_or_pin_chat_naming(
     provider.is_public = provider_is_public
     with (
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
-        patch.object(api, "fetch_default_chat_naming_model", return_value=naming),
+        patch.object(
+            api,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {LLMModelFlowType.CHAT_NAMING: naming}.get(
+                flow
+            ),
+        ),
         patch.object(
             api,
             "fetch_model_configurations_page",

@@ -42,11 +42,10 @@ def test_manage_llms_can_set_and_clear_search_selection(client: TestClient) -> N
                 else PermissionAuthority.NONE
             ),
         ),
-        patch.object(api, "update_default_search_selection_provider") as set_default,
+        patch.object(api, "update_default_pointer_model") as set_default,
         patch.object(
             api, "update_no_default_search_selection_provider"
         ) as clear_default,
-        patch.object(api, "update_default_chat_naming_provider") as set_chat_naming,
         patch.object(
             api, "update_no_default_chat_naming_provider"
         ) as clear_chat_naming,
@@ -63,7 +62,11 @@ def test_manage_llms_can_set_and_clear_search_selection(client: TestClient) -> N
         assert (response.status_code, response.json()) == (200, None)
         clear_default.assert_called_once()
         assert invalidate.call_count == 2
-        set_chat_naming.assert_not_called()
+        set_default.assert_called_once()
+        assert (
+            set_default.call_args.kwargs["flow_type"]
+            == LLMModelFlowType.SEARCH_SELECTION
+        )
         clear_chat_naming.assert_not_called()
 
 
@@ -74,7 +77,7 @@ def test_search_selection_requires_manage_llms(client: TestClient, method: str) 
             "onyx.auth.permissions.has_permission",
             return_value=PermissionAuthority.NONE,
         ),
-        patch.object(api, "update_default_search_selection_provider") as set_default,
+        patch.object(api, "update_default_pointer_model") as set_default,
         patch.object(
             api, "update_no_default_search_selection_provider"
         ) as clear_default,
@@ -97,7 +100,7 @@ def test_invalid_search_selection_returns_validation_error(client: TestClient) -
         ),
         patch.object(
             api,
-            "update_default_search_selection_provider",
+            "update_default_pointer_model",
             side_effect=ValueError("Unknown model"),
         ),
         patch.object(api, "invalidate_provider_listing_cache") as invalidate,
@@ -120,8 +123,14 @@ def test_admin_pins_hidden_search_selection_without_changing_chat_naming() -> No
     hidden.llm_model_flows[-1].llm_model_flow_type = LLMModelFlowType.SEARCH_SELECTION
     with (
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
-        patch.object(api, "fetch_default_chat_naming_model", return_value=visible),
-        patch.object(api, "fetch_default_search_selection_model", return_value=hidden),
+        patch.object(
+            api,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT_NAMING: visible,
+                LLMModelFlowType.SEARCH_SELECTION: hidden,
+            }.get(flow),
+        ),
         patch.object(
             api,
             "fetch_model_configurations_page",
@@ -158,7 +167,11 @@ def test_user_listing_does_not_publish_search_selection(persona_id: int | None) 
     with (
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
         patch.object(
-            api, "fetch_default_search_selection_model", return_value=hidden
+            api,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.SEARCH_SELECTION: hidden
+            }.get(flow),
         ) as fetch,
         patch.object(
             api,
@@ -180,4 +193,7 @@ def test_user_listing_does_not_publish_search_selection(persona_id: int | None) 
         )
     assert response.default_search_selection is None
     assert "gpt-5-nano" not in response.model_dump_json()
-    fetch.assert_not_called()
+    assert all(
+        call.args[1] != LLMModelFlowType.SEARCH_SELECTION
+        for call in fetch.call_args_list
+    )

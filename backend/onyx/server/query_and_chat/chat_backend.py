@@ -60,6 +60,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
 )
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
+from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
     create_chat_history_chain,
@@ -78,7 +79,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import Permission, record_mode_persists_content
+from onyx.db.enums import LLMModelFlowType, Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
 from onyx.db.incognito import (
     is_incognito_teardown_target,
@@ -99,7 +100,7 @@ from onyx.file_store.serving import (
 )
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
-    get_chat_naming_llm,
+    get_default_utility_llm,
     get_llm_for_persona,
     get_llm_token_counter,
 )
@@ -154,10 +155,7 @@ from onyx.server.usage_limits import (
 )
 from onyx.server.utils import get_json_line
 from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
-from onyx.utils.headers import (
-    get_custom_tool_additional_request_headers,
-    get_relevant_headers,
-)
+from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
@@ -518,8 +516,9 @@ def _generate_or_fallback_chat_session_name(
         additional_headers = get_relevant_headers(
             request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
-        llm = get_chat_naming_llm(
+        llm = get_default_utility_llm(
             additional_headers=additional_headers,
+            flow_type=LLMModelFlowType.CHAT_NAMING,
         )
         if llm is None:
             llm = get_llm_for_persona(
@@ -858,8 +857,8 @@ def handle_send_chat_message(
                     litellm_additional_headers=get_relevant_headers(
                         request.headers, LITELLM_PASS_THROUGH_HEADERS
                     ),
-                    custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                        request.headers
+                    custom_tool_additional_headers=get_relevant_headers(
+                        request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
                     ),
                     mcp_headers=chat_message_req.mcp_headers,
                 ):
@@ -902,8 +901,8 @@ def handle_send_chat_message(
             litellm_additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
-            custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                request.headers
+            custom_tool_additional_headers=get_relevant_headers(
+                request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
             ),
             mcp_headers=chat_message_req.mcp_headers,
             additional_context=chat_message_req.additional_context,
@@ -931,8 +930,8 @@ def handle_send_chat_message(
                 litellm_additional_headers=get_relevant_headers(
                     request.headers, LITELLM_PASS_THROUGH_HEADERS
                 ),
-                custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                    request.headers
+                custom_tool_additional_headers=get_relevant_headers(
+                    request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
                 ),
                 mcp_headers=chat_message_req.mcp_headers,
                 additional_context=chat_message_req.additional_context,

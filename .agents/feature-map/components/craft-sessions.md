@@ -639,9 +639,9 @@ send_message / reconcile_session_llm_config     session/manager.py
 
 Priority, per `llm_config.py:_select_gateway_default`: (1) the session's own
 persisted `agent_provider`/`agent_model`, if still visible and accessible;
-(2) the admin's Craft default (`fetch_default_craft_model`,
+(2) the admin's Craft default (`fetch_default_model(..., LLMModelFlowType.CRAFT)`,
 `LLMModelFlowType.CRAFT`); (3) the admin's chat default
-(`fetch_default_llm_model`); (4) each provider's recommended model
+(`fetch_default_model(..., LLMModelFlowType.CHAT)`); (4) each provider's recommended model
 (`recommended-models.json`); (5) the first visible model of the first
 provider. Per `[[llm-providers]]`, `CRAFT` is a pointer flow that nothing
 populates automatically, so step (2) is frequently empty and step (3) is

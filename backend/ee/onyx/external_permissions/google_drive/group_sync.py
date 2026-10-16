@@ -5,12 +5,14 @@ from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.google_drive.folder_retrieval import (
-    get_folder_permissions_by_ids,
     get_modified_folders,
 )
 from ee.onyx.external_permissions.google_drive.models import (
     GoogleDrivePermission,
     PermissionType,
+)
+from ee.onyx.external_permissions.google_drive.permission_retrieval import (
+    get_permissions_by_ids,
 )
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.utils import build_domain_group_id
@@ -108,8 +110,11 @@ def _get_all_folders(
 
             if not raw_permissions and permission_ids:
                 # Fetch permissions using the IDs
-                permissions = get_folder_permissions_by_ids(
-                    ops, user_email, folder_id, permission_ids
+                permissions = get_permissions_by_ids(
+                    ops=ops,
+                    user_email=user_email,
+                    doc_id=folder_id,
+                    permission_ids=permission_ids,
                 )
             else:
                 permissions = [

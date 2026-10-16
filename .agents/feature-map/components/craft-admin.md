@@ -124,7 +124,7 @@ permission. See §5 for why the flag alone is not the real gate.
   has no `default_policy` column. `default_policy` is a catalog field on
   `EndpointDescriptor`, and it only seeds the admin form.
 - `LLMModelFlow` row with `llm_model_flow_type = LLMModelFlowType.CRAFT`
-  (`backend/onyx/db/llm.py`, `fetch_default_craft_model`): the Preferences
+  (`backend/onyx/db/llm.py`, `fetch_default_model(..., LLMModelFlowType.CRAFT)`): the Preferences
   page's default-model selection. See `[[llm-providers]]`.
 
 ---
@@ -230,7 +230,7 @@ renders nothing (no empty heading).
 `deleteDefaultCraftModel` (`web/src/lib/languageModels/svc.ts`), which hit
 `POST` / `DELETE /api/admin/llm/default-craft`. That endpoint writes the
 `LLMModelFlow` row for `LLMModelFlowType.CRAFT`
-(`backend/onyx/db/llm.py:update_default_craft_provider`).
+(`backend/onyx/db/llm.py:update_default_pointer_model`).
 Per `[[llm-providers]]`, `CRAFT` is a **pointer flow, not a capability check**:
 nothing populates this row automatically, and Craft falls back to the
 workspace chat default (`defaultText` in the page) when no explicit Craft
