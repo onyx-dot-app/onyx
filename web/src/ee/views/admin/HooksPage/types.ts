@@ -1,3 +1,5 @@
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+
 export type HookPoint = string;
 export type HookFailStrategy = "hard" | "soft";
 
@@ -20,6 +22,7 @@ export interface HookResponse {
   endpoint_url: string | null;
   /** Partially-masked API key (e.g. "abcd••••••••wxyz"), or null if no key is set. */
   api_key_masked: string | null;
+  api_token_id: number | null;
   fail_strategy: HookFailStrategy;
   timeout_seconds: number;
   is_active: boolean;
@@ -32,7 +35,7 @@ export interface HookResponse {
 export interface HookFormState {
   name: string;
   endpoint_url: string;
-  api_key: string;
+  api_key: ApiTokenValue;
   fail_strategy: HookFailStrategy;
   timeout_seconds: string;
 }
@@ -41,7 +44,7 @@ export interface HookCreateRequest {
   name: string;
   hook_point: HookPoint;
   endpoint_url: string;
-  api_key?: string;
+  api_key?: ApiTokenValue;
   fail_strategy?: HookFailStrategy;
   timeout_seconds?: number;
 }
@@ -49,7 +52,8 @@ export interface HookCreateRequest {
 export interface HookUpdateRequest {
   name?: string;
   endpoint_url?: string;
-  api_key?: string | null;
+  /** Omit to keep the current key. */
+  api_key?: ApiTokenValue;
   fail_strategy?: HookFailStrategy;
   timeout_seconds?: number;
 }

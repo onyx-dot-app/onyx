@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import (
     ApiToken,
     CloudEmbeddingProvider,
+    Hook,
     ImageGenerationConfig,
     InternetContentProvider,
     InternetSearchProvider,
@@ -315,5 +316,12 @@ def get_api_token_usages(
         TracingProviderConfig.api_token_id,
         TracingProviderConfig.provider_type,
     )
+
+    for token_id, name in db_session.execute(
+        select(Hook.api_token_id, Hook.name).where(
+            Hook.api_token_id.in_(token_ids), Hook.deleted.is_(False)
+        )
+    ):
+        usages[token_id].append(("hook", name))
 
     return usages

@@ -5899,11 +5899,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "O {appName} usará esta chave para se autenticar no seu endpoint de API.",
-          "keepCurrent": {
-            "placeholder": "Deixe em branco para manter a chave atual"
-          },
-          "title": "Chave de API"
+          "description": "O {appName} usará esta chave para se autenticar no seu endpoint de API."
         },
         "connectionValid": {
           "label": "Conexão válida."

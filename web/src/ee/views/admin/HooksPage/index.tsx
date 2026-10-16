@@ -50,7 +50,7 @@ import {
 import type {
   HookPointMeta,
   HookResponse,
-} from "@/ee/views/admin/HooksPage/interfaces";
+} from "@/ee/views/admin/HooksPage/types";
 import { noProp } from "@/lib/utils";
 
 const route = ADMIN_ROUTES.HOOKS;

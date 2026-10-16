@@ -6,11 +6,15 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.db.api_token import assign_api_token, release_api_token
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import HookFailStrategy, HookPoint
 from onyx.db.models import Hook, HookExecutionLog
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import ApiTokenInput
+
+HOOK_API_TOKEN_PLATFORM = "hook"
 
 # ── Hook CRUD ────────────────────────────────────────────────────────────
 
@@ -65,7 +69,7 @@ def create_hook__no_commit(
     name: str,
     hook_point: HookPoint,
     endpoint_url: str | None = None,
-    api_key: str | None = None,
+    api_key: ApiTokenInput | None = None,
     fail_strategy: HookFailStrategy,
     timeout_seconds: float,
     is_active: bool = False,
@@ -91,7 +95,6 @@ def create_hook__no_commit(
         name=name,
         hook_point=hook_point,
         endpoint_url=endpoint_url,
-        api_key=api_key,
         fail_strategy=fail_strategy,
         timeout_seconds=timeout_seconds,
         is_active=is_active,
@@ -112,6 +115,13 @@ def create_hook__no_commit(
                 f"A hook for '{hook_point.value}' already exists.",
             )
         raise  # re-raise unrelated integrity errors (FK violations, etc.)
+    assign_api_token(
+        db_session,
+        hook,
+        api_key,
+        platform=HOOK_API_TOKEN_PLATFORM,
+        base_url=endpoint_url,
+    )
     return hook
 
 
@@ -121,7 +131,7 @@ def update_hook__no_commit(
     hook_id: int,
     name: str | None = None,
     endpoint_url: str | None | UnsetType = UNSET,
-    api_key: str | None | UnsetType = UNSET,
+    api_key: ApiTokenInput | None | UnsetType = UNSET,
     fail_strategy: HookFailStrategy | None = None,
     timeout_seconds: float | None = None,
     is_active: bool | None = None,
@@ -145,7 +155,13 @@ def update_hook__no_commit(
     if not isinstance(endpoint_url, UnsetType):
         hook.endpoint_url = endpoint_url
     if not isinstance(api_key, UnsetType):
-        hook.api_key = api_key  # EncryptedString coerces str → SensitiveValue at the ORM level  # ty: ignore[invalid-assignment]
+        assign_api_token(
+            db_session,
+            hook,
+            api_key,
+            platform=HOOK_API_TOKEN_PLATFORM,
+            base_url=hook.endpoint_url,
+        )
     if fail_strategy is not None:
         hook.fail_strategy = fail_strategy
     if timeout_seconds is not None:
@@ -168,9 +184,13 @@ def delete_hook__no_commit(
     if hook is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Hook with id {hook_id} not found.")
 
+    token_id = hook.api_token_id
     hook.deleted = True
     hook.is_active = False
+    hook.api_token = None
     db_session.flush()
+    if token_id is not None:
+        release_api_token(db_session, token_id)
 
 
 # ── HookExecutionLog CRUD ────────────────────────────────────────────────

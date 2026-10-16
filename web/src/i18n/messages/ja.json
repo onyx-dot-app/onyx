@@ -5899,11 +5899,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "{appName}はこのキーを使用してAPIエンドポイントで認証を行います。",
-          "keepCurrent": {
-            "placeholder": "現在のキーを保持するには空欄のままにしてください"
-          },
-          "title": "APIキー"
+          "description": "{appName}はこのキーを使用してAPIエンドポイントで認証を行います。"
         },
         "connectionValid": {
           "label": "接続は有効です。"

@@ -7354,9 +7354,10 @@ class Hook(Base):
         Enum(HookPoint, native_enum=False), nullable=False
     )
     endpoint_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     is_reachable: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )  # null = never validated, true = last check passed, false = last check failed
@@ -7396,6 +7397,10 @@ class Hook(Base):
             postgresql_where=(deleted == False),  # noqa: E712
         ),
     )
+
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
 
 
 class HookExecutionLog(Base):

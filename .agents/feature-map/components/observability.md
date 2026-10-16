@@ -175,7 +175,7 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
   `db/llm_usage.py:build_usage_upsert_values` (additive merge on conflict, not
   overwrite).
 - **`Hook`** and **`HookExecutionLog`** (`db/models.py`): a hook row (`name`,
-  `hook_point`, `endpoint_url`, encrypted `api_key`, `fail_strategy`,
+  `hook_point`, `endpoint_url`, `api_token_id` (a shared `ApiToken`), `fail_strategy`,
   `timeout_seconds`, `is_active`, `is_reachable`, soft-deleted via `deleted`)
   and its failure log (`db/hook.py`). At most one non-deleted hook per
   `HookPoint` (`db/hook.py:create_hook__no_commit`).

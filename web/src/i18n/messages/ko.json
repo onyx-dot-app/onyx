@@ -5899,11 +5899,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "{appName}는 이 키를 사용하여 API 엔드포인트에 인증합니다.",
-          "keepCurrent": {
-            "placeholder": "현재 키를 유지하려면 비워 두세요"
-          },
-          "title": "API 키"
+          "description": "{appName}는 이 키를 사용하여 API 엔드포인트에 인증합니다."
         },
         "connectionValid": {
           "label": "연결이 유효합니다."

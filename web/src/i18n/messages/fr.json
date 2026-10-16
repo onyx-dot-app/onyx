@@ -5899,11 +5899,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "{appName} utilisera cette clé pour s'authentifier auprès de votre point de terminaison d'API.",
-          "keepCurrent": {
-            "placeholder": "Laissez vide pour conserver la clé actuelle"
-          },
-          "title": "Clé API"
+          "description": "{appName} utilisera cette clé pour s'authentifier auprès de votre point de terminaison d'API."
         },
         "connectionValid": {
           "label": "Connexion valide."

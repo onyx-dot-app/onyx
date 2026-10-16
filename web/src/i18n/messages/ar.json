@@ -5899,11 +5899,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "سيستخدم {appName} هذا المفتاح للمصادقة مع نقطة نهاية API الخاصة بك.",
-          "keepCurrent": {
-            "placeholder": "اتركه فارغًا للاحتفاظ بالمفتاح الحالي"
-          },
-          "title": "مفتاح API"
+          "description": "سيستخدم {appName} هذا المفتاح للمصادقة مع نقطة نهاية API الخاصة بك."
         },
         "connectionValid": {
           "label": "الاتصال صالح."

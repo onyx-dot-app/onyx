@@ -15,7 +15,6 @@ import {
 import { BasicModalFooter, Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputSingleSelect } from "@opal/components";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
 import {
@@ -36,7 +35,14 @@ import type {
   HookPointMeta,
   HookResponse,
   HookUpdateRequest,
-} from "@/ee/views/admin/HooksPage/interfaces";
+} from "@/ee/views/admin/HooksPage/types";
+import { ApiTokenField } from "@/lib/api-tokens/components";
+import {
+  initialApiTokenValue,
+  toApiTokenPayload,
+} from "@/lib/api-tokens/utils";
+import { apiTokenSchema } from "@/lib/api-tokens/validation";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,6 +62,13 @@ interface HookFormModalProps {
 // ---------------------------------------------------------------------------
 
 const MAX_TIMEOUT_SECONDS = 600;
+const HOOK_API_TOKEN_PLATFORM = "hook";
+
+function isSameApiTokenValue(a: ApiTokenValue, b: ApiTokenValue): boolean {
+  if (a.type === "existing" && b.type === "existing") return a.id === b.id;
+  if (a.type === "new" && b.type === "new") return a.value === b.value;
+  return false;
+}
 
 function buildInitialValues(
   hook: HookResponse | undefined,
@@ -65,7 +78,7 @@ function buildInitialValues(
     return {
       name: hook.name,
       endpoint_url: hook.endpoint_url ?? "",
-      api_key: "",
+      api_key: initialApiTokenValue(hook.api_token_id),
       fail_strategy: hook.fail_strategy,
       timeout_seconds: String(hook.timeout_seconds),
     };
@@ -73,7 +86,7 @@ function buildInitialValues(
   return {
     name: "",
     endpoint_url: "",
-    api_key: "",
+    api_key: initialApiTokenValue(null),
     fail_strategy: spec?.default_fail_strategy ?? "hard",
     timeout_seconds: spec ? String(spec.default_timeout_seconds) : "30",
   };
@@ -86,8 +99,8 @@ function buildValidationSchema(isEdit: boolean, t: HooksTranslate) {
       .trim()
       .required(t("form.validation.endpointRequired")),
     api_key: isEdit
-      ? Yup.string()
-      : Yup.string().trim().required(t("form.validation.apiKeyRequired")),
+      ? apiTokenSchema()
+      : apiTokenSchema(t("form.validation.apiKeyRequired")),
     timeout_seconds: Yup.string()
       .required(t("form.validation.timeoutRequired"))
       .test(
@@ -169,7 +182,6 @@ export default function HookFormModal({
   const { appName } = useSettings();
   const isEdit = !!hook;
   const [isConnected, setIsConnected] = useState(false);
-  const [apiKeyCleared, setApiKeyCleared] = useState(false);
 
   const initialValues = buildInitialValues(hook, spec);
   const validationSchema = buildValidationSchema(isEdit, t);
@@ -204,10 +216,10 @@ export default function HookFormModal({
                 const timeoutNum = parseFloat(values.timeout_seconds);
                 if (timeoutNum !== hook.timeout_seconds)
                   req.timeout_seconds = timeoutNum;
-                if (values.api_key.trim().length > 0) {
-                  req.api_key = values.api_key;
-                } else if (apiKeyCleared) {
-                  req.api_key = null;
+                if (
+                  !isSameApiTokenValue(values.api_key, initialValues.api_key)
+                ) {
+                  req.api_key = toApiTokenPayload(values.api_key);
                 }
                 if (Object.keys(req).length === 0) {
                   handleClose();
@@ -223,7 +235,7 @@ export default function HookFormModal({
                   name: values.name,
                   hook_point: spec.hook_point,
                   endpoint_url: values.endpoint_url,
-                  api_key: values.api_key || undefined,
+                  api_key: toApiTokenPayload(values.api_key),
                   fail_strategy: values.fail_strategy,
                   timeout_seconds: parseFloat(values.timeout_seconds),
                 });
@@ -373,27 +385,13 @@ export default function HookFormModal({
                     </div>
                   </InputVertical>
 
-                  <InputVertical
-                    withLabel="api_key"
-                    title={t("form.apiKey.title")}
+                  <ApiTokenField
+                    platform={HOOK_API_TOKEN_PLATFORM}
+                    optional={isEdit}
                     subDescription={t("form.apiKey.description", { appName })}
-                  >
-                    <PasswordInputTypeInField
-                      name="api_key"
-                      placeholder={
-                        isEdit
-                          ? (hook?.api_key_masked ??
-                            t("form.apiKey.keepCurrent.placeholder"))
-                          : undefined
-                      }
-                      disabled={isSubmitting}
-                      onChange={(e) => {
-                        if (isEdit && hook?.api_key_masked) {
-                          setApiKeyCleared(e.target.value === "");
-                        }
-                      }}
-                    />
-                  </InputVertical>
+                    savedMaskedValue={hook?.api_key_masked ?? undefined}
+                    disabled={isSubmitting}
+                  />
 
                   {!isEdit && (isSubmitting || isConnected) && (
                     <Section
@@ -440,9 +438,7 @@ export default function HookFormModal({
                     submit={
                       <Button
                         disabled={
-                          isSubmitting ||
-                          !isValid ||
-                          (!dirty && !apiKeyCleared && isEdit)
+                          isSubmitting || !isValid || (!dirty && isEdit)
                         }
                         type="submit"
                         icon={

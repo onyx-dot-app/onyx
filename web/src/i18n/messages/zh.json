@@ -5899,11 +5899,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "{appName} 将使用此密钥向您的 API 端点进行身份验证。",
-          "keepCurrent": {
-            "placeholder": "留空以保留当前密钥"
-          },
-          "title": "API 密钥"
+          "description": "{appName} 将使用此密钥向您的 API 端点进行身份验证。"
         },
         "connectionValid": {
           "label": "连接有效。"

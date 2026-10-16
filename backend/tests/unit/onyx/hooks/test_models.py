@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from onyx.db.enums import HookFailStrategy, HookPoint
 from onyx.hooks.models import HookCreateRequest, HookUpdateRequest
+from onyx.server.manage.api_token.models import ExistingApiToken, NewApiToken
 
 
 def test_hook_update_request_rejects_empty() -> None:
@@ -82,3 +83,15 @@ def test_hook_create_request_rejects_whitespace_endpoint_url() -> None:
             hook_point=HookPoint.QUERY_PROCESSING,
             endpoint_url="   ",
         )
+
+
+def test_hook_update_request_accepts_plain_string_api_key() -> None:
+    req = HookUpdateRequest.model_validate({"api_key": "secret"})
+    assert isinstance(req.api_key, NewApiToken)
+    assert req.api_key.value == "secret"
+
+
+def test_hook_update_request_accepts_existing_api_key() -> None:
+    req = HookUpdateRequest.model_validate({"api_key": {"type": "existing", "id": 7}})
+    assert isinstance(req.api_key, ExistingApiToken)
+    assert req.api_key.id == 7

@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { HookPointMeta } from "@/ee/views/admin/HooksPage/interfaces";
+import { HookPointMeta } from "@/ee/views/admin/HooksPage/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export function useHookSpecs() {
