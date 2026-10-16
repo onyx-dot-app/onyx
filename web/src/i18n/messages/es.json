@@ -685,7 +685,7 @@
         "label": "Preguntar"
       },
       "deny": {
-        "label": "Denegar"
+        "label": "Desactivada"
       }
     },
     "switchList": {
@@ -5338,7 +5338,7 @@
           "title": "Todavía no hay apps"
         },
         "panel": {
-          "blurb": "Se configura una vez para toda la organización. Edita una app para definir credenciales compartidas, políticas de acciones y habilidades asociadas."
+          "blurb": "Se configura una vez para toda la organización. Edita una app para establecer credenciales compartidas, ajustes de aprobación y habilidades asociadas."
         },
         "tab": {
           "label": "Apps",
@@ -13649,7 +13649,8 @@
       },
       "status": {
         "approved": "Aprobado",
-        "rejected": "Rechazado"
+        "rejected": "Rechazado",
+        "expired": "Caducada"
       },
       "submit": {
         "errorFallback": "No se pudo enviar la decisión"
@@ -13815,6 +13816,7 @@
         "connectButton": "Conectar",
         "connectingButton": "Redirigiendo…",
         "disconnectButton": "Desconectar",
+        "actionsMenuLabel": "Acciones de {name}",
         "empty": {
           "description": "Aún no hay apps ni servidores MCP configurados para tu organización.",
           "title": "Aún no hay nada que conectar"
@@ -14549,10 +14551,6 @@
             "label": "Nombre",
             "placeholder": "p. ej., Resumen semanal de escalaciones de clientes"
           },
-          "preApproval": {
-            "description": "Craft puede usar las apps y servidores MCP seleccionados sin pausas cuando esta tarea se ejecuta sin supervisión. Otras solicitudes de aprobación pausan la ejecución y pueden hacer que falle.",
-            "label": "Apps y servidores MCP preaprobados"
-          },
           "prompt": {
             "description": "Este mensaje se envía a Craft cada vez que la tarea se dispara.",
             "label": "Prompt",
@@ -14611,31 +14609,6 @@
       "newPage": {
         "description": "Guarda un prompt y una programación. Craft lo ejecutará según un temporizador.",
         "title": "Nueva tarea programada"
-      },
-      "preApproval": {
-        "appFallbackName": "App n.º {id}",
-        "appsGroupTitle": "Apps",
-        "empty": {
-          "label": "Aún no hay apps ni servidores MCP disponibles en Craft."
-        },
-        "errors": {
-          "loadFailed": "No se pudieron cargar las apps y los servidores MCP. Actualiza para volver a intentarlo.",
-          "partialLoadFailed": "Algunas opciones de aprobación previa no se pudieron cargar. Actualiza para volver a intentarlo."
-        },
-        "loading": {
-          "label": "Cargando apps y servidores MCP…"
-        },
-        "mcpGroupTitle": "Servidores MCP",
-        "mcpServerFallbackName": "Servidor MCP n.º {id}",
-        "status": {
-          "connected": "Conectado",
-          "connectionRequired": "Se requiere conexión",
-          "unavailable": "Ya no está disponible"
-        },
-        "summary": {
-          "partialLoadFailed": "Algunos detalles de aprobación previa no se pudieron cargar. Actualiza para volver a intentarlo.",
-          "title": "Apps y servidores MCP preaprobados"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15011,6 +14984,50 @@
       "viewPlans": {
         "label": "Ver planes"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "Ajustes de aprobación de {name}",
+      "title": "Ajustes de aprobación",
+      "personalDescription": "Esta configuración se aplica a tus conversaciones y tareas nuevas. Las tareas existentes mantienen su configuración.",
+      "taskDescription": "Solo las aplicaciones activadas están disponibles para esta tarea. Los cambios solo se aplican a esta tarea.",
+      "newTaskDescription": "Activa las aplicaciones que puede usar esta tarea. Cada aplicación comienza con tu configuración de acciones actual.",
+      "workspace_disabled": "Desactivada para el espacio de trabajo",
+      "workspace_managed": "Administrado por tu espacio de trabajo",
+      "userManagement": "Permitir que los usuarios administren las ajustes de aprobación",
+      "userManagementDescription": "Los usuarios pueden cambiar la aprobación de las acciones disponibles.",
+      "loading": "Cargando ajustes de aprobación…",
+      "loadError": "No se pudieron cargar las ajustes de aprobación.",
+      "retry": "Reintentar",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "cancel": "Cancelar",
+      "saveError": "No se pudieron guardar las ajustes de aprobación.",
+      "emptyActions": "No hay acciones conocidas. Las acciones desconocidas requieren aprobación.",
+      "emptyApps": "No hay aplicaciones disponibles.",
+      "expired": "La aprobación caducó. Esta solicitud no se ejecutó.",
+      "rejected": "Solicitud rechazada. Esta solicitud no se ejecutó.",
+      "deadline": "Aprobar antes de {time}",
+      "agentPermissionRequired": "Esta ejecución se detuvo porque una acción requería aprobación. Revisa los permisos y vuelve a ejecutar la tarea.",
+      "enableForTask": "Activar para esta tarea",
+      "enableAppForTask": "Activar {app} para esta tarea",
+      "enabledForTask": "Activada para esta tarea",
+      "disabledForTask": "Desactivada para esta tarea",
+      "externalApp": "Aplicación",
+      "mcpServer": "Servidor MCP",
+      "taskAppsTitle": "Aplicaciones y servidores MCP",
+      "actionPolicies": "Ajustes de aprobación",
+      "policyCounts": "{auto} automáticas · {ask} preguntar · {disabled} desactivadas",
+      "manageActions": "Gestionar acciones",
+      "viewActions": "Ver acciones",
+      "taskModalDescription": "Los cambios se aplican al guardar la tarea. Las restricciones del espacio de trabajo siempre se aplican.",
+      "searchActions": "Buscar acciones",
+      "applyMatching": "Establecer {count} acciones editables coincidentes:",
+      "noMatchingActions": "Ninguna acción coincide con la búsqueda.",
+      "close": "Cerrar",
+      "saveChanges": "Guardar cambios",
+      "resetDefaults": "Restablecer todos los valores predeterminados",
+      "resetAll": "Restablecer todo a los valores del espacio de trabajo",
+      "workspaceDisabledTooltip": "Un administrador desactivó esta acción para el espacio de trabajo."
     }
   },
   "knowledge": {

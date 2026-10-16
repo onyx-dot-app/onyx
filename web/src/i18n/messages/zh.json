@@ -685,7 +685,7 @@
         "label": "询问"
       },
       "deny": {
-        "label": "拒绝"
+        "label": "已禁用"
       }
     },
     "switchList": {
@@ -5338,7 +5338,7 @@
           "title": "暂无应用"
         },
         "panel": {
-          "blurb": "为整个组织统一配置一次。编辑应用可设置共享凭证、操作策略和关联技能。"
+          "blurb": "为整个组织统一配置。编辑应用以设置共享凭据、审批设置和关联技能。"
         },
         "tab": {
           "label": "应用",
@@ -13649,7 +13649,8 @@
       },
       "status": {
         "approved": "已批准",
-        "rejected": "已拒绝"
+        "rejected": "已拒绝",
+        "expired": "已过期"
       },
       "submit": {
         "errorFallback": "提交决定失败"
@@ -13815,6 +13816,7 @@
         "connectButton": "连接",
         "connectingButton": "正在重定向…",
         "disconnectButton": "断开连接",
+        "actionsMenuLabel": "{name} 的操作",
         "empty": {
           "description": "您的组织尚未配置任何应用或 MCP 服务器。",
           "title": "暂无可连接的内容"
@@ -14549,10 +14551,6 @@
             "label": "名称",
             "placeholder": "例如：每周客户升级问题摘要"
           },
-          "preApproval": {
-            "description": "当此任务在无人值守时运行，Craft 可以直接使用选定的应用和 MCP 服务器而不暂停。其他审批请求会暂停运行并可能导致失败。",
-            "label": "预批准的应用和 MCP 服务器"
-          },
           "prompt": {
             "description": "每次任务触发时，此消息都会发送给 Craft。",
             "label": "提示词",
@@ -14611,31 +14609,6 @@
       "newPage": {
         "description": "保存提示词和计划。Craft 会按定时器运行它。",
         "title": "新建计划任务"
-      },
-      "preApproval": {
-        "appFallbackName": "应用 #{id}",
-        "appsGroupTitle": "应用",
-        "empty": {
-          "label": "Craft 中尚无可用的应用或 MCP 服务器。"
-        },
-        "errors": {
-          "loadFailed": "无法加载应用和 MCP 服务器。请刷新重试。",
-          "partialLoadFailed": "部分预批准选项无法加载。请刷新重试。"
-        },
-        "loading": {
-          "label": "正在加载应用和 MCP 服务器…"
-        },
-        "mcpGroupTitle": "MCP 服务器",
-        "mcpServerFallbackName": "MCP 服务器 #{id}",
-        "status": {
-          "connected": "已连接",
-          "connectionRequired": "需要连接",
-          "unavailable": "已不可用"
-        },
-        "summary": {
-          "partialLoadFailed": "部分预批准详情无法加载。请刷新重试。",
-          "title": "预批准的应用和 MCP 服务器"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15011,6 +14984,50 @@
       "viewPlans": {
         "label": "查看套餐"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "{name} 审批设置",
+      "title": "审批设置",
+      "personalDescription": "这些设置适用于您的对话和新任务。现有任务保留各自的设置。",
+      "taskDescription": "此任务只能使用已启用的应用。更改仅适用于此任务。",
+      "newTaskDescription": "启用此任务可以使用的应用。每个应用初始使用您当前的操作设置。",
+      "workspace_disabled": "工作区已禁用",
+      "workspace_managed": "由工作区管理",
+      "userManagement": "允许用户管理审批设置",
+      "userManagementDescription": "用户可以更改可用操作的审批设置。",
+      "loading": "正在加载审批设置…",
+      "loadError": "无法加载审批设置。",
+      "retry": "重试",
+      "save": "保存",
+      "saving": "正在保存…",
+      "cancel": "取消",
+      "saveError": "无法保存审批设置。",
+      "emptyActions": "没有已知操作。未知操作需要审批。",
+      "emptyApps": "没有可用应用。",
+      "expired": "审批已过期。此请求未执行。",
+      "rejected": "请求已拒绝。此请求未执行。",
+      "deadline": "请在 {time} 前批准",
+      "agentPermissionRequired": "某项操作需要审批，因此本次运行已停止。请检查权限，然后重新运行任务。",
+      "enableForTask": "为此任务启用",
+      "enableAppForTask": "为此任务启用 {app}",
+      "enabledForTask": "已为此任务启用",
+      "disabledForTask": "已为此任务禁用",
+      "externalApp": "应用",
+      "mcpServer": "MCP 服务器",
+      "taskAppsTitle": "应用和 MCP 服务器",
+      "actionPolicies": "审批设置",
+      "policyCounts": "自动批准 {auto} · 询问 {ask} · 已禁用 {disabled}",
+      "manageActions": "管理操作",
+      "viewActions": "查看操作",
+      "taskModalDescription": "更改将在保存任务时生效。工作区限制始终适用。",
+      "searchActions": "搜索操作",
+      "applyMatching": "设置 {count} 个匹配的可编辑操作：",
+      "noMatchingActions": "没有与搜索条件匹配的操作。",
+      "close": "关闭",
+      "saveChanges": "保存更改",
+      "resetDefaults": "全部重置为默认值",
+      "resetAll": "全部重置为工作区默认值",
+      "workspaceDisabledTooltip": "管理员已在工作区中禁用此操作。"
     }
   },
   "knowledge": {

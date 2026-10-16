@@ -7,10 +7,7 @@ import ScheduleTaskForm, {
   defaultFormInitial,
   type ScheduleTaskFormInitial,
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
-import type {
-  EditorMode,
-  EditorPayload,
-} from "@/app/craft/v1/tasks/interfaces";
+import type { EditorMode, EditorPayload } from "@/app/craft/v1/tasks/types";
 import { TASKS_PATH } from "@/app/craft/v1/tasks/constants";
 
 const VALID_MODES: ReadonlySet<EditorMode> = new Set<EditorMode>([

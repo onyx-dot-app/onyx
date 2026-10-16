@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource, DocumentSourceDescription
+from onyx.db.action_policy import get_workspace_action_policies
 from onyx.db.connector import _INTERNAL_ONLY_SOURCES
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
@@ -14,7 +15,6 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
 from onyx.db.external_app import get_external_app_by_skill_id
-from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
@@ -226,7 +226,9 @@ def render_external_app_files(
     it as an argument it could only ever be given one value for."""
     external_app = get_external_app_by_skill_id(db_session, skill.id)
     stored = (
-        get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
+        get_workspace_action_policies(
+            db_session, GatedAppKind.EXTERNAL_APP, external_app.id
+        )
         if external_app
         else {}
     )

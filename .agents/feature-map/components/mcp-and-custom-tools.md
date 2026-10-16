@@ -476,6 +476,22 @@ Both endpoint queries and configured extras reject flow-owned parameters,
 including `resource`. The pending-attempt store resolves the tenant cache on
 each operation and consumes state before exchanging the authorization code.
 
+### 4.8 Shared Craft action controls
+
+`web/src/sections/actions/PolicyToggle.tsx` is also used by Craft's workspace
+and scheduled-task action editors. It exposes Auto-approve, Ask, and
+Disabled choices. Its `disabled` prop locks all choices; `label` names the group
+for assistive technology, and `aria-pressed` identifies the selected choice.
+
+Craft locks actions disabled by the workspace and settings managed only by admins.
+The backend enforces those restrictions; disabling the control is a display rule,
+not authorization. Craft MCP permissions use the same action model as external
+apps. See [[craft-external-apps]] and [[craft-admin]] for policy resolution.
+
+Craft policy edits use the shared workspace-policy database writer. The MCP update route preserves
+its access checks but delegates catalog validation and sparse policy storage to that writer.
+MCP server creation also creates its `GatedApp` identity, so permission reads remain read-only.
+
 ## 5. Contracts and invariants
 
 1. **A tool name must be unique within one turn's tool set**, or the LLM

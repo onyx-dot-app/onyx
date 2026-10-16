@@ -338,7 +338,17 @@ is so long-running headless-agent task runs do not compete for Heavy's slots
 other workers. Light is the exception: it reads
 `CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER`, default 8.
 
+Scheduled-task creation and edits save action policies through
+`backend/onyx/db/action_policy.py`. New tasks start with all apps disabled.
+Enabling an app first copies personal settings; later toggles retain its saved choices. The proxy reads task settings for each
+request while the run is RUNNING; workers do not grant blanket app approval.
+Scheduling, queue selection, and dispatch locking are unchanged. See
+[[craft-scheduled-tasks]] for permission ownership and approval outcomes.
+
 ---
+
+Scheduled-task updates lock and authorize the task through `get_scheduled_task` before saving action policies.
+Policy writes receive that task; they do not repeat task ownership queries.
 
 ## 5. Contracts and invariants
 

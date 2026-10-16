@@ -2,7 +2,7 @@
 
 A provider declares the out-of-the-box policy for each catalog action (defaults
 to ``ASK``). The write path persists only deviations from that default
-(``resolve_action_overrides``); the policy views resolve missing rows back to it.
+(``normalize_action_policies``); the policy views resolve missing rows back to it.
 """
 
 from __future__ import annotations
@@ -45,78 +45,11 @@ def test_endpoint_spec_accepts_override() -> None:
     assert spec.default_policy == ActionPolicy.ALWAYS
 
 
-def test_resolve_overrides_persists_nothing_when_all_default(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """No requested/stored values → no rows. Each action resolves to its
-    ``default_policy`` at read time, so nothing is materialized."""
-    catalog = [
-        _spec(_TestAction.READ, ActionPolicy.ALWAYS),
-        _spec(_TestAction.WRITE),  # omitted → ASK
-    ]
-    monkeypatch.setattr(registry, "get_endpoint_catalog", lambda _app_type: catalog)
-
-    assert (
-        registry.resolve_action_overrides(
-            ExternalAppType.SLACK, requested=None, existing={}
-        )
-        == {}
-    )
-
-
-def test_resolve_overrides_keeps_deviations_prunes_defaults(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Only values differing from the catalog default survive: a requested pick
-    equal to the default is pruned, one that differs is kept, and an existing
-    override is preserved (merged under the request)."""
-    catalog = [
-        _spec(_TestAction.READ, ActionPolicy.ALWAYS),
-        _spec(_TestAction.WRITE, ActionPolicy.ASK),
-    ]
-    monkeypatch.setattr(registry, "get_endpoint_catalog", lambda _app_type: catalog)
-
-    resolved = registry.resolve_action_overrides(
-        ExternalAppType.SLACK,
-        # READ default is ALWAYS → DENY deviates (kept); setting it to ALWAYS
-        # would prune.
-        requested={"test.read": ActionPolicy.DENY},
-        existing={"test.write": ActionPolicy.DENY},  # deviates from ASK → kept
-    )
-    assert resolved == {
-        "test.read": ActionPolicy.DENY,
-        "test.write": ActionPolicy.DENY,
-    }
-
-
-def test_resolve_overrides_prunes_request_equal_to_default(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    catalog = [_spec(_TestAction.READ, ActionPolicy.ALWAYS)]
-    monkeypatch.setattr(registry, "get_endpoint_catalog", lambda _app_type: catalog)
-
-    resolved = registry.resolve_action_overrides(
-        ExternalAppType.SLACK,
-        requested={"test.read": ActionPolicy.ALWAYS},  # == default → pruned
-        existing={},
-    )
-    assert resolved == {}
-
-
-def test_resolve_overrides_drops_orphan_existing_rows(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An existing override for an action no longer in the catalog is dropped
-    on the next write (self-healing cleanup of orphaned rows)."""
-    catalog = [_spec(_TestAction.READ, ActionPolicy.ALWAYS)]
-    monkeypatch.setattr(registry, "get_endpoint_catalog", lambda _app_type: catalog)
-
-    resolved = registry.resolve_action_overrides(
-        ExternalAppType.SLACK,
-        requested=None,
-        existing={"test.removed": ActionPolicy.DENY},
-    )
-    assert resolved == {}
+def test_normalize_action_policies_keeps_only_overrides() -> None:
+    assert registry.normalize_action_policies(
+        {"read": ActionPolicy.ALWAYS, "write": ActionPolicy.DENY},
+        {"read": ActionPolicy.ALWAYS, "write": ActionPolicy.ASK},
+    ) == {"write": ActionPolicy.DENY}
 
 
 def test_action_policy_views_seed_from_each_default(

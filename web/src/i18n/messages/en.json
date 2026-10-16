@@ -685,7 +685,7 @@
         "label": "Ask"
       },
       "deny": {
-        "label": "Deny"
+        "label": "Disabled"
       }
     },
     "switchList": {
@@ -5338,7 +5338,7 @@
           "title": "No apps yet"
         },
         "panel": {
-          "blurb": "Configured once for the whole organization. Edit an app to set shared credentials, action policies, and associated skills."
+          "blurb": "Configured once for the whole organization. Edit an app to set shared credentials, approval settings, and associated skills."
         },
         "tab": {
           "label": "Apps",
@@ -13649,7 +13649,8 @@
       },
       "status": {
         "approved": "Approved",
-        "rejected": "Rejected"
+        "rejected": "Rejected",
+        "expired": "Expired"
       },
       "submit": {
         "errorFallback": "Failed to submit decision"
@@ -13815,6 +13816,7 @@
         "connectButton": "Connect",
         "connectingButton": "Redirecting…",
         "disconnectButton": "Disconnect",
+        "actionsMenuLabel": "Actions for {name}",
         "empty": {
           "description": "No apps or MCP servers are configured for your organization yet.",
           "title": "Nothing to connect yet"
@@ -14549,10 +14551,6 @@
             "label": "Name",
             "placeholder": "e.g. Weekly customer escalations digest"
           },
-          "preApproval": {
-            "description": "Craft can use selected apps and MCP servers without pausing when this task runs unattended. Other approval requests pause the run and can cause it to fail.",
-            "label": "Pre-approved apps and MCP servers"
-          },
           "prompt": {
             "description": "This message is sent to Craft each time the task fires.",
             "label": "Prompt",
@@ -14611,31 +14609,6 @@
       "newPage": {
         "description": "Save a prompt + schedule. Craft will run it on a timer.",
         "title": "New Scheduled Task"
-      },
-      "preApproval": {
-        "appFallbackName": "App #{id}",
-        "appsGroupTitle": "Apps",
-        "empty": {
-          "label": "No apps or MCP servers are available in Craft yet."
-        },
-        "errors": {
-          "loadFailed": "Couldn’t load apps and MCP servers. Refresh to try again.",
-          "partialLoadFailed": "Some pre-approval options couldn’t load. Refresh to try again."
-        },
-        "loading": {
-          "label": "Loading apps and MCP servers…"
-        },
-        "mcpGroupTitle": "MCP servers",
-        "mcpServerFallbackName": "MCP server #{id}",
-        "status": {
-          "connected": "Connected",
-          "connectionRequired": "Connection required",
-          "unavailable": "No longer available"
-        },
-        "summary": {
-          "partialLoadFailed": "Some pre-approval details couldn’t load. Refresh to try again.",
-          "title": "Pre-approved apps and MCP servers"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15011,6 +14984,50 @@
       "viewPlans": {
         "label": "View plans"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "{name} Approval settings",
+      "title": "Approval settings",
+      "personalDescription": "These settings apply to your conversations and new tasks. Existing tasks keep their own settings.",
+      "taskDescription": "Only enabled apps are available to this task. Changes apply only to this task.",
+      "newTaskDescription": "Enable the apps this task can use. Each app starts with your current approval settings.",
+      "workspace_disabled": "Disabled for the workspace",
+      "workspace_managed": "Managed by your workspace",
+      "userManagement": "Let users manage approval settings",
+      "userManagementDescription": "Users can change approval settings for available actions.",
+      "loading": "Loading approval settings…",
+      "loadError": "Could not load approval settings.",
+      "retry": "Try again",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saveError": "Could not save approval settings.",
+      "emptyActions": "No known actions. Unknown actions require approval.",
+      "emptyApps": "No apps available.",
+      "expired": "Approval expired. This request did not run.",
+      "rejected": "Request rejected. This request did not run.",
+      "deadline": "Approve by {time}",
+      "agentPermissionRequired": "This run stopped because an action needed approval. Review approval settings, then run the task again.",
+      "enableForTask": "Enable for this task",
+      "enableAppForTask": "Enable {app} for this task",
+      "enabledForTask": "Enabled for this task",
+      "disabledForTask": "Disabled for this task",
+      "externalApp": "App",
+      "mcpServer": "MCP server",
+      "taskAppsTitle": "Apps and MCP servers",
+      "actionPolicies": "Approval settings",
+      "policyCounts": "{auto} auto-approve · {ask} ask · {disabled} disabled",
+      "manageActions": "Manage actions",
+      "viewActions": "View actions",
+      "taskModalDescription": "Changes apply when you save the task. Workspace restrictions always apply.",
+      "searchActions": "Search actions",
+      "applyMatching": "Set {count} matching editable actions to:",
+      "noMatchingActions": "No actions match your search.",
+      "close": "Close",
+      "saveChanges": "Save changes",
+      "resetDefaults": "Reset all to defaults",
+      "resetAll": "Reset all to workspace defaults",
+      "workspaceDisabledTooltip": "An admin disabled this action for the workspace."
     }
   },
   "knowledge": {
