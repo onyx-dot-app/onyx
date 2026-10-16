@@ -2481,7 +2481,7 @@
           "running": "{count, plural, one {# ejecución en curso} other {# ejecuciones en curso}}",
           "succeeded": "{count, plural, one {# ejecución correcta} other {# ejecuciones correctas}}",
           "failed": "{count, plural, one {# ejecución fallida} other {# ejecuciones fallidas}}",
-          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
+          "canceled": "{count, plural, one {# ejecución cancelada} other {# ejecuciones canceladas}}",
           "passedChecks": "{count, plural, one {# comprobación superada} other {# comprobaciones superadas}}",
           "failedChecks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
           "skippedChecks": "{count, plural, one {# comprobación omitida} other {# comprobaciones omitidas}}"
@@ -2495,7 +2495,16 @@
           "h1": "Última hora",
           "h12": "Últimas 12 horas",
           "h24": "Últimas 24 horas",
-          "d7": "Últimos 7 días"
+          "d7": "Últimos 7 días",
+          "d30": "Últimos 30 días"
+        },
+        "statusGroups": {
+          "label": "Estado",
+          "all": "Todos los estados",
+          "running": "En curso",
+          "succeeded": "Correctas",
+          "failed": "Fallidas",
+          "canceled": "Canceladas"
         },
         "loadError": {
           "title": "No se pudieron cargar las ejecuciones."

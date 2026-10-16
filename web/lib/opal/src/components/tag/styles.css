@@ -163,25 +163,3 @@
   padding: 1px;
   border-radius: 2px;
 }
-
-/* ---------------------------------------------------------------------------
-   Toggle ([data-type="toggle"]): a passive tag that filters on click. An
-   inset ring in the tag's own color marks hover and selection, so the tag
-   keeps its size.
-   --------------------------------------------------------------------------- */
-
-.opal-auxiliary-tag[data-type="toggle"] {
-  @apply cursor-pointer;
-}
-
-.opal-auxiliary-tag[data-type="toggle"]:hover {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 40%, transparent);
-}
-
-.opal-auxiliary-tag[data-type="toggle"][data-selected] {
-  box-shadow: inset 0 0 0 1px currentColor;
-}
-
-.opal-auxiliary-tag[data-type="toggle"]:focus-visible {
-  @apply outline-none ring-2 ring-background-tint-04;
-}

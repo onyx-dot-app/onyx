@@ -36,8 +36,11 @@ const TICK_MINUTES = {
   "7d": DAY_MINUTES,
 } satisfies Record<CCPairThroughputWindow, number>;
 
-/** A window a picker offers: a chart window, or all time where a list shares the picker. */
-export type PickerWindow = CCPairThroughputWindow | "all";
+/** A window a picker offers. */
+export type PickerWindow = CCPairThroughputWindow;
+
+// The pair chart has no 1h window: one hour of a pair is too few runs to read.
+export const PAIR_WINDOWS: readonly PickerWindow[] = ["12h", "24h", "7d"];
 
 /** Each window's label under `admin.connector.runs.window`. */
 export const WINDOW_LABEL_KEYS = {
@@ -45,7 +48,6 @@ export const WINDOW_LABEL_KEYS = {
   "12h": "h12",
   "24h": "h24",
   "7d": "d7",
-  all: "all",
 } as const satisfies Record<PickerWindow, string>;
 
 const WINDOW_HOURS = {
@@ -53,8 +55,7 @@ const WINDOW_HOURS = {
   "12h": 12,
   "24h": 24,
   "7d": 24 * 7,
-  all: null,
-} satisfies Record<PickerWindow, number | null>;
+} satisfies Record<PickerWindow, number>;
 
 function windowLabelKey(window: PickerWindow) {
   return WINDOW_LABEL_KEYS[window];
@@ -62,18 +63,16 @@ function windowLabelKey(window: PickerWindow) {
 
 export interface PickedWindow {
   window: PickerWindow;
-  /** The window's start, fixed when it is picked so polling keeps one cache key. `null` is all time. */
-  since: string | null;
+  /** The window's start, fixed when it is picked so polling keeps one cache key. */
+  since: string;
 }
 
 export function pickWindow(window: PickerWindow): PickedWindow {
-  const hours = WINDOW_HOURS[window];
   return {
     window,
-    since:
-      hours === null
-        ? null
-        : new Date(Date.now() - hours * 3_600_000).toISOString(),
+    since: new Date(
+      Date.now() - WINDOW_HOURS[window] * 3_600_000
+    ).toISOString(),
   };
 }
 
