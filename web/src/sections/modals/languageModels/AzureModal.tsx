@@ -1,5 +1,6 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -33,7 +34,7 @@ import {
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface AzureModalValues extends BaseLLMFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   target_uri: string;
   api_base?: string;
   api_version?: string;
@@ -180,7 +181,9 @@ export default function AzureModal({
         </InputVertical>
       </InputPadder>
 
-      <APIKeyField providerName="Azure" />
+      <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
+      />
 
       {!isOnboarding && (
         <>

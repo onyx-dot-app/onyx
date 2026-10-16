@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "API 키를 입력하세요.",
-          "label": "API 키",
-          "placeholder": "API 키를 입력하세요",
           "required": "API 키는 필수입니다"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "{title} 편집"
-        },
-        "loading": {
-          "placeholder": "불러오는 중..."
         },
         "location": {
           "idle": "Vertex AI 모델을 사용할 Google Cloud 리전입니다. 사용 가능한 리전은 <link>Google 문서</link>를 참고하세요.",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "모델 추가"
           },
-          "apiKeyField": {
-            "description": "모델 제공자가 인증을 요구하면 API 키를 붙여넣으세요."
-          },
           "apiVersionField": {
             "title": "API 버전"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "Ollama API 기본 URL"
           },
           "apiKeyField": {
-            "description": "Ollama Cloud API 키입니다.",
-            "placeholder": "API 키"
+            "description": "Ollama Cloud API 키입니다."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "OpenAI 호환 엔드포인트 URL을 붙여넣으세요.",
             "learnMore": "[자세히 보기](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "모델 제공자가 인증을 요구하면 API 키를 붙여넣으세요."
           },
           "description": "OpenAI 호환 엔드포인트를 통해 다른 클라우드 모델이나 자체 호스팅 모델을 연결합니다."
         },
@@ -7315,8 +7302,6 @@
             "title": "API 기본 URL"
           },
           "apiKeyField": {
-            "description": "모델에 액세스하려면 API 키를 붙여넣으세요.",
-            "providerDescription": "모델에 액세스하려면 {provider}에서 발급한 API 키를 붙여넣으세요.",
             "title": "API 키"
           },
           "cancelButton": {

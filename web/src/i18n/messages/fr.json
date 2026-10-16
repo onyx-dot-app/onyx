@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "Saisissez votre clé d'API.",
-          "label": "Clé d'API",
-          "placeholder": "Saisissez votre clé d'API",
           "required": "La clé d'API est obligatoire"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "Modifier {title}"
-        },
-        "loading": {
-          "placeholder": "Chargement..."
         },
         "location": {
           "idle": "La région Google Cloud de vos modèles Vertex AI. Consultez la <link>documentation Google</link> pour connaître les régions disponibles.",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "Ajouter un modèle"
           },
-          "apiKeyField": {
-            "description": "Collez votre clé d'API si votre fournisseur de modèles exige une authentification."
-          },
           "apiVersionField": {
             "title": "Version de l'API"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "L'URL de base de votre API Ollama"
           },
           "apiKeyField": {
-            "description": "Votre clé d'API Ollama Cloud.",
-            "placeholder": "Clé d'API"
+            "description": "Votre clé d'API Ollama Cloud."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "Collez l'URL de votre point de terminaison compatible OpenAI.",
             "learnMore": "[En savoir plus](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "Collez votre clé d'API si votre fournisseur de modèles exige une authentification."
           },
           "description": "Connectez d'autres modèles cloud ou auto-hébergés via des points de terminaison compatibles OpenAI."
         },
@@ -7315,8 +7302,6 @@
             "title": "URL de base de l'API"
           },
           "apiKeyField": {
-            "description": "Collez votre clé d'API pour accéder à vos modèles.",
-            "providerDescription": "Collez votre clé d'API de {provider} pour accéder à vos modèles.",
             "title": "Clé d'API"
           },
           "cancelButton": {

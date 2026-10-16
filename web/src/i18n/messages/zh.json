@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "输入您的 API 密钥。",
-          "label": "API 密钥",
-          "placeholder": "输入您的 API 密钥",
           "required": "API 密钥为必填项"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "编辑 {title}"
-        },
-        "loading": {
-          "placeholder": "正在加载..."
         },
         "location": {
           "idle": "用于 Vertex AI 模型的 Google Cloud 区域。可用区域请参见 <link>Google 文档</link>。",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "添加模型"
           },
-          "apiKeyField": {
-            "description": "如果您的模型提供商需要身份验证，请粘贴您的 API 密钥。"
-          },
           "apiVersionField": {
             "title": "API 版本"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "您的 Ollama API 基础 URL"
           },
           "apiKeyField": {
-            "description": "您的 Ollama Cloud API 密钥。",
-            "placeholder": "API 密钥"
+            "description": "您的 Ollama Cloud API 密钥。"
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "粘贴您的 OpenAI 兼容端点 URL。",
             "learnMore": "[了解更多](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "如果您的模型提供商需要身份验证，请粘贴您的 API 密钥。"
           },
           "description": "通过 OpenAI 兼容端点连接其他云端或自托管模型。"
         },
@@ -7315,8 +7302,6 @@
             "title": "API 基础 URL"
           },
           "apiKeyField": {
-            "description": "粘贴您的 API 密钥以访问您的模型。",
-            "providerDescription": "粘贴来自 {provider} 的 API 密钥以访问您的模型。",
             "title": "API 密钥"
           },
           "cancelButton": {

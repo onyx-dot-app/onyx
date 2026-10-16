@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "Geben Sie Ihren API-Schlüssel ein.",
-          "label": "API-Schlüssel",
-          "placeholder": "Geben Sie Ihren API-Schlüssel ein",
           "required": "API-Schlüssel ist erforderlich"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "{title} bearbeiten"
-        },
-        "loading": {
-          "placeholder": "Wird geladen..."
         },
         "location": {
           "idle": "Die Google Cloud-Region für Ihre Vertex AI-Modelle. Verfügbare Regionen finden Sie in der <link>Dokumentation von Google</link>.",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "Modell hinzufügen"
           },
-          "apiKeyField": {
-            "description": "Fügen Sie Ihren API-Schlüssel ein, wenn Ihr Modellanbieter eine Authentifizierung erfordert."
-          },
           "apiVersionField": {
             "title": "API-Version"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "Ihre Ollama-API-Basis-URL"
           },
           "apiKeyField": {
-            "description": "Ihr API-Schlüssel für Ollama Cloud.",
-            "placeholder": "API-Schlüssel"
+            "description": "Ihr API-Schlüssel für Ollama Cloud."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "Fügen Sie Ihre OpenAI-kompatible Endpunkt-URL ein.",
             "learnMore": "[Mehr erfahren](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "Fügen Sie Ihren API-Schlüssel ein, wenn Ihr Modellanbieter eine Authentifizierung erfordert."
           },
           "description": "Verbinden Sie andere Cloud-Modelle oder selbst gehostete Modelle über OpenAI-kompatible Endpunkte."
         },
@@ -7315,8 +7302,6 @@
             "title": "API-Basis-URL"
           },
           "apiKeyField": {
-            "description": "Fügen Sie Ihren API-Schlüssel ein, um auf Ihre Modelle zuzugreifen.",
-            "providerDescription": "Fügen Sie Ihren API-Schlüssel von {provider} ein, um auf Ihre Modelle zuzugreifen.",
             "title": "API-Schlüssel"
           },
           "cancelButton": {

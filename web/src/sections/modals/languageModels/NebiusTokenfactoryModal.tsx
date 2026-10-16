@@ -1,5 +1,7 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { toApiTokenPayload } from "@/lib/api-tokens/utils";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { markdown } from "@opal/utils";
@@ -33,7 +35,7 @@ import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 const DEFAULT_API_BASE = "https://api.tokenfactory.nebius.com/v1";
 
 interface NebiusTokenfactoryModalValues extends BaseLLMFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   api_base: string;
 }
 
@@ -55,7 +57,7 @@ function NebiusTokenfactoryModalInternals({
   const handleFetchModels = async () => {
     const { models, error } = await fetchNebiusTokenfactoryModels({
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key || undefined,
+      api_key: toApiTokenPayload(formikProps.values.api_key),
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -75,7 +77,7 @@ function NebiusTokenfactoryModalInternals({
     autoRefetched.current = true;
     fetchNebiusTokenfactoryModels({
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key || undefined,
+      api_key: toApiTokenPayload(formikProps.values.api_key),
       provider_id: existingLlmProvider.id,
     })
       .then(({ models }) => {
@@ -95,6 +97,7 @@ function NebiusTokenfactoryModalInternals({
       />
 
       <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
         subDescription={markdown(t("nebius.apiKeyField.description"))}
       />
 

@@ -10,6 +10,7 @@ const baseProvider: LLMProviderView = {
   name: "azure",
   provider: "azure",
   api_key: "sk-test",
+  api_token_id: 1,
   api_base: "https://my-resource.openai.azure.com",
   api_version: "2025-01-01-preview",
   custom_config: null,

@@ -701,7 +701,6 @@ export class OnyxApiClient {
           name: MOCK_LLM_PROVIDER_NAME,
           provider: "openai_compatible",
           api_key: MOCK_LLM_API_KEY,
-          api_key_changed: true,
           api_base: mockLlmApiBase(),
           is_public: true,
           groups: [],

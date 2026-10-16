@@ -1,11 +1,13 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { isApiTokenValueEmpty } from "@/lib/api-tokens/utils";
+import { ApiTokenField } from "@/lib/api-tokens/components";
 import { useTranslations } from "next-intl";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, InputVertical, toast } from "@opal/layouts";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -39,6 +41,7 @@ enum Tab {
 }
 
 interface OllamaModalValues extends BaseLLMFormValues {
+  api_key: ApiTokenValue;
   api_base: string;
 }
 
@@ -65,13 +68,13 @@ function OllamaModalInternals({
     () =>
       tab === Tab.TAB_SELF_HOSTED
         ? !formikProps.values.api_base
-        : !formikProps.values.api_key,
+        : isApiTokenValueEmpty(formikProps.values.api_key),
     [tab, formikProps]
   );
 
   const handleFetchModels = async (signal?: AbortSignal) => {
     // Only Ollama cloud accepts API key
-    const apiBase = formikProps.values.api_key
+    const apiBase = !isApiTokenValueEmpty(formikProps.values.api_key)
       ? CLOUD_API_BASE
       : formikProps.values.api_base;
     const { models, error } = await fetchOllamaModels({
@@ -113,16 +116,11 @@ function OllamaModalInternals({
             </Tabs.Content>
 
             <Tabs.Content value={Tab.TAB_CLOUD}>
-              <InputVertical
-                withLabel="api_key"
-                title={t("setup.apiKeyField.title")}
+              <ApiTokenField
+                platform={LLMProviderName.OLLAMA_CHAT}
                 subDescription={t("ollama.apiKeyField.description")}
-              >
-                <PasswordInputTypeInField
-                  name="api_key"
-                  placeholder={t("ollama.apiKeyField.placeholder")}
-                />
-              </InputVertical>
+                savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
+              />
             </Tabs.Content>
           </div>
         </Tabs>
@@ -202,7 +200,9 @@ export default function OllamaModal({
         const submitValues = {
           ...values,
           // Ollama Cloud is reached via a fixed base URL; the API key implies it.
-          api_base: values.api_key ? CLOUD_API_BASE : values.api_base,
+          api_base: !isApiTokenValueEmpty(values.api_key)
+            ? CLOUD_API_BASE
+            : values.api_base,
         };
 
         await submitProvider({

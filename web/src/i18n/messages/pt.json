@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "Insira sua chave de API.",
-          "label": "Chave de API",
-          "placeholder": "Insira sua chave de API",
           "required": "A chave de API é obrigatória"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "Editar {title}"
-        },
-        "loading": {
-          "placeholder": "Carregando..."
         },
         "location": {
           "idle": "A região do Google Cloud dos seus modelos Vertex AI. Consulte a <link>documentação do Google</link> para ver as regiões disponíveis.",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "Adicionar modelo"
           },
-          "apiKeyField": {
-            "description": "Cole sua chave de API se o seu provedor de modelos exigir autenticação."
-          },
           "apiVersionField": {
             "title": "Versão da API"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "A URL base da API do seu Ollama"
           },
           "apiKeyField": {
-            "description": "Sua chave de API do Ollama Cloud.",
-            "placeholder": "Chave de API"
+            "description": "Sua chave de API do Ollama Cloud."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "Cole a URL do seu endpoint compatível com OpenAI.",
             "learnMore": "[Saiba mais](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "Cole sua chave de API se o seu provedor de modelos exigir autenticação."
           },
           "description": "Conecte outros modelos na nuvem ou auto-hospedados por endpoints compatíveis com OpenAI."
         },
@@ -7315,8 +7302,6 @@
             "title": "URL base da API"
           },
           "apiKeyField": {
-            "description": "Cole sua chave de API para acessar seus modelos.",
-            "providerDescription": "Cole sua chave de API do {provider} para acessar seus modelos.",
             "title": "Chave de API"
           },
           "cancelButton": {

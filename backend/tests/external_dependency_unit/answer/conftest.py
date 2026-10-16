@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.llm import update_default_provider, upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -24,7 +25,7 @@ def ensure_default_llm_provider(db_session: Session) -> None:
         llm_provider_request = LLMProviderUpsertRequest(
             name="test-provider",
             provider=LlmProviderNames.OPENAI,
-            api_key=os.environ.get("OPENAI_API_KEY", "test"),
+            api_key=NewApiToken(value=os.environ.get("OPENAI_API_KEY", "test")),
             is_public=True,
             model_configurations=[
                 ModelConfigurationUpsertRequest(

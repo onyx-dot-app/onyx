@@ -3738,9 +3738,10 @@ class LLMProvider(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     provider: Mapped[str] = mapped_column(String)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     api_base: Mapped[str | None] = mapped_column(String, nullable=True)
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     # custom configs that should be passed to the LLM provider at inference time
@@ -3780,6 +3781,10 @@ class LLMProvider(Base):
         back_populates="llm_provider",
         foreign_keys="ModelConfiguration.llm_provider_id",
     )
+
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
 
 
 class ModelConfiguration(Base):

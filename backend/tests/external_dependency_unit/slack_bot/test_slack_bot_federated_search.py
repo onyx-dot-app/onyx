@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
 
 from onyx.db.llm import update_default_provider, upsert_llm_provider
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -449,7 +450,7 @@ class TestSlackBotFederatedSearch:
             LLMProviderUpsertRequest(
                 name=f"test-llm-provider-{uuid4().hex[:8]}",
                 provider=LlmProviderNames.OPENAI,
-                api_key=api_key,
+                api_key=NewApiToken(value=api_key),
                 is_public=True,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(

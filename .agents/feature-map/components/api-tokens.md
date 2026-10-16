@@ -136,7 +136,7 @@ and the Unstructured key (the key-value store holds its token id under
 
 ## 8. How to verify a change
 
-- External dependency: `backend/tests/external_dependency_unit/db/test_rotate_encryption_key.py` (rotation finds `api_token.value`).
+- Integration: `backend/tests/integration/tests/api_token/`.
 - Per consumer: the LLM provider, web search and image generation integration
   tests, and the voice, embedding, tracing, hook and Unstructured unit tests.
 - Manual: save an OpenAI key on an LLM provider, open the image generation

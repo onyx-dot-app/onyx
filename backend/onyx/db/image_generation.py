@@ -1,8 +1,10 @@
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.db.api_token import assign_api_token, assign_system_api_token
 from onyx.db.models import ImageGenerationConfig, LLMProvider, ModelConfiguration
 from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -167,6 +169,8 @@ def create_default_image_gen_config_from_api_key(
     provider: str = DEFAULT_IMAGE_PROVIDER,
     image_provider_id: str = DEFAULT_IMAGE_PROVIDER_ID,
     model_name: str = DEFAULT_IMAGE_MODEL_NAME,
+    *,
+    system_key: bool = False,
 ) -> ImageGenerationConfig | None:
     """Create default image gen config using an API key directly.
 
@@ -179,6 +183,7 @@ def create_default_image_gen_config_from_api_key(
         provider: Provider name (default: openai)
         image_provider_id: Static unique key for the config (default: openai_gpt_image_1)
         model_name: Model name for image generation (default: gpt-image-1)
+        system_key: Store the key as Onyx-owned (Cloud default keys)
 
     Returns:
         The created ImageGenerationConfig, or None if:
@@ -195,7 +200,6 @@ def create_default_image_gen_config_from_api_key(
         new_provider = LLMProvider(
             name=f"Image Gen - {image_provider_id}",
             provider=provider,
-            api_key=api_key,
             api_base=None,
             api_version=None,
             deployment_name=None,
@@ -203,6 +207,18 @@ def create_default_image_gen_config_from_api_key(
         )
         db_session.add(new_provider)
         db_session.flush()
+        if system_key:
+            assign_system_api_token(
+                db_session, new_provider, api_key, platform=provider, base_url=None
+            )
+        else:
+            assign_api_token(
+                db_session,
+                new_provider,
+                NewApiToken(value=api_key),
+                platform=provider,
+                base_url=None,
+            )
 
         # Create model configuration
         max_input_tokens = get_max_input_tokens(

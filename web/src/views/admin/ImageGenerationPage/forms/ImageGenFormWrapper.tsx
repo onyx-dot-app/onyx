@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import isEqual from "lodash/isEqual";
 import { useTranslations } from "next-intl";
 import { Form, Formik, FormikProps } from "formik";
 import ProviderModal from "@/sections/modals/ProviderModal";
@@ -115,18 +116,16 @@ export function ImageGenFormWrapper<T extends FormValues>({
             modelName: imageProvider.model_name,
             imageProviderId: imageProvider.image_provider_id,
             provider: imageProvider.provider_name,
-            apiKey: (values as Record<string, unknown>).api_key as
-              | string
-              | undefined,
+            apiKey: values.api_key,
           };
 
-      const apiKeyValue = (values as Record<string, unknown>).api_key as string;
-      // Check if the API key was changed from its masked value
-      // A masked key contains "****", so if present, user hasn't entered a new key
-      const apiKeyChanged = !apiKeyValue?.includes("****");
+      // An edit that keeps the saved key does not test it again.
+      const keepsSavedKey =
+        isEditMode &&
+        payload.apiKey?.type === "existing" &&
+        isEqual(payload.apiKey, mergedInitialValues.api_key);
 
-      // Test the API key first (only if changed or creating new config)
-      if (apiKeyChanged) {
+      if (!keepsSavedKey) {
         const result = await testImageGenerationApiKey(payload.modelName, {
           provider: payload.provider,
           apiKey: payload.apiKey,
@@ -156,7 +155,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
           apiVersion: payload.apiVersion,
           deploymentName: payload.deploymentName,
           customConfig: payload.customConfig,
-          apiKeyChanged,
         });
       } else {
         await createImageGenerationConfig({

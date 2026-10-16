@@ -14,6 +14,7 @@ from onyx.db.llm import (
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_default_llm, llm_from_provider
 from onyx.llm.interfaces import LLM
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -64,7 +65,7 @@ def _ensure_llm_provider(db_session: Session) -> None:  # noqa: F811
         llm_provider_upsert_request=LLMProviderUpsertRequest(
             name=_FALLBACK_PROVIDER_NAME,
             provider=LlmProviderNames.OPENAI,
-            api_key=api_key,
+            api_key=NewApiToken(value=api_key),
             is_public=True,
             model_configurations=[
                 ModelConfigurationUpsertRequest(name=_FALLBACK_MODEL, is_visible=True)

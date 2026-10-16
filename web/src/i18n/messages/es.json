@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "Introduce tu clave de API.",
-          "label": "Clave de API",
-          "placeholder": "Introduce tu clave de API",
           "required": "La clave de API es obligatoria"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "Editar {title}"
-        },
-        "loading": {
-          "placeholder": "Cargando..."
         },
         "location": {
           "idle": "La región de Google Cloud de tus modelos de Vertex AI. Consulta <link>la documentación de Google</link> para ver las regiones disponibles.",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "Añadir un modelo"
           },
-          "apiKeyField": {
-            "description": "Pega tu clave de API si tu proveedor de modelos requiere autenticación."
-          },
           "apiVersionField": {
             "title": "Versión de la API"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "URL base de la API de Ollama"
           },
           "apiKeyField": {
-            "description": "Tu clave de API de Ollama Cloud.",
-            "placeholder": "Clave de API"
+            "description": "Tu clave de API de Ollama Cloud."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "Pega la URL del endpoint compatible con OpenAI.",
             "learnMore": "[Más información](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "Pega tu clave de API si tu proveedor de modelos requiere autenticación."
           },
           "description": "Conéctate a otros modelos en la nube o autoalojados mediante endpoints compatibles con OpenAI."
         },
@@ -7315,8 +7302,6 @@
             "title": "URL base de la API"
           },
           "apiKeyField": {
-            "description": "Pega tu clave de API para acceder a tus modelos.",
-            "providerDescription": "Pega tu clave de API de {provider} para acceder a tus modelos.",
             "title": "Clave de API"
           },
           "cancelButton": {

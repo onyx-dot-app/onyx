@@ -288,7 +288,6 @@ def _create_provider_payload(
         "groups": [],
         "personas": [],
         "model_configurations": [{"name": model_name, "is_visible": True}],
-        "api_key_changed": bool(api_key),
         "custom_config_changed": bool(custom_config),
     }
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.db.api_token import assign_api_token, peek_api_token_value
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.image_generation import (
@@ -23,6 +24,7 @@ from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.utils import collect_credential_values
+from onyx.server.manage.api_token.models import ApiTokenInput, ExistingApiToken
 from onyx.server.manage.image_generation.models import (
     ImageGenerationConfigCreate,
     ImageGenerationConfigUpdate,
@@ -60,23 +62,33 @@ def _get_test_quality_for_model(model_name: str) -> str | None:
 
 
 def _build_llm_provider_request(
+    db_session: Session,
     image_provider_id: str,
     model_name: str,
     provider: str | None,
-    api_key: str | None,
+    api_key: ApiTokenInput | None,
     api_base: str | None,
     api_version: str | None,
     deployment_name: str | None,
     custom_config: dict[str, str] | None,
+    current_token_id: int | None = None,
 ) -> LLMProviderUpsertRequest:
-    """Build the LLM provider request for an image generation config."""
+    """Build the LLM provider request for an image generation config.
+
+    ``current_token_id`` is the key of the config being edited, if any."""
     if not provider:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No provider provided")
 
     custom_config = _validate_and_normalize_vertex_auth(provider, custom_config)
 
     credentials = ImageGenerationProviderCredentials(
-        api_key=api_key,
+        api_key=peek_api_token_value(
+            db_session,
+            api_key,
+            platform=provider,
+            base_url=api_base,
+            current_token_id=current_token_id,
+        ),
         api_base=api_base,
         api_version=api_version,
         deployment_name=deployment_name,
@@ -112,18 +124,21 @@ def _create_image_gen_llm_provider__no_commit(
     db_session: Session,
     provider_request: LLMProviderUpsertRequest,
     model_name: str,
+    current_token_id: int | None = None,
 ) -> int:
     """Create a new LLM provider for image generation. Returns model_config_id.
 
     Unlike upsert_llm_provider, this always creates a new provider and never
     deletes existing model configurations (which would cascade-delete ImageGenerationConfig).
+    ``current_token_id`` is the key of the provider this one replaces, so an
+    edit can keep it.
     """
 
     # Always create a new provider (don't look up by name to avoid upsert behavior)
     new_provider = LLMProviderModel(
         name=provider_request.name,
         provider=provider_request.provider,
-        api_key=provider_request.api_key,
+        api_token_id=current_token_id,
         api_base=provider_request.api_base,
         api_version=provider_request.api_version,
         deployment_name=provider_request.deployment_name,
@@ -132,6 +147,13 @@ def _create_image_gen_llm_provider__no_commit(
     )
     db_session.add(new_provider)
     db_session.flush()  # Get the ID
+    assign_api_token(
+        db_session,
+        new_provider,
+        provider_request.api_key,
+        platform=provider_request.provider,
+        base_url=provider_request.api_base,
+    )
 
     # Create model configuration
     max_input_tokens = get_max_input_tokens(
@@ -155,16 +177,23 @@ def _create_image_gen_llm_provider__no_commit(
 def test_image_generation(
     test_request: TestImageGenerationRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> None:
     """Test if an API key is valid for image generation.
 
     Makes a minimal image generation request to verify credentials using LiteLLM.
     """
-    api_key = test_request.api_key
     provider = test_request.provider
 
     if provider is None:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No provider provided")
+
+    api_key = peek_api_token_value(
+        db_session,
+        test_request.api_key,
+        platform=provider,
+        base_url=test_request.api_base,
+    )
 
     custom_config = _validate_and_normalize_vertex_auth(
         provider, test_request.custom_config
@@ -239,6 +268,7 @@ def create_config(
     try:
         # Build and create LLM provider
         provider_request = _build_llm_provider_request(
+            db_session=db_session,
             image_provider_id=config_create.image_provider_id,
             model_name=config_create.model_name,
             provider=config_create.provider,
@@ -336,47 +366,37 @@ def update_config(
             old_provider.name = f"{old_provider.name}-old-{old_llm_provider_id}"
             db_session.flush()
 
-        # Use the provided api_key, or preserve the existing one if not changed
-        actual_api_key = config_update.api_key
+        # Leaving out api_key keeps the current key.
+        current_token_id = old_provider.api_token_id if old_provider else None
+        api_key = config_update.api_key
+        if "api_key" not in config_update.model_fields_set and current_token_id:
+            api_key = ExistingApiToken(id=current_token_id)
         if old_provider:
-            # Check if we should preserve existing API key:
-            # - api_key_changed=False AND (key is None/empty OR looks masked)
-            provided_key_is_masked = (
-                config_update.api_key and "****" in config_update.api_key
+            _validate_llm_provider_change(
+                existing_custom_config=old_provider.custom_config,
+                new_custom_config=config_update.custom_config,
+                uses_saved_key=isinstance(api_key, ExistingApiToken),
             )
-            if not config_update.api_key_changed and (
-                not config_update.api_key or provided_key_is_masked
-            ):
-                _validate_llm_provider_change(
-                    existing_api_base=old_provider.api_base,
-                    existing_custom_config=old_provider.custom_config,
-                    new_api_base=config_update.api_base,
-                    new_custom_config=config_update.custom_config,
-                    api_key_changed=False,
-                )
-                # Preserve existing API key when user didn't change it
-                actual_api_key = (
-                    old_provider.api_key.get_value(apply_mask=False)
-                    if old_provider.api_key
-                    else None
-                )
 
         # 3. Build and create new LLM provider
         provider_request = _build_llm_provider_request(
+            db_session=db_session,
             image_provider_id=image_provider_id,
             model_name=config_update.model_name,
             provider=config_update.provider,
-            api_key=actual_api_key,
+            api_key=api_key,
             api_base=config_update.api_base,
             api_version=config_update.api_version,
             deployment_name=config_update.deployment_name,
             custom_config=config_update.custom_config,
+            current_token_id=current_token_id,
         )
 
         new_model_config_id = _create_image_gen_llm_provider__no_commit(
             db_session=db_session,
             provider_request=provider_request,
             model_name=config_update.model_name,
+            current_token_id=current_token_id,
         )
 
         # 4. Update the ImageGenerationConfig to point to new model config

@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "أدخل مفتاح API الخاص بك.",
-          "label": "مفتاح API",
-          "placeholder": "أدخل مفتاح API الخاص بك",
           "required": "مفتاح API مطلوب"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "تعديل {title}"
-        },
-        "loading": {
-          "placeholder": "جارٍ التحميل..."
         },
         "location": {
           "idle": "منطقة Google Cloud لنماذج Vertex AI الخاصة بك. راجع <link>وثائق Google</link> للمناطق المتاحة.",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "إضافة نموذج"
           },
-          "apiKeyField": {
-            "description": "الصق مفتاح API إذا كان موفر النموذج يتطلب مصادقة."
-          },
           "apiVersionField": {
             "title": "إصدار API"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "عنوان URL الأساسي لـ Ollama API"
           },
           "apiKeyField": {
-            "description": "مفتاح API الخاص بك في Ollama Cloud.",
-            "placeholder": "مفتاح API"
+            "description": "مفتاح API الخاص بك في Ollama Cloud."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "الصق عنوان URL لنقطة النهاية المتوافقة مع OpenAI.",
             "learnMore": "[اعرف المزيد](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "الصق مفتاح API إذا كان موفر النموذج يتطلب مصادقة."
           },
           "description": "اربط نماذج سحابية أو مستضافة ذاتيًا أخرى عبر نقاط نهاية متوافقة مع OpenAI."
         },
@@ -7315,8 +7302,6 @@
             "title": "عنوان URL الأساسي لـ API"
           },
           "apiKeyField": {
-            "description": "الصق مفتاح API للوصول إلى نماذجك.",
-            "providerDescription": "الصق مفتاح API من {provider} للوصول إلى نماذجك.",
             "title": "مفتاح API"
           },
           "cancelButton": {

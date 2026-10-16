@@ -19,6 +19,7 @@ from onyx.db.models import MCPServer, Persona
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.mcp import api as mcp_api
 from onyx.server.features.persona.api import get_persona
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -81,8 +82,7 @@ def test_viewer_outside_provider_group_keeps_agent_model_pin(
         LLMProviderUpsertRequest(
             name=f"restricted-{uuid4().hex[:8]}",
             provider=LlmProviderNames.OPENAI,
-            api_key="sk-test-00000000000000000000000000000000000000",
-            api_key_changed=True,
+            api_key=NewApiToken(value="sk-test-00000000000000000000000000000000000000"),
             is_public=False,
             model_configurations=[
                 ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)

@@ -52,6 +52,7 @@ from onyx.natural_language_processing.search_nlp_models import (
     EmbeddingModel,
     warm_up_bi_encoder,
 )
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -259,7 +260,7 @@ def setup_postgres(db_session: Session) -> None:
             id=existing.id if existing else None,
             name=provider_name,
             provider=LlmProviderNames.OPENAI,
-            api_key=GEN_AI_API_KEY,
+            api_key=NewApiToken(value=GEN_AI_API_KEY),
             api_base=None,
             api_version=None,
             custom_config=None,
@@ -269,7 +270,6 @@ def setup_postgres(db_session: Session) -> None:
                 ModelConfigurationUpsertRequest(name=name, is_visible=True)
                 for name in get_openai_model_names()
             ],
-            api_key_changed=True,
         )
         try:
             new_llm_provider = upsert_llm_provider(

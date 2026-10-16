@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "Enter your API key.",
-          "label": "API Key",
-          "placeholder": "Enter your API key",
           "required": "API Key is required"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "Edit {title}"
-        },
-        "loading": {
-          "placeholder": "Loading..."
         },
         "location": {
           "idle": "The Google Cloud region for your Vertex AI models. See <link>Google's documentation</link> for available regions.",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "Add Model"
           },
-          "apiKeyField": {
-            "description": "Paste your API key if your model provider requires authentication."
-          },
           "apiVersionField": {
             "title": "API Version"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "Your Ollama API base URL"
           },
           "apiKeyField": {
-            "description": "Your Ollama Cloud API key.",
-            "placeholder": "API Key"
+            "description": "Your Ollama Cloud API key."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "Paste your OpenAI-compatible endpoint URL.",
             "learnMore": "[Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "Paste your API key if your model provider requires authentication."
           },
           "description": "Connect from other cloud or self-hosted models via OpenAI-compatible endpoints."
         },
@@ -7315,8 +7302,6 @@
             "title": "API Base URL"
           },
           "apiKeyField": {
-            "description": "Paste your API key to access your models.",
-            "providerDescription": "Paste your API key from {provider} to access your models.",
             "title": "API Key"
           },
           "cancelButton": {

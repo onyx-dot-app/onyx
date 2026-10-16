@@ -2,6 +2,7 @@ import os
 from uuid import uuid4
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     DefaultModel,
     LLMProviderUpsertRequest,
@@ -37,7 +38,7 @@ class LLMProviderManager:
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",
             provider=provider or LlmProviderNames.OPENAI,
-            api_key=api_key or os.environ["OPENAI_API_KEY"],
+            api_key=NewApiToken(value=api_key or os.environ["OPENAI_API_KEY"]),
             api_base=api_base,
             api_version=api_version,
             custom_config=None,
@@ -70,7 +71,6 @@ class LLMProviderManager:
                     for model_name in (router_model_names or [])
                 ),
             ],
-            api_key_changed=True,
         )
 
         llm_response = client.put(
@@ -86,6 +86,7 @@ class LLMProviderManager:
             name=response_data["name"],
             provider=response_data["provider"],
             api_key=response_data["api_key"],
+            api_token_id=response_data["api_token_id"],
             default_model_name=default_model_name or "gpt-4o-mini",
             is_public=response_data["is_public"],
             is_auto_mode=response_data.get("is_auto_mode", False),

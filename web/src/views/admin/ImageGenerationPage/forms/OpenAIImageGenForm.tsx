@@ -2,10 +2,14 @@
 
 import React, { useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { InputPasswordTypeIn } from "@opal/components";
 import * as Yup from "yup";
-import { FormikField } from "@/refresh-components/form/FormikField";
-import { FormField } from "@/refresh-components/form/FormField";
+import { EMPTY_API_TOKEN_VALUE } from "@/lib/api-tokens/constants";
+import { initialApiTokenValue } from "@/lib/api-tokens/utils";
+import { apiTokenSchema } from "@/lib/api-tokens/validation";
+import {
+  ImageGenApiKeyField,
+  type ImageGenApiKeyFormValues,
+} from "@/views/admin/ImageGenerationPage/forms/ImageGenApiKeyField";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -16,75 +20,14 @@ import { ImageGenerationCredentials } from "@/views/admin/ImageGenerationPage/sv
 import { ImageProvider } from "@/views/admin/ImageGenerationPage/constants";
 
 // OpenAI form values - just API key
-interface OpenAIFormValues {
-  api_key: string;
-}
+type OpenAIFormValues = ImageGenApiKeyFormValues;
 
 const initialValues: OpenAIFormValues = {
-  api_key: "",
+  api_key: EMPTY_API_TOKEN_VALUE,
 };
 
 function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
-  const t = useTranslations("admin.imageGeneration");
-  const {
-    apiStatus,
-    showApiMessage,
-    errorMessage,
-    disabled,
-    isLoadingCredentials,
-    resetApiState,
-    imageProvider,
-  } = props;
-
-  return (
-    <FormikField<string>
-      name="api_key"
-      render={(field, _helper, meta, state) => (
-        <FormField
-          name="api_key"
-          state={apiStatus === "error" ? "error" : state}
-          className="w-full"
-        >
-          <FormField.Label>{t("form.apiKey.label")}</FormField.Label>
-          <FormField.Control>
-            <InputPasswordTypeIn
-              {...field}
-              onChange={(e) => {
-                field.onChange(e);
-                resetApiState();
-              }}
-              placeholder={
-                isLoadingCredentials
-                  ? t("form.loading.placeholder")
-                  : t("form.apiKey.placeholder")
-              }
-              disabled={disabled}
-              error={apiStatus === "error"}
-            />
-          </FormField.Control>
-          {showApiMessage ? (
-            <FormField.APIMessage
-              state={apiStatus}
-              messages={{
-                loading: t("form.apiKeyTest.loading", {
-                  title: imageProvider.title,
-                }),
-                success: t("form.apiKeyTest.success"),
-                error: errorMessage || t("form.apiKeyTest.error"),
-              }}
-            />
-          ) : (
-            <FormField.Message
-              messages={{
-                idle: t("form.apiKey.idle"),
-                error: meta.error,
-              }}
-            />
-          )}
-        </FormField>
-      )}
-    />
-  );
+  return <ImageGenApiKeyField childProps={props} />;
 }
 
 function getInitialValuesFromCredentials(
@@ -92,7 +35,8 @@ function getInitialValuesFromCredentials(
   _imageProvider: ImageProvider
 ): Partial<OpenAIFormValues> {
   return {
-    api_key: credentials.api_key || "",
+    api_key: initialApiTokenValue(credentials.api_token_id),
+    api_key_masked: credentials.api_key ?? undefined,
   };
 }
 
@@ -115,7 +59,7 @@ export function OpenAIImageGenForm(props: ImageGenFormBaseProps) {
   const validationSchema = useMemo(
     () =>
       Yup.object().shape({
-        api_key: Yup.string().required(t("form.apiKey.required")),
+        api_key: apiTokenSchema(t("form.apiKey.required")),
       }),
     [t]
   );

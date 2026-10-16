@@ -1,5 +1,7 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { toApiTokenPayload } from "@/lib/api-tokens/utils";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -30,7 +32,7 @@ import {
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface OpenAICompatibleModalValues extends BaseLLMFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   api_base: string;
 }
 
@@ -56,7 +58,7 @@ function OpenAICompatibleModalInternals({
   const handleFetchModels = async () => {
     const { models, error } = await fetchOpenAICompatibleModels({
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key || undefined,
+      api_key: toApiTokenPayload(formikProps.values.api_key),
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -73,8 +75,8 @@ function OpenAICompatibleModalInternals({
       />
 
       <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
         optional
-        subDescription={t("openAiCompatible.apiKeyField.description")}
       />
 
       {!isOnboarding && (

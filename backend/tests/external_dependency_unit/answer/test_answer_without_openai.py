@@ -16,6 +16,7 @@ from onyx.db.llm import (
     upsert_llm_provider,
 )
 from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -50,13 +51,12 @@ def test_answer_with_only_anthropic_provider(
         LLMProviderUpsertRequest(
             name=provider_name,
             provider=LlmProviderNames.ANTHROPIC,
-            api_key=anthropic_api_key,
+            api_key=NewApiToken(value=anthropic_api_key),
             is_public=True,
             groups=[],
             model_configurations=[
                 ModelConfigurationUpsertRequest(name=anthropic_model, is_visible=True)
             ],
-            api_key_changed=True,
         ),
         db_session=db_session,
     )

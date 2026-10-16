@@ -15,6 +15,9 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import (
     ApiToken,
+    ImageGenerationConfig,
+    LLMProvider,
+    ModelConfiguration,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -219,10 +222,42 @@ def list_api_tokens(db_session: Session, platform: str) -> list[ApiToken]:
 
 
 def get_api_token_usages(
-    db_session: Session,  # noqa: ARG001
-    token_ids: list[int],
+    db_session: Session, token_ids: list[int]
 ) -> dict[int, list[tuple[str, str]]]:
     """Where each token is used, as ``(kind, name)`` pairs. Each feature that
     references tokens adds its own lookup here."""
     usages: dict[int, list[tuple[str, str]]] = {token_id: [] for token_id in token_ids}
+    if not token_ids:
+        return usages
+
+    # An image generation config owns a hidden LLM provider row, so those rows
+    # read as image generation, not as an LLM provider.
+    llm_rows = db_session.execute(
+        select(
+            LLMProvider.id,
+            LLMProvider.api_token_id,
+            LLMProvider.name,
+            LLMProvider.provider,
+            ImageGenerationConfig.image_provider_id,
+        )
+        .outerjoin(
+            ModelConfiguration, ModelConfiguration.llm_provider_id == LLMProvider.id
+        )
+        .outerjoin(
+            ImageGenerationConfig,
+            ImageGenerationConfig.model_configuration_id == ModelConfiguration.id,
+        )
+        .where(LLMProvider.api_token_id.in_(token_ids))
+    ).all()
+    image_gen_provider_ids = {row[0] for row in llm_rows if row[4] is not None}
+    for provider_id, token_id, name, provider, image_provider_id in llm_rows:
+        if image_provider_id is not None:
+            usage = ("image_generation", image_provider_id)
+        elif provider_id in image_gen_provider_ids:
+            continue
+        else:
+            usage = ("llm_provider", name or provider)
+        if token_id is not None and usage not in usages[token_id]:
+            usages[token_id].append(usage)
+
     return usages

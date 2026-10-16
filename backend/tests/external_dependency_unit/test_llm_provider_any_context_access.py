@@ -10,6 +10,7 @@ from onyx.db.llm import (
     upsert_llm_provider,
 )
 from onyx.db.models import User
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -40,8 +41,7 @@ def test_persona_restricted_provider_requires_persona_access(
         LLMProviderUpsertRequest(
             name=f"any-context-{uuid4().hex[:8]}",
             provider="anthropic",
-            api_key="sk-ant-not-used",
-            api_key_changed=True,
+            api_key=NewApiToken(value="sk-ant-not-used"),
             is_public=False,
             personas=[persona.id],
             model_configurations=[

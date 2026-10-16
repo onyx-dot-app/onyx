@@ -1,5 +1,7 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { toApiTokenPayload } from "@/lib/api-tokens/utils";
 import { useTranslations } from "next-intl";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
@@ -52,7 +54,7 @@ const API_MODE_TABS = [
 }[];
 
 interface BifrostModalValues extends BaseLLMFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   api_base: string;
 }
 
@@ -80,7 +82,7 @@ function BifrostModalInternals({
   const handleFetchModels = async () => {
     const { models, error } = await fetchBifrostModels({
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key || undefined,
+      api_key: toApiTokenPayload(formikProps.values.api_key),
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -119,6 +121,7 @@ function BifrostModalInternals({
       />
 
       <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
         optional
         subDescription={markdown(t("bifrost.apiKeyField.description"))}
       />

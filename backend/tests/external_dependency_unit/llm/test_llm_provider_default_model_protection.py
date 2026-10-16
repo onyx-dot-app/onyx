@@ -29,6 +29,7 @@ from onyx.db.llm import (
 )
 from onyx.db.models import LLMModelFlow, ModelConfiguration
 from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     LLMProviderView,
@@ -55,8 +56,9 @@ def _create_test_provider(
         LLMProviderUpsertRequest(
             name=name,
             provider=LlmProviderNames.OPENAI,
-            api_key="sk-test-key-00000000000000000000000000000000000",
-            api_key_changed=True,
+            api_key=NewApiToken(
+                value="sk-test-key-00000000000000000000000000000000000"
+            ),
             model_configurations=models,
         ),
         db_session=db_session,
@@ -98,8 +100,9 @@ class TestDefaultModelProtection:
                     id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o-mini", is_visible=True
@@ -125,8 +128,9 @@ class TestDefaultModelProtection:
                     id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o", is_visible=False
@@ -157,8 +161,9 @@ class TestDefaultModelProtection:
                     id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o-mini", is_visible=True
@@ -183,8 +188,9 @@ class TestDefaultModelProtection:
                 id=provider.id,
                 name=provider_name,
                 provider=LlmProviderNames.OPENAI,
-                api_key="sk-test-key-00000000000000000000000000000000000",
-                api_key_changed=True,
+                api_key=NewApiToken(
+                    value="sk-test-key-00000000000000000000000000000000000"
+                ),
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
                         name="gpt-4o", is_visible=True, supports_image_input=True
@@ -213,8 +219,9 @@ class TestDefaultModelProtection:
                 id=provider.id,
                 name=provider_name,
                 provider=LlmProviderNames.OPENAI,
-                api_key="sk-test-key-00000000000000000000000000000000000",
-                api_key_changed=True,
+                api_key=NewApiToken(
+                    value="sk-test-key-00000000000000000000000000000000000"
+                ),
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
                         name="gpt-4o", is_visible=True, supports_image_input=True
@@ -250,8 +257,9 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
                 id=provider_id,
                 name=name,
                 provider=LlmProviderNames.OPENAI,
-                api_key="sk-test-key-00000000000000000000000000000000000",
-                api_key_changed=True,
+                api_key=NewApiToken(
+                    value="sk-test-key-00000000000000000000000000000000000"
+                ),
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
                         name="gpt-4o", is_visible=True, supports_image_input=True
@@ -308,8 +316,9 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
                 id=provider_id,
                 name=name,
                 provider=LlmProviderNames.OPENAI,
-                api_key="sk-test-key-00000000000000000000000000000000000",
-                api_key_changed=True,
+                api_key=NewApiToken(
+                    value="sk-test-key-00000000000000000000000000000000000"
+                ),
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
                         name="gpt-4o", is_visible=True, supports_image_input=True
@@ -411,8 +420,9 @@ class TestEveryFlowDefaultIsGuarded:
                 id=provider_id,
                 name=name,
                 provider=LlmProviderNames.OPENAI,
-                api_key="sk-test-key-00000000000000000000000000000000000",
-                api_key_changed=True,
+                api_key=NewApiToken(
+                    value="sk-test-key-00000000000000000000000000000000000"
+                ),
                 model_configurations=models,
             ),
             db_session=db_session,
@@ -564,8 +574,9 @@ class TestCapabilityChangesCannotEraseADefault:
                     id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o",
@@ -597,8 +608,9 @@ class TestCapabilityChangesCannotEraseADefault:
                 id=provider.id,
                 name=provider_name,
                 provider=LlmProviderNames.OPENAI,
-                api_key="sk-test-key-00000000000000000000000000000000000",
-                api_key_changed=True,
+                api_key=NewApiToken(
+                    value="sk-test-key-00000000000000000000000000000000000"
+                ),
                 model_configurations=[
                     # no supports_image_input, as a partial client would send
                     ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -632,8 +644,9 @@ class TestCapabilityChangesCannotEraseADefault:
                     id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o",

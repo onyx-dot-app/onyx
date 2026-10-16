@@ -68,6 +68,7 @@ def test_schema_engine() -> Generator[Engine, None, None]:
             tables=[
                 Base.metadata.tables[table_name]
                 for table_name in (
+                    "api_token",
                     "llm_provider",
                     "model_configuration",
                     "llm_model_flow",

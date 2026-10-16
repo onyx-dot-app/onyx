@@ -1,5 +1,7 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { toApiTokenPayload } from "@/lib/api-tokens/utils";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -31,7 +33,7 @@ import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 const DEFAULT_API_BASE = "https://ai-gateway.vercel.sh/v1";
 
 interface VercelAIGatewayModalValues extends BaseLLMFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   api_base: string;
 }
 
@@ -53,7 +55,7 @@ function VercelAIGatewayModalInternals({
   const handleFetchModels = async () => {
     const { models: fetched, error } = await fetchVercelAIGatewayModels({
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key,
+      api_key: toApiTokenPayload(formikProps.values.api_key),
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -69,7 +71,9 @@ function VercelAIGatewayModalInternals({
         placeholder={t("vercelAiGateway.apiBaseField.placeholder")}
       />
 
-      <APIKeyField providerName="Vercel AI Gateway" />
+      <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
+      />
 
       {!isOnboarding && (
         <>

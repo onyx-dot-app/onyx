@@ -70,6 +70,7 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
+import { ApiTokenField } from "@/lib/api-tokens/components";
 
 /** How long a save may run before the footer says it is taking a while. */
 const SLOW_SAVE_NOTICE_MS = 10_000;
@@ -103,33 +104,55 @@ export function DisplayNameField({ disabled }: DisplayNameFieldProps = {}) {
 // ─── APIKeyField ─────────────────────────────────────────────────────────────
 
 export interface APIKeyFieldProps {
-  /** Formik field name. @default "api_key" */
-  name?: string;
   optional?: boolean;
-  providerName?: string;
+  /** Replaces the shared sub-description, e.g. to say where to get the key. */
   subDescription?: string | RichStr;
+  /** The masked key the provider already uses. */
+  savedMaskedValue?: string;
 }
+
+/** The `api_key` field. Its platform is the form's `provider`. */
 export function APIKeyField({
-  name = "api_key",
   optional = false,
-  providerName,
   subDescription,
+  savedMaskedValue,
 }: APIKeyFieldProps) {
+  const { values } = useFormikContext<{ provider?: string }>();
+  return (
+    <InputPadder>
+      <ApiTokenField
+        name="api_key"
+        platform={values.provider ?? ""}
+        optional={optional}
+        subDescription={subDescription}
+        savedMaskedValue={savedMaskedValue}
+      />
+    </InputPadder>
+  );
+}
+
+// ─── CustomConfigKeyField ────────────────────────────────────────────────────
+
+export interface CustomConfigKeyFieldProps {
+  /** Formik field name under `custom_config`. */
+  name: string;
+  optional?: boolean;
+  subDescription: string | RichStr;
+}
+
+/** A key the provider keeps in `custom_config`, not as a saved API key. */
+export function CustomConfigKeyField({
+  name,
+  optional = false,
+  subDescription,
+}: CustomConfigKeyFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
   return (
     <InputPadder>
       <InputVertical
         withLabel={name}
         title={t("setup.apiKeyField.title")}
-        subDescription={
-          subDescription
-            ? subDescription
-            : providerName
-              ? t("setup.apiKeyField.providerDescription", {
-                  provider: providerName,
-                })
-              : t("setup.apiKeyField.description")
-        }
+        subDescription={subDescription}
         suffix={optional ? t("setup.optionalSuffix.label") : undefined}
       >
         <PasswordInputTypeInField name={name} />

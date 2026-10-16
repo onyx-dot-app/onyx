@@ -25,6 +25,7 @@ from onyx.llm.models import (
     parse_user_selectable_reasoning_effort,
     reasoning_effort_exceeds,
 )
+from onyx.server.manage.api_token.models import ApiTokenInput
 from onyx.server.manage.llm.utils import (
     extract_vendor_from_model_name,
     filter_model_configurations,
@@ -68,7 +69,7 @@ class TestLLMRequest(BaseModel):
     id: int | None = None
     provider: str
     model: str
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -76,8 +77,7 @@ class TestLLMRequest(BaseModel):
     # model level
     deployment_name: str | None = None
 
-    # if try and use the existing API/custom config key
-    api_key_changed: bool
+    # if try and use the existing custom config
     custom_config_changed: bool
 
     @field_validator("provider", mode="before")
@@ -154,7 +154,6 @@ class LLMProviderDescriptor(BaseModel):
 class LLMProvider(BaseModel):
     name: str | None = None
     provider: str
-    api_key: str | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -169,7 +168,12 @@ class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
     id: int | None = None
-    api_key_changed: bool = False
+    # Absent on an edit keeps the provider's current key; null clears it.
+    api_key: ApiTokenInput | None = None
+    # Legacy: older clients (the Terraform provider) send `api_key: null` with
+    # `api_key_changed: false` to mean "keep the current key". Only that pair
+    # is read; new clients leave `api_key` out instead.
+    api_key_changed: bool | None = None
     custom_config_changed: bool = False
     # The write replaces model_configurations, and the read hides obsolete and
     # dated-duplicate models, so a read-modify-write drops the hidden rows. With
@@ -189,6 +193,9 @@ class LLMProviderView(LLMProvider):
     """Stripped down representation of LLMProvider for display / limited access info only"""
 
     id: int
+    # The raw key for server-side callers; admin responses mask it.
+    api_key: str | None = None
+    api_token_id: int | None = None
     model_configurations: list["ModelConfigurationView"]
     # Set when the response holds only a page of the models (the admin
     # listing with page_models). None means every model is included.
@@ -243,6 +250,7 @@ class LLMProviderView(LLMProvider):
             name=llm_provider_model.name,
             provider=provider,
             api_key=api_key,
+            api_token_id=llm_provider_model.api_token_id,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
@@ -604,7 +612,7 @@ class OllamaModelDetails(BaseModel):
 # OpenRouter dynamic models fetch
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
-    api_key: str
+    api_key: ApiTokenInput | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
 
@@ -750,7 +758,7 @@ class SyncModelEntry(BaseModel):
 
 
 class LitellmModelsRequest(BaseModel):
-    api_key: str
+    api_key: ApiTokenInput | None = None
     api_base: str
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
@@ -835,7 +843,7 @@ class LitellmFinalModelResponse(BaseModel):
 # Bifrost dynamic models fetch
 class BifrostModelsRequest(BaseModel):
     api_base: str
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
 
@@ -851,7 +859,7 @@ class BifrostFinalModelResponse(BaseModel):
 # Nebius Token Factory dynamic models fetch
 class NebiusTokenfactoryModelsRequest(BaseModel):
     api_base: str
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
 
@@ -872,7 +880,7 @@ class NebiusTokenfactoryFinalModelResponse(BaseModel):
 # OpenAI Compatible dynamic models fetch
 class OpenAICompatibleModelsRequest(BaseModel):
     api_base: str
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
 
@@ -889,7 +897,7 @@ class OpenAICompatibleFinalModelResponse(BaseModel):
 class VercelAIGatewayModelsRequest(BaseModel):
     # The catalog is public, so api_base alone is enough to list models.
     api_base: str | None = None
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     # Existing provider id; syncs fetched models on edit
     provider_id: int | None = None
 
@@ -905,7 +913,7 @@ class VercelAIGatewayFinalModelResponse(BaseModel):
 # Portkey dynamic models fetch
 class PortkeyModelsRequest(BaseModel):
     api_base: str
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
 

@@ -437,8 +437,8 @@ export default function CustomModal({
       </InputPadder>
 
       <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
         optional
-        subDescription={t("custom.apiKeyField.description")}
       />
 
       <APIBaseField optional subDescription={apiBaseSubDescription} />

@@ -11,6 +11,8 @@
  * - /api/admin/llm/{provider}/available-models - Fetch available models for a provider
  */
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { toApiTokenPayload } from "@/lib/api-tokens/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
@@ -644,7 +646,8 @@ export const fetchModels = async (
   providerName: string,
   formValues: {
     api_base?: string;
-    api_key?: string;
+    api_key?: ApiTokenValue;
+    /** LM Studio only: whether its custom_config key was changed. */
     api_key_changed?: boolean;
     id?: number;
     custom_config?: Record<string, string>;
@@ -653,6 +656,9 @@ export const fetchModels = async (
   signal?: AbortSignal
 ) => {
   const customConfig = formValues.custom_config || {};
+  const apiKey = formValues.api_key
+    ? toApiTokenPayload(formValues.api_key)
+    : undefined;
 
   switch (providerName) {
     case LLMProviderName.BEDROCK:
@@ -680,48 +686,48 @@ export const fetchModels = async (
     case LLMProviderName.OPENROUTER:
       return fetchOpenRouterModels({
         api_base: formValues.api_base,
-        api_key: formValues.api_key,
+        api_key: apiKey,
         provider_id: formValues.id,
       });
     case LLMProviderName.LITELLM_PROXY:
       return fetchLiteLLMProxyModels({
         api_base: formValues.api_base,
-        api_key: formValues.api_key,
+        api_key: apiKey,
         provider_id: formValues.id,
         signal,
       });
     case LLMProviderName.BIFROST:
       return fetchBifrostModels({
         api_base: formValues.api_base,
-        api_key: formValues.api_key,
+        api_key: apiKey,
         provider_id: formValues.id,
         signal,
       });
     case LLMProviderName.OPENAI_COMPATIBLE:
       return fetchOpenAICompatibleModels({
         api_base: formValues.api_base,
-        api_key: formValues.api_key,
+        api_key: apiKey,
         provider_id: formValues.id,
         signal,
       });
     case LLMProviderName.NEBIUS_TOKENFACTORY:
       return fetchNebiusTokenfactoryModels({
         api_base: formValues.api_base,
-        api_key: formValues.api_key,
+        api_key: apiKey,
         provider_id: formValues.id,
         signal,
       });
     case LLMProviderName.PORTKEY:
       return fetchPortkeyModels({
         api_base: formValues.api_base,
-        api_key: formValues.api_key,
+        api_key: apiKey,
         provider_id: formValues.id,
         signal,
       });
     case LLMProviderName.VERCEL_AI_GATEWAY:
       return fetchVercelAIGatewayModels({
         api_base: formValues.api_base,
-        api_key: formValues.api_key,
+        api_key: apiKey,
         provider_id: formValues.id,
         signal,
       });

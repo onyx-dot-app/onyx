@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.auth.users import current_chat_accessible_user, scope_exempt
+from onyx.db.api_token import peek_api_token_value
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
@@ -89,6 +90,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     WellKnownLLMProviderDescriptor,
     fetch_available_well_known_llms,
 )
+from onyx.server.manage.api_token.models import ApiTokenInput, ExistingApiToken
 from onyx.server.manage.llm.models import (
     BedrockFinalModelResponse,
     BedrockModelsRequest,
@@ -172,40 +174,29 @@ def _mask_string(value: str) -> str:
 
 
 def _resolve_api_key(
-    api_key: str | None,
+    api_key: ApiTokenInput | None,
     provider_id: int | None,
     api_base: str | None,
+    platform: str,
     db_session: Session,
 ) -> str | None:
-    """Return the real API key for model-fetch endpoints.
+    """Return the raw API key a model-fetch request names, without saving it.
 
-    When editing an existing provider the form value is masked (e.g.
-    ``sk-a****b1c2``). We look up the unmasked key from the database so the
-    external request succeeds; a freshly typed (non-masked) key is used as-is.
-
-    The provider is resolved by *provider_id* — reliable, since the edit form
-    always has it (well-known providers are frequently saved with a NULL name).
-    The stored key is only returned when the request's *api_base* matches the
-    value stored in the database.
+    On an edit the form sends the provider's saved key as an existing token,
+    so *provider_id* lets that key through even when it is Onyx-owned.
     """
-    if provider_id is None:
-        return api_key
-
-    existing_provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
-    if existing_provider and existing_provider.api_key:
-        # Normalise both URLs before comparing so trailing-slash
-        # differences don't cause a false mismatch.
-        stored_base = (existing_provider.api_base or "").strip().rstrip("/")
-        request_base = (api_base or "").strip().rstrip("/")
-        if stored_base != request_base:
-            return api_key
-
-        stored_key = existing_provider.api_key.get_value(apply_mask=False)
-        # Only resolve when the incoming value is the masked form of the
-        # stored key — i.e. the user hasn't typed a new key.
-        if api_key and api_key == _mask_string(stored_key):
-            return stored_key
-    return api_key
+    current_token_id: int | None = None
+    if provider_id is not None:
+        existing_provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
+        if existing_provider:
+            current_token_id = existing_provider.api_token_id
+    return peek_api_token_value(
+        db_session,
+        api_key,
+        platform=platform,
+        base_url=api_base,
+        current_token_id=current_token_id,
+    )
 
 
 def _resolve_bedrock_bearer_token(
@@ -269,9 +260,8 @@ def _sync_fetched_models(
 
 def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
     """Mask sensitive credentials in provider view including api_key and custom_config."""
-    # Mask the API key
     if provider_view.api_key:
-        provider_view.api_key = _mask_string(provider_view.api_key)
+        provider_view.api_key = mask_with_ellipsis(provider_view.api_key)
 
     # Mask sensitive values in custom_config
     if provider_view.custom_config:
@@ -322,27 +312,22 @@ def _restore_masked_custom_config_values(
 
 
 def _validate_llm_provider_change(
-    existing_api_base: str | None,
     existing_custom_config: dict[str, str] | None,
-    new_api_base: str | None,
     new_custom_config: dict[str, str] | None,
-    api_key_changed: bool,
+    uses_saved_key: bool,
 ) -> None:
-    """Validate that api_base and custom_config changes are safe.
+    """Validate that custom_config changes are safe when a saved key is used.
 
-    When using a stored API key (api_key_changed=False), we must ensure api_base and
-    custom_config match the stored values.
+    A saved key may not be sent with a changed custom_config. The API token
+    checks the api_base itself (see ``resolve_api_token``).
 
     Only enforced in MULTI_TENANT mode.
 
     Raises:
-        OnyxError: If api_base or custom_config changed without changing API key
+        OnyxError: If custom_config changed while a saved key is used
     """
-    if not MULTI_TENANT or api_key_changed:
+    if not MULTI_TENANT or not uses_saved_key:
         return
-
-    normalized_existing_api_base = existing_api_base or None
-    normalized_new_api_base = new_api_base or None
 
     # Surface-mode keys only pick a path on the same api_base and cannot
     # redirect the stored key, so they must not force key re-entry.
@@ -353,17 +338,16 @@ def _validate_llm_provider_change(
             if k not in SURFACE_SELECTION_CONFIG_KEYS
         }
 
-    api_base_changed = normalized_new_api_base != normalized_existing_api_base
     # Gate on the raw config (empty submissions are never persisted); compare
     # stripped dicts so dropping stored non-surface entries is still rejected.
     custom_config_changed = bool(new_custom_config) and _without_surface_keys(
         new_custom_config
     ) != _without_surface_keys(existing_custom_config)
 
-    if api_base_changed or custom_config_changed:
+    if custom_config_changed:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            "API base and/or custom config cannot be changed without changing the API key",
+            "Custom config cannot be changed without changing the API key",
         )
 
 
@@ -469,35 +453,33 @@ def test_llm_configuration(
 ) -> None:
     """Test LLM configuration settings"""
 
-    # the api key is sanitized if we are testing a provider already in the system
-
-    test_api_key = test_llm_request.api_key
     test_custom_config = test_llm_request.custom_config
+    current_token_id: int | None = None
     if test_llm_request.id:
         existing_provider = fetch_existing_llm_provider_by_id(
             id=test_llm_request.id, db_session=db_session
         )
         if existing_provider:
+            current_token_id = existing_provider.api_token_id
             test_custom_config = _restore_masked_custom_config_values(
                 existing_custom_config=existing_provider.custom_config,
                 new_custom_config=test_custom_config,
             )
-        # if an API key is not provided, use the existing provider's API key
-        if existing_provider and not test_llm_request.api_key_changed:
             _validate_llm_provider_change(
-                existing_api_base=existing_provider.api_base,
                 existing_custom_config=existing_provider.custom_config,
-                new_api_base=test_llm_request.api_base,
                 new_custom_config=test_custom_config,
-                api_key_changed=False,
+                uses_saved_key=isinstance(test_llm_request.api_key, ExistingApiToken),
             )
-            test_api_key = (
-                existing_provider.api_key.get_value(apply_mask=False)
-                if existing_provider.api_key
-                else None
-            )
-        if existing_provider and not test_llm_request.custom_config_changed:
-            test_custom_config = existing_provider.custom_config
+            if not test_llm_request.custom_config_changed:
+                test_custom_config = existing_provider.custom_config
+
+    test_api_key = peek_api_token_value(
+        db_session,
+        test_llm_request.api_key,
+        platform=test_llm_request.provider,
+        base_url=test_llm_request.api_base,
+        current_token_id=current_token_id,
+    )
 
     test_custom_config = _validate_and_normalize_vertex_auth(
         provider=test_llm_request.provider,
@@ -720,8 +702,19 @@ def put_llm_provider(
             f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} does not exist",
         )
 
-    # SSRF Protection: Validate api_base and custom_config match stored values
+    # SSRF Protection: a saved key cannot be sent with a changed custom_config.
+    # The API token checks the api_base.
     if existing_provider:
+        # Leaving out api_key keeps the current key, as does a legacy client's
+        # null key with api_key_changed=false.
+        keeps_key = "api_key" not in llm_provider_upsert_request.model_fields_set or (
+            llm_provider_upsert_request.api_key is None
+            and llm_provider_upsert_request.api_key_changed is False
+        )
+        if keeps_key and existing_provider.api_token_id is not None:
+            llm_provider_upsert_request.api_key = ExistingApiToken(
+                id=existing_provider.api_token_id
+            )
         llm_provider_upsert_request.custom_config = (
             _restore_masked_custom_config_values(
                 existing_custom_config=existing_provider.custom_config,
@@ -729,11 +722,11 @@ def put_llm_provider(
             )
         )
         _validate_llm_provider_change(
-            existing_api_base=existing_provider.api_base,
             existing_custom_config=existing_provider.custom_config,
-            new_api_base=llm_provider_upsert_request.api_base,
             new_custom_config=llm_provider_upsert_request.custom_config,
-            api_key_changed=llm_provider_upsert_request.api_key_changed,
+            uses_saved_key=isinstance(
+                llm_provider_upsert_request.api_key, ExistingApiToken
+            ),
         )
 
     persona_ids = llm_provider_upsert_request.personas
@@ -755,14 +748,6 @@ def put_llm_provider(
                 deduplicated_personas.append(persona_id)
         llm_provider_upsert_request.personas = deduplicated_personas
 
-    # the llm api key is sanitized when returned to clients, so the only time we
-    # should get a real key is when it is explicitly changed
-    if existing_provider and not llm_provider_upsert_request.api_key_changed:
-        llm_provider_upsert_request.api_key = (
-            existing_provider.api_key.get_value(apply_mask=False)
-            if existing_provider.api_key
-            else None
-        )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
@@ -1810,7 +1795,11 @@ def get_openrouter_available_models(
     """
 
     api_key = _resolve_api_key(
-        request.api_key, request.provider_id, request.api_base, db_session
+        request.api_key,
+        request.provider_id,
+        request.api_base,
+        LlmProviderNames.OPENROUTER,
+        db_session,
     )
 
     response_json = _get_openrouter_models_response(
@@ -2016,7 +2005,11 @@ def get_litellm_available_models(
 ) -> list[LitellmFinalModelResponse]:
     """Fetch available models from LiteLLM proxy /v1/model/info endpoint."""
     api_key = _resolve_api_key(
-        request.api_key, request.provider_id, request.api_base, db_session
+        request.api_key,
+        request.provider_id,
+        request.api_base,
+        LlmProviderNames.LITELLM_PROXY,
+        db_session,
     )
 
     response_json = _get_litellm_models_response(
@@ -2165,7 +2158,11 @@ def get_bifrost_available_models(
 ) -> list[BifrostFinalModelResponse]:
     """Fetch available models from Bifrost gateway /v1/models endpoint."""
     api_key = _resolve_api_key(
-        request.api_key, request.provider_id, request.api_base, db_session
+        request.api_key,
+        request.provider_id,
+        request.api_base,
+        LlmProviderNames.BIFROST,
+        db_session,
     )
 
     response_json = _get_bifrost_models_response(
@@ -2305,7 +2302,11 @@ def get_nebius_tokenfactory_available_models(
     """Fetch chat models from Nebius TokenFactory, with per-model context
     length and tool/vision capabilities read straight from the source API."""
     api_key = _resolve_api_key(
-        request.api_key, request.provider_id, request.api_base, db_session
+        request.api_key,
+        request.provider_id,
+        request.api_base,
+        LlmProviderNames.NEBIUS_TOKENFACTORY,
+        db_session,
     )
 
     response_json = _get_nebius_tokenfactory_models_response(
@@ -2418,7 +2419,11 @@ def get_openai_compatible_server_available_models(
 ) -> list[OpenAICompatibleFinalModelResponse]:
     """Fetch available models from a generic OpenAI-compatible /v1/models endpoint."""
     api_key = _resolve_api_key(
-        request.api_key, request.provider_id, request.api_base, db_session
+        request.api_key,
+        request.provider_id,
+        request.api_base,
+        LlmProviderNames.OPENAI_COMPATIBLE,
+        db_session,
     )
 
     response_json = _get_openai_compatible_server_response(
@@ -2530,9 +2535,13 @@ def get_vercel_ai_gateway_available_models(
     )
     url = f"{api_base}/models" if api_base.endswith("/v1") else f"{api_base}/v1/models"
 
-    # On edit the form sends a masked key, so resolve the stored one.
+    # The token's base URL is the stored api_base, which may be unset.
     api_key = _resolve_api_key(
-        request.api_key, request.provider_id, api_base, db_session
+        request.api_key,
+        request.provider_id,
+        request.api_base,
+        LlmProviderNames.VERCEL_AI_GATEWAY,
+        db_session,
     )
 
     response_json = _get_openai_compatible_models_response(
@@ -2631,7 +2640,11 @@ def get_portkey_available_models(
 ) -> list[PortkeyFinalModelResponse]:
     """Fetch available models from a Portkey gateway's /v1/models endpoint."""
     api_key = _resolve_api_key(
-        request.api_key, request.provider_id, request.api_base, db_session
+        request.api_key,
+        request.provider_id,
+        request.api_base,
+        LlmProviderNames.PORTKEY,
+        db_session,
     )
 
     response_json = _get_portkey_models_response(

@@ -6161,9 +6161,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "API キーを入力してください。",
-          "label": "API キー",
-          "placeholder": "API キーを入力",
           "required": "API キーは必須です"
         },
         "apiKeyTest": {
@@ -6206,9 +6203,6 @@
         },
         "editHeader": {
           "title": "{title} を編集"
-        },
-        "loading": {
-          "placeholder": "読み込んでいます..."
         },
         "location": {
           "idle": "Vertex AI モデルを使用する Google Cloud リージョンです。利用できるリージョンは <link>Google のドキュメント</link> を参照してください。",
@@ -7073,9 +7067,6 @@
           "addModelButton": {
             "label": "モデルを追加"
           },
-          "apiKeyField": {
-            "description": "モデルプロバイダーが認証を必要とする場合は、API キーを貼り付けてください。"
-          },
           "apiVersionField": {
             "title": "API バージョン"
           },
@@ -7242,8 +7233,7 @@
             "placeholder": "Ollama の API ベース URL"
           },
           "apiKeyField": {
-            "description": "Ollama Cloud の API キーです。",
-            "placeholder": "API キー"
+            "description": "Ollama Cloud の API キーです。"
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7248,6 @@
           "apiBaseField": {
             "description": "OpenAI 互換のエンドポイント URL を貼り付けてください。",
             "learnMore": "[詳細](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "モデルプロバイダーが認証を必要とする場合は、API キーを貼り付けてください。"
           },
           "description": "OpenAI 互換のエンドポイント経由で、他のクラウドモデルやセルフホストモデルを接続します。"
         },
@@ -7315,8 +7302,6 @@
             "title": "API ベース URL"
           },
           "apiKeyField": {
-            "description": "モデルにアクセスするには、API キーを貼り付けてください。",
-            "providerDescription": "モデルにアクセスするには、{provider} の API キーを貼り付けてください。",
             "title": "API キー"
           },
           "cancelButton": {

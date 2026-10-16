@@ -19,11 +19,13 @@ from onyx.db.llm import (
     upsert_llm_provider,
 )
 from onyx.db.models import (
+    ApiToken,
     LLMProvider,
     LLMProvider__Persona,
     LLMProvider__UserGroup,
     User,
 )
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -43,8 +45,7 @@ def _make_group_restricted_anthropic_provider(
         LLMProviderUpsertRequest(
             name=f"craft-access-test-{uuid4().hex[:8]}",
             provider="anthropic",
-            api_key="sk-ant-not-used",
-            api_key_changed=True,
+            api_key=NewApiToken(value="sk-ant-not-used"),
             is_public=False,
             groups=[group_id],
             model_configurations=[
@@ -98,7 +99,7 @@ def _make_llm_provider(
     provider = LLMProvider(
         name=f"sandbox-credential-{uuid4().hex[:8]}",
         provider=provider_type,
-        api_key=api_key,
+        api_token=ApiToken(platform=provider_type, value=api_key),
         is_public=is_public,
     )
     db_session.add(provider)
