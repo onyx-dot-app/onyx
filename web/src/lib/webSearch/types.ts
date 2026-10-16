@@ -80,7 +80,7 @@ export interface DisconnectTargetState {
 
 export type ProviderTestPayload = {
   provider_type: string;
-  api_key: ApiTokenValue | null;
+  api_key: ApiTokenValue | undefined;
   config: Record<string, string>;
 };
 
@@ -88,7 +88,7 @@ export type ProviderUpsertPayload = {
   id: number | null;
   name: string;
   provider_type: string;
-  api_key: ApiTokenValue | null;
+  api_key: ApiTokenValue | undefined;
   config: Record<string, string>;
   activate: boolean;
 };

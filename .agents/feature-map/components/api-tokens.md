@@ -75,7 +75,10 @@ and the Unstructured key (the key-value store holds its token id under
 1. A form's key field (`ApiTokenField` / `ApiTokenInput` in
    `web/src/lib/api-tokens/components/`) holds an `ApiTokenValue`. On edit it
    starts as `existing` with the row's `api_token_id`.
-2. The request sends `toApiTokenPayload(value)`.
+2. The request sends `toApiTokenPayload(value)`. An empty field is left out of
+   the request, so it keeps a saved row's key; the field never sends `null`.
+   Re-picking the selected key empties the field, and an empty required field
+   shows its error at once.
 3. The consumer's write path calls `db/api_token.py:assign_api_token`, which
    resolves the input (`resolve_api_token`), points the row at the token, and
    deletes the previous token if nothing else uses it (`release_api_token`).

@@ -44,7 +44,7 @@ export interface HookCreateRequest {
   name: string;
   hook_point: HookPoint;
   endpoint_url: string;
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   fail_strategy?: HookFailStrategy;
   timeout_seconds?: number;
 }
@@ -53,7 +53,7 @@ export interface HookUpdateRequest {
   name?: string;
   endpoint_url?: string;
   /** Omit to keep the current key; `null` clears it. */
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   fail_strategy?: HookFailStrategy;
   timeout_seconds?: number;
 }

@@ -36,7 +36,7 @@ export async function deactivateVoiceProvider(
 export async function testVoiceProvider(request: {
   id?: number;
   provider_type: string;
-  api_key: ApiTokenValue | null;
+  api_key: ApiTokenValue | undefined;
   api_secret?: string;
   target_uri?: string;
   use_stored_secret?: boolean;

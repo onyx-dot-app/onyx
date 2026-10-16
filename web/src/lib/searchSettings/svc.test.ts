@@ -46,7 +46,7 @@ describe("Bifrost embedding provider", () => {
     await expect(
       connectEmbeddingProvider({
         providerType: "bifrost",
-        apiKey: null,
+        apiKey: undefined,
         apiUrl: "https://bifrost.example",
         modelName: "openai/gpt-5-mini",
         apiVersion: null,
@@ -61,7 +61,7 @@ describe("Bifrost embedding provider", () => {
 describe("Google embedding authentication", () => {
   afterEach(() => jest.restoreAllMocks());
 
-  test("tests keyless credentials before saving and explicitly clears the old key", async () => {
+  test("tests keyless credentials before saving and sends no key", async () => {
     const fetchSpy = jest
       .spyOn(global, "fetch")
       .mockImplementation(async () => testEmbeddingResponse(768));
@@ -72,7 +72,7 @@ describe("Google embedding authentication", () => {
     } as const;
     await connectEmbeddingProvider({
       providerType: "google",
-      apiKey: null,
+      apiKey: undefined,
       apiUrl: "",
       apiVersion: null,
       deploymentName: null,
@@ -90,9 +90,10 @@ describe("Google embedding authentication", () => {
     const testBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
     const saveBody = JSON.parse(String(fetchSpy.mock.calls[1]?.[1]?.body));
     expect(testBody.vertex_config).toEqual(vertexConfig);
-    expect(testBody.api_key).toBeNull();
+    expect(testBody).not.toHaveProperty("api_key");
     expect(saveBody.vertex_config).toEqual(vertexConfig);
-    expect(saveBody.api_key).toBeNull();
+    // The backend clears the old key for keyless Vertex auth itself.
+    expect(saveBody).not.toHaveProperty("api_key");
     expect(saveBody).not.toHaveProperty("api_key_changed");
   });
 
@@ -105,7 +106,7 @@ describe("Google embedding authentication", () => {
     await expect(
       connectEmbeddingProvider({
         providerType: "google",
-        apiKey: null,
+        apiKey: undefined,
         apiUrl: "",
         apiVersion: null,
         deploymentName: null,

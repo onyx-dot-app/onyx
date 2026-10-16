@@ -9,6 +9,7 @@ import {
   type DropdownItem,
 } from "@opal/components";
 import { markdown } from "@opal/utils";
+import { EMPTY_API_TOKEN_VALUE } from "@/lib/api-tokens/constants";
 import { useApiTokens } from "@/lib/api-tokens/hooks";
 import {
   getApiTokenPlatformLabel,
@@ -151,9 +152,15 @@ export function ApiTokenInput({
         label={t("input.listLabel", { platform: platformLabel })}
         items={items}
         value={value.type === "existing" ? String(value.id) : ""}
-        onSelect={(option) =>
-          onChange({ type: "existing", id: Number(option.value) })
-        }
+        // Re-picking the selected key unselects it, like Opal's selects.
+        onSelect={(option) => {
+          const id = Number(option.value);
+          onChange(
+            value.type === "existing" && value.id === id
+              ? EMPTY_API_TOKEN_VALUE
+              : { type: "existing", id }
+          );
+        }}
       />
     </Dropdown>
   );

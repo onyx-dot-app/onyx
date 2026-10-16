@@ -153,7 +153,7 @@ export type ConnectProviderFlowArgs = {
 
   providerRequiresApiKey: boolean;
   /** The key to send, or `null` when the field is empty. */
-  apiKey: ApiTokenValue | null;
+  apiKey: ApiTokenValue | undefined;
   apiKeyChanged: boolean;
 
   config: Record<string, string>;
@@ -196,7 +196,7 @@ export async function connectProviderFlow({
     activateFailedFallback: "Failed to activate provider.",
   };
 
-  if (providerRequiresApiKey && apiKey === null) return;
+  if (providerRequiresApiKey && apiKey === undefined) return;
 
   try {
     if (needsValidation) {

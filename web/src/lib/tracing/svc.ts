@@ -9,7 +9,7 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 export interface ConnectTracingProviderArgs {
   providerType: TracingProviderType;
   /** The key to send, or `null` when the field is empty. */
-  apiKey: ApiTokenValue | null;
+  apiKey: ApiTokenValue | undefined;
   config: Record<string, string>;
 }
 

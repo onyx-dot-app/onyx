@@ -170,7 +170,7 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
           provider && provider.id > 0 ? provider.name : null,
         displayName: providerLabel,
         providerRequiresApiKey: requiresApiKey,
-        apiKey: requiresApiKey ? toApiTokenPayload(values.api_key) : null,
+        apiKey: requiresApiKey ? toApiTokenPayload(values.api_key) : undefined,
         apiKeyChanged,
         config,
         configChanged,

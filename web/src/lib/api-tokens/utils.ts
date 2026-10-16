@@ -23,9 +23,15 @@ export function isApiTokenValueEmpty(value: ApiTokenValue): boolean {
   return value.type === "new" && value.value.trim() === "";
 }
 
-/** What a request sends for the field: `null` when it holds no key. */
-export function toApiTokenPayload(value: ApiTokenValue): ApiTokenValue | null {
-  return isApiTokenValueEmpty(value) ? null : value;
+/**
+ * What a request sends for the field. An empty field is left out of the
+ * request, which keeps a saved row's current key; clearing the field never
+ * removes a key.
+ */
+export function toApiTokenPayload(
+  value: ApiTokenValue
+): ApiTokenValue | undefined {
+  return isApiTokenValueEmpty(value) ? undefined : value;
 }
 
 /**

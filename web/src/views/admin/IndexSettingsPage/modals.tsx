@@ -129,7 +129,7 @@ async function testAndSaveProviderCredentials({
   alwaysTest = false,
 }: {
   provider: EmbeddingProvider;
-  apiKey: ApiTokenValue | null;
+  apiKey: ApiTokenValue | undefined;
   /** The token the saved provider already uses, if any. */
   savedTokenId?: number | null;
   /** Fallback toast copy when the backend error carries no message. */
@@ -385,11 +385,11 @@ function GoogleProviderModal({
       validateOnMount
       onSubmit={async (values) => {
         // An empty upload keeps the saved service account JSON.
-        const apiKey: ApiTokenValue | null = values.apiKey
+        const apiKey: ApiTokenValue | undefined = values.apiKey
           ? { type: "new", value: values.apiKey }
           : savedTokenId !== null
             ? { type: "existing", id: savedTokenId }
-            : null;
+            : undefined;
         if (
           await testAndSaveProviderCredentials({
             provider,

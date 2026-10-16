@@ -23,7 +23,7 @@ interface TestEmbeddingResponse {
 interface TestEmbeddingArgs {
   provider_type: string;
   modelName: string;
-  apiKey: ApiTokenValue | null;
+  apiKey: ApiTokenValue | undefined;
   apiUrl: string | null;
   apiVersion: string | null;
   deploymentName: string | null;
@@ -83,7 +83,7 @@ export async function connectEmbeddingProvider({
   alwaysTest = false,
 }: {
   providerType: string;
-  apiKey: ApiTokenValue | null;
+  apiKey: ApiTokenValue | undefined;
   /** The token the saved provider already uses, if any. */
   savedTokenId?: number | null;
   apiUrl: string;

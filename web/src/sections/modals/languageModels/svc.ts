@@ -73,7 +73,7 @@ export const testApiKeyHelper = async (
   const formApiKey = formValues?.api_key as ApiTokenValue | undefined;
   const keyValue = apiKey ?? formApiKey;
   const payload = {
-    api_key: keyValue ? toApiTokenPayload(keyValue) : null,
+    api_key: keyValue ? toApiTokenPayload(keyValue) : undefined,
     api_base: finalApiBase,
     api_version: finalApiVersion,
     deployment_name: finalDeploymentName,
@@ -172,7 +172,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
     ...rest,
     name: nameForRequest,
     api_base: normalizedApiBase,
-    api_key: api_key ? toApiTokenPayload(api_key) : null,
+    api_key: api_key ? toApiTokenPayload(api_key) : undefined,
     custom_config_changed: customConfigChanged,
   };
 

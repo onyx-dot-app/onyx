@@ -658,7 +658,7 @@ export const fetchModels = async (
   const customConfig = formValues.custom_config || {};
   const apiKey = formValues.api_key
     ? toApiTokenPayload(formValues.api_key)
-    : null;
+    : undefined;
 
   switch (providerName) {
     case LLMProviderName.BEDROCK:

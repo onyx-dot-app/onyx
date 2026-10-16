@@ -237,13 +237,13 @@ export interface OllamaFetchParams {
 
 export interface OpenRouterFetchParams {
   api_base?: string;
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   provider_id?: number;
 }
 
 export interface LiteLLMProxyFetchParams {
   api_base?: string;
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -259,7 +259,7 @@ export interface LiteLLMProxyModelResponse {
 
 export interface BifrostFetchParams {
   api_base?: string;
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -274,7 +274,7 @@ export interface BifrostModelResponse {
 
 export interface OpenAICompatibleFetchParams {
   api_base?: string;
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -289,7 +289,7 @@ export interface OpenAICompatibleModelResponse {
 
 export interface NebiusTokenfactoryFetchParams {
   api_base?: string;
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -308,7 +308,7 @@ export interface NebiusTokenfactoryModelResponse {
 
 export interface PortkeyFetchParams {
   api_base?: string;
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -323,7 +323,7 @@ export interface PortkeyModelResponse {
 
 export interface VercelAIGatewayFetchParams {
   api_base?: string;
-  api_key?: ApiTokenValue | null;
+  api_key?: ApiTokenValue;
   provider_id?: number;
   signal?: AbortSignal;
 }

@@ -62,7 +62,7 @@ export interface VoiceProviderUpsertRequest {
   id?: number;
   name: string;
   provider_type: string;
-  api_key: ApiTokenValue | null;
+  api_key: ApiTokenValue | undefined;
   api_secret?: string;
   api_secret_changed?: boolean;
   target_uri?: string;

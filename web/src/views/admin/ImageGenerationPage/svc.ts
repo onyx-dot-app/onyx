@@ -69,7 +69,7 @@ export async function testImageGenerationApiKey(
       body: JSON.stringify({
         model_name: modelName,
         provider: options.provider || null,
-        api_key: options.apiKey ? toApiTokenPayload(options.apiKey) : null,
+        api_key: options.apiKey ? toApiTokenPayload(options.apiKey) : undefined,
         api_base: options.apiBase || null,
         api_version: options.apiVersion || null,
         deployment_name: options.deploymentName || null,

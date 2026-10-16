@@ -7,7 +7,10 @@ import type { RichStr } from "@opal/types";
 import { ApiTokenInput } from "@/lib/api-tokens/components/ApiTokenInput";
 import { useApiTokens } from "@/lib/api-tokens/hooks";
 import { EMPTY_API_TOKEN_VALUE } from "@/lib/api-tokens/constants";
-import { getApiTokenPlatformLabel } from "@/lib/api-tokens/utils";
+import {
+  getApiTokenPlatformLabel,
+  isApiTokenValueEmpty,
+} from "@/lib/api-tokens/utils";
 import type { ApiTokenPlatform, ApiTokenValue } from "@/lib/api-tokens/types";
 
 export interface ApiTokenFieldProps {
@@ -53,7 +56,11 @@ export function ApiTokenField({
         name={name}
         platform={platform}
         value={field.value ?? EMPTY_API_TOKEN_VALUE}
-        onChange={(value) => void helpers.setValue(value)}
+        onChange={(value) => {
+          void helpers.setValue(value);
+          // Clearing the field shows a required error at once, not on blur.
+          if (isApiTokenValueEmpty(value)) void helpers.setTouched(true);
+        }}
         onBlur={() => void helpers.setTouched(true)}
         savedMaskedValue={savedMaskedValue}
         disabled={disabled}

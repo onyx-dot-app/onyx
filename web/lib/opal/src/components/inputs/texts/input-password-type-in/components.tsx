@@ -159,7 +159,19 @@ function InputPasswordTypeIn({
         data-ph-no-capture
         rightChildren={
           showToggleButton || rightChildren ? (
-            <div className="flex flex-row items-center gap-1">
+            // A field inside a <label> gets every click under the label sent
+            // on to the input, even one on a disabled toggle. Cancelling the
+            // click here stops that; cancelling mousedown keeps focus in the
+            // field.
+            <div
+              role="presentation"
+              className="flex flex-row items-center gap-1"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
               {showToggleButton && (
                 <Button
                   disabled={disabled || effectiveNonRevealable}
