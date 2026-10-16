@@ -299,6 +299,7 @@ def get_indexing_connectors(
             cc_pair_status=cc_pair.status,
             status=statuses[cc_pair.id],
             creator_email=cc_pair.creator.email if cc_pair.creator else None,
+            creator_name=cc_pair.creator.personal_name if cc_pair.creator else None,
             docs_indexed=docs_indexed[cc_pair.id],
             last_success=cc_pair.last_successful_index_time,
             latest_index_attempt=(

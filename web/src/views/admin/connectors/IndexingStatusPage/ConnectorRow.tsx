@@ -62,6 +62,8 @@ export default function ConnectorRow({
     attempt?.status
   );
   const warnings = attempt?.error_count ?? 0;
+  // An empty display name falls back to the email, as an unset one does.
+  const owner = row.creator_name?.trim() || row.creator_email;
   const toggleLabel = expanded ? t("actions.collapse") : t("actions.expand");
 
   // What the status line adds: the live rate, the place in line, or when it last ran.
@@ -159,10 +161,10 @@ export default function ConnectorRow({
                     color="muted"
                     width="fit"
                   />
-                  {row.creator_email !== null && (
+                  {owner !== null && (
                     <Content
                       icon={SvgUser}
-                      title={row.creator_email}
+                      title={owner}
                       sizePreset="secondary"
                       variant="body"
                       color="muted"

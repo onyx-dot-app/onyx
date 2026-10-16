@@ -215,46 +215,25 @@ export default function ActivityPanel({
                     icon={SvgFold}
                     prominence="tertiary"
                     tooltip={tPanel("close")}
+                    tooltipSide="start"
                     aria-label={tPanel("close")}
                     onClick={onClose}
                   />
                 )}
               </Section>
             )}
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              alignItems="center"
-              gap={1}
-              height="fit"
-            >
-              <Section height="fit" className="min-w-0 flex-1">
-                <InputTypeIn
-                  searchIcon
-                  variant="internal"
-                  placeholder={t("search.placeholder")}
-                  maxLength={SEARCH_MAX_LENGTH}
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                />
-              </Section>
-              <Section
-                flexDirection="row"
-                justifyContent="end"
-                gap={2}
-                padding={1.5}
-                width="fit"
-                height="fit"
-              >
-                <ActivityCountTags
-                  failures={failures.total}
-                  errors={errors.total}
-                />
-              </Section>
-            </Section>
+            <InputTypeIn
+              searchIcon
+              variant="primary"
+              placeholder={t("search.placeholder")}
+              maxLength={SEARCH_MAX_LENGTH}
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+            />
             <Section
               flexDirection="row"
               justifyContent="start"
+              alignItems="center"
               gap={1}
               height="fit"
               wrap
@@ -294,6 +273,20 @@ export default function ActivityPanel({
               >
                 {t("resolved.label")}
               </SelectButton>
+              <Section
+                flexDirection="row"
+                justifyContent="end"
+                alignItems="center"
+                gap={2}
+                width="fit"
+                height="fit"
+                className="ms-auto"
+              >
+                <ActivityCountTags
+                  failures={failures.total}
+                  errors={errors.total}
+                />
+              </Section>
             </Section>
           </Section>
 

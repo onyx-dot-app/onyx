@@ -6869,10 +6869,10 @@
       "activities": {
         "title": "Activités",
         "history": "Historique complet de l'activité",
-        "viewLogs": "Voir l'historique de l'activité",
+        "viewLogs": "Voir les journaux",
         "panel": {
           "title": "Historique de l'activité",
-          "close": "Masquer l'historique de l'activité"
+          "close": "Fermer le panneau"
         }
       },
       "list": {

@@ -39,6 +39,7 @@ def _create_cc_pair(
     in_repeated_error_state: bool = False,
 ) -> ConnectorCredentialPair:
     owner = create_test_user(db_session, "monitor_list_owner")
+    owner.personal_name = "Monitor List Owner"
     connector = Connector(
         name=f"{prefix} Connector",
         source=DocumentSource.GOOGLE_DRIVE,
@@ -159,6 +160,7 @@ def test_pairs_sort_by_bucket_then_name_and_the_filter_keeps_the_counts(
     assert by_name[canceled.name].queue_position is None
     assert by_name[indexed_a.name].latest_index_attempt is not None
     assert by_name[indexed_a.name].creator_email is not None
+    assert by_name[indexed_a.name].creator_name == "Monitor List Owner"
     assert by_name[indexed_a.name].permissions["operate"] is True
 
     filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.INDEXED)

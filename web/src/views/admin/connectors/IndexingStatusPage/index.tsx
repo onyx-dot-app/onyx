@@ -31,7 +31,6 @@ export default function IndexingStatusPage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
-        divider
       />
       <SettingsLayouts.Body>
         <Section

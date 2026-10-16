@@ -6869,10 +6869,10 @@
       "activities": {
         "title": "활동",
         "history": "전체 활동 기록",
-        "viewLogs": "활동 기록 보기",
+        "viewLogs": "로그 보기",
         "panel": {
           "title": "활동 기록",
-          "close": "활동 기록 숨기기"
+          "close": "패널 닫기"
         }
       },
       "list": {

@@ -6869,10 +6869,10 @@
       "activities": {
         "title": "Aktivitäten",
         "history": "Vollständiger Aktivitätsverlauf",
-        "viewLogs": "Aktivitätsverlauf anzeigen",
+        "viewLogs": "Protokolle anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
-          "close": "Aktivitätsverlauf ausblenden"
+          "close": "Bereich schließen"
         }
       },
       "list": {
