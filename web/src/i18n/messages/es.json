@@ -2601,6 +2601,9 @@
         "uneven": {
           "tooltip": "Los tiempos por lote varían mucho en esta etapa"
         },
+        "clipped": {
+          "label": "Barra recortada: el máximo supera la escala"
+        },
         "close": "Cerrar detalles de etapas"
       }
     },

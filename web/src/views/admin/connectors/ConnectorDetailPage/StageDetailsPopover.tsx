@@ -147,7 +147,24 @@ export function formatSeconds(ms: number | null | undefined): string {
 }
 
 function percent(ms: number, scale: number): string {
-  return `${scale > 0 ? (ms / scale) * 100 : 0}%`;
+  return `${scale > 0 ? (Math.min(ms, scale) / scale) * 100 : 0}%`;
+}
+
+/**
+ * The longest average plus one spread across the rows. One very long max
+ * would otherwise squash every other bar to a dot, so longer bars get clipped.
+ */
+export function barScale(buckets: BucketSummary[]): number {
+  const timings = buckets.flatMap(({ timing }) => (timing ? [timing] : []));
+  const scale = Math.max(
+    0,
+    ...timings.map(({ avgMs, stdDevMs }) =>
+      avgMs === null ? 0 : avgMs + (stdDevMs ?? 0)
+    )
+  );
+  return scale > 0
+    ? scale
+    : Math.max(0, ...timings.map(({ maxMs }) => maxMs ?? 0));
 }
 
 /** Opens the stage details of one attempt. Place it inside the Popover that holds the content. */
@@ -235,7 +252,7 @@ function ColumnTitle({ children }: ColumnTitleProps) {
 
 interface BucketRowProps {
   summary: BucketSummary;
-  /** The longest max across the rows, which the bars scale to. */
+  /** From `barScale`; bars running past it are clipped. */
   scale: number;
 }
 /** One row: batch count, average, a min-to-max bar with the average marked, and max. */
@@ -244,6 +261,7 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
   const format = useFormatter();
   const min = timing?.minMs ?? 0;
   const max = timing?.maxMs ?? 0;
+  const clipped = max > scale;
 
   return (
     <Section
@@ -277,9 +295,17 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
               className="absolute top-0 h-1 rounded-sm bg-theme-blue-02"
               style={{
                 insetInlineStart: percent(min, scale),
-                width: percent(max - min, scale),
+                width: `calc(${percent(max, scale)} - ${percent(min, scale)})`,
               }}
             />
+            {clipped && (
+              <div
+                role="img"
+                aria-label={t("stageDetails.clipped.label")}
+                title={t("stageDetails.clipped.label")}
+                className="absolute -top-1 end-0 h-3 w-0.5 rounded-sm bg-theme-blue-05"
+              />
+            )}
             {timing.avgMs !== null && (
               <div
                 className="absolute top-0 h-1 w-1 -ms-0.5 rounded-sm bg-theme-blue-05"
@@ -349,7 +375,7 @@ function StageRows({ stages, loaded, failed }: StageRowsProps) {
       </Section>
     );
   }
-  const scale = Math.max(0, ...buckets.map(({ timing }) => timing?.maxMs ?? 0));
+  const scale = barScale(buckets);
   return (
     <ShadowDiv>
       {buckets.map((summary) => (

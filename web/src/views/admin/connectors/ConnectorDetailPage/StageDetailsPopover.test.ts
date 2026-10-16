@@ -5,6 +5,7 @@ import type {
 } from "@/lib/types";
 import {
   STAGE_BUCKETS,
+  barScale,
   formatSeconds,
   summarizeBuckets,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
@@ -129,6 +130,39 @@ describe("summarizeBuckets", () => {
       metric("BATCH_UNACCOUNTED"),
     ]);
     expect(summaries.every((s) => s.timing === undefined)).toBe(true);
+  });
+});
+
+describe("barScale", () => {
+  it("scales to the largest average plus one spread, ignoring long maxes", () => {
+    const buckets = summarizeBuckets([
+      metric("CONNECTOR_FETCH", {
+        avg_duration_ms: 100,
+        std_dev_duration_ms: 50,
+        max_duration_ms: 3_600_000,
+      }),
+      metric("EMBEDDING", {
+        avg_duration_ms: 120,
+        std_dev_duration_ms: null,
+        max_duration_ms: 130,
+      }),
+    ]);
+    expect(barScale(buckets)).toBe(150);
+  });
+
+  it("falls back to the largest max when no row has an average", () => {
+    const buckets = summarizeBuckets([
+      metric("CHUNKING", {
+        avg_duration_ms: null,
+        std_dev_duration_ms: null,
+        max_duration_ms: 40,
+      }),
+    ]);
+    expect(barScale(buckets)).toBe(40);
+  });
+
+  it("is zero with no data", () => {
+    expect(barScale(summarizeBuckets([]))).toBe(0);
   });
 });
 
