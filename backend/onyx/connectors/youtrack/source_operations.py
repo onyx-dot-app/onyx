@@ -32,9 +32,14 @@ from onyx.connectors.source_operations import (
     source_operation,
 )
 from onyx.connectors.youtrack.models import (
+    YouTrackAssignedRole,
     YouTrackComment,
     YouTrackIssue,
+    YouTrackIssueAccess,
+    YouTrackOrganization,
     YouTrackProject,
+    YouTrackRef,
+    YouTrackRole,
     YouTrackSlimIssue,
     YouTrackUser,
 )
@@ -84,8 +89,8 @@ _MAX_PAGES: int = 100_000
 # Listings (projects, users, one issue's comments) are held in memory whole.
 _MAX_LISTED_ITEMS: int = 250_000
 
-_USER_FIELDS: str = "id,login,fullName,email,banned,guest"
-_PROJECT_FIELDS: str = "id,shortName,name,archived"
+_USER_FIELDS: str = "id,login,fullName,email,banned,guest,userType(id)"
+_PROJECT_FIELDS: str = "id,shortName,name,archived,projectType(id)"
 _COMMENT_FIELDS: str = "id,text,deleted,visibility($type)"
 _ISSUE_FIELDS: str = (
     "id,idReadable,summary,description,created,updated,resolved,commentsCount,"
@@ -95,6 +100,13 @@ _ISSUE_FIELDS: str = (
     f"comments({_COMMENT_FIELDS})"
 )
 _SLIM_ISSUE_FIELDS: str = f"id,created,project({_PROJECT_FIELDS})"
+_ISSUE_ACCESS_FIELDS: str = (
+    f"id,project({_PROJECT_FIELDS}),reporter(id),"
+    "visibility($type,permittedGroups(id),permittedUsers(id))"
+)
+_ASSIGNED_ROLE_FIELDS: str = (
+    "id,role(id),holder($type,id),scope($type,project(id),organization(id))"
+)
 
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -235,7 +247,11 @@ class YouTrackSourceOperations(SourceOperations):
         return items
 
     @source_operation(
-        capabilities=(CredentialCapability.INDEXING,),
+        capabilities=(
+            CredentialCapability.INDEXING,
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.BOTH,
         untested=_CHECKS_PENDING,
     )
@@ -289,3 +305,74 @@ class YouTrackSourceOperations(SourceOperations):
             "/issues", {"query": query, "fields": _SLIM_ISSUE_FIELDS}, SLIM_PAGE_SIZE
         ):
             yield [YouTrackSlimIssue.model_validate(item) for item in page]
+
+    @source_operation(
+        capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
+        consumes=OperationConsumes.BOTH,
+        untested=_CHECKS_PENDING,
+    )
+    def iterate_issue_access(
+        self, *, query: str
+    ) -> Iterator[list[YouTrackIssueAccess]]:
+        """Pages of each issue's project, reporter and visibility."""
+        for page in self._pages(
+            "/issues", {"query": query, "fields": _ISSUE_ACCESS_FIELDS}, SLIM_PAGE_SIZE
+        ):
+            yield [YouTrackIssueAccess.model_validate(item) for item in page]
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.BOTH,
+        untested=_CHECKS_PENDING,
+    )
+    def list_users(self) -> list[YouTrackUser]:
+        return self._list("/users", _USER_FIELDS, YouTrackUser)
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.BOTH,
+        untested=_CHECKS_PENDING,
+    )
+    def list_group_user_ids(self, *, group_id: str) -> set[str]:
+        """Members of the group and of every group nested under it."""
+        return {
+            ref.id for ref in self._list(f"/groups/{group_id}/users", "id", YouTrackRef)
+        }
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.BOTH,
+        untested=_CHECKS_PENDING,
+    )
+    def list_roles(self) -> list[YouTrackRole]:
+        return self._list("/roles", "id,permissions(id,key)", YouTrackRole)
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.BOTH,
+        untested=_CHECKS_PENDING,
+    )
+    def list_assigned_roles(self) -> list[YouTrackAssignedRole]:
+        """Every role grant in every scope. Needs YouTrack 2026.1 or later and
+        a token that can read global and project roles."""
+        try:
+            return self._list(
+                "/assignedRoles", _ASSIGNED_ROLE_FIELDS, YouTrackAssignedRole
+            )
+        except YouTrackRequestError as e:
+            if e.status_code != 404:
+                raise
+            raise ConnectorValidationError(
+                "This YouTrack has no role assignments API. Permission sync "
+                "needs YouTrack 2026.1 or later."
+            ) from e
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.BOTH,
+        untested=_CHECKS_PENDING,
+    )
+    def list_organizations(self) -> list[YouTrackOrganization]:
+        return self._list(
+            "/admin/organizations", "id,projects(id)", YouTrackOrganization
+        )

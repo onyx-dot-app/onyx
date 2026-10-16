@@ -20,6 +20,13 @@ class YouTrackRef(_YouTrackEntity):
     id: str
 
 
+# A helpdesk customer account (YouTrack 2026.1 and later).
+CUSTOMER_USER_TYPE: str = "REPORTER"
+# Undocumented, read by YouTrack's own UI. A project without it is treated as
+# a regular one, whose access rules are the stricter of the two.
+HELPDESK_PROJECT_TYPE: str = "HELPDESK"
+
+
 class YouTrackUser(_YouTrackEntity):
     id: str
     login: str | None = None
@@ -27,6 +34,11 @@ class YouTrackUser(_YouTrackEntity):
     email: str | None = None
     banned: bool = False
     guest: bool = False
+    user_type: YouTrackRef | None = Field(default=None, alias="userType")
+
+    @property
+    def is_customer(self) -> bool:
+        return self.user_type is not None and self.user_type.id == CUSTOMER_USER_TYPE
 
 
 class YouTrackVisibility(_YouTrackEntity):
@@ -48,6 +60,14 @@ class YouTrackProject(_YouTrackEntity):
     short_name: str = Field(alias="shortName")
     name: str
     archived: bool = False
+    project_type: YouTrackRef | None = Field(default=None, alias="projectType")
+
+    @property
+    def is_helpdesk(self) -> bool:
+        return (
+            self.project_type is not None
+            and self.project_type.id == HELPDESK_PROJECT_TYPE
+        )
 
 
 class YouTrackFieldValue(_YouTrackEntity):
@@ -109,3 +129,57 @@ class YouTrackSlimIssue(_YouTrackEntity):
     id: str
     created: int
     project: YouTrackProject
+
+
+class YouTrackPermission(_YouTrackEntity):
+    id: str
+    key: str | None = None
+
+
+class YouTrackRole(_YouTrackEntity):
+    id: str
+    permissions: list[YouTrackPermission] = Field(default_factory=list)
+
+
+# Any other role holder is a group: UserGroup, ProjectTeam, AllUsersGroup or
+# RegisteredUsersGroup, all listed by /groups/{id}/users.
+USER_HOLDER_TYPE: str = "User"
+
+
+class ScopeType(str, Enum):
+    GLOBAL = "GlobalScope"
+    ORGANIZATION = "OrganizationScope"
+    PROJECT = "ProjectScope"
+
+
+class YouTrackHolder(_YouTrackEntity):
+    type: str = Field(alias="$type")
+    id: str
+
+
+class YouTrackScope(_YouTrackEntity):
+    type: str = Field(alias="$type")
+    project: YouTrackRef | None = None
+    organization: YouTrackRef | None = None
+
+
+class YouTrackAssignedRole(_YouTrackEntity):
+    """One role granted to a user or group, in one scope."""
+
+    role: YouTrackRef
+    holder: YouTrackHolder
+    scope: YouTrackScope
+
+
+class YouTrackOrganization(_YouTrackEntity):
+    id: str
+    projects: list[YouTrackRef] = Field(default_factory=list)
+
+
+class YouTrackIssueAccess(_YouTrackEntity):
+    """What the permission walk reads per issue."""
+
+    id: str
+    project: YouTrackProject
+    reporter: YouTrackRef | None = None
+    visibility: YouTrackVisibility | None = None

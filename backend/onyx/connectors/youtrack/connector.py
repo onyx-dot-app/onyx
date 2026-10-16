@@ -11,7 +11,7 @@ from onyx.connectors.interfaces import (
     CredentialsProviderInterface,
     GenerateSlimDocumentOutput,
     SecondsSinceUnixEpoch,
-    SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
@@ -23,6 +23,10 @@ from onyx.connectors.models import (
     SlimDocument,
     TabularSection,
     TextSection,
+)
+from onyx.connectors.youtrack.access import (
+    get_issue_access,
+    get_project_node_access,
 )
 from onyx.connectors.youtrack.models import (
     YouTrackComment,
@@ -144,7 +148,9 @@ def _is_public_comment(comment: YouTrackComment) -> bool:
 
 
 class YouTrackConnector(
-    CheckpointedConnector[YouTrackCheckpoint], SlimConnector, CredentialsConnector
+    CheckpointedConnector[YouTrackCheckpoint],
+    SlimConnectorWithPermSync,
+    CredentialsConnector,
 ):
     def __init__(
         self,
@@ -312,3 +318,40 @@ class YouTrackConnector(
             ]
             if callback is not None:
                 callback.progress("youtrack_slim_docs", len(issues))
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Every issue in scope with who may read it. The doc sync makes any
+        indexed issue this does not list private, so the window is ignored."""
+        query: str | None = scoped_query(self.ops, self.projects)
+        if query is None:
+            return
+        seen_projects: set[str] = set()
+        for page in self.ops.iterate_issue_access(query=query):
+            if callback is not None and callback.should_stop():
+                raise RuntimeError("YouTrack permission sync: stop signal detected")
+            batch: list[SlimDocument | HierarchyNode] = []
+            for issue in page:
+                if issue.project.id not in seen_projects:
+                    seen_projects.add(issue.project.id)
+                    node: HierarchyNode = self._project_node(issue.project)
+                    node.external_access = get_project_node_access(
+                        self.base_url, issue.project.id
+                    )
+                    batch.append(node)
+                batch.append(
+                    SlimDocument(
+                        id=self.doc_id(issue.id),
+                        external_access=get_issue_access(self.base_url, issue),
+                        parent_hierarchy_raw_node_id=self.project_node_id(
+                            issue.project.id
+                        ),
+                    )
+                )
+            yield batch
+            if callback is not None:
+                callback.progress("youtrack_perm_sync", len(page))
