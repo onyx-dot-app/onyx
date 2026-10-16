@@ -333,9 +333,9 @@ Run only the gates that match the change:
   session-provisioning shard then runs Craft browser streaming, file, reload,
   cancellation, and attachment checks against the same cluster. Browser turns
   use the existing scripted mock LLM, but execute real guest tools.
-  Session-provisioning tests repeat finite binary transfers from the API pod
-  and check exact digests and unchanged pod and container identity.
-  The probe uses the production manager and mounted service account.
+  Session-provisioning tests repeat managed archive transfers from the API pod
+  and check file digests and unchanged pod and container identity.
+  The probe uses the production archive builder, helper, and mounted service account.
   Missing real-model credentials fail before paid prerequisite jobs. Manual
   `product_only=true` dispatches run only the session/browser setup probe with
   a distinct status name. They do not qualify the migration; the full suite

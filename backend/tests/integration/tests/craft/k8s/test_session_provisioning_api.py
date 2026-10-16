@@ -67,7 +67,7 @@ def test_create_session_provisions_running_sandbox_pod_via_api(
         cleanup_api_user_sandbox(k8s_manager, k8s_client, UUID(api_user.id), sandbox_id)
 
 
-def test_api_pod_preserves_repeated_finite_binary_stdin(
+def test_api_pod_preserves_repeated_managed_archive_input(
     k8s_client: client.CoreV1Api,
     owned_live_pod: OwnedLivePod,
     record_property: Callable[[str, object], None],
@@ -96,38 +96,55 @@ def test_api_pod_preserves_repeated_finite_binary_stdin(
 
         signal.alarm(110)
 
+        import hashlib
         import sys
         import time
         from uuid import UUID
 
         from onyx.server.features.build.sandbox.image.guest.security import GUEST_PYTHON
-        from onyx.server.features.build.sandbox.manager import SandboxManager
+        from onyx.server.features.build.sandbox.manager import SandboxManager, _StatusOk, _build_targz
 
         iteration = 0
         try:
             manager = SandboxManager()
             sandbox_id = UUID(sys.argv[1])
-            payload = bytes(range(256)) * 4096
-            expected = "1048576 fbbab289f7f94b25736c58be46a994c441fd02552cc6022352e3d86d2fab7c83\\n"
+            payload = hashlib.shake_256(b"onyx-push-managed-proof-v1").digest(1024 * 1024)
+            archive = _build_targz({"payload.bin": payload})
+            if len(archive) < len(payload):
+                raise ValueError("managed archive compressed below file size")
+            mount = f"/workspace/managed/document-preview/transport-proof-{sandbox_id.hex}"
+            expected = "1048576 2f5a08e97472f6373ff0a2a5c67f77e52d31190aeb7aa7bfb3b637c0bdec4238\\n"
             child = (
-                "import hashlib, sys; data = sys.stdin.buffer.read(); "
+                "import hashlib, pathlib, sys; data = pathlib.Path(sys.argv[1]).read_bytes(); "
                 "print(len(data), hashlib.sha256(data).hexdigest())"
             )
             deadline = time.monotonic() + 100.0
             for iteration in range(1, 65):
-                print(f"ONYX_API_STDIN_ITERATION={iteration}", flush=True)
+                print(f"ONYX_API_MANAGED_ITERATION={iteration}", flush=True)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise TimeoutError("API stdin loop budget expired")
+                    raise TimeoutError("API managed input loop budget expired")
+                print("ONYX_API_MANAGED_PHASE=push", flush=True)
+                receipt = manager._guest_json(
+                    sandbox_id, "push-managed", _StatusOk, {"mount_path": mount},
+                    stdin=archive, timeout=min(20.0, remaining),
+                )
+                if receipt.status != "ok":
+                    raise ValueError("managed input status mismatch")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("API managed input loop budget expired")
+                print("ONYX_API_MANAGED_PHASE=readback", flush=True)
                 output = manager._run(
-                    sandbox_id, [GUEST_PYTHON, "-I", "-c", child],
-                    stdin=payload, timeout=min(20.0, remaining),
+                    sandbox_id, [GUEST_PYTHON, "-I", "-c", child, f"{mount}/payload.bin"],
+                    timeout=min(20.0, remaining),
                 )
                 if output != expected:
-                    raise ValueError("binary stdin output mismatch")
-            print("ONYX_API_STDIN_OK=64", flush=True)
+                    raise ValueError("managed file receipt mismatch")
+            print(f"ONYX_API_MANAGED_ARCHIVE_BYTES={len(archive)}", flush=True)
+            print("ONYX_API_MANAGED_OK=64", flush=True)
         except Exception as error:
-            print(f"ONYX_API_STDIN_EXCEPTION={type(error).__name__}", flush=True)
+            print(f"ONYX_API_MANAGED_EXCEPTION={type(error).__name__}", flush=True)
             sys.exit(1)
         """
     )
@@ -163,26 +180,41 @@ def test_api_pod_preserves_repeated_finite_binary_stdin(
         )
         outcome = "TimeoutExpired"
     iterations = {
-        f"ONYX_API_STDIN_ITERATION={number}": number for number in range(1, 65)
+        f"ONYX_API_MANAGED_ITERATION={number}": number for number in range(1, 65)
     }
     iteration = 0
+    archive_bytes = 0
+    phase = "unreported"
+    phases = {
+        "ONYX_API_MANAGED_PHASE=push": "push",
+        "ONYX_API_MANAGED_PHASE=readback": "readback",
+    }
     exception_class = "unreported"
     lines = stdout.splitlines()
     for line in lines:
         if line in iterations:
             iteration = iterations[line]
-        elif line.startswith("ONYX_API_STDIN_EXCEPTION="):
-            candidate = line.removeprefix("ONYX_API_STDIN_EXCEPTION=")
+            phase = "unreported"
+        elif line in phases:
+            phase = phases[line]
+        elif line.startswith("ONYX_API_MANAGED_ARCHIVE_BYTES="):
+            candidate = line.removeprefix("ONYX_API_MANAGED_ARCHIVE_BYTES=")
+            if candidate.isascii() and candidate.isdecimal() and len(candidate) <= 8:
+                size = int(candidate)
+                if 1048576 <= size <= 2097152:
+                    archive_bytes = size
+        elif line.startswith("ONYX_API_MANAGED_EXCEPTION="):
+            candidate = line.removeprefix("ONYX_API_MANAGED_EXCEPTION=")
             if (
                 candidate.isidentifier()
                 and candidate.isascii()
                 and len(candidate) <= 80
             ):
                 exception_class = candidate
-    if outcome != "0" or "ONYX_API_STDIN_OK=64" not in lines:
+    if outcome != "0" or "ONYX_API_MANAGED_OK=64" not in lines or archive_bytes == 0:
         pytest.fail(
-            f"In-cluster binary stdin failed with exit {outcome} "
-            f"at iteration {iteration}/64 with exception {exception_class}",
+            f"In-cluster managed archive input failed with exit {outcome} "
+            f"at iteration {iteration}/64 with exception {exception_class}; phase={phase}",
             pytrace=False,
         )
     after = k8s_client.read_namespaced_pod(
@@ -203,11 +235,12 @@ def test_api_pod_preserves_repeated_finite_binary_stdin(
     assert after_deletion_timestamp is None
     assert after_runtime_class == before_runtime_class
     assert after_containers == before_containers
-    record_property("api_stdin_completed_transfers", 64)
-    record_property("api_stdin_payload_bytes", 1048576)
+    record_property("api_managed_completed_transfers", 64)
+    record_property("api_managed_file_bytes", 1048576)
     record_property(
-        "api_stdin_payload_sha256",
-        "fbbab289f7f94b25736c58be46a994c441fd02552cc6022352e3d86d2fab7c83",
+        "api_managed_file_sha256",
+        "2f5a08e97472f6373ff0a2a5c67f77e52d31190aeb7aa7bfb3b637c0bdec4238",
     )
-    record_property("api_stdin_pod_uid", after_uid)
-    record_property("api_stdin_container_id", after_containers[0][1])
+    record_property("api_managed_archive_bytes", archive_bytes)
+    record_property("api_managed_pod_uid", after_uid)
+    record_property("api_managed_container_id", after_containers[0][1])
