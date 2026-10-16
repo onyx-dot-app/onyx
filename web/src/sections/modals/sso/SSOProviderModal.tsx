@@ -35,7 +35,7 @@ import {
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import SwitchField from "@/refresh-components/form/SwitchField";
+import { InputSwitchField } from "@opal/form";
 import { InputSingleSelect } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
@@ -230,7 +230,7 @@ function ConfigInput({
     ? t(field.placeholderKey)
     : undefined;
   if (field.kind === "switch") {
-    return <SwitchField name={name} />;
+    return <InputSwitchField name={name} />;
   }
   if (field.kind === "chips") {
     return <TagListField name={name} placeholder={placeholder} />;

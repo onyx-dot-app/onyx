@@ -11,32 +11,19 @@
   background-color: var(--background-tint-03);
   border: 1px solid transparent;
 }
-.switch-normal:hover {
+/* Keyboard focus darkens the track like hover does. */
+.switch-normal:hover,
+.switch-normal:focus-visible {
   background-color: var(--background-tint-04);
-}
-.switch-normal:focus,
-.switch-normal:focus-within {
-  border-color: var(--background-tint-04);
-}
-.switch-normal:focus:hover,
-.switch-normal:focus-within:hover {
-  border-color: var(--border-01);
 }
 
 .switch-normal-checked {
   background-color: var(--action-selection-05);
   border: 1px solid transparent;
 }
-.switch-normal-checked:hover {
+.switch-normal-checked:hover,
+.switch-normal-checked:focus-visible {
   background-color: var(--action-selection-04);
-}
-.switch-normal-checked:focus,
-.switch-normal-checked:focus-within {
-  border-color: var(--action-selection-04);
-}
-.switch-normal-checked:focus:hover,
-.switch-normal-checked:focus-within:hover {
-  border-color: var(--border-01);
 }
 
 .switch-disabled {
