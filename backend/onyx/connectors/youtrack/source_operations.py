@@ -77,10 +77,6 @@ _RETRY: Retry = _BoundedRetry(
 ISSUE_PAGE_SIZE: int = 100
 SLIM_PAGE_SIZE: int = 1000
 _LISTING_PAGE_SIZE: int = 500
-_CHECKS_PENDING: str = (
-    "Not yet tested during incremental migration: no YouTrack capability "
-    "checks exist yet."
-)
 # Each page re-reads the last tenth of the previous one, which absorbs that
 # many deletions between two requests.
 _PAGE_OVERLAP_DIVISOR: int = 10
@@ -253,7 +249,6 @@ class YouTrackSourceOperations(SourceOperations):
             CredentialCapability.EXTERNAL_GROUP_SYNC,
         ),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def get_me(self) -> YouTrackUser:
         """The token's own user."""
@@ -262,9 +257,12 @@ class YouTrackSourceOperations(SourceOperations):
         )
 
     @source_operation(
-        capabilities=(CredentialCapability.INDEXING,),
+        capabilities=(
+            CredentialCapability.INDEXING,
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def list_projects(self) -> list[YouTrackProject]:
         """Every project the token can read, archived ones included."""
@@ -273,19 +271,19 @@ class YouTrackSourceOperations(SourceOperations):
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
-    def iterate_issues(self, *, query: str) -> Iterator[list[YouTrackIssue]]:
+    def iterate_issues(
+        self, *, query: str, page_size: int = ISSUE_PAGE_SIZE
+    ) -> Iterator[list[YouTrackIssue]]:
         """Pages of issues matching a YouTrack search query, with comments."""
         for page in self._pages(
-            "/issues", {"query": query, "fields": _ISSUE_FIELDS}, ISSUE_PAGE_SIZE
+            "/issues", {"query": query, "fields": _ISSUE_FIELDS}, page_size
         ):
             yield [YouTrackIssue.model_validate(item) for item in page]
 
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def list_issue_comments(self, *, issue_id: str) -> list[YouTrackComment]:
         """Every comment of one issue, for issues whose embedded list fell
@@ -297,41 +295,45 @@ class YouTrackSourceOperations(SourceOperations):
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
-    def iterate_slim_issues(self, *, query: str) -> Iterator[list[YouTrackSlimIssue]]:
+    def iterate_slim_issues(
+        self, *, query: str, page_size: int = SLIM_PAGE_SIZE
+    ) -> Iterator[list[YouTrackSlimIssue]]:
         """Pages of issue ids for pruning."""
         for page in self._pages(
-            "/issues", {"query": query, "fields": _SLIM_ISSUE_FIELDS}, SLIM_PAGE_SIZE
+            "/issues", {"query": query, "fields": _SLIM_ISSUE_FIELDS}, page_size
         ):
             yield [YouTrackSlimIssue.model_validate(item) for item in page]
 
     @source_operation(
-        capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def iterate_issue_access(
-        self, *, query: str
+        self, *, query: str, page_size: int = SLIM_PAGE_SIZE
     ) -> Iterator[list[YouTrackIssueAccess]]:
         """Pages of each issue's project, reporter and visibility."""
         for page in self._pages(
-            "/issues", {"query": query, "fields": _ISSUE_ACCESS_FIELDS}, SLIM_PAGE_SIZE
+            "/issues", {"query": query, "fields": _ISSUE_ACCESS_FIELDS}, page_size
         ):
             yield [YouTrackIssueAccess.model_validate(item) for item in page]
 
     @source_operation(
         capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def list_users(self) -> list[YouTrackUser]:
         return self._list("/users", _USER_FIELDS, YouTrackUser)
 
     @source_operation(
-        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def list_group_user_ids(self, *, group_id: str) -> set[str]:
         """Members of the group and of every group nested under it."""
@@ -340,17 +342,21 @@ class YouTrackSourceOperations(SourceOperations):
         }
 
     @source_operation(
-        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def list_roles(self) -> list[YouTrackRole]:
         return self._list("/roles", "id,permissions(id,key)", YouTrackRole)
 
     @source_operation(
-        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def list_assigned_roles(self) -> list[YouTrackAssignedRole]:
         """Every role grant in every scope. Needs YouTrack 2026.1 or later and
@@ -368,9 +374,11 @@ class YouTrackSourceOperations(SourceOperations):
             ) from e
 
     @source_operation(
-        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.BOTH,
-        untested=_CHECKS_PENDING,
     )
     def list_organizations(self) -> list[YouTrackOrganization]:
         return self._list(

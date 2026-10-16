@@ -42,7 +42,11 @@ def youtrack_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
-    yield from project_groups(youtrack_connector(cc_pair))
+    connector: YouTrackConnector = youtrack_connector(cc_pair)
+    # A token that lost Override Visibility Restrictions walks past restricted
+    # issues, and the sync would then drop their groups without an error.
+    connector.validate_perm_sync()
+    yield from project_groups(connector)
 
 
 def _member_emails(users: list[YouTrackUser]) -> dict[str, str]:
