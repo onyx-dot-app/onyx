@@ -1,7 +1,7 @@
 """add api_token table
 
 Revision ID: 3b2ad4fe0d6a
-Revises: c92b67e56ec4
+Revises: b034d72b7abe
 Create Date: 2026-10-16 03:00:00.000000
 
 Adds the shared ``api_token`` table. Features move their stored API keys into
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "3b2ad4fe0d6a"
-down_revision = "c92b67e56ec4"
+down_revision = "b034d72b7abe"
 branch_labels = None
 depends_on = None
 
