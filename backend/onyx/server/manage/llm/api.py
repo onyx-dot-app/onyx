@@ -32,10 +32,8 @@ from onyx.db.llm import (
     remove_llm_provider,
     require_router_model_configuration,
     sync_model_configurations,
-    update_default_chat_naming_provider,
-    update_default_craft_provider,
-    update_default_provider,
-    update_default_search_selection_provider,
+    update_default_model,
+    update_default_pointer_model,
     update_default_vision_provider,
     update_no_default_chat_naming_provider,
     update_no_default_craft_provider,
@@ -874,10 +872,11 @@ def set_provider_as_default(
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_provider(
+    update_default_model(
         provider_id=default_model_request.provider_id,
-        model_name=default_model_request.model_name,
+        model=default_model_request.model_name,
         db_session=db_session,
+        flow_type=LLMModelFlowType.CHAT,
     )
     invalidate_provider_listing_cache()
 
@@ -903,10 +902,11 @@ def set_provider_as_default_chat_naming(
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
-        update_default_chat_naming_provider(
+        update_default_pointer_model(
             provider_id=default_model.provider_id,
-            chat_naming_model=default_model.model_name,
+            model_name=default_model.model_name,
             db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT_NAMING,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
@@ -929,10 +929,11 @@ def set_provider_as_default_craft(
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_craft_provider(
+    update_default_pointer_model(
         provider_id=default_model.provider_id,
         model_name=default_model.model_name,
         db_session=db_session,
+        flow_type=LLMModelFlowType.CRAFT,
     )
     invalidate_provider_listing_cache()
 
@@ -954,10 +955,11 @@ def set_provider_as_default_search_selection(
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
-        update_default_search_selection_provider(
+        update_default_pointer_model(
             provider_id=default_model.provider_id,
             model_name=default_model.model_name,
             db_session=db_session,
+            flow_type=LLMModelFlowType.SEARCH_SELECTION,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e

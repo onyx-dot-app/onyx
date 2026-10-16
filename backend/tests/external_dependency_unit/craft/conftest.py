@@ -28,7 +28,7 @@ from onyx.db.llm import (
     fetch_default_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.db.models import (
@@ -114,10 +114,11 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                     ),
                     db_session=session,
                 )
-                update_default_provider(
+                update_default_model(
                     provider_id=provider.id,
-                    model_name="gpt-5-mini",
+                    model="gpt-5-mini",
                     db_session=session,
+                    flow_type=LLMModelFlowType.CHAT,
                 )
                 session.commit()
         yield

@@ -27,7 +27,7 @@ from onyx.db.index_attempt import (
 from onyx.db.llm import (
     fetch_default_model,
     fetch_existing_llm_provider,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.db.search_settings import (
@@ -282,8 +282,11 @@ def setup_postgres(db_session: Session) -> None:
         except ValueError as e:
             logger.warning("Failed to upsert LLM provider during setup: %s", e)
             return
-        update_default_provider(
-            provider_id=new_llm_provider.id, model_name=llm_model, db_session=db_session
+        update_default_model(
+            provider_id=new_llm_provider.id,
+            model=llm_model,
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
         )
 
 

@@ -230,7 +230,7 @@ renders nothing (no empty heading).
 `deleteDefaultCraftModel` (`web/src/lib/languageModels/svc.ts`), which hit
 `POST` / `DELETE /api/admin/llm/default-craft`. That endpoint writes the
 `LLMModelFlow` row for `LLMModelFlowType.CRAFT`
-(`backend/onyx/db/llm.py:update_default_craft_provider`).
+(`backend/onyx/db/llm.py:update_default_pointer_model`).
 Per `[[llm-providers]]`, `CRAFT` is a **pointer flow, not a capability check**:
 nothing populates this row automatically, and Craft falls back to the
 workspace chat default (`defaultText` in the page) when no explicit Craft

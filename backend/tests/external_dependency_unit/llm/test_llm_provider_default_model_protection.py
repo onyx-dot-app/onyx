@@ -19,8 +19,8 @@ from onyx.db.llm import (
     fetch_existing_llm_provider,
     remove_llm_provider,
     update_default_contextual_model,
-    update_default_craft_provider,
-    update_default_provider,
+    update_default_model,
+    update_default_pointer_model,
     update_default_vision_provider,
     upsert_llm_provider,
 )
@@ -86,7 +86,12 @@ class TestDefaultModelProtection:
     ) -> None:
         """Removing the default text model from a provider should raise ValueError."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_provider(provider.id, "gpt-4o", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
 
         # Try to update the provider without the default model
         with pytest.raises(ValueError, match="Cannot remove the default model"):
@@ -113,7 +118,12 @@ class TestDefaultModelProtection:
     ) -> None:
         """Setting is_visible=False on the default text model should raise ValueError."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_provider(provider.id, "gpt-4o", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
 
         # Try to hide the default model
         with pytest.raises(ValueError, match="Cannot hide the default model"):
@@ -144,7 +154,12 @@ class TestDefaultModelProtection:
         """Removing the default vision model from a provider should raise ValueError."""
         provider = _create_test_provider(db_session, provider_name)
         # Set gpt-4o as both the text and vision default
-        update_default_provider(provider.id, "gpt-4o", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
         update_default_vision_provider(provider.id, "gpt-4o", db_session)
 
         # Try to remove the default vision model
@@ -172,7 +187,12 @@ class TestDefaultModelProtection:
     ) -> None:
         """Removing a non-default model should succeed."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_provider(provider.id, "gpt-4o", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
 
         # Remove gpt-4o-mini (not default) — should succeed
         updated = upsert_llm_provider(
@@ -202,7 +222,12 @@ class TestDefaultModelProtection:
     ) -> None:
         """Hiding a non-default model should succeed."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_provider(provider.id, "gpt-4o", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
 
         # Hide gpt-4o-mini (not default) — should succeed
         updated = upsert_llm_provider(
@@ -267,7 +292,12 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         provider_name: str,
     ) -> None:
         provider = _create_test_provider(db_session, provider_name)
-        update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_pointer_model(
+            provider_id=provider.id,
+            model_name="gpt-4o-mini",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CRAFT,
+        )
         assert fetch_default_model(db_session, LLMModelFlowType.CRAFT) is not None
 
         self._update_provider(db_session, provider.id, provider_name)
@@ -331,7 +361,12 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         """Keeping the row means the model under it must stay visible. Neither
         resolver checks is_visible, so a hidden default would still be used."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_pointer_model(
+            provider_id=provider.id,
+            model_name="gpt-4o-mini",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CRAFT,
+        )
 
         with pytest.raises(ValueError, match="Cannot hide the default model"):
             self._hide_mini(db_session, provider.id, provider_name)
@@ -362,8 +397,8 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
     ) -> None:
         """CHAT_NAMING is the third pointer flow, so the filter must cover it.
 
-        update_default_chat_naming_provider cannot reach this state on its own:
-        it calls _update_default_model, which needs a CHAT_NAMING row that no
+        update_default_pointer_model cannot reach this state on its own:
+        it calls update_default_model, which needs a CHAT_NAMING row that no
         upsert path creates, so setting this default always fails. That is a
         separate bug. Seed the row directly so this test exercises the
         reconciliation filter rather than the broken setter.
@@ -427,7 +462,12 @@ class TestEveryFlowDefaultIsGuarded:
         """The existing vision test puts both defaults on one model, so the chat
         check alone caught it. Here only the vision default is at stake."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model="gpt-4o-mini",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
         update_default_vision_provider(provider.id, "gpt-4o", db_session)
 
         with pytest.raises(ValueError, match="default for: vision"):
@@ -451,7 +491,12 @@ class TestEveryFlowDefaultIsGuarded:
         provider_name: str,
     ) -> None:
         provider = _create_test_provider(db_session, provider_name)
-        update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_pointer_model(
+            provider_id=provider.id,
+            model_name="gpt-4o-mini",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CRAFT,
+        )
 
         with pytest.raises(ValueError, match="Cannot remove the default model"):
             self._upsert(
@@ -475,7 +520,12 @@ class TestEveryFlowDefaultIsGuarded:
         on a hidden model. The form then re-sends that stored visibility, and an
         unrelated edit — an API key rotation — must not be refused for it."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model="gpt-4o-mini",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
         update_default_vision_provider(provider.id, "gpt-4o", db_session)
 
         hidden = db_session.scalar(
@@ -514,7 +564,12 @@ class TestEveryFlowDefaultIsGuarded:
         """Dropping a capability must still reconcile its flow away; only the
         pointer flows are exempt."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_craft_provider(provider.id, "gpt-4o", db_session)
+        update_default_pointer_model(
+            provider_id=provider.id,
+            model_name="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CRAFT,
+        )
 
         self._upsert(
             db_session,
@@ -624,7 +679,12 @@ class TestCapabilityChangesCannotEraseADefault:
         by model id kept only the first flow found, so the vision default went
         unguarded and the reconciliation deleted it."""
         provider = _create_test_provider(db_session, provider_name)
-        update_default_provider(provider.id, "gpt-4o", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
         update_default_vision_provider(provider.id, "gpt-4o", db_session)
 
         with pytest.raises(ValueError, match=r"Cannot disable vision support"):

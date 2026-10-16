@@ -78,7 +78,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import Permission, record_mode_persists_content
+from onyx.db.enums import LLMModelFlowType, Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
 from onyx.db.incognito import (
     is_incognito_teardown_target,
@@ -99,7 +99,7 @@ from onyx.file_store.serving import (
 )
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
-    get_chat_naming_llm,
+    get_default_utility_llm,
     get_llm_for_persona,
     get_llm_token_counter,
 )
@@ -518,8 +518,9 @@ def _generate_or_fallback_chat_session_name(
         additional_headers = get_relevant_headers(
             request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
-        llm = get_chat_naming_llm(
+        llm = get_default_utility_llm(
             additional_headers=additional_headers,
+            flow_type=LLMModelFlowType.CHAT_NAMING,
         )
         if llm is None:
             llm = get_llm_for_persona(

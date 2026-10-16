@@ -592,6 +592,11 @@ saved Google account's tab comes from its keys, since an uploaded OAuth app and 
 service account both store `authentication_method: "uploaded"`. `draft_credentials.py`
 rejects a Google-family draft whose key is not a service-account key's JSON text.
 
+Google discovery clients use `google_utils/resources.py:get_google_service` with a
+`GoogleService` enum. Each member pairs its API name with its version: Docs v1,
+Drive v3, Admin directory_v1, or Gmail v1. The helper preserves service-account
+impersonation and passes OAuth credentials through unchanged.
+
 A config also picks how the cc-pair status page breaks the documents down by
 hierarchy node. `hierarchy_breakdown_sections` returns the node types to list, and
 the nodes that the config names (`HierarchyBreakdownSection`). The default (`None`)

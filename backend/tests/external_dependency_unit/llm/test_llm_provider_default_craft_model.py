@@ -16,7 +16,7 @@ from onyx.db.llm import (
     fetch_default_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
-    update_default_craft_provider,
+    update_default_pointer_model,
     update_no_default_craft_provider,
     upsert_llm_provider,
 )
@@ -64,7 +64,12 @@ class TestDefaultCraftModel:
         """The regression: nothing seeds CRAFT rows, so this used to raise."""
         provider = _create_test_provider(db_session, provider_name)
 
-        update_default_craft_provider(provider.id, "gpt-4o", db_session)
+        update_default_pointer_model(
+            provider_id=provider.id,
+            model_name="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CRAFT,
+        )
 
         default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
         assert default is not None
@@ -78,8 +83,18 @@ class TestDefaultCraftModel:
     ) -> None:
         provider = _create_test_provider(db_session, provider_name)
 
-        update_default_craft_provider(provider.id, "gpt-4o", db_session)
-        update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_pointer_model(
+            provider_id=provider.id,
+            model_name="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CRAFT,
+        )
+        update_default_pointer_model(
+            provider_id=provider.id,
+            model_name="gpt-4o-mini",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CRAFT,
+        )
 
         default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
         assert default is not None
@@ -91,7 +106,12 @@ class TestDefaultCraftModel:
         provider_name: str,
     ) -> None:
         provider = _create_test_provider(db_session, provider_name)
-        update_default_craft_provider(provider.id, "gpt-4o", db_session)
+        update_default_pointer_model(
+            provider_id=provider.id,
+            model_name="gpt-4o",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CRAFT,
+        )
 
         update_no_default_craft_provider(db_session)
 
@@ -105,4 +125,9 @@ class TestDefaultCraftModel:
         provider = _create_test_provider(db_session, provider_name)
 
         with pytest.raises(ValueError, match="is not a valid model"):
-            update_default_craft_provider(provider.id, "not-a-real-model", db_session)
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="not-a-real-model",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )

@@ -92,14 +92,6 @@ def _append_api_path(provider: LLMProviderView, suffix: str) -> str:
     return urlunsplit(parsed._replace(path=path))
 
 
-def _messages_url(provider: LLMProviderView) -> str:
-    return _append_api_path(provider, "/v1/messages")
-
-
-def _count_tokens_url(provider: LLMProviderView) -> str:
-    return _append_api_path(provider, "/v1/messages/count_tokens")
-
-
 def _timeout() -> httpx.Timeout:
     return httpx.Timeout(
         ANTHROPIC_PASSTHROUGH_READ_TIMEOUT_SECONDS,
@@ -271,7 +263,7 @@ def handle_anthropic_passthrough(
         request, model_config.name, str(user.id), request.stream
     )
     headers = _build_upstream_headers(provider, http_request)
-    url = _messages_url(provider)
+    url = _append_api_path(provider, "/v1/messages")
     # llm is built only for tracing config (model/provider metadata); the
     # actual call goes straight over httpx, never through llm.invoke_raw/stream_raw.
     llm = llm_from_provider(model_name=model_config.name, llm_provider=provider)
@@ -509,7 +501,7 @@ def handle_anthropic_count_tokens_passthrough(
 ) -> JSONResponse:
     body = _build_upstream_request(request, model_config.name, str(user.id), None)
     headers = _build_upstream_headers(provider, http_request)
-    url = _count_tokens_url(provider)
+    url = _append_api_path(provider, "/v1/messages/count_tokens")
     try:
         with httpx.Client(timeout=_timeout()) as client:
             response = client.post(url, json=body, headers=headers)

@@ -22,8 +22,8 @@ from onyx.db.llm import (
     fetch_llm_provider_view,
     remove_llm_provider,
     sync_auto_mode_models,
-    update_default_craft_provider,
-    update_default_provider,
+    update_default_model,
+    update_default_pointer_model,
 )
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
@@ -169,7 +169,12 @@ class TestAutoModeSyncFeature:
                     assert mc.is_visible is True, f"Model '{mc.name}' should be visible"
 
             # Step 4: Set the provider as default
-            update_default_provider(provider.id, expected_default_model, db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model=expected_default_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # Step 5: Fetch the default provider and verify
             default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
@@ -547,7 +552,12 @@ class TestAutoModeSyncFeature:
                 name=provider_1_name, db_session=db_session
             )
             assert provider_1 is not None
-            update_default_provider(provider_1.id, provider_1_default_model, db_session)
+            update_default_model(
+                provider_id=provider_1.id,
+                model=provider_1_default_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             with patch(
                 "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
@@ -581,7 +591,12 @@ class TestAutoModeSyncFeature:
                 name=provider_2_name, db_session=db_session
             )
             assert provider_2 is not None
-            update_default_provider(provider_2.id, provider_2_default_model, db_session)
+            update_default_model(
+                provider_id=provider_2.id,
+                model=provider_2_default_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()
@@ -748,7 +763,12 @@ class TestAutoModeTransitionsAndResync:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-4o",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
@@ -1104,7 +1124,12 @@ class TestAutoModeTransitionsAndResync:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-4o",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
@@ -1205,7 +1230,12 @@ class TestAutoModeTransitionsAndResync:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-4o",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
@@ -1290,7 +1320,12 @@ class TestAutoModeTransitionsAndResync:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-4o",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # First sync to stabilize state
             db_session.expire_all()
@@ -1383,7 +1418,12 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="gpt-4o-mini",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )
 
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
@@ -1467,8 +1507,18 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
-            update_default_craft_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-4o",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="gpt-4o",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )
 
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
@@ -1559,7 +1609,12 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="gpt-4o-mini",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )
 
             # Reproduce the state the old sync left: hidden, but still the default.
             db_session.expire_all()
@@ -1656,7 +1711,12 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="gpt-4o-mini",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )
 
             db_session.expire_all()
             provider = fetch_existing_llm_provider(

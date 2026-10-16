@@ -1309,17 +1309,6 @@ def remove_llm_provider(
         db_session.flush()
 
 
-def update_default_provider(
-    provider_id: int, model_name: str, db_session: Session
-) -> None:
-    _update_default_model(
-        db_session,
-        provider_id,
-        model_name,
-        LLMModelFlowType.CHAT,
-    )
-
-
 def update_default_vision_provider(
     provider_id: int, vision_model: str, db_session: Session
 ) -> None:
@@ -1339,7 +1328,7 @@ def update_default_vision_provider(
             f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
         )
 
-    _update_default_model(
+    update_default_model(
         db_session=db_session,
         provider_id=provider_id,
         model=vision_model,
@@ -1347,7 +1336,7 @@ def update_default_vision_provider(
     )
 
 
-def _update_default_pointer_model(
+def update_default_pointer_model(
     provider_id: int,
     model_name: str,
     db_session: Session,
@@ -1370,31 +1359,7 @@ def _update_default_pointer_model(
         flow_type=flow_type,
     )
     db_session.flush()
-    _update_default_model(db_session, provider_id, model_name, flow_type)
-
-
-def update_default_chat_naming_provider(
-    provider_id: int, chat_naming_model: str, db_session: Session
-) -> None:
-    _update_default_pointer_model(
-        provider_id, chat_naming_model, db_session, LLMModelFlowType.CHAT_NAMING
-    )
-
-
-def update_default_craft_provider(
-    provider_id: int, model_name: str, db_session: Session
-) -> None:
-    _update_default_pointer_model(
-        provider_id, model_name, db_session, LLMModelFlowType.CRAFT
-    )
-
-
-def update_default_search_selection_provider(
-    provider_id: int, model_name: str, db_session: Session
-) -> None:
-    _update_default_pointer_model(
-        provider_id, model_name, db_session, LLMModelFlowType.SEARCH_SELECTION
-    )
+    update_default_model(db_session, provider_id, model_name, flow_type)
 
 
 def update_no_default_chat_naming_provider(
@@ -1472,7 +1437,7 @@ def update_default_contextual_model(
         model_configuration_id=model_config.id,
         flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
-    _update_default_model(
+    update_default_model(
         db_session=db_session,
         provider_id=model_config.llm_provider_id,
         model=model_config.name,
@@ -1567,7 +1532,7 @@ def sync_auto_mode_models(
     # Update the default if this provider currently holds the global CHAT default.
     # This runs before the models the config dropped are hidden, so a model that
     # gives up the chat default here can still be hidden below.
-    # We flush (but don't commit) so that _update_default_model can see the new
+    # We flush (but don't commit) so that update_default_model can see the new
     # model rows, then commit everything atomically to avoid a window where the
     # old default is invisible but still pointed-to.
     db_session.flush()
@@ -1903,7 +1868,7 @@ def _update_default_model__no_commit(
         model_config.is_visible = True
 
 
-def _update_default_model(
+def update_default_model(
     db_session: Session,
     provider_id: int,
     model: str,

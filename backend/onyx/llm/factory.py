@@ -404,10 +404,10 @@ def get_default_llm(
         )
 
 
-def _get_default_utility_llm(
+def get_default_utility_llm(
     flow_type: LLMModelFlowType,
-    additional_headers: dict[str, str] | None,
-    policy_fn: Callable[[str], LlmRequestPolicy] | None,
+    additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
 ) -> LLM | None:
     with get_session_with_current_tenant() as db_session:
         model = fetch_default_model(db_session, flow_type)
@@ -438,20 +438,10 @@ def get_search_selection_llm(
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
 ) -> LLM:
     return (
-        _get_default_utility_llm(
+        get_default_utility_llm(
             LLMModelFlowType.SEARCH_SELECTION, additional_headers, policy_fn
         )
         or fallback
-    )
-
-
-def get_chat_naming_llm(
-    *,
-    additional_headers: dict[str, str] | None = None,
-    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
-) -> LLM | None:
-    return _get_default_utility_llm(
-        LLMModelFlowType.CHAT_NAMING, additional_headers, policy_fn
     )
 
 
