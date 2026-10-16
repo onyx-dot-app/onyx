@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import ColumnElement, delete, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
@@ -30,6 +31,7 @@ logger = setup_logger()
 _GROUP_SYNC_BACKOFF_LOOKBACK = 8
 
 _FAILURE_STATUSES = (PermissionSyncStatus.FAILED, PermissionSyncStatus.CANCELED)
+_OPEN_STATUSES = (PermissionSyncStatus.NOT_STARTED, PermissionSyncStatus.IN_PROGRESS)
 
 _AttemptModel = (
     type[DocPermissionSyncAttempt] | type[ExternalGroupPermissionSyncAttempt]
@@ -88,6 +90,137 @@ def create_doc_permission_sync_attempt(
     db_session.commit()
 
     return attempt.id
+
+
+def _get_not_started_attempts_older_than(
+    model: type[DocPermissionSyncAttempt],
+    db_session: Session,
+    older_than: timedelta,
+) -> dict[int, str | None]:
+    return dict(
+        db_session.execute(
+            select(model.id, model.celery_task_id)
+            .where(model.status == PermissionSyncStatus.NOT_STARTED)
+            .where(model.time_created < func.now() - older_than)
+        )
+        .tuples()
+        .all()
+    )
+
+
+def _fail_not_started_attempts(
+    model: _AttemptModel, db_session: Session, attempt_ids: list[int], reason: str
+) -> list[int]:
+    failed_ids = list(
+        db_session.execute(
+            update(model)
+            .where(model.id.in_(attempt_ids))
+            # A task that started meanwhile keeps its attempt
+            .where(model.status == PermissionSyncStatus.NOT_STARTED)
+            .values(
+                status=PermissionSyncStatus.FAILED,
+                time_started=func.now(),
+                time_finished=func.now(),
+                error_message=reason,
+            )
+            .returning(model.id)
+        ).scalars()
+    )
+    db_session.commit()
+    return failed_ids
+
+
+def get_not_started_doc_permission_sync_attempts_older_than(
+    db_session: Session, older_than: timedelta
+) -> dict[int, str | None]:
+    """celery_task_id by attempt ID, for NOT_STARTED attempts older than this."""
+    return _get_not_started_attempts_older_than(
+        DocPermissionSyncAttempt, db_session, older_than
+    )
+
+
+def fail_not_started_doc_permission_sync_attempts(
+    db_session: Session, attempt_ids: list[int], reason: str
+) -> list[int]:
+    """Fails those of these attempts that are still NOT_STARTED. Returns their IDs."""
+    return _fail_not_started_attempts(
+        DocPermissionSyncAttempt, db_session, attempt_ids, reason
+    )
+
+
+def try_create_doc_permission_sync_attempt(
+    connector_credential_pair_id: int,
+    celery_task_id: str,
+    db_session: Session,
+) -> int | None:
+    """Creates a NOT_STARTED attempt for a doc permission sync about to be
+    dispatched. Returns None when the cc_pair already has an open attempt: the
+    partial unique index on open attempts is the per-cc_pair sync lock."""
+    attempt_id = db_session.execute(
+        pg_insert(DocPermissionSyncAttempt)
+        .values(
+            connector_credential_pair_id=connector_credential_pair_id,
+            status=PermissionSyncStatus.NOT_STARTED,
+            celery_task_id=celery_task_id,
+        )
+        # The only other unique constraint is the primary key
+        .on_conflict_do_nothing()
+        .returning(DocPermissionSyncAttempt.id)
+    ).scalar_one_or_none()
+    db_session.commit()
+    return attempt_id
+
+
+def get_open_doc_permission_sync_attempt(
+    connector_credential_pair_id: int,
+    db_session: Session,
+) -> DocPermissionSyncAttempt | None:
+    """The NOT_STARTED or IN_PROGRESS attempt of a cc_pair, if any."""
+    return db_session.scalars(
+        select(DocPermissionSyncAttempt)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id
+            == connector_credential_pair_id
+        )
+        .where(DocPermissionSyncAttempt.status.in_(_OPEN_STATUSES))
+    ).one_or_none()
+
+
+def get_cc_pair_ids_with_open_doc_permission_sync_attempt(
+    db_session: Session,
+) -> set[int]:
+    return set(
+        db_session.scalars(
+            select(DocPermissionSyncAttempt.connector_credential_pair_id).where(
+                DocPermissionSyncAttempt.status.in_(_OPEN_STATUSES)
+            )
+        )
+    )
+
+
+def cancel_open_doc_permission_sync_attempt(
+    connector_credential_pair_id: int,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    """Marks the open attempt of a cc_pair CANCELED, so another job can proceed.
+    A worker still running it loses its lease and stops. Returns its ID."""
+    attempt_id = db_session.execute(
+        update(DocPermissionSyncAttempt)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id
+            == connector_credential_pair_id
+        )
+        .where(DocPermissionSyncAttempt.status.in_(_OPEN_STATUSES))
+        .values(
+            status=PermissionSyncStatus.CANCELED,
+            time_finished=func.now(),
+            error_message=reason,
+        )
+        .returning(DocPermissionSyncAttempt.id)
+    ).scalar_one_or_none()
+    db_session.commit()
+    return attempt_id
 
 
 def get_doc_permission_sync_attempt(

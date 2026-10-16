@@ -225,7 +225,7 @@ family in `onyx/redis/` (`redis_connector_prune.py`, `redis_connector_delete.py`
 | `<prefix>_fence_<id>` | `RedisConnectorPrune.FENCE_PREFIX` (`redis_connector_prune.py`) | 7 days (`FENCE_TTL`) | The task is in progress. Holds a JSON payload (submitted time, celery task id, progress). Presence is the source of truth for "is this running". |
 | `<prefix>_generator_progress_<id>` | `redis_connector_prune.py:GENERATOR_PROGRESS_PREFIX` | tied to fence lifecycle | Running count of work items produced by the generator task. |
 | `<prefix>_generator_complete_<id>` | `redis_connector_prune.py:GENERATOR_COMPLETE_PREFIX` | tied to fence lifecycle | Set once the generator finishes fanning out; its int payload is the starting item count. |
-| `active_fences` (a Redis set) | `OnyxRedisConstants.ACTIVE_FENCES` (`onyx/configs/constants.py`) | n/a (set membership) | A lookup table of every fence key currently believed active, across pruning, deletion, doc-permission sync, external-group sync, document sync, and docprocessing. Beat-driven checker tasks (`check_for_pruning`, its siblings) scan this set instead of doing a `KEYS`/`SCAN` over the whole keyspace, then re-verify each key still exists before trusting it. |
+| `active_fences` (a Redis set) | `OnyxRedisConstants.ACTIVE_FENCES` (`onyx/configs/constants.py`) | n/a (set membership) | A lookup table of every fence key currently believed active, across pruning, deletion, external-group sync, document sync, and docprocessing. Beat-driven checker tasks (`check_for_pruning`, its siblings) scan this set instead of doing a `KEYS`/`SCAN` over the whole keyspace, then re-verify each key still exists before trusting it. |
 | `da_lock:primary_worker` | `OnyxRedisLocks.PRIMARY_WORKER` | touched every `CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8`s | Singleton lock so only one primary worker instance is active. |
 | `da_lock:check_prune_beat`, `da_lock:check_vespa_sync_beat`, etc. | `OnyxRedisLocks.*` | short | Per-checker-task locks (`lock_beat` in `check_for_pruning`) so overlapping beat firings of the same checker don't run concurrently. |
 | `signal:block_validate_indexing_fences`, `signal:block_validate_pruning_fences` | `OnyxRedisSignals.*` | a few minutes | Rate-limits the (expensive) fence-validation pass to run less often than the checker task itself. |
@@ -418,8 +418,9 @@ See [[document-index]] for the cached admin warnings it supplies.
 **Depended on by**
 - [[indexing-pipeline]]: docfetching/docprocessing queues, the indexing fence
   and generator-task pattern this document generalizes.
-- [[permission-sync]]: doc-permission and external-group-sync fences, run on
-  Heavy, monitored the same way as pruning.
+- [[permission-sync]]: external-group-sync fences, run on Heavy, monitored the
+  same way as pruning. Doc permission sync uses no fence: its open attempt row
+  is the lock (see [[permission-sync]] §5.9).
 - [[connectors]] and [[cc-pairs-and-credentials]]: pruning, deletion, and
   hierarchy-fetching all run as Celery tasks scoped to a cc_pair.
 - [[file-store-and-user-files]]: the `user_file_processing` worker and its three
