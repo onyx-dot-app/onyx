@@ -2594,7 +2594,7 @@
           "close": "关闭",
           "count": "({count})"
         },
-        "showing": "显示第 {from}~{to} 条，共 {total} 条"
+        "showing": "显示第 <mono>{from}</mono>~<mono>{to}</mono> 条，共 <mono>{total}</mono> 条"
       },
       "activity": {
         "search": {

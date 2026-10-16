@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { markdown } from "@opal/utils";
+import { richNodes } from "@opal/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
@@ -509,11 +509,16 @@ export default function RunsCard({
             height="fit"
           >
             <Text font="secondary-body" color="text-03">
-              {markdown(
-                t("showing", {
-                  from: `\`${format.number((page - 1) * PAGE_SIZE + 1)}\``,
-                  to: `\`${format.number(Math.min(page * PAGE_SIZE, totalItems))}\``,
-                  total: `\`${format.number(totalItems)}\``,
+              {richNodes(
+                t.rich("showing", {
+                  from: format.number((page - 1) * PAGE_SIZE + 1),
+                  to: format.number(Math.min(page * PAGE_SIZE, totalItems)),
+                  total: format.number(totalItems),
+                  mono: (chunks) => (
+                    <Text font="secondary-mono" color="text-03">
+                      {String(chunks)}
+                    </Text>
+                  ),
                 })
               )}
             </Text>

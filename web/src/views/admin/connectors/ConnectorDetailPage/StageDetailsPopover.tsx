@@ -13,7 +13,6 @@ import {
 import { Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
-import { formatDurationMs } from "@opal/time";
 import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
 import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
 import type { IndexAttemptStageMetric } from "@/lib/types";
@@ -37,8 +36,13 @@ const AVERAGE_WIDTH = 8.5;
 const BAR_WIDTH = 5.75;
 const MAX_WIDTH = 4;
 
+/** Stage times print as seconds with three decimals, e.g. `9.860s`. */
+function formatStageSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(3)}s`;
+}
+
 function formatMs(ms: number | null | undefined): string {
-  return ms == null ? "-" : formatDurationMs(ms);
+  return ms == null ? "-" : formatStageSeconds(ms);
 }
 
 function percent(ms: number, scale: number): string {
@@ -112,11 +116,11 @@ function Average({ stage }: AverageProps) {
       height="fit"
     >
       <Text font="secondary-mono-label" color="text-04">
-        {formatDurationMs(stage.avg_duration_ms)}
+        {formatStageSeconds(stage.avg_duration_ms)}
       </Text>
       {stage.std_dev_duration_ms !== null && (
         <Text font="secondary-mono" color="text-03">
-          {`± ${formatDurationMs(stage.std_dev_duration_ms)}`}
+          {`± ${formatStageSeconds(stage.std_dev_duration_ms)}`}
         </Text>
       )}
     </Section>

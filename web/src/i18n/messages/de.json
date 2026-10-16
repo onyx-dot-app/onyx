@@ -2594,7 +2594,7 @@
           "close": "Schließen",
           "count": "({count})"
         },
-        "showing": "{from}~{to} von {total}"
+        "showing": "<mono>{from}</mono>~<mono>{to}</mono> von <mono>{total}</mono>"
       },
       "activity": {
         "search": {

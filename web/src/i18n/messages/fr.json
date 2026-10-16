@@ -2594,7 +2594,7 @@
           "close": "Fermer",
           "count": "({count})"
         },
-        "showing": "Affichage de {from}~{to} sur {total}"
+        "showing": "Affichage de <mono>{from}</mono>~<mono>{to}</mono> sur <mono>{total}</mono>"
       },
       "activity": {
         "search": {

@@ -2594,7 +2594,7 @@
           "close": "閉じる",
           "count": "({count})"
         },
-        "showing": "{total} 件中 {from}~{to} 件を表示"
+        "showing": "<mono>{total}</mono> 件中 <mono>{from}</mono>~<mono>{to}</mono> 件を表示"
       },
       "activity": {
         "search": {

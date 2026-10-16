@@ -2594,7 +2594,7 @@
           "close": "إغلاق",
           "count": "({count})"
         },
-        "showing": "عرض {from}~{to} من {total}"
+        "showing": "عرض <mono>{from}</mono>~<mono>{to}</mono> من <mono>{total}</mono>"
       },
       "activity": {
         "search": {

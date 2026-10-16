@@ -2594,7 +2594,7 @@
           "close": "닫기",
           "count": "({count})"
         },
-        "showing": "{total}개 중 {from}~{to}개 표시"
+        "showing": "<mono>{total}</mono>개 중 <mono>{from}</mono>~<mono>{to}</mono>개 표시"
       },
       "activity": {
         "search": {
