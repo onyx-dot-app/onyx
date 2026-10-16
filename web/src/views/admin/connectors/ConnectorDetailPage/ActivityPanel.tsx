@@ -186,6 +186,7 @@ export default function ActivityPanel({
   const [confirmingResolveAll, setConfirmingResolveAll] = useState<{
     level: CCPairRunLevel;
     q: string;
+    timeRange: ActivityTimeRange;
     count: number;
   } | null>(null);
   const { resolving, resolve, resolveRun, resolveMatching } =
@@ -272,6 +273,7 @@ export default function ActivityPanel({
     scope,
     scope === "fleet" || scope.canResolveRuns ? resolveAllLevel : null,
     search,
+    timeRange,
     RUNS_POLL_MS
   );
   // Waits until the list and count match the search typed.
@@ -412,6 +414,7 @@ export default function ActivityPanel({
                     setConfirmingResolveAll({
                       level: resolveAllLevel,
                       q: search,
+                      timeRange,
                       count: resolvable.count,
                     })
                   }
@@ -468,7 +471,8 @@ export default function ActivityPanel({
                 void resolveMatching(
                   scope,
                   confirmingResolveAll.level,
-                  confirmingResolveAll.q
+                  confirmingResolveAll.q,
+                  confirmingResolveAll.timeRange
                 );
               }}
             >
