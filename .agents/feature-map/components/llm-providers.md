@@ -52,7 +52,7 @@ Admin router, prefix `/admin/llm`:
 |---|---|---|---|
 | GET | `/admin/llm/provider` | `list_llm_providers` | All configured providers. |
 | GET | `/admin/llm/provider/{id}` | `get_llm_provider` | |
-| PUT | `/admin/llm/provider` | `put_llm_provider` | Create or update. Restores masked credential fields via `_restore_masked_custom_config_values`. |
+| PUT | `/admin/llm/provider` | `put_llm_provider` | Create or update. `api_key` is a new key or an existing token id (`db/api_token.py:assign_api_token`); an edit that leaves it out keeps the current key, and `null` clears it. Restores masked credential fields via `_restore_masked_custom_config_values`. |
 | DELETE | `/admin/llm/provider/{id}` | `delete_llm_provider` | |
 | POST | `/admin/llm/test` | `test_llm_configuration` | Fires one real call against the given config before it is saved. |
 | POST | `/admin/llm/test/default` | `test_default_provider` | Tests the currently configured default. |
@@ -132,7 +132,8 @@ designation and endpoints have been removed.
 ## 3. Data model
 
 - **`LLMProvider`** (`db/models.py`): one row per configured connection.
-  `provider`, encrypted `api_key` (`EncryptedString`), `api_base`, `api_version`,
+  `provider`, `api_token_id` (a shared `ApiToken` that holds the encrypted key;
+  `api_key` is a read-only property over it), `api_base`, `api_version`,
   `custom_config` (JSONB, for provider-specific fields like Bedrock's access
   keys), `deployment_name`, `is_public`, `is_auto_mode`. Four columns are
   **deprecated in favour of `LLMModelFlow`** and kept only for back-compat
@@ -163,7 +164,7 @@ designation and endpoints have been removed.
   (`alembic/versions/f220515df7b4_add_flow_mapping_table.py:upgrade`,
   `db/models.py:LLMModelFlow`). See §9 for why this matters.
 - **`TracingProviderConfig`** (`db/models.py`, via `db/tracing.py`): one row per
-  tracing provider (Braintrust, Langfuse) with `enabled`, encrypted `api_key`,
+  tracing provider (Braintrust, Langfuse) with `enabled`, `api_token_id` (a shared `ApiToken`),
   and a `config` JSONB blob.
 - **`UserUsage`** (`db/models.py`, via `db/llm_usage.py`): per-user rolling
   window of `input_tokens`, `output_tokens`, `cache_read_tokens`,

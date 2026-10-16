@@ -1,5 +1,3 @@
-from enum import Enum, auto
-
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -7,6 +5,11 @@ from sqlalchemy.orm import Session, load_only, selectinload
 from sqlalchemy.orm.interfaces import LoaderOption
 
 from onyx.auth.permissions import Permission, has_global_permission
+from onyx.db.api_token import (
+    assign_api_token,
+    assign_system_api_token,
+    release_api_token,
+)
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
@@ -37,6 +40,11 @@ from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
+from onyx.server.manage.api_token.models import (
+    ApiTokenInput,
+    ExistingApiToken,
+    NewApiToken,
+)
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
     CloudEmbeddingProviderCreationRequest,
@@ -47,9 +55,7 @@ from onyx.server.manage.llm.models import (
     SyncModelEntry,
     ensure_default_within_max,
 )
-from onyx.utils.encryption import is_masked_credential, mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.sensitive import SensitiveValue
 from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
@@ -213,99 +219,28 @@ def fetch_persona_with_groups(db_session: Session, persona_id: int) -> Persona |
     )
 
 
-class ApiKeyIntent(Enum):
-    """What a request states about the api_key it carries."""
-
-    # A new key, taken as given. The only way to rotate to a value equal to the
-    # stored key's mask, which UNSTATED reads as an unchanged echo.
-    ROTATED = auto()
-    # Keep the stored key and ignore whatever api_key holds. The admin UI sends
-    # this with no api_key at all when the key is left alone.
-    UNCHANGED = auto()
-    # The caller does not set the flag, so the mask-echo heuristic decides. This
-    # is what keeps callers predating the flag able to rotate a key.
-    UNSTATED = auto()
-
-    @classmethod
-    def from_request_flag(cls, api_key_changed: bool | None) -> "ApiKeyIntent":
-        if api_key_changed is None:
-            return cls.UNSTATED
-        return cls.ROTATED if api_key_changed else cls.UNCHANGED
-
-
-def _resolve_embedding_api_key(
-    incoming: str | None,
-    existing: SensitiveValue[str] | None,
-    intent: ApiKeyIntent,
-) -> str | None:
-    """Pick the api_key to store for an embedding provider."""
-    if intent is ApiKeyIntent.ROTATED:
-        return incoming
-    if intent is ApiKeyIntent.UNCHANGED and existing is not None:
-        return existing.get_value(apply_mask=False)
-    # UNCHANGED with nothing stored says to keep a key that does not exist, so
-    # read the request instead of creating a provider with no key at all.
-    return _restore_masked_embedding_api_key(incoming, existing)
-
-
-def _restore_masked_embedding_api_key(
-    incoming: str | None,
-    existing: SensitiveValue[str] | None,
-) -> str | None:
-    """Restore the stored key when the caller submits the masked placeholder.
-
-    Reads mask the key, so a read-modify-write cycle would otherwise persist the
-    mask itself as the real credential. Mirrors resolve_masked_credentials in
-    onyx/db/external_app.py.
-    """
-    if incoming is None:
-        return incoming
-
-    stored = existing.get_value(apply_mask=False) if existing is not None else None
-
-    if stored is not None:
-        # Compare against this key's own mask rather than the general shape
-        # test, so a real key that happens to look like a placeholder is still
-        # stored instead of being swallowed. Whatever is stored is preserved:
-        # the stored value cannot be told apart from a real key of the same
-        # shape, so refusing it would break providers holding a valid one.
-        #
-        # A caller rotating to a key that equals this mask exactly is read as an
-        # unchanged echo, and keeps the old key. Only api_key_changed on the
-        # request separates the two.
-        return stored if incoming == mask_string(stored) else incoming
-
-    if is_masked_credential(incoming):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "api_key was submitted masked but has no stored value to restore — "
-            "provide the actual key.",
-        )
-    return incoming
-
-
 def upsert_cloud_embedding_provider(
-    db_session: Session, provider: CloudEmbeddingProviderCreationRequest
+    db_session: Session,
+    provider: CloudEmbeddingProviderCreationRequest,
+    *,
+    system_key: bool = False,
 ) -> CloudEmbeddingProvider:
+    """Create or update an embedding provider. ``system_key`` stores a new key
+    as Onyx-owned (Cloud default keys)."""
     existing_provider = (
         db_session.query(CloudEmbeddingProviderModel)
         .filter_by(provider_type=provider.provider_type)
         .first()
     )
+    # api_key goes through the token write path; every other field is set
+    # straight onto the model.
+    updates = provider.model_dump(exclude={"api_key"})
     if existing_provider:
-        # api_key_changed is a request-only flag; every remaining key is setattr'd
-        # straight onto the model.
-        updates = provider.model_dump(exclude={"api_key_changed"})
-        updates["api_key"] = _resolve_embedding_api_key(
-            provider.api_key,
-            existing_provider.api_key,
-            ApiKeyIntent.from_request_flag(provider.api_key_changed),
-        )
         if "vertex_config" not in provider.model_fields_set:
             # Older clients do not send authentication metadata. Preserve it for
             # unrelated edits, but a supplied credential selects legacy auth.
             if (
-                updates["api_key"] is not None
+                provider.api_key is not None
                 and existing_provider.vertex_config is not None
                 and not build_embedding_auth(
                     existing_provider.provider_type,
@@ -319,16 +254,27 @@ def upsert_cloud_embedding_provider(
         for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:
-        creation = provider.model_dump(exclude={"api_key_changed"})
-        creation["api_key"] = _resolve_embedding_api_key(
-            provider.api_key,
-            None,
-            ApiKeyIntent.from_request_flag(provider.api_key_changed),
-        )
-        new_provider = CloudEmbeddingProviderModel(**creation)
+        existing_provider = CloudEmbeddingProviderModel(**updates)
+        db_session.add(existing_provider)
+        db_session.flush()
 
-        db_session.add(new_provider)
-        existing_provider = new_provider
+    if system_key and isinstance(provider.api_key, NewApiToken):
+        assign_system_api_token(
+            db_session,
+            existing_provider,
+            provider.api_key.value,
+            platform=provider.provider_type.value,
+            base_url=existing_provider.api_url,
+        )
+    elif "api_key" in provider.model_fields_set:
+        # Leaving api_key out keeps the current key; only null clears it.
+        assign_api_token(
+            db_session,
+            existing_provider,
+            provider.api_key,
+            platform=provider.provider_type.value,
+            base_url=existing_provider.api_url,
+        )
     db_session.commit()
     db_session.refresh(existing_provider)
     return CloudEmbeddingProvider.from_request(existing_provider)
@@ -380,10 +326,46 @@ def _stored_max_input_tokens(
     return max_input_tokens
 
 
+def _assign_llm_provider_api_token(
+    db_session: Session,
+    provider: LLMProviderModel,
+    request: LLMProviderUpsertRequest,
+    system_key: bool,
+) -> None:
+    """Point ``provider`` at the key the request names. An edit that leaves out
+    api_key keeps the current key, and still goes through assign_api_token so
+    a changed api_base is checked against it. ``system_key`` stores a new key
+    as Onyx-owned (Cloud default keys)."""
+    if system_key and isinstance(request.api_key, NewApiToken):
+        assign_system_api_token(
+            db_session,
+            provider,
+            request.api_key.value.strip(),
+            platform=provider.provider,
+            base_url=provider.api_base,
+        )
+        return
+
+    api_key_input: ApiTokenInput | None = request.api_key
+    if "api_key" not in request.model_fields_set and provider.api_token_id is not None:
+        api_key_input = ExistingApiToken(id=provider.api_token_id)
+    assign_api_token(
+        db_session,
+        provider,
+        api_key_input,
+        platform=provider.provider,
+        base_url=provider.api_base,
+    )
+
+
 def upsert_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
+    *,
+    system_key: bool = False,
 ) -> LLMProviderView:
+    """Create or update an LLM provider. ``system_key`` stores a new key as
+    Onyx-owned (Cloud default keys)."""
     existing_llm_provider: LLMProviderModel | None = None
     if llm_provider_upsert_request.id:
         existing_llm_provider = fetch_existing_llm_provider_by_id(
@@ -417,10 +399,6 @@ def upsert_llm_provider(
     if "name" in llm_provider_upsert_request.model_fields_set:
         existing_llm_provider.name = llm_provider_upsert_request.name
     existing_llm_provider.provider = llm_provider_upsert_request.provider
-    # EncryptedString accepts str for writes, returns SensitiveValue for reads
-    existing_llm_provider.api_key = (  # ty: ignore[invalid-assignment]
-        llm_provider_upsert_request.api_key
-    )
     existing_llm_provider.api_base = api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
     existing_llm_provider.custom_config = custom_config
@@ -432,6 +410,10 @@ def upsert_llm_provider(
     if not existing_llm_provider.id:
         # If its not already in the db, we need to generate an ID by flushing
         db_session.flush()
+
+    _assign_llm_provider_api_token(
+        db_session, existing_llm_provider, llm_provider_upsert_request, system_key
+    )
 
     # Build a lookup of existing model configurations by name (single iteration)
     existing_by_name = {
@@ -929,7 +911,7 @@ def fetch_first_accessible_llm_provider_by_type(
         None,
     )
     if provider is not None:
-        db_session.refresh(provider, attribute_names=["api_key"])
+        db_session.refresh(provider, attribute_names=["api_token"])
     return provider
 
 
@@ -1282,12 +1264,19 @@ def remove_embedding_provider(
         delete(SearchSettings).where(SearchSettings.provider_type == provider_type)
     )
 
-    # Delete the embedding provider
+    token_id = db_session.scalar(
+        select(CloudEmbeddingProviderModel.api_token_id).where(
+            CloudEmbeddingProviderModel.provider_type == provider_type
+        )
+    )
     db_session.execute(
         delete(CloudEmbeddingProviderModel).where(
             CloudEmbeddingProviderModel.provider_type == provider_type
         )
     )
+    db_session.flush()
+    if token_id is not None:
+        release_api_token(db_session, token_id)
 
     db_session.commit()
 
@@ -1330,9 +1319,13 @@ def remove_llm_provider(
             LLMProvider__UserGroup.llm_provider_id == provider_id
         )
     )
+    api_token_id = provider.api_token_id
     db_session.execute(
         delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
     )
+    if api_token_id is not None:
+        db_session.flush()
+        release_api_token(db_session, api_token_id)
     if commit:
         db_session.commit()
     else:

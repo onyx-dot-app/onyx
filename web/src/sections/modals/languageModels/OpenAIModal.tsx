@@ -84,7 +84,9 @@ export default function OpenAIModal({
         });
       }}
     >
-      <APIKeyField providerName="OpenAI" />
+      <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
+      />
 
       {!isOnboarding && (
         <>

@@ -1,13 +1,11 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.db.enums import HookFailStrategy, HookPoint
-
-NonEmptySecretStr = Annotated[SecretStr, Field(min_length=1)]
-
+from onyx.server.manage.api_token.models import ApiTokenInput
 
 # ---------------------------------------------------------------------------
 # Request models
@@ -18,7 +16,7 @@ class HookCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     hook_point: HookPoint
     endpoint_url: str = Field(min_length=1)
-    api_key: NonEmptySecretStr | None = None
+    api_key: ApiTokenInput | None = None
     fail_strategy: HookFailStrategy | None = None  # if None, uses HookPointSpec default
     timeout_seconds: float | None = Field(
         default=None, gt=0
@@ -35,7 +33,8 @@ class HookCreateRequest(BaseModel):
 class HookUpdateRequest(BaseModel):
     name: str | None = None
     endpoint_url: str | None = None
-    api_key: NonEmptySecretStr | None = None
+    # Omitted = unchanged, null = clear, otherwise a new or saved key.
+    api_key: ApiTokenInput | None = None
     fail_strategy: HookFailStrategy | None = None
     timeout_seconds: float | None = Field(default=None, gt=0)
 
@@ -87,6 +86,7 @@ class HookResponse(BaseModel):
     endpoint_url: str | None
     # Partially-masked API key (e.g. "abcd••••••••wxyz"), or None if no key is set.
     api_key_masked: str | None
+    api_token_id: int | None
     fail_strategy: HookFailStrategy
     timeout_seconds: float  # always resolved — None from request is replaced with spec default before DB write
     is_active: bool

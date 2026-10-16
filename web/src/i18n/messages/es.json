@@ -5025,9 +5025,6 @@
     },
     "documentProcessing": {
       "unstructured": {
-        "apiKey": {
-          "placeholder": "Introduce la clave de API"
-        },
         "deleteButton": {
           "label": "Eliminar la clave de API"
         },
@@ -5899,11 +5896,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "{appName} usará esta clave para autenticarse en tu endpoint de API.",
-          "keepCurrent": {
-            "placeholder": "Déjalo en blanco para conservar la clave actual"
-          },
-          "title": "Clave de API"
+          "description": "{appName} usará esta clave para autenticarse en tu endpoint de API."
         },
         "connectionValid": {
           "label": "Conexión válida."
@@ -6161,9 +6154,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "Introduce tu clave de API.",
-          "label": "Clave de API",
-          "placeholder": "Introduce tu clave de API",
           "required": "La clave de API es obligatoria"
         },
         "apiKeyTest": {
@@ -6206,9 +6196,6 @@
         },
         "editHeader": {
           "title": "Editar {title}"
-        },
-        "loading": {
-          "placeholder": "Cargando..."
         },
         "location": {
           "idle": "La región de Google Cloud de tus modelos de Vertex AI. Consulta <link>la documentación de Google</link> para ver las regiones disponibles.",
@@ -6432,10 +6419,6 @@
         "unknownError": "Error desconocido"
       },
       "fields": {
-        "apiKey": {
-          "description": "Pega tu [clave de API]({link}) de {provider} para acceder a tus modelos.",
-          "title": "Clave de API"
-        },
         "googleCredentials": {
           "title": "Sube el archivo de credenciales JSON"
         },
@@ -7073,9 +7056,6 @@
           "addModelButton": {
             "label": "Añadir un modelo"
           },
-          "apiKeyField": {
-            "description": "Pega tu clave de API si tu proveedor de modelos requiere autenticación."
-          },
           "apiVersionField": {
             "title": "Versión de la API"
           },
@@ -7242,8 +7222,7 @@
             "placeholder": "URL base de la API de Ollama"
           },
           "apiKeyField": {
-            "description": "Tu clave de API de Ollama Cloud.",
-            "placeholder": "Clave de API"
+            "description": "Tu clave de API de Ollama Cloud."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7237,6 @@
           "apiBaseField": {
             "description": "Pega la URL del endpoint compatible con OpenAI.",
             "learnMore": "[Más información](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "Pega tu clave de API si tu proveedor de modelos requiere autenticación."
           },
           "description": "Conéctate a otros modelos en la nube o autoalojados mediante endpoints compatibles con OpenAI."
         },
@@ -7315,8 +7291,6 @@
             "title": "URL base de la API"
           },
           "apiKeyField": {
-            "description": "Pega tu clave de API para acceder a tus modelos.",
-            "providerDescription": "Pega tu clave de API de {provider} para acceder a tus modelos.",
             "title": "Clave de API"
           },
           "cancelButton": {
@@ -9967,9 +9941,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "Pega tu [clave de API]({url}) de {provider} para acceder a tus modelos.",
-          "label": "Clave de API",
-          "placeholder": "Clave de API",
           "required": "La clave de API es obligatoria"
         },
         "apiSecret": {
@@ -10057,11 +10028,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "Pega tu clave de API de {provider} para conectarte."
-        },
-        "placeholder": "Clave de API",
-        "title": "Clave de API",
         "withLink": {
           "description": "Pega tu [clave de API]({url}) de {provider} para conectarte."
         }
@@ -13580,6 +13546,32 @@
       "vertexAi": {
         "projectId": "mi-proyecto-vertex",
         "location": "global"
+      }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "Clave de API",
+        "description": "Pega tu clave de API de {platform}.",
+        "reuseDescription": "Pega tu clave de API de {platform} o reutiliza una guardada."
+      },
+      "input": {
+        "placeholder": "Introduce la clave de API",
+        "listLabel": "Claves de API de {platform} guardadas"
+      },
+      "reuse": {
+        "title": "Reutilizar claves de API de {platform}"
+      },
+      "usedFor": "Se usa para {usages}",
+      "usage": {
+        "llmProvider": "el proveedor de LLM **{name}**",
+        "imageGeneration": "la generación de imágenes **{name}**",
+        "voiceProvider": "el proveedor de voz **{name}**",
+        "embeddingProvider": "el proveedor de embeddings **{name}**",
+        "webSearchProvider": "el proveedor de búsqueda web **{name}**",
+        "webContentProvider": "el proveedor de contenido web **{name}**",
+        "tracingProvider": "el proveedor de trazas **{name}**",
+        "hook": "el hook **{name}**",
+        "unstructured": "el procesamiento de documentos **{name}**"
       }
     }
   },

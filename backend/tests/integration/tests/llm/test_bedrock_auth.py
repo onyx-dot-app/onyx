@@ -37,7 +37,6 @@ def test_bedrock_test_endpoint_rejects_invalid_credentials(
                 "AWS_SECRET_ACCESS_KEY": "invalid_secret_access_key",
             },
             "model_configurations": [{"name": _BEDROCK_MODEL, "is_visible": True}],
-            "api_key_changed": True,
             "custom_config_changed": True,
         },
     )

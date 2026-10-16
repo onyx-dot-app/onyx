@@ -3,6 +3,7 @@ from uuid import uuid4
 import httpx
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     DefaultModel,
     LLMProviderUpsertRequest,
@@ -110,7 +111,7 @@ class MockLLMManager:
         upsert_request = LLMProviderUpsertRequest(
             name=f"mock-llm-{uuid4()}",
             provider=LlmProviderNames.OPENAI_COMPATIBLE,
-            api_key="sk-mock-llm-server",
+            api_key=NewApiToken(value="sk-mock-llm-server"),
             api_base=api_base,
             api_version=None,
             custom_config=None,
@@ -126,7 +127,6 @@ class MockLLMManager:
                     supports_image_input=False,
                 )
             ],
-            api_key_changed=True,
         )
         response = client.put(
             f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
@@ -140,6 +140,7 @@ class MockLLMManager:
             name=data["name"],
             provider=data["provider"],
             api_key=data["api_key"],
+            api_token_id=data["api_token_id"],
             default_model_name=MOCK_LLM_MODEL_NAME,
             is_public=data["is_public"],
             is_auto_mode=data.get("is_auto_mode", False),

@@ -241,6 +241,56 @@ class TestSsrfProtection:
             assert "token" not in content.lower() or "example" in content.lower()
 
 
+def test_search_key_is_shared_with_content_provider(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    """Saving a new Exa search key points the Exa content provider at the same
+    token, and an edit that keeps the key keeps the token."""
+    search_url = f"{API_SERVER_URL}/admin/web-search/search-providers"
+    created = client.post(
+        search_url,
+        json={
+            "name": "Exa",
+            "provider_type": WebSearchProviderType.EXA.value,
+            "config": {},
+            "api_key": {"type": "new", "value": "exa-shared-test-key"},
+        },
+        headers=admin_user.headers,
+    )
+    assert created.status_code == 200, created.text
+    search = created.json()
+    token_id = search["api_token_id"]
+    assert token_id is not None
+
+    content_response = client.get(
+        f"{API_SERVER_URL}/admin/web-search/content-providers",
+        headers=admin_user.headers,
+    )
+    assert content_response.status_code == 200, content_response.text
+    content = next(
+        provider
+        for provider in content_response.json()
+        if provider["provider_type"] == WebContentProviderType.EXA.value
+    )
+    assert content["api_token_id"] == token_id
+    assert content["masked_api_key"] == search["masked_api_key"]
+
+    edited = client.post(
+        search_url,
+        json={
+            "id": search["id"],
+            "name": "Exa",
+            "provider_type": WebSearchProviderType.EXA.value,
+            "config": {"num_results": "5"},
+            "api_key": {"type": "existing", "id": token_id},
+        },
+        headers=admin_user.headers,
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["api_token_id"] == token_id
+
+
 # Mark the Exa-dependent tests to skip if no API key
 pytestmark_exa = pytest.mark.skipif(
     not os.environ.get("EXA_API_KEY"),
@@ -256,8 +306,7 @@ def _activate_exa_provider(admin_user: DATestUser) -> int:
             "name": "integration-exa-provider",
             "provider_type": WebSearchProviderType.EXA.value,
             "config": {},
-            "api_key": os.environ["EXA_API_KEY"],
-            "api_key_changed": True,
+            "api_key": {"type": "new", "value": os.environ["EXA_API_KEY"]},
             "activate": True,
         },
         headers=admin_user.headers,
@@ -267,7 +316,7 @@ def _activate_exa_provider(admin_user: DATestUser) -> int:
     provider = response.json()
     assert provider["provider_type"] == WebSearchProviderType.EXA.value
     assert provider["is_active"] is True
-    assert provider["has_api_key"] is True
+    assert provider["api_token_id"] is not None
 
     return provider["id"]
 

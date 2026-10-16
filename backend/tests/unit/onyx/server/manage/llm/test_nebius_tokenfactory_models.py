@@ -10,6 +10,7 @@ from unittest.mock import patch
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.api import get_nebius_tokenfactory_available_models
 from onyx.server.manage.llm.models import NebiusTokenfactoryModelsRequest
 
@@ -75,7 +76,7 @@ def _fetch(sample: dict | None = None) -> dict:
         results = get_nebius_tokenfactory_available_models(
             request=NebiusTokenfactoryModelsRequest(
                 api_base="https://api.tokenfactory.nebius.com/v1",
-                api_key="k",
+                api_key=NewApiToken(value="k"),
                 provider_id=None,  # skip DB sync
             ),
             _=cast(User, None),

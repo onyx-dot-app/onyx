@@ -4,6 +4,7 @@ import { IconLoader } from "@opal/loaders";
 import { Formik, Form } from "formik";
 import { useTranslations } from "next-intl";
 import * as Yup from "yup";
+import { markdown } from "@opal/utils";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
@@ -24,19 +25,29 @@ import {
   CONTENT_PROVIDER_DETAILS,
 } from "@/lib/webSearch/utils";
 import { connectProviderFlow } from "@/lib/webSearch/svc";
+import { ApiTokenField } from "@/lib/api-tokens/components";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import {
+  initialApiTokenValue,
+  toApiTokenPayload,
+} from "@/lib/api-tokens/utils";
+import { apiTokenSchema } from "@/lib/api-tokens/validation";
 import type {
   WebSearchProviderType,
   WebSearchProviderView,
   WebContentProviderView,
 } from "@/lib/webSearch/types";
-import {
-  ApiKeyField,
-  ConfigTextField,
-} from "@/views/admin/WebSearchPage/shared";
+import { ConfigTextField } from "@/views/admin/WebSearchPage/shared";
 
 interface FormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   config: string;
+}
+
+function isSameApiTokenValue(a: ApiTokenValue, b: ApiTokenValue): boolean {
+  if (a.type === "existing" && b.type === "existing") return a.id === b.id;
+  if (a.type === "new" && b.type === "new") return a.value === b.value;
+  return false;
 }
 
 export type ProviderModalState =
@@ -59,42 +70,10 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
   const t = useTranslations("admin.webSearch");
   const onClose = useModalClose();
   const { category, providerType, provider } = state;
-  const {
-    searchProviders,
-    contentProviders,
-    mutateSearchProviders,
-    mutateContentProviders,
-  } = useWebSearchProviders();
-
-  const exaSibling =
-    providerType === "exa"
-      ? category === "search"
-        ? {
-            category: "content" as const,
-            existingProviderId:
-              contentProviders.find((p) => p.provider_type === "exa")?.id ??
-              null,
-            existingProviderName:
-              contentProviders.find((p) => p.provider_type === "exa")?.name ??
-              null,
-          }
-        : {
-            category: "search" as const,
-            existingProviderId:
-              searchProviders.find((p) => p.provider_type === "exa")?.id ??
-              null,
-            existingProviderName:
-              searchProviders.find((p) => p.provider_type === "exa")?.name ??
-              null,
-          }
-      : undefined;
+  const { mutateSearchProviders, mutateContentProviders } =
+    useWebSearchProviders();
 
   const isEditing = !!provider && provider.id > 0;
-  const hasStoredKey = !!(
-    provider &&
-    provider.id > 0 &&
-    provider.masked_api_key
-  );
 
   const requiresApiKey =
     category === "search"
@@ -125,8 +104,9 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
         ]?.apiKeyUrl
       : undefined;
 
-  const initialApiKey =
-    provider && provider.id > 0 ? (provider.masked_api_key ?? "") : "";
+  // A placeholder provider (id < 0) can carry the key its sibling side uses.
+  const initialApiKey = initialApiTokenValue(provider?.api_token_id);
+  const prefilledKey = !isEditing && initialApiKey.type === "existing";
 
   const initialConfig = configField
     ? (category === "search"
@@ -142,10 +122,9 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
   };
 
   const validationSchema = Yup.object().shape({
-    api_key:
-      requiresApiKey && !hasStoredKey
-        ? Yup.string().required(t("setupModal.apiKey.required"))
-        : Yup.string(),
+    api_key: requiresApiKey
+      ? apiTokenSchema(t("setupModal.apiKey.required"))
+      : apiTokenSchema(),
     config: configField
       ? Yup.string().required(
           t("setupModal.config.required", { title: configField.title })
@@ -154,8 +133,8 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
   });
 
   async function mutate() {
-    // Providers whose key the backend syncs to the other side need both lists
-    // refreshed so the sibling card leaves the disconnected state.
+    // Providers whose key the backend shares with the other side need both
+    // lists refreshed so the sibling card leaves the disconnected state.
     const syncsSiblingSide = ["exa", "tavily", "firecrawl"].includes(
       providerType
     );
@@ -172,7 +151,8 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
     values: FormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
-    const apiKeyChanged = requiresApiKey && values.api_key !== initialApiKey;
+    const apiKeyChanged =
+      requiresApiKey && !isSameApiTokenValue(values.api_key, initialApiKey);
 
     const config =
       category === "search"
@@ -188,14 +168,12 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
         existingProviderId: provider && provider.id > 0 ? provider.id : null,
         existingProviderName:
           provider && provider.id > 0 ? provider.name : null,
-        existingProviderHasApiKey: hasStoredKey,
         displayName: providerLabel,
         providerRequiresApiKey: requiresApiKey,
-        apiKeyChangedForProvider: apiKeyChanged,
-        apiKey: values.api_key,
+        apiKey: requiresApiKey ? toApiTokenPayload(values.api_key) : null,
+        apiKeyChanged,
         config,
         configChanged,
-        exaSibling,
         onValidating: () => {},
         onSaving: () => {},
         onError: (message) => toast.error(message),
@@ -240,9 +218,19 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
               {!hasNoFields && (
                 <Modal.Body>
                   {requiresApiKey && (
-                    <ApiKeyField
-                      providerLabel={providerLabel}
-                      apiKeyUrl={apiKeyUrl}
+                    <ApiTokenField
+                      platform={providerType}
+                      savedMaskedValue={provider?.masked_api_key ?? undefined}
+                      subDescription={
+                        apiKeyUrl
+                          ? markdown(
+                              t("apiKeyField.withLink.description", {
+                                url: apiKeyUrl,
+                                provider: providerLabel,
+                              })
+                            )
+                          : undefined
+                      }
                     />
                   )}
                   {configField && (
@@ -261,7 +249,8 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
                 <Button
                   type="submit"
                   disabled={
-                    (!hasNoFields && (!dirty || !isValid)) || isSubmitting
+                    (!hasNoFields && ((!dirty && !prefilledKey) || !isValid)) ||
+                    isSubmitting
                   }
                   icon={isSubmitting ? IconLoader : undefined}
                 >

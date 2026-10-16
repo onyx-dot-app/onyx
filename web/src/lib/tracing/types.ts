@@ -9,6 +9,7 @@ export interface TracingProviderView {
   enabled: boolean;
   config: Record<string, string>;
   masked_api_key: string | null;
+  api_token_id: number | null;
 }
 
 export interface TracingDisconnectTarget {

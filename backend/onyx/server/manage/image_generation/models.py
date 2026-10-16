@@ -2,17 +2,11 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from onyx.server.manage.api_token.models import ApiTokenInput
+from onyx.utils.encryption import mask_string
+
 if TYPE_CHECKING:
     from onyx.db.models import ImageGenerationConfig as ImageGenerationConfigModel
-
-
-def _mask_api_key(api_key: str | None) -> str | None:
-    """Mask API key, showing first 4 and last 4 characters."""
-    if not api_key:
-        return None
-    if len(api_key) <= 8:
-        return "****"
-    return api_key[:4] + "****" + api_key[-4:]
 
 
 class TestImageGenerationRequest(BaseModel):
@@ -20,7 +14,7 @@ class TestImageGenerationRequest(BaseModel):
 
     model_name: str  # e.g., "gpt-image-1"
     provider: str | None = None  # e.g., "openai", "azure"
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
 
     # Additional fields for custom config
     custom_config: dict[str, str] | None = None
@@ -42,7 +36,7 @@ class ImageGenerationConfigCreate(BaseModel):
     model_name: str  # e.g., "gpt-image-1"
 
     provider: str | None = None  # e.g., "openai", "azure"
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     api_base: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
@@ -54,21 +48,19 @@ class ImageGenerationConfigCreate(BaseModel):
 class ImageGenerationConfigUpdate(BaseModel):
     """Request model for updating an image generation config.
 
-    Backend will delete old LLM provider and create new one.
+    Backend will delete old LLM provider and create new one. Leaving out
+    api_key keeps the current key.
     """
 
     model_name: str  # e.g., "gpt-image-1"
     # Note: image_provider_id cannot be changed during update
 
     provider: str | None = None  # e.g., "openai", "azure"
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     api_base: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
-
-    # If False, preserve existing API key from DB
-    api_key_changed: bool = False
 
 
 class ImageGenerationConfigView(BaseModel):
@@ -100,6 +92,7 @@ class ImageGenerationCredentials(BaseModel):
     """Response model for image generation config credentials (edit mode)."""
 
     api_key: str | None
+    api_token_id: int | None
     api_base: str | None
     api_version: str | None
     deployment_name: str | None
@@ -108,17 +101,15 @@ class ImageGenerationCredentials(BaseModel):
     def from_model(
         cls, config: "ImageGenerationConfigModel"
     ) -> "ImageGenerationCredentials":
-        """Convert database model to credentials model.
-
-        Note: API key is masked for security - only first 4 and last 4 chars shown.
-        """
+        """Convert database model to credentials model. The API key is masked."""
         llm_provider = config.model_configuration.llm_provider
         return cls(
-            api_key=_mask_api_key(
-                llm_provider.api_key.get_value(apply_mask=False)
+            api_key=(
+                mask_string(llm_provider.api_key.get_value(apply_mask=False))
                 if llm_provider.api_key
                 else None
             ),
+            api_token_id=llm_provider.api_token_id,
             api_base=llm_provider.api_base,
             api_version=llm_provider.api_version,
             deployment_name=llm_provider.deployment_name,

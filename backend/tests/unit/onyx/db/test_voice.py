@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.db.models import VoiceProvider
+from onyx.db.models import ApiToken, VoiceProvider
 from onyx.db.voice import (
     MAX_VOICE_PLAYBACK_SPEED,
     MIN_VOICE_PLAYBACK_SPEED,
@@ -23,6 +23,7 @@ from onyx.db.voice import (
     upsert_voice_provider,
 )
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import ExistingApiToken, NewApiToken
 
 
 def _make_voice_provider(
@@ -39,7 +40,6 @@ def _make_voice_provider(
     provider.provider_type = provider_type
     provider.is_default_stt = is_default_stt
     provider.is_default_tts = is_default_tts
-    provider.api_key = None
     provider.api_secret = None
     provider.api_base = None
     provider.custom_config = None
@@ -193,13 +193,12 @@ class TestUpsertVoiceProvider:
             provider_id=None,
             name="New Provider",
             provider_type="openai",
-            api_key="test-key",
-            api_key_changed=True,
+            api_key=NewApiToken(value="test-key"),
         )
 
-        mock_db_session.add.assert_called_once()
         mock_db_session.flush.assert_called()
-        added_obj = mock_db_session.add.call_args[0][0]
+        added_obj = mock_db_session.add.call_args_list[0][0][0]
+        assert isinstance(added_obj, VoiceProvider)
         assert added_obj.name == "New Provider"
         assert added_obj.provider_type == "openai"
 
@@ -214,11 +213,11 @@ class TestUpsertVoiceProvider:
             provider_id=1,
             name="Updated Name",
             provider_type="elevenlabs",
-            api_key="new-key",
-            api_key_changed=True,
+            api_key=NewApiToken(value="new-key"),
         )
 
-        mock_db_session.add.assert_not_called()
+        added = [c.args[0] for c in mock_db_session.add.call_args_list]
+        assert not any(isinstance(obj, VoiceProvider) for obj in added)
         assert existing_provider.name == "Updated Name"
         assert existing_provider.provider_type == "elevenlabs"
 
@@ -232,32 +231,70 @@ class TestUpsertVoiceProvider:
                 name="Test",
                 provider_type="openai",
                 api_key=None,
-                api_key_changed=False,
             )
 
         assert "No voice provider with id 999" in str(exc_info.value)
 
-    def test_does_not_update_api_key_when_not_changed(
+    def test_keeps_api_token_when_existing_id_is_sent(
         self, mock_db_session: MagicMock
     ) -> None:
+        token = ApiToken(id=7, platform="openai", value="original-key")
         existing_provider = _make_voice_provider(id=1)
-        existing_provider.api_key = "original-key"  # ty: ignore[invalid-assignment]
-        original_api_key = existing_provider.api_key
+        existing_provider.api_token_id = 7
+        existing_provider.api_token = token
         mock_db_session.scalar.return_value = existing_provider
-        mock_db_session.flush.return_value = None
-        mock_db_session.refresh.return_value = None
+        mock_db_session.get.return_value = token
 
         upsert_voice_provider(
             db_session=mock_db_session,
             provider_id=1,
             name="Test",
             provider_type="openai",
-            api_key="new-key",
-            api_key_changed=False,
+            api_key=ExistingApiToken(id=7),
         )
 
-        # api_key should remain unchanged (same object reference)
-        assert existing_provider.api_key is original_api_key
+        assert existing_provider.api_token is token
+        mock_db_session.delete.assert_not_called()
+
+    def test_keeps_api_token_when_key_is_left_out(
+        self, mock_db_session: MagicMock
+    ) -> None:
+        token = ApiToken(id=7, platform="openai", value="original-key")
+        existing_provider = _make_voice_provider(id=1)
+        existing_provider.api_token_id = 7
+        existing_provider.api_token = token
+        mock_db_session.scalar.return_value = existing_provider
+
+        upsert_voice_provider(
+            db_session=mock_db_session,
+            provider_id=1,
+            name="Test",
+            provider_type="openai",
+            api_key=None,
+            update_api_key=False,
+        )
+
+        assert existing_provider.api_token is token
+        mock_db_session.get.assert_not_called()
+
+    def test_creates_api_token_for_new_key(self, mock_db_session: MagicMock) -> None:
+        existing_provider = _make_voice_provider(id=1)
+        mock_db_session.scalar.return_value = existing_provider
+
+        upsert_voice_provider(
+            db_session=mock_db_session,
+            provider_id=1,
+            name="Test",
+            provider_type="openai",
+            api_key=NewApiToken(value="new-key"),
+            api_base="https://api.example.com",
+        )
+
+        token = existing_provider.api_token
+        assert token is not None
+        assert token.platform == "openai"
+        assert token.base_url == "https://api.example.com"
+        assert token.value.get_value(apply_mask=False) == "new-key"
 
     def test_updates_api_secret_when_changed(self, mock_db_session: MagicMock) -> None:
         existing_provider = _make_voice_provider(id=1)
@@ -272,7 +309,6 @@ class TestUpsertVoiceProvider:
             name="Test",
             provider_type="openai",
             api_key=None,
-            api_key_changed=False,
             api_secret="new-secret",
             api_secret_changed=True,
         )
@@ -296,7 +332,6 @@ class TestUpsertVoiceProvider:
             name="Test",
             provider_type="openai",
             api_key=None,
-            api_key_changed=False,
             api_secret="new-secret",
             api_secret_changed=False,
         )
@@ -317,7 +352,6 @@ class TestUpsertVoiceProvider:
             name="Test",
             provider_type="openai",
             api_key=None,
-            api_key_changed=False,
             api_secret="new-secret",
             api_secret_changed=False,
         )
@@ -343,7 +377,6 @@ class TestUpsertVoiceProvider:
             name="Test",
             provider_type="azure",
             api_key=None,
-            api_key_changed=False,
         )
 
         assert existing_provider.custom_config == {
@@ -366,7 +399,6 @@ class TestUpsertVoiceProvider:
             name="Test",
             provider_type="azure",
             api_key=None,
-            api_key_changed=False,
             custom_config={},
         )
 
@@ -385,7 +417,6 @@ class TestUpsertVoiceProvider:
             name="Test",
             provider_type="openai",
             api_key=None,
-            api_key_changed=False,
             activate_stt=True,
         )
 
@@ -404,7 +435,6 @@ class TestUpsertVoiceProvider:
             name="Test",
             provider_type="openai",
             api_key=None,
-            api_key_changed=False,
             activate_tts=True,
         )
 
@@ -422,6 +452,19 @@ class TestDeleteVoiceProvider:
 
         mock_db_session.delete.assert_called_once_with(provider)
         mock_db_session.flush.assert_called_once()
+
+    def test_releases_api_token_after_delete(
+        self, mock_db_session: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        provider = _make_voice_provider(id=1)
+        provider.api_token_id = 7
+        mock_db_session.scalar.return_value = provider
+        release = MagicMock()
+        monkeypatch.setattr("onyx.db.voice.release_api_token", release)
+
+        delete_voice_provider(mock_db_session, 1)
+
+        release.assert_called_once_with(mock_db_session, 7)
 
     def test_does_nothing_when_provider_not_found(
         self, mock_db_session: MagicMock

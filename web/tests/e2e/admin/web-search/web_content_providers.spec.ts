@@ -44,9 +44,7 @@ test.describe("Web Content Provider Configuration", () => {
       // Don't check value - it might have a custom value from previous config
 
       // Enter API key - clear first in case modal opened with masked credentials.
-      const apiKeyInput = modalDialog.getByPlaceholder("API Key", {
-        exact: true,
-      });
+      const apiKeyInput = modalDialog.getByLabel(/api key/i);
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
       await apiKeyInput.clear();
       await apiKeyInput.fill(FIRECRAWL_API_KEY!);
@@ -104,9 +102,7 @@ test.describe("Web Content Provider Configuration", () => {
         ).toBeVisible();
 
         // Enter API key - clear first in case modal opened with masked credentials.
-        const apiKeyInput = modalDialog.getByPlaceholder("API Key", {
-          exact: true,
-        });
+        const apiKeyInput = modalDialog.getByLabel(/api key/i);
         await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
         await apiKeyInput.clear();
         await apiKeyInput.fill(FIRECRAWL_API_KEY!);

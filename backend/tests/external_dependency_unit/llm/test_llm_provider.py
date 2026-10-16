@@ -23,6 +23,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
+from onyx.server.manage.api_token.models import ExistingApiToken, NewApiToken
 from onyx.server.manage.llm.api import (
     test_default_provider as run_test_default_provider,
 )
@@ -53,8 +54,7 @@ def _create_test_provider(
         LLMProviderUpsertRequest(
             name=name,
             provider=LlmProviderNames.OPENAI,
-            api_key=api_key,
-            api_key_changed=True,
+            api_key=NewApiToken(value=api_key),
             model_configurations=[
                 ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
             ],
@@ -105,8 +105,9 @@ class TestLLMConfigurationEndpoint:
                 run_test_llm_configuration(
                     test_llm_request=LLMTestRequest(
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-new-test-key-0000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-new-test-key-0000000000000000000000000000"
+                        ),
                         custom_config_changed=False,
                         model="gpt-4o-mini",
                     ),
@@ -149,8 +150,9 @@ class TestLLMConfigurationEndpoint:
                     run_test_llm_configuration(
                         test_llm_request=LLMTestRequest(
                             provider=LlmProviderNames.OPENAI,
-                            api_key="sk-invalid-key-00000000000000000000000000",
-                            api_key_changed=True,
+                            api_key=NewApiToken(
+                                value="sk-invalid-key-00000000000000000000000000"
+                            ),
                             custom_config_changed=False,
                             model="gpt-4o-mini",
                         ),
@@ -190,13 +192,13 @@ class TestLLMConfigurationEndpoint:
             with patch(
                 "onyx.server.manage.llm.api.test_llm", side_effect=mock_test_llm_capture
             ):
-                # Test with api_key_changed=False - should use stored key
+                # The saved key is sent as an existing token
+                assert provider.api_token_id is not None
                 run_test_llm_configuration(
                     test_llm_request=LLMTestRequest(
                         id=provider.id,
                         provider=LlmProviderNames.OPENAI,
-                        api_key=None,  # Not providing a new key
-                        api_key_changed=False,  # Using existing key
+                        api_key=ExistingApiToken(id=provider.api_token_id),
                         custom_config_changed=False,
                         model="gpt-4o-mini",
                     ),
@@ -239,13 +241,12 @@ class TestLLMConfigurationEndpoint:
             with patch(
                 "onyx.server.manage.llm.api.test_llm", side_effect=mock_test_llm_capture
             ):
-                # Test with api_key_changed=True - should use new key
+                # A new key replaces the stored one
                 run_test_llm_configuration(
                     test_llm_request=LLMTestRequest(
                         id=provider.id,
                         provider=LlmProviderNames.OPENAI,
-                        api_key=new_api_key,  # Providing a new key
-                        api_key_changed=True,  # Key is being changed
+                        api_key=NewApiToken(value=new_api_key),  # Providing a new key
                         custom_config_changed=False,
                         model="gpt-4o-mini",
                     ),
@@ -284,8 +285,9 @@ class TestLLMConfigurationEndpoint:
                 LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     custom_config=original_custom_config,
                     custom_config_changed=True,
                     model_configurations=[
@@ -306,7 +308,6 @@ class TestLLMConfigurationEndpoint:
                         id=provider.id,
                         provider=LlmProviderNames.OPENAI,
                         api_key=None,
-                        api_key_changed=False,
                         custom_config=None,  # Not providing new config
                         custom_config_changed=False,  # Using existing config
                         model="gpt-4o-mini",
@@ -346,8 +347,9 @@ class TestLLMConfigurationEndpoint:
                     run_test_llm_configuration(
                         test_llm_request=LLMTestRequest(
                             provider=LlmProviderNames.OPENAI,
-                            api_key="sk-test-key-00000000000000000000000000000000000",
-                            api_key_changed=True,
+                            api_key=NewApiToken(
+                                value="sk-test-key-00000000000000000000000000000000000"
+                            ),
                             custom_config_changed=False,
                             model=model_name,
                         ),
@@ -411,8 +413,7 @@ class TestDefaultProviderEndpoint:
                 LLMProviderUpsertRequest(
                     name=provider_1_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key=provider_1_api_key,
-                    api_key_changed=True,
+                    api_key=NewApiToken(value=provider_1_api_key),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                         ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -440,8 +441,7 @@ class TestDefaultProviderEndpoint:
                 LLMProviderUpsertRequest(
                     name=provider_2_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key=provider_2_api_key,
-                    api_key_changed=True,
+                    api_key=NewApiToken(value=provider_2_api_key),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o-mini", is_visible=True
@@ -471,8 +471,7 @@ class TestDefaultProviderEndpoint:
                     id=provider_1.id,
                     name=provider_1_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key=provider_1_api_key,
-                    api_key_changed=True,
+                    api_key=NewApiToken(value=provider_1_api_key),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                         ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -563,8 +562,9 @@ class TestDefaultProviderEndpoint:
                 LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name="gpt-4o-mini", is_visible=True

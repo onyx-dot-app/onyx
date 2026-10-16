@@ -1,4 +1,10 @@
 import { CONTENT_PROVIDER_DETAILS } from "@/lib/webSearch/utils";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { parseErrorDetail } from "@/lib/fetcher";
+import {
+  initialApiTokenValue,
+  toApiTokenPayload,
+} from "@/lib/api-tokens/utils";
 import type {
   WebProviderCategory,
   WebContentProviderView,
@@ -7,18 +13,6 @@ import type {
 } from "@/lib/webSearch/types";
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
-
-async function parseErrorDetail(
-  res: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 const WEB_SEARCH_PROVIDER_ENDPOINTS = {
   search: {
@@ -94,8 +88,8 @@ export async function activateContentProvider(
         CONTENT_PROVIDER_DETAILS[provider.provider_type]?.label ||
         provider.provider_type,
       provider_type: provider.provider_type,
-      api_key: null,
-      api_key_changed: false,
+      // A placeholder card can carry the key its sibling side already uses.
+      api_key: toApiTokenPayload(initialApiTokenValue(provider.api_token_id)),
       config: provider.config ?? null,
       activate: true,
     };
@@ -148,31 +142,22 @@ export async function disconnectProvider(
 
 // ── Connect / update provider flow ────────────────────────────────────────────
 
-type ExaSiblingSpec = {
-  category: WebProviderCategory;
-  existingProviderId: number | null;
-  existingProviderName: string | null;
-};
-
 export type ConnectProviderFlowArgs = {
   category: WebProviderCategory;
   providerType: string;
 
   existingProviderId: number | null;
   existingProviderName: string | null;
-  existingProviderHasApiKey: boolean;
 
   displayName: string;
 
   providerRequiresApiKey: boolean;
-  apiKeyChangedForProvider: boolean;
-  apiKey: string;
+  /** The key to send, or `null` when the field is empty. */
+  apiKey: ApiTokenValue | null;
+  apiKeyChanged: boolean;
 
   config: Record<string, string>;
   configChanged: boolean;
-
-  /** When set and a new plaintext key is provided, also upsert the linked Exa sibling. */
-  exaSibling?: ExaSiblingSpec;
 
   onValidating: (message: string) => void;
   onSaving: (message: string) => void;
@@ -187,14 +172,12 @@ export async function connectProviderFlow({
   providerType,
   existingProviderId,
   existingProviderName,
-  existingProviderHasApiKey,
   displayName,
   providerRequiresApiKey,
-  apiKeyChangedForProvider,
   apiKey,
+  apiKeyChanged,
   config,
   configChanged,
-  exaSibling,
   onValidating,
   onSaving,
   onError,
@@ -203,8 +186,7 @@ export async function connectProviderFlow({
 }: ConnectProviderFlowArgs): Promise<void> {
   const { testUrl, upsertUrl } = WEB_SEARCH_PROVIDER_ENDPOINTS[category];
   const isNewProvider = existingProviderId == null;
-  const needsValidation =
-    isNewProvider || apiKeyChangedForProvider || configChanged;
+  const needsValidation = isNewProvider || apiKeyChanged || configChanged;
 
   const msg = {
     validating: "Validating configuration...",
@@ -214,10 +196,7 @@ export async function connectProviderFlow({
     activateFailedFallback: "Failed to activate provider.",
   };
 
-  if (providerRequiresApiKey) {
-    if (isNewProvider && !apiKey) return;
-    if (apiKeyChangedForProvider && !apiKey) return;
-  }
+  if (providerRequiresApiKey && apiKey === null) return;
 
   try {
     if (needsValidation) {
@@ -225,11 +204,7 @@ export async function connectProviderFlow({
 
       const testPayload: ProviderTestPayload = {
         provider_type: providerType,
-        api_key: apiKeyChangedForProvider ? apiKey : null,
-        use_stored_key:
-          providerRequiresApiKey &&
-          !apiKeyChangedForProvider &&
-          existingProviderHasApiKey,
+        api_key: apiKey,
         config,
       };
 
@@ -240,11 +215,8 @@ export async function connectProviderFlow({
       });
 
       if (!testResponse.ok) {
-        const errorBody = await testResponse.json().catch(() => ({}));
         throw new Error(
-          typeof (errorBody as { detail?: unknown })?.detail === "string"
-            ? (errorBody as { detail: string }).detail
-            : msg.validationFailedFallback
+          await parseErrorDetail(testResponse, msg.validationFailedFallback)
         );
       }
 
@@ -257,8 +229,7 @@ export async function connectProviderFlow({
       id: existingProviderId,
       name: existingProviderName ?? displayName,
       provider_type: providerType,
-      api_key: apiKeyChangedForProvider ? apiKey : null,
-      api_key_changed: apiKeyChangedForProvider,
+      api_key: apiKey,
       config,
       activate: true,
     };
@@ -270,34 +241,9 @@ export async function connectProviderFlow({
     });
 
     if (!upsertResponse.ok) {
-      const errorBody = await upsertResponse.json().catch(() => ({}));
       throw new Error(
-        typeof (errorBody as { detail?: unknown })?.detail === "string"
-          ? (errorBody as { detail: string }).detail
-          : msg.activateFailedFallback
+        await parseErrorDetail(upsertResponse, msg.activateFailedFallback)
       );
-    }
-
-    if (exaSibling && apiKeyChangedForProvider && apiKey) {
-      const siblingPayload: ProviderUpsertPayload = {
-        id: exaSibling.existingProviderId,
-        name: exaSibling.existingProviderName ?? "Exa",
-        provider_type: "exa",
-        api_key: apiKey,
-        api_key_changed: true,
-        config: {},
-        activate: false,
-      };
-      await fetch(
-        WEB_SEARCH_PROVIDER_ENDPOINTS[exaSibling.category].upsertUrl,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(siblingPayload),
-        }
-      ).catch((err: unknown) => {
-        console.error("Failed to sync Exa sibling provider:", err);
-      });
     }
 
     await mutate();

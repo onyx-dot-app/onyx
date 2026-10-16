@@ -7,6 +7,7 @@ from unittest.mock import patch
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.db.api_token import create_api_token, release_api_token
 from onyx.db.models import InternetSearchProvider
 from onyx.db.web_search import fetch_web_search_provider_by_name
 from onyx.tools.tool_implementations.web_search.models import (
@@ -56,10 +57,13 @@ def add_web_provider_to_db(db_session: Session) -> None:
     if fetch_web_search_provider_by_name(name="Test Provider 2", db_session=db_session):
         return
 
+    token = create_api_token(
+        db_session, platform=WebSearchProviderType.EXA.value, value="test-api-key"
+    )
     provider = InternetSearchProvider(
         name="Test Provider 2",
         provider_type=WebSearchProviderType.EXA.value,
-        api_key="test-api-key",
+        api_token=token,
         config={},
         is_active=True,
     )
@@ -73,7 +77,11 @@ def delete_web_provider_from_db(db_session: Session) -> None:
         name="Test Provider 2", db_session=db_session
     )
     if provider is not None:
+        token_id = provider.api_token_id
         db_session.delete(provider)
+        db_session.flush()
+        if token_id is not None:
+            release_api_token(db_session, token_id)
         db_session.commit()
 
 

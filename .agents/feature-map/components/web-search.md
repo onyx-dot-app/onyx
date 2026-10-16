@@ -58,16 +58,17 @@ new is fetched from the live internet.
 | POST | `/admin/web-search/search-providers/{id}/activate`, `/deactivate` | `activate_search_provider`, `deactivate_search_provider` | Activation makes the provider the single active row. |
 | POST | `/admin/web-search/content-providers/{id}/activate`, `/deactivate` | `activate_content_provider`, `deactivate_content_provider` | |
 | POST | `/admin/web-search/content-providers/reset-default` | `reset_content_provider_default` | Returns to the built-in crawler. |
-| POST | `/admin/web-search/content-providers/test` | `test_content_provider` | Same idea for content (page-fetch) providers. On `MULTI_TENANT`, this refuses to reuse a stored API key with a different `base_url` than the one already saved for that provider type (`api.py:411-419`). |
+| POST | `/admin/web-search/content-providers/test` | `test_content_provider` | Same idea for content (page-fetch) providers. The key is a new key or a saved token id (`db/api_token.py:peek_api_token_value`). |
 | POST/GET/DELETE | analogous endpoints for `content-providers` | `upsert_content_provider_endpoint`, etc. | |
 
 All admin endpoints gate on `Permission.FULL_ADMIN_PANEL_ACCESS`
 (`onyx/server/manage/web_search/api.py`).
 
 Search and content providers whose API key is shared between the two sides
-(currently Exa and Tavily) are cross-seeded on upsert: entering a key on one side
-seeds the other's stored key, via `_SEARCH_TO_CONTENT_SYNC` /
-`_CONTENT_TO_SEARCH_SYNC` (`api.py`).
+(Exa, Tavily and Firecrawl) share one `ApiToken` row: when a save gives one side a
+new token, the upsert points the other side at the same token (and creates that
+row if it is missing), via `_SEARCH_TO_CONTENT_SYNC` / `_CONTENT_TO_SEARCH_SYNC`
+(`api.py:_share_token_with_sibling`). The key is not copied by value.
 
 ### Runtime API (`backend/onyx/server/features/web_search/api.py`, router prefix `/web-search`)
 
@@ -109,8 +110,9 @@ See §3.
 Two tables, mirrored in shape (`backend/onyx/db/models.py`):
 
 - **`InternetSearchProvider`** (`internet_search_provider`): `name` (unique),
-  `provider_type`, `api_key` (`EncryptedString`, decrypted on read via
-  `SensitiveValue.get_value(apply_mask=...)`), `config` (JSONB, provider-specific
+  `provider_type`, `api_token_id` (FK to the shared `api_token` table; the
+  read-only `api_key` property returns the token value as a `SensitiveValue`;
+  writes go through `db/api_token.py:assign_api_token`), `config` (JSONB, provider-specific
   options such as `num_results`, `searxng_base_url`, `country`), `is_active`.
 - **`InternetContentProvider`** (`internet_content_provider`): same shape, for the
   page-fetch side (Firecrawl base URL, timeouts).
@@ -406,10 +408,10 @@ external test).
   guard, or it reintroduces the exact SSRF surface `OnyxWebCrawler` was built to
   close.
 - **A stored, shared API key cannot silently be repointed at a different host in a
-  multi-tenant deployment.** `test_content_provider` refuses to reuse a stored key
-  with a different `base_url` when `MULTI_TENANT` is set
-  (`server/manage/web_search/api.py:411-419`). This is scoped narrowly to that one
-  endpoint; it is not a general guarantee that `base_url` cannot change elsewhere.
+  multi-tenant deployment.** `db/api_token.py:resolve_api_token` refuses a saved
+  token whose `base_url` differs from the request's `config.base_url` when
+  `MULTI_TENANT` is set, on upsert and on the `/test` endpoints. A Firecrawl
+  sibling on another URL therefore keeps its own key instead of sharing one.
 - **Query sanitization is defensive, not a security boundary.**
   `_sanitize_query`/`_normalize_queries_input` (`web_search_tool.py`) strip control
   characters because LLMs sometimes emit them, not to prevent injection into the

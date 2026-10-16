@@ -4,9 +4,11 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from onyx.db.api_token import assign_api_token, release_api_token
 from onyx.db.models import User, VoiceProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import ApiTokenInput
 from onyx.voice.interface import normalize_provider_type
 
 MIN_VOICE_PLAYBACK_SPEED = 0.5
@@ -76,8 +78,8 @@ def upsert_voice_provider(
     provider_id: int | None,
     name: str,
     provider_type: str,
-    api_key: str | None,
-    api_key_changed: bool,
+    api_key: ApiTokenInput | None,
+    update_api_key: bool = True,
     api_secret: str | None = None,
     api_secret_changed: bool = False,
     api_base: str | None = None,
@@ -88,7 +90,8 @@ def upsert_voice_provider(
     activate_stt: bool = False,
     activate_tts: bool = False,
 ) -> VoiceProvider:
-    """Create or update a voice provider."""
+    """Create or update a voice provider. ``update_api_key=False`` keeps the
+    row's current key (the request left ``api_key`` out)."""
     provider: VoiceProvider | None = None
 
     if provider_id is not None:
@@ -114,14 +117,18 @@ def upsert_voice_provider(
     provider.tts_model = tts_model
     provider.default_voice = default_voice
 
-    # Only update API key if explicitly changed or if provider has no key
-    if api_key_changed or provider.api_key is None:
-        provider.api_key = api_key  # ty: ignore[invalid-assignment]
-
     if api_secret_changed or provider.api_secret is None:
         provider.api_secret = api_secret  # ty: ignore[invalid-assignment]
 
     db_session.flush()
+    if update_api_key:
+        assign_api_token(
+            db_session,
+            provider,
+            api_key,
+            platform=provider_type,
+            base_url=api_base,
+        )
 
     if activate_stt:
         set_default_stt_provider(db_session=db_session, provider_id=provider.id)
@@ -136,8 +143,11 @@ def delete_voice_provider(db_session: Session, provider_id: int) -> None:
     """Delete a voice provider by ID."""
     provider = fetch_voice_provider_by_id(db_session, provider_id)
     if provider:
+        token_id = provider.api_token_id
         db_session.delete(provider)
         db_session.flush()
+        if token_id is not None:
+            release_api_token(db_session, token_id)
 
 
 def set_default_stt_provider(*, db_session: Session, provider_id: int) -> VoiceProvider:

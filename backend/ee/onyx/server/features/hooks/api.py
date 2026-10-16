@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
-from onyx.db.constants import UNSET, UnsetType
+from onyx.db.api_token import peek_api_token_value
+from onyx.db.constants import UNSET
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.hook import (
+    HOOK_API_TOKEN_PLATFORM,
     create_hook__no_commit,
     delete_hook__no_commit,
     get_hook_by_id,
@@ -29,6 +31,7 @@ from onyx.hooks.models import (
     HookValidateStatus,
 )
 from onyx.hooks.registry import get_all_specs, get_hook_point_spec
+from onyx.server.manage.api_token.models import ApiTokenInput, ExistingApiToken
 from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
@@ -85,6 +88,7 @@ def _hook_to_response(hook: Hook, creator_email: str | None = None) -> HookRespo
         api_key_masked=(
             hook.api_key.get_value(apply_mask=True) if hook.api_key else None
         ),
+        api_token_id=hook.api_token_id,
         fail_strategy=hook.fail_strategy,
         timeout_seconds=hook.timeout_seconds,
         is_active=hook.is_active,
@@ -237,7 +241,12 @@ def create_hook(
     the endpoint cannot be reached or the api_key is invalid. Hooks are created active.
     """
     spec = get_hook_point_spec(req.hook_point)
-    api_key = req.api_key.get_secret_value() if req.api_key else None
+    api_key = peek_api_token_value(
+        db_session,
+        req.api_key,
+        platform=HOOK_API_TOKEN_PLATFORM,
+        base_url=req.endpoint_url,
+    )
     validation = _validate_endpoint(
         endpoint_url=req.endpoint_url,
         api_key=api_key,
@@ -251,7 +260,7 @@ def create_hook(
         name=req.name,
         hook_point=req.hook_point,
         endpoint_url=req.endpoint_url,
-        api_key=api_key,
+        api_key=req.api_key,
         fail_strategy=req.fail_strategy or spec.default_fail_strategy,
         timeout_seconds=req.timeout_seconds or spec.default_timeout_seconds,
         is_active=True,
@@ -289,17 +298,8 @@ def update_hook(
     Note: if an active hook's endpoint is currently down, even a timeout_seconds-only
     increase will be rejected. The recovery flow is: deactivate → update → reactivate.
     """
-    # api_key: UNSET = no change, None = clear, value = update
-    api_key: str | None | UnsetType
-    if "api_key" not in req.model_fields_set:
-        api_key = UNSET
-    elif req.api_key is None:
-        api_key = None
-    else:
-        api_key = req.api_key.get_secret_value()
-
     endpoint_url_changing = "endpoint_url" in req.model_fields_set
-    api_key_changing = not isinstance(api_key, UnsetType)
+    api_key_changing = "api_key" in req.model_fields_set
     timeout_changing = "timeout_seconds" in req.model_fields_set
 
     validated_is_reachable: bool | None = None
@@ -310,14 +310,23 @@ def update_hook(
             if endpoint_url_changing
             else existing.endpoint_url  # endpoint_url is required on create and cannot be cleared on update
         )
-        effective_api_key: str | None = (
-            (api_key if not isinstance(api_key, UnsetType) else None)
+        # An omitted key keeps the saved one; resolving it the same way applies
+        # the saved-key base URL rules when only the endpoint URL changes.
+        effective_key_input: ApiTokenInput | None = (
+            req.api_key
             if api_key_changing
             else (
-                existing.api_key.get_value(apply_mask=False)
-                if existing.api_key
+                ExistingApiToken(id=existing.api_token_id)
+                if existing.api_token_id is not None
                 else None
             )
+        )
+        effective_api_key = peek_api_token_value(
+            db_session,
+            effective_key_input,
+            platform=HOOK_API_TOKEN_PLATFORM,
+            base_url=effective_url,
+            current_token_id=existing.api_token_id,
         )
         effective_timeout: float = (  # ty: ignore[invalid-assignment]
             req.timeout_seconds
@@ -338,7 +347,7 @@ def update_hook(
         hook_id=hook_id,
         name=req.name,
         endpoint_url=(req.endpoint_url if endpoint_url_changing else UNSET),
-        api_key=api_key,
+        api_key=(req.api_key if api_key_changing else UNSET),
         fail_strategy=req.fail_strategy,
         timeout_seconds=req.timeout_seconds,
         is_reachable=validated_is_reachable,

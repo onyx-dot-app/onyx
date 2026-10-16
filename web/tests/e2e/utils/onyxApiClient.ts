@@ -701,7 +701,6 @@ export class OnyxApiClient {
           name: MOCK_LLM_PROVIDER_NAME,
           provider: "openai_compatible",
           api_key: MOCK_LLM_API_KEY,
-          api_key_changed: true,
           api_base: mockLlmApiBase(),
           is_public: true,
           groups: [],
@@ -1609,8 +1608,7 @@ export class OnyxApiClient {
     const response = await this.post("/admin/web-search/search-providers", {
       name,
       provider_type: providerType,
-      api_key: E2E_WEB_SEARCH_API_KEY,
-      api_key_changed: true,
+      api_key: { type: "new", value: E2E_WEB_SEARCH_API_KEY },
       config: Object.keys(config).length > 0 ? config : undefined,
       activate: true,
     });

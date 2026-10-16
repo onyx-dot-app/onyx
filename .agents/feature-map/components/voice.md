@@ -71,8 +71,9 @@ streaming session, so provider-specific error detail never reaches the client.
 ## 3. Data model
 
 - `VoiceProvider` (`db/models.py`, owned via `db/voice.py`): `provider_type`
-  (`"openai"`, `"azure"`, `"elevenlabs"`, or `"zoom"`), encrypted `api_key` and
-  `api_secret` (`SensitiveValue`/`EncryptedString`), `api_base`,
+  (`"openai"`, `"azure"`, `"elevenlabs"`, or `"zoom"`), `api_token_id` (the
+  shared `ApiToken` that holds the key, read through the `api_key` property),
+  encrypted `api_secret` (`SensitiveValue`/`EncryptedString`), `api_base`,
   `custom_config` (JSONB), `stt_model`, `tts_model`, `default_voice`, and two
   independent booleans `is_default_stt` / `is_default_tts`.
 - **STT and TTS defaults are independent of each other and independent per
@@ -181,7 +182,7 @@ sample rather than silently truncating or shifting it.
    both return a `VALIDATION_ERROR` naming the missing provider if called
    directly with none configured, rather than a mid-stream failure.
 2. **Credentials never reach the client or the LLM.** Voice provider
-   `api_key`/`api_secret` are `EncryptedString` columns; the admin API only
+   `api_key` (a shared `ApiToken`) and `api_secret` are encrypted; the admin API only
    returns view models (`VoiceProviderView`) built by `_provider_to_view`,
    which does not echo the raw key back. `_reject_custom_config_credentials`
    (`server/manage/voice/api.py`) actively strips credential-shaped keys out

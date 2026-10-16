@@ -5,7 +5,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.db.api_token import assign_api_token, release_api_token
 from onyx.db.models import TracingProviderConfig
+from onyx.server.manage.api_token.models import ApiTokenInput
 from shared_configs.enums import TracingProviderType
 
 
@@ -28,8 +30,7 @@ def fetch_tracing_provider(
 def upsert_tracing_provider(
     *,
     provider_type: TracingProviderType,
-    api_key: str | None,
-    api_key_changed: bool,
+    api_key: ApiTokenInput | None,
     config: dict[str, str] | None,
     enabled: bool = True,
     updated_by_user_id: UUID | None = None,
@@ -43,11 +44,11 @@ def upsert_tracing_provider(
     provider.enabled = enabled
     provider.config = config
     provider.updated_by_user_id = updated_by_user_id
-    if api_key_changed or provider.api_key is None:
-        # EncryptedString accepts str for writes, returns SensitiveValue for reads
-        provider.api_key = api_key  # ty: ignore[invalid-assignment]
-
     db_session.flush()
+    assign_api_token(
+        db_session, provider, api_key, platform=provider_type.value, base_url=None
+    )
+
     db_session.refresh(provider)
     return provider
 
@@ -59,5 +60,8 @@ def delete_tracing_provider(
     if provider is None:
         return
 
+    token_id = provider.api_token_id
     db_session.delete(provider)
     db_session.flush()
+    if token_id is not None:
+        release_api_token(db_session, token_id)

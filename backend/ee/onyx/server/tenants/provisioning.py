@@ -70,6 +70,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     get_recommendations,
     model_configurations_for_provider,
 )
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -395,7 +396,7 @@ def configure_default_api_keys(db_session: Session) -> None:
                 )
             if existing:
                 request.id = existing.id
-            provider = upsert_llm_provider(request, db_session)
+            provider = upsert_llm_provider(request, db_session, system_key=True)
             if not has_set_default_provider:
                 update_default_provider(provider.id, default_model, db_session)
                 has_set_default_provider = True
@@ -414,11 +415,10 @@ def configure_default_api_keys(db_session: Session) -> None:
         openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
             provider=OPENAI_PROVIDER_NAME,
-            api_key=OPENAI_DEFAULT_API_KEY,
+            api_key=NewApiToken(value=OPENAI_DEFAULT_API_KEY),
             model_configurations=_build_model_configuration_upsert_requests(
                 OPENAI_PROVIDER_NAME, recommendations
             ),
-            api_key_changed=True,
             is_auto_mode=True,
         )
         _upsert(openai_provider, default_model_name)
@@ -426,7 +426,7 @@ def configure_default_api_keys(db_session: Session) -> None:
         # Create default image generation config using the OpenAI API key
         try:
             create_default_image_gen_config_from_api_key(
-                db_session, OPENAI_DEFAULT_API_KEY
+                db_session, OPENAI_DEFAULT_API_KEY, system_key=True
             )
         except Exception as e:
             logger.error("Failed to create default image gen config: %s", e)
@@ -449,11 +449,10 @@ def configure_default_api_keys(db_session: Session) -> None:
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",
             provider=ANTHROPIC_PROVIDER_NAME,
-            api_key=ANTHROPIC_DEFAULT_API_KEY,
+            api_key=NewApiToken(value=ANTHROPIC_DEFAULT_API_KEY),
             model_configurations=_build_model_configuration_upsert_requests(
                 ANTHROPIC_PROVIDER_NAME, recommendations
             ),
-            api_key_changed=True,
             is_auto_mode=True,
         )
         _upsert(anthropic_provider, default_model_name)
@@ -486,7 +485,6 @@ def configure_default_api_keys(db_session: Session) -> None:
             model_configurations=_build_model_configuration_upsert_requests(
                 VERTEXAI_PROVIDER_NAME, recommendations
             ),
-            api_key_changed=True,
             is_auto_mode=True,
         )
         _upsert(vertexai_provider, default_model_name)
@@ -521,9 +519,8 @@ def configure_default_api_keys(db_session: Session) -> None:
         openrouter_provider = LLMProviderUpsertRequest(
             name="OpenRouter",
             provider=OPENROUTER_PROVIDER_NAME,
-            api_key=OPENROUTER_DEFAULT_API_KEY,
+            api_key=NewApiToken(value=OPENROUTER_DEFAULT_API_KEY),
             model_configurations=model_configurations,
-            api_key_changed=True,
             is_auto_mode=True,
         )
         _upsert(openrouter_provider, default_model_name)
@@ -537,12 +534,14 @@ def configure_default_api_keys(db_session: Session) -> None:
     if COHERE_DEFAULT_API_KEY:
         cloud_embedding_provider = CloudEmbeddingProviderCreationRequest(
             provider_type=EmbeddingProvider.COHERE,
-            api_key=COHERE_DEFAULT_API_KEY,
+            api_key=NewApiToken(value=COHERE_DEFAULT_API_KEY),
         )
 
         try:
             logger.info("Attempting to upsert Cohere cloud embedding provider")
-            upsert_cloud_embedding_provider(db_session, cloud_embedding_provider)
+            upsert_cloud_embedding_provider(
+                db_session, cloud_embedding_provider, system_key=True
+            )
             logger.info("Successfully upserted Cohere cloud embedding provider")
 
             logger.info("Updating search settings with Cohere embedding model details")

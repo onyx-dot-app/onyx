@@ -24,6 +24,7 @@ from onyx.db.port_attempt import ReindexProgressCounts
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
+from onyx.server.manage.api_token.models import ApiTokenInput, NewApiToken
 from onyx.server.models import FullUserSnapshot, InvitedUserSnapshot
 
 if TYPE_CHECKING:
@@ -605,7 +606,20 @@ class AllVersions(BaseModel):
 
 
 class UnstructuredApiKeyRequest(BaseModel):
-    unstructured_api_key: str = Field(min_length=1, pattern=r"\S")
+    api_key: ApiTokenInput
+
+    @field_validator("api_key")
+    @classmethod
+    def reject_empty_key(cls, value: ApiTokenInput) -> ApiTokenInput:
+        if isinstance(value, NewApiToken) and not value.value.strip():
+            raise ValueError("API key cannot be empty")
+        return value
+
+
+class UnstructuredApiKeyStatus(BaseModel):
+    is_set: bool
+    api_key_masked: str | None
+    api_token_id: int | None
 
 
 class ReindexProgress(ReindexProgressCounts):

@@ -14,6 +14,7 @@ import pytest
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     BedrockModelsRequest,
     BifrostFinalModelResponse,
@@ -344,7 +345,7 @@ class TestGetOpenRouterAvailableModels:
 
             request = OpenRouterModelsRequest(
                 api_base="https://openrouter.ai/api/v1",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_openrouter_available_models(
                 request, MagicMock(), mock_session
@@ -370,7 +371,7 @@ class TestGetOpenRouterAvailableModels:
 
             request = OpenRouterModelsRequest(
                 api_base="https://openrouter.ai/api/v1",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_openrouter_available_models(
                 request, MagicMock(), mock_session
@@ -417,7 +418,7 @@ class TestGetOpenRouterAvailableModels:
 
             request = OpenRouterModelsRequest(
                 api_base="https://openrouter.ai/api/v1",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_openrouter_available_models(
                 request, MagicMock(), mock_session
@@ -460,7 +461,7 @@ class TestGetOpenRouterAvailableModels:
 
             request = OpenRouterModelsRequest(
                 api_base="https://openrouter.ai/api/v1",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
                 provider_id=1,
             )
             get_openrouter_available_models(request, MagicMock(), mock_session)
@@ -510,7 +511,7 @@ class TestGetOpenRouterAvailableModels:
 
             request = OpenRouterModelsRequest(
                 api_base="https://openrouter.ai/api/v1",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
                 provider_id=1,
             )
             get_openrouter_available_models(request, MagicMock(), mock_session)
@@ -542,7 +543,7 @@ class TestGetOpenRouterAvailableModels:
 
             request = OpenRouterModelsRequest(
                 api_base="https://openrouter.ai/api/v1",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             get_openrouter_available_models(request, MagicMock(), mock_session)
 
@@ -1016,7 +1017,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1037,7 +1038,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1084,7 +1085,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1107,7 +1108,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1149,7 +1150,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1182,7 +1183,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1220,7 +1221,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1255,7 +1256,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1275,7 +1276,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1296,7 +1297,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             with pytest.raises(OnyxError, match="No models found"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1315,7 +1316,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             with pytest.raises(OnyxError):
                 get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1348,7 +1349,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1375,7 +1376,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             with pytest.raises(OnyxError, match="No compatible models"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1406,7 +1407,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000/",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             get_litellm_available_models(request, MagicMock(), mock_session)
 
@@ -1428,7 +1429,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             with pytest.raises(OnyxError) as exc_info:
                 get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1451,7 +1452,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="bad-key",
+                api_key=NewApiToken(value="bad-key"),
             )
             with pytest.raises(OnyxError, match="Authentication failed"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1471,7 +1472,7 @@ class TestGetLitellmAvailableModels:
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
-                api_key="test-key",
+                api_key=NewApiToken(value="test-key"),
             )
             with pytest.raises(OnyxError, match="endpoint not found"):
                 get_litellm_available_models(request, MagicMock(), mock_session)

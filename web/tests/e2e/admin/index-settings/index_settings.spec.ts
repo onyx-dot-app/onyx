@@ -236,7 +236,6 @@ test.describe("Index Settings Page @exclusive", () => {
         expect(route.request().postDataJSON()).toMatchObject({
           provider_type: "google",
           api_key: null,
-          api_key_changed: true,
           vertex_config: vertexConfig,
         });
         providerSaved = true;

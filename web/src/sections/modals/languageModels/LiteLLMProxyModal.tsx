@@ -1,5 +1,10 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import {
+  toApiTokenPayload,
+  isApiTokenValueEmpty,
+} from "@/lib/api-tokens/utils";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -31,7 +36,7 @@ import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 const DEFAULT_API_BASE = "http://localhost:4000";
 
 interface LiteLLMProxyModalValues extends BaseLLMFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   api_base: string;
 }
 
@@ -49,12 +54,13 @@ function LiteLLMProxyModalInternals({
   const formikProps = useFormikContext<LiteLLMProxyModalValues>();
 
   const isFetchDisabled =
-    !formikProps.values.api_base || !formikProps.values.api_key;
+    !formikProps.values.api_base ||
+    isApiTokenValueEmpty(formikProps.values.api_key);
 
   const handleFetchModels = async () => {
     const { models, error } = await fetchLiteLLMProxyModels({
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key,
+      api_key: toApiTokenPayload(formikProps.values.api_key),
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -70,7 +76,9 @@ function LiteLLMProxyModalInternals({
         placeholder={tPlaceholders("litellm.apiBase")}
       />
 
-      <APIKeyField providerName="LiteLLM Proxy" />
+      <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
+      />
 
       {!isOnboarding && (
         <>

@@ -14,6 +14,8 @@ import {
   TestApiKeyResult,
 } from "@/sections/modals/languageModels/utils";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { toApiTokenPayload } from "@/lib/api-tokens/utils";
 
 // ─── Test helpers ─────────────────────────────────────────────────────────
 
@@ -46,7 +48,7 @@ export const testApiKeyHelper = async (
   t: LlmModalsTranslator,
   providerName: string,
   formValues: Record<string, unknown>,
-  apiKey?: string,
+  apiKey?: ApiTokenValue,
   modelName?: string,
   customConfigOverride?: Record<string, unknown>
 ): Promise<TestApiKeyResult> => {
@@ -67,13 +69,15 @@ export const testApiKeyHelper = async (
     }
   }
 
+  // SAFETY: every LLM form keeps its `api_key` field as an ApiTokenValue.
+  const formApiKey = formValues?.api_key as ApiTokenValue | undefined;
+  const keyValue = apiKey ?? formApiKey;
   const payload = {
-    api_key: apiKey ?? formValues?.api_key,
+    api_key: keyValue ? toApiTokenPayload(keyValue) : null,
     api_base: finalApiBase,
     api_version: finalApiVersion,
     deployment_name: finalDeploymentName,
     provider: providerName,
-    api_key_changed: true,
     custom_config_changed: true,
     custom_config: {
       ...(formValues?.custom_config as Record<string, unknown> | undefined),
@@ -160,25 +164,21 @@ export async function submitProvider<T extends BaseLLMFormValues>({
       : undefined
     : rawName || null;
 
-  // For updates: omit api_key when unchanged — signals "not changing credentials"
-  // to both the test-skip logic below and the backend's api_key_changed flag.
+  // An edit that keeps the key sends the key it already has.
   const apiKeyUnchanged =
-    !!existingLlmProvider &&
-    api_key === (initialValues.api_key as string | undefined);
-  const apiKeyForRequest = apiKeyUnchanged ? undefined : api_key;
+    !!existingLlmProvider && isEqual(api_key, initialValues.api_key);
 
   const finalValues = {
     ...rest,
     name: nameForRequest,
     api_base: normalizedApiBase,
-    api_key: apiKeyForRequest,
-    api_key_changed: apiKeyForRequest !== undefined,
+    api_key: api_key ? toApiTokenPayload(api_key) : null,
     custom_config_changed: customConfigChanged,
   };
 
-  // Skip test on updates where api_key is absent (credentials not changing)
+  // Skip test on updates that keep the key (credentials not changing)
   if (
-    (!existingLlmProvider || apiKeyForRequest !== undefined) &&
+    (!existingLlmProvider || !apiKeyUnchanged) &&
     !isEqual(finalValues, initialValues)
   ) {
     setStatus({ isTesting: true });

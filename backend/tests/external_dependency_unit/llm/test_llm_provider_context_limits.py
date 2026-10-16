@@ -24,6 +24,7 @@ from onyx.db.llm import (
 from onyx.db.models import ModelConfiguration
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -51,8 +52,9 @@ def _upsert(
             id=provider_id,
             name=provider_name,
             provider=provider,
-            api_key="sk-test-key-00000000000000000000000000000000000",
-            api_key_changed=True,
+            api_key=NewApiToken(
+                value="sk-test-key-00000000000000000000000000000000000"
+            ),
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=model_name,

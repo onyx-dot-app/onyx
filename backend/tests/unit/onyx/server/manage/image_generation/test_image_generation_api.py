@@ -5,6 +5,7 @@ from litellm.exceptions import BadRequestError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.image_generation.api import (
     test_image_generation as run_test_image_generation,
 )
@@ -29,7 +30,7 @@ def test_image_generation_error_is_actionable_and_redacts_credentials() -> None:
     request = ImageGenerationTestRequest(
         model_name="gpt-image-1",
         provider="openai",
-        api_key=_API_KEY,
+        api_key=NewApiToken(value=_API_KEY),
         custom_config={"custom_token": _CUSTOM_SECRET},
     )
 
@@ -40,7 +41,7 @@ def test_image_generation_error_is_actionable_and_redacts_credentials() -> None:
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
-        run_test_image_generation(request, MagicMock())
+        run_test_image_generation(request, MagicMock(), MagicMock())
 
     assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
     assert "Unsupported image size" in exc_info.value.detail

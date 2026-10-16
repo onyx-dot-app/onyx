@@ -24,8 +24,14 @@ import {
   connectEmbeddingProvider,
   testEmbedding,
 } from "@/lib/searchSettings/svc";
+import { ApiTokenField } from "@/lib/api-tokens/components";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 import {
-  ApiKeyField,
+  initialApiTokenValue,
+  toApiTokenPayload,
+} from "@/lib/api-tokens/utils";
+import { apiTokenSchema } from "@/lib/api-tokens/validation";
+import {
   ApiUrlField,
   GoogleCredentialsField,
   ModelSpecFields,
@@ -113,6 +119,7 @@ interface ProviderTestResult {
 async function testAndSaveProviderCredentials({
   provider,
   apiKey,
+  savedTokenId = null,
   unknownErrorMessage,
   apiUrl = "",
   modelName = "",
@@ -122,7 +129,9 @@ async function testAndSaveProviderCredentials({
   alwaysTest = false,
 }: {
   provider: EmbeddingProvider;
-  apiKey: string | null;
+  apiKey: ApiTokenValue | null;
+  /** The token the saved provider already uses, if any. */
+  savedTokenId?: number | null;
   /** Fallback toast copy when the backend error carries no message. */
   unknownErrorMessage: string;
   apiUrl?: string;
@@ -136,6 +145,7 @@ async function testAndSaveProviderCredentials({
     const dimension = await connectEmbeddingProvider({
       providerType: provider.providerName,
       apiKey,
+      savedTokenId,
       apiUrl,
       modelName,
       apiVersion,
@@ -172,11 +182,36 @@ interface ProviderModalProps {
 }
 
 // ---------------------------------------------------------------------------
+// API key field, bound to the `apiKey` form value
+// ---------------------------------------------------------------------------
+
+interface EmbeddingApiTokenFieldProps {
+  provider: EmbeddingProvider;
+  existingCredentials?: ConfiguredEmbeddingProvider;
+  optional?: boolean;
+}
+
+function EmbeddingApiTokenField({
+  provider,
+  existingCredentials,
+  optional = false,
+}: EmbeddingApiTokenFieldProps) {
+  return (
+    <ApiTokenField
+      name="apiKey"
+      platform={provider.providerName}
+      optional={optional}
+      savedMaskedValue={existingCredentials?.api_key ?? undefined}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Standard provider modal (OpenAI, Cohere, Voyage)
 // ---------------------------------------------------------------------------
 
 interface StandardFormValues {
-  apiKey: string;
+  apiKey: ApiTokenValue;
 }
 function StandardProviderModal({
   provider,
@@ -185,15 +220,15 @@ function StandardProviderModal({
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
-  const maskedApiKey = existingCredentials?.api_key ?? "";
+  const savedTokenId = existingCredentials?.api_token_id ?? null;
 
   const schema = Yup.object({
-    apiKey: isEditing
-      ? Yup.string().trim()
-      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+    apiKey: apiTokenSchema(t("validation.apiKeyRequired")),
   });
 
-  const initialValues: StandardFormValues = { apiKey: maskedApiKey };
+  const initialValues: StandardFormValues = {
+    apiKey: initialApiTokenValue(savedTokenId),
+  };
 
   return (
     <Formik<StandardFormValues>
@@ -201,12 +236,11 @@ function StandardProviderModal({
       validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
-        const apiKey =
-          values.apiKey === maskedApiKey ? null : values.apiKey || null;
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey,
+            apiKey: toApiTokenPayload(values.apiKey),
+            savedTokenId,
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -215,7 +249,10 @@ function StandardProviderModal({
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing}>
-        <ApiKeyField provider={provider} />
+        <EmbeddingApiTokenField
+          provider={provider}
+          existingCredentials={existingCredentials}
+        />
       </ModalShell>
     </Formik>
   );
@@ -294,6 +331,7 @@ function GoogleProviderModal({
   const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
   const existingConfig = existingCredentials?.vertex_config;
+  const savedTokenId = existingCredentials?.api_token_id ?? null;
 
   const schema = Yup.object({
     authMethod: Yup.string()
@@ -346,10 +384,17 @@ function GoogleProviderModal({
       validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
+        // An empty upload keeps the saved service account JSON.
+        const apiKey: ApiTokenValue | null = values.apiKey
+          ? { type: "new", value: values.apiKey }
+          : savedTokenId !== null
+            ? { type: "existing", id: savedTokenId }
+            : null;
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey: values.apiKey || null,
+            apiKey,
+            savedTokenId,
             vertexConfig: {
               auth_method: values.authMethod,
               project_id:
@@ -382,7 +427,7 @@ function GoogleProviderModal({
 
 interface AzureFormValues {
   apiUrl: string;
-  apiKey: string;
+  apiKey: ApiTokenValue;
   apiVersion: string;
   deploymentName: string;
   modelName: string;
@@ -401,16 +446,14 @@ function AzureProviderModal({
   const tPlaceholders = useTranslations("common.placeholders");
   const { appName } = useSettings();
   const isEditing = !!existingCredentials;
-  const maskedApiKey = existingCredentials?.api_key ?? "";
+  const savedTokenId = existingCredentials?.api_token_id ?? null;
 
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
       .required(t("validation.targetUrlRequired"))
       .url(t("validation.urlInvalid")),
-    apiKey: isEditing
-      ? Yup.string().trim()
-      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+    apiKey: apiTokenSchema(t("validation.apiKeyRequired")),
     apiVersion: Yup.string()
       .trim()
       .required(t("validation.apiVersionRequired")),
@@ -422,7 +465,7 @@ function AzureProviderModal({
 
   const initialValues: AzureFormValues = {
     apiUrl: existingCredentials?.api_url ?? "",
-    apiKey: maskedApiKey,
+    apiKey: initialApiTokenValue(savedTokenId),
     apiVersion: existingCredentials?.api_version ?? "",
     deploymentName: existingCredentials?.deployment_name ?? "",
     modelName: existingModel?.modelName ?? "",
@@ -438,12 +481,11 @@ function AzureProviderModal({
       validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
-        const apiKey =
-          values.apiKey === maskedApiKey ? null : values.apiKey || null;
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey,
+            apiKey: toApiTokenPayload(values.apiKey),
+            savedTokenId,
             unknownErrorMessage: t("toasts.unknownError"),
             apiUrl: values.apiUrl,
             apiVersion: values.apiVersion,
@@ -465,7 +507,10 @@ function AzureProviderModal({
           title={t("azure.targetUrl.title")}
           placeholder={tPlaceholders("azure.embeddingsUrl")}
         />
-        <ApiKeyField provider={provider} />
+        <EmbeddingApiTokenField
+          provider={provider}
+          existingCredentials={existingCredentials}
+        />
         <TextField
           name="apiVersion"
           title={t("azure.apiVersion.title")}
@@ -495,7 +540,7 @@ function AzureProviderModal({
 
 interface LiteLLMFormValues {
   apiUrl: string;
-  apiKey: string;
+  apiKey: ApiTokenValue;
   modelName: string;
   modelDim: number;
   queryPrefix: string;
@@ -511,22 +556,23 @@ function LiteLLMProviderModal({
   const t = useTranslations("admin.indexSettings");
   const { appName } = useSettings();
   const isEditing = !!existingCredentials;
-  const maskedApiKey = existingCredentials?.api_key ?? "";
+  const savedTokenId = existingCredentials?.api_token_id ?? null;
 
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
       .required(t("validation.apiBaseUrlRequired"))
       .url(t("validation.urlInvalid")),
+    // LiteLLM works without a key, so an edit may clear it.
     apiKey: isEditing
-      ? Yup.string().trim()
-      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+      ? apiTokenSchema()
+      : apiTokenSchema(t("validation.apiKeyRequired")),
     ...modelSpecSchemaShape(t),
   });
 
   const initialValues: LiteLLMFormValues = {
     apiUrl: existingCredentials?.api_url ?? "",
-    apiKey: maskedApiKey,
+    apiKey: initialApiTokenValue(savedTokenId),
     modelName: existingModel?.modelName ?? "",
     modelDim: existingModel?.modelDim ?? 0,
     queryPrefix: existingModel?.queryPrefix ?? "",
@@ -540,12 +586,11 @@ function LiteLLMProviderModal({
       validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
-        const apiKey =
-          values.apiKey === maskedApiKey ? null : values.apiKey || null;
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey,
+            apiKey: toApiTokenPayload(values.apiKey),
+            savedTokenId,
             apiUrl: values.apiUrl,
             modelName: values.modelName.trim(),
             unknownErrorMessage: t("toasts.unknownError"),
@@ -570,7 +615,10 @@ function LiteLLMProviderModal({
           })}
         />
 
-        <ApiKeyField provider={provider} />
+        <EmbeddingApiTokenField
+          provider={provider}
+          existingCredentials={existingCredentials}
+        />
 
         <ModelSpecFields
           modelNameSubDescription={t("litellm.modelName.description", {
@@ -600,7 +648,7 @@ function isHttpUrl(value: string | undefined): boolean {
 
 interface BifrostFormValues {
   apiUrl: string;
-  apiKey: string;
+  apiKey: ApiTokenValue;
   modelName: string;
 }
 function BifrostProviderModal({
@@ -613,7 +661,7 @@ function BifrostProviderModal({
   const tPlaceholders = useTranslations("common.placeholders");
   const { appName } = useSettings();
   const isEditing = !!existingCredentials;
-  const maskedApiKey = existingCredentials?.api_key ?? "";
+  const savedTokenId = existingCredentials?.api_token_id ?? null;
   // Editing manages the connection only; another model is picked from the
   // model list. The kept model is tested against the new URL and key.
   const isModelLocked = isEditing && !!existingModel;
@@ -624,13 +672,13 @@ function BifrostProviderModal({
       .required(t("validation.apiBaseUrlRequired"))
       // Yup's .url() rejects in-cluster hosts such as http://bifrost:8080.
       .test("http-url", t("validation.urlInvalid"), isHttpUrl),
-    apiKey: Yup.string().trim(),
+    apiKey: apiTokenSchema(),
     modelName: Yup.string().trim().required(t("validation.modelNameRequired")),
   });
 
   const initialValues: BifrostFormValues = {
     apiUrl: existingCredentials?.api_url ?? "",
-    apiKey: maskedApiKey,
+    apiKey: initialApiTokenValue(savedTokenId),
     modelName: existingModel?.modelName ?? "",
   };
 
@@ -640,12 +688,11 @@ function BifrostProviderModal({
       validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
-        const apiKey =
-          values.apiKey === maskedApiKey ? null : values.apiKey || null;
         const modelName = values.modelName.trim();
         const result = await testAndSaveProviderCredentials({
           provider,
-          apiKey,
+          apiKey: toApiTokenPayload(values.apiKey),
+          savedTokenId,
           apiUrl: values.apiUrl.trim(),
           modelName,
           alwaysTest: true,
@@ -669,7 +716,11 @@ function BifrostProviderModal({
           subDescription={t("bifrost.apiUrl.description", { appName })}
         />
 
-        <ApiKeyField provider={provider} optional />
+        <EmbeddingApiTokenField
+          provider={provider}
+          existingCredentials={existingCredentials}
+          optional
+        />
 
         <TextField
           name="modelName"

@@ -11,6 +11,7 @@ from unittest.mock import patch
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.api import get_portkey_available_models
 from onyx.server.manage.llm.models import PortkeyModelsRequest
 
@@ -38,7 +39,7 @@ def _fetch(api_base: str = "https://api.portkey.ai/v1") -> dict:
         results = get_portkey_available_models(
             request=PortkeyModelsRequest(
                 api_base=api_base,
-                api_key="pk-key",
+                api_key=NewApiToken(value="pk-key"),
                 provider_id=None,  # skip DB sync
             ),
             _=cast(User, None),

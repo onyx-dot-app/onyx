@@ -10,13 +10,21 @@ import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
 import { toast } from "@opal/layouts";
+import { markdown } from "@opal/utils";
+import { ApiTokenField } from "@/lib/api-tokens/components";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import {
+  initialApiTokenValue,
+  toApiTokenPayload,
+} from "@/lib/api-tokens/utils";
+import { apiTokenSchema } from "@/lib/api-tokens/validation";
 import { connectTracingProvider } from "@/lib/tracing/svc";
 import type { TracingProviderDetail } from "@/lib/tracing/utils";
 import type {
   TracingProviderType,
   TracingProviderView,
 } from "@/lib/tracing/types";
-import { SecretField, ConfigField } from "@/views/admin/TracingPage/shared";
+import { ConfigField } from "@/views/admin/TracingPage/shared";
 
 export interface TracingSetupModalState {
   providerType: TracingProviderType;
@@ -29,64 +37,61 @@ export interface TracingSetupModalProps {
   onSaved: () => Promise<void>;
 }
 
-type FormValues = Record<string, string>;
+interface FormValues {
+  api_key: ApiTokenValue;
+  config: Record<string, string>;
+}
 
 export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
   const t = useTranslations("admin.tracing");
   const onClose = useModalClose();
   const { providerType, detail, provider } = state;
 
-  // Only a DB-backed provider exposes a stored (masked) key. An env-sourced
-  // provider has no retrievable key, so the admin must enter one (which adopts
-  // it into the DB).
-  const hasStoredKey = provider?.source === "db" && !!provider.masked_api_key;
+  // Only a DB-backed provider has a saved key. An env-sourced provider has
+  // no retrievable key, so the admin must enter one (which adopts it into the
+  // DB).
+  const savedProvider = provider?.source === "db" ? provider : null;
   const isEditing = !!provider?.connected;
 
-  const initialApiKey = hasStoredKey ? (provider?.masked_api_key ?? "") : "";
-
-  const initialValues: FormValues = {
-    [detail.secretField.name]: initialApiKey,
-  };
+  const initialConfig: Record<string, string> = {};
   for (const field of detail.configFields) {
-    initialValues[field.name] =
+    initialConfig[field.name] =
       provider?.config?.[field.name] ?? field.defaultValue ?? "";
   }
-
-  const shape: Record<string, Yup.StringSchema> = {
-    [detail.secretField.name]: hasStoredKey
-      ? Yup.string()
-      : Yup.string().required(
-          t("field.required.error", { label: t(detail.secretField.labelKey) })
-        ),
+  const initialValues: FormValues = {
+    api_key: initialApiTokenValue(savedProvider?.api_token_id),
+    config: initialConfig,
   };
+
+  const configShape: Record<string, Yup.StringSchema> = {};
   for (const field of detail.configFields) {
-    shape[field.name] = field.optional
+    configShape[field.name] = field.optional
       ? Yup.string()
       : Yup.string().required(
           t("field.required.error", { label: t(field.labelKey) })
         );
   }
-  const validationSchema = Yup.object().shape(shape);
+  const validationSchema = Yup.object().shape({
+    api_key: apiTokenSchema(
+      t("field.required.error", { label: t(detail.secretField.labelKey) })
+    ),
+    config: Yup.object().shape(configShape),
+  });
 
   async function handleSubmit(
     values: FormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
-    const apiKey = values[detail.secretField.name] ?? "";
-    const apiKeyChanged = apiKey !== initialApiKey;
-
     const config: Record<string, string> = {};
     for (const field of detail.configFields) {
-      const value = (values[field.name] ?? "").trim();
+      const value = (values.config[field.name] ?? "").trim();
       if (value) config[field.name] = value;
     }
 
     try {
       await connectTracingProvider({
         providerType,
-        apiKey,
-        apiKeyChanged,
-        hasStoredKey,
+        apiKey: toApiTokenPayload(values.api_key),
         config,
       });
       toast.success(t("toasts.connected", { label: detail.label }));
@@ -126,9 +131,21 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
                 onClose={onClose}
               />
               <Modal.Body>
-                <SecretField field={detail.secretField} />
+                <ApiTokenField
+                  platform={providerType}
+                  savedMaskedValue={savedProvider?.masked_api_key ?? undefined}
+                  subDescription={
+                    detail.secretField.descriptionKey
+                      ? markdown(t(detail.secretField.descriptionKey))
+                      : undefined
+                  }
+                />
                 {detail.configFields.map((field) => (
-                  <ConfigField key={field.name} field={field} />
+                  <ConfigField
+                    key={field.name}
+                    field={field}
+                    name={`config.${field.name}`}
+                  />
                 ))}
               </Modal.Body>
               <Modal.Footer>

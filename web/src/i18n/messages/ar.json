@@ -5025,9 +5025,6 @@
     },
     "documentProcessing": {
       "unstructured": {
-        "apiKey": {
-          "placeholder": "أدخل مفتاح API"
-        },
         "deleteButton": {
           "label": "حذف مفتاح API"
         },
@@ -5899,11 +5896,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "سيستخدم {appName} هذا المفتاح للمصادقة مع نقطة نهاية API الخاصة بك.",
-          "keepCurrent": {
-            "placeholder": "اتركه فارغًا للاحتفاظ بالمفتاح الحالي"
-          },
-          "title": "مفتاح API"
+          "description": "سيستخدم {appName} هذا المفتاح للمصادقة مع نقطة نهاية API الخاصة بك."
         },
         "connectionValid": {
           "label": "الاتصال صالح."
@@ -6161,9 +6154,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "أدخل مفتاح API الخاص بك.",
-          "label": "مفتاح API",
-          "placeholder": "أدخل مفتاح API الخاص بك",
           "required": "مفتاح API مطلوب"
         },
         "apiKeyTest": {
@@ -6206,9 +6196,6 @@
         },
         "editHeader": {
           "title": "تعديل {title}"
-        },
-        "loading": {
-          "placeholder": "جارٍ التحميل..."
         },
         "location": {
           "idle": "منطقة Google Cloud لنماذج Vertex AI الخاصة بك. راجع <link>وثائق Google</link> للمناطق المتاحة.",
@@ -6432,10 +6419,6 @@
         "unknownError": "خطأ غير معروف"
       },
       "fields": {
-        "apiKey": {
-          "description": "الصق [مفتاح API]({link}) من {provider} للوصول إلى نماذجك.",
-          "title": "مفتاح API"
-        },
         "googleCredentials": {
           "title": "ارفع ملف بيانات اعتماد JSON"
         },
@@ -7073,9 +7056,6 @@
           "addModelButton": {
             "label": "إضافة نموذج"
           },
-          "apiKeyField": {
-            "description": "الصق مفتاح API إذا كان موفر النموذج يتطلب مصادقة."
-          },
           "apiVersionField": {
             "title": "إصدار API"
           },
@@ -7242,8 +7222,7 @@
             "placeholder": "عنوان URL الأساسي لـ Ollama API"
           },
           "apiKeyField": {
-            "description": "مفتاح API الخاص بك في Ollama Cloud.",
-            "placeholder": "مفتاح API"
+            "description": "مفتاح API الخاص بك في Ollama Cloud."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7237,6 @@
           "apiBaseField": {
             "description": "الصق عنوان URL لنقطة النهاية المتوافقة مع OpenAI.",
             "learnMore": "[اعرف المزيد](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "الصق مفتاح API إذا كان موفر النموذج يتطلب مصادقة."
           },
           "description": "اربط نماذج سحابية أو مستضافة ذاتيًا أخرى عبر نقاط نهاية متوافقة مع OpenAI."
         },
@@ -7315,8 +7291,6 @@
             "title": "عنوان URL الأساسي لـ API"
           },
           "apiKeyField": {
-            "description": "الصق مفتاح API للوصول إلى نماذجك.",
-            "providerDescription": "الصق مفتاح API من {provider} للوصول إلى نماذجك.",
             "title": "مفتاح API"
           },
           "cancelButton": {
@@ -9967,9 +9941,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "الصق [مفتاح API]({url}) من {provider} للوصول إلى نماذجك.",
-          "label": "مفتاح API",
-          "placeholder": "مفتاح API",
           "required": "مفتاح API مطلوب"
         },
         "apiSecret": {
@@ -10057,11 +10028,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "الصق مفتاح API من {provider} للاتصال."
-        },
-        "placeholder": "مفتاح API",
-        "title": "مفتاح API",
         "withLink": {
           "description": "الصق [مفتاح API]({url}) من {provider} للاتصال."
         }
@@ -13580,6 +13546,32 @@
       "vertexAi": {
         "projectId": "mashrue-vertex",
         "location": "global"
+      }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "مفتاح API",
+        "description": "الصق مفتاح API الخاص بـ {platform}.",
+        "reuseDescription": "الصق مفتاح API الخاص بـ {platform}، أو أعد استخدام مفتاح محفوظ."
+      },
+      "input": {
+        "placeholder": "أدخل مفتاح API",
+        "listLabel": "مفاتيح API المحفوظة لـ {platform}"
+      },
+      "reuse": {
+        "title": "إعادة استخدام مفاتيح API لـ {platform}"
+      },
+      "usedFor": "مستخدم في {usages}",
+      "usage": {
+        "llmProvider": "موفر LLM **{name}**",
+        "imageGeneration": "إنشاء الصور **{name}**",
+        "voiceProvider": "موفر الصوت **{name}**",
+        "embeddingProvider": "موفر التضمين **{name}**",
+        "webSearchProvider": "موفر البحث على الويب **{name}**",
+        "webContentProvider": "موفر محتوى الويب **{name}**",
+        "tracingProvider": "موفر التتبع **{name}**",
+        "hook": "الخطاف **{name}**",
+        "unstructured": "معالجة المستندات **{name}**"
       }
     }
   },

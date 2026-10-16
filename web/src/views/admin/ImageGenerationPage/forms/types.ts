@@ -1,4 +1,5 @@
 import { FormikProps } from "formik";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 import { ImageProvider } from "@/views/admin/ImageGenerationPage/constants";
 import {
   ImageGenerationConfigView,
@@ -59,7 +60,7 @@ export interface ImageGenSubmitPayload {
   isDefault?: boolean;
 
   provider?: string;
-  apiKey?: string;
+  apiKey?: ApiTokenValue;
   apiBase?: string;
   apiVersion?: string;
   deploymentName?: string;

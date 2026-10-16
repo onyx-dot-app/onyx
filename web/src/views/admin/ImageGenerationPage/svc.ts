@@ -4,6 +4,8 @@
  */
 
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { toApiTokenPayload } from "@/lib/api-tokens/utils";
 
 // Types
 export interface ImageGenerationConfigView {
@@ -21,7 +23,9 @@ export interface TestApiKeyResult {
 }
 
 export interface ImageGenerationCredentials {
+  /** Masked. */
   api_key: string | null;
+  api_token_id: number | null;
   api_base: string | null;
   api_version: string | null;
   deployment_name: string | null;
@@ -33,7 +37,7 @@ export interface ImageGenerationConfigCreateOptions {
   modelName: string;
   isDefault?: boolean;
   provider?: string;
-  apiKey?: string;
+  apiKey?: ApiTokenValue;
   apiBase?: string;
   apiVersion?: string;
   deploymentName?: string;
@@ -51,7 +55,7 @@ export async function testImageGenerationApiKey(
   modelName: string,
   options: {
     provider?: string;
-    apiKey?: string;
+    apiKey?: ApiTokenValue;
     apiBase?: string;
     apiVersion?: string;
     deploymentName?: string;
@@ -65,7 +69,7 @@ export async function testImageGenerationApiKey(
       body: JSON.stringify({
         model_name: modelName,
         provider: options.provider || null,
-        api_key: options.apiKey || null,
+        api_key: options.apiKey ? toApiTokenPayload(options.apiKey) : null,
         api_base: options.apiBase || null,
         api_version: options.apiVersion || null,
         deployment_name: options.deploymentName || null,
@@ -134,7 +138,7 @@ export async function createImageGenerationConfig(
       model_name: options.modelName,
       is_default: options.isDefault ?? false,
       provider: options.provider,
-      api_key: options.apiKey,
+      api_key: options.apiKey ? toApiTokenPayload(options.apiKey) : undefined,
       api_base: options.apiBase,
       api_version: options.apiVersion,
       deployment_name: options.deploymentName,
@@ -154,14 +158,11 @@ export async function createImageGenerationConfig(
 export interface ImageGenerationConfigUpdateOptions {
   modelName: string;
   provider?: string;
-  apiKey?: string;
+  apiKey?: ApiTokenValue;
   apiBase?: string;
   apiVersion?: string;
   deploymentName?: string;
   customConfig?: Record<string, string>;
-
-  // If true, apiKey was changed by user; if false, backend preserves existing key
-  apiKeyChanged?: boolean;
 }
 
 /**
@@ -178,13 +179,11 @@ export async function updateImageGenerationConfig(
     body: JSON.stringify({
       model_name: options.modelName,
       provider: options.provider,
-      api_key: options.apiKey,
+      api_key: options.apiKey ? toApiTokenPayload(options.apiKey) : undefined,
       api_base: options.apiBase,
       api_version: options.apiVersion,
       deployment_name: options.deploymentName,
       custom_config: options.customConfig,
-      // If false, backend preserves existing API key
-      api_key_changed: options.apiKeyChanged ?? false,
     }),
   });
 

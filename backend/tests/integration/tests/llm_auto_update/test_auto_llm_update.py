@@ -50,7 +50,6 @@ def _create_provider_with_api(
         "groups": [],
         "personas": [],
         "model_configurations": model_configurations,
-        "api_key_changed": True,
     }
 
     response = client.put(

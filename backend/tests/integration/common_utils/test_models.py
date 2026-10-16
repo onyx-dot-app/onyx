@@ -126,6 +126,7 @@ class DATestLLMProvider(BaseModel):
     name: str | None
     provider: str
     api_key: str
+    api_token_id: int | None = None
     default_model_name: str | None = None
     is_public: bool
     is_auto_mode: bool = False

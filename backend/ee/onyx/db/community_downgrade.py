@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.api_key import remove_all_api_keys__no_commit
+from onyx.db.api_token import release_api_token
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
@@ -340,11 +341,20 @@ def disable_paid_features__no_commit(db_session: Session) -> None:
     not be turned off afterwards. Each one gets what its own delete does."""
     db_session.execute(delete(TokenRateLimit__UserGroup))
     db_session.execute(delete(TokenRateLimit))
+    hook_token_ids = db_session.scalars(
+        select(Hook.api_token_id).where(
+            Hook.deleted.is_(False), Hook.api_token_id.is_not(None)
+        )
+    ).all()
     db_session.execute(
         update(Hook)
         .where(Hook.deleted.is_(False))
-        .values(deleted=True, is_active=False)
+        .values(deleted=True, is_active=False, api_token_id=None)
+        .execution_options(synchronize_session="fetch")
     )
+    for token_id in set(hook_token_ids):
+        if token_id is not None:
+            release_api_token(db_session, token_id)
     db_session.execute(
         update(StandardAnswer)
         .where(StandardAnswer.active.is_(True))

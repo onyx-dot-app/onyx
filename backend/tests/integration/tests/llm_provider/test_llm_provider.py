@@ -186,7 +186,7 @@ def test_create_llm_provider(
         admin_user,
         response,
         expected,
-        "sk-0****0000",
+        "sk-0...0000",
     )
 
 
@@ -276,7 +276,6 @@ def test_update_model_configurations(
             ],
             "is_public": True,
             "groups": [],
-            "api_key_changed": True,
         },
     )
     created_provider = response.json()
@@ -316,7 +315,7 @@ def test_update_model_configurations(
         admin_user,
         response,
         updated_expected,
-        "sk-0****0000",
+        "sk-0...0000",
     )
 
     response = client.post(
@@ -343,14 +342,13 @@ def test_update_model_configurations(
             ],
             "is_public": True,
             "groups": [],
-            "api_key_changed": True,
         },
     )
     assert_response_is_equivalent(
         admin_user,
         response,
         updated_expected,
-        "sk-0****0001",
+        "sk-0...0001",
     )
 
 
@@ -2344,7 +2342,7 @@ def test_get_llm_provider_by_id(reset: None) -> None:  # noqa: ARG001
     fetched = response.json()
     assert fetched["id"] == provider_id
     # masked exactly as the listing masks it
-    assert fetched["api_key"] == "sk-0****0000"
+    assert fetched["api_key"] == "sk-0...0000"
 
     missing = client.get(
         f"{API_SERVER_URL}/admin/llm/provider/{provider_id + 10_000}",
@@ -2352,6 +2350,47 @@ def test_get_llm_provider_by_id(reset: None) -> None:  # noqa: ARG001
     )
     assert missing.status_code == 404
     assert missing.json()["error_code"] == "NOT_FOUND"
+
+
+def test_llm_providers_share_saved_key(reset: None) -> None:  # noqa: ARG001
+    """A second provider can pick the first one's saved key. Deleting one
+    provider keeps the key for the other."""
+    admin_user = UserManager.create(name="admin_user")
+
+    def _create(api_key: str | dict[str, str | int]) -> dict:
+        response = client.put(
+            f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+            headers=admin_user.headers,
+            json={
+                "name": str(uuid.uuid4()),
+                "provider": LlmProviderNames.OPENAI,
+                "api_key": api_key,
+                "model_configurations": [{"name": "gpt-4", "is_visible": True}],
+                "is_public": True,
+                "groups": [],
+            },
+        )
+        assert response.status_code == 200
+        return response.json()
+
+    first = _create("sk-000000000000000000000000000000000000000000000000")
+    assert first["api_token_id"] is not None
+    second = _create({"type": "existing", "id": first["api_token_id"]})
+    assert second["api_token_id"] == first["api_token_id"]
+    assert second["api_key"] == first["api_key"]
+
+    response = client.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{first['id']}?force=true",
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+
+    fetched = client.get(
+        f"{API_SERVER_URL}/admin/llm/provider/{second['id']}",
+        headers=admin_user.headers,
+    ).json()
+    assert fetched["api_token_id"] == first["api_token_id"]
+    assert fetched["api_key"] == "sk-0...0000"
 
 
 def test_keep_existing_models_preserves_unsent_models(

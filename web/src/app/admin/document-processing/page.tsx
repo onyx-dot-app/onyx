@@ -5,7 +5,6 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import CardSection from "@/components/admin/CardSection";
 import { Button } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { PageLoader } from "@opal/loaders";
@@ -15,31 +14,44 @@ import { cn } from "@opal/utils";
 import { SvgLock } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
+import { ApiTokenInput } from "@/lib/api-tokens/components";
+import { EMPTY_API_TOKEN_VALUE } from "@/lib/api-tokens/constants";
+import {
+  isApiTokenValueEmpty,
+  toApiTokenPayload,
+} from "@/lib/api-tokens/utils";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 
 const route = ADMIN_ROUTES.DOCUMENT_PROCESSING;
+const UNSTRUCTURED_API_TOKEN_PLATFORM = "unstructured";
+/** Shown when a saved key has no masked text. */
+const FALLBACK_MASK = "••••••••••••••••";
+
+interface UnstructuredApiKeyStatus {
+  is_set: boolean;
+  api_key_masked: string | null;
+  api_token_id: number | null;
+}
 
 function Main() {
   const t = useTranslations("admin.documentProcessing");
   const { appName } = useSettings();
-  const {
-    data: isApiKeySet,
-    error,
-    mutate,
-    isLoading,
-  } = useSWR<{
-    unstructured_api_key: string | null;
-  }>(SWR_KEYS.unstructuredApiKeySet, (url: string) =>
-    fetch(url).then((res) => res.json())
+  const { data, mutate, isLoading } = useSWR<UnstructuredApiKeyStatus>(
+    SWR_KEYS.unstructuredApiKeySet,
+    (url: string) => fetch(url).then((res) => res.json())
   );
+  const isApiKeySet = data?.is_set ?? false;
 
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKey] = useState<ApiTokenValue>(EMPTY_API_TOKEN_VALUE);
 
   const handleSave = async () => {
+    const payload = toApiTokenPayload(apiKey);
+    if (!payload) return;
     try {
       await fetch("/api/search-settings/upsert-unstructured-api-key", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ unstructured_api_key: apiKey }),
+        body: JSON.stringify({ api_key: payload }),
       });
     } catch (error) {
       console.error("Failed to save API key:", error);
@@ -52,7 +64,7 @@ function Main() {
       await fetch("/api/search-settings/delete-unstructured-api-key", {
         method: "DELETE",
       });
-      setApiKey("");
+      setApiKey(EMPTY_API_TOKEN_VALUE);
     } catch (error) {
       console.error("Failed to delete API key:", error);
     }
@@ -121,17 +133,22 @@ function Main() {
                     as="p"
                     mainUiMuted
                     text03
-                    className="flex-1 tracking-[0.3em] text-text-03"
+                    className={cn(
+                      "flex-1 text-text-03",
+                      !data?.api_key_masked && "tracking-[0.3em]"
+                    )}
                   >
-                    ••••••••••••••••
+                    {data?.api_key_masked ?? FALLBACK_MASK}
                   </Text>
                   <SvgLock className="h-4 w-4 stroke-text-03" aria-hidden />
                 </div>
               ) : (
-                <InputTypeIn
-                  placeholder={t("unstructured.apiKey.placeholder")}
+                <ApiTokenInput
+                  id="api_key"
+                  name="api_key"
+                  platform={UNSTRUCTURED_API_TOKEN_PLATFORM}
                   value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
+                  onChange={setApiKey}
                 />
               )}
             </div>
@@ -149,7 +166,7 @@ function Main() {
                 <Button
                   variant="action"
                   onClick={handleSave}
-                  disabled={!apiKey.trim()}
+                  disabled={isApiTokenValueEmpty(apiKey)}
                 >
                   {t("unstructured.saveButton.label")}
                 </Button>

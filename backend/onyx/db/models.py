@@ -3703,15 +3703,45 @@ class ChatMessageFeedback(Base):
     )
 
 
+class ApiToken(Base):
+    """A third-party API key that features reference instead of storing their
+    own copy. Rotating it updates every feature that points to it."""
+
+    __tablename__ = "api_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # The service the key is for, e.g. "openai" or "exa". Pickers offer only
+    # the tokens of the platform a field needs.
+    platform: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    value: Mapped[SensitiveValue[str]] = mapped_column(
+        EncryptedString(), nullable=False
+    )
+    # The endpoint the key was first saved for. In multi-tenant, a reused key
+    # may only be sent there, so it cannot be pointed at another host.
+    base_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Onyx-owned keys (Cloud defaults) never show in the token list.
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class LLMProvider(Base):
     __tablename__ = "llm_provider"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     provider: Mapped[str] = mapped_column(String)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     api_base: Mapped[str | None] = mapped_column(String, nullable=True)
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     # custom configs that should be passed to the LLM provider at inference time
@@ -3751,6 +3781,10 @@ class LLMProvider(Base):
         back_populates="llm_provider",
         foreign_keys="ModelConfiguration.llm_provider_id",
     )
+
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
 
 
 class ModelConfiguration(Base):
@@ -3900,9 +3934,10 @@ class VoiceProvider(Base):
     provider_type: Mapped[str] = mapped_column(
         String
     )  # "openai", "azure", "elevenlabs", "zoom"
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     api_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
@@ -3949,6 +3984,10 @@ class VoiceProvider(Base):
         ),
     )
 
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
+
 
 class CloudEmbeddingProvider(Base):
     __tablename__ = "embedding_provider"
@@ -3957,7 +3996,10 @@ class CloudEmbeddingProvider(Base):
         Enum(EmbeddingProvider), primary_key=True
     )
     api_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(EncryptedString())
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
     vertex_config: Mapped[VertexEmbeddingConfigDict | None] = mapped_column(
@@ -3972,6 +4014,10 @@ class CloudEmbeddingProvider(Base):
     def __repr__(self) -> str:
         return f"<EmbeddingProvider(type='{self.provider_type}')>"
 
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
+
 
 class InternetSearchProvider(Base):
     __tablename__ = "internet_search_provider"
@@ -3979,9 +4025,10 @@ class InternetSearchProvider(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     provider_type: Mapped[str] = mapped_column(String, nullable=False)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     config: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -3996,6 +4043,10 @@ class InternetSearchProvider(Base):
     def __repr__(self) -> str:
         return f"<InternetSearchProvider(name='{self.name}', provider_type='{self.provider_type}')>"
 
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
+
 
 class InternetContentProvider(Base):
     __tablename__ = "internet_content_provider"
@@ -4003,9 +4054,10 @@ class InternetContentProvider(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     provider_type: Mapped[str] = mapped_column(String, nullable=False)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     config: Mapped[WebContentProviderConfig | None] = mapped_column(
         PydanticType(WebContentProviderConfig), nullable=True
     )
@@ -4020,6 +4072,10 @@ class InternetContentProvider(Base):
     def __repr__(self) -> str:
         return f"<InternetContentProvider(name='{self.name}', provider_type='{self.provider_type}')>"
 
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
+
 
 class TracingProviderConfig(Base):
     """Admin-configured tracing provider (Braintrust, Langfuse), one row each.
@@ -4033,9 +4089,10 @@ class TracingProviderConfig(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     provider_type: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     config: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -4054,6 +4111,10 @@ class TracingProviderConfig(Base):
             f"<TracingProviderConfig(provider_type='{self.provider_type}', "
             f"enabled={self.enabled})>"
         )
+
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
 
 
 class DocumentSet(Base):
@@ -7293,9 +7354,10 @@ class Hook(Base):
         Enum(HookPoint, native_enum=False), nullable=False
     )
     endpoint_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     is_reachable: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )  # null = never validated, true = last check passed, false = last check failed
@@ -7335,6 +7397,10 @@ class Hook(Base):
             postgresql_where=(deleted == False),  # noqa: E712
         ),
     )
+
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
 
 
 class HookExecutionLog(Base):

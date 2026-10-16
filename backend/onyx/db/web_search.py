@@ -3,7 +3,9 @@ from __future__ import annotations
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from onyx.db.api_token import assign_api_token, release_api_token
 from onyx.db.models import InternetContentProvider, InternetSearchProvider
+from onyx.server.manage.api_token.models import ApiTokenInput
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
@@ -62,16 +64,21 @@ def _apply_search_provider_updates(
     *,
     name: str,
     provider_type: WebSearchProviderType,
-    api_key: str | None,
-    api_key_changed: bool,
+    api_key: ApiTokenInput | None,
     config: dict[str, str] | None,
+    db_session: Session,
 ) -> None:
     provider.name = name
     provider.provider_type = provider_type.value
     provider.config = config
-    if api_key_changed or provider.api_key is None:
-        # EncryptedString accepts str for writes, returns SensitiveValue for reads
-        provider.api_key = api_key  # ty: ignore[invalid-assignment]
+    db_session.flush()
+    assign_api_token(
+        db_session,
+        provider,
+        api_key,
+        platform=provider_type.value,
+        base_url=(config or {}).get("base_url"),
+    )
 
 
 def upsert_web_search_provider(
@@ -79,8 +86,7 @@ def upsert_web_search_provider(
     provider_id: int | None,
     name: str,
     provider_type: WebSearchProviderType,
-    api_key: str | None,
-    api_key_changed: bool,
+    api_key: ApiTokenInput | None,
     config: dict[str, str] | None,
     activate: bool,
     db_session: Session,
@@ -103,8 +109,8 @@ def upsert_web_search_provider(
         name=name,
         provider_type=provider_type,
         api_key=api_key,
-        api_key_changed=api_key_changed,
         config=config,
+        db_session=db_session,
     )
 
     db_session.flush()
@@ -163,8 +169,11 @@ def delete_web_search_provider(provider_id: int, db_session: Session) -> None:
     if provider is None:
         raise ValueError(f"No web search provider with id {provider_id} exists.")
 
+    token_id = provider.api_token_id
     db_session.delete(provider)
     db_session.flush()
+    if token_id is not None:
+        release_api_token(db_session, token_id)
 
     db_session.commit()
 
@@ -243,16 +252,21 @@ def _apply_content_provider_updates(
     *,
     name: str,
     provider_type: WebContentProviderType,
-    api_key: str | None,
-    api_key_changed: bool,
+    api_key: ApiTokenInput | None,
     config: WebContentProviderConfig | None,
+    db_session: Session,
 ) -> None:
     provider.name = name
     provider.provider_type = provider_type.value
     provider.config = config
-    if api_key_changed or provider.api_key is None:
-        # EncryptedString accepts str for writes, returns SensitiveValue for reads
-        provider.api_key = api_key  # ty: ignore[invalid-assignment]
+    db_session.flush()
+    assign_api_token(
+        db_session,
+        provider,
+        api_key,
+        platform=provider_type.value,
+        base_url=config.base_url if config else None,
+    )
 
 
 def upsert_web_content_provider(
@@ -260,8 +274,7 @@ def upsert_web_content_provider(
     provider_id: int | None,
     name: str,
     provider_type: WebContentProviderType,
-    api_key: str | None,
-    api_key_changed: bool,
+    api_key: ApiTokenInput | None,
     config: WebContentProviderConfig | None,
     activate: bool,
     db_session: Session,
@@ -284,8 +297,8 @@ def upsert_web_content_provider(
         name=name,
         provider_type=provider_type,
         api_key=api_key,
-        api_key_changed=api_key_changed,
         config=config,
+        db_session=db_session,
     )
 
     db_session.flush()
@@ -344,7 +357,10 @@ def delete_web_content_provider(provider_id: int, db_session: Session) -> None:
     if provider is None:
         raise ValueError(f"No web content provider with id {provider_id} exists.")
 
+    token_id = provider.api_token_id
     db_session.delete(provider)
     db_session.flush()
+    if token_id is not None:
+        release_api_token(db_session, token_id)
 
     db_session.commit()

@@ -5,7 +5,15 @@ import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
-import { InputTypeIn, InputPasswordTypeIn } from "@opal/components";
+import { InputTypeIn } from "@opal/components";
+import { markdown } from "@opal/utils";
+import { EMPTY_API_TOKEN_VALUE } from "@/lib/api-tokens/constants";
+import { initialApiTokenValue } from "@/lib/api-tokens/utils";
+import { apiTokenSchema } from "@/lib/api-tokens/validation";
+import {
+  ImageGenApiKeyField,
+  type ImageGenApiKeyFormValues,
+} from "@/views/admin/ImageGenerationPage/forms/ImageGenApiKeyField";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -20,14 +28,13 @@ import {
 } from "@/lib/azureTargetUri";
 
 // Azure form values - target URI and API key
-interface AzureFormValues {
+interface AzureFormValues extends ImageGenApiKeyFormValues {
   target_uri: string;
-  api_key: string;
 }
 
 const initialValues: AzureFormValues = {
   target_uri: "",
-  api_key: "",
+  api_key: EMPTY_API_TOKEN_VALUE,
 };
 
 /** Azure portal page that issues both the target URI and the API key. */
@@ -36,16 +43,7 @@ const AZURE_OPENAI_URL = "https://oai.azure.com";
 function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
   const t = useTranslations("admin.imageGeneration");
   const tPlaceholders = useTranslations("common.placeholders");
-  const {
-    formikProps,
-    apiStatus,
-    showApiMessage,
-    errorMessage,
-    disabled,
-    isLoadingCredentials,
-    resetApiState,
-    imageProvider,
-  } = props;
+  const { formikProps, disabled } = props;
 
   return (
     <>
@@ -83,64 +81,14 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
         )}
       />
 
-      {/* API Key field */}
-      <FormikField<string>
-        name="api_key"
-        render={(field, _helper, meta, state) => (
-          <FormField
-            name="api_key"
-            state={apiStatus === "error" ? "error" : state}
-            className="w-full"
-          >
-            <FormField.Label>{t("form.apiKey.label")}</FormField.Label>
-            <FormField.Control>
-              <InputPasswordTypeIn
-                {...field}
-                onChange={(e) => {
-                  field.onChange(e);
-                  resetApiState();
-                }}
-                placeholder={
-                  isLoadingCredentials
-                    ? t("form.loading.placeholder")
-                    : t("form.apiKey.placeholder")
-                }
-                disabled={disabled || !formikProps.values.target_uri?.trim()}
-                error={apiStatus === "error"}
-              />
-            </FormField.Control>
-            {showApiMessage ? (
-              <FormField.APIMessage
-                state={apiStatus}
-                messages={{
-                  loading: t("form.apiKeyTest.loading", {
-                    title: imageProvider.title,
-                  }),
-                  success: t("form.apiKeyTest.success"),
-                  error: errorMessage || t("form.apiKeyTest.error"),
-                }}
-              />
-            ) : (
-              <FormField.Message
-                messages={{
-                  idle: t.rich("form.azureApiKey.idle", {
-                    link: (chunks) => (
-                      <a
-                        href={AZURE_OPENAI_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        {chunks}
-                      </a>
-                    ),
-                  }),
-                  error: meta.error,
-                }}
-              />
-            )}
-          </FormField>
+      <ImageGenApiKeyField
+        childProps={props}
+        subDescription={markdown(
+          t.markup("form.azureApiKey.idle", {
+            link: (chunks) => `[${chunks}](${AZURE_OPENAI_URL})`,
+          })
         )}
+        disabled={!formikProps.values.target_uri?.trim()}
       />
     </>
   );
@@ -158,7 +106,8 @@ function getInitialValuesFromCredentials(
   }
 
   return {
-    api_key: credentials.api_key || "",
+    api_key: initialApiTokenValue(credentials.api_token_id),
+    api_key_masked: credentials.api_key ?? undefined,
     target_uri: targetUri,
   };
 }
@@ -209,7 +158,7 @@ export function AzureImageGenForm(props: ImageGenFormBaseProps) {
           .test("valid-target-uri", t("form.targetUri.invalid"), (value) =>
             value ? isValidAzureTargetUri(value) : false
           ),
-        api_key: Yup.string().required(t("form.apiKey.required")),
+        api_key: apiTokenSchema(t("form.apiKey.required")),
       }),
     [t]
   );

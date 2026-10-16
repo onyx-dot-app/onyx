@@ -44,6 +44,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -103,8 +104,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                     LLMProviderUpsertRequest(
                         name=seeded_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-craft-ci-not-used",
-                        api_key_changed=True,
+                        api_key=NewApiToken(value="sk-craft-ci-not-used"),
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
                                 name="gpt-5-mini", is_visible=True

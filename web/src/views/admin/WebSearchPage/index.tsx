@@ -89,10 +89,9 @@ export default function WebSearchPage() {
     providerType: WebSearchProviderType,
     provider?: WebSearchProviderView
   ) => {
-    const hasStoredKey = !!provider?.masked_api_key;
     // Exa, Tavily and Firecrawl share one API key across the search and content
-    // sides, so pre-fill the search modal from the stored content-provider key
-    // when the search side has none yet (the backend syncs the two on save).
+    // sides, so pre-fill the search modal with the content provider's key when
+    // the search side has none yet.
     const sharedContentProviders = new Map<
       WebSearchProviderType,
       WebContentProviderView | undefined
@@ -101,20 +100,21 @@ export default function WebSearchPage() {
       ["tavily", tavilyContentProvider],
       ["firecrawl", firecrawlContentProvider],
     ]);
-    const sharedContentMaskedKey = hasStoredKey
-      ? null
-      : (sharedContentProviders.get(providerType)?.masked_api_key ?? null);
+    const sharedContentProvider = provider?.masked_api_key
+      ? undefined
+      : sharedContentProviders.get(providerType);
 
     const effectiveProvider: WebSearchProviderView | null =
       provider ??
-      (sharedContentMaskedKey
+      (sharedContentProvider?.api_token_id != null
         ? {
             id: -1,
             name: SEARCH_PROVIDER_DETAILS[providerType]?.label ?? providerType,
             provider_type: providerType,
             is_active: false,
             config: null,
-            masked_api_key: sharedContentMaskedKey,
+            masked_api_key: sharedContentProvider.masked_api_key,
+            api_token_id: sharedContentProvider.api_token_id,
           }
         : null);
 
@@ -198,6 +198,7 @@ export default function WebSearchPage() {
           is_active: true,
           config: null,
           masked_api_key: null,
+          api_token_id: null,
         } satisfies WebContentProviderView;
       }
 
@@ -211,6 +212,10 @@ export default function WebSearchPage() {
           masked_api_key:
             firecrawlSearchProvider?.masked_api_key ??
             firecrawlContentProvider?.masked_api_key ??
+            null,
+          api_token_id:
+            firecrawlSearchProvider?.api_token_id ??
+            firecrawlContentProvider?.api_token_id ??
             null,
         } satisfies WebContentProviderView;
       }
@@ -226,6 +231,10 @@ export default function WebSearchPage() {
             exaSearchProvider?.masked_api_key ??
             exaContentProvider?.masked_api_key ??
             null,
+          api_token_id:
+            exaSearchProvider?.api_token_id ??
+            exaContentProvider?.api_token_id ??
+            null,
         } satisfies WebContentProviderView;
       }
 
@@ -239,6 +248,10 @@ export default function WebSearchPage() {
           masked_api_key:
             tavilySearchProvider?.masked_api_key ??
             tavilyContentProvider?.masked_api_key ??
+            null,
+          api_token_id:
+            tavilySearchProvider?.api_token_id ??
+            tavilyContentProvider?.api_token_id ??
             null,
         } satisfies WebContentProviderView;
       }

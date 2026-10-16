@@ -1,3 +1,4 @@
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 import type { OnboardingActions } from "@/interfaces/onboarding";
 import type { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import type { FunctionComponent } from "react";
@@ -102,7 +103,9 @@ export interface LLMProviderView {
   id: number;
   name: string | null;
   provider: string;
+  /** Masked. */
   api_key: string | null;
+  api_token_id: number | null;
   api_base: string | null;
   api_version: string | null;
   custom_config: { [key: string]: string } | null;
@@ -234,13 +237,13 @@ export interface OllamaFetchParams {
 
 export interface OpenRouterFetchParams {
   api_base?: string;
-  api_key?: string;
+  api_key?: ApiTokenValue | null;
   provider_id?: number;
 }
 
 export interface LiteLLMProxyFetchParams {
   api_base?: string;
-  api_key?: string;
+  api_key?: ApiTokenValue | null;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -256,7 +259,7 @@ export interface LiteLLMProxyModelResponse {
 
 export interface BifrostFetchParams {
   api_base?: string;
-  api_key?: string;
+  api_key?: ApiTokenValue | null;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -271,7 +274,7 @@ export interface BifrostModelResponse {
 
 export interface OpenAICompatibleFetchParams {
   api_base?: string;
-  api_key?: string;
+  api_key?: ApiTokenValue | null;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -286,7 +289,7 @@ export interface OpenAICompatibleModelResponse {
 
 export interface NebiusTokenfactoryFetchParams {
   api_base?: string;
-  api_key?: string;
+  api_key?: ApiTokenValue | null;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -305,7 +308,7 @@ export interface NebiusTokenfactoryModelResponse {
 
 export interface PortkeyFetchParams {
   api_base?: string;
-  api_key?: string;
+  api_key?: ApiTokenValue | null;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -320,7 +323,7 @@ export interface PortkeyModelResponse {
 
 export interface VercelAIGatewayFetchParams {
   api_base?: string;
-  api_key?: string;
+  api_key?: ApiTokenValue | null;
   provider_id?: number;
   signal?: AbortSignal;
 }

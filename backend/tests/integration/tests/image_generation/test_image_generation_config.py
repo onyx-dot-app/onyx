@@ -140,8 +140,8 @@ def test_get_config_credentials(
         user_performing_action=admin_user,
     )
 
-    # Credentials should contain the masked API key (first 4 + **** + last 4)
-    assert credentials["api_key"] == "sk-t****2345"
+    # Credentials should contain the masked API key (first 4 + ... + last 4)
+    assert credentials["api_key"] == "sk-t...2345"
     assert "api_base" in credentials
     assert "api_version" in credentials
     assert "deployment_name" in credentials
@@ -191,12 +191,52 @@ def test_update_config_direct_key_entry(
     assert updated_config.image_provider_id == config.image_provider_id
     assert updated_config.model_name == "gpt-image-1"
 
-    # Verify credentials were updated (masked: first 4 + **** + last 4)
+    # Verify credentials were updated (masked: first 4 + ... + last 4)
     credentials = ImageGenerationConfigManager.get_credentials(
         image_provider_id=config.image_provider_id,
         user_performing_action=admin_user,
     )
-    assert credentials["api_key"] == "sk-u****2345"
+    assert credentials["api_key"] == "sk-u...2345"
+
+
+def test_update_config_keeps_saved_key(
+    setup_image_generation_tests: DATestUser,
+) -> None:
+    """An update that sends the saved key as an existing token keeps that
+    token, though the config gets a new hidden LLM provider."""
+    admin_user = setup_image_generation_tests
+
+    config = ImageGenerationConfigManager.create(
+        image_provider_id="update-keep-key-test",
+        model_name="gpt-image-1",
+        provider="openai",
+        api_key="sk-kept-key-12345",
+        user_performing_action=admin_user,
+    )
+    before = ImageGenerationConfigManager.get_credentials(
+        image_provider_id=config.image_provider_id,
+        user_performing_action=admin_user,
+    )
+    assert before["api_token_id"] is not None
+
+    response = client.put(
+        f"{API_SERVER_URL}/admin/image-generation/config/{config.image_provider_id}",
+        json={
+            "model_name": "gpt-image-1",
+            "provider": "openai",
+            "api_key": {"type": "existing", "id": before["api_token_id"]},
+        },
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["llm_provider_id"] != config.llm_provider_id
+
+    after = ImageGenerationConfigManager.get_credentials(
+        image_provider_id=config.image_provider_id,
+        user_performing_action=admin_user,
+    )
+    assert after["api_token_id"] == before["api_token_id"]
+    assert after["api_key"] == "sk-k...2345"
 
 
 def test_delete_config(

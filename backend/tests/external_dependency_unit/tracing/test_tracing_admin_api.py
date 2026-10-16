@@ -10,9 +10,11 @@ from typing import cast
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.api_token import get_api_token
 from onyx.db.models import User
 from onyx.db.tracing import delete_tracing_provider
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.tracing import api as tracing_api
 from onyx.server.manage.tracing.api import (
     adopt_env_tracing_provider,
@@ -50,8 +52,7 @@ def test_connect_then_list_shows_db_masked(db_session: Session) -> None:
     upsert_tracing_provider_endpoint(
         TracingProviderUpsertRequest(
             provider_type=TracingProviderType.BRAINTRUST,
-            api_key="bt-secret",
-            api_key_changed=True,
+            api_key=NewApiToken(value="bt-secret"),
             config={"project": "MyProject"},
         ),
         _NO_USER,
@@ -70,23 +71,25 @@ def test_connect_then_list_shows_db_masked(db_session: Session) -> None:
     assert langfuse.source == "none"
 
 
-def test_disconnect_removes_db_row(db_session: Session) -> None:
-    upsert_tracing_provider_endpoint(
+def test_disconnect_removes_db_row_and_token(db_session: Session) -> None:
+    connected = upsert_tracing_provider_endpoint(
         TracingProviderUpsertRequest(
             provider_type=TracingProviderType.BRAINTRUST,
-            api_key="bt-secret",
-            api_key_changed=True,
+            api_key=NewApiToken(value="bt-secret"),
             config={"project": "P"},
         ),
         _NO_USER,
         db_session,
     )
+    token_id = connected.api_token_id
+    assert token_id is not None
 
     view = disconnect_tracing_provider(
         TracingProviderType.BRAINTRUST, _NO_USER, db_session
     )
     assert view.source == "none"
     assert view.connected is False
+    assert get_api_token(db_session, token_id) is None
 
 
 def test_validate_endpoint_rejects_missing_key(db_session: Session) -> None:

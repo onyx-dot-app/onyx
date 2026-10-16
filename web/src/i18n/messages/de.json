@@ -5025,9 +5025,6 @@
     },
     "documentProcessing": {
       "unstructured": {
-        "apiKey": {
-          "placeholder": "API-Schlüssel eingeben"
-        },
         "deleteButton": {
           "label": "API-Schlüssel löschen"
         },
@@ -5899,11 +5896,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "{appName} verwendet diesen Schlüssel zur Authentifizierung bei Ihrem API-Endpunkt.",
-          "keepCurrent": {
-            "placeholder": "Leer lassen, um den aktuellen Schlüssel zu behalten"
-          },
-          "title": "API-Schlüssel"
+          "description": "{appName} verwendet diesen Schlüssel zur Authentifizierung bei Ihrem API-Endpunkt."
         },
         "connectionValid": {
           "label": "Verbindung gültig."
@@ -6161,9 +6154,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "Geben Sie Ihren API-Schlüssel ein.",
-          "label": "API-Schlüssel",
-          "placeholder": "Geben Sie Ihren API-Schlüssel ein",
           "required": "API-Schlüssel ist erforderlich"
         },
         "apiKeyTest": {
@@ -6206,9 +6196,6 @@
         },
         "editHeader": {
           "title": "{title} bearbeiten"
-        },
-        "loading": {
-          "placeholder": "Wird geladen..."
         },
         "location": {
           "idle": "Die Google Cloud-Region für Ihre Vertex AI-Modelle. Verfügbare Regionen finden Sie in der <link>Dokumentation von Google</link>.",
@@ -6432,10 +6419,6 @@
         "unknownError": "Unbekannter Fehler"
       },
       "fields": {
-        "apiKey": {
-          "description": "Fügen Sie Ihren [API-Schlüssel]({link}) von {provider} ein, um auf Ihre Modelle zuzugreifen.",
-          "title": "API-Schlüssel"
-        },
         "googleCredentials": {
           "title": "JSON-Datei mit Anmeldedaten hochladen"
         },
@@ -7073,9 +7056,6 @@
           "addModelButton": {
             "label": "Modell hinzufügen"
           },
-          "apiKeyField": {
-            "description": "Fügen Sie Ihren API-Schlüssel ein, wenn Ihr Modellanbieter eine Authentifizierung erfordert."
-          },
           "apiVersionField": {
             "title": "API-Version"
           },
@@ -7242,8 +7222,7 @@
             "placeholder": "Ihre Ollama-API-Basis-URL"
           },
           "apiKeyField": {
-            "description": "Ihr API-Schlüssel für Ollama Cloud.",
-            "placeholder": "API-Schlüssel"
+            "description": "Ihr API-Schlüssel für Ollama Cloud."
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7237,6 @@
           "apiBaseField": {
             "description": "Fügen Sie Ihre OpenAI-kompatible Endpunkt-URL ein.",
             "learnMore": "[Mehr erfahren](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "Fügen Sie Ihren API-Schlüssel ein, wenn Ihr Modellanbieter eine Authentifizierung erfordert."
           },
           "description": "Verbinden Sie andere Cloud-Modelle oder selbst gehostete Modelle über OpenAI-kompatible Endpunkte."
         },
@@ -7315,8 +7291,6 @@
             "title": "API-Basis-URL"
           },
           "apiKeyField": {
-            "description": "Fügen Sie Ihren API-Schlüssel ein, um auf Ihre Modelle zuzugreifen.",
-            "providerDescription": "Fügen Sie Ihren API-Schlüssel von {provider} ein, um auf Ihre Modelle zuzugreifen.",
             "title": "API-Schlüssel"
           },
           "cancelButton": {
@@ -9967,9 +9941,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "Fügen Sie Ihren [API-Schlüssel]({url}) von {provider} ein, um auf Ihre Modelle zuzugreifen.",
-          "label": "API-Schlüssel",
-          "placeholder": "API-Schlüssel",
           "required": "API-Schlüssel ist erforderlich"
         },
         "apiSecret": {
@@ -10057,11 +10028,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "Fügen Sie Ihren API-Schlüssel von {provider} ein, um eine Verbindung herzustellen."
-        },
-        "placeholder": "API-Schlüssel",
-        "title": "API-Schlüssel",
         "withLink": {
           "description": "Fügen Sie Ihren [API-Schlüssel]({url}) von {provider} ein, um eine Verbindung herzustellen."
         }
@@ -13580,6 +13546,32 @@
       "vertexAi": {
         "projectId": "mein-vertex-projekt",
         "location": "global"
+      }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "API-Schlüssel",
+        "description": "Fügen Sie Ihren {platform}-API-Schlüssel ein.",
+        "reuseDescription": "Fügen Sie Ihren {platform}-API-Schlüssel ein oder verwenden Sie einen gespeicherten erneut."
+      },
+      "input": {
+        "placeholder": "API-Schlüssel eingeben",
+        "listLabel": "Gespeicherte {platform}-API-Schlüssel"
+      },
+      "reuse": {
+        "title": "{platform}-API-Schlüssel wiederverwenden"
+      },
+      "usedFor": "Verwendet für {usages}",
+      "usage": {
+        "llmProvider": "LLM-Anbieter **{name}**",
+        "imageGeneration": "Bildgenerierung **{name}**",
+        "voiceProvider": "Sprachanbieter **{name}**",
+        "embeddingProvider": "Embedding-Anbieter **{name}**",
+        "webSearchProvider": "Websuche-Anbieter **{name}**",
+        "webContentProvider": "Webinhalt-Anbieter **{name}**",
+        "tracingProvider": "Tracing-Anbieter **{name}**",
+        "hook": "Hook **{name}**",
+        "unstructured": "Dokumentverarbeitung **{name}**"
       }
     }
   },

@@ -46,7 +46,7 @@ never sees an image generation tool it cannot use, and a user is never told
 | POST | `/admin/image-generation/test` | `test_image_generation` (`server/manage/image_generation/api.py`) | Validates a candidate provider/credentials pair by generating a test image. |
 | POST | `/admin/image-generation/config` | `create_config` | Creates a config from a provider and its credentials. |
 | GET | `/admin/image-generation/config` | `get_all_configs` | Lists configs for the admin table. |
-| GET | `/admin/image-generation/config/{image_provider_id}/credentials` | `get_config_credentials` | Returns credentials with the API key masked (`models.py:_mask_api_key`). |
+| GET | `/admin/image-generation/config/{image_provider_id}/credentials` | `get_config_credentials` | Returns credentials with the API key masked (`mask_string`) and its `api_token_id`. |
 | PUT | `/admin/image-generation/config/{image_provider_id}` | `update_config` | |
 | DELETE | `/admin/image-generation/config/{image_provider_id}` | `delete_config` | |
 | POST/DELETE | `/admin/image-generation/config/{image_provider_id}/default` | `set_config_as_default` / `unset_config_as_default` | Only one config can be default at a time (`db/image_generation.py:set_default_image_generation_config`). |
@@ -77,7 +77,7 @@ does not test that the provider accepts the credentials.
   this, so concurrent updates can leave several defaults (see §7).
 - Credentials are not stored on `ImageGenerationConfig` itself. Each config
   points at a `ModelConfiguration`, which points at an `LLMProvider`
-  (`db/models.py`), whose `api_key` is an `EncryptedString`/`SensitiveValue`. This
+  (`db/models.py`), whose key is a shared `ApiToken` (`api_token_id`). This
   reuses the same LLM-provider credential storage as chat models; see
   [[llm-providers]].
 - Generated images are not modeled as their own table row. They are files in the
@@ -117,8 +117,9 @@ creates a fresh `LLMProvider` row and `ModelConfiguration` row, then an
 `ImageGenerationConfig` pointing at them
 (`db/image_generation.py:create_image_generation_config__no_commit`).
 `_build_llm_provider_request` calls `validate_credentials`
-(`image_gen/factory.py`) before persisting. An update with an unchanged (masked)
-key keeps the old provider's key. These `LLMProvider` rows are left out of the
+(`image_gen/factory.py`) before persisting. The new `LLMProvider` row gets its key
+through `assign_api_token`. An update that sends the current token id (or
+leaves `api_key` out) keeps the same token. These `LLMProvider` rows are left out of the
 admin LLM provider list unless the caller passes `include_image_gen=true`, as
 the Terraform provider does (`db/llm.py:fetch_existing_llm_providers`).
 `test_image_generation` is a separate, optional step: it lets an admin
@@ -206,7 +207,7 @@ the returned base64 data.
    `ensure_image_generation_configured()` before it commits to a streaming
    response.
 2. **Credentials never reach the client or the LLM.** The admin API only ever
-   returns a masked API key (`server/manage/image_generation/models.py:_mask_api_key`,
+   returns a masked API key (`onyx/utils/encryption.py:mask_string`,
    first 4 / last 4 characters). The tool receives full credentials
    server-side only. The chat tool reads them from the default config when
    `tool_constructor.py` builds the tool for a turn. The standalone endpoint

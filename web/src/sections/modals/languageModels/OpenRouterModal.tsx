@@ -1,5 +1,10 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import {
+  toApiTokenPayload,
+  isApiTokenValueEmpty,
+} from "@/lib/api-tokens/utils";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -31,7 +36,7 @@ import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
 
 interface OpenRouterModalValues extends BaseLLMFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   api_base: string;
 }
 
@@ -48,12 +53,13 @@ function OpenRouterModalInternals({
   const formikProps = useFormikContext<OpenRouterModalValues>();
 
   const isFetchDisabled =
-    !formikProps.values.api_base || !formikProps.values.api_key;
+    !formikProps.values.api_base ||
+    isApiTokenValueEmpty(formikProps.values.api_key);
 
   const handleFetchModels = async () => {
     const { models: fetched, error } = await fetchOpenRouterModels({
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key,
+      api_key: toApiTokenPayload(formikProps.values.api_key),
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -69,7 +75,9 @@ function OpenRouterModalInternals({
         placeholder={t("openRouter.apiBaseField.placeholder")}
       />
 
-      <APIKeyField providerName="OpenRouter" />
+      <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
+      />
 
       {!isOnboarding && (
         <>

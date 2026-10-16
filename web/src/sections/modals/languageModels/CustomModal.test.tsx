@@ -247,6 +247,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       name: "Existing Provider",
       provider: "anthropic",
       api_key: "old-key",
+      api_token_id: 1,
       api_base: "",
       api_version: "",
       model_configurations: [
@@ -331,6 +332,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       name: "ArcAI",
       provider: "openai",
       api_key: "old-key",
+      api_token_id: 1,
       api_base: "https://example-openai-compatible.local/v1",
       api_version: "",
       model_configurations: [

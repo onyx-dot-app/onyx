@@ -18,7 +18,7 @@ import {
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
-  APIKeyField,
+  CustomConfigKeyField,
   APIBaseField,
   ModelSelectionField,
   DisplayNameField,
@@ -76,7 +76,7 @@ function LMStudioModalInternals({
         placeholder={t("lmStudio.apiBaseField.placeholder")}
       />
 
-      <APIKeyField
+      <CustomConfigKeyField
         name="custom_config.LM_STUDIO_API_KEY"
         optional
         subDescription={t("lmStudio.apiKeyField.description")}

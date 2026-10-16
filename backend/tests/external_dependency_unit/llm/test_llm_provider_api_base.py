@@ -10,7 +10,8 @@ These are external dependency unit tests because they need a real database but
 also need to control the MULTI_TENANT setting via patching.
 """
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -26,6 +27,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.api import _mask_string, put_llm_provider
 from onyx.server.manage.llm.api import test_llm_configuration as run_llm_config_test
 from onyx.server.manage.llm.models import (
@@ -34,6 +36,17 @@ from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
 )
 from onyx.server.manage.llm.models import TestLLMRequest as LLMTestRequest
+
+
+@contextmanager
+def _multi_tenant(enabled: bool) -> Iterator[None]:
+    # The saved key's base URL is checked by the API token, the custom_config
+    # by the LLM API.
+    with (
+        patch("onyx.server.manage.llm.api.MULTI_TENANT", enabled),
+        patch("onyx.db.api_token.MULTI_TENANT", enabled),
+    ):
+        yield
 
 
 def _create_test_provider(
@@ -47,8 +60,9 @@ def _create_test_provider(
         LLMProviderUpsertRequest(
             name=name,
             provider=LlmProviderNames.OPENAI,
-            api_key="sk-test-key-00000000000000000000000000000000000",
-            api_key_changed=True,
+            api_key=NewApiToken(
+                value="sk-test-key-00000000000000000000000000000000000"
+            ),
             api_base=api_base,
             custom_config=custom_config,
             model_configurations=[
@@ -93,7 +107,7 @@ class TestLLMProviderChanges:
         try:
             provider = _create_test_provider(db_session, provider_name)
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
@@ -109,10 +123,8 @@ class TestLLMProviderChanges:
                         db_session=db_session,
                     )
 
-                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
-                assert "cannot be changed without changing the API key" in str(
-                    exc_info.value.detail
-                )
+                assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+                assert "base URL it was saved for" in str(exc_info.value.detail)
         finally:
             _cleanup_provider(db_session, provider_name)
 
@@ -127,13 +139,14 @@ class TestLLMProviderChanges:
         try:
             provider = _create_test_provider(db_session, provider_name)
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-new-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-new-key-00000000000000000000000000000000000"
+                    ),
                     api_base="https://custom-endpoint.example.com/v1",
                 )
 
@@ -163,7 +176,7 @@ class TestLLMProviderChanges:
                 db_session, provider_name, api_base=original_api_base
             )
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
@@ -194,7 +207,7 @@ class TestLLMProviderChanges:
         try:
             view = _create_test_provider(db_session, provider_name, api_base=None)
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=view.id,
                     name=provider_name,
@@ -229,7 +242,7 @@ class TestLLMProviderChanges:
                 db_session, provider_name, api_base=original_api_base
             )
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
@@ -245,10 +258,8 @@ class TestLLMProviderChanges:
                         db_session=db_session,
                     )
 
-                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
-                assert "cannot be changed without changing the API key" in str(
-                    exc_info.value.detail
-                )
+                assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+                assert "base URL it was saved for" in str(exc_info.value.detail)
         finally:
             _cleanup_provider(db_session, provider_name)
 
@@ -265,7 +276,7 @@ class TestLLMProviderChanges:
         try:
             provider = _create_test_provider(db_session, provider_name)
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
+            with _multi_tenant(False):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
@@ -290,16 +301,17 @@ class TestLLMProviderChanges:
         provider_name: str,
     ) -> None:
         """
-        Creating a new provider with an api_base should work regardless of
-        api_key_changed (since there's no existing key to protect).
+        Creating a new provider with an api_base and a new key works, since
+        there is no saved key to protect.
         """
         try:
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 create_request = LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-new-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-new-key-00000000000000000000000000000000000"
+                    ),
                     api_base="https://custom.example.com/v1",
                 )
 
@@ -331,7 +343,7 @@ class TestLLMProviderChanges:
                 custom_config={"SOME_CONFIG": "original_value"},
             )
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
@@ -367,7 +379,7 @@ class TestLLMProviderChanges:
         try:
             provider = _create_test_provider(db_session, provider_name)
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
@@ -408,13 +420,14 @@ class TestLLMProviderChanges:
                 custom_config={"AWS_REGION_NAME": "us-east-1"},
             )
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-new-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-new-key-00000000000000000000000000000000000"
+                    ),
                     custom_config_changed=True,
                     custom_config=new_config,
                 )
@@ -445,7 +458,7 @@ class TestLLMProviderChanges:
                 db_session, provider_name, custom_config=original_config
             )
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+            with _multi_tenant(True):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
@@ -483,7 +496,7 @@ class TestLLMProviderChanges:
                 custom_config={"AWS_REGION_NAME": "us-east-1"},
             )
 
-            with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
+            with _multi_tenant(False):
                 update_request = LLMProviderUpsertRequest(
                     id=provider.id,
                     name=provider_name,
@@ -535,7 +548,6 @@ def test_upload_with_custom_config_then_change(
                 LLMTestRequest(
                     provider=provider_name,
                     model=default_model_name,
-                    api_key_changed=False,
                     custom_config_changed=True,
                     custom_config=custom_config,
                 ),
@@ -553,7 +565,6 @@ def test_upload_with_custom_config_then_change(
                             name=default_model_name, is_visible=True
                         )
                     ],
-                    api_key_changed=False,
                     custom_config_changed=True,
                     is_auto_mode=False,
                 ),
@@ -568,7 +579,6 @@ def test_upload_with_custom_config_then_change(
                     id=provider.id,
                     provider=provider_name,
                     model=default_model_name,
-                    api_key_changed=False,
                     custom_config_changed=False,
                 ),
                 _=_create_mock_admin(),
@@ -588,7 +598,6 @@ def test_upload_with_custom_config_then_change(
                             name="gpt-4o-mini", is_visible=True
                         ),
                     ],
-                    api_key_changed=False,
                     custom_config_changed=False,
                     is_auto_mode=False,
                 ),
@@ -641,7 +650,6 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
                         name=default_model_name, is_visible=True
                     )
                 ],
-                api_key_changed=False,
                 custom_config_changed=True,
                 is_auto_mode=False,
             ),
@@ -650,7 +658,7 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
             db_session=db_session,
         )
 
-        with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
+        with _multi_tenant(False):
             put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     id=view.id,
@@ -667,7 +675,6 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
                             name=default_model_name, is_visible=True
                         )
                     ],
-                    api_key_changed=False,
                     custom_config_changed=True,
                     is_auto_mode=False,
                 ),
@@ -717,7 +724,6 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
                         name=default_model_name, is_visible=True
                     )
                 ],
-                api_key_changed=False,
                 custom_config_changed=True,
                 is_auto_mode=False,
             ),
@@ -732,7 +738,6 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
                     id=provider.id,
                     provider=provider_name,
                     model=default_model_name,
-                    api_key_changed=False,
                     custom_config_changed=True,
                     custom_config={
                         "vertex_credentials": _mask_string(
@@ -788,7 +793,6 @@ def test_vertex_workload_identity_provider_create(
                         name=default_model_name, is_visible=True
                     )
                 ],
-                api_key_changed=False,
                 custom_config_changed=True,
                 is_auto_mode=False,
             ),
@@ -812,7 +816,6 @@ def test_vertex_workload_identity_provider_create(
                     id=stored.id,
                     provider=provider,
                     model=default_model_name,
-                    api_key_changed=False,
                     custom_config_changed=False,
                 ),
                 _=_create_mock_admin(),
@@ -854,7 +857,6 @@ def test_vertex_workload_identity_rejects_missing_project(
                             name=default_model_name, is_visible=True
                         )
                     ],
-                    api_key_changed=False,
                     custom_config_changed=True,
                     is_auto_mode=False,
                 ),
@@ -897,7 +899,6 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
                         name=default_model_name, is_visible=True
                     )
                 ],
-                api_key_changed=False,
                 custom_config_changed=True,
                 is_auto_mode=False,
             ),
@@ -912,7 +913,6 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
                     id=stored.id,
                     provider=provider,
                     model=default_model_name,
-                    api_key_changed=False,
                     custom_config_changed=False,
                 ),
                 _=_create_mock_admin(),

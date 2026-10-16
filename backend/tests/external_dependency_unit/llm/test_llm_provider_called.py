@@ -19,6 +19,7 @@ from onyx.db.models import User
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.override_models import LLMOverride
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -73,7 +74,7 @@ def _create_provider(
         LLMProviderUpsertRequest(
             name=name,
             provider=provider,
-            api_key="sk-ant-api03-...",
+            api_key=NewApiToken(value="sk-ant-api03-..."),
             is_public=is_public,
             model_configurations=[
                 ModelConfigurationUpsertRequest(

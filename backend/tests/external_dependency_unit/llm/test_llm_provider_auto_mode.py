@@ -33,6 +33,7 @@ from onyx.llm.well_known_providers.auto_update_models import (
     LLMRecommendations,
 )
 from onyx.llm.well_known_providers.models import SimpleKnownModel
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.api import put_llm_provider
 from onyx.server.manage.llm.api import (
     test_default_provider as run_test_default_provider,
@@ -139,8 +140,9 @@ class TestAutoModeSyncFeature:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],  # No model configs provided
                     ),
@@ -236,8 +238,9 @@ class TestAutoModeSyncFeature:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -314,8 +317,9 @@ class TestAutoModeSyncFeature:
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     is_auto_mode=False,  # Not in auto mode initially
                     model_configurations=initial_models,
                 ),
@@ -346,8 +350,6 @@ class TestAutoModeSyncFeature:
                         id=initial_provider.id,
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key=None,  # Not changing API key
-                        api_key_changed=False,
                         is_auto_mode=True,  # Now enabling auto mode
                         model_configurations=[],  # Auto mode will sync from config
                     ),
@@ -425,8 +427,9 @@ class TestAutoModeSyncFeature:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
@@ -532,8 +535,7 @@ class TestAutoModeSyncFeature:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_1_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key=provider_1_api_key,
-                        api_key_changed=True,
+                        api_key=NewApiToken(value=provider_1_api_key),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -559,8 +561,7 @@ class TestAutoModeSyncFeature:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_2_name,
                         provider=LlmProviderNames.ANTHROPIC,
-                        api_key=provider_2_api_key,
-                        api_key_changed=True,
+                        api_key=NewApiToken(value=provider_2_api_key),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -639,8 +640,9 @@ class TestAutoModeMissingFlows:
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     is_auto_mode=True,
                     model_configurations=[],
                 ),
@@ -734,8 +736,9 @@ class TestAutoModeTransitionsAndResync:
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key="sk-test-key-00000000000000000000000000000000000",
-                    api_key_changed=True,
+                    api_key=NewApiToken(
+                        value="sk-test-key-00000000000000000000000000000000000"
+                    ),
                     is_auto_mode=False,
                     model_configurations=initial_models,
                 ),
@@ -766,8 +769,6 @@ class TestAutoModeTransitionsAndResync:
                         id=provider.id,
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key=None,
-                        api_key_changed=False,
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -826,8 +827,9 @@ class TestAutoModeTransitionsAndResync:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -852,8 +854,6 @@ class TestAutoModeTransitionsAndResync:
                     id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
-                    api_key=None,
-                    api_key_changed=False,
                     is_auto_mode=False,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -924,8 +924,9 @@ class TestAutoModeTransitionsAndResync:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -993,8 +994,9 @@ class TestAutoModeTransitionsAndResync:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -1089,8 +1091,9 @@ class TestAutoModeTransitionsAndResync:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -1190,8 +1193,9 @@ class TestAutoModeTransitionsAndResync:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -1275,8 +1279,9 @@ class TestAutoModeTransitionsAndResync:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -1369,8 +1374,9 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -1453,8 +1459,9 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -1545,8 +1552,9 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),
@@ -1642,8 +1650,9 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
-                        api_key="sk-test-key-00000000000000000000000000000000000",
-                        api_key_changed=True,
+                        api_key=NewApiToken(
+                            value="sk-test-key-00000000000000000000000000000000000"
+                        ),
                         is_auto_mode=True,
                         model_configurations=[],
                     ),

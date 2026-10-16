@@ -11,6 +11,9 @@ import {
   minReasoningStop,
 } from "@/sections/model-selector/setting-controls";
 import * as Yup from "yup";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { initialApiTokenValue } from "@/lib/api-tokens/utils";
+import { apiTokenSchema } from "@/lib/api-tokens/validation";
 import type { useTranslations } from "next-intl";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
 
@@ -60,7 +63,7 @@ export function useInitialValues(
     name: isOnboarding
       ? providerName
       : (existingLlmProvider?.name ?? undefined),
-    api_key: existingLlmProvider?.api_key ?? undefined,
+    api_key: initialApiTokenValue(existingLlmProvider?.api_token_id),
     api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,
     is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
@@ -97,7 +100,7 @@ export function buildValidationSchema(
 ) {
   const providerFields: Yup.ObjectShape = {
     ...(apiKey && {
-      api_key: Yup.string().required(t("validation.apiKeyRequired")),
+      api_key: apiTokenSchema(t("validation.apiKeyRequired")),
     }),
     ...(apiBase && {
       api_base: Yup.string().required(t("validation.apiBaseRequired")),
@@ -129,7 +132,7 @@ export function buildValidationSchema(
 export interface BaseLLMFormValues {
   id?: number;
   name?: string;
-  api_key?: string;
+  api_key?: ApiTokenValue;
   api_base?: string;
   /** Model name used for the test request — automatically derived. */
   test_model_name?: string;

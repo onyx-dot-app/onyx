@@ -5025,9 +5025,6 @@
     },
     "documentProcessing": {
       "unstructured": {
-        "apiKey": {
-          "placeholder": "输入 API 密钥"
-        },
         "deleteButton": {
           "label": "删除 API 密钥"
         },
@@ -5899,11 +5896,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "{appName} 将使用此密钥向您的 API 端点进行身份验证。",
-          "keepCurrent": {
-            "placeholder": "留空以保留当前密钥"
-          },
-          "title": "API 密钥"
+          "description": "{appName} 将使用此密钥向您的 API 端点进行身份验证。"
         },
         "connectionValid": {
           "label": "连接有效。"
@@ -6161,9 +6154,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "输入您的 API 密钥。",
-          "label": "API 密钥",
-          "placeholder": "输入您的 API 密钥",
           "required": "API 密钥为必填项"
         },
         "apiKeyTest": {
@@ -6206,9 +6196,6 @@
         },
         "editHeader": {
           "title": "编辑 {title}"
-        },
-        "loading": {
-          "placeholder": "正在加载..."
         },
         "location": {
           "idle": "用于 Vertex AI 模型的 Google Cloud 区域。可用区域请参见 <link>Google 文档</link>。",
@@ -6432,10 +6419,6 @@
         "unknownError": "未知错误"
       },
       "fields": {
-        "apiKey": {
-          "description": "粘贴来自 {provider} 的 [API 密钥]({link})，以访问您的模型。",
-          "title": "API 密钥"
-        },
         "googleCredentials": {
           "title": "上传 JSON 凭证文件"
         },
@@ -7073,9 +7056,6 @@
           "addModelButton": {
             "label": "添加模型"
           },
-          "apiKeyField": {
-            "description": "如果您的模型提供商需要身份验证，请粘贴您的 API 密钥。"
-          },
           "apiVersionField": {
             "title": "API 版本"
           },
@@ -7242,8 +7222,7 @@
             "placeholder": "您的 Ollama API 基础 URL"
           },
           "apiKeyField": {
-            "description": "您的 Ollama Cloud API 密钥。",
-            "placeholder": "API 密钥"
+            "description": "您的 Ollama Cloud API 密钥。"
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7237,6 @@
           "apiBaseField": {
             "description": "粘贴您的 OpenAI 兼容端点 URL。",
             "learnMore": "[了解更多](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "如果您的模型提供商需要身份验证，请粘贴您的 API 密钥。"
           },
           "description": "通过 OpenAI 兼容端点连接其他云端或自托管模型。"
         },
@@ -7315,8 +7291,6 @@
             "title": "API 基础 URL"
           },
           "apiKeyField": {
-            "description": "粘贴您的 API 密钥以访问您的模型。",
-            "providerDescription": "粘贴来自 {provider} 的 API 密钥以访问您的模型。",
             "title": "API 密钥"
           },
           "cancelButton": {
@@ -9967,9 +9941,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "粘贴来自 {provider} 的 [API 密钥]({url})，以访问您的模型。",
-          "label": "API 密钥",
-          "placeholder": "API 密钥",
           "required": "API 密钥为必填项"
         },
         "apiSecret": {
@@ -10057,11 +10028,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "粘贴来自 {provider} 的 API 密钥以进行连接。"
-        },
-        "placeholder": "API 密钥",
-        "title": "API 密钥",
         "withLink": {
           "description": "粘贴来自 {provider} 的 [API 密钥]({url}) 以进行连接。"
         }
@@ -13580,6 +13546,32 @@
       "vertexAi": {
         "projectId": "wode-vertex-xiangmu",
         "location": "global"
+      }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "API 密钥",
+        "description": "粘贴您的 {platform} API 密钥。",
+        "reuseDescription": "粘贴您的 {platform} API 密钥，或重用已保存的密钥。"
+      },
+      "input": {
+        "placeholder": "输入 API 密钥",
+        "listLabel": "已保存的 {platform} API 密钥"
+      },
+      "reuse": {
+        "title": "重用 {platform} API 密钥"
+      },
+      "usedFor": "用于 {usages}",
+      "usage": {
+        "llmProvider": "LLM 提供商 **{name}**",
+        "imageGeneration": "图像生成 **{name}**",
+        "voiceProvider": "语音提供商 **{name}**",
+        "embeddingProvider": "嵌入提供商 **{name}**",
+        "webSearchProvider": "网页搜索提供商 **{name}**",
+        "webContentProvider": "网页内容提供商 **{name}**",
+        "tracingProvider": "追踪提供商 **{name}**",
+        "hook": "钩子 **{name}**",
+        "unstructured": "文档处理 **{name}**"
       }
     }
   },

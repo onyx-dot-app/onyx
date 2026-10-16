@@ -5025,9 +5025,6 @@
     },
     "documentProcessing": {
       "unstructured": {
-        "apiKey": {
-          "placeholder": "API キーを入力"
-        },
         "deleteButton": {
           "label": "API キーを削除"
         },
@@ -5899,11 +5896,7 @@
       },
       "form": {
         "apiKey": {
-          "description": "{appName}はこのキーを使用してAPIエンドポイントで認証を行います。",
-          "keepCurrent": {
-            "placeholder": "現在のキーを保持するには空欄のままにしてください"
-          },
-          "title": "APIキー"
+          "description": "{appName}はこのキーを使用してAPIエンドポイントで認証を行います。"
         },
         "connectionValid": {
           "label": "接続は有効です。"
@@ -6161,9 +6154,6 @@
       },
       "form": {
         "apiKey": {
-          "idle": "API キーを入力してください。",
-          "label": "API キー",
-          "placeholder": "API キーを入力",
           "required": "API キーは必須です"
         },
         "apiKeyTest": {
@@ -6206,9 +6196,6 @@
         },
         "editHeader": {
           "title": "{title} を編集"
-        },
-        "loading": {
-          "placeholder": "読み込んでいます..."
         },
         "location": {
           "idle": "Vertex AI モデルを使用する Google Cloud リージョンです。利用できるリージョンは <link>Google のドキュメント</link> を参照してください。",
@@ -6432,10 +6419,6 @@
         "unknownError": "不明なエラー"
       },
       "fields": {
-        "apiKey": {
-          "description": "モデルにアクセスするには、{provider} の [API キー]({link}) を貼り付けてください。",
-          "title": "API キー"
-        },
         "googleCredentials": {
           "title": "JSON 認証情報ファイルをアップロード"
         },
@@ -7073,9 +7056,6 @@
           "addModelButton": {
             "label": "モデルを追加"
           },
-          "apiKeyField": {
-            "description": "モデルプロバイダーが認証を必要とする場合は、API キーを貼り付けてください。"
-          },
           "apiVersionField": {
             "title": "API バージョン"
           },
@@ -7242,8 +7222,7 @@
             "placeholder": "Ollama の API ベース URL"
           },
           "apiKeyField": {
-            "description": "Ollama Cloud の API キーです。",
-            "placeholder": "API キー"
+            "description": "Ollama Cloud の API キーです。"
           },
           "tabs": {
             "cloud": {
@@ -7258,9 +7237,6 @@
           "apiBaseField": {
             "description": "OpenAI 互換のエンドポイント URL を貼り付けてください。",
             "learnMore": "[詳細](https://docs.litellm.ai/docs/providers/openai_compatible)"
-          },
-          "apiKeyField": {
-            "description": "モデルプロバイダーが認証を必要とする場合は、API キーを貼り付けてください。"
           },
           "description": "OpenAI 互換のエンドポイント経由で、他のクラウドモデルやセルフホストモデルを接続します。"
         },
@@ -7315,8 +7291,6 @@
             "title": "API ベース URL"
           },
           "apiKeyField": {
-            "description": "モデルにアクセスするには、API キーを貼り付けてください。",
-            "providerDescription": "モデルにアクセスするには、{provider} の API キーを貼り付けてください。",
             "title": "API キー"
           },
           "cancelButton": {
@@ -9967,9 +9941,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "モデルにアクセスするには、{provider} の [API キー]({url}) を貼り付けてください。",
-          "label": "API キー",
-          "placeholder": "API キー",
           "required": "API キーは必須です"
         },
         "apiSecret": {
@@ -10057,11 +10028,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "接続するには、{provider} の API キーを貼り付けてください。"
-        },
-        "placeholder": "API キー",
-        "title": "API キー",
         "withLink": {
           "description": "接続するには、{provider} の [API キー]({url}) を貼り付けてください。"
         }
@@ -13580,6 +13546,32 @@
       "vertexAi": {
         "projectId": "vertex-purojekuto",
         "location": "global"
+      }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "API キー",
+        "description": "{platform} の API キーを貼り付けてください。",
+        "reuseDescription": "{platform} の API キーを貼り付けるか、保存済みのキーを再利用してください。"
+      },
+      "input": {
+        "placeholder": "API キーを入力",
+        "listLabel": "保存済みの {platform} API キー"
+      },
+      "reuse": {
+        "title": "{platform} API キーを再利用"
+      },
+      "usedFor": "使用先: {usages}",
+      "usage": {
+        "llmProvider": "LLM プロバイダー **{name}**",
+        "imageGeneration": "画像生成 **{name}**",
+        "voiceProvider": "音声プロバイダー **{name}**",
+        "embeddingProvider": "埋め込みプロバイダー **{name}**",
+        "webSearchProvider": "ウェブ検索プロバイダー **{name}**",
+        "webContentProvider": "ウェブコンテンツプロバイダー **{name}**",
+        "tracingProvider": "トレーシングプロバイダー **{name}**",
+        "hook": "フック **{name}**",
+        "unstructured": "ドキュメント処理 **{name}**"
       }
     }
   },

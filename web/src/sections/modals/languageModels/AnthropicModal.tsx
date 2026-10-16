@@ -84,7 +84,9 @@ export default function AnthropicModal({
         });
       }}
     >
-      <APIKeyField providerName="Anthropic" />
+      <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
+      />
 
       {!isOnboarding && (
         <>

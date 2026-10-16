@@ -9,6 +9,7 @@ from onyx.db.llm import (
     upsert_cloud_embedding_provider,
 )
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
+from onyx.server.manage.api_token.models import ExistingApiToken, NewApiToken
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from shared_configs.enums import EmbeddingProvider
 
@@ -34,9 +35,7 @@ def test_legacy_edit_preserves_keyless_workload_identity(db_session: Session) ->
 
     updated = upsert_cloud_embedding_provider(
         db_session,
-        CloudEmbeddingProviderCreationRequest(
-            provider_type=EmbeddingProvider.GOOGLE, api_key_changed=False
-        ),
+        CloudEmbeddingProviderCreationRequest(provider_type=EmbeddingProvider.GOOGLE),
     )
 
     assert updated.vertex_config == config
@@ -57,8 +56,7 @@ def test_legacy_credential_replaces_workload_identity(db_session: Session) -> No
         db_session,
         CloudEmbeddingProviderCreationRequest(
             provider_type=EmbeddingProvider.GOOGLE,
-            api_key="test-service-account-json",
-            api_key_changed=True,
+            api_key=NewApiToken(value="test-service-account-json"),
         ),
     )
 
@@ -70,18 +68,20 @@ def test_legacy_credential_replaces_workload_identity(db_session: Session) -> No
 
 def test_legacy_edit_preserves_service_account_location(db_session: Session) -> None:
     config = VertexEmbeddingConfig(location="us-central1")
-    upsert_cloud_embedding_provider(
+    created = upsert_cloud_embedding_provider(
         db_session,
         CloudEmbeddingProviderCreationRequest(
             provider_type=EmbeddingProvider.GOOGLE,
-            api_key="test-service-account-json",
+            api_key=NewApiToken(value="test-service-account-json"),
             vertex_config=config,
         ),
     )
+    assert created.api_token_id is not None
     updated = upsert_cloud_embedding_provider(
         db_session,
         CloudEmbeddingProviderCreationRequest(
-            provider_type=EmbeddingProvider.GOOGLE, api_key_changed=False
+            provider_type=EmbeddingProvider.GOOGLE,
+            api_key=ExistingApiToken(id=created.api_token_id),
         ),
     )
 

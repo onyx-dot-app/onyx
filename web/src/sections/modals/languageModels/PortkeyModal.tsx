@@ -1,5 +1,7 @@
 "use client";
 
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+import { toApiTokenPayload } from "@/lib/api-tokens/utils";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { markdown } from "@opal/utils";
@@ -76,7 +78,7 @@ const API_MODE_TABS = [
 }[];
 
 interface PortkeyModalValues extends BaseLLMFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   api_base: string;
 }
 
@@ -111,7 +113,7 @@ function PortkeyModalInternals({
   const handleFetchModels = async () => {
     const { models, error } = await fetchPortkeyModels({
       api_base: values.api_base,
-      api_key: values.api_key || undefined,
+      api_key: toApiTokenPayload(values.api_key),
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -128,7 +130,7 @@ function PortkeyModalInternals({
     autoRefetched.current = true;
     fetchPortkeyModels({
       api_base: values.api_base,
-      api_key: values.api_key || undefined,
+      api_key: toApiTokenPayload(values.api_key),
       provider_id: existingLlmProvider.id,
     })
       .then(({ models }) => {
@@ -177,6 +179,7 @@ function PortkeyModalInternals({
       />
 
       <APIKeyField
+        savedMaskedValue={existingLlmProvider?.api_key ?? undefined}
         subDescription={markdown(t("portkey.apiKeyField.description"))}
       />
 
