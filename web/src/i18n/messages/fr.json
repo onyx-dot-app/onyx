@@ -2677,7 +2677,7 @@
         "tags": {
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
-          "doc_permission_sync": "{count, plural, one {# document non synchronisé} other {# documents non synchronisés}}",
+          "doc_permission_sync": "{count, plural, one {# utilisateur non synchronisé} other {# utilisateurs non synchronisés}}",
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
@@ -2685,7 +2685,7 @@
         },
         "more": "Afficher plus",
         "empty": {
-          "title": "Aucun échec ni erreur",
+          "title": "Aucune activité récente",
           "resolved": "Aucune erreur résolue",
           "filtered": "Rien ne correspond à cette recherche.",
           "failures": "Aucun échec",
@@ -2710,7 +2710,7 @@
           "open": "Ouvrir le document"
         },
         "trace": {
-          "runId": "ID d'exécution : {id}",
+          "header": "Trace de la pile • ID d'exécution : {id}",
           "copy": "Copier la trace de la pile"
         },
         "actions": {

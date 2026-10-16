@@ -94,8 +94,9 @@ export function runWarnings(run: CCPairRun): number {
     case "doc_permission_sync":
       return run.attempt.docs_with_permission_errors;
     case "group_sync":
+      return run.attempt.total_groups_failed;
     case "pruning":
-      return 0;
+      return run.attempt.docs_failed;
     case "checks":
       return checkCount(run.attempt, "failed");
   }

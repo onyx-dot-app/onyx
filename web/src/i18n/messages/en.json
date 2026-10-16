@@ -2677,7 +2677,7 @@
         "tags": {
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
-          "doc_permission_sync": "{count, plural, one {# doc failed to sync} other {# docs failed to sync}}",
+          "doc_permission_sync": "{count, plural, one {# user failed to sync} other {# users failed to sync}}",
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
@@ -2685,7 +2685,7 @@
         },
         "more": "Show more",
         "empty": {
-          "title": "No failures or errors",
+          "title": "No recent activity",
           "resolved": "No resolved errors",
           "filtered": "Nothing matches this search.",
           "failures": "No failures",
@@ -2710,7 +2710,7 @@
           "open": "Open the document"
         },
         "trace": {
-          "runId": "Run ID: {id}",
+          "header": "Stack Trace • Run ID: {id}",
           "copy": "Copy the stack trace"
         },
         "actions": {

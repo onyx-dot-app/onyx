@@ -21,6 +21,10 @@
   @apply bg-background-tint-01;
 }
 
+.opal-card[data-color="background-tint-02"] {
+  @apply bg-background-tint-02;
+}
+
 .opal-card[data-color="status-info-00"] {
   @apply bg-status-info-00;
 }
@@ -112,6 +116,10 @@
 
 .opal-card-expandable-header[data-color="background-tint-01"] {
   @apply bg-background-tint-01;
+}
+
+.opal-card-expandable-header[data-color="background-tint-02"] {
+  @apply bg-background-tint-02;
 }
 
 .opal-card-expandable-header[data-color="status-info-00"] {

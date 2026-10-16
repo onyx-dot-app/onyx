@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -10,12 +11,13 @@ import {
   SvgCheckCircle,
   SvgFiles,
   SvgTextLines,
-  SvgUser,
+  SvgUserShield,
   SvgUsers,
   SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import type { CardColor, IconFunctionComponent } from "@opal/types";
+import { cn } from "@opal/utils";
 import type {
   CCPairRef,
   CCPairRun,
@@ -39,34 +41,44 @@ import {
 
 const GROUP_STYLE: Record<
   ActivityGroup,
-  { color: CardColor; icon: IconFunctionComponent; stroke: string }
+  {
+    color: CardColor;
+    icon: IconFunctionComponent;
+    stroke: string;
+    /** The 1px edge a hovered or selected card takes, in the level's 02 color. */
+    outline: string;
+  }
 > = {
   failures: {
     color: "status-error-00",
     icon: SvgXCircle,
     stroke: "stroke-status-error-05",
+    outline: "outline-status-error-02",
   },
   errors: {
     color: "status-warning-00",
     icon: SvgAlertTriangle,
     stroke: "stroke-theme-amber-05",
+    outline: "outline-status-warning-02",
   },
   other: {
     color: "background-tint-00",
     icon: SvgCheckCircle,
     stroke: "stroke-status-success-05",
+    outline: "outline-border-01",
   },
   resolved: {
     color: "background-tint-01",
     icon: SvgCheckCircle,
     stroke: "stroke-status-success-05",
+    outline: "outline-border-01",
   },
 };
 
 /** What each kind's failed items are: documents, users, groups or checks. */
 const WARNING_ICONS = {
   indexing: SvgFiles,
-  doc_permission_sync: SvgUser,
+  doc_permission_sync: SvgUserShield,
   group_sync: SvgUsers,
   pruning: SvgFiles,
   checks: SvgXOctagon,
@@ -127,6 +139,16 @@ export default function ActivityCard({
   const t = useTranslations("admin.connector.activity");
   const tRuns = useTranslations("admin.connector.runs");
   const format = useFormatter();
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [openPopover, setOpenPopover] = useState<"trace" | "items" | null>(
+    null
+  );
+  const selected = openPopover !== null;
+  const togglePopover = (popover: "trace" | "items") => (open: boolean) =>
+    setOpenPopover((current) =>
+      open ? popover : current === popover ? null : current
+    );
   const active = isActive(run);
   const style = GROUP_STYLE[group];
   const StatusIcon = active ? IconLoader : style.icon;
@@ -164,157 +186,198 @@ export default function ActivityCard({
       ? t("tags.resolvedDocs", { count: warnings })
       : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
+  // The outline draws the edge inside the card, so hovering does not shift the list.
   return (
-    <Card color={style.color} border="none" rounding={2} padding={1}>
-      <Section alignItems="stretch" gap={0} height="fit">
-        <Section
-          flexDirection="row"
-          alignItems="start"
-          gap={1}
-          padding={1}
-          height="fit"
-        >
+    <Section
+      alignItems="stretch"
+      height="fit"
+      className={cn(
+        "rounded-08 -outline-offset-1",
+        (hovered || selected) && `outline-1 outline-solid ${style.outline}`
+      )}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setFocused(false);
+        }
+      }}
+    >
+      <Card
+        color={hovered && !selected ? "background-tint-02" : style.color}
+        border="none"
+        rounding={2}
+        padding={1}
+        shadow={selected ? "md" : "none"}
+      >
+        <Section alignItems="stretch" gap={0} height="fit">
           <Section
-            alignItems="center"
-            justifyContent="center"
-            padding={0.5}
-            width="fit"
+            flexDirection="row"
+            alignItems="start"
+            gap={1}
+            padding={1}
             height="fit"
           >
-            <StatusIcon size={16} className={style.stroke} />
+            <Section
+              alignItems="center"
+              justifyContent="center"
+              padding={0.5}
+              width="fit"
+              height="fit"
+            >
+              <StatusIcon size={16} className={style.stroke} />
+            </Section>
+            <Section
+              alignItems="stretch"
+              gap={0}
+              height="fit"
+              className="min-w-0 flex-1"
+            >
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                alignItems="center"
+                gap={1}
+                height="fit"
+              >
+                <Text font="secondary-mono" color="text-03">
+                  {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
+                </Text>
+                <Section
+                  flexDirection="row"
+                  alignItems="center"
+                  gap={0.5}
+                  padding={0.5}
+                  width="fit"
+                  height="fit"
+                >
+                  {run.kind === "indexing" && run.attempt.is_new_model && (
+                    <Tag
+                      title={tRuns("newModel.label")}
+                      tooltip={tRuns("newModel.tooltip")}
+                      color="purple"
+                    />
+                  )}
+                  <Text font="secondary-body" color="text-03" maxLines={1}>
+                    {identity}
+                  </Text>
+                  <IdentityIcon size={12} className="stroke-text-03" />
+                </Section>
+              </Section>
+              <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
+                <Text font="main-ui-body" color="text-04">
+                  {t(`title.${run.kind}.${cardState(run, group)}`)}
+                </Text>
+                {description !== null && (
+                  <Text font="secondary-body" color="text-03" maxLines={3}>
+                    {description}
+                  </Text>
+                )}
+              </Section>
+            </Section>
           </Section>
-          <Section
-            alignItems="stretch"
-            gap={0}
-            height="fit"
-            className="min-w-0 flex-1"
-          >
+          {(trace !== null || warnings > 0 || listsChecks) && (
             <Section
               flexDirection="row"
               justifyContent="between"
               alignItems="center"
               gap={1}
+              padding={0.5}
               height="fit"
             >
-              <Text font="secondary-mono" color="text-03">
-                {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
-              </Text>
               <Section
                 flexDirection="row"
+                justifyContent="start"
                 alignItems="center"
-                gap={0.5}
-                padding={0.5}
-                width="fit"
+                gap={1}
                 height="fit"
+                className="min-w-0 flex-1"
+                wrap
               >
-                {run.kind === "indexing" && run.attempt.is_new_model && (
-                  <Tag
-                    title={tRuns("newModel.label")}
-                    tooltip={tRuns("newModel.tooltip")}
-                    color="purple"
-                  />
+                {trace !== null && (
+                  <Popover onOpenChange={togglePopover("trace")}>
+                    <Popover.Trigger asChild>
+                      <Tag
+                        icon={SvgTextLines}
+                        title={t("tags.stackTrace")}
+                        size="md"
+                        onClick={() => {}}
+                      />
+                    </Popover.Trigger>
+                    <StackTracePopoverContent
+                      runId={run.attempt.id}
+                      trace={trace}
+                    />
+                  </Popover>
                 )}
-                <Text font="secondary-body" color="text-03" maxLines={1}>
-                  {identity}
-                </Text>
-                <IdentityIcon size={12} className="stroke-text-03" />
+                {listsDocs ? (
+                  <Popover onOpenChange={togglePopover("items")}>
+                    <Popover.Trigger asChild>
+                      <Tag
+                        icon={WARNING_ICONS.indexing}
+                        iconColor="orange"
+                        title={docsLabel}
+                        size="md"
+                        onClick={() => {}}
+                      />
+                    </Popover.Trigger>
+                    <FailedDocsPopoverContent
+                      ccPairId={ccPairId}
+                      indexAttemptId={run.attempt.id}
+                      canResolve={resolvable}
+                      onResolve={onResolve}
+                      resolving={resolving}
+                    />
+                  </Popover>
+                ) : run.kind === "checks" && listsChecks ? (
+                  <Popover onOpenChange={togglePopover("items")}>
+                    <Popover.Trigger asChild>
+                      <Tag
+                        icon={WARNING_ICONS.checks}
+                        iconColor="orange"
+                        title={docsLabel}
+                        size="md"
+                        onClick={() => {}}
+                      />
+                    </Popover.Trigger>
+                    <CheckRunPopoverContent run={run.attempt} beside />
+                  </Popover>
+                ) : (
+                  warnings > 0 && (
+                    <Tag
+                      icon={WARNING_ICONS[run.kind]}
+                      iconColor="orange"
+                      title={docsLabel}
+                      size="md"
+                    />
+                  )
+                )}
               </Section>
-            </Section>
-            <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
-              <Text font="main-ui-body" color="text-04">
-                {t(`title.${run.kind}.${cardState(run, group)}`)}
-              </Text>
-              {description !== null && (
-                <Text font="secondary-body" color="text-03" maxLines={3}>
-                  {description}
-                </Text>
+              {/* Hidden with opacity, not unmounted, so Tab can still reach it. */}
+              {resolvable && (
+                <Section
+                  width="fit"
+                  height="fit"
+                  className={cn(
+                    !(hovered || focused || selected) && "opacity-0"
+                  )}
+                >
+                  <Button
+                    rightIcon={SvgCheckAll}
+                    prominence="tertiary"
+                    size="xs"
+                    disabled={resolving}
+                    onClick={() => onResolve(null)}
+                  >
+                    {t("actions.resolve")}
+                  </Button>
+                </Section>
               )}
             </Section>
-          </Section>
+          )}
         </Section>
-        {(trace !== null || warnings > 0 || listsChecks) && (
-          <Section
-            flexDirection="row"
-            justifyContent="between"
-            alignItems="center"
-            gap={1}
-            padding={0.5}
-            height="fit"
-          >
-            <Section
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="center"
-              gap={1}
-              height="fit"
-              className="min-w-0 flex-1"
-              wrap
-            >
-              {trace !== null && (
-                <Popover>
-                  <Popover.Trigger asChild>
-                    <Button icon={SvgTextLines} prominence="tertiary" size="xs">
-                      {t("tags.stackTrace")}
-                    </Button>
-                  </Popover.Trigger>
-                  <StackTracePopoverContent
-                    runId={run.attempt.id}
-                    trace={trace}
-                  />
-                </Popover>
-              )}
-              {listsDocs ? (
-                <Popover>
-                  <Popover.Trigger asChild>
-                    <Button icon={SvgFiles} prominence="tertiary" size="xs">
-                      {docsLabel}
-                    </Button>
-                  </Popover.Trigger>
-                  <FailedDocsPopoverContent
-                    ccPairId={ccPairId}
-                    indexAttemptId={run.attempt.id}
-                    canResolve={resolvable}
-                    onResolve={onResolve}
-                    resolving={resolving}
-                  />
-                </Popover>
-              ) : run.kind === "checks" && listsChecks ? (
-                <Popover>
-                  <Popover.Trigger asChild>
-                    <Button
-                      icon={WARNING_ICONS.checks}
-                      prominence="tertiary"
-                      size="xs"
-                    >
-                      {docsLabel}
-                    </Button>
-                  </Popover.Trigger>
-                  <CheckRunPopoverContent run={run.attempt} beside />
-                </Popover>
-              ) : (
-                warnings > 0 && (
-                  <Tag
-                    icon={WARNING_ICONS[run.kind]}
-                    title={docsLabel}
-                    color="gray"
-                  />
-                )
-              )}
-            </Section>
-            {resolvable && (
-              <Button
-                icon={SvgCheckAll}
-                prominence="tertiary"
-                size="xs"
-                disabled={resolving}
-                onClick={() => onResolve(null)}
-              >
-                {t("actions.resolve")}
-              </Button>
-            )}
-          </Section>
-        )}
-      </Section>
-    </Card>
+      </Card>
+    </Section>
   );
 }

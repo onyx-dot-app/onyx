@@ -2677,7 +2677,7 @@
         "tags": {
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
-          "doc_permission_sync": "{count, plural, one {# Dokument nicht synchronisiert} other {# Dokumente nicht synchronisiert}}",
+          "doc_permission_sync": "{count, plural, one {# Benutzer nicht synchronisiert} other {# Benutzer nicht synchronisiert}}",
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
@@ -2685,7 +2685,7 @@
         },
         "more": "Mehr anzeigen",
         "empty": {
-          "title": "Keine Fehlschläge oder Fehler",
+          "title": "Keine aktuellen Aktivitäten",
           "resolved": "Keine behobenen Fehler",
           "filtered": "Nichts passt zu dieser Suche.",
           "failures": "Keine Fehlschläge",
@@ -2710,7 +2710,7 @@
           "open": "Dokument öffnen"
         },
         "trace": {
-          "runId": "Lauf-ID: {id}",
+          "header": "Stacktrace • Lauf-ID: {id}",
           "copy": "Stacktrace kopieren"
         },
         "actions": {

@@ -2677,7 +2677,7 @@
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
-          "doc_permission_sync": "{count, plural, other {문서 #개 동기화 실패}}",
+          "doc_permission_sync": "{count, plural, other {사용자 #명 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
@@ -2685,7 +2685,7 @@
         },
         "more": "더 보기",
         "empty": {
-          "title": "실패나 오류가 없습니다",
+          "title": "최근 활동이 없습니다",
           "resolved": "해결된 오류가 없습니다",
           "filtered": "이 검색과 일치하는 항목이 없습니다.",
           "failures": "실패가 없습니다",
@@ -2710,7 +2710,7 @@
           "open": "문서 열기"
         },
         "trace": {
-          "runId": "실행 ID: {id}",
+          "header": "스택 트레이스 • 실행 ID: {id}",
           "copy": "스택 트레이스 복사"
         },
         "actions": {

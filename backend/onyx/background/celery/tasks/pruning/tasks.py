@@ -931,6 +931,7 @@ def monitor_ccpair_pruning_taskset(
         sync_type=SyncType.PRUNING,
         sync_status=SyncStatus.FAILED if failed else SyncStatus.SUCCESS,
         num_docs_synced=initial,
+        num_docs_failed=redis_connector.prune.failed_docs,
     )
 
     redis_connector.prune.taskset_clear()

@@ -215,13 +215,28 @@ def _doc_permission_sync_runs(
     )
 
 
+def _by_failed_count(
+    stmt: Select, run_filter: CCPairRunFilter, failed: InstrumentedAttribute[int]
+) -> Select:
+    """Narrows runs by a count of items that failed. Nothing resolves these failures."""
+    match run_filter.errors:
+        case CCPairRunErrors.UNRESOLVED:
+            return stmt.where(failed > 0)
+        case CCPairRunErrors.RESOLVED:
+            return stmt.where(false())
+        case CCPairRunErrors.NONE:
+            return stmt.where(failed == 0)
+        case None:
+            return stmt
+
+
 def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
     stmt = select(ExternalGroupPermissionSyncAttempt).where(
         _group_sync_scope(run_filter)
     )
-    # A group sync records no per-item errors, so it either fails or succeeds.
-    if run_filter.errors not in (None, CCPairRunErrors.NONE):
-        stmt = stmt.where(false())
+    stmt = _by_failed_count(
+        stmt, run_filter, ExternalGroupPermissionSyncAttempt.total_groups_failed
+    )
     return _narrowed(
         stmt,
         run_filter,
@@ -240,9 +255,7 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.entity_id.in_(run_filter.cc_pair_ids),
         SyncRecord.sync_type == SyncType.PRUNING,
     )
-    # A prune records no per-document errors, so it either fails or succeeds.
-    if run_filter.errors not in (None, CCPairRunErrors.NONE):
-        stmt = stmt.where(false())
+    stmt = _by_failed_count(stmt, run_filter, SyncRecord.num_docs_failed)
     return _narrowed(
         stmt,
         run_filter,

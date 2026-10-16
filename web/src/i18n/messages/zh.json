@@ -2677,7 +2677,7 @@
         "tags": {
           "stackTrace": "堆栈跟踪",
           "indexing": "{count, plural, other {# 个文档失败}}",
-          "doc_permission_sync": "{count, plural, other {# 个文档同步失败}}",
+          "doc_permission_sync": "{count, plural, other {# 个用户同步失败}}",
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "resolvedDocs": "{count, plural, other {# 个文档已解决}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
@@ -2685,7 +2685,7 @@
         },
         "more": "显示更多",
         "empty": {
-          "title": "没有失败或错误",
+          "title": "暂无近期活动",
           "resolved": "没有已解决的错误",
           "filtered": "没有与此搜索匹配的内容。",
           "failures": "没有失败",
@@ -2710,7 +2710,7 @@
           "open": "打开文档"
         },
         "trace": {
-          "runId": "运行 ID：{id}",
+          "header": "堆栈跟踪 • 运行 ID：{id}",
           "copy": "复制堆栈跟踪"
         },
         "actions": {

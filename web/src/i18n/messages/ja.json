@@ -2677,7 +2677,7 @@
         "tags": {
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
-          "doc_permission_sync": "{count, plural, other {# 件のドキュメントの同期に失敗}}",
+          "doc_permission_sync": "{count, plural, other {# 人のユーザーの同期に失敗}}",
           "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
@@ -2685,7 +2685,7 @@
         },
         "more": "さらに表示",
         "empty": {
-          "title": "失敗もエラーもありません",
+          "title": "最近のアクティビティはありません",
           "resolved": "解決済みのエラーはありません",
           "filtered": "この検索に一致するものはありません。",
           "failures": "失敗はありません",
@@ -2710,7 +2710,7 @@
           "open": "ドキュメントを開く"
         },
         "trace": {
-          "runId": "実行 ID: {id}",
+          "header": "スタックトレース • 実行 ID: {id}",
           "copy": "スタックトレースをコピー"
         },
         "actions": {

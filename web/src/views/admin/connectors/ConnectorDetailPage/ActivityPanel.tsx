@@ -15,6 +15,7 @@ import {
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { Content, IllustrationContent, Section } from "@opal/layouts";
+import { SvgLongWait } from "@opal/illustrations";
 import { CardLoader } from "@opal/loaders";
 import {
   SvgActivity,
@@ -184,6 +185,19 @@ export default function ActivityPanel({
           ? t("empty.title")
           : t(`empty.${shown}`);
 
+  const countTags = (
+    <Section
+      flexDirection="row"
+      justifyContent="end"
+      gap={0.5}
+      padding={title === undefined ? 1.5 : 0}
+      width="fit"
+      height="fit"
+    >
+      <ActivityCountTags failures={failures.total} errors={errors.total} />
+    </Section>
+  );
+
   // Full width once the page stacks its columns, the panel's own width beside them.
   return (
     <Section
@@ -221,6 +235,7 @@ export default function ActivityPanel({
                 )}
               </Section>
             )}
+            {/* Beside the page the search shares its row with the counts. The side panel gives the search its own row. */}
             <Section
               flexDirection="row"
               justifyContent="between"
@@ -231,69 +246,67 @@ export default function ActivityPanel({
               <Section height="fit" className="min-w-0 flex-1">
                 <InputTypeIn
                   searchIcon
-                  variant="internal"
+                  variant={title === undefined ? "internal" : "primary"}
                   placeholder={t("search.placeholder")}
                   maxLength={SEARCH_MAX_LENGTH}
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                 />
               </Section>
-              <Section
-                flexDirection="row"
-                justifyContent="end"
-                gap={2}
-                padding={1.5}
-                width="fit"
-                height="fit"
-              >
-                <ActivityCountTags
-                  failures={failures.total}
-                  errors={errors.total}
-                />
-              </Section>
+              {title === undefined && countTags}
             </Section>
             <Section
               flexDirection="row"
-              justifyContent="start"
+              justifyContent="between"
+              alignItems="center"
               gap={1}
               height="fit"
-              wrap
             >
-              <Dropdown>
-                <Dropdown.Trigger asChild>
-                  <FilterButton
-                    icon={SvgActivity}
-                    active={shown !== "all"}
-                    onClear={() => setShown("all")}
-                  >
-                    {t(`filter.${shown}`)}
-                  </FilterButton>
-                </Dropdown.Trigger>
-                <Dropdown.Data
-                  label={t("filter.label")}
-                  value={shown}
-                  onSelect={(option) =>
-                    setShown(
-                      shownOptions.find(
-                        (candidate) => candidate === option.value
-                      ) ?? "all"
-                    )
-                  }
-                  items={shownOptions.map((candidate) => ({
-                    kind: "option" as const,
-                    value: candidate,
-                    title: t(`filter.${candidate}`),
-                  }))}
-                />
-              </Dropdown>
-              <SelectButton
-                icon={SvgEyeClosed}
-                state={resolved ? "selected" : "empty"}
-                aria-pressed={resolved}
-                onClick={() => setResolved((current) => !current)}
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                gap={1}
+                width="fit"
+                height="fit"
+                wrap
               >
-                {t("resolved.label")}
-              </SelectButton>
+                <Dropdown>
+                  <Dropdown.Trigger asChild>
+                    <FilterButton
+                      icon={SvgActivity}
+                      active={shown !== "all"}
+                      onClear={() => setShown("all")}
+                    >
+                      {t(`filter.${shown}`)}
+                    </FilterButton>
+                  </Dropdown.Trigger>
+                  <Dropdown.Data
+                    label={t("filter.label")}
+                    value={shown}
+                    onSelect={(option) =>
+                      setShown(
+                        shownOptions.find(
+                          (candidate) => candidate === option.value
+                        ) ?? "all"
+                      )
+                    }
+                    items={shownOptions.map((candidate) => ({
+                      kind: "option" as const,
+                      value: candidate,
+                      title: t(`filter.${candidate}`),
+                    }))}
+                  />
+                </Dropdown>
+                <SelectButton
+                  icon={SvgEyeClosed}
+                  state={resolved ? "selected" : "empty"}
+                  aria-pressed={resolved}
+                  onClick={() => setResolved((current) => !current)}
+                >
+                  {t("resolved.label")}
+                </SelectButton>
+              </Section>
+              {title !== undefined && countTags}
             </Section>
           </Section>
 
@@ -312,7 +325,10 @@ export default function ActivityPanel({
               ))}
             </Section>
           ) : empty ? (
-            <IllustrationContent title={emptyTitle} />
+            <IllustrationContent
+              illustration={SvgLongWait}
+              title={emptyTitle}
+            />
           ) : (
             groups.map((group) => (
               <GroupList

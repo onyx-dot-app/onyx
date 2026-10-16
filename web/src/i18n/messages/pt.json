@@ -2677,7 +2677,7 @@
         "tags": {
           "stackTrace": "Rastreamento de pilha",
           "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
-          "doc_permission_sync": "{count, plural, one {# documento não sincronizado} other {# documentos não sincronizados}}",
+          "doc_permission_sync": "{count, plural, one {# usuário não sincronizado} other {# usuários não sincronizados}}",
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
@@ -2685,7 +2685,7 @@
         },
         "more": "Mostrar mais",
         "empty": {
-          "title": "Sem falhas ou erros",
+          "title": "Nenhuma atividade recente",
           "resolved": "Sem erros resolvidos",
           "filtered": "Nada corresponde a esta pesquisa.",
           "failures": "Sem falhas",
@@ -2710,7 +2710,7 @@
           "open": "Abrir o documento"
         },
         "trace": {
-          "runId": "ID da execução: {id}",
+          "header": "Rastreamento de pilha • ID da execução: {id}",
           "copy": "Copiar o rastreamento de pilha"
         },
         "actions": {
