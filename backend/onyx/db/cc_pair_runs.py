@@ -140,6 +140,8 @@ def _narrowed(
         stmt = stmt.where(*narrowed)
     if run_filter.since is not None:
         stmt = stmt.where(time_created >= run_filter.since)
+    if run_filter.until is not None:
+        stmt = stmt.where(time_created < run_filter.until)
     if run_filter.error_query:
         stmt = stmt.where(matches_error(run_filter.error_query))
     groups = run_filter.status_groups

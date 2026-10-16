@@ -1792,6 +1792,8 @@ configMap:
   ZOOM_PERMISSION_DOC_SYNC_FREQUENCY: ""
   LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   LINEAR_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY: ""
   HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
@@ -1806,13 +1808,9 @@ configMap:
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
-  # Per-connector external group sync lock TTL in seconds (default 300); raise
-  # toward the 6h crawl deadline if group syncs run long, so periodic
-  # re-dispatches can't start concurrent duplicate syncs.
-  CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: ""
-  # Per-connector document permission sync lock TTL in seconds (default 3600);
-  # raise it if a sync loses its lock mid-run ("lock that's no longer owned").
-  CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: ""
+  # Time limit in seconds for one doc permission sync or group sync (default:
+  # JOB_TIMEOUT_SECONDS, 6h); raise it for a source whose full sync takes longer.
+  PERMISSION_SYNC_TIMEOUT_SECONDS: ""
   # Document-index sync beat lock TTL in seconds (default 120); raise it if the
   # sync pass aborts with "no longer owned" or "Lock not owned on completion".
   CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: ""

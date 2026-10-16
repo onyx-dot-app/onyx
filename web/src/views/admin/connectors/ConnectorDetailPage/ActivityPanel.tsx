@@ -34,6 +34,7 @@ import {
   type ActivityGroupState,
   type ActivityItem,
   type ActivityScope,
+  type ActivityTimeRange,
 } from "@/lib/connectors/ccPair/hooks";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
 import {
@@ -41,6 +42,10 @@ import {
   SEARCH_DELAY_MS,
   SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import {
+  SliceRangeFilter,
+  type SliceRange,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const LOADER_ROWS = 2;
 
@@ -51,7 +56,7 @@ export interface ActivityCountTagsProps {
   failures: number;
   errors: number;
 }
-/** The failed runs and the runs with document errors, as two counts. */
+/** The failed runs and the runs with document errors, as two counts. A zero count shows no tag. */
 export function ActivityCountTags({
   failures,
   errors,
@@ -60,18 +65,22 @@ export function ActivityCountTags({
   const format = useFormatter();
   return (
     <>
-      <Tag
-        icon={SvgXCircle}
-        title={format.number(failures)}
-        tooltip={t("counts.failures", { count: failures })}
-        color="red"
-      />
-      <Tag
-        icon={SvgAlertTriangle}
-        title={format.number(errors)}
-        tooltip={t("counts.errors", { count: errors })}
-        color="amber"
-      />
+      {failures > 0 && (
+        <Tag
+          icon={SvgXCircle}
+          title={format.number(failures)}
+          tooltip={t("counts.failures", { count: failures })}
+          color="red"
+        />
+      )}
+      {errors > 0 && (
+        <Tag
+          icon={SvgAlertTriangle}
+          title={format.number(errors)}
+          tooltip={t("counts.errors", { count: errors })}
+          color="amber"
+        />
+      )}
     </>
   );
 }
@@ -142,6 +151,9 @@ export interface ActivityPanelProps {
   title?: string | RichStr;
   /** Shows a close button beside the title. */
   onClose?: () => void;
+  /** A chart slice that narrows every group, shown as a filter its `onClearRange` removes. */
+  range?: SliceRange | null;
+  onClearRange?: () => void;
   className?: string;
 }
 
@@ -150,6 +162,8 @@ export default function ActivityPanel({
   scope,
   title,
   onClose,
+  range = null,
+  onClearRange,
   className,
 }: ActivityPanelProps) {
   const t = useTranslations("admin.connector.activity");
@@ -168,6 +182,10 @@ export default function ActivityPanel({
   const isShown = (group: ActivityGroup) =>
     shownOptions.includes(group) && (shown === "all" || shown === group);
 
+  const timeRange: ActivityTimeRange = {
+    since: range?.since ?? null,
+    until: range?.until ?? null,
+  };
   // The failures and errors totals head the panel, so both always poll.
   const failures = useActivityItems(
     scope,
@@ -175,7 +193,8 @@ export default function ActivityPanel({
     false,
     search,
     true,
-    RUNS_POLL_MS
+    RUNS_POLL_MS,
+    timeRange
   );
   const closedFailures = useActivityItems(
     scope,
@@ -183,7 +202,8 @@ export default function ActivityPanel({
     true,
     search,
     showResolved && isShown("failures"),
-    RUNS_POLL_MS
+    RUNS_POLL_MS,
+    timeRange
   );
   const errors = useActivityItems(
     scope,
@@ -191,7 +211,8 @@ export default function ActivityPanel({
     false,
     search,
     true,
-    RUNS_POLL_MS
+    RUNS_POLL_MS,
+    timeRange
   );
   const closedErrors = useActivityItems(
     scope,
@@ -199,7 +220,8 @@ export default function ActivityPanel({
     true,
     search,
     showResolved && isShown("errors"),
-    RUNS_POLL_MS
+    RUNS_POLL_MS,
+    timeRange
   );
   const other = useActivityItems(
     scope,
@@ -207,7 +229,8 @@ export default function ActivityPanel({
     false,
     search,
     isShown("other"),
-    RUNS_POLL_MS
+    RUNS_POLL_MS,
+    timeRange
   );
   const levels = [
     { state: failures, closedState: showResolved ? closedFailures : null },
@@ -225,7 +248,7 @@ export default function ActivityPanel({
     (group) => group.loaded && group.runs.length === 0
   );
   const emptyTitle =
-    search !== ""
+    search !== "" || range !== null
       ? t("empty.filtered")
       : shown === "all"
         ? t("empty.title")
@@ -296,6 +319,9 @@ export default function ActivityPanel({
                 width="fit"
                 height="fit"
               >
+                {range !== null && onClearRange !== undefined && (
+                  <SliceRangeFilter range={range} onClear={onClearRange} />
+                )}
                 <ActivityCountTags
                   failures={failures.total}
                   errors={errors.total}

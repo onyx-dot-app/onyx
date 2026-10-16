@@ -47,6 +47,7 @@ import {
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
 import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
@@ -1098,11 +1099,10 @@ function ModalWrapperInner({
         ? t("setup.submitButton.pristineTooltip")
         : undefined;
 
-  const {
-    icon: providerIcon,
-    companyName: providerDisplayName,
-    productName: providerProductName,
-  } = getProvider(providerName);
+  const providerEntry = getProvider(providerName);
+  const providerIcon = providerEntry.icon;
+  const { companyName: providerDisplayName, productName: providerProductName } =
+    useProviderNames()(providerEntry);
 
   const title = llmProvider
     ? markdown(

@@ -19,6 +19,7 @@ function runsQueryParams(query: CCPairRunsQuery): string {
     page_size: String(query.pageSize),
   });
   if (query.since !== null) params.set("since", query.since);
+  if (query.until !== null) params.set("until", query.until);
   for (const kind of query.kinds ?? []) params.append("kinds", kind);
   for (const group of query.statusGroups ?? []) {
     params.append("status_groups", group);
@@ -80,7 +81,6 @@ export const SWR_KEYS = {
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
   llmRouterModels: "/api/admin/llm/router-models",
-  llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>

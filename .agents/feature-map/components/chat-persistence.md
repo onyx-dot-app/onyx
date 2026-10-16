@@ -327,6 +327,16 @@ processing fence shows an unfinished stream. The client uses it to reconnect thr
 
 ---
 
+### 4.3 Naming a session
+
+`chat_backend.py:rename_chat_session` loads the session's history and override,
+then generates its title outside the read session. `get_default_utility_llm(..., flow_type=LLMModelFlowType.CHAT_NAMING)` prefers
+the admin CHAT_NAMING default and returns `None` when it is unset.
+Only then does the endpoint construct and cost-check the session client.
+Configured utility clients receive one provider cost check in the factory.
+Naming keeps its existing rate-limit check and text fallback on failure. Sessions whose
+incognito mode does not persist content skip the naming call.
+
 ## 5. Contracts and invariants
 
 1. **Messages alternate user and assistant.** The empty `SYSTEM` root row is

@@ -5,8 +5,8 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.config_diff import (
     ConfigFieldChange,
-    build_source_scoped_backfill_config,
-    classify_source_config_change,
+    build_scoped_backfill_config,
+    classify_config_change,
     source_change_override,
 )
 from onyx.connectors.field_policy import FieldClass, ScopeDirection
@@ -25,16 +25,22 @@ _JIRA_SITE = {"jira_base_url": "https://example.atlassian.net"}
 def _classify(
     source: DocumentSource, old: dict[str, Any], new: dict[str, Any]
 ) -> list[ConfigFieldChange]:
-    return classify_source_config_change(
-        source, old, new, source_change_override(source, old, new)
+    return classify_config_change(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old,
+        new,
+        source_change_override(source, old, new),
     )
 
 
 def _scoped_backfill_config(
     source: DocumentSource, old: dict[str, Any], new: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return build_source_scoped_backfill_config(
-        source, old, new, source_change_override(source, old, new)
+    return build_scoped_backfill_config(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old,
+        new,
+        source_change_override(source, old, new),
     )
 
 
@@ -443,7 +449,9 @@ def test_outlook_roster_change_is_an_identity_change(
 ) -> None:
     """The walked mailboxes and folders decide each thread document's builder,
     content and readers, so no backfill or prune of part of them is correct."""
-    changes = classify_source_config_change(DocumentSource.OUTLOOK, old, new)
+    changes = classify_config_change(
+        CONNECTOR_CLASS_MAP[DocumentSource.OUTLOOK].config_class, old, new
+    )
 
     assert changes
     assert {change.field_class for change in changes} == {FieldClass.IDENTITY}

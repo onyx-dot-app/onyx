@@ -54,6 +54,11 @@ import SharingSettingsSection from "@/views/admin/connectors/ConnectorDetailPage
 import ScheduleSection from "@/views/admin/connectors/ConnectorDetailPage/ScheduleSection";
 import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
+import {
+  pickWindow,
+  type PickedWindow,
+  type SliceRange,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const CC_PAIR_POLL_MS = 5000;
 
@@ -85,6 +90,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
     useState(false);
   // Counts the status card's asks to open the checks card.
   const [checksExpandRequest, setChecksExpandRequest] = useState(0);
+  // One window drives the status card's chart and the runs card's list.
+  const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
+    pickWindow("12h")
+  );
+  // A clicked chart slice narrows the runs and activity inside the window.
+  const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
   const isSchedulingConnectorDeletionRef = useRef(false);
 
   const refresh = useCallback(() => {
@@ -375,6 +386,18 @@ function Main({ ccPairId }: { ccPairId: number }) {
               ccPair={ccPair}
               canOperate={canOperate}
               onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
+              timeWindow={timeWindow.window}
+              onTimeWindowChange={(picked) => {
+                setTimeWindow(pickWindow(picked));
+                // The slice belongs to the old chart, so a new window drops it.
+                setSliceRange(null);
+              }}
+              onSliceClick={(start, end) =>
+                setSliceRange({
+                  since: start.toISOString(),
+                  until: end.toISOString(),
+                })
+              }
             />
             <PairChecksCard
               source={source}
@@ -393,7 +416,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
             <Divider paddingParallel={0} paddingPerpendicular={0} />
             <ScheduleSection ccPair={ccPair} editable={canOperate} />
 
-            <RunsCard ccPairId={ccPair.id} canOperate={canOperate} />
+            <RunsCard
+              ccPairId={ccPair.id}
+              canOperate={canOperate}
+              sharedWindow={timeWindow}
+              onSharedWindowChange={(picked) =>
+                setTimeWindow(pickWindow(picked))
+              }
+              range={sliceRange}
+            />
           </Section>
           <ActivityPanel
             scope={{
@@ -401,6 +432,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
               canResolve: canOperate && ccPair.supports_targeted_reindex,
               canResolveRuns: canOperate,
             }}
+            range={sliceRange}
+            onClearRange={() => setSliceRange(null)}
           />
         </Section>
       </SettingsLayouts.Body>

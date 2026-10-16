@@ -302,11 +302,54 @@ type to one of three `SectionChunker` implementations
 - `ImageChunker` (`image_section_chunker.py`): always flushes the buffer and emits
   its own one-section chunk carrying `image_file_id`; images never share a chunk
   with text.
-- `TabularChunker` (`tabular_section_chunker/tabular_section_chunker.py`): streams a
-  staged CSV twice (`file_store.read_file(csv_file_id)`), once to pack rows into
-  token-bounded chunks (`parse_to_chunks`) and once through `analyze_sheet` to build
-  descriptor/total summary chunks (`sheet_descriptor.py`, `total_descriptor.py`).
-  The full sheet is never materialized in memory.
+- `TabularChunker` (`tabular_section_chunker/tabular_section_chunker.py`): the one
+  path for spreadsheets and CSVs. `DocumentChunker` groups a document's
+  `TabularSection`s by `link` and sends each group to
+  `TabularChunker.chunk_workbook` in one call, at the first section of that
+  group, so the chunks describe one file. A document carrying two attachments
+  therefore yields two sets of chunks, not one merged workbook.
+  `workbook_chunks.py:build_workbook_chunks` (with the cell-level parsing in
+  `tabular_section_chunker/cell_values.py` and the data shapes in
+  `tabular_section_chunker/models.py`) emits one workbook overview, the full rows of
+  small sheets, and a bounded profile (column roles, identifier ranges, totals,
+  breakdowns by category and by month, frequent values, sample rows) of large
+  sheets. `TABULAR_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file,
+  so chunk count does not grow with row count. Each sheet is streamed once and
+  never materialized in memory. A file that yields no chunks is logged. The
+  document still reaches the index through the empty payload
+  `DocumentChunker.chunk` adds, so it stays findable by title and metadata, but
+  none of its sheet contents are.
+
+  There is no per-row chunking. Rows reach the index only through a small
+  sheet's verbatim block or a profile's sample rows, so a query naming one row
+  of a large sheet has little to match. The chunks make a file findable and say
+  what it holds; the file itself remains the record.
+
+  What the chunks will and will not claim:
+
+  - **Dates carry no locale assumption.** `date_key` reads ISO, `YYYY/MM/DD` and
+    written months outright. For `5/3/2024` or `5.3.2024` the separator settles
+    nothing, so the order comes from the column's own values — a part above 12
+    cannot be a month — tracked per column as `DateOrder` while both readings run
+    side by side. A column that never settles gets no time range and no monthly
+    totals, and says so in the log. Never assume dots mean day-first.
+  - **A title block does not hide the table.** `profile_sheet` skips up to
+    `_MAX_PREAMBLE_ROWS` narrow rows to reach the header, keeping them as
+    `preamble` for the overview. Only a sheet with nothing wider in that span is
+    text.
+  - **Partial lines say they are partial.** `_shown_suffix` appends
+    `(N of M shown)` to a clipped breakdown, so a truncated list is never read as
+    the whole truth.
+  - **Percentages are never summed**; a `%` column reports average, min and max
+    only (`ColumnStats.summable`, which also refuses a column that mixes
+    currencies), and a `$` column keeps its unit.
+  - **Sheets merge only when merging costs nothing.** `_can_merge` refuses to
+    pool same-header tabs whose combined category values would pass
+    `_CATEGORY_MAX_DISTINCT`, since that would delete a breakdown each tab had
+    alone.
+  - **Blocks queue one per sheet before any sheet gets extras**, and the overview
+    (up to `_OVERVIEW_MAX_CHUNKS`) names every sheet, so exhausting the budget
+    costs detail rather than whole sheets. `_Packer` logs whatever it drops.
 
 `DocumentChunker.chunk` assigns `chunk_id` sequentially over the section-ordered
 payload stream, then `ChunkPayload.to_doc_aware_chunk` attaches the per-document
@@ -423,7 +466,12 @@ matches exactly and whose status `should_reuse_checkpoint()` (`FAILED`, `CANCELE
 or `INTERRUPTED`, but not a successful terminal state, which always starts a fresh
 window), then loads that attempt's checkpoint blob. If 50 consecutive attempts made
 no progress at all, the checkpoint is discarded and the run starts from scratch
-rather than replaying a permanently stuck cursor.
+rather than replaying a permanently stuck cursor. The lookback, and the "most
+recent attempt" whose poll window a new attempt reuses, skip attempts with no
+`poll_range_end` (`get_recent_completed_attempts_for_cc_pair`). Such an attempt
+ended before docfetching set its window, for example one cancelled by a pause
+right after the scheduler created it. Without the skip, the next attempt takes a
+fresh window, finds no matching checkpoint and deletes the leftover batches.
 
 Checkpointing tracks **which batches were sent to the file store**, not which
 batches finished processing (`run_docfetching.py` comment, verified in source). A

@@ -14,7 +14,7 @@ from onyx.connectors.credential_families import (
     to_source_credential_json,
 )
 from onyx.connectors.credential_family_base import CredentialFamily
-from onyx.connectors.google_utils.resources import get_drive_service, get_gmail_service
+from onyx.connectors.google_utils.resources import GoogleService, get_google_service
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
     DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY,
@@ -75,7 +75,7 @@ def _build_frontend_google_drive_redirect(source: DocumentSource) -> str:
 
 def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> str:
     if source == DocumentSource.GOOGLE_DRIVE:
-        drive_service = get_drive_service(creds)
+        drive_service = get_google_service(GoogleService.DRIVE, creds)
         user_info = (
             drive_service.about()  # ty: ignore[unresolved-attribute]
             .get(
@@ -85,7 +85,7 @@ def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> 
         )
         email = user_info.get("user", {}).get("emailAddress")
     elif source == DocumentSource.GMAIL:
-        gmail_service = get_gmail_service(creds)
+        gmail_service = get_google_service(GoogleService.GMAIL, creds)
         user_info = (
             gmail_service.users()  # ty: ignore[unresolved-attribute]
             .getProfile(

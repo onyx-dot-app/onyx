@@ -235,6 +235,8 @@ def _job(
     groups_processed: int | None = 0,
     memberships_synced: int | None = 0,
     error_count: int | None = 0,
+    last_progress_at: datetime | None = None,
+    last_heartbeat_at: datetime | None = None,
 ) -> dict[str, Any]:
     return {
         "job_id": job_id,
@@ -250,6 +252,8 @@ def _job(
         "groups_processed": groups_processed or 0,
         "memberships_synced": memberships_synced or 0,
         "error_count": error_count or 0,
+        "last_progress_at": last_progress_at,
+        "last_heartbeat_at": last_heartbeat_at,
     }
 
 
@@ -307,6 +311,8 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             DocPermissionSyncAttempt.time_created,
             DocPermissionSyncAttempt.time_started,
             DocPermissionSyncAttempt.time_finished,
+            DocPermissionSyncAttempt.last_progress_at,
+            DocPermissionSyncAttempt.heartbeat_at,
         )
         .where(
             or_(
@@ -332,6 +338,8 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             revision_at=attempt.revision_at,
             docs_processed=attempt.total_docs_synced,
             error_count=attempt.docs_with_permission_errors,
+            last_progress_at=attempt.last_progress_at,
+            last_heartbeat_at=attempt.heartbeat_at,
         )
         for attempt in permission_syncs
     )
@@ -355,6 +363,8 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             ExternalGroupPermissionSyncAttempt.time_created,
             ExternalGroupPermissionSyncAttempt.time_started,
             ExternalGroupPermissionSyncAttempt.time_finished,
+            ExternalGroupPermissionSyncAttempt.last_progress_at,
+            ExternalGroupPermissionSyncAttempt.heartbeat_at,
         )
         .where(
             or_(
@@ -384,6 +394,8 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             groups_processed=group.total_groups_processed,
             memberships_synced=group.total_group_memberships_synced,
             error_count=int(group.has_error),
+            last_progress_at=group.last_progress_at,
+            last_heartbeat_at=group.heartbeat_at,
         )
         for group in group_syncs
     )

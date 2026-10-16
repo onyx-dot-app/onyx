@@ -231,6 +231,14 @@ interface ActivityFeed {
 // SWR's key-filter mutate skips useSWRInfinite keys, so each mounted feed registers its own revalidate.
 const activityFeeds = new Set<ActivityFeed>();
 
+/** The creation times an activity feed keeps, as ISO times. `until` is exclusive. */
+export interface ActivityTimeRange {
+  since: string | null;
+  until: string | null;
+}
+
+const ALL_TIME: ActivityTimeRange = { since: null, until: null };
+
 /** One activity level of the scope, its open runs or its `closed` ones, polled while `enabled`. `more` loads the next page and a new search starts over. */
 export function useActivityItems(
   scope: ActivityScope,
@@ -238,8 +246,10 @@ export function useActivityItems(
   closed: boolean,
   q: string,
   enabled: boolean,
-  pollMs: number
+  pollMs: number,
+  range: ActivityTimeRange = ALL_TIME
 ): ActivityGroupState {
+  const { since, until } = range;
   const ccPairId = scope === "fleet" ? null : scope.ccPairId;
   const pair = scope === "fleet" ? null : scope;
   // Primitives, so a scope rebuilt every render does not remap the runs.
@@ -256,7 +266,8 @@ export function useActivityItems(
         const query: CCPairRunsQuery = {
           pageNum: pageIndex,
           pageSize: ACTIVITY_PAGE_SIZE,
-          since: null,
+          since,
+          until,
           kinds: null,
           q,
           ...groupQuery,
@@ -272,7 +283,7 @@ export function useActivityItems(
     );
   useEffect(() => {
     void setSize(1);
-  }, [q, setSize]);
+  }, [q, since, until, setSize]);
   useEffect(() => {
     const feed: ActivityFeed = {
       ccPairId,

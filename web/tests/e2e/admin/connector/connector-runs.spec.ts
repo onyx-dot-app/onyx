@@ -1,6 +1,7 @@
 /** The run list and the activity panel: a file connector shows no run-type
- * filter and no activity, and a perm-synced pair's failed syncs open their
- * error and the doc sync's shows in the panel. */
+ * filter and no activity, a perm-synced pair's failed syncs open their
+ * error and the doc sync's shows in the panel, and the status card and the
+ * run list share one time window. */
 
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -138,6 +139,16 @@ async function mockSyncConnector(page: Page): Promise<void> {
   await page.route(`${base}/index-attempts*`, async (route) => {
     await route.fulfill(jsonResponse({ items: [], total_items: 0 }));
   });
+  await page.route(`${base}/throughput*`, async (route) => {
+    await route.fulfill(
+      jsonResponse({
+        window_start: new Date(Date.now() - 3_600_000).toISOString(),
+        window_end: new Date().toISOString(),
+        docs_indexed: [0, 0, 0],
+        runs: [],
+      })
+    );
+  });
   await page.route(`${base}/errors*`, async (route) => {
     await route.fulfill(jsonResponse({ items: [], total_items: 0 }));
   });
@@ -196,5 +207,48 @@ test.describe("Connector runs", () => {
       "Group Membership Sync Error"
     );
     await expect(groupModal).toContainText(MOCK_GROUP_ERROR_MESSAGE);
+  });
+
+  test("the status card and the run list share one time window", async ({
+    page,
+  }) => {
+    await mockSyncConnector(page);
+    const runsSince: (string | null)[] = [];
+    const chartWindows: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith(`/cc-pair/${MOCK_SYNC_CC_PAIR_ID}/runs`)) {
+        runsSince.push(url.searchParams.get("since"));
+      }
+      if (
+        url.pathname.endsWith(`/cc-pair/${MOCK_SYNC_CC_PAIR_ID}/throughput`)
+      ) {
+        chartWindows.push(url.searchParams.get("window") ?? "");
+      }
+    });
+    const detail = new AdminConnectorDetailPage(page);
+    await detail.goto(MOCK_SYNC_CC_PAIR_ID);
+    await detail.expectRunsVisible();
+
+    // Both cards open on the last 12 hours.
+    await expect(detail.timeWindowPicker).toHaveText("Last 12 hours");
+    await expect(detail.runsTimeFilter).toContainText("Last 12 hours");
+    await expect.poll(() => chartWindows.at(-1)).toBe("12h");
+    // The activity panel reads the same route without a window, so look at windowed reads only.
+    const lastSince = () => runsSince.filter((since) => since !== null).at(-1);
+    await expect.poll(lastSince).toBeDefined();
+    const twelveHourSince = lastSince();
+
+    // The run list's filter moves the chart.
+    await detail.pickTimeWindow(detail.runsTimeFilter, "Last 24 hours");
+    await expect(detail.timeWindowPicker).toHaveText("Last 24 hours");
+    await expect.poll(() => chartWindows.at(-1)).toBe("24h");
+    await expect.poll(lastSince).not.toBe(twelveHourSince);
+
+    // The chart's picker moves the run list.
+    await detail.pickTimeWindow(detail.timeWindowPicker, "Last 7 days");
+    await expect(detail.runsTimeFilter).toContainText("Last 7 days");
+    await expect.poll(() => chartWindows.at(-1)).toBe("7d");
+    await expect(page.getByRole("option", { name: "All time" })).toHaveCount(0);
   });
 });
