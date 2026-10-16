@@ -2562,7 +2562,6 @@
             "stopped": "توقفت الفهرسة مع أخطاء",
             "errors": "اكتملت الفهرسة مع أخطاء",
             "resolved": "تم حل أخطاء الفهرسة",
-            "superseded": "Indexing failed, a newer run followed",
             "succeeded": "اكتملت الفهرسة بنجاح",
             "inProgress": "الفهرسة قيد التنفيذ",
             "canceled": "توقفت الفهرسة"
@@ -2573,7 +2572,6 @@
             "stopped": "توقفت مزامنة الأذونات مع أخطاء",
             "errors": "تمت مزامنة الأذونات مع أخطاء",
             "resolved": "تم حل أخطاء مزامنة الأذونات",
-            "superseded": "Permissions sync failed, a newer run followed",
             "succeeded": "تمت مزامنة الأذونات بنجاح",
             "inProgress": "جارٍ مزامنة الأذونات",
             "canceled": "توقفت مزامنة الأذونات"
@@ -2584,7 +2582,6 @@
             "stopped": "توقفت مزامنة عضوية المجموعات مع أخطاء",
             "errors": "تمت مزامنة عضوية المجموعات مع أخطاء",
             "resolved": "تم حل أخطاء مزامنة عضوية المجموعات",
-            "superseded": "Group membership sync failed, a newer run followed",
             "succeeded": "تمت مزامنة عضويات المجموعات بنجاح",
             "inProgress": "جارٍ مزامنة عضويات المجموعات",
             "canceled": "توقفت مزامنة المجموعات"
@@ -2595,7 +2592,6 @@
             "stopped": "توقف التقليم مع وجود أخطاء",
             "errors": "اكتمل التقليم مع وجود أخطاء",
             "resolved": "تم حل أخطاء التقليم",
-            "superseded": "Pruning failed, a newer run followed",
             "succeeded": "اكتمل التقليم بنجاح",
             "inProgress": "التقليم قيد التنفيذ",
             "canceled": "توقف التقليم"
@@ -2606,7 +2602,6 @@
             "stopped": "توقفت فحوصات الموصّل مع وجود أخطاء",
             "errors": "اكتملت فحوصات الموصّل مع وجود أخطاء",
             "resolved": "تم حل أخطاء فحوصات الموصّل",
-            "superseded": "Connector checks failed, a newer run followed",
             "succeeded": "نجحت فحوصات الموصّل",
             "inProgress": "فحوصات الموصّل قيد التنفيذ",
             "canceled": "توقفت فحوصات الموصّل"

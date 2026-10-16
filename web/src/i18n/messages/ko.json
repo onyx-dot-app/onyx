@@ -2562,7 +2562,6 @@
             "stopped": "오류와 함께 인덱싱 중단됨",
             "errors": "오류와 함께 인덱싱 완료",
             "resolved": "인덱싱 오류 해결됨",
-            "superseded": "Indexing failed, a newer run followed",
             "succeeded": "인덱싱이 성공적으로 완료됨",
             "inProgress": "인덱싱 진행 중",
             "canceled": "인덱싱 중지됨"
@@ -2573,7 +2572,6 @@
             "stopped": "오류와 함께 권한 동기화 중단됨",
             "errors": "오류와 함께 권한 동기화됨",
             "resolved": "권한 동기화 오류 해결됨",
-            "superseded": "Permissions sync failed, a newer run followed",
             "succeeded": "권한 동기화가 성공적으로 완료됨",
             "inProgress": "권한 동기화 중",
             "canceled": "권한 동기화 중지됨"
@@ -2584,7 +2582,6 @@
             "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨",
             "errors": "오류와 함께 그룹 멤버십 동기화됨",
             "resolved": "그룹 멤버십 동기화 오류 해결됨",
-            "superseded": "Group membership sync failed, a newer run followed",
             "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨",
             "inProgress": "그룹 멤버십 동기화 중",
             "canceled": "그룹 동기화 중지됨"
@@ -2595,7 +2592,6 @@
             "stopped": "오류와 함께 정리 중지됨",
             "errors": "오류와 함께 정리 완료됨",
             "resolved": "정리 오류 해결됨",
-            "superseded": "Pruning failed, a newer run followed",
             "succeeded": "정리가 성공적으로 완료됨",
             "inProgress": "정리 진행 중",
             "canceled": "정리 중지됨"
@@ -2606,7 +2602,6 @@
             "stopped": "오류와 함께 커넥터 검사 중지됨",
             "errors": "오류와 함께 커넥터 검사 완료됨",
             "resolved": "커넥터 검사 오류 해결됨",
-            "superseded": "Connector checks failed, a newer run followed",
             "succeeded": "커넥터 검사 통과",
             "inProgress": "커넥터 검사 진행 중",
             "canceled": "커넥터 검사 중지됨"

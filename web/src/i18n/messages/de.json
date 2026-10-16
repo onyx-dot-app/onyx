@@ -2562,7 +2562,6 @@
             "stopped": "Indexierung mit Fehlern abgebrochen",
             "errors": "Indexierung mit Fehlern abgeschlossen",
             "resolved": "Indexierungsfehler behoben",
-            "superseded": "Indexing failed, a newer run followed",
             "succeeded": "Indexierung erfolgreich abgeschlossen",
             "inProgress": "Indexierung läuft",
             "canceled": "Indexierung gestoppt"
@@ -2573,7 +2572,6 @@
             "stopped": "Berechtigungssynchronisierung mit Fehlern abgebrochen",
             "errors": "Berechtigungen mit Fehlern synchronisiert",
             "resolved": "Fehler der Berechtigungssynchronisierung behoben",
-            "superseded": "Permissions sync failed, a newer run followed",
             "succeeded": "Berechtigungen erfolgreich synchronisiert",
             "inProgress": "Berechtigungen werden synchronisiert",
             "canceled": "Berechtigungssynchronisierung gestoppt"
@@ -2584,7 +2582,6 @@
             "stopped": "Gruppenmitgliedschaftssynchronisierung mit Fehlern abgebrochen",
             "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert",
             "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben",
-            "superseded": "Group membership sync failed, a newer run followed",
             "succeeded": "Gruppenmitgliedschaften erfolgreich synchronisiert",
             "inProgress": "Gruppenmitgliedschaften werden synchronisiert",
             "canceled": "Gruppensynchronisierung gestoppt"
@@ -2595,7 +2592,6 @@
             "stopped": "Bereinigung mit Fehlern gestoppt",
             "errors": "Bereinigung mit Fehlern abgeschlossen",
             "resolved": "Bereinigungsfehler behoben",
-            "superseded": "Pruning failed, a newer run followed",
             "succeeded": "Bereinigung erfolgreich abgeschlossen",
             "inProgress": "Bereinigung läuft",
             "canceled": "Bereinigung gestoppt"
@@ -2606,7 +2602,6 @@
             "stopped": "Connector-Prüfungen mit Fehlern gestoppt",
             "errors": "Connector-Prüfungen mit Fehlern abgeschlossen",
             "resolved": "Fehler der Connector-Prüfungen behoben",
-            "superseded": "Connector checks failed, a newer run followed",
             "succeeded": "Connector-Prüfungen bestanden",
             "inProgress": "Connector-Prüfungen laufen",
             "canceled": "Connector-Prüfungen gestoppt"

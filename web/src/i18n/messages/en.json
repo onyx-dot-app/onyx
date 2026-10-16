@@ -2562,7 +2562,6 @@
             "stopped": "Indexing stopped with errors",
             "errors": "Indexing completed with errors",
             "resolved": "Indexing errors resolved",
-            "superseded": "Indexing failed, a newer run followed",
             "succeeded": "Indexing completed successfully",
             "inProgress": "Indexing in progress",
             "canceled": "Indexing stopped"
@@ -2573,7 +2572,6 @@
             "stopped": "Permissions sync stopped with errors",
             "errors": "Permissions synced with errors",
             "resolved": "Permissions sync errors resolved",
-            "superseded": "Permissions sync failed, a newer run followed",
             "succeeded": "Permissions synced successfully",
             "inProgress": "Permissions syncing",
             "canceled": "Permissions sync stopped"
@@ -2584,7 +2582,6 @@
             "stopped": "Group membership sync stopped with errors",
             "errors": "Group membership synced with errors",
             "resolved": "Group membership sync errors resolved",
-            "superseded": "Group membership sync failed, a newer run followed",
             "succeeded": "Group membership synced successfully",
             "inProgress": "Group membership syncing",
             "canceled": "Group membership sync stopped"
@@ -2595,7 +2592,6 @@
             "stopped": "Pruning stopped with errors",
             "errors": "Pruning completed with errors",
             "resolved": "Pruning errors resolved",
-            "superseded": "Pruning failed, a newer run followed",
             "succeeded": "Pruning completed successfully",
             "inProgress": "Pruning in progress",
             "canceled": "Pruning stopped"
@@ -2606,7 +2602,6 @@
             "stopped": "Connector checks stopped with errors",
             "errors": "Connector checks completed with errors",
             "resolved": "Connector check errors resolved",
-            "superseded": "Connector checks failed, a newer run followed",
             "succeeded": "Connector checks passed",
             "inProgress": "Connector checks running",
             "canceled": "Connector checks stopped"

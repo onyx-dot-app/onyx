@@ -79,7 +79,6 @@ type CardState =
   | "stopped"
   | "errors"
   | "resolved"
-  | "superseded"
   | "inProgress"
   | "canceled"
   | "succeeded";
@@ -92,8 +91,7 @@ function cardState(run: CCPairRun, group: ActivityGroup): CardState {
     case "failures":
       return "failed";
     case "resolved":
-      // A failed run is here because a newer run of its kind followed it.
-      return isFailed(run) ? "superseded" : "resolved";
+      return "resolved";
     case "errors":
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
@@ -153,7 +151,8 @@ export default function ActivityCard({
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
-  if (state === "failed" || state === "superseded") {
+  // A failure a newer run superseded still explains itself.
+  if (isFailed(run)) {
     description =
       runErrorMessage(run) ??
       (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
