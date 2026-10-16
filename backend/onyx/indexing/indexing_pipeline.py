@@ -509,6 +509,8 @@ def index_doc_batch_with_handler(
     llm_enrichment_allowed: bool = True,
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
+    force_update: bool = False,
+    skip_document_row_writes: bool = False,
     skip_spreadsheet_content: bool = False,
 ) -> IndexingPipelineResult:
     # Documents whose prepare() committed before the batch raised. Their change
@@ -537,6 +539,7 @@ def index_doc_batch_with_handler(
                 image_summarization_llm=image_summarization_llm,
                 llm=llm,
                 force_update=force_update,
+                skip_document_row_writes=skip_document_row_writes,
                 on_prepared=prepared.update,
                 skip_spreadsheet_content=skip_spreadsheet_content,
             )
@@ -589,7 +592,7 @@ def index_doc_batch_with_handler(
         )
 
     batch_result: IndexingPipelineResult | Exception = _index(
-        document_batch, force_update=False
+        document_batch, force_update=force_update
     )
     if not isinstance(batch_result, Exception):
         return batch_result
@@ -602,7 +605,7 @@ def index_doc_batch_with_handler(
     results: list[IndexingPipelineResult] = []
     for document in document_batch:
         result: IndexingPipelineResult | Exception = _index(
-            [document], force_update=document.id in prepared
+            [document], force_update=force_update or document.id in prepared
         )
         if isinstance(result, Exception):
             result = _failure_result([document], result)
@@ -661,11 +664,18 @@ def index_doc_batch_prepare(
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     force_update: bool = False,
+    skip_document_row_writes: bool = False,
 ) -> DocumentBatchPrepareContext | None:
     """Sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
     This preceeds indexing it into the actual document index. `force_update`
     skips both change gates: a retry of a batch whose prepare already committed
-    new readers would otherwise see nothing to do."""
+    new readers would otherwise see nothing to do.
+
+    `skip_document_row_writes` leaves the Document row, its staged-file
+    promotion and its replaced-blob deletes alone. ONLY for a caller that
+    re-processes content it did not fetch and so has nothing newer to write -
+    a connector path passing this would silently stop documents updating.
+    Chunk enrichment still reads the live rows, so chunks stay correct."""
     documents = sanitize_documents_for_postgres(documents)
 
     # Create a trimmed list of docs that don't have a newer updated at
@@ -700,7 +710,7 @@ def index_doc_batch_prepare(
 
     # for all updatable docs, upsert into the DB
     # Does not include doc_updated_at which is also used to indicate a successful update
-    if updatable_docs:
+    if updatable_docs and not skip_document_row_writes:
         # Queue the STAGING → CONNECTOR origin flips BEFORE the Document upsert
         # so `upsert_documents`' commit flushes Document.file_id and the origin
         # flip atomically
@@ -1495,6 +1505,7 @@ def index_doc_batch(
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
     force_update: bool = False,
+    skip_document_row_writes: bool = False,
     on_prepared: Callable[[set[str]], None] | None = None,
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
@@ -1541,7 +1552,11 @@ def index_doc_batch(
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(
-            filtered_documents, ignore_time_skip, index_to_secondary, force_update
+            filtered_documents,
+            ignore_time_skip,
+            index_to_secondary,
+            force_update,
+            skip_document_row_writes,
         )
     if not context:
         result = IndexingPipelineResult.empty(len(filtered_documents))
@@ -1768,12 +1783,19 @@ def run_indexing_pipeline(
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     from_beginning: bool = False,
+    force_update: bool = False,
+    skip_document_row_writes: bool = False,
     skip_spreadsheet_content: bool = False,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them.
 
     index_to_secondary disables the content-hash gate + stamp for FUTURE writes so
     they don't cross-suppress the PRESENT index's shared hash.
+
+    force_update bypasses both change gates. Needed when the document is
+    unchanged at the source but must be re-chunked anyway (see
+    run_tabular_rechunk): a tabular document's content_hash never moves,
+    because content_hash() ignores TabularSections.
 
     skip_spreadsheet_content indexes each tabular file as its title plus a
     placeholder (see skip_tabular_content). Only connector indexing sets it:
@@ -1843,5 +1865,7 @@ def run_indexing_pipeline(
             ignore_time_skip=ignore_time_skip,
             index_to_secondary=index_to_secondary,
             from_beginning=from_beginning,
+            force_update=force_update,
+            skip_document_row_writes=skip_document_row_writes,
             skip_spreadsheet_content=skip_spreadsheet_content,
         )
