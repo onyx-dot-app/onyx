@@ -67,10 +67,6 @@ def load_progress() -> TabularRechunkProgress:
         return TabularRechunkProgress()
 
 
-def store_progress(progress: TabularRechunkProgress) -> None:
-    get_kv_store().store(KV_TABULAR_RECHUNK_PROGRESS_KEY, progress.model_dump())
-
-
 def _blocked_reason() -> str | None:
     """Why an armed migration still must not run, or None when it may."""
     if DISABLE_VECTOR_DB:
@@ -152,7 +148,7 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
                     progress.retry_passes,
                     progress.failed_document_ids,
                 )
-        store_progress(progress)
+        get_kv_store().store(KV_TABULAR_RECHUNK_PROGRESS_KEY, progress.model_dump())
 
         return result.documents_indexed or None
     finally:

@@ -71,26 +71,6 @@ def get_hierarchy_node_by_raw_id(
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def get_raw_node_ids_by_id(db_session: Session, node_ids: list[int]) -> dict[int, str]:
-    """Maps hierarchy node row ids to the connector's own ids for them.
-
-    The reverse of `get_hierarchy_node_by_raw_id`. A caller that rebuilds a
-    document from its stored row has only the resolved id, while the indexing
-    adapter resolves ancestors from the raw one.
-    """
-    if not node_ids:
-        return {}
-    return dict(
-        db_session.execute(
-            select(HierarchyNode.id, HierarchyNode.raw_node_id).where(
-                HierarchyNode.id.in_(node_ids)
-            )
-        )
-        .tuples()
-        .all()
-    )
-
-
 def get_source_hierarchy_node(
     db_session: Session,
     source: DocumentSource,
