@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
+from onyx.db.enums import ActionPolicy, ApprovalDecidedVia, ApprovalDecision
 from onyx.db.gated_app import get_gated_app_id
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import ScheduledRunGrants, get_live_scheduled_run_grants
@@ -421,7 +421,7 @@ class GateAddon:
                 logger.info(
                     "egress_block " + EGRESS_APPROVAL_MATCHED_FIELDS + " reason=%s",
                     *egress_approval_matched_args(
-                        flow, ctx, matched_actions, EndpointPolicy.ASK, approval_id
+                        flow, ctx, matched_actions, ActionPolicy.ASK, approval_id
                     ),
                     reason,
                 )
@@ -462,12 +462,12 @@ class GateAddon:
         if approval_id is None:
             fields = EGRESS_SESSION_MATCHED_FIELDS
             args = egress_session_matched_args(
-                flow, ctx, matched_actions, EndpointPolicy.ASK
+                flow, ctx, matched_actions, ActionPolicy.ASK
             )
         else:
             fields = EGRESS_APPROVAL_MATCHED_FIELDS
             args = egress_approval_matched_args(
-                flow, ctx, matched_actions, EndpointPolicy.ASK, approval_id
+                flow, ctx, matched_actions, ActionPolicy.ASK, approval_id
             )
 
         if injection is InjectionOutcome.BLOCKED:
@@ -570,18 +570,16 @@ class GateAddon:
                 )
             return None
 
-        if matched_actions.governing_action.policy is EndpointPolicy.DENY:
+        if matched_actions.governing_action.policy is ActionPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             logger.info(
                 "egress_block " + EGRESS_MATCHED_FIELDS + " reason=%s",
-                *egress_matched_args(
-                    flow, sandbox, matched_actions, EndpointPolicy.DENY
-                ),
+                *egress_matched_args(flow, sandbox, matched_actions, ActionPolicy.DENY),
                 SandboxProxyError.POLICY_DENIED.value,
             )
             return None
 
-        if matched_actions.governing_action.policy is EndpointPolicy.ALWAYS:
+        if matched_actions.governing_action.policy is ActionPolicy.ALWAYS:
             # Off-thread: see the ASK path in `request` — the resolver may
             # refresh an expiring OAuth token before injecting on this
             # auto-approved call.
@@ -597,7 +595,7 @@ class GateAddon:
                     + EGRESS_MATCHED_FIELDS
                     + " reason=%s credential_outcome=%s",
                     *egress_matched_args(
-                        flow, sandbox, matched_actions, EndpointPolicy.ALWAYS
+                        flow, sandbox, matched_actions, ActionPolicy.ALWAYS
                     ),
                     SandboxProxyError.CREDENTIAL_ERROR.value,
                     credential_outcome_label(injection),
@@ -606,7 +604,7 @@ class GateAddon:
                 logger.info(
                     "egress_allow " + EGRESS_MATCHED_FIELDS + " credential_outcome=%s",
                     *egress_matched_args(
-                        flow, sandbox, matched_actions, EndpointPolicy.ALWAYS
+                        flow, sandbox, matched_actions, ActionPolicy.ALWAYS
                     ),
                     credential_outcome_label(injection),
                 )
@@ -631,9 +629,7 @@ class GateAddon:
         if session_id is None:
             logger.info(
                 "egress_block " + EGRESS_MATCHED_FIELDS + " reason=%s",
-                *egress_matched_args(
-                    flow, sandbox, matched_actions, EndpointPolicy.ASK
-                ),
+                *egress_matched_args(flow, sandbox, matched_actions, ActionPolicy.ASK),
                 SandboxProxyError.NO_ACTIVE_SESSION.value,
             )
             flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)

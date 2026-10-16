@@ -19,7 +19,7 @@ from mitmproxy import http
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -146,16 +146,16 @@ def test_tools_call_defaults_to_ask(
     assert matched.target.key == (GatedAppKind.MCP_SERVER, server.id)
     assert matched.app_name == server.name
     assert [a.action_type for a in matched.actions] == ["send_email"]
-    assert matched.governing_action.policy is EndpointPolicy.ASK
+    assert matched.governing_action.policy is ActionPolicy.ASK
     # The JSON-RPC body is carried through for the approval card.
     assert matched.payload["method"] == "tools/call"
 
 
-@pytest.mark.parametrize("override", [EndpointPolicy.ALWAYS, EndpointPolicy.DENY])
+@pytest.mark.parametrize("override", [ActionPolicy.ALWAYS, ActionPolicy.DENY])
 def test_admin_tool_override_is_reflected(
     db_session: Session,
     craft_server: CraftServerFactory,
-    override: EndpointPolicy,
+    override: ActionPolicy,
 ) -> None:
     user = create_test_user(db_session, f"mcp_eval_override_{override.value}")
     server = craft_server()
@@ -177,7 +177,7 @@ def test_admin_tool_override_is_reflected(
         _request(_server_host(server), body=_tool_call_body("read_inbox")), user.id
     )
     assert other is not None
-    assert other.governing_action.policy is EndpointPolicy.ASK
+    assert other.governing_action.policy is ActionPolicy.ASK
 
 
 @pytest.mark.parametrize("method", ["initialize", "tools/list", "notifications/x"])
@@ -224,7 +224,7 @@ def test_protocol_upgrade_is_denied(
     )
     matched = McpRequestEvaluator().evaluate(request, POSTGRES_DEFAULT_SCHEMA, user.id)
     assert matched is not None
-    assert matched.governing_action.policy is EndpointPolicy.DENY
+    assert matched.governing_action.policy is ActionPolicy.DENY
     assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
 
 
@@ -235,7 +235,7 @@ def test_unclassifiable_body_on_matched_host_is_denied(
     server = craft_server()
     matched = _evaluate(_request(_server_host(server), body=b"<not-json>"), user.id)
     assert matched is not None
-    assert matched.governing_action.policy is EndpointPolicy.DENY
+    assert matched.governing_action.policy is ActionPolicy.DENY
     assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
     assert matched.target.key == (GatedAppKind.MCP_SERVER, server.id)
 
@@ -271,7 +271,7 @@ def test_batched_tool_calls_sorted_strictest_first(
     replace_action_policies__no_commit(
         db_session,
         gated_app_id,
-        {"safe_read": EndpointPolicy.ALWAYS, "danger_write": EndpointPolicy.DENY},
+        {"safe_read": ActionPolicy.ALWAYS, "danger_write": ActionPolicy.DENY},
     )
     db_session.commit()
 
@@ -284,7 +284,7 @@ def test_batched_tool_calls_sorted_strictest_first(
     assert matched is not None
     # DENY (strictest) governs; both tools are represented.
     assert matched.governing_action.action_type == "danger_write"
-    assert matched.governing_action.policy is EndpointPolicy.DENY
+    assert matched.governing_action.policy is ActionPolicy.DENY
     assert {a.action_type for a in matched.actions} == {"safe_read", "danger_write"}
 
 
@@ -310,7 +310,7 @@ def test_evaluator_failure_after_attribution_denies(
         _request(_server_host(server), body=_tool_call_body("send_email")), user.id
     )
     assert matched is not None
-    assert matched.governing_action.policy is EndpointPolicy.DENY
+    assert matched.governing_action.policy is ActionPolicy.DENY
     assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
     assert matched.target.key == (GatedAppKind.MCP_SERVER, server.id)
 
@@ -348,7 +348,7 @@ def test_attribution_resolves_by_user_access(
     matched = _evaluate(_request(host, body=_tool_call_body("send_email")), user.id)
     assert matched is not None
     assert matched.target.key == (GatedAppKind.MCP_SERVER, accessible.id)
-    assert matched.governing_action.policy is EndpointPolicy.ASK
+    assert matched.governing_action.policy is ActionPolicy.ASK
 
 
 def test_two_accessible_identical_servers_stay_ambiguous(

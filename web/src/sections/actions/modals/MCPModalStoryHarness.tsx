@@ -23,7 +23,7 @@ import {
 import { refreshMCPServerTools } from "@/lib/mcp/svc";
 import { Permission } from "@/lib/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { MCPOAuthDiscovery } from "@/lib/mcp/types";
 
 export const storyServer: MCPServer = {
@@ -409,16 +409,16 @@ function MockEnvironment({
           )
             savedServer.available_in_craft = payload.available_in_craft;
           if (
-            "tool_policies" in payload &&
-            payload.tool_policies &&
-            typeof payload.tool_policies === "object"
+            "action_policies" in payload &&
+            payload.action_policies &&
+            typeof payload.action_policies === "object"
           ) {
-            const policies: Record<string, EndpointPolicy> = {};
-            for (const [name, value] of Object.entries(payload.tool_policies)) {
+            const policies: Record<string, ActionPolicy> = {};
+            for (const [name, value] of Object.entries(payload.action_policies)) {
               if (value === "ALWAYS" || value === "ASK" || value === "DENY")
                 policies[name] = value;
             }
-            savedServer.tool_policies = policies;
+            savedServer.action_policies = policies;
           }
           if ("name" in payload && typeof payload.name === "string")
             savedServer.name = payload.name;

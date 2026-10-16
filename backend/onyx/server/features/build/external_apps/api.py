@@ -10,7 +10,7 @@ from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     ExternalAppType,
     GatedAppKind,
     Permission,
@@ -85,7 +85,7 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
 def _to_admin_response(
     app: ExternalApp,
     *,
-    stored: dict[str, EndpointPolicy],
+    stored: dict[str, ActionPolicy],
 ) -> ExternalAppAdminResponse:
     # ``stored`` is the app's per-action policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None

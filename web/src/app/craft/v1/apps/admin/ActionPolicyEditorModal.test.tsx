@@ -10,7 +10,7 @@ import {
 import ActionPolicyEditorModal, {
   type PolicyEditorItem,
 } from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -33,7 +33,7 @@ const ITEMS: PolicyEditorItem[] = [
 ];
 
 async function renderEditor(
-  initialPolicies: Record<string, EndpointPolicy> = {},
+  initialPolicies: Record<string, ActionPolicy> = {},
   items: PolicyEditorItem[] = ITEMS
 ) {
   const onSave = jest.fn().mockResolvedValue(undefined);
@@ -63,7 +63,7 @@ function expectValidSelection(label: string) {
   ).not.toBeInTheDocument();
 }
 
-const DEFAULT_POLICIES: Record<string, EndpointPolicy>[] = [
+const DEFAULT_POLICIES: Record<string, ActionPolicy>[] = [
   {},
   { read: "ALWAYS" },
   { read: "ALWAYS", write: "ASK" },

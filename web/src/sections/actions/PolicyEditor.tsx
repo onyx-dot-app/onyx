@@ -3,20 +3,20 @@
 import { useTranslations } from "next-intl";
 import { Text, InputSingleSelect } from "@opal/components";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 export interface PolicyEditorItem {
   id: string;
   name: string;
   description: string;
-  defaultPolicy: EndpointPolicy;
+  defaultPolicy: ActionPolicy;
 }
 
 type BulkPolicy = "DEFAULT" | "ALWAYS" | "ASK" | "CUSTOM";
 
 function bulkPolicyOf(
   items: PolicyEditorItem[],
-  policies: Record<string, EndpointPolicy>
+  policies: Record<string, ActionPolicy>
 ): BulkPolicy {
   if (
     items.every(
@@ -33,8 +33,8 @@ function bulkPolicyOf(
 interface PolicyEditorProps {
   showTitle?: boolean;
   items: PolicyEditorItem[];
-  policies: Record<string, EndpointPolicy>;
-  onChange: (policies: Record<string, EndpointPolicy>) => void;
+  policies: Record<string, ActionPolicy>;
+  onChange: (policies: Record<string, ActionPolicy>) => void;
 }
 
 export default function PolicyEditor({

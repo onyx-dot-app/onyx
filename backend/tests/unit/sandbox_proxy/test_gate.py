@@ -29,9 +29,9 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheBackend
 from onyx.db.enums import (
+    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    EndpointPolicy,
     GatedAppKind,
 )
 from onyx.external_apps.matching.engine import (
@@ -181,22 +181,22 @@ _MATCH_MULTI_ASK = AllMatchedActions(
             action_type="slack.messages.write",
             display_name="Post a message",
             description="Post a message to a channel or conversation.",
-            policy=EndpointPolicy.ASK,
+            policy=ActionPolicy.ASK,
         ),
         MatchedAction(
             action_type="slack.files.upload",
             display_name="Upload a file",
             description="Upload a file to a channel or conversation.",
-            policy=EndpointPolicy.ASK,
+            policy=ActionPolicy.ASK,
         ),
     ),
     target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=42, app_name="Slack"),
     payload={"text": "hi"},
 )
 _MATCH_ALWAYS = make_matched_actions(
-    action_type="slack.channels.read", policy=EndpointPolicy.ALWAYS
+    action_type="slack.channels.read", policy=ActionPolicy.ALWAYS
 )
-_MATCH_DENY = make_matched_actions(payload={"text": "hi"}, policy=EndpointPolicy.DENY)
+_MATCH_DENY = make_matched_actions(payload={"text": "hi"}, policy=ActionPolicy.DENY)
 
 
 # ---------------------------------------------------------------------------

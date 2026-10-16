@@ -12,7 +12,7 @@ from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -461,7 +461,7 @@ class MCPServerSimpleUpdateRequest(BaseModel):
         None, description="Description of the MCP server"
     )
     server_url: Optional[str] = Field(None, description="URL of the MCP server")
-    tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
+    action_policies: Optional[dict[str, ActionPolicy]] = Field(
         default=None,
         description=(
             "Sparse per-tool Craft approval overrides keyed by tool name; "
@@ -805,7 +805,7 @@ class MCPServer(BaseModel):
             "Computed by member and admin listings, independently of credentials and tool enablement."
         ),
     )
-    tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
+    action_policies: Optional[dict[str, ActionPolicy]] = Field(
         None,
         description=(
             "Stored per-tool Craft approval overrides (sparse; unlisted tools "

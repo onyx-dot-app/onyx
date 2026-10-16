@@ -13,7 +13,7 @@ Contract under test (observed through the admin response's ``actions`` view):
 - clearing an override means sending that action explicitly as ``ASK``.
 """
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.slack import SlackAction
 from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
@@ -25,7 +25,7 @@ _SLACK_URLS = [r"^https://slack\.com/api/.*$"]
 
 def _create_slack(
     admin_user: DATestUser,
-    action_policies: dict[str, EndpointPolicy] | None = None,
+    action_policies: dict[str, ActionPolicy] | None = None,
 ) -> ExternalAppAdminResponse:
     return ExternalAppManager.create(
         user_performing_action=admin_user,
@@ -41,7 +41,7 @@ def _create_slack(
 def _update_slack(
     admin_user: DATestUser,
     app_id: int,
-    action_policies: dict[str, EndpointPolicy] | None,
+    action_policies: dict[str, ActionPolicy] | None,
 ) -> ExternalAppAdminResponse:
     return ExternalAppManager.update(
         user_performing_action=admin_user,
@@ -55,11 +55,11 @@ def _update_slack(
     )
 
 
-def _states(resp: ExternalAppAdminResponse) -> dict[str, EndpointPolicy]:
+def _states(resp: ExternalAppAdminResponse) -> dict[str, ActionPolicy]:
     return {action.action_id: action.state for action in resp.actions}
 
 
-def _fetch_states(admin_user: DATestUser, app_id: int) -> dict[str, EndpointPolicy]:
+def _fetch_states(admin_user: DATestUser, app_id: int) -> dict[str, ActionPolicy]:
     """Re-read via the list endpoint, so assertions reflect persisted state, not
     just the create/update echo."""
     apps = ExternalAppManager.list_admin(user_performing_action=admin_user)
@@ -74,18 +74,18 @@ def test_create_returns_full_catalog_with_overrides(
     created = _create_slack(
         admin_user,
         action_policies={
-            SlackAction.MESSAGES_READ: EndpointPolicy.ALWAYS,
-            SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY,
+            SlackAction.MESSAGES_READ: ActionPolicy.ALWAYS,
+            SlackAction.MESSAGES_WRITE: ActionPolicy.DENY,
         },
     )
 
     states = _states(created)
     # Overrides honoured; unset catalog actions fall back to their declared
     # default (Slack reads default to ALWAYS).
-    assert states[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
-    assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
-    assert states[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ALWAYS
-    assert states[SlackAction.USERS_READ.value] == EndpointPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_READ.value] == ActionPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_WRITE.value] == ActionPolicy.DENY
+    assert states[SlackAction.CHANNELS_READ.value] == ActionPolicy.ALWAYS
+    assert states[SlackAction.USERS_READ.value] == ActionPolicy.ALWAYS
     # The same set persists across a fresh read.
     assert _fetch_states(admin_user, created.id) == states
 
@@ -100,11 +100,11 @@ def test_create_without_policies_yields_action_defaults(
     assert states  # the catalog is non-empty
     # No supplied policies → each action falls back to its declared default:
     # reads auto-approve (ALWAYS), the write requires approval (ASK).
-    assert states[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ALWAYS
-    assert states[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
-    assert states[SlackAction.USERS_READ.value] == EndpointPolicy.ALWAYS
-    assert states[SlackAction.SEARCH_READ.value] == EndpointPolicy.ALWAYS
-    assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.ASK
+    assert states[SlackAction.CHANNELS_READ.value] == ActionPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_READ.value] == ActionPolicy.ALWAYS
+    assert states[SlackAction.USERS_READ.value] == ActionPolicy.ALWAYS
+    assert states[SlackAction.SEARCH_READ.value] == ActionPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_WRITE.value] == ActionPolicy.ASK
     assert _fetch_states(admin_user, created.id) == states
 
 
@@ -115,8 +115,8 @@ def test_edit_merges_overrides_preserving_unmentioned(
     created = _create_slack(
         admin_user,
         action_policies={
-            SlackAction.MESSAGES_READ: EndpointPolicy.ALWAYS,
-            SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY,
+            SlackAction.MESSAGES_READ: ActionPolicy.ALWAYS,
+            SlackAction.MESSAGES_WRITE: ActionPolicy.DENY,
         },
     )
 
@@ -124,13 +124,13 @@ def test_edit_merges_overrides_preserving_unmentioned(
     edited = _update_slack(
         admin_user,
         created.id,
-        action_policies={SlackAction.CHANNELS_READ: EndpointPolicy.ALWAYS},
+        action_policies={SlackAction.CHANNELS_READ: ActionPolicy.ALWAYS},
     )
 
     states = _states(edited)
-    assert states[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ALWAYS
-    assert states[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
-    assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
+    assert states[SlackAction.CHANNELS_READ.value] == ActionPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_READ.value] == ActionPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_WRITE.value] == ActionPolicy.DENY
     # The full action set is unchanged by the edit (no policy dropped or added).
     assert set(states) == set(_states(created))
     assert _fetch_states(admin_user, created.id) == states
@@ -142,7 +142,7 @@ def test_edit_omitting_policies_preserves_existing(
 ) -> None:
     created = _create_slack(
         admin_user,
-        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
+        action_policies={SlackAction.MESSAGES_WRITE: ActionPolicy.DENY},
     )
 
     # An edit that omits action_policies (e.g. a rename) must
@@ -150,7 +150,7 @@ def test_edit_omitting_policies_preserves_existing(
     _update_slack(admin_user, created.id, action_policies=None)
 
     states = _fetch_states(admin_user, created.id)
-    assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
+    assert states[SlackAction.MESSAGES_WRITE.value] == ActionPolicy.DENY
 
 
 def test_edit_with_explicit_ask_clears_override(
@@ -159,17 +159,17 @@ def test_edit_with_explicit_ask_clears_override(
 ) -> None:
     created = _create_slack(
         admin_user,
-        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
+        action_policies={SlackAction.MESSAGES_WRITE: ActionPolicy.DENY},
     )
 
     # Clearing an override means naming the action explicitly as ASK.
     edited = _update_slack(
         admin_user,
         created.id,
-        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.ASK},
+        action_policies={SlackAction.MESSAGES_WRITE: ActionPolicy.ASK},
     )
 
-    assert _states(edited)[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.ASK
+    assert _states(edited)[SlackAction.MESSAGES_WRITE.value] == ActionPolicy.ASK
 
 
 def test_patch_sets_policies(
@@ -181,11 +181,11 @@ def test_patch_sets_policies(
     patched = _update_slack(
         admin_user,
         created.id,
-        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
+        action_policies={SlackAction.MESSAGES_WRITE: ActionPolicy.DENY},
     )
 
     states = _states(patched)
-    assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
+    assert states[SlackAction.MESSAGES_WRITE.value] == ActionPolicy.DENY
     # Unmentioned actions keep their declared default.
-    assert states[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_READ.value] == ActionPolicy.ALWAYS
     assert _fetch_states(admin_user, created.id) == states

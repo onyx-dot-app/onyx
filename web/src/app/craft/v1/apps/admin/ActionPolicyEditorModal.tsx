@@ -17,7 +17,7 @@ import PolicyEditor, {
   type PolicyEditorItem,
 } from "@/sections/actions/PolicyEditor";
 export type { PolicyEditorItem } from "@/sections/actions/PolicyEditor";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
@@ -54,14 +54,14 @@ interface ActionPolicyEditorModalProps {
   initialFieldValues: Record<string, string>;
   /** Undefined while the capability list is still loading. */
   policyItems: PolicyEditorItem[] | undefined;
-  initialPolicies: Record<string, EndpointPolicy>;
+  initialPolicies: Record<string, ActionPolicy>;
   /** Shown when the capability list resolves to empty. */
   emptyPoliciesMessage: string;
   saveLabel: string;
   /** Persist the edit; throw to surface the failure inside the modal. */
   onSave: (
     fieldValues: Record<string, string>,
-    policies: Record<string, EndpointPolicy>
+    policies: Record<string, ActionPolicy>
   ) => Promise<void>;
   skillsContent?: (
     requestLeave: (navigate: () => void) => void
@@ -108,7 +108,7 @@ export default function ActionPolicyEditorModal({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
     ...initialFieldValues,
   });
-  const [policies, setPolicies] = useState<Record<string, EndpointPolicy>>({
+  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({
     ...initialPolicies,
   });
   const [isSaving, setIsSaving] = useState(false);

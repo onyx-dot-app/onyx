@@ -51,7 +51,7 @@ is not in `backend/ee/onyx/configs/multi_tenant_gating_config.py:MULTI_TENANT_GA
 
 An admin building a custom OpenAPI action or MCP tool also sees per-action
 gating: each action defaults to a policy (`ALWAYS`, `ASK`, `DENY` in
-`backend/onyx/db/enums.py:EndpointPolicy`) resolved through the `gated_app`
+`backend/onyx/db/enums.py:ActionPolicy`) resolved through the `gated_app`
 tables, independent of CE/EE at all.
 
 ---
@@ -108,7 +108,7 @@ scaffolding; flag keys are defined ad hoc at their call sites (see
 
 Not an edition boundary. `GatedApp` is the identity row shared by every gated
 target (`GatedAppKind.EXTERNAL_APP` or `MCP_SERVER`, in `backend/onyx/db/enums.py`);
-`GatedActionPolicy` stores per-action overrides (`EndpointPolicy.ALWAYS` /
+`GatedActionPolicy` stores per-action overrides (`ActionPolicy.ALWAYS` /
 `ASK` / `DENY`). Consumers: `backend/onyx/server/features/mcp/api.py`,
 `backend/onyx/server/features/build/external_apps/api.py`,
 `backend/onyx/sandbox_proxy/addons/gate.py`, and

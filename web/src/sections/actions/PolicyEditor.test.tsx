@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import PolicyEditor from "@/sections/actions/PolicyEditor";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 function Editor() {
-  const [policies, setPolicies] = useState<Record<string, EndpointPolicy>>({});
+  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({});
   return (
     <PolicyEditor
       items={[
