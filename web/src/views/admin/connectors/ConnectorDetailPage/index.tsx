@@ -21,11 +21,13 @@ import {
   toast,
 } from "@opal/layouts";
 import { IconLoader, PageLoader } from "@opal/loaders";
+import { markdown } from "@opal/utils";
 import { SvgPlugBroken } from "@opal/illustrations";
 import {
   SvgArrowLeft,
   SvgEditBig,
   SvgPause,
+  SvgPlay,
   SvgPlayCircle,
   SvgRefreshCw,
   SvgSettings,
@@ -36,7 +38,7 @@ import { isEditableSource } from "@/lib/connectors/edit/editable";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
-import { triggerIndexing } from "@/lib/connectors/svc";
+import { releaseIndexingHold, triggerIndexing } from "@/lib/connectors/svc";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
@@ -60,12 +62,12 @@ import {
   type PickedWindow,
   type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 
 const CC_PAIR_POLL_MS = 5000;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
-  const editT = useTranslations("admin.connectorEdit");
   const router = useRouter();
 
   const {
@@ -91,6 +93,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     useState(false);
   // Counts the status card's asks to open the checks card.
   const [checksExpandRequest, setChecksExpandRequest] = useState(0);
+  const [runFocus, setRunFocus] = useState(false);
   // One window drives the status card's chart and the runs card's list.
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
     pickWindow("12h")
@@ -145,6 +148,22 @@ function Main({ ccPairId }: { ccPairId: number }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const startIndexing = async () => {
+    if (!ccPair) return;
+    setBusy(true);
+    const failure = await releaseIndexingHold(
+      ccPair.id,
+      t("statusCard.hold.releaseFailed")
+    );
+    setBusy(false);
+    if (failure !== null) {
+      toast.error(failure);
+      return;
+    }
+    toast.success(t("statusCard.hold.released"));
+    refresh();
   };
 
   useEffect(() => {
@@ -220,75 +239,105 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const onEdit = canOpenEditForm ? openEditForm : null;
   const canManageInlineFiles = source === "file" && can(ccPair, "edit");
 
+  const isPaused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
+  const held = ccPair.indexing_hold;
+  // While held, the menu offers Start Indexing in place of the re-index rows; a check run in flight releases the hold itself.
+  const canStartIndexing = held !== null && held.reason !== "checks_running";
   // The reason a row is disabled is its tooltip.
   const reIndexBlocked = ccPair.indexing
     ? t("manageMenu.reIndex.tooltip.indexing")
-    : ccPair.status === ConnectorCredentialPairStatus.PAUSED
-      ? t("manageMenu.reIndex.tooltip.paused")
-      : ccPair.status === ConnectorCredentialPairStatus.INVALID
-        ? t("manageMenu.reIndex.tooltip.invalid")
-        : undefined;
-  const manageItems: DropdownMenuItem[] = [
-    {
-      kind: "action",
-      id: "update-index",
-      icon: SvgRefreshCw,
-      title: t("manageMenu.updateIndex.label"),
-      description: t("manageMenu.updateIndex.description"),
-      tooltip: reIndexBlocked,
-      disabled: reIndexBlocked !== undefined,
-      onSelect: () => void triggerReIndex(false),
-    },
-    {
-      kind: "action",
-      id: "full-reindex",
-      icon: SvgSlowMotion,
-      title: t("manageMenu.fullReindex.label"),
-      description: t("manageMenu.fullReindex.description"),
-      tooltip: reIndexBlocked,
-      disabled: reIndexBlocked !== undefined,
-      onSelect: () => void triggerReIndex(true),
-    },
-    ...(!isDeleting
+    : ccPair.status === ConnectorCredentialPairStatus.INVALID
+      ? t("manageMenu.reIndex.tooltip.invalid")
+      : undefined;
+  const startItems: DropdownMenuItem[] = canStartIndexing
+    ? [
+        {
+          kind: "action",
+          id: "start-indexing",
+          icon: SvgPlay,
+          title: t("manageMenu.startIndexing.label"),
+          description: t("manageMenu.startIndexing.description"),
+          disabled: busy,
+          onSelect: () => void startIndexing(),
+        },
+      ]
+    : [];
+  const reIndexItems: DropdownMenuItem[] =
+    isPaused || held !== null
+      ? []
+      : [
+          {
+            kind: "action",
+            id: "update-index",
+            icon: SvgRefreshCw,
+            title: t("manageMenu.updateIndex.label"),
+            description: t("manageMenu.updateIndex.description"),
+            tooltip: reIndexBlocked,
+            disabled: reIndexBlocked !== undefined,
+            onSelect: () => void triggerReIndex(false),
+          },
+          {
+            kind: "action",
+            id: "full-reindex",
+            icon: SvgSlowMotion,
+            title: t("manageMenu.fullReindex.label"),
+            description: markdown(t("manageMenu.fullReindex.description")),
+            tooltip: reIndexBlocked,
+            disabled: reIndexBlocked !== undefined,
+            onSelect: () => void triggerReIndex(true),
+          },
+        ];
+  const toggleItems: DropdownMenuItem[] = isDeleting
+    ? []
+    : [
+        {
+          kind: "action",
+          id: "toggle-status",
+          icon: paused ? SvgPlayCircle : SvgPause,
+          title: paused
+            ? t("manageMenu.toggleStatus.resume.label")
+            : t("manageMenu.toggleStatus.pause.label"),
+          description: paused
+            ? t("manageMenu.toggleStatus.resume.description")
+            : t("manageMenu.toggleStatus.pause.description"),
+          tooltip: isStatusUpdating
+            ? t("manageMenu.toggleStatus.tooltip.updating")
+            : undefined,
+          disabled: isStatusUpdating,
+          onSelect: () =>
+            handleStatusChange(
+              paused
+                ? ConnectorCredentialPairStatus.ACTIVE
+                : ConnectorCredentialPairStatus.PAUSED
+            ),
+        },
+      ];
+  // An untitled group, so the list draws its divider above the danger row.
+  const dangerItems: DropdownMenuItem[] =
+    !isDeleting && can(ccPair, "delete")
       ? [
           {
-            kind: "action" as const,
-            id: "toggle-status",
-            icon: paused ? SvgPlayCircle : SvgPause,
-            title: paused
-              ? t("manageMenu.toggleStatus.resume.label")
-              : t("manageMenu.toggleStatus.pause.label"),
-            description: paused
-              ? t("manageMenu.toggleStatus.resume.description")
-              : t("manageMenu.toggleStatus.pause.description"),
-            tooltip: isStatusUpdating
-              ? t("manageMenu.toggleStatus.tooltip.updating")
-              : undefined,
-            disabled: isStatusUpdating,
-            onSelect: () =>
-              handleStatusChange(
-                paused
-                  ? ConnectorCredentialPairStatus.ACTIVE
-                  : ConnectorCredentialPairStatus.PAUSED
-              ),
+            kind: "group",
+            items: [
+              {
+                kind: "action",
+                id: "delete",
+                icon: SvgTrash,
+                danger: true,
+                title: t("manageMenu.delete.label"),
+                tooltip: paused
+                  ? undefined
+                  : t("manageMenu.delete.tooltip.active"),
+                disabled: !paused,
+                onSelect: () => setShowDeleteConnectorConfirmModal(true),
+              },
+            ],
           },
         ]
-      : []),
-    ...(!isDeleting && can(ccPair, "delete")
-      ? [
-          {
-            kind: "action" as const,
-            id: "delete",
-            icon: SvgTrash,
-            danger: true,
-            title: t("manageMenu.delete.label"),
-            tooltip: paused ? undefined : t("manageMenu.delete.tooltip.active"),
-            disabled: !paused,
-            onSelect: () => setShowDeleteConnectorConfirmModal(true),
-          },
-        ]
-      : []),
-  ];
+      : [];
+  const manageItems: DropdownMenuItem[] = isPaused
+    ? [...toggleItems, ...dangerItems]
+    : [...startItems, ...reIndexItems, ...toggleItems, ...dangerItems];
 
   return (
     <SettingsLayouts.Root width="xl">
@@ -322,11 +371,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
                         icon={SvgEditBig}
                         onClick={openEditForm}
                       >
-                        {editT("editButton.label")}
+                        {t("configuration.editButton.label")}
                       </Button>,
                     ]
                   : []),
-                <Dropdown key="manage">
+                <Dropdown key="manage" width={80} align="end">
                   <Dropdown.Trigger asChild>
                     <Button
                       prominence="secondary"
@@ -383,39 +432,47 @@ function Main({ ccPairId }: { ccPairId: number }) {
               <PendingBackfills backfills={ccPair.pending_backfills} />
             )}
 
-            <StatusCard
-              ccPair={ccPair}
-              canOperate={canOperate}
-              onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
-              timeWindow={timeWindow.window}
-              onTimeWindowChange={(picked) => {
-                setTimeWindow(pickWindow(picked));
-                // The slice belongs to the old chart, so a new window drops it.
-                setSliceRange(null);
-              }}
-              onSliceClick={(start, end) =>
-                setSliceRange({
-                  since: start.toISOString(),
-                  until: end.toISOString(),
-                })
-              }
-            />
-            <PairChecksCard
-              source={source}
-              credentialId={ccPair.credential.id}
-              connectorId={ccPair.connector.id}
-              expandRequest={checksExpandRequest}
-            />
-            <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
-            <IndexConfigurationsSection
-              ccPair={ccPair}
-              onEdit={onEdit}
-              manageFiles={canManageInlineFiles}
-              onRefresh={refresh}
-            />
-            <SharingSettingsSection ccPair={ccPair} onEdit={onEdit} />
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-            <ScheduleSection ccPair={ccPair} editable={canOperate} />
+            {/* While a run row's popover is open, the sections above the runs step back. */}
+            <Section
+              alignItems="stretch"
+              gap={6}
+              height="fit"
+              className={focusDimClass(runFocus)}
+            >
+              <StatusCard
+                ccPair={ccPair}
+                canOperate={canOperate}
+                onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
+                timeWindow={timeWindow.window}
+                onTimeWindowChange={(picked) => {
+                  setTimeWindow(pickWindow(picked));
+                  // The slice belongs to the old chart, so a new window drops it.
+                  setSliceRange(null);
+                }}
+                onSliceClick={(start, end) =>
+                  setSliceRange({
+                    since: start.toISOString(),
+                    until: end.toISOString(),
+                  })
+                }
+              />
+              <PairChecksCard
+                source={source}
+                credentialId={ccPair.credential.id}
+                connectorId={ccPair.connector.id}
+                expandRequest={checksExpandRequest}
+              />
+              <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
+              <IndexConfigurationsSection
+                ccPair={ccPair}
+                onEdit={onEdit}
+                manageFiles={canManageInlineFiles}
+                onRefresh={refresh}
+              />
+              <SharingSettingsSection ccPair={ccPair} onEdit={onEdit} />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              <ScheduleSection ccPair={ccPair} editable={canOperate} />
+            </Section>
 
             <RunsCard
               ccPairId={ccPair.id}
@@ -424,6 +481,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               onSharedWindowChange={(picked) =>
                 setTimeWindow(pickWindow(picked))
               }
+              onFocusChange={setRunFocus}
               range={sliceRange}
             />
           </Section>
@@ -449,6 +507,7 @@ function BackToConnectors() {
       <Button
         icon={SvgArrowLeft}
         prominence="tertiary"
+        size="md"
         href={ADMIN_ROUTES.INDEXING_STATUS.path}
       >
         {t("backButton.label")}

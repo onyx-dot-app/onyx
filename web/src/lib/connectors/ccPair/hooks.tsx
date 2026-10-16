@@ -35,7 +35,9 @@ import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 // ---------------------------------------------------------------------------
 
 /** Pauses, resumes, or re-enables a cc-pair, confirming first when it is invalid. */
-export function useStatusChange(ccPair: CCPairFullInfo | null) {
+export function useStatusChange(
+  ccPair: Pick<CCPairFullInfo, "id" | "name" | "status"> | null
+) {
   const t = useTranslations("admin.connector");
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -50,7 +52,15 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
       await setCCPairStatus(ccPair.id, newStatus);
 
       // Use mutate to revalidate the status on the backend
-      await mutate(buildCCPairInfoUrl(ccPair.id));
+      // The status page lists the pair's state too.
+      await Promise.all([
+        mutate(buildCCPairInfoUrl(ccPair.id)),
+        mutate(
+          (cached) =>
+            typeof cached === "string" &&
+            cached.startsWith(SWR_KEYS.indexMonitoringConnectorsPrefix)
+        ),
+      ]);
     } catch (error) {
       console.error("Failed to update status", error);
     } finally {

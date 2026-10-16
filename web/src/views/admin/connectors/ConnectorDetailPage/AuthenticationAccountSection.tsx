@@ -6,6 +6,7 @@ import { mutate } from "swr";
 import { Button, Card, Modal } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgEdit, SvgUserEdit } from "@opal/icons";
+import { formatTimestamp } from "@opal/time";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -168,10 +169,8 @@ export default function AuthenticationAccountSection({
             }
             suffix={tAccount("sourceSuffix", { source: sourceName })}
             description={tAccount("addedOn.label", {
-              date: format.dateTime(new Date(ccPair.credential.time_created), {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
+              date: formatTimestamp(ccPair.credential.time_created, {
+                dateOnly: true,
               }),
             })}
             sizePreset="main-ui"

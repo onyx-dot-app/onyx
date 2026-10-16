@@ -21,6 +21,7 @@ import {
   IllustrationContent,
   Section,
 } from "@opal/layouts";
+import { SvgLongWait } from "@opal/illustrations";
 import { CardLoader } from "@opal/loaders";
 import {
   SvgActivity,
@@ -296,6 +297,22 @@ export default function ActivityPanel({
         ? t("empty.title")
         : t(`empty.${shown}`);
 
+  const countTags = (
+    <Section
+      flexDirection="row"
+      justifyContent="end"
+      gap={0.5}
+      padding={title === undefined ? 1.5 : 0}
+      width="fit"
+      height="fit"
+    >
+      {range !== null && onClearRange !== undefined && (
+        <SliceRangeFilter range={range} onClear={onClearRange} />
+      )}
+      <ActivityCountTags failures={failures.total} errors={errors.total} />
+    </Section>
+  );
+
   // Full width once the page stacks its columns. Beside them it pins 1.5rem under the settings header and fits the visible height, so a long list scrolls inside the panel instead of lengthening the page. 6rem is that gap plus the body's 4.5rem bottom padding, so the panel still fits when the page ends.
   return (
     <Section
@@ -337,91 +354,95 @@ export default function ActivityPanel({
                 )}
               </Section>
             )}
-            <InputTypeIn
-              searchIcon
-              variant="primary"
-              placeholder={t("search.placeholder")}
-              maxLength={SEARCH_MAX_LENGTH}
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-            />
+            {/* Beside the page the search shares its row with the counts. The side panel gives the search its own row. */}
             <Section
               flexDirection="row"
-              justifyContent="start"
+              justifyContent="between"
               alignItems="center"
               gap={1}
               height="fit"
-              wrap
             >
-              <Dropdown>
-                <Dropdown.Trigger asChild>
-                  <FilterButton
-                    icon={SvgActivity}
-                    active={shown !== "all"}
-                    onClear={() => setShown("all")}
-                  >
-                    {t(`filter.${shown}`)}
-                  </FilterButton>
-                </Dropdown.Trigger>
-                <Dropdown.Data
-                  label={t("filter.label")}
-                  value={shown}
-                  onSelect={(option) =>
-                    setShown(
-                      shownOptions.find(
-                        (candidate) => candidate === option.value
-                      ) ?? "all"
-                    )
-                  }
-                  items={shownOptions.map((candidate) => ({
-                    kind: "option" as const,
-                    value: candidate,
-                    title: t(`filter.${candidate}`),
-                  }))}
-                />
-              </Dropdown>
-              <SelectButton
-                variant="select-filter"
-                icon={showResolved ? SvgEye : SvgEyeClosed}
-                state={showResolved ? "selected" : "empty"}
-                onClick={() => setShowResolved((value) => !value)}
-              >
-                {t("filter.resolved")}
-              </SelectButton>
-              {resolveAllLevel !== null && resolvable.count > 0 && (
-                <Button
-                  rightIcon={SvgCheckAll}
-                  prominence="tertiary"
-                  disabled={resolving || !resolveAllSettled}
-                  onClick={() =>
-                    setConfirmingResolveAll({
-                      level: resolveAllLevel,
-                      q: search,
-                      timeRange,
-                      count: resolvable.count,
-                    })
-                  }
-                >
-                  {t("resolveAll.button")}
-                </Button>
-              )}
-              <Section
-                flexDirection="row"
-                justifyContent="end"
-                alignItems="center"
-                gap={2}
-                width="fit"
-                height="fit"
-                className="ms-auto"
-              >
-                {range !== null && onClearRange !== undefined && (
-                  <SliceRangeFilter range={range} onClear={onClearRange} />
-                )}
-                <ActivityCountTags
-                  failures={failures.total}
-                  errors={errors.total}
+              <Section height="fit" className="min-w-0 flex-1">
+                <InputTypeIn
+                  searchIcon
+                  variant={title === undefined ? "internal" : "primary"}
+                  placeholder={t("search.placeholder")}
+                  maxLength={SEARCH_MAX_LENGTH}
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
                 />
               </Section>
+              {title === undefined && countTags}
+            </Section>
+            <Section
+              flexDirection="row"
+              justifyContent="between"
+              alignItems="center"
+              gap={1}
+              height="fit"
+            >
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                gap={1}
+                width="fit"
+                height="fit"
+                wrap
+              >
+                <Dropdown>
+                  <Dropdown.Trigger asChild>
+                    <FilterButton
+                      icon={SvgActivity}
+                      active={shown !== "all"}
+                      onClear={() => setShown("all")}
+                    >
+                      {t(`filter.${shown}`)}
+                    </FilterButton>
+                  </Dropdown.Trigger>
+                  <Dropdown.Data
+                    label={t("filter.label")}
+                    value={shown}
+                    onSelect={(option) =>
+                      setShown(
+                        shownOptions.find(
+                          (candidate) => candidate === option.value
+                        ) ?? "all"
+                      )
+                    }
+                    items={shownOptions.map((candidate) => ({
+                      kind: "option" as const,
+                      value: candidate,
+                      title: t(`filter.${candidate}`),
+                    }))}
+                  />
+                </Dropdown>
+                <SelectButton
+                  variant="select-filter"
+                  icon={showResolved ? SvgEye : SvgEyeClosed}
+                  state={showResolved ? "selected" : "empty"}
+                  onClick={() => setShowResolved((value) => !value)}
+                >
+                  {t("filter.resolved")}
+                </SelectButton>
+                {resolveAllLevel !== null && resolvable.count > 0 && (
+                  <Button
+                    rightIcon={SvgCheckAll}
+                    prominence="tertiary"
+                    disabled={resolving || !resolveAllSettled}
+                    onClick={() =>
+                      setConfirmingResolveAll({
+                        level: resolveAllLevel,
+                        q: search,
+                        timeRange,
+                        count: resolvable.count,
+                      })
+                    }
+                  >
+                    {t("resolveAll.button")}
+                  </Button>
+                )}
+              </Section>
+              {title !== undefined && countTags}
             </Section>
           </Section>
 
@@ -442,7 +463,10 @@ export default function ActivityPanel({
                   ))}
                 </Section>
               ) : empty ? (
-                <IllustrationContent title={emptyTitle} />
+                <IllustrationContent
+                  illustration={SvgLongWait}
+                  title={emptyTitle}
+                />
               ) : (
                 levels.map((level) => (
                   <GroupList

@@ -2237,18 +2237,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Eine Neuindizierung ist nicht möglich, während bereits eine Indizierung läuft",
-            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung",
-            "paused": "Setzen Sie den Konnektor vor der Neuindizierung fort"
+            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "Indizierung pausieren",
-            "description": "Alle laufenden und künftigen Indexläufe und Synchronisationen abbrechen."
+            "label": "Indizierung & Synchronisation pausieren",
+            "description": "Laufende und künftige Indexläufe und Berechtigungssynchronisationen abbrechen. Indizierte Dokumente sind dann nicht mehr synchron, bleiben aber durchsuchbar."
           },
           "resume": {
-            "label": "Indizierung fortsetzen",
-            "description": "Geplante Indexläufe und Synchronisationen wieder zulassen."
+            "label": "Indizierung & Synchronisation fortsetzen",
+            "description": "Indexläufe und Berechtigungssynchronisationen wieder starten."
           },
           "tooltip": {
             "updating": "Statusaktualisierung läuft"
@@ -2263,7 +2262,11 @@
         },
         "fullReindex": {
           "label": "Vollständig neu indizieren",
-          "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang Stunden oder Tage dauern."
+          "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang **Stunden oder Tage** dauern."
+        },
+        "startIndexing": {
+          "label": "Indexierung starten",
+          "description": "Konnektorprüfungen überspringen und jetzt indexieren."
         }
       },
       "reEnableModal": {
@@ -2303,16 +2306,17 @@
       },
       "statusCard": {
         "documentsIndexed": {
-          "label": "Indizierte Dokumente"
+          "label": "Indexierte Dokumente"
         },
         "indexingSpeed": "{speed} Dok./Min.",
         "lastIndexed": {
           "value": "Zuletzt indiziert {when}"
         },
-        "title": "Indexierungsstatus",
+        "statusLine": "Indexierungsstatus - {detail}",
         "documents": {
           "label": "Aktuell / Gesamt",
-          "total": "/ {total}"
+          "total": "/ {total}",
+          "totalLabel": "Gesamt"
         },
         "throughput": {
           "ariaLabel": "Indizierte Dokumente im Zeitverlauf",
@@ -2408,7 +2412,8 @@
           "displayName": "• {name}",
           "docsUnit": "{count, plural, one {Dokument} other {Dokumente}}"
         },
-        "summary": "{realm} • {counts}"
+        "summary": "{realm} • {counts}",
+        "hostPrefix": "{host}: {realm}"
       },
       "sharing": {
         "title": "Freigabeeinstellungen",
@@ -2450,7 +2455,8 @@
           "queued": "In Warteschlange",
           "running": "Läuft",
           "rate": "{rate} Dok./Min.",
-          "finished": "{time} ({minutes, number} Min.)"
+          "finished": "{time} ({minutes, number} Min.)",
+          "membershipRate": "{rate} Mitgliedschaften/Min."
         },
         "actions": {
           "stages": "Phasenmetriken anzeigen",
@@ -2469,9 +2475,8 @@
         "figures": {
           "indexed": "indiziert",
           "synced": "synchronisiert",
-          "memberships": "Mitgliedschaften",
           "removed": "entfernt",
-          "checks": "Prüfungen ausgeführt"
+          "checksRun": "{count, plural, one {# Prüfung ausgeführt} other {# Prüfungen ausgeführt}}"
         },
         "counts": {
           "newDocs": "{count, plural, one {# neues Dokument} other {# neue Dokumente}}",
@@ -2485,10 +2490,11 @@
           "canceled": "{count, plural, one {# Lauf abgebrochen} other {# Läufe abgebrochen}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
-          "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
+          "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}",
+          "syncedDocs": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}"
         },
         "search": {
-          "placeholder": "Indexläufe durchsuchen..."
+          "placeholder": "Indexläufe durchsuchen…"
         },
         "window": {
           "label": "Zeitraum",
@@ -2511,9 +2517,11 @@
           "title": "Die Läufe konnten nicht geladen werden."
         },
         "empty": {
-          "title": "Noch keine Läufe",
+          "title": "Keine aktuellen Indexierungsläufe",
           "filteredTitle": "Keine Läufe entsprechen diesen Filtern.",
-          "description": "Läufe werden im Hintergrund geplant und erscheinen eventuell erst nach kurzer Zeit."
+          "pastRuns": "{count, plural, one {# vergangener Lauf} other {# vergangene Läufe}}",
+          "view": "Anzeigen",
+          "viewAria": "{count, plural, one {# vergangenen Lauf anzeigen} other {# vergangene Läufe anzeigen}}"
         },
         "units": "{count, plural, one {Lauf} other {Läufe}}",
         "errorModal": {
@@ -2531,11 +2539,12 @@
           "title": "Connector-Prüfungen",
           "close": "Schließen",
           "count": "({count})"
-        }
+        },
+        "showing": "<mono>{from}</mono>~<mono>{to}</mono> von <mono>{total}</mono>"
       },
       "activity": {
         "search": {
-          "placeholder": "Aktivitätsverlauf durchsuchen..."
+          "placeholder": "Aktivitätsverlauf durchsuchen…"
         },
         "counts": {
           "failures": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}",
@@ -2543,7 +2552,7 @@
         },
         "filter": {
           "label": "Anzeigen",
-          "all": "Alle Stufen",
+          "all": "Alle Ebenen",
           "failures": "Fehlschläge",
           "errors": "Fehler",
           "other": "Sonstige",
@@ -2556,60 +2565,65 @@
         },
         "title": {
           "indexing": {
-            "failed": "Indexierung fehlgeschlagen",
-            "running": "Indexierung läuft mit Fehlern",
-            "stopped": "Indexierung mit Fehlern abgebrochen",
-            "errors": "Indexierung mit Fehlern abgeschlossen",
-            "resolved": "Indexierungsfehler behoben",
-            "succeeded": "Indexierung erfolgreich abgeschlossen",
-            "inProgress": "Indexierung läuft",
-            "canceled": "Indexierung gestoppt"
+            "failed": "Indexierung fehlgeschlagen.",
+            "failedWith": "Indexierung fehlgeschlagen: {reason}.",
+            "running": "Indexierung läuft mit Fehlern.",
+            "stopped": "Indexierung mit Fehlern abgebrochen.",
+            "errors": "Indexierung mit Fehlern abgeschlossen.",
+            "resolved": "Indexierungsfehler behoben.",
+            "succeeded": "Indexierung erfolgreich abgeschlossen.",
+            "inProgress": "Indexierung läuft.",
+            "canceled": "Indexierung gestoppt."
           },
           "doc_permission_sync": {
-            "failed": "Berechtigungssynchronisierung fehlgeschlagen",
-            "running": "Berechtigungen werden mit Fehlern synchronisiert",
-            "stopped": "Berechtigungssynchronisierung mit Fehlern abgebrochen",
-            "errors": "Berechtigungen mit Fehlern synchronisiert",
-            "resolved": "Fehler der Berechtigungssynchronisierung behoben",
-            "succeeded": "Berechtigungen erfolgreich synchronisiert",
-            "inProgress": "Berechtigungen werden synchronisiert",
-            "canceled": "Berechtigungssynchronisierung gestoppt"
+            "failed": "Berechtigungssynchronisierung fehlgeschlagen.",
+            "failedWith": "Berechtigungssynchronisierung fehlgeschlagen: {reason}.",
+            "running": "Berechtigungen werden mit Fehlern synchronisiert.",
+            "stopped": "Berechtigungssynchronisierung mit Fehlern abgebrochen.",
+            "errors": "Berechtigungen mit Fehlern synchronisiert.",
+            "resolved": "Fehler der Berechtigungssynchronisierung behoben.",
+            "succeeded": "Berechtigungen erfolgreich synchronisiert.",
+            "inProgress": "Berechtigungen werden synchronisiert.",
+            "canceled": "Berechtigungssynchronisierung gestoppt."
           },
           "group_sync": {
-            "failed": "Gruppenmitgliedschaftssynchronisierung fehlgeschlagen",
-            "running": "Gruppenmitgliedschaften werden mit Fehlern synchronisiert",
-            "stopped": "Gruppenmitgliedschaftssynchronisierung mit Fehlern abgebrochen",
-            "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert",
-            "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben",
-            "succeeded": "Gruppenmitgliedschaften erfolgreich synchronisiert",
-            "inProgress": "Gruppenmitgliedschaften werden synchronisiert",
-            "canceled": "Gruppensynchronisierung gestoppt"
+            "failed": "Gruppenmitgliedschaftssynchronisierung fehlgeschlagen.",
+            "failedWith": "Gruppenmitgliedschaftssynchronisierung fehlgeschlagen: {reason}.",
+            "running": "Gruppenmitgliedschaften werden mit Fehlern synchronisiert.",
+            "stopped": "Gruppenmitgliedschaftssynchronisierung mit Fehlern abgebrochen.",
+            "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert.",
+            "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben.",
+            "succeeded": "Gruppenmitgliedschaften erfolgreich synchronisiert.",
+            "inProgress": "Gruppenmitgliedschaften werden synchronisiert.",
+            "canceled": "Gruppensynchronisierung gestoppt."
           },
           "pruning": {
-            "failed": "Bereinigung fehlgeschlagen",
-            "running": "Bereinigung läuft mit Fehlern",
-            "stopped": "Bereinigung mit Fehlern gestoppt",
-            "errors": "Bereinigung mit Fehlern abgeschlossen",
-            "resolved": "Bereinigungsfehler behoben",
-            "succeeded": "Bereinigung erfolgreich abgeschlossen",
-            "inProgress": "Bereinigung läuft",
-            "canceled": "Bereinigung gestoppt"
+            "failed": "Bereinigung fehlgeschlagen.",
+            "failedWith": "Bereinigung fehlgeschlagen: {reason}.",
+            "running": "Bereinigung läuft mit Fehlern.",
+            "stopped": "Bereinigung mit Fehlern gestoppt.",
+            "errors": "Bereinigung mit Fehlern abgeschlossen.",
+            "resolved": "Bereinigungsfehler behoben.",
+            "succeeded": "Bereinigung erfolgreich abgeschlossen.",
+            "inProgress": "Bereinigung läuft.",
+            "canceled": "Bereinigung gestoppt."
           },
           "checks": {
-            "failed": "Connector-Prüfungen fehlgeschlagen",
-            "running": "Connector-Prüfungen laufen mit Fehlern",
-            "stopped": "Connector-Prüfungen mit Fehlern gestoppt",
-            "errors": "Connector-Prüfungen mit Fehlern abgeschlossen",
-            "resolved": "Fehler der Connector-Prüfungen behoben",
-            "succeeded": "Connector-Prüfungen bestanden",
-            "inProgress": "Connector-Prüfungen laufen",
-            "canceled": "Connector-Prüfungen gestoppt"
+            "failed": "Connector-Prüfungen fehlgeschlagen.",
+            "failedWith": "Connector-Prüfungen fehlgeschlagen: {reason}.",
+            "running": "Connector-Prüfungen laufen mit Fehlern.",
+            "stopped": "Connector-Prüfungen mit Fehlern gestoppt.",
+            "errors": "Connector-Prüfungen mit Fehlern abgeschlossen.",
+            "resolved": "Fehler der Connector-Prüfungen behoben.",
+            "succeeded": "Connector-Prüfungen bestanden.",
+            "inProgress": "Connector-Prüfungen laufen.",
+            "canceled": "Connector-Prüfungen gestoppt."
           }
         },
         "description": {
           "indexing": "{count, plural, one {# Dokument indexiert} other {# Dokumente indexiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
-          "doc_permission_sync": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
-          "group_sync": "{count, plural, one {# Mitgliedschaft synchronisiert} other {# Mitgliedschaften synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
+          "doc_permission_sync": "{count, plural, one {# Benutzerberechtigung synchronisiert} other {# Benutzerberechtigungen synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
+          "group_sync": "{count, plural, one {# Gruppe synchronisiert} other {# Gruppen synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
           "pruning": "{count, plural, one {# Dokument entfernt} other {# Dokumente entfernt}}. Laufzeit der Bereinigung {minutes, plural, one {# Minute} other {# Minuten}}.",
           "checks": "{count, plural, one {# Prüfung ausgeführt} other {# Prüfungen ausgeführt}}. Laufzeit der Prüfung {minutes, plural, one {# Minute} other {# Minuten}}.",
           "checksFailed": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}."
@@ -2626,7 +2640,8 @@
         },
         "more": "Mehr anzeigen",
         "empty": {
-          "title": "Keine Fehlschläge oder Fehler",
+          "title": "Keine aktuellen Aktivitäten",
+          "resolved": "Keine behobenen Fehler",
           "filtered": "Nichts passt zu dieser Suche.",
           "failures": "Keine Fehlschläge",
           "errors": "Keine Fehler",
@@ -2638,7 +2653,7 @@
         "docs": {
           "title": "Fehlgeschlagene Dokumente",
           "search": {
-            "placeholder": "Dateien durchsuchen..."
+            "placeholder": "Dokumente durchsuchen…"
           },
           "resolveAll": "Alle beheben",
           "resolveOne": "Dieses Dokument beheben",
@@ -2650,7 +2665,7 @@
           "open": "Dokument öffnen"
         },
         "trace": {
-          "runId": "• Lauf-ID: {id}",
+          "header": "Stacktrace • Lauf-ID: {id}",
           "copy": "Stacktrace kopieren"
         },
         "actions": {
@@ -6840,12 +6855,13 @@
         "viewLogs": "Logs anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
-          "close": "Bereich schließen"
+          "close": "Bereich schließen",
+          "pairTitle": "Aktivitätsverlauf von {name}"
         }
       },
       "list": {
         "search": {
-          "placeholder": "Konnektoren suchen..."
+          "placeholder": "Konnektoren suchen…"
         },
         "statusFilter": {
           "label": "Status",
@@ -6876,7 +6892,9 @@
           "manage": "Verwalten",
           "manageFederated": "Föderierten Konnektor verwalten",
           "expand": "Details anzeigen",
-          "collapse": "Details ausblenden"
+          "collapse": "Details ausblenden",
+          "pause": "Pausieren",
+          "resume": "Fortsetzen"
         },
         "federated": {
           "tag": "Föderiert"
@@ -6888,7 +6906,8 @@
         },
         "loadError": "Die Konnektoren konnten nicht geladen werden.",
         "units": "{count, plural, one {Konnektor} other {Konnektoren}}"
-      }
+      },
+      "title": "Indexierungsstatus der Connectors"
     },
     "languageModels": {
       "availableProviders": {
@@ -10182,7 +10201,7 @@
       "groups": {
         "failed": "{count} Fehlgeschlagen",
         "indeterminate": "{count} Nicht verifiziert",
-        "passed": "{count} Abgeschlossen",
+        "passed": "{count} Erfolgreich",
         "skipped": "{count} Übersprungen",
         "running": "{count} laufen",
         "expected": "{count} erwartet"
@@ -10207,7 +10226,7 @@
       },
       "foldButton": {
         "fold": "Einklappen",
-        "expand": "Ausklappen"
+        "expand": "Alle anzeigen"
       },
       "titleCount": "({complete}/{total})",
       "summary": {

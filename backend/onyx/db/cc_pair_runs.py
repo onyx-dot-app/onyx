@@ -338,11 +338,25 @@ def _doc_permission_sync_runs(
     )
 
 
+def _failed_count_errors(
+    run_filter: CCPairRunFilter, failed: InstrumentedAttribute[int]
+) -> ColumnElement[bool] | None:
+    """The ``errors`` filter for a kind that counts failed items. Nothing resolves these failures."""
+    match run_filter.errors:
+        case CCPairRunErrors.UNRESOLVED:
+            return failed > 0
+        case CCPairRunErrors.RESOLVED:
+            return false()
+        case CCPairRunErrors.NONE:
+            return failed == 0
+        case None:
+            return None
+
+
 def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
     stmt = select(ExternalGroupPermissionSyncAttempt).where(
         _group_sync_scope(run_filter)
     )
-    # A group sync records no per-item errors, so it either fails or succeeds.
     return _narrowed(
         stmt,
         run_filter,
@@ -353,7 +367,9 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
         ExternalGroupPermissionSyncAttempt.status,
         PermissionSyncStatus,
         with_status_filter,
-        _no_item_errors(run_filter),
+        _failed_count_errors(
+            run_filter, ExternalGroupPermissionSyncAttempt.total_groups_failed
+        ),
         _group_sync_has_newer_run(run_filter),
         run_is_resolved(
             CCPairRunKind.GROUP_SYNC, ExternalGroupPermissionSyncAttempt.id
@@ -374,7 +390,6 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
             newer.sync_start_time, newer.id, SyncRecord.sync_start_time, SyncRecord.id
         ),
     )
-    # A prune records no per-document errors, so it either fails or succeeds.
     return _narrowed(
         stmt,
         run_filter,
@@ -383,7 +398,7 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.sync_status,
         SyncStatus,
         with_status_filter,
-        _no_item_errors(run_filter),
+        _failed_count_errors(run_filter, SyncRecord.num_docs_failed),
         has_newer_run,
         run_is_resolved(CCPairRunKind.PRUNING, SyncRecord.id),
     )
