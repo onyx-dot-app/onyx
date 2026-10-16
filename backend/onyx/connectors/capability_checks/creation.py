@@ -40,8 +40,10 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
+    dependency_not_run_result,
     generate_capability_report,
     merge_capability_results,
+    stop_blocked_results,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -310,12 +312,18 @@ def _run_checks_within_budget(
 
 
 def _unfinished_results(
-    checks: list[CapabilityCheck[Any]], unfinished: frozenset[str], message: str
+    checks: list[CapabilityCheck[Any]],
+    unfinished: frozenset[str],
+    finished: list[CapabilityCheckResult],
+    message: str,
 ) -> list[CapabilityCheckResult]:
-    """INCOMPLETE rows for checks with no result, for a report that is stored
-    without a background run."""
+    """Rows for checks with no result, for a report that is stored without a
+    background run: not run when a finished dependency stops the check, else
+    INCOMPLETE."""
+    result_by_check_id = {result.check_id: result for result in finished}
     return [
-        CapabilityCheckResult(
+        dependency_not_run_result(check, result_by_check_id)
+        or CapabilityCheckResult(
             capability=check.capability,
             check_id=check.check_id,
             display_name=check.display_name,
@@ -498,7 +506,12 @@ def run_named_checks_within_budget(
         for check in checks
         if check.discovery and check.check_id not in reused
     )
-    return NamedCheckRun(finished_results=finished, unfinished_check_ids=unfinished)
+    # The checks ran side by side, so a check whose dependency failed ran
+    # anyway: it reports its dependency, not its own failure.
+    return NamedCheckRun(
+        finished_results=stop_blocked_results(checks, finished),
+        unfinished_check_ids=unfinished,
+    )
 
 
 def _discovery_not_run_result(check: CapabilityCheck[Any]) -> CapabilityCheckResult:
@@ -591,7 +604,10 @@ def validate_pairing_with_named_checks(
             _store_report(
                 finished
                 + _unfinished_results(
-                    get_capability_checks(source), unfinished, _REJECTED_MESSAGE
+                    get_capability_checks(source),
+                    unfinished,
+                    finished,
+                    _REJECTED_MESSAGE,
                 ),
                 credential_id=credential_id,
                 connector_id=connector_id,

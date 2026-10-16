@@ -14,7 +14,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftRunStatus,
     cache_draft_result,
     pending_in_run_order,
-    required_check_failed,
+    settled_results,
 )
 from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.models import (
@@ -138,20 +138,34 @@ def test_a_cached_required_failure_skips_discovery() -> None:
     results: list[CapabilityCheckResult] = run_capability_checks(
         [_Check("listing", [_USERS], discovery=True)],
         _context(),
-        required_check_failed=True,
+        prior_results=[
+            CapabilityCheckResult(
+                capability=CredentialCapability.INDEXING,
+                check_id="auth",
+                display_name="auth",
+                required=True,
+                status=CapabilityCheckStatus.FAILED,
+            )
+        ],
     )
 
     assert results[0].status == CapabilityCheckStatus.SKIPPED
     assert results[0].findings == []
 
 
-def test_a_draft_snapshot_knows_its_cached_required_failures() -> None:
-    assert required_check_failed(
-        _snapshot([_state("auth", DraftCheckStateKind.FAILED)])
+def test_a_draft_snapshot_settles_only_its_finished_checks() -> None:
+    results = settled_results(
+        _snapshot(
+            [
+                _state("auth", DraftCheckStateKind.FAILED),
+                _state("comments", DraftCheckStateKind.PENDING),
+            ]
+        )
     )
-    assert not required_check_failed(
-        _snapshot([_state("comments", DraftCheckStateKind.FAILED, required=False)])
-    )
+
+    assert [(result.check_id, result.status) for result in results] == [
+        ("auth", CapabilityCheckStatus.FAILED)
+    ]
 
 
 def test_pending_checks_run_validation_first_whatever_the_registration() -> None:
@@ -163,7 +177,12 @@ def test_pending_checks_run_validation_first_whatever_the_registration() -> None
         ]
     )
 
-    assert [check.check_id for check in pending_in_run_order(snapshot)] == [
+    checks: list[CapabilityCheck] = [
+        _Check("auth"),
+        _Check("listing", discovery=True),
+        _Check("content"),
+    ]
+    assert [check.check_id for check in pending_in_run_order(snapshot, checks)] == [
         "content",
         "listing",
     ]

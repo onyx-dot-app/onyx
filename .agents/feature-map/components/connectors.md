@@ -462,7 +462,13 @@ rejected, permission, invalid, rate limited, timeout, unreachable, unexpected).
 One exception: on a form run (a draft run or a pair dry run) a sign-in check
 that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
 source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
-as `INCOMPLETE`. `CapabilityCheckTrigger`
+as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
+`run_order` runs dependencies first. A dependency that `FAILED`, is
+`INCOMPLETE` or did not run stops the check: it is `SKIPPED` with a
+`not_run_reason` and `blocked_by`. After a rate limit, the rest of the run is
+`SKIPPED` too. Creation runs its checks side by side, then applies the same rule
+(`stop_blocked_results`). In a draft run, a check waits while a dependency
+waits (`draft_runs.py:wait_for_dependencies`). `CapabilityCheckTrigger`
 (`backend/onyx/db/enums.py`): `MANUAL`, `CREDENTIAL_CREATED`,
 `CC_PAIR_VALIDATION`, `INDEXING_ATTEMPT`, `PERM_SYNC_ATTEMPT`. The simpler,
 existing blocking-validation path in `factory.py:validate_ccpair_for_user`

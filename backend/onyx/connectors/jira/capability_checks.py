@@ -164,6 +164,30 @@ def _raise_for_api_error(
     ) from error
 
 
+_SIGN_IN_CHECK_IDS = ("jira_auth", "jira_scoped_token_auth")
+_SCOPE_CHECK_IDS = (
+    "jira_projects_visible",
+    "jira_configured_project",
+    "jira_jql_query",
+)
+# check_id to the checks it runs after, in run order. A listed check that does
+# not apply (the other token type, a scope not in use) is left out.
+_DEPENDS_ON: dict[str, tuple[str, ...]] = {
+    "jira_projects_visible": _SIGN_IN_CHECK_IDS,
+    "jira_configured_project": ("jira_projects_visible",),
+    "jira_jql_query": ("jira_projects_visible",),
+    "jira_issue_read": _SCOPE_CHECK_IDS,
+    "jira_permission_scheme_read": _SCOPE_CHECK_IDS,
+    "jira_project_access_mappable": ("jira_permission_scheme_read",),
+    "jira_project_roles_read": ("jira_permission_scheme_read",),
+    "jira_permission_user_emails": ("jira_project_roles_read",),
+    "jira_group_listing": _SIGN_IN_CHECK_IDS,
+    "jira_group_listing_complete": ("jira_group_listing",),
+    "jira_group_membership": ("jira_group_listing",),
+    "jira_group_member_emails": ("jira_group_membership",),
+}
+
+
 class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
     config_class = JiraConnectorConfig
 
@@ -189,6 +213,7 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
             docs_link=_DOCS_LINK,
             validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
+            depends_on=_DEPENDS_ON.get(check_id, ()),
         )
 
 
