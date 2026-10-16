@@ -20,7 +20,10 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import Skill, User
 from onyx.external_apps.providers.slack import SlackAction
+from onyx.external_apps.providers.zendesk import ZendeskAction
+from onyx.server.features.skill.response_helpers import skill_preview_response
 from onyx.skills.built_in import SLACK
+from onyx.skills.bundle import strip_skill_md_frontmatter
 from onyx.skills.push import build_skills_fileset_for_user
 from tests.external_dependency_unit.craft.db_helpers import (
     make_external_app,
@@ -144,3 +147,39 @@ def test_no_disabled_actions_omits_section(
     rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
     # No DENY policies -> the unavailable-actions warning is omitted entirely.
     assert "unavailable and should not be attempted" not in rendered
+
+
+def test_zendesk_push_and_preview_share_account_and_action_policy(
+    db_session: Session,
+    test_user: User,
+) -> None:
+    skill = reset_built_in_skill_row(
+        db_session, built_in_skill_id="zendesk", is_public=True
+    )
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        app_type=ExternalAppType.ZENDESK,
+        auth_template={"Authorization": "Bearer {access_token}"},
+        organization_credentials={"subdomain": "acme"},
+        action_policies={ZendeskAction.TICKETS_UPDATE.value: EndpointPolicy.DENY},
+    )
+    make_user_credential(
+        db_session,
+        app=app,
+        user=test_user,
+        user_credentials={"access_token": "test-token"},
+    )
+    db_session.commit()
+
+    files = build_skills_fileset_for_user(test_user, db_session)
+    preview = skill_preview_response(skill, test_user, db_session)
+    instructions = strip_skill_md_frontmatter(files["zendesk/SKILL.md"].decode())
+
+    assert preview.instructions_markdown == instructions
+    assert "https://acme.zendesk.com" in instructions
+    assert "- Update a ticket" in instructions
+    assert "{{" not in instructions
+    assert files["zendesk/account.txt"].decode().strip() == "https://acme.zendesk.com"
+    assert "zendesk/zendesk_api.py" in files
+    assert not any(name.endswith(".template") for name in files)

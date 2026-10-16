@@ -16,21 +16,11 @@ def _mask_api_key(api_key: str | None) -> str | None:
 
 
 class TestImageGenerationRequest(BaseModel):
-    """Request model for testing image generation API key.
-
-    Two modes:
-    1. Direct API key: Provide api_key + provider
-    2. From existing provider: Provide source_llm_provider_id (backend fetches API key)
-    """
+    """Request model for testing image generation API key."""
 
     model_name: str  # e.g., "gpt-image-1"
-
-    # Option 1: Direct API key
     provider: str | None = None  # e.g., "openai", "azure"
     api_key: str | None = None
-
-    # Option 2: Use API key from existing provider
-    source_llm_provider_id: int | None = None
 
     # Additional fields for custom config
     custom_config: dict[str, str] | None = None
@@ -44,23 +34,13 @@ class TestImageGenerationRequest(BaseModel):
 class ImageGenerationConfigCreate(BaseModel):
     """Request model for creating an image generation config.
 
-    Two creation modes (backend always creates new LLM provider + model config):
-
-    1. Clone mode: Provide source_llm_provider_id + model_name
-       → Backend extracts credentials from existing provider and creates new provider
-
-    2. New credentials mode: Provide api_key + provider + model_name (+ optional fields)
-       → Backend creates new provider with provided credentials
+    The backend always creates a new LLM provider + model config with the
+    provided credentials.
     """
 
-    # Required for both modes
     image_provider_id: str  # Static unique key (e.g., "openai_gpt_image_1")
     model_name: str  # e.g., "gpt-image-1"
 
-    # Option 1: Clone mode - use credentials from existing provider
-    source_llm_provider_id: int | None = None
-
-    # Option 2: New credentials mode
     provider: str | None = None  # e.g., "openai", "azure"
     api_key: str | None = None
     api_base: str | None = None
@@ -74,18 +54,12 @@ class ImageGenerationConfigCreate(BaseModel):
 class ImageGenerationConfigUpdate(BaseModel):
     """Request model for updating an image generation config.
 
-    Same modes as create - either clone from existing provider or use new credentials.
     Backend will delete old LLM provider and create new one.
     """
 
-    # Required
     model_name: str  # e.g., "gpt-image-1"
     # Note: image_provider_id cannot be changed during update
 
-    # Option 1: Clone mode - use credentials from existing provider
-    source_llm_provider_id: int | None = None
-
-    # Option 2: New credentials mode
     provider: str | None = None  # e.g., "openai", "azure"
     api_key: str | None = None
     api_base: str | None = None
@@ -93,7 +67,7 @@ class ImageGenerationConfigUpdate(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
 
-    # If False and using new credentials mode, preserve existing API key from DB
+    # If False, preserve existing API key from DB
     api_key_changed: bool = False
 
 

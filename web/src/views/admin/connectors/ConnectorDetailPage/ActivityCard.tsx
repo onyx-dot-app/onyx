@@ -10,7 +10,7 @@ import {
   SvgCheckCircle,
   SvgFiles,
   SvgTextLines,
-  SvgUser,
+  SvgUserShield,
   SvgUsers,
   SvgXCircle,
   SvgXOctagon,
@@ -66,7 +66,7 @@ const GROUP_STYLE: Record<
 /** What each kind's failed items are: documents, users, groups or checks. */
 const WARNING_ICONS = {
   indexing: SvgFiles,
-  doc_permission_sync: SvgUser,
+  doc_permission_sync: SvgUserShield,
   group_sync: SvgUsers,
   pruning: SvgFiles,
   checks: SvgXOctagon,
@@ -196,7 +196,11 @@ export default function ActivityCard({
               gap={1}
               height="fit"
             >
-              <Text font="secondary-mono" color="text-03">
+              <Text
+                font="secondary-mono"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
                 {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
               </Text>
               <Section
@@ -206,6 +210,7 @@ export default function ActivityCard({
                 padding={0.5}
                 width="fit"
                 height="fit"
+                className="min-w-0"
               >
                 {run.kind === "indexing" && run.attempt.is_new_model && (
                   <Tag

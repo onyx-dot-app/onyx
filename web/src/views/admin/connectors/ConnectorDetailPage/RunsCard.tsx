@@ -270,11 +270,8 @@ export default function RunsCard({
           {sharedWindow !== undefined && onSharedWindowChange !== undefined ? (
             <Dropdown>
               <Dropdown.Trigger asChild>
-                <FilterButton
-                  icon={SvgClock}
-                  active
-                  onClear={() => onSharedWindowChange(PAIR_WINDOWS[0]!)}
-                >
+                {/* The shared window is always set, so it shows filled with no clear button. */}
+                <FilterButton icon={SvgClock} filled onClear={() => undefined}>
                   {t(`window.${WINDOW_LABEL_KEYS[sharedWindow.window]}`)}
                 </FilterButton>
               </Dropdown.Trigger>

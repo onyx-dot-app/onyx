@@ -8,7 +8,7 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     fetch_existing_llm_providers,
     fetch_llm_provider_view,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.llm.constants import LlmProviderNames
@@ -73,7 +73,12 @@ def _ensure_llm_provider(db_session: Session) -> None:  # noqa: F811
         ),
         db_session=db_session,
     )
-    update_default_provider(provider.id, _FALLBACK_MODEL, db_session)
+    update_default_model(
+        provider_id=provider.id,
+        model=_FALLBACK_MODEL,
+        db_session=db_session,
+        flow_type=LLMModelFlowType.CHAT,
+    )
     db_session.commit()
 
 

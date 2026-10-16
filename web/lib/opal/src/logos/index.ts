@@ -93,6 +93,7 @@ export { default as SvgVoyage } from "@opal/logos/voyage";
 export { default as SvgWikipedia } from "@opal/logos/wikipedia";
 export { default as SvgXAI } from "@opal/logos/xai";
 export { default as SvgXenForo } from "@opal/logos/xenforo";
+export { default as SvgYouTrack } from "@opal/logos/youtrack";
 export { default as SvgZendesk } from "@opal/logos/zendesk";
 export { default as SvgZoom } from "@opal/logos/zoom";
 export { default as SvgZulip } from "@opal/logos/zulip";

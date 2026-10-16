@@ -18,6 +18,7 @@ from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.notion import NotionProvider
 from onyx.external_apps.providers.slack import SlackProvider
+from onyx.external_apps.providers.zendesk import ZendeskProvider
 from shared_configs.configs import MULTI_TENANT
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
@@ -29,6 +30,7 @@ _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     GitHubProvider,
     HubspotProvider,
     NotionProvider,
+    ZendeskProvider,
 ]
 
 

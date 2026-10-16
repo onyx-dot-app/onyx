@@ -63,10 +63,8 @@ from onyx.db.port_attempt import (
     get_latest_port_attempt,
     get_port_attempt,
     get_stale_in_progress_port_attempts,
-    mark_port_canceled,
-    mark_port_failed,
     mark_port_in_progress,
-    mark_port_succeeded,
+    mark_port_terminal,
     pause_port_attempt,
     port_backfill_has_pending_work,
     request_port_cancel,
@@ -281,8 +279,11 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             db_session, attempt.search_settings_id
         )
         if future_search_settings is None:
-            mark_port_failed(
-                db_session, port_attempt_id, error_msg="FUTURE search settings missing"
+            mark_port_terminal(
+                db_session,
+                port_attempt_id,
+                PortAttemptStatus.FAILED,
+                error_msg="FUTURE search settings missing",
             )
             return
         # Refuse a FUTURE that is no longer the port target: a revert/supersede or stale
@@ -310,9 +311,10 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 db_session, future_search_settings.port_backfill_source_id
             )
             if present_search_settings is None:
-                mark_port_failed(
+                mark_port_terminal(
                     db_session,
                     port_attempt_id,
+                    PortAttemptStatus.FAILED,
                     error_msg="port backfill source settings missing",
                 )
                 return
@@ -330,7 +332,9 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             copier = PortCopier(present_search_settings, future_search_settings)
         except Exception as e:
             log.exception("Failed to build port copier; marking FAILED")
-            mark_port_failed(db_session, port_attempt_id, error_msg=str(e))
+            mark_port_terminal(
+                db_session, port_attempt_id, PortAttemptStatus.FAILED, error_msg=str(e)
+            )
             return
 
     start_monotonic = time.monotonic()
@@ -362,12 +366,16 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             if attempt.cancel_requested:
                 # ack between batches, after our last write: this unblocks the waiting
                 # deletion, so its cleanup writes strictly after us
-                mark_port_canceled(db_session, port_attempt_id)
+                mark_port_terminal(
+                    db_session, port_attempt_id, PortAttemptStatus.CANCELED
+                )
                 log.info("Port cancel requested; acknowledged and stopping")
                 return
             if port_user_id is not None:
                 if not user_file_port_scope_active(db_session, port_user_id):
-                    mark_port_canceled(db_session, port_attempt_id)
+                    mark_port_terminal(
+                        db_session, port_attempt_id, PortAttemptStatus.CANCELED
+                    )
                     log.info("user gone, stopping port")
                     return
             elif cc_pair_id is not None:
@@ -378,7 +386,9 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 ):
                     # A deletion is waiting on us; ack now (between batches, after our
                     # last write) so it proceeds next tick, not after the watchdog.
-                    mark_port_canceled(db_session, port_attempt_id)
+                    mark_port_terminal(
+                        db_session, port_attempt_id, PortAttemptStatus.CANCELED
+                    )
                     log.info("cc_pair gone/deleting, stopping port")
                     return
             # Thread-pool tasks ignore celery's soft_time_limit, so enforce it here.
@@ -387,9 +397,10 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             # stall watchdog fails it a full window later. After the cancel/deleting
             # acks so those still win.
             if time.monotonic() - start_monotonic > _PORT_SOFT_TIME_LIMIT:
-                mark_port_failed(
+                mark_port_terminal(
                     db_session,
                     port_attempt_id,
+                    PortAttemptStatus.FAILED,
                     error_msg="soft time limit reached; yielding for reschedule",
                 )
                 log.info("Port soft time limit reached; failing for prompt resume")
@@ -437,7 +448,12 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         except Exception as e:
             log.exception("Port batch failed after retries; marking FAILED")
             with get_session_with_current_tenant() as db_session:
-                mark_port_failed(db_session, port_attempt_id, error_msg=str(e))
+                mark_port_terminal(
+                    db_session,
+                    port_attempt_id,
+                    PortAttemptStatus.FAILED,
+                    error_msg=str(e),
+                )
             return
 
         chunks_ported += batch_chunks
@@ -473,11 +489,13 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
     except Exception as e:
         log.exception("Port orphan sweep failed; marking FAILED")
         with get_session_with_current_tenant() as db_session:
-            mark_port_failed(db_session, port_attempt_id, error_msg=str(e))
+            mark_port_terminal(
+                db_session, port_attempt_id, PortAttemptStatus.FAILED, error_msg=str(e)
+            )
         return
 
     with get_session_with_current_tenant() as db_session:
-        mark_port_succeeded(db_session, port_attempt_id)
+        mark_port_terminal(db_session, port_attempt_id, PortAttemptStatus.SUCCESS)
     log.info("Port complete: %d docs, %d chunks", docs_ported, chunks_ported)
 
 
@@ -540,8 +558,11 @@ def _fail_stalled_port_attempts(db_session: Session, lock_beat: RedisLock) -> No
             stale.cc_pair_id,
             stale.port_user_id,
         )
-        mark_port_failed(
-            db_session, stale.id, error_msg="stalled: no progress within threshold"
+        mark_port_terminal(
+            db_session,
+            stale.id,
+            PortAttemptStatus.FAILED,
+            error_msg="stalled: no progress within threshold",
         )
 
 
@@ -765,7 +786,12 @@ def _schedule_scope_attempts(
             task_logger.exception(
                 "check_for_port: enqueue failed; failing PortAttempt %s", attempt.id
             )
-            mark_port_failed(db_session, attempt.id, error_msg="enqueue failed")
+            mark_port_terminal(
+                db_session,
+                attempt.id,
+                PortAttemptStatus.FAILED,
+                error_msg="enqueue failed",
+            )
             continue
         created_new += 1
         active_attempts += 1
