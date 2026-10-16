@@ -17,7 +17,7 @@ from mitmproxy import http
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy, GatedAppKind
+from onyx.db.enums import ActionPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
 from onyx.db.gated_app import get_action_policies
 from onyx.db.mcp import get_craft_enabled_mcp_servers
@@ -48,7 +48,7 @@ MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
 
 # MCP tools default to ASK; a server's self-declared `readOnlyHint` never
 # auto-grants. Only an admin override relaxes a tool.
-MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
+MCP_TOOL_DEFAULT_POLICY = ActionPolicy.ASK
 
 
 class RequestEvaluator(Protocol):
@@ -214,7 +214,7 @@ class McpRequestEvaluator(RequestEvaluator):
                         action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
                         display_name="Unrecognized MCP request",
                         description="MCP gating failed; blocked.",
-                        policy=EndpointPolicy.DENY,
+                        policy=ActionPolicy.DENY,
                     ),
                 )
 
@@ -240,7 +240,7 @@ def _mcp_tool_actions(
                     f"{request.method} {path} could not be parsed "
                     "as an MCP tool call or protocol message; blocked."
                 ),
-                policy=EndpointPolicy.DENY,
+                policy=ActionPolicy.DENY,
             ),
         )
     stored = get_action_policies(db, GatedAppKind.MCP_SERVER, server.id)

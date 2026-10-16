@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.registry import get_endpoint_catalog
@@ -55,16 +55,16 @@ def test_rest_route_resolves_to_exactly_one_action(
 @pytest.mark.parametrize(
     "action, expected_policy",
     [
-        (SlackAction.CHANNELS_READ, EndpointPolicy.ALWAYS),
-        (SlackAction.MESSAGES_READ, EndpointPolicy.ALWAYS),
-        (SlackAction.USERS_READ, EndpointPolicy.ALWAYS),
-        (SlackAction.SEARCH_READ, EndpointPolicy.ALWAYS),
-        (SlackAction.MESSAGES_WRITE, EndpointPolicy.ASK),
-        (SlackAction.DM_OPEN, EndpointPolicy.ASK),
-        (SlackAction.FILES_WRITE, EndpointPolicy.ASK),
+        (SlackAction.CHANNELS_READ, ActionPolicy.ALWAYS),
+        (SlackAction.MESSAGES_READ, ActionPolicy.ALWAYS),
+        (SlackAction.USERS_READ, ActionPolicy.ALWAYS),
+        (SlackAction.SEARCH_READ, ActionPolicy.ALWAYS),
+        (SlackAction.MESSAGES_WRITE, ActionPolicy.ASK),
+        (SlackAction.DM_OPEN, ActionPolicy.ASK),
+        (SlackAction.FILES_WRITE, ActionPolicy.ASK),
     ],
 )
-def test_default_policies(action: SlackAction, expected_policy: EndpointPolicy) -> None:
+def test_default_policies(action: SlackAction, expected_policy: ActionPolicy) -> None:
     by_id = {endpoint.id: endpoint for endpoint in _CATALOG}
     assert by_id[action].default_policy == expected_policy
 

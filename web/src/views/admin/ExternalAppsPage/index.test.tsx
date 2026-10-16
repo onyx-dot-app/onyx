@@ -77,7 +77,7 @@ const MCP_SERVER: MCPServer = {
   users: [],
   tool_count: 12,
   available_in_craft: true,
-  tool_policies: {},
+  action_policies: {},
 };
 
 interface SWRData {

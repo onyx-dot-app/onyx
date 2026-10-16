@@ -12,7 +12,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from onyx.db.enums import EndpointPolicy, GatedAppKind
+from onyx.db.enums import ActionPolicy, GatedAppKind
 from onyx.db.models import GatedActionPolicy, GatedApp
 
 
@@ -64,7 +64,7 @@ def get_or_create_gated_app_id(
 
 def get_action_policies(
     db_session: Session, kind: GatedAppKind, target_id: int
-) -> dict[str, EndpointPolicy]:
+) -> dict[str, ActionPolicy]:
     """The target's stored per-action policy overrides as
     ``{action_id: policy}``; ``{}`` when none are set. Sparse — only actions an
     admin has explicitly set. One query: joins ``gated_action_policy`` to
@@ -80,7 +80,7 @@ def get_action_policies(
 def replace_action_policies__no_commit(
     db_session: Session,
     gated_app_id: int,
-    policies: dict[str, EndpointPolicy],
+    policies: dict[str, ActionPolicy],
 ) -> None:
     """Replace ``gated_app_id``'s per-action policy rows with exactly ``policies``.
 

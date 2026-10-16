@@ -28,7 +28,7 @@ from onyx.auth.scoped_permissions import assert_within_scope, get_scoped_groups
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -151,7 +151,7 @@ logger = setup_logger()
 
 # A tool with no stored override is treated as ASK; stored policies stay sparse
 # by omitting this value (mirrors the gate evaluator's default).
-MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
+MCP_TOOL_DEFAULT_POLICY = ActionPolicy.ASK
 
 
 _SSRF_HINT_NEVER_ALLOWED = (
@@ -1321,7 +1321,7 @@ def _db_mcp_server_to_api_mcp_server(
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
-        tool_policies=(
+        action_policies=(
             get_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
             if can_view_server_details
             else None
@@ -2668,9 +2668,9 @@ def update_mcp_server_simple(
             db_session=db_session,
         )
 
-    if request.tool_policies is not None:
+    if request.action_policies is not None:
         known = {t.name for t in get_all_mcp_tools_for_server(server_id, db_session)}
-        unknown = sorted(set(request.tool_policies) - known)
+        unknown = sorted(set(request.action_policies) - known)
         if unknown:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
@@ -2681,7 +2681,7 @@ def update_mcp_server_simple(
         # equivalent to leaving the tool unlisted.
         sparse_policies = {
             tool: policy
-            for tool, policy in request.tool_policies.items()
+            for tool, policy in request.action_policies.items()
             if policy != MCP_TOOL_DEFAULT_POLICY
         }
         gated_app_id = get_or_create_gated_app_id(

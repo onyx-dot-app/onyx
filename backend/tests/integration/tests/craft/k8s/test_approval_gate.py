@@ -16,9 +16,9 @@ from sqlalchemy.orm import Session
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import (
+    ActionPolicy,
     ApprovalDecision,
     BuildSessionStatus,
-    EndpointPolicy,
     ExternalAppType,
 )
 from onyx.db.models import ActionApproval, BuildSession, Notification
@@ -94,7 +94,7 @@ def _upsert_slack_external_app(
         "upstream_url_patterns": ["https://slack\\.com/api/.*"],
         "auth_template": {"Authorization": "Bearer {access_token}"},
         "organization_credentials": organization_credentials,
-        "action_policies": {"slack.messages.write": EndpointPolicy.ASK},
+        "action_policies": {"slack.messages.write": ActionPolicy.ASK},
     }
     if existing is None:
         created = ExternalAppManager.create(admin_user, **kwargs)
@@ -106,7 +106,7 @@ def _upsert_slack_external_app(
 
 def _action_policies_for_restore(
     app: ExternalAppAdminResponse,
-) -> dict[str, EndpointPolicy]:
+) -> dict[str, ActionPolicy]:
     return {action.action_id: action.state for action in app.actions}
 
 

@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -147,7 +147,7 @@ def _matched(kind: GatedAppKind, target_id: int) -> AllMatchedActions:
                 action_type="x",
                 display_name="X",
                 description="d",
-                policy=EndpointPolicy.ASK,
+                policy=ActionPolicy.ASK,
             ),
         ),
         target=GatedTarget(kind=kind, id=target_id, app_name="srv"),

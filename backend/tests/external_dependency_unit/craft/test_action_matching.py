@@ -26,7 +26,7 @@ import pytest
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
 from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import ExternalApp, GatedActionPolicy, User
 from onyx.external_apps.credentials import app_is_available
@@ -73,7 +73,7 @@ def _set_policy(
     db_session: Session,
     app: ExternalApp,
     action_id: str,
-    policy: EndpointPolicy,
+    policy: ActionPolicy,
 ) -> None:
     gated_app_id = get_or_create_gated_app_id(
         db_session, GatedAppKind.EXTERNAL_APP, app.id
@@ -96,7 +96,7 @@ def test_match_stored_override_wins(
     test_user: User,  # noqa: ARG001 — for tenant context
 ) -> None:
     app = _connect_app(db_session, ExternalAppType.SLACK)
-    _set_policy(db_session, app, "slack.messages.write", EndpointPolicy.ALWAYS)
+    _set_policy(db_session, app, "slack.messages.write", ActionPolicy.ALWAYS)
 
     request = ProxiedRequest(method="POST", path="/api/chat.postMessage")
     assert recognize_actions(db_session, app, request) == AllMatchedActions(
@@ -105,7 +105,7 @@ def test_match_stored_override_wins(
                 action_type="slack.messages.write",
                 display_name="Post a message",
                 description="Post a message to a channel or conversation.",
-                policy=EndpointPolicy.ALWAYS,
+                policy=ActionPolicy.ALWAYS,
             ),
         ),
         target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name="Slack"),
@@ -122,7 +122,7 @@ def test_unset_read_action_uses_catalog_default_always(
     matched_actions = recognize_actions(db_session, app, request)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == ["slack.channels.read"]
-    assert matched_actions.actions[0].policy == EndpointPolicy.ALWAYS
+    assert matched_actions.actions[0].policy == ActionPolicy.ALWAYS
 
 
 def test_unset_write_action_uses_catalog_default_ask(
@@ -134,7 +134,7 @@ def test_unset_write_action_uses_catalog_default_ask(
     matched_actions = recognize_actions(db_session, app, request)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == ["slack.messages.write"]
-    assert matched_actions.actions[0].policy == EndpointPolicy.ASK
+    assert matched_actions.actions[0].policy == ActionPolicy.ASK
 
 
 def test_match_google_calendar_method_distinguishes_actions(
@@ -142,21 +142,21 @@ def test_match_google_calendar_method_distinguishes_actions(
     test_user: User,  # noqa: ARG001 — for tenant context
 ) -> None:
     app = _connect_app(db_session, ExternalAppType.GOOGLE_CALENDAR)
-    _set_policy(db_session, app, "gcal.events.delete", EndpointPolicy.DENY)
+    _set_policy(db_session, app, "gcal.events.delete", ActionPolicy.DENY)
     item_path = "/calendar/v3/calendars/primary/events/evt123"
 
     delete_req = ProxiedRequest(method="DELETE", path=item_path)
     matched_actions = recognize_actions(db_session, app, delete_req)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == ["gcal.events.delete"]
-    assert matched_actions.actions[0].policy == EndpointPolicy.DENY
+    assert matched_actions.actions[0].policy == ActionPolicy.DENY
 
     # Same path, GET → the read action; no stored row → catalog default ALWAYS.
     read_req = ProxiedRequest(method="GET", path=item_path)
     read_matched_actions = recognize_actions(db_session, app, read_req)
     assert read_matched_actions is not None
     assert [a.action_type for a in read_matched_actions.actions] == ["gcal.events.read"]
-    assert read_matched_actions.actions[0].policy == EndpointPolicy.ALWAYS
+    assert read_matched_actions.actions[0].policy == ActionPolicy.ALWAYS
 
 
 def test_match_linear_graphql_body(
@@ -164,7 +164,7 @@ def test_match_linear_graphql_body(
     test_user: User,  # noqa: ARG001 — for tenant context
 ) -> None:
     app = _connect_app(db_session, ExternalAppType.LINEAR)
-    _set_policy(db_session, app, "linear.issues.create", EndpointPolicy.DENY)
+    _set_policy(db_session, app, "linear.issues.create", ActionPolicy.DENY)
 
     body = json.dumps(
         {"query": "mutation { issueCreate(input: $i) { issue { id } } }"}
@@ -175,7 +175,7 @@ def test_match_linear_graphql_body(
     assert matched_actions is not None
     assert matched_actions.app_name == "Linear"
     assert [a.action_type for a in matched_actions.actions] == ["linear.issues.create"]
-    assert matched_actions.actions[0].policy == EndpointPolicy.DENY
+    assert matched_actions.actions[0].policy == ActionPolicy.DENY
 
 
 def test_graphql_batched_sorts_strictest_first(
@@ -186,8 +186,8 @@ def test_graphql_batched_sorts_strictest_first(
     ``AllMatchedActions.actions``, sorted strictest-first so ``actions[0]`` drives
     the verdict regardless of catalog order."""
     app = _connect_app(db_session, ExternalAppType.LINEAR)
-    _set_policy(db_session, app, "linear.viewer.read", EndpointPolicy.ALWAYS)
-    _set_policy(db_session, app, "linear.issues.create", EndpointPolicy.DENY)
+    _set_policy(db_session, app, "linear.viewer.read", ActionPolicy.ALWAYS)
+    _set_policy(db_session, app, "linear.issues.create", ActionPolicy.DENY)
 
     body = json.dumps(
         [
@@ -204,8 +204,8 @@ def test_graphql_batched_sorts_strictest_first(
         "linear.viewer.read",
     ]
     assert [a.policy for a in matched_actions.actions] == [
-        EndpointPolicy.DENY,
-        EndpointPolicy.ALWAYS,
+        ActionPolicy.DENY,
+        ActionPolicy.ALWAYS,
     ]
 
 
@@ -229,7 +229,7 @@ def test_match_action_app_name_falls_back_when_provider_unregistered(
     yields a matched_actions; ``app_name`` falls back to the raw enum value rather than
     crashing the gate."""
     app = _connect_app(db_session, ExternalAppType.SLACK)
-    _set_policy(db_session, app, "slack.messages.write", EndpointPolicy.ASK)
+    _set_policy(db_session, app, "slack.messages.write", ActionPolicy.ASK)
     monkeypatch.setattr(matching_engine, "get_provider_for_app", lambda _app: None)
 
     matched_actions = recognize_actions(
@@ -301,7 +301,7 @@ def test_external_app_matcher_resolves_app_and_verdict(
         ExternalAppType.SLACK,
         upstream_url_patterns=["https://slack\\.com/api/.*"],
     )
-    _set_policy(db_session, app, "slack.messages.write", EndpointPolicy.DENY)
+    _set_policy(db_session, app, "slack.messages.write", ActionPolicy.DENY)
 
     monkeypatch.setattr(
         request_evaluator_mod, "get_session_with_tenant", _session_factory(db_session)
@@ -311,7 +311,7 @@ def test_external_app_matcher_resolves_app_and_verdict(
 
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == ["slack.messages.write"]
-    assert matched_actions.actions[0].policy == EndpointPolicy.DENY
+    assert matched_actions.actions[0].policy == ActionPolicy.DENY
     assert matched_actions.app_name == "Slack"
     assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, app.id)
     assert matched_actions.payload == {"channel": "C1", "text": "hi"}
@@ -371,7 +371,7 @@ def test_external_app_matcher_off_catalog_synthesizes_whole_domain(
 
     assert matched_actions is not None
     assert matched_actions.actions[0].action_type == WHOLE_DOMAIN_ACTION_TYPE
-    assert matched_actions.actions[0].policy == EndpointPolicy.ASK
+    assert matched_actions.actions[0].policy == ActionPolicy.ASK
     assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, app.id)
 
 
@@ -400,7 +400,7 @@ def test_external_app_matcher_credentialless_app_is_gated(
 
     assert matched_actions is not None
     assert matched_actions.actions[0].action_type == WHOLE_DOMAIN_ACTION_TYPE
-    assert matched_actions.actions[0].policy == EndpointPolicy.ASK
+    assert matched_actions.actions[0].policy == ActionPolicy.ASK
     assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, app.id)
     # CUSTOM apps have no provider; the name comes from app display metadata.
     assert matched_actions.app_name == app.name

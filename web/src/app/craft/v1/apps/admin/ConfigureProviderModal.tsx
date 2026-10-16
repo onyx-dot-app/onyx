@@ -10,7 +10,7 @@ import ActionPolicyEditorModal, {
 } from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
 import {
   BuiltInExternalAppDescriptor,
-  EndpointPolicy,
+  ActionPolicy,
   ExternalAppAdminResponse,
 } from "@/app/craft/v1/apps/registry";
 import {
@@ -104,12 +104,12 @@ export default function ConfigureProviderModal({
   // Seed each action from the admin's stored choice (edit) or the action's
   // backend-declared default (create) — usually "Ask", but a provider can
   // declare a different out-of-the-box stance per action.
-  const storedPolicies: Record<string, EndpointPolicy> = {};
+  const storedPolicies: Record<string, ActionPolicy> = {};
   for (const action of existingApp?.actions ?? []) {
     storedPolicies[action.action_id] = action.state;
   }
   const initialPolicies = Object.fromEntries(
-    descriptor.actions.map((action): [string, EndpointPolicy] => [
+    descriptor.actions.map((action): [string, ActionPolicy] => [
       action.action_id,
       storedPolicies[action.action_id] ?? action.default_policy,
     ])
@@ -117,7 +117,7 @@ export default function ConfigureProviderModal({
 
   async function save(
     values: Record<string, string>,
-    policies: Record<string, EndpointPolicy>
+    policies: Record<string, ActionPolicy>
   ) {
     if (managed && existingApp) {
       // Managed: only policies are persisted; a partial PATCH leaves the rest.

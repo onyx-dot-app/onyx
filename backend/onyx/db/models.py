@@ -69,6 +69,7 @@ from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
+    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
     ArtifactType,
@@ -80,7 +81,6 @@ from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     DefaultAppMode,
-    EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
     GrantSource,
@@ -7645,8 +7645,8 @@ class GatedActionPolicy(Base):
         nullable=False,
     )
     action_id: Mapped[str] = mapped_column(Text, nullable=False)
-    policy: Mapped[EndpointPolicy] = mapped_column(
-        Enum(EndpointPolicy, native_enum=False),
+    policy: Mapped[ActionPolicy] = mapped_column(
+        Enum(ActionPolicy, native_enum=False),
         nullable=False,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(

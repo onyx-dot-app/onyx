@@ -17,9 +17,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    EndpointPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -46,7 +46,7 @@ _ASK_ACTION = [
         "action_type": "send_email",
         "display_name": "send_email",
         "description": "Call send_email.",
-        "policy": EndpointPolicy.ASK.value,
+        "policy": ActionPolicy.ASK.value,
     }
 ]
 
@@ -164,20 +164,20 @@ def test_mcp_tool_policy_storage_round_trips(
     replace_action_policies__no_commit(
         db_session,
         gated_app_id,
-        {"read_inbox": EndpointPolicy.ALWAYS, "wipe": EndpointPolicy.DENY},
+        {"read_inbox": ActionPolicy.ALWAYS, "wipe": ActionPolicy.DENY},
     )
     db_session.commit()
 
     assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
-        "read_inbox": EndpointPolicy.ALWAYS,
-        "wipe": EndpointPolicy.DENY,
+        "read_inbox": ActionPolicy.ALWAYS,
+        "wipe": ActionPolicy.DENY,
     }
 
     # Re-setting replaces the prior rows rather than colliding on the unique key.
     replace_action_policies__no_commit(
-        db_session, gated_app_id, {"read_inbox": EndpointPolicy.ASK}
+        db_session, gated_app_id, {"read_inbox": ActionPolicy.ASK}
     )
     db_session.commit()
     assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
-        "read_inbox": EndpointPolicy.ASK
+        "read_inbox": ActionPolicy.ASK
     }

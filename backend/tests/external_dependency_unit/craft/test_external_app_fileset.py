@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.db.models import Skill, User
 from onyx.external_apps.providers.slack import SlackAction
 from onyx.external_apps.providers.zendesk import ZendeskAction
@@ -107,7 +107,7 @@ def test_denied_action_listed_as_unavailable(
         skill=skill,
         app_type=ExternalAppType.SLACK,
         auth_template=_AUTH_TEMPLATE,
-        action_policies={SlackAction.MESSAGES_WRITE.value: EndpointPolicy.DENY},
+        action_policies={SlackAction.MESSAGES_WRITE.value: ActionPolicy.DENY},
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
     db_session.commit()
@@ -162,7 +162,7 @@ def test_zendesk_push_and_preview_share_account_and_action_policy(
         app_type=ExternalAppType.ZENDESK,
         auth_template={"Authorization": "Bearer {access_token}"},
         organization_credentials={"subdomain": "acme"},
-        action_policies={ZendeskAction.TICKETS_UPDATE.value: EndpointPolicy.DENY},
+        action_policies={ZendeskAction.TICKETS_UPDATE.value: ActionPolicy.DENY},
     )
     make_user_credential(
         db_session,

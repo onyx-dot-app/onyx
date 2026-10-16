@@ -1,4 +1,4 @@
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -142,8 +142,8 @@ def withheld_on_cloud(app_type: ExternalAppType) -> list[EndpointSpec]:
 
 def effective_policy(
     endpoint: EndpointSpec,
-    stored: dict[str, EndpointPolicy],
-) -> EndpointPolicy:
+    stored: dict[str, ActionPolicy],
+) -> ActionPolicy:
     """Policy in force for ``endpoint``: the admin's stored override, else the
     catalog's curated default. Shared by the runtime gate (``recognize_actions``) and
     the FE view (``action_policy_views``) so they never diverge — notably during
@@ -153,8 +153,8 @@ def effective_policy(
 
 def validate_action_policies(
     app_type: ExternalAppType,
-    policies: dict[str, EndpointPolicy],
-) -> dict[str, EndpointPolicy]:
+    policies: dict[str, ActionPolicy],
+) -> dict[str, ActionPolicy]:
     """Validate admin-submitted ``{action_id: policy}`` against the provider
     catalog: reject any id that doesn't exist for this ``app_type``. Returns the
     validated map unchanged."""
@@ -170,9 +170,9 @@ def validate_action_policies(
 
 def resolve_action_overrides(
     app_type: ExternalAppType,
-    requested: dict[str, EndpointPolicy] | None,
-    existing: dict[str, EndpointPolicy],
-) -> dict[str, EndpointPolicy]:
+    requested: dict[str, ActionPolicy] | None,
+    existing: dict[str, ActionPolicy],
+) -> dict[str, ActionPolicy]:
     """The per-action overrides to persist: the admin's validated picks merged
     over existing overrides, with any entry equal to the catalog default — or
     naming an endpoint no longer in the catalog — pruned out.
@@ -184,7 +184,7 @@ def resolve_action_overrides(
     re-pruned against the current catalog, so materialized rows self-heal on the
     next write). Raises if ``requested`` names an action id outside the catalog.
     """
-    catalog_defaults: dict[str, EndpointPolicy] = {
+    catalog_defaults: dict[str, ActionPolicy] = {
         endpoint.id: endpoint.default_policy
         for endpoint in get_endpoint_catalog(app_type)
     }
@@ -200,7 +200,7 @@ def resolve_action_overrides(
 
 def action_policy_views(
     app_type: ExternalAppType,
-    stored: dict[str, EndpointPolicy],
+    stored: dict[str, ActionPolicy],
 ) -> list[ActionPolicyView]:
     """Merge the catalog with the admin's stored overrides: each action's
     effective ``state`` is the override if present, else the action's

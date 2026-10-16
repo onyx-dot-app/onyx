@@ -12,9 +12,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.enums import (
     POLICY_SEVERITY,
+    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    EndpointPolicy,
     GatedAppKind,
 )
 from onyx.db.gated_app import get_or_create_gated_app_id
@@ -50,7 +50,7 @@ def insert_action_approval(
         raise ValueError("actions must be non-empty")
     sorted_actions = sorted(
         actions,
-        key=lambda a: POLICY_SEVERITY[EndpointPolicy(a["policy"])],
+        key=lambda a: POLICY_SEVERITY[ActionPolicy(a["policy"])],
         reverse=True,
     )
     gated_app_id = (

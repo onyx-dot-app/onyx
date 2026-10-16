@@ -2,11 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 interface PolicyToggleProps {
-  value: EndpointPolicy;
-  onChange: (value: EndpointPolicy) => void;
+  value: ActionPolicy;
+  onChange: (value: ActionPolicy) => void;
 }
 
 /** Three-state Craft approval policy selector, shared by per-action and
@@ -14,7 +14,7 @@ interface PolicyToggleProps {
 export default function PolicyToggle({ value, onChange }: PolicyToggleProps) {
   const t = useTranslations("actions");
 
-  const policyOptions: { value: EndpointPolicy; label: string }[] = [
+  const policyOptions: { value: ActionPolicy; label: string }[] = [
     { value: "ALWAYS", label: t("policyToggle.always.label") },
     { value: "ASK", label: t("policyToggle.ask.label") },
     { value: "DENY", label: t("policyToggle.deny.label") },
