@@ -25,7 +25,10 @@ from websocket import (
 
 from onyx.server.features.build.sandbox.image.guest.input import MAX_FRAME_BYTES
 from onyx.server.features.build.sandbox.models import ExecResult, SandboxExecError
+from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_future
+
+logger = setup_logger()
 
 _PROTOCOL = "v5.channel.k8s.io"
 _CHUNK_BYTES = MAX_FRAME_BYTES
@@ -263,7 +266,10 @@ def _start_upload(
     api_client: _ExecApiClient, stdin: bytes | BinaryIO | FramedStdin
 ) -> Future[Literal["complete", "cancelled"]]:
     def upload() -> Literal["complete", "cancelled"]:
+        bytes_sent = 0
+        outcome: Literal["complete", "cancelled", "failure"] = "failure"
         try:
+            logger.info("Sandbox exec transport stage=upload outcome=start")
             framed = isinstance(stdin, FramedStdin)
             source = stdin.source if isinstance(stdin, FramedStdin) else stdin
             chunks = _stdin_chunks(source)
@@ -272,18 +278,29 @@ def _start_upload(
                 if chunk is None:
                     break
                 if api_client.cancelled.is_set():
+                    outcome = "cancelled"
                     return "cancelled"
                 payload = len(chunk).to_bytes(4, "big") + chunk if framed else chunk
                 api_client.websocket.send(b"\x00" + payload, opcode=ABNF.OPCODE_BINARY)
+                bytes_sent += len(chunk)
             if api_client.cancelled.is_set():
+                outcome = "cancelled"
                 return "cancelled"
             api_client.websocket.send(
                 b"\x00\x00\x00\x00\x00" if framed else b"\xff\x00",
                 opcode=ABNF.OPCODE_BINARY,
             )
+            outcome = "complete"
             return "complete"
         finally:
             _UPLOAD_SLOTS.release()
+            logger.info(
+                "Sandbox exec transport stage=upload outcome=%s bytes_sent=%d "
+                "terminator_written=%s",
+                outcome,
+                bytes_sent,
+                outcome == "complete",
+            )
 
     def cancel_failed_upload(result: Future[Literal["complete", "cancelled"]]) -> None:
         if result.exception() is not None:
@@ -353,14 +370,30 @@ class ExecClient:
                 _CONNECT_SLOTS.release()
                 raise
             connection.result(timeout=_remaining(deadline))
+            logger.info("Sandbox exec transport stage=connection outcome=complete")
 
             # Receive while uploading so early guest failures cannot block behind stdin.
             if inline_input:
+                logger.info("Sandbox exec transport stage=upload outcome=start")
                 websocket.send(b"\x00\x00\x00\x00\x00", opcode=ABNF.OPCODE_BINARY)
+                logger.info(
+                    "Sandbox exec transport stage=upload outcome=complete "
+                    "bytes_sent=0 terminator_written=True"
+                )
             elif stdin is not None:
                 upload_result = _start_upload(api_client, stdin)
                 upload_slot_reserved = False
-            yield from output.receive(websocket)
+            receive_outcome = "failure"
+            logger.info("Sandbox exec transport stage=receive outcome=start")
+            try:
+                yield from output.receive(websocket)
+                receive_outcome = "complete"
+            finally:
+                logger.info(
+                    "Sandbox exec transport stage=receive outcome=%s status_bytes=%d",
+                    receive_outcome,
+                    len(output.status),
+                )
             output.validate_exit()
             if upload_result is not None:
                 if upload_result.result(timeout=_remaining(deadline)) != "complete":

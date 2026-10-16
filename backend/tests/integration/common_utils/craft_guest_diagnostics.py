@@ -46,6 +46,24 @@ fd_types = {
     stat.S_IFBLK: 'block', stat.S_IFDIR: 'directory', stat.S_IFREG: 'regular',
     stat.S_IFLNK: 'symlink',
 }
+wait_categories = {
+    'pipe_read': {'pipe_read', 'anon_pipe_read', 'fifo_pipe_read',
+                  'pipe_wait_readable'},
+    'futex_wait': {'futex_wait_queue', 'futex_wait_queue_me', 'futex_wait',
+                   'futex_wait_multiple', 'futex_do_wait', 'futex_sleep_multiple'},
+    'child_wait': {'do_wait', 'kernel_wait4', 'kernel_waitid'},
+    'flock_wait': {'flock_lock_inode_wait', 'locks_lock_inode_wait',
+                   'posix_lock_inode_wait'},
+    'file_io': {'io_schedule', 'folio_wait_bit_common', 'wait_on_page_bit_common',
+                'filemap_get_pages', '__wait_on_buffer', 'jbd2_log_wait_commit'},
+}
+x86_64_syscalls = {
+    0: 'read', 1: 'write', 17: 'read', 18: 'write', 19: 'read', 20: 'write',
+    61: 'child_wait', 202: 'futex_wait', 247: 'child_wait',
+    295: 'read', 296: 'write', 327: 'read', 328: 'write',
+    449: 'futex_wait', 455: 'futex_wait',
+}
+native_x86_64 = os.uname().machine == 'x86_64'
 for process in Path('/proc').iterdir():
     if not process.name.isascii() or not process.name.isdecimal():
         continue
@@ -66,16 +84,24 @@ for process in Path('/proc').iterdir():
         with suppress(OSError):
             with (process / 'wchan').open() as source:
                 wchan = source.read(128).strip()
-            if wchan in {'pipe_read', 'pipe_wait_readable'}:
-                wait = 'pipe_read'
-            elif wchan in {'flock_lock_inode_wait', 'locks_lock_inode_wait',
-                           'posix_lock_inode_wait'}:
-                wait = 'flock_wait'
-            elif wchan in {'io_schedule', 'folio_wait_bit_common',
-                           'wait_on_page_bit_common', 'filemap_get_pages',
-                           '__wait_on_buffer', 'jbd2_log_wait_commit'}:
-                wait = 'file_io'
+            wait = next((category for category, names in wait_categories.items()
+                         if wchan in names), 'other')
         row.append(f'wait={wait}')
+        syscall = 'unavailable'
+        syscall_fd = None
+        if native_x86_64:
+            with suppress(OSError, ValueError, IndexError):
+                with (process / 'syscall').open() as source:
+                    fields = source.read(256).split()
+                if len(fields) == 9 and fields[0].isascii() and fields[0].isdecimal():
+                    syscall = x86_64_syscalls.get(int(fields[0]), 'other')
+                    if syscall in {'read', 'write'}:
+                        fd = int(fields[1], 16)
+                        if 0 <= fd <= 2**31 - 1:
+                            syscall_fd = fd
+        row.append(f'syscall={syscall}')
+        if syscall_fd is not None:
+            row.append(f'syscall_fd={syscall_fd}')
         for fd in range(3):
             with suppress(OSError):
                 kind = stat.S_IFMT((process / 'fd' / str(fd)).stat().st_mode)
@@ -166,7 +192,7 @@ def _owned_guest_facts(user: DATestUser, context: str) -> str:
             return "unavailable"
         if sandbox.user_id != user_id:
             raise ValueError("Sandbox ownership mismatch")
-        sandbox_id = sandbox.id
+        sandbox_id = UUID(str(sandbox.id))
     pod_name = f"sandbox-{sandbox_id.hex}"
     command = ["kubectl", "--context", context, "--namespace", SANDBOX_NAMESPACE]
     metadata = subprocess.run(
@@ -212,7 +238,7 @@ def _owned_guest_facts(user: DATestUser, context: str) -> str:
         timeout=20.0,
         check=True,
     )
-    return _managed_push_facts(output.stdout)
+    return f"target_sandbox_id={sandbox_id} | {_managed_push_facts(output.stdout)}"
 
 
 def _managed_push_facts(output: str) -> str:
@@ -224,6 +250,7 @@ def _managed_push_facts(output: str) -> str:
         },
         "helper": {
             "pid": 2**31 - 1,
+            "syscall_fd": 2**31 - 1,
             "utime_ticks": 2**63 - 1,
             "stime_ticks": 2**63 - 1,
             "rss_kib": 2**63 - 1,
@@ -232,7 +259,22 @@ def _managed_push_facts(output: str) -> str:
     }
     categories = {
         "state": set("RSDZTtXxIPW"),
-        "wait": {"pipe_read", "flock_wait", "file_io", "other"},
+        "wait": {
+            "pipe_read",
+            "futex_wait",
+            "child_wait",
+            "flock_wait",
+            "file_io",
+            "other",
+        },
+        "syscall": {
+            "read",
+            "write",
+            "futex_wait",
+            "child_wait",
+            "other",
+            "unavailable",
+        },
         **{
             f"fd{fd}": {
                 "fifo",
@@ -268,6 +310,8 @@ def _managed_push_facts(output: str) -> str:
                 facts[key] = str(int(value))
             elif kind == "helper" and value in categories.get(key, set()):
                 facts[key] = value
+        if facts.get("syscall") not in {"read", "write"}:
+            facts.pop("syscall_fd", None)
         if facts and (kind != "helper" or "pid" in facts):
             rows.append(
                 kind + " " + " ".join(f"{key}={value}" for key, value in facts.items())

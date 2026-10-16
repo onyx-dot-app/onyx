@@ -838,6 +838,14 @@ jobs:
           disown || true
           echo "sandbox pod log capture started (pid $!)"
 
+      - name: Verify Linux timeout probe without consuming stdin
+        if: matrix.test-file.name == 'firecracker_runtime'
+        run: |
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          py.test --noconftest -q \
+            backend/tests/unit/onyx/server/features/craft/sandbox/test_craft_guest_diagnostics.py::test_generated_probe_observes_owned_stdin_read_without_consuming_input
+
       - name: Run Craft K8s tests (${{ matrix.test-file.name }})
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |

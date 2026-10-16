@@ -5,8 +5,11 @@ from __future__ import annotations
 import io
 import json
 import os
+import selectors
 import stat
 import subprocess
+import sys
+import time
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import TracebackType
@@ -301,14 +304,14 @@ def test_owned_current_pod_is_the_only_bounded_exec_target(
                 subprocess.CompletedProcess(
                     [],
                     0,
-                    "summary helper_count=0 metadata=private-secret\n",
+                    "summary helper_count=0 metadata=private-secret target_sandbox_id=11111111-1111-1111-1111-111111111111\n",
                     "private-stderr",
                 ),
             ],
         ) as run,
     ):
         assert subject._owned_guest_facts(ci_user, "kind-onyx-craft-ci") == (
-            "summary helper_count=0"
+            f"target_sandbox_id={_SANDBOX_ID} | summary helper_count=0"
         )
     lookup.assert_called_once_with(db.return_value.__enter__.return_value, _USER_ID)
     prefix = [
@@ -347,6 +350,21 @@ def test_owned_current_pod_is_the_only_bounded_exec_target(
         "check": True,
     }
     assert run.call_count == 2
+
+
+def test_invalid_owned_sandbox_id_never_reaches_the_capture(
+    ci_user: DATestUser, owned_sandbox: Sandbox
+) -> None:
+    with (
+        patch.object(owned_sandbox, "id", "private-sandbox-secret"),
+        patch.object(subject, "get_current_tenant_id", return_value="public"),
+        patch.object(subject, "get_session_with_current_tenant"),
+        patch.object(subject, "get_sandbox_by_user_id", return_value=owned_sandbox),
+        patch.object(subject.subprocess, "run") as run,
+        pytest.raises(ValueError),
+    ):
+        subject._owned_guest_facts(ci_user, "kind-onyx-craft-ci")
+    run.assert_not_called()
 
 
 @pytest.mark.parametrize("missing", [False, True])
@@ -494,7 +512,7 @@ def test_broken_diagnostic_output_preserves_read_timeout(ci_user: DATestUser) ->
 
 def test_host_projects_only_known_scalar_fields_and_categories() -> None:
     output = (
-        "summary helper_count=1 total_kib=8192 available_kib=4096 metadata=secret\n"
+        "summary helper_count=1 total_kib=8192 available_kib=4096 metadata=secret target_sandbox_id=private-secret\n"
         "summary helper_count=2\n"
         "helper pid=123 state=S wait=flock_wait utime_ticks=11 stime_ticks=12 fd0=fifo fd1=socket fd2=char rss_kib=64\n"
         "helper pid=0 state=secret\n"
@@ -509,6 +527,31 @@ def test_host_projects_only_known_scalar_fields_and_categories() -> None:
         "summary helper_count=1 total_kib=8192 available_kib=4096 | "
         "helper pid=123 state=S wait=flock_wait utime_ticks=11 stime_ticks=12 fd0=fifo fd1=socket fd2=char rss_kib=64 | "
         "helper pid=124 | lock owner_pid=123 waiter_pid=124"
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw_fields", "expected"),
+    [
+        ("syscall=read syscall_fd=0", "syscall=read syscall_fd=0"),
+        ("syscall=write syscall_fd=2", "syscall=write syscall_fd=2"),
+        ("syscall=futex_wait syscall_fd=42", "syscall=futex_wait"),
+        ("syscall=child_wait syscall_fd=42", "syscall=child_wait"),
+        ("syscall=unavailable syscall_fd=0", "syscall=unavailable"),
+        ("syscall=private-secret syscall_fd=0", ""),
+        ("syscall_fd=0", ""),
+        ("syscall=read syscall_fd=0x7fff12345678", "syscall=read"),
+        ("syscall=read syscall_fd=2147483648", "syscall=read"),
+        ("syscall=read syscall_fd=-1", "syscall=read"),
+        ("syscall=read syscall_fd=１２３", "syscall=read"),
+        ("syscall=read syscall_fd=private-secret", "syscall=read"),
+    ],
+)
+def test_host_projects_only_bounded_io_descriptor_numbers(
+    raw_fields: str, expected: str
+) -> None:
+    assert subject._managed_push_facts(f"helper pid=123 {raw_fields}") == (
+        "helper pid=123" + (f" {expected}" if expected else "")
     )
 
 
@@ -531,20 +574,67 @@ def test_host_rejects_unrecognized_output() -> None:
 
 
 @pytest.mark.parametrize(
-    ("wchan", "expected_wait"),
+    ("wchan", "expected_wait", "syscall_snapshot", "machine", "expected_syscall"),
     [
-        ("pipe_read", "pipe_read"),
-        ("locks_lock_inode_wait", "flock_wait"),
-        ("folio_wait_bit_common", "file_io"),
-        ("private-wchan-secret", "other"),
+        ("pipe_read", "pipe_read", "running", "x86_64", "unavailable"),
+        ("anon_pipe_read", "pipe_read", "running", "x86_64", "unavailable"),
+        ("fifo_pipe_read", "pipe_read", "running", "x86_64", "unavailable"),
+        ("pipe_wait_readable", "pipe_read", "running", "x86_64", "unavailable"),
+        ("futex_do_wait", "futex_wait", "running", "x86_64", "unavailable"),
+        ("futex_sleep_multiple", "futex_wait", "running", "x86_64", "unavailable"),
+        ("futex_wait_queue_me", "futex_wait", "running", "x86_64", "unavailable"),
+        ("do_wait", "child_wait", "running", "x86_64", "unavailable"),
+        ("kernel_wait4", "child_wait", "running", "x86_64", "unavailable"),
+        ("locks_lock_inode_wait", "flock_wait", "running", "x86_64", "unavailable"),
+        ("folio_wait_bit_common", "file_io", "running", "x86_64", "unavailable"),
+        ("private-wchan-secret", "other", "running", "x86_64", "unavailable"),
+        ("0", "other", "0 0x0", "x86_64", "unavailable"),
+        ("0", "other", "0 0x0", "aarch64", "unavailable"),
+        ("0", "other", "-1 0x7fff12345678 0x7fff12345678", "x86_64", "unavailable"),
+        ("0", "other", "", "x86_64", "unavailable"),
+        (
+            "0",
+            "other",
+            PermissionError("private-syscall-secret"),
+            "x86_64",
+            "unavailable",
+        ),
+    ]
+    + [
+        (
+            "0",
+            "other",
+            f"{number} {descriptor} 0x7fff12345678 0x1000 0x0 0x0 0x0 0x7fff12345678 0x7fff12345678",
+            machine,
+            expected,
+        )
+        for number, descriptor, machine, expected in [
+            (0, "0x0", "x86_64", "read syscall_fd=0"),
+            (1, "0x2", "x86_64", "write syscall_fd=2"),
+            (19, "0x0", "x86_64", "read syscall_fd=0"),
+            (20, "0x2", "x86_64", "write syscall_fd=2"),
+            (202, "0x7fff12345678", "x86_64", "futex_wait"),
+            (449, "0x7fff12345678", "x86_64", "futex_wait"),
+            (455, "0x7fff12345678", "x86_64", "futex_wait"),
+            (61, "0x1", "x86_64", "child_wait"),
+            (247, "0x1", "x86_64", "child_wait"),
+            (999, "0x7fff12345678", "x86_64", "other"),
+            (-1, "0x0", "x86_64", "unavailable"),
+            (0, "0x7fff12345678", "x86_64", "read"),
+            (0, "private-secret", "x86_64", "read"),
+            (0, "0x0", "aarch64", "unavailable"),
+        ]
     ],
 )
 def test_generated_probe_filters_argv_and_emits_only_safe_process_facts(
     wchan: str,
     expected_wait: str,
+    syscall_snapshot: str | OSError,
+    machine: str,
+    expected_syscall: str,
 ) -> None:
     valid_argv = b"python\0-I\0-m\0onyx_guest\0push-managed\0private-metadata-secret\0"
-    files: dict[str, bytes | str] = {
+    files: dict[str, bytes | str | OSError] = {
         "/proc/123/cmdline": valid_argv,
         "/proc/124/cmdline": b"python\0-c\0onyx_guest push-managed private-secret\0",
         "/proc/125/cmdline": b"python\0-m\0onyx_guest_other\0push-managed\0",
@@ -552,6 +642,7 @@ def test_generated_probe_filters_argv_and_emits_only_safe_process_facts(
         "/proc/127/cmdline": valid_argv + b"x" * 4096,
         "/proc/123/stat": "123 (private-command-secret) S " + "0 " * 10 + "11 12\n",
         "/proc/123/wchan": wchan,
+        "/proc/123/syscall": syscall_snapshot,
         "/proc/123/status": "Name: private-command-secret\nVmRSS: 64 kB\n",
         "/proc/meminfo": "MemTotal: 8192 kB\nMemAvailable: 4096 kB\nPrivate: secret\n",
         "/proc/locks": "1: FLOCK ADVISORY WRITE 123 00:2a:999 0 EOF\n1: -> FLOCK ADVISORY WRITE 124 00:2a:999 0 EOF\n2: FLOCK ADVISORY WRITE 125 00:2a:998 0 EOF\n3: POSIX ADVISORY WRITE 126 00:2a:999 0 EOF\n",
@@ -564,12 +655,22 @@ def test_generated_probe_filters_argv_and_emits_only_safe_process_facts(
             argv_reads.append(size)
             return super().read(size)
 
+    class SyscallSource(io.StringIO):
+        def read(self, size: int | None = -1, /) -> str:
+            assert size == 256
+            return super().read(size)
+
     def open_file(path: Path, mode: str = "r") -> io.StringIO | io.BytesIO:
         content = files[str(path)]
+        if isinstance(content, OSError):
+            raise content
         if mode == "rb":
             assert isinstance(content, bytes)
             return ArgvSource(content)
         assert isinstance(content, str)
+        if path.name == "syscall":
+            assert machine == "x86_64"
+            return SyscallSource(content)
         return io.StringIO(content)
 
     def stat_file(path: Path) -> os.stat_result:
@@ -596,6 +697,9 @@ def test_generated_probe_filters_argv_and_emits_only_safe_process_facts(
             patch.object(Path, "open", open_file),
             patch.object(Path, "stat", stat_file),
             patch("os.readlink", side_effect=AssertionError("readlink must not run")),
+            patch(
+                "os.uname", return_value=os.uname_result(("Linux", "", "", "", machine))
+            ),
             patch("signal.alarm") as alarm,
             patch("sys.excepthook"),
             redirect_stdout(output),
@@ -603,12 +707,13 @@ def test_generated_probe_filters_argv_and_emits_only_safe_process_facts(
             exec(subject._MANAGED_PUSH_PROBE, {})
         alarm.assert_called_once_with(5)
         assert "secret" not in output.getvalue()
+        assert "0x" not in output.getvalue()
         return output.getvalue()
 
     facts = subject._managed_push_facts(probe())
     assert facts == (
         "summary helper_count=1 total_kib=8192 available_kib=4096 | "
-        f"helper pid=123 state=S utime_ticks=11 stime_ticks=12 wait={expected_wait} fd0=fifo fd1=socket fd2=char rss_kib=64 | "
+        f"helper pid=123 state=S utime_ticks=11 stime_ticks=12 wait={expected_wait} syscall={expected_syscall} fd0=fifo fd1=socket fd2=char rss_kib=64 | "
         "lock owner_pid=123 | lock waiter_pid=124"
     )
     assert argv_reads == [4096] * 5
@@ -649,7 +754,58 @@ def test_generated_probe_stops_after_sixteen_helpers() -> None:
     assert facts == " | ".join(
         ["summary helper_count=16"]
         + [
-            f"helper pid={pid} state=R utime_ticks=1 stime_ticks=2 wait=other"
+            f"helper pid={pid} state=R utime_ticks=1 stime_ticks=2 wait=other syscall=unavailable"
             for pid in range(1, 17)
         ]
     )
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux" or os.uname().machine != "x86_64",
+    reason="Requires native x86_64 Linux procfs",
+)
+def test_generated_probe_observes_owned_stdin_read_without_consuming_input() -> None:
+    with subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import os; os.write(1, b'ready\\n'); os.write(1, os.read(0, 1))",
+            "-m",
+            "onyx_guest",
+            "push-managed",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as helper:
+        assert helper.stdin is not None
+        assert helper.stdout is not None
+        with selectors.DefaultSelector() as ready:
+            ready.register(helper.stdout, selectors.EVENT_READ)
+            assert ready.select(timeout=5)
+        assert helper.stdout.readline() == b"ready\n"
+        deadline = time.monotonic() + 5
+        facts = ""
+        while time.monotonic() < deadline:
+            output = io.StringIO()
+            with (
+                patch.object(
+                    Path, "iterdir", return_value=iter([Path(f"/proc/{helper.pid}")])
+                ),
+                patch("signal.alarm"),
+                patch("sys.excepthook"),
+                redirect_stdout(output),
+            ):
+                exec(subject._MANAGED_PUSH_PROBE, {})
+            facts = subject._managed_push_facts(output.getvalue())
+            if "wait=pipe_read syscall=read syscall_fd=0 fd0=fifo" in facts:
+                break
+            time.sleep(0.01)
+        assert f"helper pid={helper.pid} state=S" in facts
+        assert "wait=pipe_read syscall=read syscall_fd=0 fd0=fifo" in facts
+        helper.stdin.write(b"x")
+        helper.stdin.flush()
+        stdout, stderr = helper.communicate(timeout=5)
+        assert stdout == b"x"
+        assert stderr == b""
+        assert helper.returncode == 0
