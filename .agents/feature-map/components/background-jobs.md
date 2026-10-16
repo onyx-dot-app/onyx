@@ -147,7 +147,12 @@ lists plus its own additions):
   `check-for-index-attempt-cleanup`, `backfill-cc-pair-ids`, and more). The
   `backfill-cc-pair-ids` entry runs every 5 minutes on the `index_reclaim` queue
   (Light worker) and fills `cc_pair_ids` on existing OpenSearch chunks for the
-  cc-pair access filter (see [[access-control]] §4.3a). Filtered by
+  cc-pair access filter (see [[access-control]] §4.3a). The `tabular-rechunk`
+  entry shares that cadence but runs on the `docprocessing` queue, where its
+  embedding belongs: each tick re-chunks one cc-pair's tabular documents with
+  the current chunker (`background/indexing/run_tabular_rechunk.py`).
+  `TABULAR_RECHUNK_ENABLED` arms it and a KV record stops it, so a finished
+  migration costs one cached read per tick. Both are filtered by
   `_VECTOR_DB_BEAT_TASK_NAMES` when `DISABLE_VECTOR_DB` is set.
   `beat_schedule.py:beat_task_templates`
 - `beat_cloud_tasks`: system-wide tasks that exist once regardless of tenant

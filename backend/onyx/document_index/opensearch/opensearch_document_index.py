@@ -674,6 +674,28 @@ class OpenSearchDocumentIndex(DocumentIndex):
             found.update(chunk.document_id for chunk in page)
         return found
 
+    def get_chunk_heads(
+        self, document_ids: list[str]
+    ) -> dict[str, DocumentChunkWithoutVectors]:
+        """Gets the lowest-indexed stored chunk of each of the given documents.
+
+        That chunk carries the document fields Postgres does not keep - title,
+        metadata and owners - so a caller that rebuilds a document without
+        re-fetching it from the source can restore them.
+        """
+        if not document_ids:
+            return {}
+        self._client.refresh_index()
+        heads: dict[str, DocumentChunkWithoutVectors] = {}
+        for page in self._client.iter_chunks_for_doc_ids(
+            document_ids, tenant_state=self._tenant_state
+        ):
+            for chunk in page:
+                head = heads.get(chunk.document_id)
+                if head is None or chunk.chunk_index < head.chunk_index:
+                    heads[chunk.document_id] = chunk
+        return heads
+
     def get_documents_missing_chunks(self, document_ids: list[str]) -> list[str]:
         """Gets the IDs of the documents whose chunk 0 is not in this index.
 

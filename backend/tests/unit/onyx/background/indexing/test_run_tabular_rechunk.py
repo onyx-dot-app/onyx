@@ -1,0 +1,104 @@
+"""Guards for the tabular re-chunk migration's document rebuild.
+
+The migration re-runs the indexing pipeline over documents nobody changed, so
+`_upsert_documents_in_db` writes the rebuilt document back over a row that was
+already correct. Anything the rebuild drops is destroyed, quietly, across the
+whole corpus. These tests pin the fields that must survive.
+"""
+
+from io import BytesIO
+from typing import IO
+from unittest.mock import MagicMock, patch
+
+from onyx.background.indexing.run_tabular_rechunk import _owners, _rebuild_document
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    get_experts_stores_representations,
+)
+from onyx.connectors.models import (
+    Document,
+    TabularSection,
+    convert_metadata_dict_to_list_of_strings,
+)
+from onyx.db.models import Document as DbDocument
+
+_CSV = b"region,sales\nnorth,10\nsouth,20\n"
+
+
+def _db_doc() -> DbDocument:
+    return DbDocument(
+        id="doc-1",
+        semantic_id="quarterly.csv",
+        link="https://example.com/quarterly.csv",
+        file_id="file-abc",
+        doc_metadata={"owner_team": "finance"},
+        parent_hierarchy_node_id=7,
+        primary_owners=["Ada Lovelace"],
+        secondary_owners=["Grace Hopper"],
+        from_ingestion_api=False,
+    )
+
+
+def _head() -> MagicMock:
+    head = MagicMock()
+    head.source_type = DocumentSource.FILE.value
+    head.title = "Quarterly numbers"
+    head.metadata_list = convert_metadata_dict_to_list_of_strings(
+        {"department": "finance", "year": "2026"}
+    )
+    return head
+
+
+def _stage(content: IO[bytes], content_type: str) -> str:  # noqa: ARG001
+    """Stands in for the file-store staging callback."""
+    return "staged-csv-1"
+
+
+def _rebuild() -> Document:
+    file_store = MagicMock()
+    file_store.read_file.return_value = BytesIO(_CSV)
+    with patch(
+        "onyx.background.indexing.run_tabular_rechunk.get_default_file_store",
+        return_value=file_store,
+    ):
+        return _rebuild_document(db_doc=_db_doc(), head=_head(), stage=_stage)
+
+
+def test_owners_round_trip_through_their_stored_form() -> None:
+    """The upsert writes owners back as their string form. If the rebuild did
+    not round-trip, every re-chunked document would lose its owners."""
+    stored = ["Ada Lovelace", "Grace Hopper"]
+    assert get_experts_stores_representations(_owners(stored)) == stored
+    assert _owners(None) is None
+    assert _owners([]) is None
+
+
+def test_rebuild_keeps_the_fields_the_upsert_would_overwrite() -> None:
+    doc = _rebuild()
+
+    # Carried from the row: the upsert's update_set writes all of these.
+    assert doc.file_id == "file-abc"
+    assert doc.doc_metadata == {"owner_team": "finance"}
+    assert doc.parent_hierarchy_node_id == 7
+    assert doc.semantic_identifier == "quarterly.csv"
+    assert get_experts_stores_representations(doc.primary_owners) == ["Ada Lovelace"]
+
+    # Recovered from the stored chunk: Postgres does not keep either.
+    assert doc.title == "Quarterly numbers"
+    assert doc.metadata == {"department": "finance", "year": "2026"}
+    assert doc.source == DocumentSource.FILE
+
+
+def test_rebuild_leaves_external_access_unset() -> None:
+    """With no document carrying external_access, upsert_documents leaves the
+    ACL columns alone. Setting it here would wipe perm-synced access."""
+    assert _rebuild().external_access is None
+
+
+def test_rebuild_sections_come_from_the_stored_workbook() -> None:
+    doc = _rebuild()
+    assert [type(section) for section in doc.sections] == [TabularSection]
+    section = doc.sections[0]
+    assert isinstance(section, TabularSection)
+    assert section.csv_file_id == "staged-csv-1"
+    assert section.link == "https://example.com/quarterly.csv"
