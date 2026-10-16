@@ -61,6 +61,8 @@ def _make_attempt(
         search_settings_id=get_current_search_settings(db_session).id,
         from_beginning=False,
         status=IndexingStatus.SUCCESS,
+        poll_range_start=time_created,
+        poll_range_end=time_created,
         time_created=time_created,
         time_updated=time_created,
     )

@@ -8,6 +8,7 @@ requests to internal/private IP addresses and other potentially dangerous destin
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from onyx.utils.url import (
     SSRFException,
@@ -693,3 +694,45 @@ class TestSsrfSafeGetHttpsOnly:
     def test_rejects_plain_http_upfront(self) -> None:
         with pytest.raises(SSRFException, match="Only https"):
             ssrf_safe_get("http://idp.example.com/keys", https_only=True)
+
+
+def test_streamed_redirect_does_not_read_body_or_ambient_credentials() -> None:
+    response = requests.Response()
+    response.status_code = 307
+    response.headers["Location"] = "http://169.254.169.254/"
+    response.raw = MagicMock()
+    response.raw.read.side_effect = AssertionError("Redirect body must not be read")
+    response.raw.stream.side_effect = AssertionError(
+        "Redirect body must not be streamed"
+    )
+    with (
+        patch(
+            "onyx.utils.url._validate_and_resolve_url",
+            return_value=("93.184.216.34", "example.com", 443),
+        ),
+        patch(
+            "requests.sessions.get_netrc_auth",
+            side_effect=AssertionError("No ambient credentials"),
+        ),
+        patch(
+            "requests.sessions.get_environ_proxies",
+            side_effect=AssertionError("No environment proxies"),
+        ),
+        patch("requests.adapters.HTTPAdapter.send", return_value=response) as send,
+    ):
+        result = ssrf_safe_get(
+            "https://example.com/metadata",
+            follow_redirects=False,
+            https_only=True,
+            stream=True,
+            trust_env=False,
+        )
+        assert result.status_code == 307
+        response.raw.read.assert_not_called()
+        response.raw.stream.assert_not_called()
+        prepared = send.call_args.args[0]
+        assert prepared.url == "https://93.184.216.34/metadata"
+        assert "Authorization" not in prepared.headers
+        assert "Proxy-Authorization" not in prepared.headers
+        send.assert_called_once()
+        result.close()

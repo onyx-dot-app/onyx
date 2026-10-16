@@ -9,6 +9,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     UserMessage,
 )
+from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 
@@ -34,6 +35,7 @@ def _clean_keyword_line(line: str) -> str:
 def expand_keywords(
     user_query: str,
     llm: LLM,
+    enforce_llm_input_budget: bool = False,
 ) -> list[str]:
     """Expand a user query into multiple keyword-only queries for BM25 search.
 
@@ -52,16 +54,22 @@ def expand_keywords(
     messages: list[Message] = [
         UserMessage(content=KEYWORD_EXPANSION_PROMPT.format(user_query=user_query))
     ]
+    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
+    request = GenerationRequest(
+        messages=messages,
+        options=(
+            budget.options()
+            if budget
+            else GenerationOptions(reasoning_effort=ReasoningEffort.OFF, max_tokens=150)
+        ),
+    )
+    if budget and not budget.fits(request):
+        logger.warning("Search keyword prompt exceeds its input budget")
+        return []
 
     try:
         response = llm.invoke(
-            GenerationRequest(
-                messages=messages,
-                # Keyword expansion should return only a few short queries.
-                options=GenerationOptions(
-                    reasoning_effort=ReasoningEffort.OFF, max_tokens=150
-                ),
-            ),
+            request,
             context=GenerationContext(flow=LLMFlow.KEYWORD_QUERY_EXPANSION),
         )
 

@@ -554,9 +554,6 @@
       "loading": {
         "label": "既存の設定を読み込み中..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth パススルーには、OAuth に対応したログイン方法 (Google または OIDC) が必要です。"
-      },
       "passThroughNotice": {
         "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
         "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "トークン URL",
         "required": "トークン URL は必須です"
+      },
+      "pkce": {
+        "label": "PKCE を使用",
+        "description": "OAuth プロバイダーが S256 チャレンジ方式の PKCE に対応している場合のみ有効にしてください。"
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "PKCE の対応状況を確認するには、有効な HTTPS エンドポイントを入力してください。",
+          "checking": "公表されている PKCE の対応状況を確認中…",
+          "supported": "プロバイダーは S256 PKCE への対応を公表しています。",
+          "unsupported": "プロバイダーは S256 PKCE への対応を公表していません。",
+          "unknown": "PKCE の対応状況を確認できませんでした。設定は手動で選択できます。"
+        },
+        "description": "設定やトークンを保存せず、未保存の設定をテストします。プロバイダーで同意すると、このアプリにアカウントへのアクセスが許可される場合があります。",
+        "testing": "接続をテスト中…",
+        "test": "接続をテスト",
+        "successPkce": "PKCE パラメーターを使った認可に成功しました。ただし、プロバイダーが PKCE を強制している証明にはなりません。",
+        "success": "PKCE を使わない認可に成功しました。",
+        "result": {
+          "blocked": "ポップアップを許可して再試行してください。",
+          "closed": "テストウィンドウが閉じられたか、接続が切れました。開いているテストを完了するか、もう一度お試しください。",
+          "stale": "設定が変更されました。現在の設定を再テストしてください。",
+          "failed": "認可テストに失敗しました。設定を確認して再試行してください。",
+          "denied": "プロバイダーでの認可が拒否またはキャンセルされました。",
+          "interrupted": "テストが期限切れまたは中断されました。新しいテストを開始してください。"
+        },
+        "returnToSettings": "設定ウィンドウに戻って結果を確認してください。",
+        "close": "ウィンドウを閉じる"
       }
     },
     "openApiCard": {
@@ -1037,6 +1062,9 @@
         },
         "lumapps": {
           "description": "イントラネットのページとコミュニティ"
+        },
+        "youtrack": {
+          "description": "課題管理とプロジェクト管理"
         },
         "canvas": {
           "description": "コース、ページ、お知らせ"
@@ -1754,6 +1782,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "チャットセッションの名前を付けるモデルです。既定では各セッションのモデルを使用します。",
+        "resetButton": {
+          "label": "リセット"
+        },
+        "sessionModel": {
+          "label": "デフォルトモデルを使用"
+        },
+        "title": "チャット名の生成モデル"
+      },
+      "searchSelectionModel": {
+        "description": "取得したドキュメントを選択して確認します。低コストのモデルは検索コストを削減できますが、回答の品質に影響する可能性があります。",
+        "resetButton": {
+          "label": "リセット"
+        },
+        "sessionModel": {
+          "label": "デフォルトモデルを使用"
+        },
+        "title": "検索選択モデル"
+      },
+      "taskModels": {
+        "title": "モデルの選択",
+        "loadFailed": "タスクモデルを読み込めませんでした",
+        "retry": {
+          "label": "再試行"
+        },
+        "noProviders": {
+          "title": "言語モデルのプロバイダーを接続"
+        },
+        "addProvider": {
+          "label": "プロバイダーを追加"
+        }
+      },
       "advanced": {
         "title": "詳細オプション"
       },
@@ -1772,13 +1833,6 @@
       "betaTag": {
         "label": "ベータ"
       },
-      "chatNaming": {
-        "description": "チャットセッションに自動で名前を付けるモデルです。既定では各セッションのモデルを使用します。メインのモデルが同時リクエストを処理できない場合は、小さく高速なモデルをここで指定してください。",
-        "resetButton": {
-          "label": "リセット"
-        },
-        "title": "チャット命名モデル"
-      },
       "connectors": {
         "empty": {
           "title": "コネクターが設定されていません"
@@ -1791,6 +1845,10 @@
       "deepResearch": {
         "description": "ウェブと接続済みソースを横断して調査するエージェント型のリサーチ機能です。クエリあたりの token 消費が大幅に増えます。",
         "title": "ディープリサーチ"
+      },
+      "defaultLanguage": {
+        "description": "自分の設定で言語を選択していないユーザーに適用される UI の言語です。",
+        "title": "既定の言語"
       },
       "disableDefaultChat": {
         "description": "ユーザーは必ずエージェントからチャットを開始します。新しいチャットは、最初にピン留めされたエージェントで作成されます。新しいユーザーを支援するため、注目のエージェントを設定してください。",
@@ -1932,11 +1990,15 @@
         "title": "Temperature の制御"
       },
       "toasts": {
-        "chatNamingReset": "チャット命名をセッションのモデルにリセットしました",
-        "chatNamingResetFailed": "チャット命名モデルのリセットに失敗しました",
-        "chatNamingUpdateFailed": "チャット命名モデルの更新に失敗しました",
-        "chatNamingUpdated": "チャット命名モデルを更新しました",
+        "chatNamingUpdated": "チャット名の生成モデルを更新しました",
+        "chatNamingReset": "チャット名の生成モデルをデフォルトモデルにリセットしました",
+        "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
+        "chatNamingResetFailed": "チャット名の生成モデルのリセットに失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
+        "searchSelectionReset": "検索選択モデルをデフォルトモデルにリセットしました",
+        "searchSelectionResetFailed": "検索選択モデルのリセットに失敗しました",
+        "searchSelectionUpdateFailed": "検索選択モデルの更新に失敗しました",
+        "searchSelectionUpdated": "検索選択モデルを更新しました",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "settingsUpdated": "設定を更新しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
@@ -2218,89 +2280,24 @@
         "perBatch": {
           "empty": "バッチごとのステージデータは記録されていません。"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "バッチ読み込み"
+        "buckets": {
+          "fetchSource": {
+            "label": "ソース取得"
           },
-          "batchTotal": {
-            "label": "バッチ合計"
-          },
-          "batchUnaccounted": {
-            "label": "未計上"
-          },
-          "checkpointLoad": {
-            "label": "チェックポイント読み込み"
+          "batchPreProcessing": {
+            "label": "バッチ前処理"
           },
           "chunking": {
             "label": "チャンク分割"
           },
-          "connectorFetch": {
-            "label": "コネクター取得"
-          },
-          "connectorValidation": {
-            "label": "コネクター検証"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "調整ロック取得待ち"
-          },
-          "coordinationUpdate": {
-            "label": "調整更新"
-          },
-          "docBatchEnqueue": {
-            "label": "ドキュメントバッチのキュー投入"
-          },
-          "docBatchStore": {
-            "label": "ドキュメントバッチ保存"
-          },
-          "docDbPrepare": {
-            "label": "ドキュメント DB の準備"
-          },
-          "docLockAcquireWait": {
-            "label": "ドキュメントロックの取得待ち"
-          },
-          "docprocessingSetup": {
-            "label": "ドキュメント処理のセットアップ"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "エンリッチメントの準備"
-          },
-          "finalization": {
-            "label": "最終処理"
-          },
-          "gcCollect": {
-            "label": "ガベージコレクション"
-          },
-          "hierarchyUpsert": {
-            "label": "階層のアップサート"
-          },
-          "imageProcessing": {
-            "label": "画像処理"
-          },
-          "permissionValidation": {
-            "label": "権限の検証"
-          },
-          "postIndexDbUpdate": {
-            "label": "インデックス後の DB 更新"
-          },
-          "queueWait": {
-            "label": "キューの待ち時間"
+            "label": "埋め込み"
           },
           "vectorDbWrite": {
             "label": "ベクトル DB への書き込み"
           },
-          "embeddingRateLimitWait": {
-            "label": "埋め込みレート制限の待機",
-            "description": "インデックス設定で設定した埋め込みのレート制限により、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "プロバイダーの制限による待機",
-            "description": "埋め込みプロバイダーがリクエストを制限した後に、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
+          "postProcessing": {
+            "label": "後処理"
           }
         }
       },
@@ -2320,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
-          "loadError": "グラフを読み込めませんでした。"
+          "loadError": "グラフを読み込めませんでした。",
+          "rangeFilter": "グラフのこの区間に作成された実行"
         },
         "hold": {
           "checks_running": "インデックス前チェックを実行中",
@@ -2481,6 +2479,7 @@
           "running": "{count, plural, other {# 件の実行が進行中}}",
           "succeeded": "{count, plural, other {# 件の実行が成功}}",
           "failed": "{count, plural, other {# 件の実行が失敗}}",
+          "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"
@@ -2618,7 +2617,7 @@
         "tags": {
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
-          "doc_permission_sync": "{count, plural, other {# 件のドキュメントの同期に失敗}}",
+          "doc_permission_sync": "{count, plural, other {# 人のユーザーの同期に失敗}}",
           "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
@@ -2660,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "ステージ詳細",
+        "heading": {
+          "top": "ステージ",
+          "bottom": "詳細"
+        },
         "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
         "uneven": {
           "tooltip": "このステージのバッチ時間は大きくばらついています"
+        },
+        "clipped": {
+          "label": "バーを切り詰めています：最大値が目盛りを超えています"
         },
         "close": "ステージ詳細を閉じる"
       }
@@ -3261,6 +3267,19 @@
             "lang": {
               "label": "言語",
               "description": "コンテンツのタイトル/本文とメタデータラベルに使用する言語(ISO 639-1。例: en、fr)。"
+            }
+          }
+        },
+        "youtrack": {
+          "description": "YouTrack コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack の URL",
+              "description": "YouTrack のアドレス (例: https://example.youtrack.cloud)。YouTrack Server の場合はコンテキストパスを含めます (例: https://example.com/youtrack)。"
+            },
+            "projects": {
+              "label": "プロジェクト",
+              "description": "インデックスするプロジェクトの短縮名 (例: ABC)。空欄にすると、トークンが読み取れるすべてのプロジェクトをインデックスします。"
             }
           }
         },
@@ -4616,6 +4635,7 @@
         "gongBaseUrl": "任意。米国外のデータを使う場合は、https://[region].api.gong.io のようにリージョンのホストを指定します。",
         "jiraUserEmail": "Jira Cloud では必須です。",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
+        "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
@@ -6102,8 +6122,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "新しい API キーを入力するか、既存のプロバイダーを選択",
-          "idle": "新しい API キーを入力するか、既存のプロバイダーを選択してください。",
+          "idle": "API キーを入力してください。",
           "label": "API キー",
           "placeholder": "API キーを入力",
           "required": "API キーは必須です"
@@ -6148,9 +6167,6 @@
         },
         "editHeader": {
           "title": "{title} を編集"
-        },
-        "invalidProviderSelection": {
-          "message": "プロバイダーの選択が無効です"
         },
         "loading": {
           "placeholder": "読み込んでいます..."
@@ -6814,7 +6830,7 @@
       "activities": {
         "title": "アクティビティ",
         "history": "アクティビティ履歴をすべて表示",
-        "viewLogs": "アクティビティ履歴を表示",
+        "viewLogs": "ログを表示",
         "panel": {
           "title": "アクティビティ履歴",
           "close": "アクティビティ履歴を閉じる"
@@ -7376,6 +7392,7 @@
         "providerDeleteFailed": "プロバイダーを削除できませんでした：{message}",
         "providerDeleted": "プロバイダーを削除しました。",
         "providerLoadFailed": "プロバイダーを読み込めませんでした: {message}",
+        "providerResolveFailed": "プロバイダーを解決できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
@@ -7391,6 +7408,16 @@
           "empty": "ルーターモデルが見つかりません。先にゲートウェイプロバイダーでルーターモデルを有効にしてください。",
           "error": "ルーターモデルを読み込めませんでした。",
           "retry": "再試行"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "カスタムモデル",
+          "companyName": "LiteLLM 互換プロバイダー"
+        },
+        "openAICompatible": {
+          "productName": "カスタムモデル",
+          "companyName": "OpenAI 互換エンドポイント"
         }
       }
     },
@@ -13806,6 +13833,7 @@
           "askOption": "確認する",
           "autoApproveOption": "自動承認",
           "customOption": "カスタム",
+          "defaultOption": "デフォルト",
           "description": "エージェントに許可する操作を選択します。「確認する」は各アクションの実行前にチャットで確認し、「自動承認」は確認なしで実行します。アクションごとにポリシーを設定するには「詳細設定」を使用してください。",
           "title": "権限"
         },
@@ -15613,7 +15641,8 @@
       "title": "言語",
       "toasts": {
         "updateFailed": "言語設定を更新できませんでした"
-      }
+      },
+      "workspaceDefault": "ワークスペースの既定 ({language})"
     },
     "layout": {
       "header": {

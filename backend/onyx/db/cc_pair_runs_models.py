@@ -23,6 +23,8 @@ class CCPairRunFilter(BaseModel):
     source: DocumentSource | None
     shared_sources: set[DocumentSource]
     since: datetime | None
+    # Exclusive, so back-to-back windows never share a run.
+    until: datetime | None
     error_query: str | None
     status_groups: set[CCPairRunStatusGroup] | None
     errors: CCPairRunErrors | None

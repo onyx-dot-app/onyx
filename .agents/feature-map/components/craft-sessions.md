@@ -85,6 +85,8 @@ the turn pauses and the user sees an approval card; the user can approve or
 reject just that request, or approve it for the rest of the session. Files
 the agent produces appear as artifacts the user can browse, download, or
 (for Markdown) export as a `.docx`.
+An app connection card resolves its pending agent request even when credentials already exist.
+It shows Connected only after the decision endpoint succeeds. Failed decisions remain retryable.
 Passive discoveries update the inventory without adding tabs, opening the panel, or changing selection.
 Explicit resource actions create and select tabs. See [[craft-streaming]] for inventory and revision rules.
 The user's own uploaded library files
@@ -637,9 +639,9 @@ send_message / reconcile_session_llm_config     session/manager.py
 
 Priority, per `llm_config.py:_select_gateway_default`: (1) the session's own
 persisted `agent_provider`/`agent_model`, if still visible and accessible;
-(2) the admin's Craft default (`fetch_default_craft_model`,
+(2) the admin's Craft default (`fetch_default_model(..., LLMModelFlowType.CRAFT)`,
 `LLMModelFlowType.CRAFT`); (3) the admin's chat default
-(`fetch_default_llm_model`); (4) each provider's recommended model
+(`fetch_default_model(..., LLMModelFlowType.CHAT)`); (4) each provider's recommended model
 (`recommended-models.json`); (5) the first visible model of the first
 provider. Per `[[llm-providers]]`, `CRAFT` is a pointer flow that nothing
 populates automatically, so step (2) is frequently empty and step (3) is

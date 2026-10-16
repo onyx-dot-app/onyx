@@ -1,6 +1,4 @@
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
-from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
-from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_pool import get_redis_client
@@ -22,12 +20,6 @@ class RedisConnector:
         self.stop = RedisConnectorStop(tenant_id, cc_pair_id, self.redis)
         self.prune = RedisConnectorPrune(tenant_id, cc_pair_id, self.redis)
         self.delete = RedisConnectorDelete(tenant_id, cc_pair_id, self.redis)
-        self.permissions = RedisConnectorPermissionSync(
-            tenant_id, cc_pair_id, self.redis
-        )
-        self.external_group_sync = RedisConnectorExternalGroupSync(
-            tenant_id, cc_pair_id, self.redis
-        )
 
     @staticmethod
     def get_id_from_fence_key(key: str) -> str | None:

@@ -34,19 +34,6 @@ _PROTOCOL_AUTHORIZATION_PARAMS = frozenset(
 )
 
 
-def conflicting_authorization_params(
-    additional_params: Mapping[str, object] | None,
-    *,
-    owns_resource: bool = False,
-    scope_param: str = "scope",
-) -> frozenset[str]:
-    """Return parameters owned by this flow instead of provider configuration."""
-    protected = _PROTOCOL_AUTHORIZATION_PARAMS | {scope_param}
-    if owns_resource:
-        protected = protected | {"resource"}
-    return protected.intersection(additional_params or {})
-
-
 def ensure_offline_access_auth_params(authorization_url: str) -> str:
     """Merge missing offline-access params into a built authorize URL.
     Params already in the URL win."""
@@ -95,9 +82,10 @@ def validate_authorization_params(
         parse_qsl(urlparse(authorization_url).query, keep_blank_values=True)
     )
     configured.update(additional_params or {})
-    conflicts = conflicting_authorization_params(
-        configured, owns_resource=owns_resource, scope_param=scope_param
-    )
+    protected = _PROTOCOL_AUTHORIZATION_PARAMS | {scope_param}
+    if owns_resource:
+        protected = protected | {"resource"}
+    conflicts = protected.intersection(configured)
     if conflicts:
         raise ValueError(
             "OAuth authorization parameters cannot override: "
@@ -149,29 +137,6 @@ def build_authorization_url(
     ]
     return ensure_offline_access_auth_params(
         urlunparse(parsed._replace(query=urlencode([*existing, *query.items()])))
-    )
-
-
-def build_oauth_authorization_url(
-    params: OAuthFlowParams,
-    redirect_uri: str,
-    state: str,
-    *,
-    code_challenge: str | None = None,
-    resource: str | None = None,
-    owns_resource: bool = False,
-) -> str:
-    """Build a standard space-delimited scope request from configured inputs."""
-    return build_authorization_url(
-        authorization_url=params.authorization_url,
-        client_id=params.client_id,
-        redirect_uri=redirect_uri,
-        state=state,
-        scope=" ".join(params.scopes) if params.scopes else None,
-        additional_params=params.additional_params,
-        code_challenge=code_challenge,
-        resource=resource,
-        owns_resource=owns_resource,
     )
 
 

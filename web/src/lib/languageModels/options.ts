@@ -6,6 +6,7 @@ import type {
 } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import { getModelIcon, getProvider } from "@/lib/languageModels/utils";
+import type { ProviderNames } from "@/lib/languageModels/useProviderNames";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import type {
   DefaultModel,
@@ -15,6 +16,7 @@ import type {
   LLMProviderDescriptor,
   ModelOptionProvider,
   ReasoningEffortOverride,
+  ProviderEntry,
 } from "@/lib/languageModels/types";
 
 // ---------------------------------------------------------------------------
@@ -66,15 +68,32 @@ export function llmOptionKey(option: {
  * selectable model options. Hidden models require an existing selection or
  * an explicit admin opt-in.
  */
+/** `useProviderNames()`: a provider entry's names as the UI shows them. */
+export type ProviderNamesResolver = (entry: ProviderEntry) => ProviderNames;
+
+/**
+ * Pass `providerNames` wherever the options are shown, so a provider whose
+ * names are copy (custom, OpenAI-compatible) is labelled in the user's
+ * language.
+ */
 export function buildLlmOptions(
   llmProviders: ModelOptionProvider[] | undefined,
   currentModelName?: string,
-  includeHiddenModels = false
+  includeHiddenModels = false,
+  providerNames?: ProviderNamesResolver
 ): LLMOption[] {
   if (!llmProviders) return [];
 
   const seenKeys = new Set<string>();
   const options: LLMOption[] = [];
+
+  // The custom provider types share a product name, so an unnamed one is
+  // labelled by its description to keep its model group apart.
+  function unnamedProviderLabel(providerKey: string): string {
+    const entry = getProvider(providerKey);
+    const names = providerNames ? providerNames(entry) : entry;
+    return entry.copyKey ? names.companyName : names.productName;
+  }
 
   llmProviders.forEach((llmProvider) => {
     llmProvider.model_configurations
@@ -93,7 +112,7 @@ export function buildLlmOptions(
           provider: llmProvider.provider,
           providerId: llmProvider.id,
           providerDisplayName:
-            llmProvider.name || getProvider(llmProvider.provider).productName,
+            llmProvider.name || unnamedProviderLabel(llmProvider.provider),
           modelName: mc.name,
           modelConfigurationId: mc.id ?? null,
           displayName: mc.effectiveDisplayName,
@@ -305,6 +324,8 @@ export interface BuildModelSelectOptionsOptions {
    * grouping workspace-wide. Defaults to true.
    */
   grouped?: boolean;
+  /** `useProviderNames()`, for the provider group titles. */
+  providerNames?: ProviderNamesResolver;
 }
 
 /**
@@ -314,10 +335,10 @@ export interface BuildModelSelectOptionsOptions {
  */
 export function buildModelSelectOptions(
   providers: ModelOptionProvider[],
-  { grouped = true }: BuildModelSelectOptionsOptions = {}
+  { grouped = true, providerNames }: BuildModelSelectOptionsOptions = {}
 ): SelectOptions {
   const dividers: SelectDivider[] = groupLlmOptions(
-    buildLlmOptions(providers, undefined, true)
+    buildLlmOptions(providers, undefined, true, providerNames)
   )
     .map((group) => ({
       title: group.displayName,

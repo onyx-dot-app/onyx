@@ -554,9 +554,6 @@
       "loading": {
         "label": "기존 구성을 불러오는 중..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth 패스스루에는 OAuth를 지원하는 로그인 방법(Google 또는 OIDC)이 필요합니다."
-      },
       "passThroughNotice": {
         "description": "{appName}는 사용자의 OAuth 액세스 token을 Authorization 헤더로 서버에 직접 전달합니다. 서버가 동일한 공급자로 인증을 지원하는지 확인하세요.",
         "title": "ID 공급자를 공유하는 서비스에는 패스스루를 사용하세요."
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "Token URL",
         "required": "Token URL은 필수입니다"
+      },
+      "pkce": {
+        "label": "PKCE 사용",
+        "description": "OAuth 제공업체가 S256 챌린지 방식의 PKCE를 지원하는 경우에만 활성화하세요."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "PKCE 지원 여부를 확인하려면 유효한 HTTPS 엔드포인트를 입력하세요.",
+          "checking": "공개된 PKCE 지원 정보를 확인하는 중…",
+          "supported": "제공업체가 S256 PKCE 지원을 명시했습니다.",
+          "unsupported": "제공업체가 S256 PKCE 지원을 명시하지 않았습니다.",
+          "unknown": "PKCE 지원 여부를 확인할 수 없습니다. 설정은 수동으로 선택할 수 있습니다."
+        },
+        "description": "설정이나 토큰을 저장하지 않고 저장되지 않은 설정을 테스트합니다. 제공업체에서 동의하면 이 앱에 계정 접근 권한이 부여될 수 있습니다.",
+        "testing": "연결 테스트 중…",
+        "test": "연결 테스트",
+        "successPkce": "PKCE 매개변수를 사용한 인증에 성공했습니다. 제공업체가 PKCE를 강제한다는 뜻은 아닙니다.",
+        "success": "PKCE 없이 인증에 성공했습니다.",
+        "result": {
+          "blocked": "팝업을 허용하고 다시 시도하세요.",
+          "closed": "테스트 창이 닫혔거나 연결이 끊어졌습니다. 열려 있는 테스트를 완료하거나 다시 시도하세요.",
+          "stale": "설정이 변경되었습니다. 현재 설정을 다시 테스트하세요.",
+          "failed": "인증 테스트에 실패했습니다. 설정을 확인하고 다시 시도하세요.",
+          "denied": "제공업체 인증이 거부되거나 취소되었습니다.",
+          "interrupted": "테스트가 만료되거나 중단되었습니다. 새 테스트를 시작하세요."
+        },
+        "returnToSettings": "결과를 확인하려면 설정 창으로 돌아가세요.",
+        "close": "창 닫기"
       }
     },
     "openApiCard": {
@@ -1037,6 +1062,9 @@
         },
         "lumapps": {
           "description": "인트라넷 페이지와 커뮤니티"
+        },
+        "youtrack": {
+          "description": "이슈 추적 및 프로젝트 관리"
         },
         "canvas": {
           "description": "강좌, 페이지, 공지"
@@ -1754,6 +1782,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "채팅 세션의 이름을 생성하는 모델입니다. 기본적으로 각 세션의 모델을 사용합니다.",
+        "resetButton": {
+          "label": "초기화"
+        },
+        "sessionModel": {
+          "label": "기본 모델 사용"
+        },
+        "title": "채팅 이름 생성 모델"
+      },
+      "searchSelectionModel": {
+        "description": "검색된 문서를 선택하고 확인합니다. 저렴한 모델은 검색 비용을 줄일 수 있지만 답변 품질에 영향을 줄 수 있습니다.",
+        "resetButton": {
+          "label": "초기화"
+        },
+        "sessionModel": {
+          "label": "기본 모델 사용"
+        },
+        "title": "검색 선택 모델"
+      },
+      "taskModels": {
+        "title": "모델 선택",
+        "loadFailed": "작업 모델을 불러오지 못했습니다",
+        "retry": {
+          "label": "다시 시도"
+        },
+        "noProviders": {
+          "title": "언어 모델 공급자를 연결하세요"
+        },
+        "addProvider": {
+          "label": "제공자 추가"
+        }
+      },
       "advanced": {
         "title": "고급 옵션"
       },
@@ -1772,13 +1833,6 @@
       "betaTag": {
         "label": "베타"
       },
-      "chatNaming": {
-        "description": "채팅 세션의 이름을 자동으로 지정하는 데 사용하는 모델입니다. 기본값은 각 세션의 모델입니다. 기본 모델이 동시 요청을 처리할 수 없으면 여기에 작고 빠른 모델을 지정하세요.",
-        "resetButton": {
-          "label": "초기화"
-        },
-        "title": "채팅 이름 지정 모델"
-      },
       "connectors": {
         "empty": {
           "title": "설정된 커넥터 없음"
@@ -1791,6 +1845,10 @@
       "deepResearch": {
         "description": "웹과 연결된 소스 전반을 조사하는 에이전트 기반 리서치 시스템입니다. 질의당 훨씬 많은 token을 사용합니다.",
         "title": "심층 리서치"
+      },
+      "defaultLanguage": {
+        "description": "개인 설정에서 언어를 선택하지 않은 사용자에게 적용되는 UI 언어입니다.",
+        "title": "기본 언어"
       },
       "disableDefaultChat": {
         "description": "사용자가 항상 에이전트에서 시작하도록 강제합니다. 새 채팅은 사용자가 처음 고정한 에이전트에서 생성됩니다. 새 사용자가 쉽게 시작하도록 추천 에이전트를 설정하세요.",
@@ -1932,11 +1990,15 @@
         "title": "Temperature 제어"
       },
       "toasts": {
-        "chatNamingReset": "채팅 이름 지정 모델을 세션 모델로 초기화했습니다",
-        "chatNamingResetFailed": "채팅 이름 지정 모델을 초기화하지 못했습니다",
-        "chatNamingUpdateFailed": "채팅 이름 지정 모델을 업데이트하지 못했습니다",
-        "chatNamingUpdated": "채팅 이름 지정 모델을 업데이트했습니다",
+        "chatNamingUpdated": "채팅 이름 생성 모델이 업데이트되었습니다",
+        "chatNamingReset": "채팅 이름 생성 모델을 기본 모델로 초기화했습니다",
+        "chatNamingUpdateFailed": "채팅 이름 생성 모델을 업데이트하지 못했습니다",
+        "chatNamingResetFailed": "채팅 이름 생성 모델을 초기화하지 못했습니다",
         "providerResolveFailed": "제공자를 확인할 수 없습니다",
+        "searchSelectionReset": "검색 선택 모델을 기본 모델로 초기화했습니다",
+        "searchSelectionResetFailed": "검색 선택 모델을 초기화하지 못했습니다",
+        "searchSelectionUpdateFailed": "검색 선택 모델을 업데이트하지 못했습니다",
+        "searchSelectionUpdated": "검색 선택 모델이 업데이트되었습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "settingsUpdated": "설정을 업데이트했습니다",
         "systemPromptUpdateFailed": "시스템 프롬프트를 업데이트하지 못했습니다",
@@ -2218,89 +2280,24 @@
         "perBatch": {
           "empty": "배치별 단계 데이터가 기록되지 않았습니다."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "배치 로드"
+        "buckets": {
+          "fetchSource": {
+            "label": "소스 가져오기"
           },
-          "batchTotal": {
-            "label": "배치 전체"
-          },
-          "batchUnaccounted": {
-            "label": "미분류"
-          },
-          "checkpointLoad": {
-            "label": "체크포인트 로드"
+          "batchPreProcessing": {
+            "label": "배치 전처리"
           },
           "chunking": {
             "label": "청킹"
           },
-          "connectorFetch": {
-            "label": "커넥터 가져오기"
-          },
-          "connectorValidation": {
-            "label": "커넥터 검증"
-          },
-          "contextualRag": {
-            "label": "컨텍스트 기반 RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "조정 잠금 대기"
-          },
-          "coordinationUpdate": {
-            "label": "조정 업데이트"
-          },
-          "docBatchEnqueue": {
-            "label": "문서 배치 큐 등록"
-          },
-          "docBatchStore": {
-            "label": "문서 배치 저장"
-          },
-          "docDbPrepare": {
-            "label": "문서 DB 준비"
-          },
-          "docLockAcquireWait": {
-            "label": "문서 잠금 획득 대기"
-          },
-          "docprocessingSetup": {
-            "label": "문서 처리 설정"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "보강 준비"
-          },
-          "finalization": {
-            "label": "마무리"
-          },
-          "gcCollect": {
-            "label": "가비지 컬렉션"
-          },
-          "hierarchyUpsert": {
-            "label": "계층 업서트"
-          },
-          "imageProcessing": {
-            "label": "이미지 처리"
-          },
-          "permissionValidation": {
-            "label": "권한 검증"
-          },
-          "postIndexDbUpdate": {
-            "label": "인덱싱 후 DB 업데이트"
-          },
-          "queueWait": {
-            "label": "큐 대기"
+            "label": "임베딩"
           },
           "vectorDbWrite": {
             "label": "벡터 DB 쓰기"
           },
-          "embeddingRateLimitWait": {
-            "label": "임베딩 요청 한도 대기",
-            "description": "인덱스 설정에서 지정한 임베딩 요청 한도 때문에 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "제공자 제한 대기",
-            "description": "임베딩 제공자가 요청을 제한한 후 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
+          "postProcessing": {
+            "label": "후처리"
           }
         }
       },
@@ -2320,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "시간별 인덱싱된 문서",
           "tooltip": "{count, plural, one {문서 #개} other {문서 #개}}",
-          "loadError": "차트를 불러올 수 없습니다."
+          "loadError": "차트를 불러올 수 없습니다.",
+          "rangeFilter": "차트의 이 구간에 생성된 실행"
         },
         "hold": {
           "checks_running": "인덱싱 전 검사 실행 중",
@@ -2481,6 +2479,7 @@
           "running": "{count, plural, other {실행 #개 진행 중}}",
           "succeeded": "{count, plural, other {실행 #개 성공}}",
           "failed": "{count, plural, other {실행 #개 실패}}",
+          "canceled": "{count, plural, other {실행 #개 취소됨}}",
           "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
           "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
@@ -2618,7 +2617,7 @@
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
-          "doc_permission_sync": "{count, plural, other {문서 #개 동기화 실패}}",
+          "doc_permission_sync": "{count, plural, other {사용자 #명 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
@@ -2660,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "단계 세부 정보",
+        "heading": {
+          "top": "단계",
+          "bottom": "세부 정보"
+        },
         "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
         "uneven": {
           "tooltip": "이 단계의 배치 시간 편차가 큽니다"
+        },
+        "clipped": {
+          "label": "막대가 잘림: 최댓값이 눈금을 넘습니다"
         },
         "close": "단계 세부 정보 닫기"
       }
@@ -3261,6 +3267,19 @@
             "lang": {
               "label": "언어",
               "description": "콘텐츠 제목/본문과 메타데이터 레이블에 사용할 언어입니다 (ISO 639-1, 예: en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "YouTrack 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack URL",
+              "description": "YouTrack 주소입니다(예: https://example.youtrack.cloud). YouTrack Server의 경우 컨텍스트 경로를 포함하세요(예: https://example.com/youtrack)."
+            },
+            "projects": {
+              "label": "프로젝트",
+              "description": "인덱싱할 프로젝트의 짧은 이름입니다(예: ABC). 비워 두면 토큰이 읽을 수 있는 모든 프로젝트를 인덱싱합니다."
             }
           }
         },
@@ -4616,6 +4635,7 @@
         "gongBaseUrl": "선택 사항입니다. 미국 외 지역의 데이터는 해당 리전의 호스트를 입력하세요(예: https://[region].api.gong.io).",
         "jiraUserEmail": "Jira Cloud에 필요합니다.",
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
+        "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
@@ -6102,8 +6122,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "새 API 키를 입력하거나 기존 제공업체를 선택하세요",
-          "idle": "새 API 키를 입력하거나 기존 제공업체를 선택하세요.",
+          "idle": "API 키를 입력하세요.",
           "label": "API 키",
           "placeholder": "API 키를 입력하세요",
           "required": "API 키는 필수입니다"
@@ -6148,9 +6167,6 @@
         },
         "editHeader": {
           "title": "{title} 편집"
-        },
-        "invalidProviderSelection": {
-          "message": "잘못된 제공업체 선택입니다"
         },
         "loading": {
           "placeholder": "불러오는 중..."
@@ -6814,7 +6830,7 @@
       "activities": {
         "title": "활동",
         "history": "전체 활동 기록",
-        "viewLogs": "활동 기록 보기",
+        "viewLogs": "로그 보기",
         "panel": {
           "title": "활동 기록",
           "close": "활동 기록 숨기기"
@@ -7376,6 +7392,7 @@
         "providerDeleteFailed": "제공자를 삭제하지 못했습니다: {message}",
         "providerDeleted": "제공자를 삭제했습니다!",
         "providerLoadFailed": "제공자를 불러올 수 없습니다: {message}",
+        "providerResolveFailed": "제공자를 확인할 수 없습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "settingsUpdated": "설정을 업데이트했습니다",
         "unknownError": "알 수 없는 오류"
@@ -7391,6 +7408,16 @@
           "empty": "라우터 모델을 찾을 수 없습니다. 먼저 게이트웨이 제공자에서 라우터 모델을 활성화하세요.",
           "error": "라우터 모델을 불러오지 못했습니다.",
           "retry": "다시 시도"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "사용자 지정 모델",
+          "companyName": "LiteLLM 호환 공급자"
+        },
+        "openAICompatible": {
+          "productName": "사용자 지정 모델",
+          "companyName": "OpenAI 호환 엔드포인트"
         }
       }
     },
@@ -13806,6 +13833,7 @@
           "askOption": "묻기",
           "autoApproveOption": "자동 승인",
           "customOption": "사용자 지정",
+          "defaultOption": "기본값",
           "description": "에이전트가 할 수 있는 작업을 선택하세요. \"묻기\"는 각 작업 실행 전에 채팅에서 확인을 요청하고, \"자동 승인\"은 확인 없이 실행합니다. 작업별 정책은 고급 설정에서 지정하세요.",
           "title": "권한"
         },
@@ -15613,7 +15641,8 @@
       "title": "언어",
       "toasts": {
         "updateFailed": "언어 설정을 변경하지 못했습니다"
-      }
+      },
+      "workspaceDefault": "워크스페이스 기본값 ({language})"
     },
     "layout": {
       "header": {

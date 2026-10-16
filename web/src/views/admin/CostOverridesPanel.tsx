@@ -11,6 +11,7 @@ import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { getProvider } from "@/lib/languageModels/utils";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import {
   filterModelConfigurations,
   findLlmOptionById,
@@ -26,12 +27,18 @@ import {
 } from "@/lib/languageModels/costOverrides";
 import type { CostOverride } from "@/lib/languageModels/types";
 
-/** `allProvidersLabel` is passed in: this module cannot call translation hooks. */
+/**
+ * The label and resolver are passed in: this function cannot call hooks.
+ * `providerNames` is `useProviderNames()`.
+ */
 function getProviderDisplayName(
   provider: string,
-  allProvidersLabel: string
+  allProvidersLabel: string,
+  providerNames: ReturnType<typeof useProviderNames>
 ): string {
-  return provider ? getProvider(provider).companyName : allProvidersLabel;
+  return provider
+    ? providerNames(getProvider(provider)).companyName
+    : allProvidersLabel;
 }
 
 // Accepts integers/decimals only; "" is allowed mid-edit, validated on submit.
@@ -59,6 +66,7 @@ interface OverrideFormProps {
 
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const t = useTranslations("admin.costOverrides");
+  const providerNames = useProviderNames();
   const { mutate } = useSWRConfig();
   const { llmProviders, modelPaging } = useAdminLanguageModels();
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
@@ -89,7 +97,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const parsedCache = parseRate(cacheRate);
   const cacheValid = cacheRate.trim() === "" || parsedCache !== null;
   const modelLabel = model
-    ? `${getProviderDisplayName(provider, t("allProviders.label"))} · ${model}`
+    ? `${getProviderDisplayName(provider, t("allProviders.label"), providerNames)} · ${model}`
     : "";
   const canSubmit =
     model.trim() !== "" &&
@@ -228,13 +236,15 @@ interface OverrideRowProps {
 
 function OverrideRow({ override }: OverrideRowProps) {
   const t = useTranslations("admin.costOverrides");
+  const providerNames = useProviderNames();
   const locale = useLocale();
   const { mutate } = useSWRConfig();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const providerDisplayName = getProviderDisplayName(
     override.provider,
-    t("allProviders.label")
+    t("allProviders.label"),
+    providerNames
   );
 
   async function handleDelete() {
