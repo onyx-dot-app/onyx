@@ -84,7 +84,6 @@ from onyx.db.incognito import (
     is_incognito_teardown_target,
     mark_incognito_user_files_deleting,
 )
-from onyx.db.llm import fetch_default_chat_naming_model
 from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import UsageType, increment_usage
@@ -99,7 +98,11 @@ from onyx.file_store.serving import (
     resolve_inline_disposition,
 )
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import (
+    get_chat_naming_llm,
+    get_llm_for_persona,
+    get_llm_token_counter,
+)
 from onyx.llm.models import (
     USER_SELECTABLE_REASONING_EFFORTS,
     ReasoningEffort,
@@ -512,20 +515,25 @@ def _generate_or_fallback_chat_session_name(
 
     try:
         check_token_rate_limits(user)
-        llm = get_llm_for_persona(
-            persona=persona,
-            user=user,
-            llm_override=llm_override,
-            additional_headers=get_relevant_headers(
-                request.headers, LITELLM_PASS_THROUGH_HEADERS
-            ),
+        additional_headers = get_relevant_headers(
+            request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
-        with get_session_with_current_tenant() as db_session:
-            check_llm_cost_limit_for_provider(
-                db_session=db_session,
-                tenant_id=get_current_tenant_id(),
-                llm_provider_api_key=llm.config.api_key,
+        llm = get_chat_naming_llm(
+            additional_headers=additional_headers,
+        )
+        if llm is None:
+            llm = get_llm_for_persona(
+                persona=persona,
+                user=user,
+                llm_override=llm_override,
+                additional_headers=additional_headers,
             )
+            with get_session_with_current_tenant() as db_session:
+                check_llm_cost_limit_for_provider(
+                    db_session=db_session,
+                    tenant_id=get_current_tenant_id(),
+                    llm_provider_api_key=llm.config.api_key,
+                )
 
         token_counter = get_llm_token_counter(llm)
         simple_chat_history = convert_chat_history_basic(
@@ -590,25 +598,14 @@ def rename_chat_session(
             chat_session_id=chat_session_id,
             db_session=db_session,
         )
-        # Admin-designated dedicated naming model (so a single-stream local
-        # session model isn't blocked by naming calls) takes priority over the
-        # session's model.
-        naming_model = fetch_default_chat_naming_model(db_session)
-        naming_override = (
-            LLMOverride(
-                model_provider=naming_model.llm_provider.name,
-                model_version=naming_model.name,
-            )
-            if naming_model is not None
-            else chat_session.llm_override
-        )
+        session_override = chat_session.llm_override
     new_name = _generate_or_fallback_chat_session_name(
         chat_history=full_history,
         request=request,
         user=user,
         chat_session_id=chat_session_id,
         persona=chat_session.persona,
-        llm_override=naming_override,
+        llm_override=session_override,
     )
 
     with get_session_with_current_tenant() as db_session:

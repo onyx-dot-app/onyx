@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from functools import partial
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -11,17 +11,21 @@ from onyx.chat.incognito import (
     incognito_llm_extra_headers,
     incognito_llm_request_policy,
 )
-from onyx.db.enums import IncognitoRecordMode
+from onyx.db.enums import IncognitoRecordMode, LLMModelFlowType
+from onyx.db.models import LLMModelFlow, ModelConfiguration
+from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
     _build_provider_extra_headers,
+    get_chat_naming_llm,
     get_default_llm,
     get_llm,
     get_llm_for_persona,
+    get_search_selection_llm,
     llm_from_provider,
 )
-from onyx.llm.interfaces import LLMConfig, LlmRequestPolicy
-from onyx.llm.models import GenerationRequest, UserMessage
+from onyx.llm.interfaces import LLM, LLMConfig, LlmRequestPolicy
+from onyx.llm.models import GenerationRequest, ReasoningEffort, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
     BIFROST_PROVIDER_NAME,
@@ -94,6 +98,162 @@ def _build_provider_view(
         personas=[],
         deployment_name=None,
     )
+
+
+def test_search_selection_unset_preserves_fallback_instance() -> None:
+    fallback = MagicMock(spec=LLM)
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant"),
+        patch("onyx.llm.factory.fetch_default_model", return_value=None),
+        patch("onyx.llm.factory.llm_from_provider") as build_llm,
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as check_cost,
+    ):
+        assert get_search_selection_llm(fallback=fallback) is fallback
+    build_llm.assert_not_called()
+    check_cost.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("resolve", "flow_type"),
+    [
+        (get_chat_naming_llm, LLMModelFlowType.CHAT_NAMING),
+        (get_search_selection_llm, LLMModelFlowType.SEARCH_SELECTION),
+    ],
+)
+def test_utility_llm_uses_designated_provider_policy_headers_and_cost_key(
+    resolve: Callable[..., LLM | None], flow_type: LLMModelFlowType
+) -> None:
+    utility_llm = MagicMock(spec=LLM)
+    model = MagicMock()
+    model.name = "test-model"
+    provider = _build_provider_view(LlmProviderNames.OPENAI, 16384)
+    provider.api_key = "utility-provider-key"
+    headers = {"X-Request-ID": "utility-request"}
+    policy_fn = partial(incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY)
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant") as session_factory,
+        patch("onyx.llm.factory.fetch_default_model", return_value=model) as fetch,
+        patch("onyx.llm.factory.LLMProviderView.from_model", return_value=provider),
+        patch("onyx.llm.factory.llm_from_provider", return_value=utility_llm) as build,
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as check_cost,
+        patch("onyx.llm.factory.get_current_tenant_id", return_value="utility-tenant"),
+        patch("onyx.llm.factory.can_user_access_llm_provider") as check_visibility,
+    ):
+        if flow_type == LLMModelFlowType.SEARCH_SELECTION:
+            result = resolve(
+                fallback=MagicMock(spec=LLM),
+                additional_headers=headers,
+                policy_fn=policy_fn,
+            )
+        else:
+            result = resolve(additional_headers=headers, policy_fn=policy_fn)
+        assert result is utility_llm
+        session = session_factory.return_value.__enter__.return_value
+        fetch.assert_called_once_with(session, flow_type)
+        check_cost.assert_called_once_with(
+            db_session=session,
+            tenant_id="utility-tenant",
+            llm_provider_api_key="utility-provider-key",
+        )
+        build.assert_called_once_with(
+            model_name="test-model",
+            llm_provider=provider,
+            additional_headers=headers,
+            policy_fn=policy_fn,
+        )
+        check_visibility.assert_not_called()
+
+
+def test_search_selection_unset_does_not_use_naming_designation() -> None:
+    fallback = MagicMock(spec=LLM)
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
+        patch(
+            "onyx.llm.factory.fetch_default_model",
+            side_effect=lambda _, flow: (
+                MagicMock() if flow == LLMModelFlowType.CHAT_NAMING else None
+            ),
+        ) as fetch,
+        patch("onyx.llm.factory.llm_from_provider") as build,
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as cost,
+    ):
+        assert get_search_selection_llm(fallback=fallback) is fallback
+    fetch.assert_called_once_with(
+        sessions.return_value.__enter__.return_value, LLMModelFlowType.SEARCH_SELECTION
+    )
+    build.assert_not_called()
+    cost.assert_not_called()
+
+
+@pytest.mark.parametrize("naming_set", [False, True])
+def test_chat_naming_resolves_only_its_own_designation(naming_set: bool) -> None:
+    naming_llm = MagicMock(spec=LLM) if naming_set else None
+    headers = {"X-Request-ID": "naming-request"}
+    policy_fn = partial(incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY)
+    with patch(
+        "onyx.llm.factory._get_default_utility_llm",
+        side_effect=[naming_llm, MagicMock(spec=LLM)],
+    ) as resolve:
+        assert (
+            get_chat_naming_llm(additional_headers=headers, policy_fn=policy_fn)
+            is naming_llm
+        )
+    resolve.assert_called_once_with(LLMModelFlowType.CHAT_NAMING, headers, policy_fn)
+
+
+@pytest.mark.parametrize("resolve", [get_chat_naming_llm, get_search_selection_llm])
+def test_utility_llm_preserves_selected_dated_model_configuration(
+    resolve: Callable[..., LLM | None],
+) -> None:
+    model = ModelConfiguration(
+        id=2,
+        name="gpt-4o-mini-2024-07-18",
+        is_visible=False,
+        max_input_tokens=2048,
+        temperature_default=0.4,
+        reasoning_effort_default=ReasoningEffort.LOW,
+        reasoning_effort_max=ReasoningEffort.HIGH,
+        is_router=True,
+        llm_model_flows=[LLMModelFlow(llm_model_flow_type=LLMModelFlowType.REASONING)],
+    )
+    LLMProviderModel(
+        id=1,
+        name="test-provider",
+        provider=LlmProviderNames.OPENAI,
+        is_public=True,
+        is_auto_mode=False,
+        model_configurations=[
+            ModelConfiguration(
+                id=1,
+                name="gpt-4o-mini",
+                is_visible=True,
+                max_input_tokens=128000,
+                is_router=False,
+            ),
+            model,
+        ],
+    )
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant"),
+        patch("onyx.llm.factory.fetch_default_model", return_value=model),
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider"),
+        patch("onyx.llm.factory.get_current_tenant_id", return_value="utility-tenant"),
+        patch("onyx.llm.factory.get_llm") as build,
+    ):
+        result = (
+            resolve(fallback=MagicMock(spec=LLM))
+            if resolve is get_search_selection_llm
+            else resolve()
+        )
+        assert result is build.return_value
+    kwargs = build.call_args.kwargs
+    assert kwargs["model"] == "gpt-4o-mini-2024-07-18"
+    assert kwargs["max_input_tokens"] == 2048
+    assert kwargs["temperature"] == 0.4
+    assert kwargs["reasoning_effort_default"] == ReasoningEffort.LOW
+    assert kwargs["reasoning_effort_max"] == ReasoningEffort.HIGH
+    assert kwargs["supports_reasoning"] is True
+    assert kwargs["is_router"] is True
 
 
 def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:

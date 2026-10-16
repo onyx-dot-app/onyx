@@ -11,13 +11,18 @@ from onyx.context.search.federated.models import ChannelMetadata, DirectThreadFe
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM, GenerationContext
-from onyx.llm.models import GenerationRequest, UserMessage
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    UserMessage,
+)
 from onyx.natural_language_processing.english_stopwords import ENGLISH_STOPWORDS_SET
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.prompts.federated_search import (
     SLACK_DATE_EXTRACTION_PROMPT,
     SLACK_QUERY_EXPANSION_PROMPT,
 )
+from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 
@@ -139,6 +144,7 @@ def extract_date_range_from_query(
     query: str,
     llm: LLM,
     default_search_days: int,
+    enforce_llm_input_budget: bool = False,
 ) -> int:
     query_lower = query.lower()
 
@@ -193,10 +199,18 @@ def extract_date_range_from_query(
     try:
         prompt = SLACK_DATE_EXTRACTION_PROMPT.format(query=query)
         prompt_msg = UserMessage(content=prompt)
+        budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
+        request = GenerationRequest(
+            messages=[prompt_msg],
+            options=(budget.options() if budget else GenerationOptions()),
+        )
+        if budget and not budget.fits(request):
+            logger.warning("Slack date prompt exceeds its input budget")
+            return default_search_days
 
         # Call LLM with Braintrust tracing
         llm_response = llm.invoke(
-            GenerationRequest(messages=[prompt_msg]),
+            request,
             context=GenerationContext(flow=LLMFlow.SLACK_DATE_EXTRACTION),
         )
         response = llm_response.text
@@ -587,7 +601,9 @@ def _is_valid_keyword_query(line: str) -> bool:
     return True
 
 
-def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
+def expand_query_with_llm(
+    query_text: str, llm: LLM, enforce_llm_input_budget: bool = False
+) -> list[str]:
     """Use LLM to expand query into multiple search variations.
 
     Args:
@@ -597,16 +613,33 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
     Returns:
         List of rephrased query strings (up to MAX_SLACK_QUERY_EXPANSIONS)
     """
-    prompt = UserMessage(
-        content=SLACK_QUERY_EXPANSION_PROMPT.format(
-            query=query_text, max_queries=MAX_SLACK_QUERY_EXPANSIONS
+    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
+    options = budget.options() if budget else GenerationOptions()
+
+    def build_request(query: str) -> GenerationRequest:
+        return GenerationRequest(
+            messages=[
+                UserMessage(
+                    content=SLACK_QUERY_EXPANSION_PROMPT.format(
+                        query=query, max_queries=MAX_SLACK_QUERY_EXPANSIONS
+                    )
+                )
+            ],
+            options=options,
         )
-    )
+
+    request = build_request(query_text)
+    if budget:
+        fitted_query = budget.fit_text(query_text, build_request)
+        if fitted_query is None:
+            logger.warning("Slack query prompt exceeds its input budget")
+            return [query_text]
+        request = build_request(fitted_query)
 
     try:
         # Call LLM with Braintrust tracing
         llm_response = llm.invoke(
-            GenerationRequest(messages=[prompt]),
+            request,
             context=GenerationContext(flow=LLMFlow.SLACK_QUERY_EXPANSION),
         )
         response = llm_response.text
@@ -674,6 +707,7 @@ def build_slack_queries(
     llm: LLM,
     entities: dict[str, Any] | None = None,
     available_channels: list[str] | None = None,
+    enforce_llm_input_budget: bool = False,
 ) -> list[str | DirectThreadFetch]:
     """Build Slack query strings with date filtering and query expansion."""
     default_search_days = 30
@@ -688,6 +722,7 @@ def build_slack_queries(
         query=query.query,
         llm=llm,
         default_search_days=default_search_days,
+        enforce_llm_input_budget=enforce_llm_input_budget,
     )
 
     # get time filter
@@ -741,7 +776,9 @@ def build_slack_queries(
         rephrased_queries = [" ".join(content_words)] if content_words else [""]
     else:
         # For other queries, use LLM to expand into multiple variations
-        rephrased_queries = expand_query_with_llm(query.query, llm)
+        rephrased_queries = expand_query_with_llm(
+            query.query, llm, enforce_llm_input_budget=enforce_llm_input_budget
+        )
 
     # Build final query strings with time filters
     search_queries = [
