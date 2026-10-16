@@ -14,8 +14,9 @@ Codex ran the hooks.
 `runtime_status` reports `disabled` when local Codex state explicitly disables
 either project event. It reports `unverified` in every other case. A saved trust
 hash does not prove that it matches the current definition or that an event ran.
-The overall `status` is `degraded` until runtime behavior is observed. A broken
-hook command or missing Git checkout reports `failed`.
+The overall `status` stays `degraded` when static checks pass because this
+read-only command cannot prove runtime activation. Observe a real turn through
+Codex. A broken hook command or missing Git checkout reports `failed`.
 
 In a new Codex session rooted at this checkout, use `/hooks` to review the
 project `UserPromptSubmit` and `Stop` handlers. Confirm that both are enabled
