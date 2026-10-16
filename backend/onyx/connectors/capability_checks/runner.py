@@ -34,7 +34,7 @@ from onyx.connectors.capability_checks.registry import (
 )
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
@@ -74,6 +74,27 @@ _TIMEOUT_MESSAGE = (
     "Check timed out; the source may be slow -- try re-running the checks."
 )
 _RATE_LIMITED_NOT_RUN_MESSAGE = "Not run: rate limited"
+# A row's line and description when the check's error does not give its own.
+# Only for kinds a check cannot word better: an actionable failure keeps its
+# message.
+_DEFAULT_ROW_TEXT_BY_KIND: dict[CheckErrorKind, tuple[str, str]] = {
+    CheckErrorKind.TIMEOUT: (
+        "Timed out",
+        "The check did not finish in time.\nRe-run, or check the source's status.",
+    ),
+    CheckErrorKind.RATE_LIMITED: (
+        "Rate limited",
+        "The source limited the number of requests.\nWait a minute, then re-run.",
+    ),
+    CheckErrorKind.UNREACHABLE: (
+        "Cannot reach the source",
+        "Onyx could not connect to the source.\nCheck the address, then re-run.",
+    ),
+    CheckErrorKind.UNEXPECTED: (
+        "Unexpected error",
+        "The check stopped on an error it does not know.\nRe-run the checks.",
+    ),
+}
 
 # Receives the results recorded so far, after each result row is appended. The
 # runner calls it on its own thread, never on an abandoned probe thread.
@@ -111,6 +132,8 @@ class _CheckOutcome(BaseModel):
     error_detail: CheckErrorDetail | None = None
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
+    summary: str | None = None
+    description: str | None = None
     duration_ms: int | None = None
     applicable: bool = True
     findings: list[CheckFinding] = []
@@ -132,6 +155,8 @@ def _build_result(
         error_detail=outcome.error_detail,
         not_run_reason=outcome.not_run_reason,
         blocked_by=outcome.blocked_by,
+        summary=outcome.summary,
+        description=outcome.description,
         is_fallback=check.is_fallback,
         remediation=check.remediation,
         docs_link=check.docs_link,
@@ -172,11 +197,18 @@ def _error_outcome(
     duration_ms: int | None = None,
 ) -> _CheckOutcome:
     """Maps a check's exception to an outcome, per the check exception
-    contract and the check's ``outcome_status``."""
+    contract and the check's ``outcome_status``. The row text is the
+    error's own, else the default of its kind."""
     error_kind = check_error_kind(error)
+    summary, description = _DEFAULT_ROW_TEXT_BY_KIND.get(error_kind, (None, None))
+    if isinstance(error, ValidationError):
+        summary = error.summary or summary
+        description = error.description or description
     return _CheckOutcome(
         status=check.outcome_status(error_kind, form_run),
         message=str(error) if message is None else message,
+        summary=summary,
+        description=description,
         error_type=type(error).__name__,
         error_kind=error_kind,
         error_detail=_safe_error_detail(check, context, error, error_kind),
@@ -420,17 +452,18 @@ def _dependency_not_run_outcome(
             return _CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED,
                 message=dependency.message,
+                summary=dependency.summary,
                 not_run_reason=dependency.not_run_reason,
                 blocked_by=dependency.blocked_by,
             )
         reason = _NOT_RUN_REASON_BY_DEPENDENCY_STATUS.get(dependency.status)
         if reason is None:
             continue
+        line = _NOT_RUN_LINE_BY_REASON[reason].format(name=dependency.display_name)
         return _CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
-            message=_NOT_RUN_LINE_BY_REASON[reason].format(
-                name=dependency.display_name
-            ),
+            message=line,
+            summary=line,
             not_run_reason=reason,
             blocked_by=dependency_id,
         )
@@ -594,6 +627,7 @@ def _next_outcome(
         return _CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_RATE_LIMITED_NOT_RUN_MESSAGE,
+            summary=_RATE_LIMITED_NOT_RUN_MESSAGE,
             not_run_reason=CheckNotRunReason.RATE_LIMITED,
         )
     return _execute_check(check, context, timeout_cap_seconds, form_run)

@@ -20,19 +20,29 @@ class SourceApiError(Exception):
 
 
 class ValidationError(Exception):
-    """General exception for validation errors."""
+    """General exception for validation errors.
 
-    def __init__(self, message: str):
+    A capability check can add the text its row shows: ``summary``, a short
+    line of what is wrong or what stopped it, and ``description``, up to
+    three lines of what happened and what is needed. ``message`` stays the
+    full text, for logs and support.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        summary: str | None = None,
+        description: str | None = None,
+    ):
         self.message = message
+        self.summary = summary
+        self.description = description
         super().__init__(self.message)
 
 
 class ConnectorValidationError(ValidationError):
     """General exception for connector validation errors."""
-
-    def __init__(self, message: str):
-        self.message = message
-        super().__init__(self.message)
 
 
 class UnexpectedValidationError(ValidationError):
@@ -46,44 +56,78 @@ class UnexpectedValidationError(ValidationError):
     used to disable the connector.
     """
 
-    def __init__(self, message: str = "Unexpected error during connector validation"):
-        super().__init__(message)
+    def __init__(
+        self,
+        message: str = "Unexpected error during connector validation",
+        *,
+        summary: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(message, summary=summary, description=description)
 
 
 class RateLimitedValidationError(UnexpectedValidationError):
     """Raised when the source rate limits a validation. The credential may be
     fine: run the validation again later."""
 
-    def __init__(self, message: str = "The source rate limited the validation"):
-        super().__init__(message)
+    def __init__(
+        self,
+        message: str = "The source rate limited the validation",
+        *,
+        summary: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(message, summary=summary, description=description)
 
 
 class UnreachableValidationError(UnexpectedValidationError):
     """Raised when Onyx cannot reach the source: the connection fails, or the
     address does not answer as the source's API."""
 
-    def __init__(self, message: str = "Onyx cannot reach the source"):
-        super().__init__(message)
+    def __init__(
+        self,
+        message: str = "Onyx cannot reach the source",
+        *,
+        summary: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(message, summary=summary, description=description)
 
 
 class CredentialInvalidError(ConnectorValidationError):
     """Raised when a connector's credential is invalid."""
 
-    def __init__(self, message: str = "Credential is invalid"):
-        super().__init__(message)
+    def __init__(
+        self,
+        message: str = "Credential is invalid",
+        *,
+        summary: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(message, summary=summary, description=description)
 
 
 class CredentialExpiredError(ConnectorValidationError):
     """Raised when a connector's credential is expired."""
 
-    def __init__(self, message: str = "Credential has expired"):
-        super().__init__(message)
+    def __init__(
+        self,
+        message: str = "Credential has expired",
+        *,
+        summary: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(message, summary=summary, description=description)
 
 
 class InsufficientPermissionsError(ConnectorValidationError):
     """Raised when the credential does not have sufficient API permissions."""
 
     def __init__(
-        self, message: str = "Insufficient permissions for the requested operation"
+        self,
+        message: str = "Insufficient permissions for the requested operation",
+        *,
+        summary: str | None = None,
+        description: str | None = None,
     ):
-        super().__init__(message)
+        super().__init__(message, summary=summary, description=description)

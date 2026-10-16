@@ -157,10 +157,20 @@ def _raise_for_api_error(
         raise ConnectorValidationError(f"{bad_request} (HTTP 400): {detail}") from error
     if status == _RATE_LIMITED_STATUS:
         raise RateLimitedValidationError(
-            "Jira rate limited the check. Run the checks again in a minute."
+            "Jira rate limited the check. Run the checks again in a minute.",
+            summary="Rate limited by Jira",
+            description=(
+                "Jira limited the number of requests. (HTTP 429)\n"
+                "Wait a minute, then re-run."
+            ),
         ) from error
     raise UnexpectedValidationError(
-        f"Unexpected Jira response (HTTP {status}): {detail}"
+        f"Unexpected Jira response (HTTP {status}): {detail}",
+        summary="Unexpected response from Jira",
+        description=(
+            "Jira answered with an error this check does not expect. "
+            f"(HTTP {status})\nRe-run the checks."
+        ),
     ) from error
 
 

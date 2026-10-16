@@ -204,10 +204,20 @@ def _raise_for_http_error(
         raise ConnectorValidationError(f"{bad_request} (HTTP 400): {detail}") from error
     if status == _RATE_LIMITED_STATUS:
         raise RateLimitedValidationError(
-            "Confluence rate limited the check. Run the checks again in a minute."
+            "Confluence rate limited the check. Run the checks again in a minute.",
+            summary="Rate limited by Confluence",
+            description=(
+                "Confluence rate limited every try. (HTTP 429)\n"
+                "Wait a minute, then re-run."
+            ),
         ) from error
     raise UnexpectedValidationError(
-        f"Unexpected Confluence response (HTTP {status}): {detail}"
+        f"Unexpected Confluence response (HTTP {status}): {detail}",
+        summary="Unexpected response from Confluence",
+        description=(
+            "Confluence returned an error that the check does not know. "
+            f"(HTTP {status})\nRe-run the checks."
+        ),
     ) from error
 
 
