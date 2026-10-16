@@ -2618,7 +2618,7 @@
         "tags": {
           "stackTrace": "Rastreamento de pilha",
           "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
-          "doc_permission_sync": "{count, plural, one {# documento não sincronizado} other {# documentos não sincronizados}}",
+          "doc_permission_sync": "{count, plural, one {# usuário não sincronizado} other {# usuários não sincronizados}}",
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
@@ -6814,6 +6814,7 @@
       "activities": {
         "title": "Atividades",
         "history": "Histórico completo de atividades",
+        "viewLogs": "Ver registros",
         "panel": {
           "title": "Histórico de atividades",
           "close": "Ocultar o histórico de atividades"

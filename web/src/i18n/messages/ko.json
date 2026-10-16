@@ -2618,7 +2618,7 @@
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
-          "doc_permission_sync": "{count, plural, other {문서 #개 동기화 실패}}",
+          "doc_permission_sync": "{count, plural, other {사용자 #명 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
@@ -6814,6 +6814,7 @@
       "activities": {
         "title": "활동",
         "history": "전체 활동 기록",
+        "viewLogs": "로그 보기",
         "panel": {
           "title": "활동 기록",
           "close": "활동 기록 숨기기"

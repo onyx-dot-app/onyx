@@ -2618,7 +2618,7 @@
         "tags": {
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
-          "doc_permission_sync": "{count, plural, one {# Dokument nicht synchronisiert} other {# Dokumente nicht synchronisiert}}",
+          "doc_permission_sync": "{count, plural, one {# Benutzer nicht synchronisiert} other {# Benutzer nicht synchronisiert}}",
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
@@ -6814,6 +6814,7 @@
       "activities": {
         "title": "Aktivitäten",
         "history": "Vollständiger Aktivitätsverlauf",
+        "viewLogs": "Logs anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
           "close": "Aktivitätsverlauf ausblenden"

@@ -10,10 +10,11 @@ import {
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
-import type { RichStr } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
 import { formatDurationMs } from "@opal/time";
-import { SvgInfo, SvgStackLine, SvgX } from "@opal/icons";
+import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
+import { cn } from "@opal/utils";
 import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
 import type { IndexAttemptStageMetric } from "@/lib/types";
 import {
@@ -23,6 +24,11 @@ import {
 
 // BATCH_TOTAL feeds the header. BATCH_UNACCOUNTED is a computed residual, not a stage, so neither gets a row.
 const SUMMARY_STAGE = "BATCH_TOTAL";
+
+// The uneven marker is a muted hint, one step darker than IconTooltip's default stroke.
+const UnevenIcon: IconFunctionComponent = ({ className, ...props }) => (
+  <SvgAlertTriangle {...props} className={cn(className, "stroke-text-02")} />
+);
 const HIDDEN_STAGES = new Set<IndexAttemptStageMetric["stage"]>([
   SUMMARY_STAGE,
   "BATCH_UNACCOUNTED",
@@ -198,7 +204,7 @@ function StageRow({ stage, scale }: StageRowProps) {
       >
         {uneven && (
           <IconTooltip
-            icon={SvgInfo}
+            icon={UnevenIcon}
             tooltip={t("stageDetails.uneven.tooltip")}
             aria-label={t("stageDetails.uneven.tooltip")}
           />

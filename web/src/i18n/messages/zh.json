@@ -2618,7 +2618,7 @@
         "tags": {
           "stackTrace": "堆栈跟踪",
           "indexing": "{count, plural, other {# 个文档失败}}",
-          "doc_permission_sync": "{count, plural, other {# 个文档同步失败}}",
+          "doc_permission_sync": "{count, plural, other {# 个用户同步失败}}",
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "resolvedDocs": "{count, plural, other {# 个文档已解决}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
@@ -6814,6 +6814,7 @@
       "activities": {
         "title": "活动",
         "history": "完整活动历史",
+        "viewLogs": "查看日志",
         "panel": {
           "title": "活动历史",
           "close": "隐藏活动历史"

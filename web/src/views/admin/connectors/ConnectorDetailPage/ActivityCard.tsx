@@ -10,6 +10,7 @@ import {
   SvgCheckCircle,
   SvgFiles,
   SvgTextLines,
+  SvgUserShield,
   SvgUsers,
   SvgXCircle,
   SvgXOctagon,
@@ -65,7 +66,7 @@ const GROUP_STYLE: Record<
 /** What each kind's failed items are: documents, users, groups or checks. */
 const WARNING_ICONS = {
   indexing: SvgFiles,
-  doc_permission_sync: SvgFiles,
+  doc_permission_sync: SvgUserShield,
   group_sync: SvgUsers,
   pruning: SvgFiles,
   checks: SvgXOctagon,
