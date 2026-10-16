@@ -2698,7 +2698,7 @@
         "docs": {
           "title": "실패한 문서",
           "search": {
-            "placeholder": "파일 검색..."
+            "placeholder": "문서 검색…"
           },
           "resolveAll": "모두 해결",
           "resolveOne": "이 문서 해결",

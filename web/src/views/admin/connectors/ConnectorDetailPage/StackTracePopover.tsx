@@ -39,6 +39,7 @@ export default function StackTracePopoverContent({
         >
           <Section
             flexDirection="row"
+            justifyContent="start"
             alignItems="center"
             padding={1}
             height="fit"

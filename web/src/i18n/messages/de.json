@@ -2698,7 +2698,7 @@
         "docs": {
           "title": "Fehlgeschlagene Dokumente",
           "search": {
-            "placeholder": "Dateien durchsuchen..."
+            "placeholder": "Dokumente durchsuchen…"
           },
           "resolveAll": "Alle beheben",
           "resolveOne": "Dieses Dokument beheben",

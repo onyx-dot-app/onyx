@@ -2698,7 +2698,7 @@
         "docs": {
           "title": "Documents en échec",
           "search": {
-            "placeholder": "Rechercher des fichiers..."
+            "placeholder": "Rechercher des documents…"
           },
           "resolveAll": "Tout résoudre",
           "resolveOne": "Résoudre ce document",

@@ -2698,7 +2698,7 @@
         "docs": {
           "title": "失败的文档",
           "search": {
-            "placeholder": "搜索文件..."
+            "placeholder": "搜索文档…"
           },
           "resolveAll": "全部解决",
           "resolveOne": "解决此文档",

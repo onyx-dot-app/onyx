@@ -2698,7 +2698,7 @@
         "docs": {
           "title": "Documentos com falha",
           "search": {
-            "placeholder": "Pesquisar arquivos..."
+            "placeholder": "Pesquisar documentos…"
           },
           "resolveAll": "Resolver tudo",
           "resolveOne": "Resolver este documento",

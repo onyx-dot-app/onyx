@@ -2698,7 +2698,7 @@
         "docs": {
           "title": "失敗したドキュメント",
           "search": {
-            "placeholder": "ファイルを検索..."
+            "placeholder": "ドキュメントを検索…"
           },
           "resolveAll": "すべて解決",
           "resolveOne": "このドキュメントを解決",
