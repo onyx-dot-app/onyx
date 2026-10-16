@@ -3,7 +3,7 @@
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Popover, ShadowDiv, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgCheckSquare, SvgX } from "@opal/icons";
+import { SvgListCheck, SvgX } from "@opal/icons";
 import type { CapabilityCheckStatus } from "@/lib/connectors/checks/types";
 import type { CheckRunSnapshot } from "@/lib/connectors/types";
 import { CheckLineGroups } from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
@@ -15,7 +15,7 @@ export function CheckRunTrigger() {
   return (
     <Popover.Trigger asChild>
       <Button
-        icon={SvgCheckSquare}
+        icon={SvgListCheck}
         prominence="tertiary"
         size="xs"
         tooltip={t("actions.checks")}

@@ -26,9 +26,9 @@ import {
   SvgExpand,
   SvgFold,
   SvgHourglass,
-  SvgMinusCircle,
   SvgPlay,
   SvgRefreshCw,
+  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
@@ -98,7 +98,7 @@ const CHECK_LOGS = {
   },
   skipped: {
     variant: "default",
-    icon: SvgMinusCircle,
+    icon: SvgXCircle,
     detail: "status.skipped",
     ...MUTED,
   },

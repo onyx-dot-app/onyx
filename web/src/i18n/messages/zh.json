@@ -9081,7 +9081,6 @@
     "status": {
       "badges": {
         "canceled": "已取消",
-        "completedWithErrors": "已完成但有错误",
         "deleting": "正在删除",
         "error": "错误",
         "failed": "失败",
@@ -9099,7 +9098,7 @@
         "pruning": "清理中",
         "pruned": "已清理",
         "checking": "检查中",
-        "passed": "通过",
+        "passed": "已完成",
         "failedToRun": "无法运行"
       }
     },
