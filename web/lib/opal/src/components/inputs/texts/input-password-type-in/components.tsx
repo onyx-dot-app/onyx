@@ -50,6 +50,9 @@ type InputPasswordTypeInProps = Omit<
    * - `"native"`: the browser's own dots (Chromium masks via
    *   -webkit-text-security: disc) at the field's normal text size, so the
    *   caret and dots never change size on reveal. For the login flow.
+   *
+   * A field with `leftChildren` or `rightChildren` always uses `"native"`:
+   * the ✱ overlay is laid out for the bare field and would cover the slots.
    */
   mask?: "asterisk" | "native";
 };
@@ -83,6 +86,7 @@ function InputPasswordTypeIn({
   disabled,
   error,
   rightChildren,
+  leftChildren,
   ...props
 }: InputPasswordTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
@@ -117,7 +121,8 @@ function InputPasswordTypeIn({
       ? strings.hidePassword
       : strings.showPassword;
 
-  const isNativeMask = mask === "native";
+  const isNativeMask =
+    mask === "native" || leftChildren != null || rightChildren != null;
   // The ✱ presentation only draws while idle. Focus anywhere in the field
   // shows native dots, so the caret tracks real glyph advances while typing.
   const showAsteriskOverlay =
@@ -154,6 +159,7 @@ function InputPasswordTypeIn({
         // inputs. Login forms should override with "current-password".
         autoComplete="new-password"
         data-ph-no-capture
+        leftChildren={leftChildren}
         rightChildren={
           // A field inside a <label> gets clicks under the label sent on to
           // the input. A click on a button's icon (not the button itself)
@@ -196,10 +202,7 @@ function InputPasswordTypeIn({
         // with the hidden input text. The end inset clears the toggle.
         <div
           aria-hidden
-          className={cn(
-            "pointer-events-none absolute inset-y-0 start-[6px] flex items-center overflow-hidden",
-            rightChildren ? "end-[4.5rem]" : "end-10"
-          )}
+          className="pointer-events-none absolute inset-y-0 start-[6px] end-10 flex items-center overflow-hidden"
         >
           <Text
             font="main-ui-body"
