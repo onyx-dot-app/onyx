@@ -20,6 +20,7 @@ import {
   createCustomExternalApp,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
+import UserManagementSwitch from "@/app/craft/v1/apps/action-policies/UserManagementSwitch";
 import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
 import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSkillsStepModal";
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
@@ -78,6 +79,9 @@ export default function CreateCustomAppModal({
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
     null
   );
+  const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
+    existingApp?.users_can_manage_policies ?? true
+  );
   const [name, setName] = useState(existingApp?.name ?? "");
   const [upstreamPatterns, setUpstreamPatterns] = useState<string[]>(
     existingApp?.upstream_url_patterns ?? []
@@ -117,14 +121,24 @@ export default function CreateCustomAppModal({
         Object.keys(toRecord(orgCredentials)).length
       );
   const unsavedChanges = useUnsavedChangesGuard({
-    isDirty: createdApp === null && configDirty,
+    isDirty:
+      createdApp === null &&
+      (configDirty ||
+        usersCanManagePolicies !==
+          (existingApp?.users_can_manage_policies ?? true)),
   });
 
   // Headers and org credentials are optional; name + at least one upstream
   // pattern are required.
   const disabledCreateReason = (() => {
     if (isSaving) return t("disabled.saving");
-    if (isEdit && !configDirty) return t("disabled.pristine");
+    if (
+      isEdit &&
+      !configDirty &&
+      usersCanManagePolicies ===
+        (existingApp?.users_can_manage_policies ?? true)
+    )
+      return t("disabled.pristine");
     if (name.trim().length === 0) {
       return t("disabled.nameMissing");
     }
@@ -155,6 +169,7 @@ export default function CreateCustomAppModal({
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
+          users_can_manage_policies: usersCanManagePolicies,
           associated_skill_ids: associationDirty ? selectedSkillIds : undefined,
         });
         onSaved();
@@ -165,6 +180,7 @@ export default function CreateCustomAppModal({
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
+          users_can_manage_policies: usersCanManagePolicies,
         });
         setCreatedApp(created);
         onSaved();
@@ -284,6 +300,11 @@ export default function CreateCustomAppModal({
               }
             />
             <Modal.Body>
+              <UserManagementSwitch
+                disabled={isSaving}
+                value={usersCanManagePolicies}
+                onChange={setUsersCanManagePolicies}
+              />
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1">
                   <Text font="main-ui-action">{t("fields.name.label")}</Text>

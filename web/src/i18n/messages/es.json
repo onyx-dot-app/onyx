@@ -13876,7 +13876,7 @@
           "customOption": "Personalizado",
           "defaultOption": "Predeterminado",
           "description": "Elige qué puede hacer el agente. «Preguntar» te consulta en el chat antes de ejecutar cada acción; «Aprobar automáticamente» la ejecuta sin preguntar. Usa Avanzado para definir una política por acción.",
-          "title": "Permisos"
+          "title": "Ajustes de aprobación"
         },
         "savingButton": "Guardando…"
       },

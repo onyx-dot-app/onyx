@@ -1,12 +1,6 @@
 /** @jest-environment jsdom */
 
-import {
-  fireEvent,
-  render,
-  screen,
-  setupUser,
-  waitFor,
-} from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import ActionPolicyEditorModal, {
   type PolicyEditorItem,
 } from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
@@ -22,13 +16,13 @@ const ITEMS: PolicyEditorItem[] = [
     id: "read",
     name: "Read",
     description: "Read tickets",
-    defaultPolicy: "ALWAYS",
+    fallbackPolicy: "ALWAYS",
   },
   {
     id: "write",
     name: "Write",
     description: "Write tickets",
-    defaultPolicy: "ASK",
+    fallbackPolicy: "ASK",
   },
 ];
 
@@ -55,79 +49,39 @@ function renderEditor(
   return { onSave };
 }
 
-function expectValidSelection(label: string) {
-  expect(screen.getByRole("combobox", { name: "Permissions" })).toHaveValue(
-    label
-  );
-  expect(
-    screen.queryByText("Please select a valid option from the list")
-  ).not.toBeInTheDocument();
-}
-
-const DEFAULT_POLICIES: Record<string, ActionPolicy>[] = [
-  {},
-  { read: "ALWAYS" },
-  { read: "ALWAYS", write: "ASK" },
-];
-
-describe("ActionPolicyEditorModal permissions", () => {
-  it.each(DEFAULT_POLICIES)(
-    "shows registry defaults without validation errors or changing stored policies: %j",
-    async (policies) => {
-      const user = setupUser();
-      const { onSave } = renderEditor(policies);
-      expectValidSelection("Default");
-      await user.click(screen.getByRole("button", { name: "Save" }));
-      await waitFor(() => expect(onSave).toHaveBeenCalledWith({}, policies));
-    }
-  );
-
-  it("shows readable custom overrides and preserves them when selected", async () => {
+describe("ActionPolicyEditorModal approval settings", () => {
+  it("preserves initial choices when setup saves without an edit", async () => {
     const user = setupUser();
     const { onSave } = renderEditor({ write: "DENY" });
-    expectValidSelection("Custom");
-    await user.click(screen.getByRole("combobox", { name: "Permissions" }));
-    const option = screen.getByRole("option", { name: "Custom" });
-    expect(option).not.toHaveAttribute("aria-disabled", "true");
-    fireEvent.click(option);
-    expectValidSelection("Custom");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith({}, { write: "DENY" })
     );
   });
 
-  it("shows Default for the shared MCP editor's all-Ask defaults", () => {
-    renderEditor(
-      {},
-      ITEMS.map((item) => ({ ...item, defaultPolicy: "ASK" }))
-    );
-    expectValidSelection("Default");
-  });
-
-  it.each(["ALWAYS", "ASK"] as const)(
-    "shows a uniform %s override",
-    (policy) => {
-      renderEditor({ read: policy, write: policy });
-      expectValidSelection(policy === "ALWAYS" ? "Auto-approve" : "Ask");
-    }
-  );
-
-  it("restores registry defaults after a bulk override", async () => {
+  it("applies bulk edits only to matching actions and resets all actions", async () => {
     const user = setupUser();
     const { onSave } = renderEditor();
-    await user.click(screen.getByRole("combobox", { name: "Permissions" }));
-    expect(
-      screen.queryByRole("option", { name: "Custom" })
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("option", { name: "Auto-approve" }));
-    expectValidSelection("Auto-approve");
-    await user.click(screen.getByRole("combobox", { name: "Permissions" }));
-    fireEvent.click(screen.getByRole("option", { name: "Default" }));
-    expectValidSelection("Default");
+    await user.type(
+      screen.getByRole("textbox", { name: "Search actions" }),
+      "Write"
+    );
+    await user.click(
+      screen.getAllByRole("button", { name: "Auto-approve" })[0]!
+    );
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(onSave).toHaveBeenCalledWith({}, { read: "ALWAYS", write: "ASK" })
+      expect(onSave).toHaveBeenCalledWith({}, { write: "ALWAYS" })
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Reset all to defaults" })
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenLastCalledWith(
+        {},
+        { read: "ALWAYS", write: "ASK" }
+      )
     );
   });
 });

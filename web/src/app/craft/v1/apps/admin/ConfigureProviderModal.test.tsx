@@ -94,6 +94,7 @@ const APP: ExternalAppAdminResponse = {
   associated_skills: [
     { id: "custom-skill", name: "slack-workflow", is_valid: true },
   ],
+  users_can_manage_policies: true,
   is_onyx_managed: false,
 };
 
@@ -134,6 +135,7 @@ describe("ConfigureProviderModal", () => {
         upstream_url_patterns: ["https://slack.com/api/.*"],
         auth_template: { Authorization: "Bearer {token}" },
         action_policies: {},
+        users_can_manage_policies: true,
         organization_credentials: { token: "updated-token" },
       })
     );
@@ -169,6 +171,7 @@ describe("ConfigureProviderModal", () => {
           app_type: "SLACK",
           upstream_url_patterns: DESCRIPTOR.upstream_url_patterns,
           auth_template: DESCRIPTOR.auth_template,
+          users_can_manage_policies: true,
           organization_credentials: {},
           action_policies: {},
         }
@@ -214,6 +217,7 @@ describe("ConfigureProviderModal", () => {
       expect(externalAppsService.createBuiltInExternalApp).toHaveBeenCalledWith(
         expect.objectContaining({
           upstream_url_patterns: perAccountDescriptor.upstream_url_patterns,
+          users_can_manage_policies: true,
           organization_credentials: { subdomain: "acme" },
         })
       )

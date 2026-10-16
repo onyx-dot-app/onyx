@@ -478,8 +478,8 @@ each operation and consumes state before exchanging the authorization code.
 
 ### 4.8 Shared Craft action controls
 
-`web/src/sections/actions/PolicyToggle.tsx` is also used by Craft's workspace
-and scheduled-task action editors. It exposes Auto-approve, Ask, and
+`web/src/sections/actions/PolicyToggle.tsx` is also used by Craft's workspace,
+personal, and scheduled-task action editors. It exposes Auto-approve, Ask, and
 Disabled choices. Its `disabled` prop locks all choices; `label` names the group
 for assistive technology, and `aria-pressed` identifies the selected choice.
 

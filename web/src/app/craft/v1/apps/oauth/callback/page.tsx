@@ -65,7 +65,13 @@ export default function ExternalAppsOAuthCallbackPage() {
           return;
         }
         await globalMutate(SWR_KEYS.buildExternalApps);
-        setTimeout(() => router.push(CRAFT_APPS_PATH), 800);
+        setTimeout(
+          () =>
+            router.push(
+              `${CRAFT_APPS_PATH}?actionPolicies=app-${external_app_id}`
+            ),
+          800
+        );
       } catch (e) {
         setStatus("error");
         setErrorMessage(e instanceof Error ? e.message : String(e));

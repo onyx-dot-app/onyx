@@ -8,6 +8,7 @@ import {
   fireEvent,
   render,
   screen,
+  setupUser,
   waitFor,
   within,
 } from "@tests/setup/test-utils";
@@ -62,6 +63,7 @@ const CUSTOM_APP: ExternalAppAdminResponse = {
   enabled: true,
   actions: [],
   associated_skills: [],
+  users_can_manage_policies: true,
   is_onyx_managed: false,
 };
 
@@ -90,6 +92,24 @@ describe("CreateCustomAppModal", () => {
       data: { builtins: [], customs: [] },
       isLoading: false,
     });
+  });
+
+  it("saves a change to user management without changing app configuration", async () => {
+    const user = setupUser();
+    jest
+      .mocked(externalAppsService.updateExternalApp)
+      .mockResolvedValue(CUSTOM_APP);
+    renderExistingApp();
+    await user.click(
+      screen.getByRole("switch", { name: "Let users manage approval settings" })
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        CUSTOM_APP.id,
+        expect.objectContaining({ users_can_manage_policies: false })
+      )
+    );
   });
 
   it("focuses the name only when creating an app", () => {
@@ -147,6 +167,7 @@ describe("CreateCustomAppModal", () => {
         name: "Acme CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        users_can_manage_policies: true,
         organization_credentials: {},
       });
     });
@@ -194,6 +215,7 @@ describe("CreateCustomAppModal", () => {
         name: "Updated CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        users_can_manage_policies: true,
         organization_credentials: {},
       })
     );
@@ -305,6 +327,7 @@ describe("CreateCustomAppModal", () => {
         name: "Acme CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        users_can_manage_policies: true,
         organization_credentials: {},
         associated_skill_ids: ["skill-a"],
       })

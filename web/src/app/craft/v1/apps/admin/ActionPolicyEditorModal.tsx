@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import isEqual from "lodash/isEqual";
@@ -11,21 +11,18 @@ import {
   InputPasswordTypeIn,
   Text,
 } from "@opal/components";
-import { InputSingleSelect } from "@opal/components";
-import { Collapsible } from "@opal/components";
-import PolicyToggle from "@/sections/actions/PolicyToggle";
+import {
+  ActionPolicyEditor,
+  type ActionPolicyRow,
+} from "@/app/craft/v1/apps/action-policies/ActionPolicyRows";
+import UserManagementSwitch from "@/app/craft/v1/apps/action-policies/UserManagementSwitch";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 
 // One agent-callable capability whose approval policy an admin can set —
 // an external-app action or an MCP tool.
-export interface PolicyEditorItem {
-  id: string;
-  name: string;
-  description: string;
-  defaultPolicy: ActionPolicy;
-}
+export type PolicyEditorItem = ActionPolicyRow;
 
 // A required text input the app needs before it can be saved
 // (name, credentials, …).
@@ -47,6 +44,8 @@ interface ActionPolicyEditorModalProps {
   }) => React.ReactNode;
   alternateContentConfirmationOpen?: boolean;
   isAdditionalContentDirty?: boolean;
+  usersCanManagePolicies?: boolean;
+  onUsersCanManagePoliciesChange?: (value: boolean) => void;
   onClose: () => void;
   title: string;
   description: string;
@@ -80,6 +79,8 @@ interface ActionPolicyEditorModalProps {
  * policy items and supply the save call; the UI is identical for both.
  * Mount it only while open — initial values are read once. */
 export default function ActionPolicyEditorModal({
+  usersCanManagePolicies,
+  onUsersCanManagePoliciesChange,
   alternateContent,
   alternateContentConfirmationOpen = false,
   isAdditionalContentDirty = false,
@@ -100,6 +101,7 @@ export default function ActionPolicyEditorModal({
   closeAfterSave = true,
 }: ActionPolicyEditorModalProps) {
   const t = useTranslations("craft.apps.policyEditor");
+  const tPolicies = useTranslations("craft.actionPolicies");
   const focusFirstField =
     useFocusOnMount<HTMLInputElement>(autoFocusFirstField);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
@@ -218,6 +220,14 @@ export default function ActionPolicyEditorModal({
                   );
                 })}
 
+                {usersCanManagePolicies !== undefined &&
+                  onUsersCanManagePoliciesChange && (
+                    <UserManagementSwitch
+                      disabled={isSaving}
+                      value={usersCanManagePolicies}
+                      onChange={onUsersCanManagePoliciesChange}
+                    />
+                  )}
                 {policyItems === undefined ? (
                   <Text font="main-content-body" color="text-03">
                     {t("loading.label")}
@@ -227,10 +237,22 @@ export default function ActionPolicyEditorModal({
                     {emptyPoliciesMessage}
                   </Text>
                 ) : (
-                  <PolicyEditor
+                  <ActionPolicyEditor
                     items={policyItems}
                     policies={policies}
                     onChange={setPolicies}
+                    resetLabel={tPolicies("resetDefaults")}
+                    disabled={isSaving}
+                    onReset={() =>
+                      setPolicies(
+                        Object.fromEntries(
+                          policyItems.map((item) => [
+                            item.id,
+                            item.fallbackPolicy,
+                          ])
+                        )
+                      )
+                    }
                   />
                 )}
 
@@ -261,121 +283,5 @@ export default function ActionPolicyEditorModal({
         )}
       </Modal.Content>
     </Modal>
-  );
-}
-
-// ── Policy editor ──────────────────────────────────────────────────────
-
-// Custom describes overrides that no bulk preset can represent.
-type BulkPolicy = "DEFAULT" | "ALWAYS" | "ASK" | "CUSTOM";
-
-function bulkPolicyOf(
-  items: PolicyEditorItem[],
-  policies: Record<string, ActionPolicy>
-): BulkPolicy {
-  if (
-    items.every(
-      (item) => (policies[item.id] ?? item.defaultPolicy) === item.defaultPolicy
-    )
-  ) {
-    return "DEFAULT";
-  }
-  const values = items.map((item) => policies[item.id] ?? item.defaultPolicy);
-  if (values.every((value) => value === "ALWAYS")) return "ALWAYS";
-  if (values.every((value) => value === "ASK")) return "ASK";
-  return "CUSTOM";
-}
-
-interface PolicyEditorProps {
-  items: PolicyEditorItem[];
-  policies: Record<string, ActionPolicy>;
-  onChange: (policies: Record<string, ActionPolicy>) => void;
-}
-
-/** Approval-policy section of the editor: a defaults/Auto-approve/Ask selector
- * plus an Advanced section with a per-item three-state toggle. */
-function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
-  const t = useTranslations("craft.apps.policyEditor");
-  const bulkValue = bulkPolicyOf(items, policies);
-  const [advancedOpen, setAdvancedOpen] = useState(
-    bulkValue === "DEFAULT" || bulkValue === "CUSTOM"
-  );
-
-  // Stored choices may arrive after mount (fetched, or seeded by an effect).
-  // Show per-item choices for defaults and custom overrides.
-  useEffect(() => {
-    if (bulkValue === "DEFAULT" || bulkValue === "CUSTOM") {
-      setAdvancedOpen(true);
-    }
-  }, [bulkValue]);
-
-  return (
-    <div className="flex flex-col gap-2 pt-2">
-      <Text font="main-ui-action">{t("permissions.title")}</Text>
-      <Text font="secondary-body" color="text-03">
-        {t("permissions.description")}
-      </Text>
-
-      <InputSingleSelect
-        value={bulkValue}
-        onValueChange={(value) => {
-          if (value === "DEFAULT" || value === "ALWAYS" || value === "ASK") {
-            onChange(
-              Object.fromEntries(
-                items.map((item) => [
-                  item.id,
-                  value === "DEFAULT" ? item.defaultPolicy : value,
-                ])
-              )
-            );
-          }
-        }}
-        defaultOption="DEFAULT"
-        placeholder={t("permissions.title")}
-        options={[
-          { value: "DEFAULT", title: t("permissions.defaultOption") },
-          ...(bulkValue === "CUSTOM"
-            ? [{ value: "CUSTOM", title: t("permissions.customOption") }]
-            : []),
-          { value: "ALWAYS", title: t("permissions.autoApproveOption") },
-          { value: "ASK", title: t("permissions.askOption") },
-        ]}
-      />
-
-      <Collapsible
-        open={advancedOpen}
-        onOpenChange={setAdvancedOpen}
-        title={t("advanced.title")}
-        description={t("advanced.description")}
-      >
-        <div className="flex flex-col gap-2">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between gap-3"
-            >
-              <div className="flex min-w-0 flex-1 flex-col">
-                <Text font="main-ui-action" wordWrap="wrap-anywhere">
-                  {item.name}
-                </Text>
-                <Text
-                  font="secondary-body"
-                  color="text-03"
-                  wordWrap="wrap-anywhere"
-                >
-                  {item.description}
-                </Text>
-              </div>
-              <PolicyToggle
-                value={policies[item.id] ?? item.defaultPolicy}
-                onChange={(value) =>
-                  onChange({ ...policies, [item.id]: value })
-                }
-              />
-            </div>
-          ))}
-        </div>
-      </Collapsible>
-    </div>
   );
 }
