@@ -370,6 +370,7 @@ def resolve_cc_pair_runs(
         source=cc_pair.connector.source,
         shared_sources=set(),
         since=None,
+        until=None,
         error_query=None,
         status_groups=None,
         errors=None,
@@ -440,6 +441,7 @@ def get_resolvable_cc_pair_runs_count(
     level: CCPairRunLevel = Query(...),
     q: str | None = Query(None, max_length=200),
     since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
@@ -448,7 +450,7 @@ def get_resolvable_cc_pair_runs_count(
 ) -> CCPairRunsResolvableCountResponse:
     """How many runs ``resolve-matching`` would mark for the same filter."""
     request = CCPairRunsResolveMatchingRequest(
-        level=level, q=q, since=since, kinds=kinds
+        level=level, q=q, since=since, until=until, kinds=kinds
     )
     wanted, run_filter = _pair_open_level(cc_pair_id, request, user, db_session)
     return CCPairRunsResolvableCountResponse(
