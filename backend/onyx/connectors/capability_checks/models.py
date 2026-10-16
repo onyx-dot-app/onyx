@@ -208,7 +208,8 @@ class CheckNotRunReason(str, Enum):
     DEPENDENCY_FAILED = "dependency_failed"
     # A check it depends on is INCOMPLETE.
     DEPENDENCY_INCOMPLETE = "dependency_incomplete"
-    # A check it depends on did not run either.
+    # A check it depends on was SKIPPED for a reason of its own, such as a
+    # setting it needs.
     DEPENDENCY_SKIPPED = "dependency_skipped"
     # The source rate limited an earlier check, so the run stopped.
     RATE_LIMITED = "rate_limited"
