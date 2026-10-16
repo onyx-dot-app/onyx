@@ -833,6 +833,113 @@ def _create_pool_session(_pool_pod: _PoolPod, *, headless: bool) -> PoolSession:
     )
 
 
+def _session_webapp_failure_facts(
+    k8s_client: "k8s_client_module.CoreV1Api", pod_name: str, session_id: UUID
+) -> str:
+    script = """
+import http.client
+import os
+import sys
+from contextlib import suppress
+from pathlib import Path
+
+session = Path(sys.argv[1])
+facts: dict[str, int | str] = {}
+
+def read_number(path: Path, maximum: int) -> int:
+    with path.open() as source:
+        value = source.read(32).strip()
+    if value.isascii() and value.isdecimal() and 0 < int(value) <= maximum:
+        return int(value)
+    return 0
+
+port = pid = 0
+with suppress(OSError, ValueError):
+    port = read_number(session / '.nextjs-port', 65535)
+with suppress(OSError, ValueError):
+    pid = read_number(session / 'nextjs.pid', 2147483647)
+facts.update(expected_port=port, recorded_pid=pid)
+if pid:
+    facts['process_alive'] = int(Path(f'/proc/{pid}').exists())
+    with suppress(OSError):
+        facts['process_cwd_matches'] = int(
+            os.readlink(f'/proc/{pid}/cwd') == str(session / 'outputs/web')
+        )
+    with suppress(OSError, IndexError):
+        with Path(f'/proc/{pid}/stat').open() as source:
+            state = source.read(1024).rsplit(')', 1)[1].split()[0]
+        if state in {'R', 'S', 'D', 'Z', 'T', 't', 'X', 'x', 'I', 'P', 'W'}:
+            facts['process_state'] = state
+if port:
+    for protocol in ('tcp', 'tcp6'):
+        with suppress(OSError, ValueError, IndexError):
+            with Path(f'/proc/net/{protocol}').open() as source:
+                listening = any(
+                    fields[3] == '0A' and int(fields[1].rsplit(':', 1)[1], 16) == port
+                    for line in source
+                    if len(fields := line.split()) >= 4
+                )
+            facts[f'{protocol}_listening'] = int(listening)
+    connection = http.client.HTTPConnection('127.0.0.1', port, timeout=2)
+    with suppress(OSError, http.client.HTTPException):
+        connection.request('GET', '/')
+        facts['http_status_ipv4'] = connection.getresponse().status
+    connection.close()
+with suppress(OSError):
+    disk = os.statvfs(session)
+    facts.update(disk_free_bytes=disk.f_bavail * disk.f_frsize, disk_free_inodes=disk.f_favail)
+with suppress(OSError, ValueError, IndexError):
+    with Path('/proc/meminfo').open() as source:
+        for line in source:
+            if line.startswith('MemTotal:'):
+                facts['mem_total_kib'] = int(line.split()[1])
+            elif line.startswith('MemAvailable:'):
+                facts['memory_available_kib'] = int(line.split()[1])
+with suppress(OSError, ValueError, IndexError):
+    with Path('/proc/vmstat').open() as source:
+        for line in source:
+            if line.startswith('oom_kill '):
+                facts['oom_kill_count'] = int(line.split()[1])
+                break
+for key, value in facts.items():
+    print(f'{key}={value}')
+"""
+    output = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"python3 -c {shlex.quote(script)} {SESSIONS_ROOT}/{session_id}",
+        timeout_s=8.0,
+    )
+    numeric_keys = {
+        "expected_port",
+        "recorded_pid",
+        "process_alive",
+        "process_cwd_matches",
+        "tcp_listening",
+        "tcp6_listening",
+        "http_status_ipv4",
+        "disk_free_bytes",
+        "disk_free_inodes",
+        "mem_total_kib",
+        "memory_available_kib",
+        "oom_kill_count",
+    }
+    facts = []
+    for line in output[:4096].splitlines():
+        key, _, value = line.partition("=")
+        if (
+            key in numeric_keys
+            and value.isascii()
+            and value.isdecimal()
+            and len(value) <= 20
+        ):
+            facts.append(f"{key}={value}")
+        elif key == "process_state" and len(value) == 1 and value in "RSDZTtXxIPW":
+            facts.append(f"{key}={value}")
+    return ", ".join(facts) or "unavailable"
+
+
 def start_session_webapp(
     k8s_client: "k8s_client_module.CoreV1Api",
     pod_name: str,
@@ -865,12 +972,30 @@ def start_session_webapp(
                 "bun cache bootstrap failed",
                 "server did not become ready",
                 "bootstrap failed",
+                "EADDRINUSE",
+                "EACCES",
+                "ENOENT",
+                "ENOSPC",
+                "Cannot find module",
+                "Module not found",
+                "Could not resolve",
+                "JavaScript heap out of memory",
+                "Reached heap limit",
+                "Failed to compile",
+                "Build failed",
+                "Turbopack build failed",
+                "TurbopackInternalError",
+                "An unexpected Turbopack error occurred",
             )
             if message in error.stderr
         )[:2000]
+        facts = "unavailable"
+        with suppress(Exception):
+            facts = _session_webapp_failure_facts(k8s_client, pod_name, session_id)
         raise AssertionError(
             f"Webapp bootstrap failed with exit code {error.returncode}; "
-            f"sanitized stderr={diagnostics or '(empty or unrecognized stderr)'}"
+            f"sanitized stderr={diagnostics or '(empty or unrecognized stderr)'}; "
+            f"runtime facts={facts}"
         ) from None
     elapsed_s = time.monotonic() - started_at
     install_state = pod_exec(

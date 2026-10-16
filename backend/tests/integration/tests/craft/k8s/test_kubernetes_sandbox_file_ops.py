@@ -56,46 +56,58 @@ class TestHealthCheck:
         sandbox_id, _, pod_name = pool_session
         contract = textwrap.dedent(
             """\
-            import socket
-            import sys
-            from uuid import UUID
+            print("ONYX_HTTP_HEALTH_STAGE=imports", flush=True)
+            try:
+                import socket
+                import sys
+                from uuid import UUID
 
-            from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRuntime
-            from onyx.server.features.build.sandbox.manager import SandboxManager
-            from onyx.server.features.build.sandbox.models import SandboxExecError
+                from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRuntime
+                from onyx.server.features.build.sandbox.manager import SandboxManager
+                from onyx.server.features.build.sandbox.models import SandboxExecError
 
-            sandbox_id = UUID(sys.argv[1])
-            pod_name = sys.argv[2]
-            manager = SandboxManager()
-            assert manager.health_check(sandbox_id, timeout=10.0)
-            runtime = manager._runtime
-            assert isinstance(runtime, KubernetesRuntime)
-            before = runtime.get_pod(sandbox_id)
-            assert before is not None
-            assert before.metadata.name == pod_name
-            assert before.metadata.uid
+                sandbox_id = UUID(sys.argv[1])
+                pod_name = sys.argv[2]
+                print("ONYX_HTTP_HEALTH_STAGE=manager", flush=True)
+                manager = SandboxManager()
+                print("ONYX_HTTP_HEALTH_STAGE=baseline", flush=True)
+                assert manager.health_check(sandbox_id, timeout=10.0)
+                print("ONYX_HTTP_HEALTH_STAGE=pod_before", flush=True)
+                runtime = manager._runtime
+                assert isinstance(runtime, KubernetesRuntime)
+                before = runtime.get_pod(sandbox_id)
+                assert before is not None
+                assert before.metadata.name == pod_name
+                assert before.metadata.uid
 
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as unavailable:
-                unavailable.bind(("127.0.0.1", 0))
-                original_host = runtime._exec.configuration.host
-                runtime._exec.configuration.host = (
-                    f"http://127.0.0.1:{unavailable.getsockname()[1]}"
-                )
-                try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as unavailable:
+                    unavailable.bind(("127.0.0.1", 0))
+                    original_host = runtime._exec.configuration.host
+                    runtime._exec.configuration.host = (
+                        f"http://127.0.0.1:{unavailable.getsockname()[1]}"
+                    )
                     try:
-                        runtime._exec.run(pod_name, ["true"], timeout=1.0)
-                    except SandboxExecError:
-                        pass
-                    else:
-                        raise AssertionError("Exec transport did not fail")
-                    assert manager.health_check(sandbox_id, timeout=10.0)
-                    after = runtime.get_pod(sandbox_id)
-                    assert after is not None
-                    assert after.metadata.name == pod_name
-                    assert after.metadata.uid == before.metadata.uid
-                    assert after.metadata.deletion_timestamp is None
-                finally:
-                    runtime._exec.configuration.host = original_host
+                        print("ONYX_HTTP_HEALTH_STAGE=exec_fault", flush=True)
+                        try:
+                            runtime._exec.run(pod_name, ["true"], timeout=1.0)
+                        except SandboxExecError:
+                            pass
+                        else:
+                            raise AssertionError("Exec transport did not fail")
+                        print("ONYX_HTTP_HEALTH_STAGE=health_during_fault", flush=True)
+                        assert manager.health_check(sandbox_id, timeout=10.0)
+                        print("ONYX_HTTP_HEALTH_STAGE=pod_after", flush=True)
+                        after = runtime.get_pod(sandbox_id)
+                        assert after is not None
+                        assert after.metadata.name == pod_name
+                        assert after.metadata.uid == before.metadata.uid
+                        assert after.metadata.deletion_timestamp is None
+                    finally:
+                        runtime._exec.configuration.host = original_host
+                print("ONYX_HTTP_HEALTH_STAGE=done", flush=True)
+            except Exception as error:
+                print(f"ONYX_HTTP_HEALTH_EXCEPTION={type(error).__name__}", flush=True)
+                raise
             """
         )
         result = subprocess.run(
@@ -119,9 +131,34 @@ class TestHealthCheck:
             timeout=60.0,
             check=False,
         )
-        if result.returncode != 0:
+        stages = (
+            "imports",
+            "manager",
+            "baseline",
+            "pod_before",
+            "exec_fault",
+            "health_during_fault",
+            "pod_after",
+            "done",
+        )
+        markers = {f"ONYX_HTTP_HEALTH_STAGE={stage}": stage for stage in stages}
+        observed_stages = [
+            markers[line] for line in result.stdout.splitlines() if line in markers
+        ]
+        last_stage = observed_stages[-1] if observed_stages else "unreported"
+        exception_class = "unreported"
+        for line in result.stdout.splitlines():
+            if line.startswith("ONYX_HTTP_HEALTH_EXCEPTION="):
+                candidate = line.removeprefix("ONYX_HTTP_HEALTH_EXCEPTION=")
+                exception_class = (
+                    candidate
+                    if candidate.isidentifier() and len(candidate) <= 80
+                    else "unknown"
+                )
+        if result.returncode != 0 or last_stage != "done":
             pytest.fail(
-                f"In-cluster HTTP health contract failed with exit {result.returncode}",
+                f"In-cluster HTTP health contract failed with exit {result.returncode} "
+                f"at stage {last_stage} with exception {exception_class}",
                 pytrace=False,
             )
 
