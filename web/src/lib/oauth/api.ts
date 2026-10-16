@@ -75,11 +75,11 @@ interface OAuthInitiateResponse {
   state: string;
 }
 
-export async function initiateOAuthFlow(
+export async function getOAuthAuthorizationUrl(
   oauthConfigId: number,
   returnPath: string,
   invalidUrlMessage: string
-): Promise<void> {
+): Promise<string> {
   const response = await fetch("/api/oauth-config/initiate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -104,7 +104,19 @@ export async function initiateOAuthFlow(
     throw new Error(invalidUrlMessage);
   }
 
-  window.location.href = data.authorization_url;
+  return data.authorization_url;
+}
+
+export async function initiateOAuthFlow(
+  oauthConfigId: number,
+  returnPath: string,
+  invalidUrlMessage: string
+): Promise<void> {
+  window.location.href = await getOAuthAuthorizationUrl(
+    oauthConfigId,
+    returnPath,
+    invalidUrlMessage
+  );
 }
 
 export interface OAuthTestRequest {

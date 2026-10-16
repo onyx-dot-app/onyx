@@ -300,6 +300,11 @@ its `tool_ids` and `system_prompt` (`db/persona.py:update_default_assistant_conf
 explicitly not display priority or built-in status (`upsert_persona`'s own
 docstring repeats this limit for the general update path).
 
+Frontend `useDefaultAssistantConfiguration` sequences complete replacement
+writes per SWR cache without copying configuration data. Failed writes roll back
+before the next operation reads the cache. Separate browsers still need backend
+concurrency control for simultaneous edits.
+
 ### 4.6 Pinning
 
 `db/pinned_personas.py:set_pinned_personas` replaces a user's whole pin set

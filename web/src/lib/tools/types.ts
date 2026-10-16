@@ -1,14 +1,6 @@
 import type { Tag } from "@/lib/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
-// Generic action status for UI components
-export enum ActionStatus {
-  CONNECTED = "connected",
-  PENDING = "pending",
-  DISCONNECTED = "disconnected",
-  FETCHING = "fetching",
-}
-
 export interface MethodSpec {
   /* Defines a single method that is part of a custom tool. Each method maps to a single
   action that the LLM can choose to take. */
@@ -54,10 +46,18 @@ export interface ToolSnapshot {
   chat_selectable: boolean;
   agent_creation_selectable: boolean;
   default_enabled: boolean;
+  default_chat_enabled?: boolean | null;
+  user_enabled_in_chat?: boolean;
 
   // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: PermissionsOf<"Action">;
 }
+
+export interface ToolUserPreferencesRequest {
+  enabled_in_chat: boolean;
+}
+
+export type ToolUserPreferencesResponse = ToolUserPreferencesRequest;
 
 export interface ApiResponse<T> {
   data: T | null;
@@ -105,11 +105,6 @@ export interface OAuthTokenStatus {
   is_expired: boolean;
 }
 
-/** Which drill-down the actions popover is showing, if any. */
-export type SecondaryViewState =
-  | { type: "sources" }
-  | { type: "mcp"; serverId: number };
-
 /**
  * What a chat has been told to do about one tool.
  *
@@ -137,3 +132,14 @@ export interface ChatSearchFilters {
   /** ISO datetime strings, kept serializable rather than as `Date`s. */
   timeRange: { from: string; to: string } | null;
 }
+
+export enum ActionStatus {
+  CONNECTED = "connected",
+  PENDING = "pending",
+  DISCONNECTED = "disconnected",
+  FETCHING = "fetching",
+}
+
+export type SecondaryViewState =
+  | { type: "sources" }
+  | { type: "mcp"; serverId: number };

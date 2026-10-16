@@ -706,3 +706,16 @@ resets setup status, and reloads affected Craft sessions.
 Preferences use `MCPServerUserPreference` and `ToolUserPreference`.
 Apply revisions `b71e3a9d2c04` and `c82f4a0e3d15` before deploying code that
 reads the preference tables.
+
+
+### Shared plugin client contracts
+
+`web/src/lib/agents/hooks.ts` exposes `useDefaultAssistantConfiguration`.
+It uses the existing default-assistant API and SWR cache. Replacement writes are
+sequenced per cache across hook instances; a failed write rolls back before the next read.
+This queue does not coordinate separate browser clients.
+
+Plugin client helpers preserve native MCP, OpenAPI, and external-app identities.
+They expose personal preference writes and permission-stamped workspace availability.
+OAuth completion helpers correlate attempts and check the saved connection before success.
+These helpers do not grant access or attach new tools by themselves.

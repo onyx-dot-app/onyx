@@ -187,7 +187,8 @@ so verify the callers rather than a single component.
 | `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts` | craft-webapp-proxy |
 | `web/src/app/admin/connector*/`, `admin/indexing-status/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
 | `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
-| `web/src/app/admin/agents/` | agents-personas |
+| `web/src/app/admin/agents/`, `web/src/lib/agents/` | agents-personas |
+| `web/src/lib/plugins/` | mcp-and-custom-tools |
 | `web/src/app/admin/language-models/` | llm-providers |
 | `web/src/views/admin/LanguageModelsPage.tsx` | llm-providers |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
