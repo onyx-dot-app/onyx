@@ -9952,9 +9952,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "Pega tu [clave de API]({url}) de {provider} para acceder a tus modelos.",
-          "label": "Clave de API",
-          "placeholder": "Clave de API",
           "required": "La clave de API es obligatoria"
         },
         "apiSecret": {

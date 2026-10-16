@@ -9952,9 +9952,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "모델을 사용하려면 {provider}의 [API 키]({url})를 붙여넣으세요.",
-          "label": "API 키",
-          "placeholder": "API 키",
           "required": "API 키가 필요합니다"
         },
         "apiSecret": {

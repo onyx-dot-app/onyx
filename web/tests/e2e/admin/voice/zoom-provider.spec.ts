@@ -12,6 +12,7 @@ interface VoiceProviderPayload {
   tts_model: string | null;
   default_voice: string | null;
   api_key: string | null;
+  api_token_id: number | null;
   api_secret: string | null;
   target_uri: string | null;
   custom_config: Record<string, unknown> | null;
@@ -29,6 +30,7 @@ const ZOOM_PROVIDER: VoiceProviderPayload = {
   tts_model: null,
   default_voice: null,
   api_key: "zm-***masked-key***",
+  api_token_id: 11,
   api_secret: "zs-***masked-secret***",
   target_uri: null,
   custom_config: {
@@ -103,18 +105,16 @@ test.describe("Zoom Scribe voice provider", () => {
 
     expect(capturedTests[0]).toMatchObject({
       provider_type: "zoom",
-      api_key: "zoom-raw-key",
+      api_key: { type: "new", value: "zoom-raw-key" },
       api_secret: "zoom-raw-secret",
-      use_stored_key: false,
       use_stored_secret: false,
       custom_config: { language: "fr-FR" },
     });
     expect(capturedUpserts[0]).toMatchObject({
       name: "Zoom Scribe",
       provider_type: "zoom",
-      api_key: "zoom-raw-key",
+      api_key: { type: "new", value: "zoom-raw-key" },
       api_secret: "zoom-raw-secret",
-      api_key_changed: true,
       api_secret_changed: true,
       stt_model: "scribe-live",
       tts_model: null,
@@ -148,18 +148,17 @@ test.describe("Zoom Scribe voice provider", () => {
     expect(capturedTests[0]).toMatchObject({
       id: 7,
       provider_type: "zoom",
-      use_stored_key: true,
+      api_key: { type: "existing", id: 11 },
       use_stored_secret: true,
       custom_config: { language: "pt-BR", passthrough: "keep-me" },
     });
-    expect(capturedTests[0]).not.toHaveProperty("api_key");
     expect(capturedTests[0]).not.toHaveProperty("api_secret");
 
     expect(capturedUpserts[0]).toMatchObject({
       id: 7,
       name: "Zoom Scribe",
       provider_type: "zoom",
-      api_key_changed: false,
+      api_key: { type: "existing", id: 11 },
       api_secret_changed: false,
       stt_model: "scribe-live",
       tts_model: null,
@@ -167,7 +166,6 @@ test.describe("Zoom Scribe voice provider", () => {
       activate_tts: false,
       custom_config: { language: "pt-BR", passthrough: "keep-me" },
     });
-    expect(capturedUpserts[0]).not.toHaveProperty("api_key");
     expect(capturedUpserts[0]).not.toHaveProperty("api_secret");
   });
 });

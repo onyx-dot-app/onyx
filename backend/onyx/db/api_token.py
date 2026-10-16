@@ -7,7 +7,7 @@ the previous token once nothing uses it.
 """
 
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 from sqlalchemy import select
@@ -18,6 +18,7 @@ from onyx.db.models import (
     ImageGenerationConfig,
     LLMProvider,
     ModelConfiguration,
+    VoiceProvider,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -221,6 +222,19 @@ def list_api_tokens(db_session: Session, platform: str) -> list[ApiToken]:
     )
 
 
+def _add_named_usages(
+    db_session: Session,
+    usages: dict[int, list[tuple[str, str]]],
+    kind: str,
+    fk_column: Any,
+    name_column: Any,
+) -> None:
+    for token_id, name in db_session.execute(
+        select(fk_column, name_column).where(fk_column.in_(list(usages)))
+    ):
+        usages[token_id].append((kind, str(name)))
+
+
 def get_api_token_usages(
     db_session: Session, token_ids: list[int]
 ) -> dict[int, list[tuple[str, str]]]:
@@ -259,5 +273,13 @@ def get_api_token_usages(
             usage = ("llm_provider", name or provider)
         if token_id is not None and usage not in usages[token_id]:
             usages[token_id].append(usage)
+
+    _add_named_usages(
+        db_session,
+        usages,
+        "voice_provider",
+        VoiceProvider.api_token_id,
+        VoiceProvider.name,
+    )
 
     return usages

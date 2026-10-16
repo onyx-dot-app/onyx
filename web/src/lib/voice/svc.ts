@@ -1,3 +1,4 @@
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 import type {
   VoiceProviderCustomConfig,
   VoiceProviderUpsertRequest,
@@ -35,10 +36,9 @@ export async function deactivateVoiceProvider(
 export async function testVoiceProvider(request: {
   id?: number;
   provider_type: string;
-  api_key?: string;
+  api_key: ApiTokenValue | undefined;
   api_secret?: string;
   target_uri?: string;
-  use_stored_key?: boolean;
   use_stored_secret?: boolean;
   custom_config?: VoiceProviderCustomConfig;
 }): Promise<Response> {
@@ -72,9 +72,4 @@ export async function deleteVoiceProvider(
   providerId: number
 ): Promise<Response> {
   return fetch(`${VOICE_PROVIDERS_URL}/${providerId}`, { method: "DELETE" });
-}
-
-/** Fetches all configured LLM providers (used to copy API keys into voice providers). */
-export async function fetchLLMProviders(): Promise<Response> {
-  return fetch("/api/admin/llm/provider");
 }

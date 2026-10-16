@@ -9952,9 +9952,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "Fügen Sie Ihren [API-Schlüssel]({url}) von {provider} ein, um auf Ihre Modelle zuzugreifen.",
-          "label": "API-Schlüssel",
-          "placeholder": "API-Schlüssel",
           "required": "API-Schlüssel ist erforderlich"
         },
         "apiSecret": {

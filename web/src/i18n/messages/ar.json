@@ -9952,9 +9952,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "الصق [مفتاح API]({url}) من {provider} للوصول إلى نماذجك.",
-          "label": "مفتاح API",
-          "placeholder": "مفتاح API",
           "required": "مفتاح API مطلوب"
         },
         "apiSecret": {

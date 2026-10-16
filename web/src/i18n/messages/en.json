@@ -9952,9 +9952,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "Paste your [API key]({url}) from {provider} to access your models.",
-          "label": "API Key",
-          "placeholder": "API key",
           "required": "API key is required"
         },
         "apiSecret": {

@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from onyx.server.manage.api_token.models import ApiTokenInput
 from onyx.voice.interface import normalize_provider_type
 
 
@@ -19,6 +20,10 @@ class VoiceProviderView(BaseModel):
     api_key: str | None = Field(
         default=None,
         description="Masked API key for display (e.g. 'sk-a...b1c2'). Non-null means a key is stored.",
+    )
+    api_token_id: int | None = Field(
+        default=None,
+        description="ID of the stored API key. Send it back as an existing key to keep it.",
     )
     api_secret: str | None = Field(
         default=None,
@@ -53,13 +58,10 @@ class VoiceProviderUpsertRequest(BaseModel):
     id: int | None = Field(default=None, description="Existing provider ID to update.")
     name: str
     provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
-    api_key: str | None = Field(
+    api_key: ApiTokenInput | None = Field(
         default=None,
-        description="API key for the provider.",
-    )
-    api_key_changed: bool = Field(
-        default=False,
-        description="Set to true when providing a new API key for an existing provider.",
+        description="A new API key, or the ID of a saved one. "
+        "Null clears the key; leaving it out keeps the current key.",
     )
     api_secret: str | None = Field(
         default=None,
@@ -68,10 +70,6 @@ class VoiceProviderUpsertRequest(BaseModel):
     api_secret_changed: bool = Field(
         default=False,
         description="Set to true when providing a new API secret for an existing provider.",
-    )
-    llm_provider_id: int | None = Field(
-        default=None,
-        description="If set, copies the API key from the specified LLM provider.",
     )
     api_base: str | None = None
     target_uri: str | None = Field(
@@ -109,13 +107,9 @@ class VoiceProviderTestRequest(BaseModel):
         description="Existing provider ID to use when testing stored credentials.",
     )
     provider_type: str
-    api_key: str | None = Field(
+    api_key: ApiTokenInput | None = Field(
         default=None,
-        description="API key for testing. If not provided, use_stored_key must be true.",
-    )
-    use_stored_key: bool = Field(
-        default=False,
-        description="If true, use the stored API key for this provider type.",
+        description="A new API key, or the ID of a saved one, to test.",
     )
     api_secret: str | None = Field(
         default=None,

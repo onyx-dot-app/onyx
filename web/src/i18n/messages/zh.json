@@ -9952,9 +9952,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "粘贴来自 {provider} 的 [API 密钥]({url})，以访问您的模型。",
-          "label": "API 密钥",
-          "placeholder": "API 密钥",
           "required": "API 密钥为必填项"
         },
         "apiSecret": {

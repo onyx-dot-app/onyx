@@ -31,6 +31,12 @@ import {
   deleteVoiceProvider,
 } from "@/lib/voice/svc";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import { ApiTokenField } from "@/lib/api-tokens/components";
+import {
+  initialApiTokenValue,
+  toApiTokenPayload,
+} from "@/lib/api-tokens/utils";
+import { apiTokenSchema } from "@/lib/api-tokens/validation";
 import {
   getVoiceProviderDetail,
   resolveModelId,
@@ -129,7 +135,7 @@ export function VoiceProviderSetupModal({
   }, [mode, providerType]);
 
   const validationSchema = Yup.object().shape({
-    api_key: Yup.string().required(t("setupModal.apiKey.required")),
+    api_key: apiTokenSchema(t("setupModal.apiKey.required")),
     api_secret: detail.requiresApiSecret
       ? Yup.string().required(t("setupModal.apiSecret.required"))
       : Yup.string(),
@@ -186,7 +192,7 @@ export function VoiceProviderSetupModal({
   });
 
   const initialValues: VoiceFormValues = {
-    api_key: existingProvider?.api_key ?? "",
+    api_key: initialApiTokenValue(existingProvider?.api_token_id),
     api_secret: existingProvider?.api_secret ?? "",
     target_uri: existingProvider?.target_uri ?? "",
     stt_model: initialSttModel,
@@ -202,11 +208,10 @@ export function VoiceProviderSetupModal({
     values: VoiceFormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
-    const apiKeyChanged = values.api_key !== (existingProvider?.api_key ?? "");
+    const apiKey = toApiTokenPayload(values.api_key);
     const apiSecretChanged =
       !!detail.requiresApiSecret &&
       values.api_secret !== (existingProvider?.api_secret ?? "");
-    const shouldUseStoredKey = !apiKeyChanged && !!existingProvider?.api_key;
     const shouldUseStoredSecret =
       !!detail.requiresApiSecret &&
       !apiSecretChanged &&
@@ -232,10 +237,9 @@ export function VoiceProviderSetupModal({
       const testResponse = await testVoiceProvider({
         id: existingProvider?.id,
         provider_type: providerType,
-        api_key: apiKeyChanged ? values.api_key : undefined,
+        api_key: apiKey,
         api_secret: apiSecretChanged ? values.api_secret : undefined,
         target_uri: values.target_uri || undefined,
-        use_stored_key: shouldUseStoredKey,
         use_stored_secret: detail.requiresApiSecret
           ? shouldUseStoredSecret
           : undefined,
@@ -257,9 +261,8 @@ export function VoiceProviderSetupModal({
         id: existingProvider?.id,
         name: detail.label,
         provider_type: providerType,
-        api_key: apiKeyChanged ? values.api_key : undefined,
+        api_key: apiKey,
         api_secret: apiSecretChanged ? values.api_secret : undefined,
-        api_key_changed: apiKeyChanged,
         api_secret_changed: detail.requiresApiSecret
           ? apiSecretChanged
           : undefined,
@@ -342,21 +345,10 @@ export function VoiceProviderSetupModal({
                     </InputVertical>
                   )}
 
-                  <InputVertical
-                    title={t("setupModal.apiKey.label")}
-                    subDescription={markdown(
-                      t("setupModal.apiKey.description", {
-                        url: detail.apiKeyUrl ?? "",
-                        provider: detail.label,
-                      })
-                    )}
-                    withLabel="api_key"
-                  >
-                    <PasswordInputTypeInField
-                      name="api_key"
-                      placeholder={t("setupModal.apiKey.placeholder")}
-                    />
-                  </InputVertical>
+                  <ApiTokenField
+                    platform={providerType}
+                    savedMaskedValue={existingProvider?.api_key ?? undefined}
+                  />
 
                   {detail.requiresApiSecret && (
                     <InputVertical

@@ -2,8 +2,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.db.models import VoiceProvider
+from onyx.db.models import ApiToken, VoiceProvider
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import ExistingApiToken, NewApiToken
 from onyx.server.manage.voice.api import (
     STORED_API_SECRET_PLACEHOLDER,
     _provider_to_view,
@@ -30,14 +31,13 @@ def _make_provider() -> VoiceProvider:
     provider.default_voice = None
     provider.api_base = None
     provider.custom_config = {}
-    provider.api_key = None
     provider.api_secret = None
     return provider
 
 
 def test_provider_to_view_returns_fixed_secret_placeholder() -> None:
     provider = _make_provider()
-    provider.api_key = "provider-key"  # ty: ignore[invalid-assignment]
+    provider.api_token = ApiToken(platform="openai", value="provider-key")
     provider.api_secret = "actual-secret-value"  # ty: ignore[invalid-assignment]
 
     view = _provider_to_view(provider)
@@ -75,8 +75,7 @@ async def test_upsert_rejects_custom_config_credentials() -> None:
             VoiceProviderUpsertRequest(
                 name="Test",
                 provider_type="openai",
-                api_key="key",
-                api_key_changed=True,
+                api_key=NewApiToken(value="key"),
                 custom_config={"nested": [{"api_secret": "secret"}]},
             ),
             MagicMock(),
@@ -112,7 +111,7 @@ async def test_voice_provider_test_uses_stored_secret_independently(
         VoiceProviderTestRequest(
             id=1,
             provider_type="openai",
-            api_key="provided-key",
+            api_key=NewApiToken(value="provided-key"),
             use_stored_secret=True,
         ),
         MagicMock(),
@@ -132,7 +131,7 @@ async def test_voice_provider_test_requires_id_for_stored_secret() -> None:
         await voice_provider_test_endpoint(
             VoiceProviderTestRequest(
                 provider_type="openai",
-                api_key="provided-key",
+                api_key=NewApiToken(value="provided-key"),
                 use_stored_secret=True,
             ),
             MagicMock(),
@@ -154,9 +153,51 @@ async def test_voice_provider_test_rejects_stored_secret_type_mismatch() -> None
             VoiceProviderTestRequest(
                 id=1,
                 provider_type="openai",
-                api_key="provided-key",
+                api_key=NewApiToken(value="provided-key"),
                 use_stored_secret=True,
             ),
             MagicMock(),
             db_session,
         )
+
+
+@pytest.mark.asyncio
+async def test_voice_provider_test_uses_saved_token_of_edited_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stored_token = ApiToken(id=7, platform="openai", value="stored-key")
+    stored_provider = _make_provider()
+    stored_provider.api_token_id = 7
+    stored_provider.api_token = stored_token
+
+    db_session = MagicMock()
+    db_session.scalar.return_value = stored_provider
+    db_session.get.return_value = stored_token
+    captured_provider: VoiceProvider | None = None
+
+    class MockTestVoiceProvider:
+        async def validate_credentials(self) -> None:
+            return None
+
+    def mock_get_voice_provider(provider: VoiceProvider) -> MockTestVoiceProvider:
+        nonlocal captured_provider
+        captured_provider = provider
+        return MockTestVoiceProvider()
+
+    monkeypatch.setattr(
+        "onyx.server.manage.voice.api.get_voice_provider", mock_get_voice_provider
+    )
+
+    await voice_provider_test_endpoint(
+        VoiceProviderTestRequest(
+            id=1,
+            provider_type="openai",
+            api_key=ExistingApiToken(id=7),
+        ),
+        MagicMock(),
+        db_session,
+    )
+
+    assert captured_provider is not None
+    assert captured_provider.api_key is not None
+    assert captured_provider.api_key.get_value(apply_mask=False) == "stored-key"

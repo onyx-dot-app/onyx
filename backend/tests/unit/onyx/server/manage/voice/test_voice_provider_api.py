@@ -2,11 +2,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.db.models import VoiceProvider
+from onyx.db.models import ApiToken, VoiceProvider
 from onyx.db.voice import fetch_voice_provider_by_id
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.voice.api import (
-    _fetch_provider_for_stored_secret,
+    _fetch_provider_for_stored_credentials,
     activate_tts_provider_endpoint,
     upsert_voice_provider_endpoint,
 )
@@ -30,7 +31,6 @@ def _make_provider(provider_type: str = "openai") -> VoiceProvider:
     provider.default_voice = None
     provider.api_base = None
     provider.custom_config = {}
-    provider.api_key = None
     provider.api_secret = None
     return provider
 
@@ -66,7 +66,7 @@ async def test_upsert_rejects_tts_activation_without_tts_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     existing_provider = _make_provider()
-    existing_provider.api_key = "key"  # ty: ignore[invalid-assignment]
+    existing_provider.api_token = ApiToken(platform="openai", value="key")
     db_session = MagicMock()
     db_session.scalar.return_value = existing_provider
     mock_voice_provider = MockVoiceProvider(tts_models=[])
@@ -82,8 +82,7 @@ async def test_upsert_rejects_tts_activation_without_tts_models(
                 id=1,
                 name="Speech",
                 provider_type="openai",
-                api_key="key",
-                api_key_changed=True,
+                api_key=NewApiToken(value="key"),
                 activate_tts=True,
             ),
             MagicMock(),
@@ -100,7 +99,7 @@ async def test_upsert_rejects_default_tts_row_changed_to_stt_only_type(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     existing_provider = _make_provider(provider_type="openai")
-    existing_provider.api_key = "key"  # ty: ignore[invalid-assignment]
+    existing_provider.api_token = ApiToken(platform="openai", value="key")
     existing_provider.is_default_tts = True
     db_session = MagicMock()
     db_session.scalar.return_value = existing_provider
@@ -117,8 +116,7 @@ async def test_upsert_rejects_default_tts_row_changed_to_stt_only_type(
                 id=1,
                 name="Speech",
                 provider_type="ELEVENLABS",
-                api_key="key",
-                api_key_changed=True,
+                api_key=NewApiToken(value="key"),
                 activate_tts=False,
             ),
             MagicMock(),
@@ -179,7 +177,7 @@ def test_stored_secret_lookup_normalizes_legacy_provider_type(
     db_session.get.return_value = existing_provider
     db_session.scalar.return_value = existing_provider
 
-    provider = _fetch_provider_for_stored_secret(db_session, 1, "openai")
+    provider = _fetch_provider_for_stored_credentials(db_session, 1, "openai")
 
     assert provider is existing_provider
 
@@ -222,7 +220,7 @@ async def test_upsert_rejects_target_uri_for_provider_without_support(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     existing_provider = _make_provider()
-    existing_provider.api_key = "key"  # ty: ignore[invalid-assignment]
+    existing_provider.api_token = ApiToken(platform="openai", value="key")
     db_session = MagicMock()
     db_session.scalar.return_value = existing_provider
     mock_voice_provider = MockVoiceProvider(tts_models=[], target_uri=False)
@@ -241,8 +239,7 @@ async def test_upsert_rejects_target_uri_for_provider_without_support(
                 id=1,
                 name="Speech",
                 provider_type="openai",
-                api_key="key",
-                api_key_changed=True,
+                api_key=NewApiToken(value="key"),
                 api_base="https://api.example.com",
             ),
             MagicMock(),

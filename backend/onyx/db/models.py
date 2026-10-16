@@ -3934,9 +3934,10 @@ class VoiceProvider(Base):
     provider_type: Mapped[str] = mapped_column(
         String
     )  # "openai", "azure", "elevenlabs", "zoom"
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     api_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
@@ -3982,6 +3983,10 @@ class VoiceProvider(Base):
             postgresql_where=(is_default_tts == True),  # noqa: E712
         ),
     )
+
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
 
 
 class CloudEmbeddingProvider(Base):

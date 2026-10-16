@@ -4,16 +4,15 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.db.api_token import peek_api_token_value
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import User, VoiceProvider
+from onyx.db.models import ApiToken, User, VoiceProvider
 from onyx.db.voice import (
     deactivate_stt_provider,
     deactivate_tts_provider,
     delete_voice_provider,
     fetch_voice_provider_by_id,
-    fetch_voice_provider_by_type,
     fetch_voice_providers,
     set_default_stt_provider,
     set_default_tts_provider,
@@ -147,7 +146,7 @@ def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | 
         ) from e
 
 
-def _fetch_provider_for_stored_secret(
+def _fetch_provider_for_stored_credentials(
     db_session: Session,
     provider_id: int | None,
     provider_type: str,
@@ -167,7 +166,7 @@ def _fetch_provider_for_stored_secret(
     ):
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            "Stored API secret provider does not match the requested provider type.",
+            "Stored provider does not match the requested provider type.",
         )
 
     return provider
@@ -186,6 +185,7 @@ def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
         tts_model=provider.tts_model,
         default_voice=provider.default_voice,
         api_key=mask_string(raw_key) if raw_key else None,
+        api_token_id=provider.api_token_id,
         api_secret=STORED_API_SECRET_PLACEHOLDER if provider.api_secret else None,
         target_uri=provider.api_base,  # api_base stores the target URI for Azure
         custom_config=_custom_config_to_view(provider.custom_config),
@@ -209,27 +209,6 @@ async def upsert_voice_provider_endpoint(
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Create or update a voice provider."""
-    api_key = request.api_key
-    api_key_changed = request.api_key_changed
-    api_secret = request.api_secret
-    api_secret_changed = request.api_secret_changed
-
-    # If llm_provider_id is specified, copy the API key from that LLM provider
-    if request.llm_provider_id is not None:
-        llm_provider = db_session.get(LLMProviderModel, request.llm_provider_id)
-        if llm_provider is None:
-            raise OnyxError(
-                OnyxErrorCode.NOT_FOUND,
-                f"LLM provider with id {request.llm_provider_id} not found.",
-            )
-        if llm_provider.api_key is None:
-            raise OnyxError(
-                OnyxErrorCode.VALIDATION_ERROR,
-                "Selected LLM provider has no API key configured.",
-            )
-        api_key = llm_provider.api_key.get_value(apply_mask=False)
-        api_key_changed = True
-
     # Use target_uri if provided, otherwise fall back to api_base
     api_base = _validate_voice_api_base(
         request.provider_type, request.target_uri or request.api_base
@@ -241,10 +220,11 @@ async def upsert_voice_provider_endpoint(
         provider_id=request.id,
         name=request.name,
         provider_type=request.provider_type,
-        api_key=api_key,
-        api_key_changed=api_key_changed,
-        api_secret=api_secret,
-        api_secret_changed=api_secret_changed,
+        api_key=request.api_key,
+        # Leaving api_key out keeps the current key; only null clears it.
+        update_api_key="api_key" in request.model_fields_set,
+        api_secret=request.api_secret,
+        api_secret_changed=request.api_secret_changed,
         api_base=api_base,
         custom_config=custom_config,
         stt_model=request.stt_model,
@@ -368,26 +348,28 @@ async def test_voice_provider(
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderUpdateSuccess:
     """Test a voice provider connection by making a real API call."""
-    api_key = request.api_key
     api_secret = request.api_secret
     existing_provider: VoiceProvider | None = None
 
-    if request.use_stored_secret:
-        existing_provider = _fetch_provider_for_stored_secret(
+    if request.use_stored_secret or request.id is not None:
+        existing_provider = _fetch_provider_for_stored_credentials(
             db_session, request.id, request.provider_type
         )
-    elif request.use_stored_key:
-        existing_provider = fetch_voice_provider_by_type(
-            db_session, request.provider_type
-        )
 
-    if request.use_stored_key:
-        if existing_provider is None or not existing_provider.api_key:
-            raise OnyxError(
-                OnyxErrorCode.VALIDATION_ERROR,
-                "No stored API key found for this provider type.",
-            )
-        api_key = existing_provider.api_key.get_value(apply_mask=False)
+    # Use target_uri if provided, otherwise fall back to api_base
+    api_base = _validate_voice_api_base(
+        request.provider_type, request.target_uri or request.api_base
+    )
+
+    api_key = peek_api_token_value(
+        db_session,
+        request.api_key,
+        platform=request.provider_type,
+        base_url=api_base,
+        current_token_id=(
+            existing_provider.api_token_id if existing_provider is not None else None
+        ),
+    )
 
     if request.use_stored_secret:
         if existing_provider is None or not existing_provider.api_secret:
@@ -400,13 +382,8 @@ async def test_voice_provider(
     if not api_key:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            "API key is required. Either provide api_key or set use_stored_key to true.",
+            "API key is required.",
         )
-
-    # Use target_uri if provided, otherwise fall back to api_base
-    api_base = _validate_voice_api_base(
-        request.provider_type, request.target_uri or request.api_base
-    )
 
     # Create a temporary VoiceProvider for testing (not saved to DB)
     temp_provider = VoiceProvider(
@@ -415,7 +392,9 @@ async def test_voice_provider(
         api_base=api_base,
         custom_config=request.custom_config or {},
     )
-    temp_provider.api_key = api_key  # ty: ignore[invalid-assignment]
+    temp_token = ApiToken(platform=request.provider_type)
+    temp_token.value = api_key  # ty: ignore[invalid-assignment]
+    temp_provider.api_token = temp_token
     temp_provider.api_secret = api_secret  # ty: ignore[invalid-assignment]
 
     try:

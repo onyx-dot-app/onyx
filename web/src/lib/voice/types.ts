@@ -1,3 +1,5 @@
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
+
 /** Provider-specific voice settings that are safe to return to administrators. */
 export type VoiceProviderCustomConfigValue =
   | string
@@ -25,6 +27,8 @@ export interface VoiceProviderView {
   default_voice: string | null;
   /** Masked API key (e.g. `"sk-a...b1c2"`). Non-null means a key is stored. */
   api_key: string | null;
+  /** ID of the stored API key. Sent back as an existing key to keep it. */
+  api_token_id: number | null;
   /** Masked API secret. Non-null means a secret is stored. */
   api_secret: string | null;
   target_uri: string | null;
@@ -41,7 +45,7 @@ export interface VoiceOption {
 
 /** Formik form values for the voice provider setup modal. */
 export interface VoiceFormValues {
-  api_key: string;
+  api_key: ApiTokenValue;
   api_secret: string;
   target_uri: string;
   stt_model: string | null;
@@ -58,9 +62,8 @@ export interface VoiceProviderUpsertRequest {
   id?: number;
   name: string;
   provider_type: string;
-  api_key?: string;
+  api_key: ApiTokenValue | undefined;
   api_secret?: string;
-  api_key_changed: boolean;
   api_secret_changed?: boolean;
   target_uri?: string;
   custom_config: VoiceProviderCustomConfig;

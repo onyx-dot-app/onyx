@@ -9952,9 +9952,6 @@
       },
       "setupModal": {
         "apiKey": {
-          "description": "モデルにアクセスするには、{provider} の [API キー]({url}) を貼り付けてください。",
-          "label": "API キー",
-          "placeholder": "API キー",
           "required": "API キーは必須です"
         },
         "apiSecret": {
