@@ -145,7 +145,7 @@ export function ApiTokenInput({
           }
           leftChildren={
             value.type === "existing" ? (
-              <Tag color="blue" icon={SvgKey} title={maskedText} />
+              <Tag color="blue" size="md" icon={SvgKey} title={maskedText} />
             ) : undefined
           }
           isNonRevealable={value.type === "existing"}
