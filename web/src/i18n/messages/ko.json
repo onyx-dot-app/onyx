@@ -1071,6 +1071,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "jiraServiceManagement": {
+          "description": "IT 서비스 데스크 및 고객 요청"
         }
       }
     },
@@ -4306,6 +4309,36 @@
             "mailboxes": {
               "label": "사서함",
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "인덱싱할 Jira Service Management 서비스 데스크, 대기열 또는 요청을 구성합니다.",
+          "fields": {
+            "service_desk_ids": {
+              "label": "서비스 데스크 ID",
+              "description": "인덱싱할 서비스 데스크 ID 목록(예: '1', '2')입니다. 비워 두면 액세스 가능한 모든 서비스 데스크를 인덱싱합니다."
+            },
+            "queue_ids": {
+              "label": "대기열 ID",
+              "description": "특정 대기열의 티켓을 인덱싱하기 위한 서비스 데스크 대기열 ID 목록입니다."
+            },
+            "request_types": {
+              "label": "요청 유형",
+              "description": "인덱싱된 티켓을 필터링할 고객 요청 유형 이름 목록입니다."
+            },
+            "include_internal_comments": {
+              "label": "내부 댓글 포함",
+              "description": "공개 고객 답변 외에 내부 상담원 메모도 인덱싱합니다."
+            },
+            "include_sla": {
+              "label": "SLA 지표 포함",
+              "description": "각 요청의 SLA 타이머 지표 및 위반 상태를 가져와 인덱싱합니다."
+            },
+            "include_changelog": {
+              "label": "변경 내역 포함",
+              "description": "각 티켓의 상태 전환 및 필드 변경 내역을 가져와 인덱싱합니다."
             }
           }
         }

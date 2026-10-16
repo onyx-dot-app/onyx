@@ -1071,6 +1071,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "jiraServiceManagement": {
+          "description": "IT-Service-Desk & Kundenanfragen"
         }
       }
     },
@@ -4306,6 +4309,36 @@
             "mailboxes": {
               "label": "Postfächer",
               "description": "Geben Sie die zu indexierenden Postfächer an (z. B. INBOX, Sent, Drafts). Leer lassen, um alle Postfächer zu indexieren."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management-Konnektor konfigurieren",
+          "subtext": "Konfigurieren Sie, welche Service Desks, Warteschlangen oder Anfragen aus Jira Service Management indiziert werden sollen.",
+          "fields": {
+            "service_desk_ids": {
+              "label": "Service-Desk-IDs",
+              "description": "Optionale Liste von Service-Desk-IDs (z. B. '1', '2') zur Indizierung. Leer lassen, um alle zugänglichen Service Desks zu indizieren."
+            },
+            "queue_ids": {
+              "label": "Warteschlangen-IDs",
+              "description": "Optionale Liste von Service-Desk-Warteschlangen-IDs, um Tickets aus bestimmten Warteschlangen zu indizieren."
+            },
+            "request_types": {
+              "label": "Anfragetypen",
+              "description": "Optionale Liste von Kundenanfragetypen (z. B. 'IT-Hilfe anfordern') zum Filtern indizierter Tickets."
+            },
+            "include_internal_comments": {
+              "label": "Interne Kommentare einbeziehen",
+              "description": "Interne Agentennotizen zusätzlich zu öffentlichen Kundenantworten indizieren."
+            },
+            "include_sla": {
+              "label": "SLA-Metriken einbeziehen",
+              "description": "SLA-Timer-Metriken und Verstöße für jede Anfrage abrufen und indizieren."
+            },
+            "include_changelog": {
+              "label": "Änderungsverlauf einbeziehen",
+              "description": "Statusübergänge und Feldänderungsverlauf für jedes Ticket abrufen und indizieren."
             }
           }
         }
