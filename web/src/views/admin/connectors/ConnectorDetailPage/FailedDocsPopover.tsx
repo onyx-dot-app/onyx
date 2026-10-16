@@ -15,7 +15,12 @@ import {
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
-import { SvgCheckAll, SvgCheckSquare, SvgExternalLink } from "@opal/icons";
+import {
+  SvgCheckAll,
+  SvgCheckSquare,
+  SvgExternalLink,
+  SvgFile,
+} from "@opal/icons";
 import type {
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
@@ -93,13 +98,23 @@ function FailedDocRow({
             </OverflowText>
             {/* A title hides the id, so the id stays below it to copy. */}
             {error.document_name !== null && error.document_id !== null && (
-              <OverflowText
-                font="secondary-mono"
-                color="text-03"
-                wordWrap="wrap-anywhere"
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                alignItems="center"
+                gap={0.25}
+                height="fit"
+                className="min-w-0"
               >
-                {error.document_id}
-              </OverflowText>
+                <SvgFile size={12} className="shrink-0 stroke-text-02" />
+                <OverflowText
+                  font="secondary-mono"
+                  color="text-02"
+                  wordWrap="wrap-anywhere"
+                >
+                  {error.document_id}
+                </OverflowText>
+              </Section>
             )}
           </Section>
           {error.document_link !== null && (
