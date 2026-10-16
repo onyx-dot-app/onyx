@@ -598,6 +598,11 @@ class CapabilityCheckResult(BaseModel):
     # Why a SKIPPED check did not run, and the dependency that stopped it.
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
+    # The row's text: a short line of what the check found or what is wrong,
+    # and up to three lines of what happened and what is needed. None when
+    # the check gives none; ``message`` stays the full text for support.
+    summary: str | None = None
+    description: str | None = None
     is_fallback: bool = False
     remediation: str | None = None
     docs_link: str | None = None
