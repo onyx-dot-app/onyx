@@ -508,6 +508,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
     total_users_processed: int
     total_groups_processed: int
     total_group_memberships_synced: int
+    total_groups_failed: int
     time_created: str
     time_started: str | None
     time_finished: str | None
@@ -524,6 +525,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
             total_users_processed=attempt.total_users_processed or 0,
             total_groups_processed=attempt.total_groups_processed or 0,
             total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
+            total_groups_failed=attempt.total_groups_failed,
             time_created=attempt.time_created.isoformat(),
             time_started=(
                 attempt.time_started.isoformat() if attempt.time_started else None
@@ -569,6 +571,7 @@ class PruneRunSnapshot(BaseModel):
     id: int
     status: SyncStatus
     docs_removed: int
+    docs_failed: int
     error_message: str | None
     time_created: str
     time_started: str | None
@@ -580,6 +583,7 @@ class PruneRunSnapshot(BaseModel):
             id=record.id,
             status=record.sync_status,
             docs_removed=record.num_docs_synced,
+            docs_failed=record.num_docs_failed,
             error_message=record.error_message,
             time_created=record.sync_start_time.isoformat(),
             time_started=record.sync_start_time.isoformat(),

@@ -167,6 +167,7 @@ export interface ExternalGroupSyncAttemptSnapshot {
   total_users_processed: number;
   total_groups_processed: number;
   total_group_memberships_synced: number;
+  total_groups_failed: number;
   time_created: string;
   time_started: string | null;
   time_finished: string | null;
@@ -191,6 +192,7 @@ export interface PruneRunSnapshot {
   id: number;
   status: PruneRunStatus;
   docs_removed: number;
+  docs_failed: number;
   error_message: string | null;
   time_created: string;
   time_started: string | null;

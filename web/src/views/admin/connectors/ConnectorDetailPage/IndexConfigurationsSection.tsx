@@ -7,7 +7,10 @@ import { Section } from "@opal/layouts";
 import { SvgEditBig } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
-import { useConnectorConfiguration } from "@/lib/connectors/connectors";
+import {
+  connectorConfigs,
+  useConnectorConfiguration,
+} from "@/lib/connectors/connectors";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import type { CCPairFullInfo, ConfigEntries } from "@/lib/connectors/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
@@ -164,6 +167,7 @@ export default function IndexConfigurationsSection({
   onRefresh,
 }: IndexConfigurationsSectionProps) {
   const t = useTranslations("admin.connector.configuration");
+  const tTabs = useTranslations("admin.connectorsList.checkboxTabs");
   const format = useFormatter();
   const [open, setOpen] = useState(false);
   const source = ccPair.connector.source;
@@ -189,10 +193,34 @@ export default function IndexConfigurationsSection({
   const realm = credentialBoundFieldNames(source)
     .map((name) => config[name])
     .find((value) => typeof value === "string" && value !== "");
-  const realmText =
+  const realmName =
     typeof realm === "string"
       ? realmMarkdown(realm)
       : escapeMarkdown(getSourceDisplayName(source) ?? "");
+  // A source with two hosting types (Confluence Cloud or Data Center) names its type first.
+  const sourceConfiguration = isEditableSource(source)
+    ? connectorConfigs[source]
+    : undefined;
+  const hostField = configFields(
+    sourceConfiguration === undefined
+      ? []
+      : [...sourceConfiguration.values, ...sourceConfiguration.advanced_values]
+  ).find((field) => field.type === "checkbox" && field.tabLabels);
+  const hostLabels =
+    hostField?.type === "checkbox" ? hostField.tabLabels : undefined;
+  const hostValue =
+    hostField === undefined
+      ? undefined
+      : (config[hostField.name] ?? hostField.default);
+  const realmText =
+    hostLabels === undefined
+      ? realmName
+      : t("hostPrefix", {
+          host: escapeMarkdown(
+            tTabs(hostValue === true ? hostLabels.true : hostLabels.false)
+          ),
+          realm: realmName,
+        });
   const description: RichStr = markdown(
     groups.length > 0
       ? t("summary", {
