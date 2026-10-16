@@ -26,6 +26,12 @@ from onyx.connectors.capability_checks.registry import has_named_capability_chec
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.pairing_access import validate_pairing_access
+from onyx.db.cc_pair_run_resolution import resolve_runs__no_commit
+from onyx.db.cc_pair_runs import (
+    count_matching_runs,
+    get_resolvable_runs,
+    resolve_matching_runs__no_commit,
+)
 from onyx.db.cc_pair_runs_models import CCPairRunFilter
 from onyx.db.connector import fetch_connector_by_id, set_connector_check_frequency
 from onyx.db.connector_credential_pair import (
@@ -64,7 +70,7 @@ from onyx.db.index_attempt import (
     count_index_attempts_for_cc_pair,
     get_error_counts_for_index_attempts,
     get_index_attempt,
-    get_index_attempt_errors_for_cc_pair,
+    get_index_attempt_errors_with_document_names_for_cc_pair,
     get_latest_index_attempt_for_cc_pair_id,
     get_latest_successful_index_attempt_for_cc_pair_id,
     get_open_doc_error_counts_for_index_attempts,
@@ -92,6 +98,7 @@ from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.cc_pair_runs_feed import (
     connector_supports_targeted_reindex,
     fetch_run_feed,
+    open_level_filter,
 )
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.credential import credential_ids_to_mask
@@ -99,6 +106,12 @@ from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_br
 from onyx.server.documents.models import (
     CCPairFullInfo,
     CCPairHierarchyBreakdown,
+    CCPairRunLevel,
+    CCPairRunsResolvableCountResponse,
+    CCPairRunsResolveMatchingRequest,
+    CCPairRunsResolveMatchingResponse,
+    CCPairRunsResolveRequest,
+    CCPairRunsResolveResponse,
     CCPairRunsResponse,
     CCPairThroughputResponse,
     CCPairThroughputWindow,
@@ -271,19 +284,24 @@ def get_cc_pair_runs(
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=_RUNS_MAX_PAGE_SIZE),
     since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
     status_groups: list[CCPairRunStatusGroup] | None = Query(None),
     q: str | None = Query(None, max_length=200),
     errors: CCPairRunErrors | None = Query(None),
+    superseded: bool | None = Query(None),
+    resolved: bool | None = Query(None),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
 ) -> CCPairRunsResponse:
     """The pair's index attempts and permission syncs as one feed, newest
-    first. ``since`` windows on creation time, ``q`` matches error messages,
-    including an index attempt's document errors, and ``errors`` keeps only
-    runs with document errors, open or resolved."""
+    first. ``since`` and ``until`` window on creation time, ``until``
+    exclusive, ``q`` matches error messages, including an index attempt's
+    document errors, ``errors`` keeps only runs with document errors, open or
+    resolved, ``superseded`` leaves out or keeps the failed runs a newer run
+    of their kind followed, and ``resolved`` the runs an admin resolved."""
     # Called directly: the route contract reaches the scope gate three calls deep.
     cc_pair = get_readable_connector_credential_pair_for_user(
         cc_pair_id, db_session, user
@@ -301,9 +319,12 @@ def get_cc_pair_runs(
         source=cc_pair.connector.source,
         shared_sources=set(),
         since=since,
+        until=until,
         error_query=(q or "").strip() or None,
         status_groups=groups,
         errors=errors,
+        superseded=superseded,
+        resolved=resolved,
     )
     feed = fetch_run_feed(db_session, wanted, run_filter, page_num, page_size)
     return CCPairRunsResponse(
@@ -311,6 +332,155 @@ def get_cc_pair_runs(
         total_items=feed.total_items,
         kinds=pair_kinds,
         status_counts=feed.status_counts,
+    )
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/runs/resolve")
+def resolve_cc_pair_runs(
+    cc_pair_id: int,
+    request: CCPairRunsResolveRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveResponse:
+    """Marks failed runs, or runs with open document errors, of the pair's feed
+    resolved. They keep their status; the feed moves them out of the open
+    failures and errors. Takes the targeted reindex's permissions."""
+    if not request.runs:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "No runs to resolve.")
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this connector",
+        )
+    cc_pair = get_readable_connector_credential_pair_for_user(
+        cc_pair_id, db_session, user
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
+    wanted = list(dict.fromkeys((run.kind, run.attempt_id) for run in request.runs))
+    run_filter = CCPairRunFilter(
+        cc_pair_ids=[cc_pair_id],
+        source=cc_pair.connector.source,
+        shared_sources=set(),
+        since=None,
+        error_query=None,
+        status_groups=None,
+        errors=None,
+        superseded=None,
+    )
+    resolvable = get_resolvable_runs(
+        db_session, _cc_pair_run_kinds(db_session, cc_pair), run_filter, wanted
+    )
+    if len(resolvable) != len(wanted):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only this connector's failed runs or runs with open errors resolve.",
+        )
+    resolve_runs__no_commit(db_session, resolvable, user.id)
+    db_session.commit()
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={
+            "resolved_runs": [
+                {"kind": kind.value, "attempt_id": run_id} for kind, run_id in wanted
+            ]
+        },
+    )
+    return CCPairRunsResolveResponse(resolved_count=len(wanted))
+
+
+def _pair_open_level(
+    cc_pair_id: int,
+    request: CCPairRunsResolveMatchingRequest,
+    user: User,
+    db_session: Session,
+) -> tuple[list[CCPairRunKind], CCPairRunFilter]:
+    """The run kinds and filter of a level's open runs on a pair the caller
+    operates."""
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this connector",
+        )
+    cc_pair = get_readable_connector_credential_pair_for_user(
+        cc_pair_id, db_session, user
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
+    kinds = [
+        kind
+        for kind in _cc_pair_run_kinds(db_session, cc_pair)
+        if request.kinds is None or kind in request.kinds
+    ]
+    run_filter = open_level_filter(
+        request, [cc_pair_id], cc_pair.connector.source, set()
+    )
+    return kinds, run_filter
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/runs/resolvable-count")
+def get_resolvable_cc_pair_runs_count(
+    cc_pair_id: int,
+    level: CCPairRunLevel = Query(...),
+    q: str | None = Query(None, max_length=200),
+    since: datetime | None = Query(None),
+    kinds: list[CCPairRunKind] | None = Query(None),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolvableCountResponse:
+    """How many runs ``resolve-matching`` would mark for the same filter."""
+    request = CCPairRunsResolveMatchingRequest(
+        level=level, q=q, since=since, kinds=kinds
+    )
+    wanted, run_filter = _pair_open_level(cc_pair_id, request, user, db_session)
+    return CCPairRunsResolvableCountResponse(
+        count=count_matching_runs(db_session, wanted, run_filter)
+    )
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/runs/resolve-matching")
+def resolve_matching_cc_pair_runs(
+    cc_pair_id: int,
+    request: CCPairRunsResolveMatchingRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveMatchingResponse:
+    """Marks every open run of a level that the pair's feed lists for the
+    filter resolved, and returns how many it marked."""
+    kinds, run_filter = _pair_open_level(cc_pair_id, request, user, db_session)
+    resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filter, user.id)
+    db_session.commit()
+    count = sum(resolved.values())
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"resolved_matching_runs": count},
+    )
+    return CCPairRunsResolveMatchingResponse(
+        resolved_count=count, cc_pair_ids=sorted(resolved)
     )
 
 
@@ -942,7 +1112,7 @@ def get_cc_pair_indexing_errors(
         query=query,
     )
 
-    index_attempt_errors = get_index_attempt_errors_for_cc_pair(
+    index_attempt_errors = get_index_attempt_errors_with_document_names_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
         unresolved_only=not include_resolved,
@@ -952,7 +1122,10 @@ def get_cc_pair_indexing_errors(
         query=query,
     )
     return PaginatedReturn(
-        items=[IndexAttemptErrorPydantic.from_model(e) for e in index_attempt_errors],
+        items=[
+            IndexAttemptErrorPydantic.from_model(error, document_name=name)
+            for error, name in index_attempt_errors
+        ],
         total_items=total_count,
     )
 

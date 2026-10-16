@@ -59,6 +59,14 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
 )
+from onyx.connectors.youtrack.models import (
+    YouTrackAssignedRole,
+    YouTrackIssue,
+    YouTrackIssueAccess,
+    YouTrackProject,
+    YouTrackRole,
+    YouTrackUser,
+)
 from tests.unit.onyx.connectors.source_operation_harnesses import (
     compute_uncovered_units,
     import_all_source_operation_gateways,
@@ -271,6 +279,37 @@ def _configure_github_user_owner_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_youtrack_spy(spy: MagicMock) -> None:
+    """One project whose readers come through a group, holding one issue, so
+    the checks reach the group listing and the comment read."""
+    project = {"id": "0-1", "shortName": "ABC", "name": "Alpha"}
+    issue = {"id": "2-1", "idReadable": "ABC-1", "created": 1, "updated": 1}
+    spy.get_me.return_value = YouTrackUser(id="1-1")
+    spy.list_projects.return_value = [YouTrackProject.model_validate(project)]
+    spy.list_assigned_roles.return_value = [
+        YouTrackAssignedRole.model_validate(
+            {
+                "role": {"id": "r"},
+                "holder": {"$type": "UserGroup", "id": "g"},
+                "scope": {"$type": "GlobalScope"},
+            }
+        )
+    ]
+    spy.list_roles.return_value = [
+        YouTrackRole.model_validate(
+            {"id": "r", "permissions": [{"id": "JetBrains.YouTrack.READ_ISSUE"}]}
+        )
+    ]
+    spy.list_group_user_ids.return_value = {"1-1"}
+    spy.list_users.return_value = [YouTrackUser(id="1-1", email="a@example.com")]
+    spy.iterate_issues.side_effect = lambda **_kwargs: iter(
+        [[YouTrackIssue.model_validate({**issue, "project": project})]]
+    )
+    spy.iterate_issue_access.side_effect = lambda **_kwargs: iter(
+        [[YouTrackIssueAccess.model_validate({"id": "2-1", "project": project})]]
+    )
+
+
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
@@ -280,6 +319,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],
+    DocumentSource.YOUTRACK: [_configure_youtrack_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every
@@ -293,6 +333,9 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
             "branch": "main",
         },
         {"repo_owner": "acme", "repositories": "docs"},
+    ],
+    DocumentSource.YOUTRACK: [
+        {"base_url": "https://example.youtrack.cloud", "projects": ["ABC"]}
     ],
 }
 

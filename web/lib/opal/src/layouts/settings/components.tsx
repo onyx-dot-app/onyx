@@ -142,7 +142,7 @@ function SettingsHeader({
     <div
       ref={headerRef}
       className={cn(
-        "w-full",
+        "w-full -mb-6",
         isSticky && "sticky top-0 z-settings-header bg-background-tint-01"
       )}
     >
@@ -187,6 +187,8 @@ function SettingsHeader({
       ) : (
         <Spacer rem={0.5} />
       )}
+      {/* The header paints the body's top gap (its -mb-6 pulls the body up under it), so a pinned header leaves no unpainted band where scrolled content can show. */}
+      <Spacer rem={1.5} />
 
       {/* No fade: an opacity transition here makes Chrome paint stale page content in this band. */}
       {isSticky && (

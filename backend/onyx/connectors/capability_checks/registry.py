@@ -29,6 +29,9 @@ from onyx.connectors.sharepoint.capability_checks import (
 )
 from onyx.connectors.slack.capability_checks import build_slack_indexing_checks
 from onyx.connectors.source_operations import get_source_operations_class
+from onyx.connectors.youtrack.capability_checks import (
+    build_youtrack_indexing_checks,
+)
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 # INDEXING checks per source. Checks must be enumerable without an instantiated
@@ -46,6 +49,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.NOTION: build_notion_indexing_checks(),
     DocumentSource.SHAREPOINT: build_sharepoint_indexing_checks(),
     DocumentSource.GITHUB: build_github_indexing_checks(),
+    DocumentSource.YOUTRACK: build_youtrack_indexing_checks(),
 }
 
 

@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "Intranet-Seiten und Communities"
         },
+        "youtrack": {
+          "description": "Issue-Tracker und Projektmanagement"
+        },
         "canvas": {
           "description": "Kurse, Seiten und Ankündigungen"
         },
@@ -2277,89 +2280,24 @@
         "perBatch": {
           "empty": "Keine Phasendaten pro Batch aufgezeichnet."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Batch laden"
+        "buckets": {
+          "fetchSource": {
+            "label": "Quellabruf"
           },
-          "batchTotal": {
-            "label": "Batch gesamt"
-          },
-          "batchUnaccounted": {
-            "label": "Nicht zugeordnet"
-          },
-          "checkpointLoad": {
-            "label": "Checkpoint laden"
+          "batchPreProcessing": {
+            "label": "Batch-Vorverarbeitung"
           },
           "chunking": {
             "label": "Chunking"
           },
-          "connectorFetch": {
-            "label": "Konnektor-Abruf"
-          },
-          "connectorValidation": {
-            "label": "Konnektor-Prüfung"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "Wartezeit auf Koordinationssperre"
-          },
-          "coordinationUpdate": {
-            "label": "Koordinationsaktualisierung"
-          },
-          "docBatchEnqueue": {
-            "label": "Dokument-Batch einreihen"
-          },
-          "docBatchStore": {
-            "label": "Dokument-Batch speichern"
-          },
-          "docDbPrepare": {
-            "label": "Dokument-DB vorbereiten"
-          },
-          "docLockAcquireWait": {
-            "label": "Wartezeit auf Dokumentsperre"
-          },
-          "docprocessingSetup": {
-            "label": "Docprocessing-Einrichtung"
-          },
           "embedding": {
             "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "Anreicherung vorbereiten"
-          },
-          "finalization": {
-            "label": "Abschluss"
-          },
-          "gcCollect": {
-            "label": "Garbage Collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Hierarchie-Upsert"
-          },
-          "imageProcessing": {
-            "label": "Bildverarbeitung"
-          },
-          "permissionValidation": {
-            "label": "Berechtigungsprüfung"
-          },
-          "postIndexDbUpdate": {
-            "label": "DB-Aktualisierung nach Indizierung"
-          },
-          "queueWait": {
-            "label": "Warteschlangenzeit"
           },
           "vectorDbWrite": {
             "label": "Schreiben in Vektor-DB"
           },
-          "embeddingRateLimitWait": {
-            "label": "Wartezeit Embedding-Ratenlimit",
-            "description": "Zeit, die Embedding-Anfragen auf das in den Index-Einstellungen festgelegte Ratenlimit gewartet haben. Teil von Embedding, summiert über Embedding-Threads."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Wartezeit Anbieter-Drosselung",
-            "description": "Zeit, die Embedding-Anfragen gewartet haben, nachdem der Embedding-Anbieter sie gedrosselt hat. Teil von Embedding, summiert über Embedding-Threads."
+          "postProcessing": {
+            "label": "Nachverarbeitung"
           }
         }
       },
@@ -2379,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "Indizierte Dokumente im Zeitverlauf",
           "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
-          "loadError": "Das Diagramm konnte nicht geladen werden."
+          "loadError": "Das Diagramm konnte nicht geladen werden.",
+          "rangeFilter": "In diesem Abschnitt des Diagramms erstellte Läufe"
         },
         "hold": {
           "checks_running": "Vorab-Prüfungen laufen",
@@ -2407,7 +2346,10 @@
         "targetedReindexFailed": "Die gezielte Neuindizierung ist fehlgeschlagen: {message}",
         "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind.",
         "checkFrequencyUpdated": "Prüfintervall des Connectors erfolgreich aktualisiert",
-        "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden"
+        "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert."
       },
       "backButton": {
         "label": "Alle Konnektoren"
@@ -2540,6 +2482,7 @@
           "running": "{count, plural, one {# Lauf aktiv} other {# Läufe aktiv}}",
           "succeeded": "{count, plural, one {# Lauf erfolgreich} other {# Läufe erfolgreich}}",
           "failed": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}",
+          "canceled": "{count, plural, one {# Lauf abgebrochen} other {# Läufe abgebrochen}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
@@ -2603,15 +2546,12 @@
           "all": "Alle Stufen",
           "failures": "Fehlschläge",
           "errors": "Fehler",
-          "other": "Sonstige"
-        },
-        "resolved": {
-          "label": "Behoben"
+          "other": "Sonstige",
+          "resolved": "Behoben"
         },
         "groups": {
           "failures": "{count, plural, one {# Fehlschlag} other {# Fehlschläge}}",
           "errors": "{count, plural, one {# Fehler} other {# Fehler}}",
-          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}",
           "other": "Sonstige"
         },
         "title": {
@@ -2677,16 +2617,16 @@
         "tags": {
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
-          "doc_permission_sync": "{count, plural, one {# Dokument nicht synchronisiert} other {# Dokumente nicht synchronisiert}}",
+          "doc_permission_sync": "{count, plural, one {# Benutzer nicht synchronisiert} other {# Benutzer nicht synchronisiert}}",
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
-          "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}"
+          "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
+          "resolved": "Behoben"
         },
         "more": "Mehr anzeigen",
         "empty": {
           "title": "Keine Fehlschläge oder Fehler",
-          "resolved": "Keine behobenen Fehler",
           "filtered": "Nichts passt zu dieser Suche.",
           "failures": "Keine Fehlschläge",
           "errors": "Keine Fehler",
@@ -2715,15 +2655,29 @@
         },
         "actions": {
           "resolve": "Beheben"
+        },
+        "resolveAll": {
+          "button": "Alle angezeigten beheben",
+          "title": "Alle angezeigten Läufe beheben?",
+          "description": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
+          "fleetDescription": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, auf den Connectoren, die Sie verwalten, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
+          "confirm": "Alle beheben"
         }
       },
       "stageDetails": {
         "title": "Phasendetails",
+        "heading": {
+          "top": "Phasen",
+          "bottom": "Details"
+        },
         "calls": "Batches",
         "averageTime": "Durchschnittszeit",
         "maxTime": "Maximalzeit",
         "uneven": {
           "tooltip": "Die Batch-Zeiten dieser Phase schwanken stark"
+        },
+        "clipped": {
+          "label": "Balken gekürzt: Das Maximum liegt außerhalb der Skala"
         },
         "close": "Phasendetails schließen"
       }
@@ -3320,6 +3274,19 @@
             "lang": {
               "label": "Sprache",
               "description": "Sprache für Titel/Text von Inhalten und Metadaten-Labels (ISO 639-1, z. B. en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "YouTrack-Connector konfigurieren",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack-URL",
+              "description": "Ihre YouTrack-Adresse, z. B. https://example.youtrack.cloud. Geben Sie bei YouTrack Server den Kontextpfad an, z. B. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projekte",
+              "description": "Kurznamen der zu indexierenden Projekte (z. B. ABC). Leer lassen, um alle Projekte zu indexieren, die das Token lesen kann."
             }
           }
         },
@@ -4675,6 +4642,7 @@
         "gongBaseUrl": "Optional. Für Daten außerhalb der USA gib den Host deiner Region an, z. B. https://[region].api.gong.io.",
         "jiraUserEmail": "Erforderlich für Jira Cloud.",
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indiziert wird.",
+        "youtrackToken": "Ein permanentes Token eines YouTrack-Benutzers, der alle zu indexierenden Projekte lesen kann. Erstellen Sie es in Ihrem YouTrack-Profil unter Kontosicherheit.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
         "pfxFile": "Lade die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
@@ -6869,7 +6837,7 @@
       "activities": {
         "title": "Aktivitäten",
         "history": "Vollständiger Aktivitätsverlauf",
-        "viewLogs": "Aktivitätsverlauf anzeigen",
+        "viewLogs": "Logs anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
           "close": "Aktivitätsverlauf ausblenden"
@@ -10339,8 +10307,25 @@
         },
         "validation": {
           "title": "Validierung",
-          "blocks": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden.",
-          "warns": "Einige optionale Prüfungen sind fehlgeschlagen. Sie können trotzdem anwenden.",
+          "unchanged": "Einstellungen, die eine Validierung erfordern, wurden nicht geändert.",
+          "outcome": {
+            "failed": {
+              "title": "Validierung fehlgeschlagen",
+              "description": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden."
+            },
+            "warnings": {
+              "title": "Validierung mit Warnungen bestanden",
+              "description": "Einige optionale Prüfungen sind fehlgeschlagen oder konnten nicht verifiziert werden. Sie können trotzdem anwenden."
+            },
+            "incomplete": {
+              "title": "Validierung nicht abgeschlossen",
+              "description": "Die abgeschlossenen Prüfungen waren erfolgreich. Sie können trotzdem anwenden."
+            },
+            "passed": {
+              "title": "Validierung bestanden",
+              "description": "Die neuen Einstellungen haben alle Prüfungen bestanden."
+            }
+          },
           "error": {
             "title": "Die Einstellungen sind ungültig"
           }
