@@ -13581,6 +13581,32 @@
         "projectId": "my-vertex-project",
         "location": "global"
       }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "API Key",
+        "description": "Paste your {platform} API key.",
+        "reuseDescription": "Paste your {platform} API key, or reuse a saved one."
+      },
+      "input": {
+        "placeholder": "abc***xyz",
+        "listLabel": "Saved {platform} API keys"
+      },
+      "reuse": {
+        "title": "Reuse {platform} API Keys"
+      },
+      "usedFor": "Used for {usages}",
+      "usage": {
+        "llmProvider": "model provider **{name}**",
+        "imageGeneration": "image generation **{name}**",
+        "voiceProvider": "voice provider **{name}**",
+        "embeddingProvider": "embedding provider **{name}**",
+        "webSearchProvider": "web search provider **{name}**",
+        "webContentProvider": "web content provider **{name}**",
+        "tracingProvider": "tracing provider **{name}**",
+        "hook": "hook **{name}**",
+        "unstructured": "document processing **{name}**"
+      }
     }
   },
   "craft": {

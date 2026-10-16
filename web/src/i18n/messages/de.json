@@ -13581,6 +13581,32 @@
         "projectId": "mein-vertex-projekt",
         "location": "global"
       }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "API-Schlüssel",
+        "description": "Fügen Sie Ihren {platform}-API-Schlüssel ein.",
+        "reuseDescription": "Fügen Sie Ihren {platform}-API-Schlüssel ein oder verwenden Sie einen gespeicherten erneut."
+      },
+      "input": {
+        "placeholder": "abc***xyz",
+        "listLabel": "Gespeicherte {platform}-API-Schlüssel"
+      },
+      "reuse": {
+        "title": "{platform}-API-Schlüssel wiederverwenden"
+      },
+      "usedFor": "Verwendet für {usages}",
+      "usage": {
+        "llmProvider": "Modellanbieter **{name}**",
+        "imageGeneration": "Bildgenerierung **{name}**",
+        "voiceProvider": "Sprachanbieter **{name}**",
+        "embeddingProvider": "Embedding-Anbieter **{name}**",
+        "webSearchProvider": "Websuche-Anbieter **{name}**",
+        "webContentProvider": "Webinhalt-Anbieter **{name}**",
+        "tracingProvider": "Tracing-Anbieter **{name}**",
+        "hook": "Hook **{name}**",
+        "unstructured": "Dokumentverarbeitung **{name}**"
+      }
     }
   },
   "craft": {

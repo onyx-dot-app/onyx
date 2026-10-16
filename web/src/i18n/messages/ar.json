@@ -13581,6 +13581,32 @@
         "projectId": "mashrue-vertex",
         "location": "global"
       }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "مفتاح API",
+        "description": "الصق مفتاح API الخاص بـ {platform}.",
+        "reuseDescription": "الصق مفتاح API الخاص بـ {platform}، أو أعد استخدام مفتاح محفوظ."
+      },
+      "input": {
+        "placeholder": "abc***xyz",
+        "listLabel": "مفاتيح API المحفوظة لـ {platform}"
+      },
+      "reuse": {
+        "title": "إعادة استخدام مفاتيح API لـ {platform}"
+      },
+      "usedFor": "مستخدم في {usages}",
+      "usage": {
+        "llmProvider": "موفر النماذج **{name}**",
+        "imageGeneration": "إنشاء الصور **{name}**",
+        "voiceProvider": "موفر الصوت **{name}**",
+        "embeddingProvider": "موفر التضمين **{name}**",
+        "webSearchProvider": "موفر البحث على الويب **{name}**",
+        "webContentProvider": "موفر محتوى الويب **{name}**",
+        "tracingProvider": "موفر التتبع **{name}**",
+        "hook": "الخطاف **{name}**",
+        "unstructured": "معالجة المستندات **{name}**"
+      }
     }
   },
   "craft": {

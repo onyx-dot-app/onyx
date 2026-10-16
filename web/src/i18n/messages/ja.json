@@ -13581,6 +13581,32 @@
         "projectId": "vertex-purojekuto",
         "location": "global"
       }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "API キー",
+        "description": "{platform} の API キーを貼り付けてください。",
+        "reuseDescription": "{platform} の API キーを貼り付けるか、保存済みのキーを再利用してください。"
+      },
+      "input": {
+        "placeholder": "abc***xyz",
+        "listLabel": "保存済みの {platform} API キー"
+      },
+      "reuse": {
+        "title": "{platform} API キーを再利用"
+      },
+      "usedFor": "使用先: {usages}",
+      "usage": {
+        "llmProvider": "モデルプロバイダー **{name}**",
+        "imageGeneration": "画像生成 **{name}**",
+        "voiceProvider": "音声プロバイダー **{name}**",
+        "embeddingProvider": "埋め込みプロバイダー **{name}**",
+        "webSearchProvider": "ウェブ検索プロバイダー **{name}**",
+        "webContentProvider": "ウェブコンテンツプロバイダー **{name}**",
+        "tracingProvider": "トレーシングプロバイダー **{name}**",
+        "hook": "フック **{name}**",
+        "unstructured": "ドキュメント処理 **{name}**"
+      }
     }
   },
   "craft": {

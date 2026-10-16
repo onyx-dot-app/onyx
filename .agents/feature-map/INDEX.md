@@ -81,6 +81,7 @@ What an admin or user configures to change how chat behaves.
 | ✅ | [mcp-and-custom-tools](components/mcp-and-custom-tools.md) | MCP servers and OpenAPI-defined custom actions. |
 | ✅ | [chat-preferences](components/chat-preferences.md) | Input prompts, reminders, default assistant, per-user settings. |
 | ✅ | [standard-answers](components/standard-answers.md) | Canned answers matched before the LLM runs, used by the bots. |
+| ✅ | [api-tokens](components/api-tokens.md) | Shared third-party API keys that features reference and reuse. |
 
 ## Domain: Platform
 
