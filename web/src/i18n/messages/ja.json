@@ -2237,18 +2237,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "インデックス作成の実行中は再インデックスできません",
-            "invalid": "再インデックスの前にコネクターの設定を修正してください",
-            "paused": "再インデックスの前にコネクターを再開してください"
+            "invalid": "再インデックスの前にコネクターの設定を修正してください"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "インデックスを一時停止",
-            "description": "進行中および今後のインデックス実行と同期をすべて取り消します。"
+            "label": "インデックスと同期を一時停止",
+            "description": "進行中および今後のインデックス実行と権限の同期を取り消します。インデックス済みのドキュメントは同期されなくなりますが、引き続き検索できます。"
           },
           "resume": {
-            "label": "インデックスを再開",
-            "description": "スケジュールされたインデックス実行と同期を再び許可します。"
+            "label": "インデックスと同期を再開",
+            "description": "インデックス実行と権限の同期を再開します。"
           },
           "tooltip": {
             "updating": "ステータスを更新しています"
@@ -2263,7 +2262,11 @@
         },
         "fullReindex": {
           "label": "完全な再インデックス",
-          "description": "ソースの全ドキュメントを再インデックスします。規模によっては数時間から数日かかります。"
+          "description": "ソースの全ドキュメントを再インデックスします。規模によっては **数時間から数日** かかります。"
+        },
+        "startIndexing": {
+          "label": "インデックス作成を開始",
+          "description": "コネクターのチェックをスキップして、今すぐインデックスを作成します。"
         }
       },
       "reEnableModal": {
@@ -2303,16 +2306,17 @@
       },
       "statusCard": {
         "documentsIndexed": {
-          "label": "インデックス済みドキュメント数"
+          "label": "インデックス済みドキュメント"
         },
         "indexingSpeed": "{speed} 件/分",
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
-        "title": "インデックス状況",
+        "statusLine": "インデックス状況 - {detail}",
         "documents": {
           "label": "直近 / 合計",
-          "total": "/ {total}"
+          "total": "/ {total}",
+          "totalLabel": "合計"
         },
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
@@ -2408,7 +2412,8 @@
           "displayName": "• {name}",
           "docsUnit": "{count, plural, other {件のドキュメント}}"
         },
-        "summary": "{realm} • {counts}"
+        "summary": "{realm} • {counts}",
+        "hostPrefix": "{host}：{realm}"
       },
       "sharing": {
         "title": "共有設定",
@@ -2470,9 +2475,8 @@
         "figures": {
           "indexed": "件インデックス済み",
           "synced": "件同期済み",
-          "memberships": "件のメンバーシップ",
           "removed": "件削除",
-          "checks": "件のチェックを実行"
+          "checksRun": "{count, plural, other {# 件のチェックを実行}}"
         },
         "counts": {
           "newDocs": "{count, plural, other {# 件の新しいドキュメント}}",
@@ -2490,7 +2494,7 @@
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
         "search": {
-          "placeholder": "インデックス実行を検索..."
+          "placeholder": "インデックス実行を検索…"
         },
         "window": {
           "label": "期間",
@@ -2540,7 +2544,7 @@
       },
       "activity": {
         "search": {
-          "placeholder": "アクティビティ履歴を検索..."
+          "placeholder": "アクティビティ履歴を検索…"
         },
         "counts": {
           "failures": "{count, plural, other {失敗した実行 # 件}}",
@@ -2548,7 +2552,7 @@
         },
         "filter": {
           "label": "表示",
-          "all": "すべてのレベル",
+          "all": "全レベル",
           "failures": "失敗",
           "errors": "エラー",
           "other": "その他",
@@ -2561,60 +2565,65 @@
         },
         "title": {
           "indexing": {
-            "failed": "インデックス作成に失敗しました",
-            "running": "エラーを伴いインデックス作成中",
-            "stopped": "エラーを伴いインデックス作成が停止しました",
-            "errors": "エラーを伴いインデックス作成が完了しました",
-            "resolved": "インデックス作成のエラーが解決されました",
-            "succeeded": "インデックスが正常に完了しました",
-            "inProgress": "インデックス実行中",
-            "canceled": "インデックスが停止しました"
+            "failed": "インデックス作成に失敗しました。",
+            "failedWith": "インデックス作成に失敗しました：{reason}。",
+            "running": "エラーを伴いインデックス作成中。",
+            "stopped": "エラーを伴いインデックス作成が停止しました。",
+            "errors": "エラーを伴いインデックス作成が完了しました。",
+            "resolved": "インデックス作成のエラーが解決されました。",
+            "succeeded": "インデックスが正常に完了しました。",
+            "inProgress": "インデックス実行中。",
+            "canceled": "インデックスが停止しました。"
           },
           "doc_permission_sync": {
-            "failed": "権限の同期に失敗しました",
-            "running": "エラーを伴い権限を同期中",
-            "stopped": "エラーを伴い権限の同期が停止しました",
-            "errors": "エラーを伴い権限が同期されました",
-            "resolved": "権限同期のエラーが解決されました",
-            "succeeded": "権限の同期が正常に完了しました",
-            "inProgress": "権限を同期中",
-            "canceled": "権限の同期が停止しました"
+            "failed": "権限の同期に失敗しました。",
+            "failedWith": "権限の同期に失敗しました：{reason}。",
+            "running": "エラーを伴い権限を同期中。",
+            "stopped": "エラーを伴い権限の同期が停止しました。",
+            "errors": "エラーを伴い権限が同期されました。",
+            "resolved": "権限同期のエラーが解決されました。",
+            "succeeded": "権限の同期が正常に完了しました。",
+            "inProgress": "権限を同期中。",
+            "canceled": "権限の同期が停止しました。"
           },
           "group_sync": {
-            "failed": "グループメンバーシップの同期に失敗しました",
-            "running": "エラーを伴いグループメンバーシップを同期中",
-            "stopped": "エラーを伴いグループメンバーシップの同期が停止しました",
-            "errors": "エラーを伴いグループメンバーシップが同期されました",
-            "resolved": "グループメンバーシップ同期のエラーが解決されました",
-            "succeeded": "グループメンバーシップの同期が正常に完了しました",
-            "inProgress": "グループメンバーシップを同期中",
-            "canceled": "グループ同期が停止しました"
+            "failed": "グループメンバーシップの同期に失敗しました。",
+            "failedWith": "グループメンバーシップの同期に失敗しました：{reason}。",
+            "running": "エラーを伴いグループメンバーシップを同期中。",
+            "stopped": "エラーを伴いグループメンバーシップの同期が停止しました。",
+            "errors": "エラーを伴いグループメンバーシップが同期されました。",
+            "resolved": "グループメンバーシップ同期のエラーが解決されました。",
+            "succeeded": "グループメンバーシップの同期が正常に完了しました。",
+            "inProgress": "グループメンバーシップを同期中。",
+            "canceled": "グループ同期が停止しました。"
           },
           "pruning": {
-            "failed": "プルーニングに失敗しました",
-            "running": "エラーを伴うプルーニングを実行中",
-            "stopped": "プルーニングがエラーで停止しました",
-            "errors": "プルーニングがエラーを伴って完了しました",
-            "resolved": "プルーニングのエラーが解決されました",
-            "succeeded": "プルーニングが正常に完了しました",
-            "inProgress": "プルーニングを実行中",
-            "canceled": "プルーニングが停止しました"
+            "failed": "プルーニングに失敗しました。",
+            "failedWith": "プルーニングに失敗しました：{reason}。",
+            "running": "エラーを伴うプルーニングを実行中。",
+            "stopped": "プルーニングがエラーで停止しました。",
+            "errors": "プルーニングがエラーを伴って完了しました。",
+            "resolved": "プルーニングのエラーが解決されました。",
+            "succeeded": "プルーニングが正常に完了しました。",
+            "inProgress": "プルーニングを実行中。",
+            "canceled": "プルーニングが停止しました。"
           },
           "checks": {
-            "failed": "コネクタチェックに失敗しました",
-            "running": "エラーを伴うコネクタチェックを実行中",
-            "stopped": "コネクタチェックがエラーで停止しました",
-            "errors": "コネクタチェックがエラーを伴って完了しました",
-            "resolved": "コネクタチェックのエラーが解決されました",
-            "succeeded": "コネクタチェックに合格しました",
-            "inProgress": "コネクタチェックを実行中",
-            "canceled": "コネクタチェックが停止しました"
+            "failed": "コネクタチェックに失敗しました。",
+            "failedWith": "コネクタチェックに失敗しました：{reason}。",
+            "running": "エラーを伴うコネクタチェックを実行中。",
+            "stopped": "コネクタチェックがエラーで停止しました。",
+            "errors": "コネクタチェックがエラーを伴って完了しました。",
+            "resolved": "コネクタチェックのエラーが解決されました。",
+            "succeeded": "コネクタチェックに合格しました。",
+            "inProgress": "コネクタチェックを実行中。",
+            "canceled": "コネクタチェックが停止しました。"
           }
         },
         "description": {
           "indexing": "{count, plural, other {# 件のドキュメントをインデックス化}}。実行時間 {minutes, plural, other {# 分}}。",
-          "doc_permission_sync": "{count, plural, other {# 件のドキュメントを同期}}。実行時間 {minutes, plural, other {# 分}}。",
-          "group_sync": "{count, plural, other {# 件のメンバーシップを同期}}。実行時間 {minutes, plural, other {# 分}}。",
+          "doc_permission_sync": "{count, plural, other {# 件のユーザー権限を同期}}。実行時間 {minutes, plural, other {# 分}}。",
+          "group_sync": "{count, plural, other {# 件のグループを同期}}。実行時間 {minutes, plural, other {# 分}}。",
           "pruning": "{count, plural, one {# 件のドキュメントを削除} other {# 件のドキュメントを削除}}。プルーニングの実行時間 {minutes, plural, one {# 分} other {# 分}}。",
           "checks": "{count, plural, one {# 件のチェックを実行} other {# 件のチェックを実行}}。チェックの実行時間 {minutes, plural, one {# 分} other {# 分}}。",
           "checksFailed": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}。"
@@ -2631,7 +2640,8 @@
         },
         "more": "さらに表示",
         "empty": {
-          "title": "失敗もエラーもありません",
+          "title": "最近のアクティビティはありません",
+          "resolved": "解決済みのエラーはありません",
           "filtered": "この検索に一致するものはありません。",
           "failures": "失敗はありません",
           "errors": "エラーはありません",
@@ -2643,7 +2653,7 @@
         "docs": {
           "title": "失敗したドキュメント",
           "search": {
-            "placeholder": "ファイルを検索..."
+            "placeholder": "ドキュメントを検索…"
           },
           "resolveAll": "すべて解決",
           "resolveOne": "このドキュメントを解決",
@@ -2655,7 +2665,7 @@
           "open": "ドキュメントを開く"
         },
         "trace": {
-          "runId": "• 実行 ID: {id}",
+          "header": "スタックトレース • 実行 ID: {id}",
           "copy": "スタックトレースをコピー"
         },
         "actions": {
@@ -6845,12 +6855,12 @@
         "viewLogs": "ログを表示",
         "panel": {
           "title": "アクティビティ履歴",
-          "close": "アクティビティ履歴を閉じる"
+          "close": "パネルを閉じる"
         }
       },
       "list": {
         "search": {
-          "placeholder": "コネクタを検索..."
+          "placeholder": "コネクタを検索…"
         },
         "statusFilter": {
           "label": "ステータス",
@@ -6893,7 +6903,8 @@
         },
         "loadError": "コネクタを読み込めませんでした。",
         "units": "{count, plural, other {件のコネクタ}}"
-      }
+      },
+      "title": "コネクタのインデックス状況"
     },
     "languageModels": {
       "availableProviders": {
@@ -10187,7 +10198,7 @@
       "groups": {
         "failed": "失敗 {count} 件",
         "indeterminate": "未検証 {count} 件",
-        "passed": "完了 {count} 件",
+        "passed": "成功 {count} 件",
         "skipped": "スキップ {count} 件",
         "running": "実行中 {count} 件",
         "expected": "予定 {count} 件"
@@ -10212,7 +10223,7 @@
       },
       "foldButton": {
         "fold": "折りたたむ",
-        "expand": "展開"
+        "expand": "すべて表示"
       },
       "titleCount": "（{complete}/{total}）",
       "summary": {

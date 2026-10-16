@@ -6,6 +6,7 @@ const CARD_COLORS = [
   "transparent",
   "background-tint-00",
   "background-tint-01",
+  "background-tint-02",
   "status-info-00",
   "status-success-00",
   "status-warning-00",

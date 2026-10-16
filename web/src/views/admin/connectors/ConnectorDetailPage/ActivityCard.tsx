@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -12,6 +12,7 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
+import { formatTimestamp } from "@opal/time";
 import {
   SvgAlertTriangle,
   SvgCheckAll,
@@ -24,6 +25,7 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import type { CardColor, IconFunctionComponent } from "@opal/types";
+import { cn } from "@opal/utils";
 import type {
   CCPairRef,
   CCPairRun,
@@ -36,7 +38,6 @@ import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPa
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import {
   RUN_KIND_ICONS,
-  RUN_TIME_FORMAT,
   isActive,
   isFailed,
   runErrorMessage,
@@ -53,6 +54,8 @@ const GROUP_STYLE: Record<
     icon: IconFunctionComponent;
     stroke: string;
     closedStroke: string;
+    /** The 1px edge a hovered or selected card takes, in the level's 02 color. */
+    outline: string;
   }
 > = {
   failures: {
@@ -60,18 +63,21 @@ const GROUP_STYLE: Record<
     icon: SvgXOctagon,
     stroke: "stroke-status-error-05",
     closedStroke: "stroke-status-error-02",
+    outline: "outline-status-error-02",
   },
   errors: {
     color: "status-warning-00",
     icon: SvgAlertTriangle,
     stroke: "stroke-status-warning-05",
     closedStroke: "stroke-status-warning-02",
+    outline: "outline-status-warning-02",
   },
   other: {
     color: "background-tint-00",
     icon: SvgCheckCircle,
     stroke: "stroke-status-success-05",
     closedStroke: "stroke-status-success-02",
+    outline: "outline-border-01",
   },
 };
 
@@ -117,6 +123,24 @@ function cardState(
   }
 }
 
+interface FailureReason {
+  /** The error's first sentence, without its end mark. */
+  reason: string;
+  /** What follows the first sentence; `null` when nothing does. */
+  rest: string | null;
+}
+
+/** Splits an error into its first sentence and the rest. */
+function splitReason(message: string): FailureReason {
+  const trimmed = message.trim();
+  const first = /^[\s\S]+?[.!?](?=\s|$)/.exec(trimmed)?.[0] ?? trimmed;
+  const rest = trimmed.slice(first.length).trim();
+  return {
+    reason: first.replace(/[.!?]+$/, ""),
+    rest: rest === "" ? null : rest,
+  };
+}
+
 export interface ActivityCardProps {
   ccPairId: number;
   run: CCPairRun;
@@ -151,9 +175,17 @@ export default function ActivityCard({
   resolving,
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
-  const [traceOpen, setTraceOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [openPopover, setOpenPopover] = useState<"trace" | "items" | null>(
+    null
+  );
+  const selected = openPopover !== null;
+  const togglePopover = (popover: "trace" | "items") => (open: boolean) =>
+    setOpenPopover((current) =>
+      open ? popover : current === popover ? null : current
+    );
   const tRuns = useTranslations("admin.connector.runs");
-  const format = useFormatter();
   const active = isActive(run);
   const style = GROUP_STYLE[group];
   const StatusIcon = active ? IconLoader : style.icon;
@@ -178,12 +210,22 @@ export default function ActivityCard({
   const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure explains itself. A run with errors reports what it still did.
+  // A failure's title carries the error's first sentence, its description the rest.
   let description: string | null = null;
   // A failure a newer run superseded still explains itself.
+  // A failure's title carries the error's first sentence, its description the rest.
+  let title = t(`title.${run.kind}.${state}`);
   if (isFailed(run)) {
-    description =
-      runErrorMessage(run) ??
-      (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
+    const message = runErrorMessage(run);
+    const split = message ? splitReason(message) : null;
+    if (split !== null && split.reason !== "") {
+      title = t(`title.${run.kind}.failedWith`, { reason: split.reason });
+      description = split.rest;
+    } else {
+      description = listsChecks
+        ? t("description.checksFailed", { count: warnings })
+        : null;
+    }
   } else if (minutes !== null) {
     description = t(`description.${run.kind}`, {
       count: runMoved(run),
@@ -195,13 +237,38 @@ export default function ActivityCard({
       ? t("tags.resolvedDocs", { count: warnings })
       : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
+  const pillIconColor = closed ? undefined : "orange";
+
+  // The outline draws the edge inside the card, so hovering does not shift the list.
   return (
-    <Section height="fit" className="group/activity">
+    <Section
+      alignItems="stretch"
+      height="fit"
+      className={cn(
+        "rounded-08 -outline-offset-1",
+        (hovered || selected) && `outline-1 outline-solid ${style.outline}`
+      )}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setFocused(false);
+        }
+      }}
+    >
       <Card
-        color={closed ? "background-tint-01" : style.color}
+        color={
+          hovered && !selected
+            ? "background-tint-02"
+            : closed
+              ? "background-tint-01"
+              : style.color
+        }
         border="none"
         rounding={2}
         padding={1}
+        shadow={selected ? "md" : "none"}
       >
         <Section alignItems="stretch" gap={0} height="fit">
           <Section
@@ -247,7 +314,7 @@ export default function ActivityCard({
                   color={mutedColor}
                   wordWrap="whitespace-nowrap"
                 >
-                  {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
+                  {formatTimestamp(run.time_created)}
                 </Text>
                 <Section
                   flexDirection="row"
@@ -275,7 +342,7 @@ export default function ActivityCard({
                   font="main-ui-body"
                   color={closed ? "text-03" : "text-04"}
                 >
-                  {t(`title.${run.kind}.${state}`)}
+                  {title}
                 </Text>
                 {description !== null && (
                   <Text font="secondary-body" color={mutedColor} maxLines={3}>
@@ -308,15 +375,14 @@ export default function ActivityCard({
                 wrap
               >
                 {trace !== null && (
-                  <Popover open={traceOpen} onOpenChange={setTraceOpen}>
+                  <Popover onOpenChange={togglePopover("trace")}>
                     <Popover.Trigger asChild>
-                      <Button
+                      <Tag
                         icon={SvgTextLines}
-                        prominence={traceOpen ? "primary" : "tertiary"}
-                        size="xs"
-                      >
-                        {t("tags.stackTrace")}
-                      </Button>
+                        title={t("tags.stackTrace")}
+                        size="md"
+                        onClick={() => {}}
+                      />
                     </Popover.Trigger>
                     <StackTracePopoverContent
                       runId={run.attempt.id}
@@ -325,11 +391,15 @@ export default function ActivityCard({
                   </Popover>
                 )}
                 {listsDocs ? (
-                  <Popover>
+                  <Popover onOpenChange={togglePopover("items")}>
                     <Popover.Trigger asChild>
-                      <Button icon={SvgFiles} prominence="tertiary" size="xs">
-                        {docsLabel}
-                      </Button>
+                      <Tag
+                        icon={WARNING_ICONS.indexing}
+                        iconColor={pillIconColor}
+                        title={docsLabel}
+                        size="md"
+                        onClick={() => {}}
+                      />
                     </Popover.Trigger>
                     <FailedDocsPopoverContent
                       ccPairId={ccPairId}
@@ -340,15 +410,15 @@ export default function ActivityCard({
                     />
                   </Popover>
                 ) : run.kind === "checks" && listsChecks ? (
-                  <Popover>
+                  <Popover onOpenChange={togglePopover("items")}>
                     <Popover.Trigger asChild>
-                      <Button
+                      <Tag
                         icon={WARNING_ICONS.checks}
-                        prominence="tertiary"
-                        size="xs"
-                      >
-                        {docsLabel}
-                      </Button>
+                        iconColor={pillIconColor}
+                        title={docsLabel}
+                        size="md"
+                        onClick={() => {}}
+                      />
                     </Popover.Trigger>
                     <CheckRunPopoverContent run={run.attempt} beside />
                   </Popover>
@@ -356,8 +426,9 @@ export default function ActivityCard({
                   warnings > 0 && (
                     <Tag
                       icon={WARNING_ICONS[run.kind]}
+                      iconColor={pillIconColor}
                       title={docsLabel}
-                      color="gray"
+                      size="md"
                     />
                   )
                 )}
@@ -373,11 +444,14 @@ export default function ActivityCard({
                 </SelectButton>
               ) : (
                 resolvesRun && (
-                  // Only on hover or focus, so an open list reads as its runs, not a column of actions.
+                  // Only on hover, focus or an open pill, so an open list reads as its runs. Opacity keeps it in the tab order.
                   <Section
                     width="fit"
                     height="fit"
-                    className="opacity-0 transition-opacity group-hover/activity:opacity-100 group-focus-within/activity:opacity-100"
+                    className={cn(
+                      "transition-opacity",
+                      !(hovered || focused || selected) && "opacity-0"
+                    )}
                   >
                     <Button
                       rightIcon={SvgCheckAll}

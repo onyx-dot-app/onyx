@@ -42,6 +42,7 @@ import {
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { IconLoader } from "@opal/loaders";
+import { formatTimestamp } from "@opal/time";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
@@ -157,14 +158,7 @@ export default function AuthenticationAccountCard({
   const running: boolean = starting || checkReport?.run_status === "running";
   const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
   const checkedAt: string | null = lastChecked
-    ? format.dateTime(new Date(lastChecked), {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      })
+    ? formatTimestamp(lastChecked)
     : null;
 
   async function rerunChecks() {
@@ -279,10 +273,8 @@ export default function AuthenticationAccountCard({
   }
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
-  const addedOn: string = format.dateTime(new Date(credential.time_created), {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+  const addedOn: string = formatTimestamp(credential.time_created, {
+    dateOnly: true,
   });
 
   // The creator, by display name where they set one. An account with no

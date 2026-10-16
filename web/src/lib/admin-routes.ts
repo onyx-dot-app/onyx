@@ -303,7 +303,7 @@ export const ADMIN_ROUTES = {
   INDEXING_STATUS: {
     path: "/admin/indexing-status",
     icon: SvgProgressBars,
-    title: "Indexing Status",
+    title: "Connector Indexing Status",
     sidebarLabel: "Indexing Status",
     requiredPermission: Permission.MANAGE_CONNECTORS,
     section: "Documents & Knowledge",

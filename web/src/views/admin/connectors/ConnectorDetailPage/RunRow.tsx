@@ -3,6 +3,7 @@
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
+import { formatTimestamp } from "@opal/time";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,
@@ -52,17 +53,6 @@ export function checkCount(
   return run.check_results.filter((result) => result.status === status).length;
 }
 
-/** How run times print: a full date and 24-hour time, as `useFormatter().dateTime` takes it. */
-export const RUN_TIME_FORMAT = {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-} as const;
-
 /** The run's own error message, without its trace. */
 export function runErrorMessage(run: CCPairRun): string | null {
   return run.kind === "indexing"
@@ -96,8 +86,9 @@ export function runWarnings(run: CCPairRun): number {
     case "doc_permission_sync":
       return run.attempt.docs_with_permission_errors;
     case "group_sync":
+      return run.attempt.total_groups_failed;
     case "pruning":
-      return 0;
+      return run.attempt.docs_failed;
     case "checks":
       return checkCount(run.attempt, "failed");
   }
@@ -334,10 +325,9 @@ function RunFigures({ run }: RunFiguresProps) {
       const skipped = checkCount(attempt, "skipped");
       return (
         <>
-          <Figure
-            value={attempt.check_results.length}
-            label={t("figures.checks")}
-          />
+          <Text font="secondary-body" color="text-03">
+            {t("figures.checksRun", { count: attempt.check_results.length })}
+          </Text>
           {attempt.check_results.length > 0 && (
             <CountsRow>
               <Count
@@ -404,7 +394,7 @@ function RunFigures({ run }: RunFiguresProps) {
         <>
           <Figure
             value={attempt.total_group_memberships_synced}
-            label={t("figures.memberships")}
+            label={t("figures.synced")}
           />
           <CountsRow>
             <Count
@@ -460,8 +450,6 @@ export default function RunRow({
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
   const canceled = run.attempt.status === "canceled";
-  const stamp = (value: string) =>
-    format.dateTime(new Date(value), RUN_TIME_FORMAT);
 
   // Queued, then the live rate, then when it finished and how long it took.
   function detail(): string {
@@ -484,8 +472,8 @@ export default function RunRow({
     const finished = finishedAt(run);
     if (finished === null) return t("detail.running");
     const minutes = runMinutes(run);
-    if (minutes === null) return stamp(finished);
-    return t("detail.finished", { time: stamp(finished), minutes });
+    if (minutes === null) return formatTimestamp(finished);
+    return t("detail.finished", { time: formatTimestamp(finished), minutes });
   }
 
   const warnings = runWarnings(run);
@@ -538,7 +526,7 @@ export default function RunRow({
                   font={emphasized ? "secondary-action" : "secondary-body"}
                   color={emphasized ? "text-04" : "text-03"}
                 >
-                  {stamp(run.time_created)}
+                  {formatTimestamp(run.time_created)}
                 </Text>
               </Section>
 

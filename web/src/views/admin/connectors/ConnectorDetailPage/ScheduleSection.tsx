@@ -127,7 +127,7 @@ export default function ScheduleSection({
   const checkHours =
     check_freq === null ? null : Number((check_freq / 3600).toFixed(3));
 
-  // Whole hours read as hours, whole days as days.
+  // Whole hours read as hours, and a day reads as 24 hours.
   function minutesLabel(minutes: number): string {
     return minutes >= 60 && minutes % 60 === 0
       ? tDuration("hours", { count: minutes / 60 })
@@ -137,10 +137,7 @@ export default function ScheduleSection({
     if (hours < 1) {
       return tDuration("minutes", { count: Math.round(hours * 60) });
     }
-    const whole = Math.round(hours);
-    return whole >= 24 && whole % 24 === 0
-      ? tDuration("days", { count: whole / 24 })
-      : tDuration("hours", { count: whole });
+    return tDuration("hours", { count: Math.round(hours) });
   }
 
   // null clears the schedule, which only the check frequency allows.
@@ -176,20 +173,15 @@ export default function ScheduleSection({
     return true;
   }
 
-  const summary = format.list(
-    [
-      refreshMinutes === null
-        ? null
-        : t("refresh", { every: minutesLabel(refreshMinutes) }),
-      pruneHours === null
-        ? null
-        : t("prune", { every: hoursLabel(pruneHours) }),
-      checkHours === null
-        ? null
-        : t("checks", { every: hoursLabel(checkHours) }),
-    ].filter((part) => part !== null),
-    { type: "unit" }
-  );
+  const summary = [
+    refreshMinutes === null
+      ? null
+      : t("refresh", { every: minutesLabel(refreshMinutes) }),
+    pruneHours === null ? null : t("prune", { every: hoursLabel(pruneHours) }),
+    checkHours === null ? null : t("checks", { every: hoursLabel(checkHours) }),
+  ]
+    .filter((part) => part !== null)
+    .join("; ");
 
   return (
     <Collapsible
