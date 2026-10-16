@@ -34,6 +34,7 @@ class HubSpotRecord(BaseModel):
     properties: dict[str, str | None] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+    archived: bool = False
     # Inline association ids by object type. None when none were requested or
     # HubSpot sent none.
     associations: dict[str, HubSpotAssociationIds] | None = None
@@ -78,6 +79,7 @@ class ApiRecord(BaseModel):
     properties: dict[str, str | None] | None = None
     created_at: datetime
     updated_at: datetime
+    archived: bool | None = None
     associations: dict[str, ApiAssociationCollection] | None = None
 
 

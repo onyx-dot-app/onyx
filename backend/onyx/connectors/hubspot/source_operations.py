@@ -149,6 +149,7 @@ def _record(raw: ApiRecord) -> HubSpotRecord:
         properties=raw.properties or {},
         created_at=_utc(raw.created_at),
         updated_at=_utc(raw.updated_at),
+        archived=bool(raw.archived),
         associations=associations,
     )
 
@@ -383,6 +384,8 @@ class HubSpotSourceOperations(SourceOperations):
             f"{variant} batch read",
             self._crm(variant).batch_api.read,
             batch_read_input_simple_public_object_id=request,
+            # The listing and search skip archived records, so a read by id does too.
+            archived=False,
         )
         return [
             _record(ApiRecord.model_validate(item.to_dict()))
