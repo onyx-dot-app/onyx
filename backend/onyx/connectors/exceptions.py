@@ -94,6 +94,17 @@ class UnreachableValidationError(UnexpectedValidationError):
         super().__init__(message, summary=summary, description=description)
 
 
+class InconclusiveValidationError(UnexpectedValidationError):
+    """Raised when a probe ran, but what it sampled cannot decide: the sample
+    held nothing to test, or the source refused every try. Not proof of a
+    broken credential, and not an unknown error."""
+
+
+class NothingToCheckError(ValidationError):
+    """Raised when a full read proves the scope has nothing for the check to
+    test. The check is skipped: its row says what is missing."""
+
+
 class CredentialInvalidError(ConnectorValidationError):
     """Raised when a connector's credential is invalid."""
 

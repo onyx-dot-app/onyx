@@ -8,11 +8,16 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
+    CapabilityCheckStatus,
+    CheckErrorKind,
+    CheckNotRunReason,
     CredentialCapability,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
+    InconclusiveValidationError,
+    NothingToCheckError,
     RateLimitedValidationError,
 )
 
@@ -98,3 +103,46 @@ def test_a_not_run_row_shows_its_line() -> None:
 
     assert results["list"].summary == "Not run: Run sign_in failed"
     assert results["content"].summary == "Not run: Run sign_in failed"
+
+
+def test_an_inconclusive_sample_is_incomplete_without_a_stack_trace() -> None:
+    result = _run(
+        [
+            _Check(
+                "comments",
+                InconclusiveValidationError(
+                    "No comments.", summary="No comments found to test"
+                ),
+            )
+        ]
+    )["comments"]
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.error_kind == CheckErrorKind.INCONCLUSIVE
+    assert result.summary == "No comments found to test"
+    assert result.error_detail is None
+
+
+def test_nothing_in_scope_is_a_skipped_row_and_stops_its_dependents() -> None:
+    results = _run(
+        [
+            _Check(
+                "emails",
+                NothingToCheckError(
+                    "Groups only.",
+                    summary="No users in space permissions",
+                    description="The space grants access only to groups.",
+                ),
+            ),
+            _Check("member_emails", depends_on=("emails",)),
+        ]
+    )
+
+    emails = results["emails"]
+    assert emails.status == CapabilityCheckStatus.SKIPPED
+    assert emails.applicable
+    assert emails.not_run_reason == CheckNotRunReason.NOTHING_IN_SCOPE
+    assert emails.summary == "No users in space permissions"
+    dependent = results["member_emails"]
+    assert dependent.not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
+    assert dependent.summary == "Not run: Run emails found nothing to test"
