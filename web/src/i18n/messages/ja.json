@@ -2710,7 +2710,7 @@
           "open": "ドキュメントを開く"
         },
         "trace": {
-          "runId": "実行 ID: {id}",
+          "runId": "• 実行 ID: {id}",
           "copy": "スタックトレースをコピー"
         },
         "actions": {

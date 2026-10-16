@@ -2710,7 +2710,7 @@
           "open": "Open the document"
         },
         "trace": {
-          "runId": "Run ID: {id}",
+          "runId": "• Run ID: {id}",
           "copy": "Copy the stack trace"
         },
         "actions": {

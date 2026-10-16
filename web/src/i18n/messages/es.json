@@ -2710,7 +2710,7 @@
           "open": "Abrir el documento"
         },
         "trace": {
-          "runId": "ID de ejecución: {id}",
+          "runId": "• ID de ejecución: {id}",
           "copy": "Copiar el seguimiento de pila"
         },
         "actions": {

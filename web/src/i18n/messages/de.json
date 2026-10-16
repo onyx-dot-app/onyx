@@ -2710,7 +2710,7 @@
           "open": "Dokument öffnen"
         },
         "trace": {
-          "runId": "Lauf-ID: {id}",
+          "runId": "• Lauf-ID: {id}",
           "copy": "Stacktrace kopieren"
         },
         "actions": {

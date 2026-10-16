@@ -2710,7 +2710,7 @@
           "open": "문서 열기"
         },
         "trace": {
-          "runId": "실행 ID: {id}",
+          "runId": "• 실행 ID: {id}",
           "copy": "스택 트레이스 복사"
         },
         "actions": {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -125,6 +126,7 @@ export default function ActivityCard({
   resolving,
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
+  const [traceOpen, setTraceOpen] = useState(false);
   const tRuns = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const active = isActive(run);
@@ -251,9 +253,13 @@ export default function ActivityCard({
               wrap
             >
               {trace !== null && (
-                <Popover>
+                <Popover open={traceOpen} onOpenChange={setTraceOpen}>
                   <Popover.Trigger asChild>
-                    <Button icon={SvgTextLines} prominence="tertiary" size="xs">
+                    <Button
+                      icon={SvgTextLines}
+                      prominence={traceOpen ? "primary" : "tertiary"}
+                      size="xs"
+                    >
                       {t("tags.stackTrace")}
                     </Button>
                   </Popover.Trigger>

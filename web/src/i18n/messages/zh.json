@@ -2710,7 +2710,7 @@
           "open": "打开文档"
         },
         "trace": {
-          "runId": "运行 ID：{id}",
+          "runId": "• 运行 ID：{id}",
           "copy": "复制堆栈跟踪"
         },
         "actions": {
