@@ -2351,7 +2351,7 @@
         "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
         "runResolved": "Marked resolved.",
         "runResolveFailed": "Could not resolve: {message}",
-        "runsResolved": "Marked {count, plural, one {# run} other {# runs}} resolved."
+        "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert."
       },
       "backButton": {
         "label": "Alle Konnektoren"
@@ -2663,11 +2663,11 @@
           "resolve": "Beheben"
         },
         "resolveAll": {
-          "button": "Resolve all shown",
-          "title": "Resolve all shown runs?",
-          "description": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved. They keep their status and move under resolved.",
-          "fleetDescription": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved, on the connectors you operate. They keep their status and move under resolved.",
-          "confirm": "Resolve all"
+          "button": "Alle angezeigten beheben",
+          "title": "Alle angezeigten Läufe beheben?",
+          "description": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
+          "fleetDescription": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, auf den Connectoren, die Sie verwalten, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
+          "confirm": "Alle beheben"
         }
       },
       "stageDetails": {

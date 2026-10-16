@@ -2351,7 +2351,7 @@
         "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
         "runResolved": "Marked resolved.",
         "runResolveFailed": "Could not resolve: {message}",
-        "runsResolved": "Marked {count, plural, one {# run} other {# runs}} resolved."
+        "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。"
       },
       "backButton": {
         "label": "所有连接器"
@@ -2663,11 +2663,11 @@
           "resolve": "解决"
         },
         "resolveAll": {
-          "button": "Resolve all shown",
-          "title": "Resolve all shown runs?",
-          "description": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved. They keep their status and move under resolved.",
-          "fleetDescription": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved, on the connectors you operate. They keep their status and move under resolved.",
-          "confirm": "Resolve all"
+          "button": "解决全部显示项",
+          "title": "解决所有显示的运行？",
+          "description": "这会将符合当前筛选条件的 {count, plural, other {# 次运行}}标记为已解决。它们保留原有状态，并移到已解决下方。",
+          "fleetDescription": "这会将您可操作的连接器上符合当前筛选条件的 {count, plural, other {# 次运行}}标记为已解决。它们保留原有状态，并移到已解决下方。",
+          "confirm": "全部解决"
         }
       },
       "stageDetails": {
