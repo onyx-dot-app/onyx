@@ -24,10 +24,12 @@ import StageDetailsPopoverContent, {
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
 import ThroughputChart, {
   ThroughputWindowPicker,
+  PAIR_WINDOWS,
+  type PickerWindow,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 // The pair chart offers no last-hour window. A pair's runs are too sparse for it.
-const WINDOWS: readonly CCPairThroughputWindow[] = ["12h", "24h", "7d"];
+// All time narrows only the runs list. The chart shows its widest window.
 
 // The chart waits for the pair's first successful run.
 const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
@@ -65,6 +67,11 @@ export interface StatusCardProps {
   canOperate: boolean;
   /** Opens the checks card, from the checks icon a held pair shows in place of its stages. */
   onViewChecks: () => void;
+  /** The page's time window, shared with the runs card. */
+  timeWindow: PickerWindow;
+  onTimeWindowChange: (window: PickerWindow) => void;
+  /** Picks a chart slice to narrow the page's run lists to. */
+  onSliceClick?: (start: Date, end: Date) => void;
 }
 
 /** The pair at a glance: status, latest and total documents, its last run, and documents indexed over time. */
@@ -72,11 +79,13 @@ export default function StatusCard({
   ccPair,
   canOperate,
   onViewChecks,
+  timeWindow,
+  onTimeWindowChange,
+  onSliceClick,
 }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
   const locale = useLocale();
-  const [range, setRange] = useState<CCPairThroughputWindow>("12h");
   const [releasing, setReleasing] = useState(false);
   const hold = ccPair.indexing_hold;
 
@@ -121,6 +130,7 @@ export default function StatusCard({
   const recent = latestIndexAttempt?.total_docs_indexed ?? 0;
 
   const chart = !FIRST_RUN_STATUSES.has(ccPair.status);
+  const range = timeWindow;
 
   // The stage details popover spans the card, so the card is its anchor.
   return (
@@ -228,9 +238,9 @@ export default function StatusCard({
                   className="grow basis-0"
                 >
                   <ThroughputWindowPicker
-                    windows={WINDOWS}
-                    value={range}
-                    onChange={setRange}
+                    windows={PAIR_WINDOWS}
+                    value={timeWindow}
+                    onChange={onTimeWindowChange}
                   />
                 </Section>
               )}
@@ -243,7 +253,11 @@ export default function StatusCard({
                 height="fit"
                 className="mx-1"
               >
-                <ThroughputChart ccPairId={ccPair.id} range={range} />
+                <ThroughputChart
+                  ccPairId={ccPair.id}
+                  range={range}
+                  onSliceClick={onSliceClick}
+                />
               </Section>
             )}
           </Section>

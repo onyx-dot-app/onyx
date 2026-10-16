@@ -1,6 +1,7 @@
 """Render dynamic skill templates for the per-user skills fileset."""
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -11,18 +12,32 @@ from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.db.models import User
+from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.external_app import get_external_app_by_skill_id
+from onyx.db.gated_app import get_action_policies
+from onyx.db.models import ExternalApp, Skill, User
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
     action_policy_views,
+    get_provider_for_app,
     uses_cloud_scope,
     withheld_on_cloud,
 )
+from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
+from onyx.skills.content import iter_builtin_skill_files
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_SKILL_TEMPLATE_NAME = f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}"
+
 ACTION_AVAILABILITY_PLACEHOLDER = "{{ACTION_AVAILABILITY_SECTION}}"
+
+# ``{{APP:<key>}}`` carries a value the provider resolved from the app's own
+# configuration. An unknown key renders as ``_UNCONFIGURED_VALUE`` so a
+# half-configured app says so rather than failing the push.
+_APP_VALUE_RE = re.compile(r"\{\{APP:([A-Za-z0-9_]+)\}\}")
+_UNCONFIGURED_VALUE = "(not configured — ask an admin to finish setting up this app)"
 
 # ``{{#IF_CLOUD_SCOPE}}`` blocks render only on cloud (``uses_cloud_scope``);
 # ``{{^IF_CLOUD_SCOPE}}`` (mustache-style inverted) only elsewhere. Markers
@@ -124,14 +139,24 @@ def build_action_availability_section(
     return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
 
 
+def substitute_app_values(template: str, values: Mapping[str, str]) -> str:
+    """Fill ``{{APP:<key>}}`` from ``values``; an unknown or blank key renders
+    as ``_UNCONFIGURED_VALUE`` so a half-configured app says so."""
+    return _APP_VALUE_RE.sub(
+        lambda match: values.get(match.group(1)) or _UNCONFIGURED_VALUE, template
+    )
+
+
 def render_external_app_skill(
     template: str,
     app_type: ExternalAppType,
     stored: dict[str, EndpointPolicy],
+    app_values: Mapping[str, str] | None = None,
 ) -> str:
     """Pure template rendering for an external-app SKILL.md: apply the cloud
-    description override, resolve the cloud-scope blocks, then fill the
-    action-availability placeholder."""
+    description override, resolve the cloud-scope blocks, substitute the
+    provider's ``{{APP:<key>}}`` values, then fill the action-availability
+    placeholder."""
     is_cloud = uses_cloud_scope(app_type)
 
     cloud_description = _CLOUD_DESCRIPTION_RE.search(template)
@@ -147,6 +172,7 @@ def render_external_app_skill(
         return match.group(2) if keep else ""
 
     template = _CLOUD_SCOPE_BLOCK_RE.sub(_resolve_block, template)
+    template = substitute_app_values(template, app_values or {})
     section = build_action_availability_section(app_type, stored)
     if section:
         rendered = template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
@@ -158,4 +184,61 @@ def render_external_app_skill(
         # Fail loudly rather than ship unresolved markup to the agent.
         offending = next(line for line in rendered.splitlines() if "{{" in line)
         raise ValueError(f"Unresolved skill-template markup: {offending!r}")
+    return rendered
+
+
+def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
+    """The provider's ``{{APP:<key>}}`` values for this app row, or ``{}`` when
+    there is no row or its config no longer resolves — rendering is a read-only
+    projection, so a rejected config leaves placeholders unconfigured."""
+    if external_app is None:
+        return {}
+    provider = get_provider_for_app(external_app)
+    if provider is None:
+        return {}
+    credentials = external_app.organization_credentials.get_value(apply_mask=False)
+    # Only public fields may enter files sent to a sandbox or shown in previews.
+    public = {
+        field.key: value if isinstance(value := credentials.get(field.key), str) else ""
+        for field in provider.spec.descriptor.required_org_credential_fields
+        if not field.secret
+    }
+    try:
+        return provider.skill_template_values(public)
+    except OnyxError:
+        logger.warning(
+            "Could not resolve app config for external_app %s; rendering its "
+            "skill with unconfigured placeholders",
+            external_app.id,
+        )
+        return {}
+
+
+def render_external_app_files(
+    db_session: Session,
+    skill: Skill,
+    app_type: ExternalAppType,
+    source_dir: Path,
+) -> dict[str, str]:
+    """Every rendered file for an external-app built-in, keyed by its path in
+    the sandbox: ``SKILL.md`` plus any other ``*.template`` sibling, which is
+    how a bundled helper gets the connected account baked in rather than taking
+    it as an argument it could only ever be given one value for."""
+    external_app = get_external_app_by_skill_id(db_session, skill.id)
+    stored = (
+        get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
+        if external_app
+        else {}
+    )
+    values = _app_template_values(external_app)
+    rendered = {
+        SKILL_MD_NAME: render_external_app_skill(
+            (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, stored, values
+        )
+    }
+    for path in iter_builtin_skill_files(source_dir):
+        if path.suffix != TEMPLATE_SUFFIX or path == source_dir / _SKILL_TEMPLATE_NAME:
+            continue
+        name = path.relative_to(source_dir).with_suffix("").as_posix()
+        rendered[name] = substitute_app_values(path.read_text(), values)
     return rendered

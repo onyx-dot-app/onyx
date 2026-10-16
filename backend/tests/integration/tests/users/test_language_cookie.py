@@ -2,7 +2,8 @@
 
 The backend owns the NEXT_LOCALE cookie the web server layout reads:
 - PATCH /user/language sets it alongside the DB update
-- GET /me sets it when the request cookie disagrees with the stored preference
+- GET /me sets it when the request cookie disagrees with the effective language
+- a user without a stored preference follows Settings.default_language
 """
 
 import httpx
@@ -74,3 +75,59 @@ def test_me_reconciles_stale_locale_cookie(reset: None) -> None:  # noqa: ARG001
     )
     current.raise_for_status()
     assert _locale_cookie(current) is None
+
+
+def test_workspace_default_applies_until_user_chooses(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    def patch_settings(**settings: str | bool) -> None:
+        client.patch(
+            url=f"{API_SERVER_URL}/admin/settings",
+            json=settings,
+            headers=admin_user.headers,
+        ).raise_for_status()
+
+    patch_settings(default_language="fr", anonymous_user_enabled=True)
+    try:
+        # An anonymous visitor whose browser still carries a signed-out
+        # user's cookie is moved to the workspace default.
+        anonymous = client.get(
+            url=f"{API_SERVER_URL}/me",
+            headers={"Cookie": f"{NEXT_LOCALE_COOKIE_NAME}=ja"},
+        )
+        anonymous.raise_for_status()
+        assert anonymous.json()["is_anonymous_user"] is True
+        assert _locale_cookie(anonymous) == "fr"
+
+        # A user with no language of their own follows the workspace default.
+        user: DATestUser = UserManager.create()
+        me = client.get(url=f"{API_SERVER_URL}/me", headers=user.headers)
+        me.raise_for_status()
+        assert _locale_cookie(me) == "fr"
+        assert me.json()["preferences"]["language"] is None
+
+        # Their own choice wins over the workspace default.
+        chosen = client.patch(
+            url=f"{API_SERVER_URL}/user/language",
+            json={"language": "es"},
+            headers=user.headers,
+        )
+        chosen.raise_for_status()
+        assert _locale_cookie(chosen) == "es"
+
+        # Clearing the choice returns them to the workspace default.
+        cleared = client.patch(
+            url=f"{API_SERVER_URL}/user/language",
+            json={"language": None},
+            headers=user.headers,
+        )
+        cleared.raise_for_status()
+        assert _locale_cookie(cleared) == "fr"
+        me = client.get(url=f"{API_SERVER_URL}/me", headers=user.headers)
+        me.raise_for_status()
+        assert me.json()["preferences"]["language"] is None
+    finally:
+        # The settings record is cached outside the database the reset fixture
+        # rebuilds, so later tests would otherwise inherit these values.
+        patch_settings(default_language="en", anonymous_user_enabled=False)

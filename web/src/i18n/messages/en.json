@@ -554,9 +554,6 @@
       "loading": {
         "label": "Loading existing configuration..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth pass-through requires an OAuth-capable login method (Google or OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
         "title": "Use pass-through for services with shared identity provider."
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "Token URL",
         "required": "Token URL is required"
+      },
+      "pkce": {
+        "label": "Use PKCE",
+        "description": "Enable only when the OAuth provider supports PKCE with the S256 challenge method."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Enter valid HTTPS endpoints to check PKCE support.",
+          "checking": "Checking advertised PKCE support…",
+          "supported": "Provider advertises S256 PKCE support.",
+          "unsupported": "Provider does not advertise S256 PKCE support.",
+          "unknown": "Could not verify PKCE support. You can still choose the setting manually."
+        },
+        "description": "Tests these unsaved settings without saving configuration or tokens. Provider consent may grant this app access to your account.",
+        "testing": "Testing connection…",
+        "test": "Test connection",
+        "successPkce": "Authorization succeeded with PKCE parameters. This does not prove the provider enforces PKCE.",
+        "success": "Authorization succeeded without PKCE.",
+        "result": {
+          "blocked": "Allow popups and try again.",
+          "closed": "Test window closed or disconnected. Finish any open test, or try again.",
+          "stale": "Settings changed. Test the current settings again.",
+          "failed": "Authorization test failed. Check the settings and try again.",
+          "denied": "Provider authorization was declined or canceled.",
+          "interrupted": "The test expired or was interrupted. Start a new test."
+        },
+        "returnToSettings": "Return to the settings window to see the result.",
+        "close": "Close window"
       }
     },
     "openApiCard": {
@@ -1037,6 +1062,9 @@
         },
         "lumapps": {
           "description": "Intranet pages & communities"
+        },
+        "youtrack": {
+          "description": "Issue tracker and project management"
         },
         "canvas": {
           "description": "Courses, pages, & announcements"
@@ -1754,6 +1782,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Model used to name chat sessions. Defaults to each session's model.",
+        "resetButton": {
+          "label": "Reset"
+        },
+        "sessionModel": {
+          "label": "Use Default model"
+        },
+        "title": "Chat naming model"
+      },
+      "searchSelectionModel": {
+        "description": "Selects and checks retrieved documents. A lower-cost model can reduce search costs, but may affect answer quality.",
+        "resetButton": {
+          "label": "Reset"
+        },
+        "sessionModel": {
+          "label": "Use Default model"
+        },
+        "title": "Search selection model"
+      },
+      "taskModels": {
+        "title": "Model selection",
+        "loadFailed": "Could not load task models",
+        "retry": {
+          "label": "Retry"
+        },
+        "noProviders": {
+          "title": "Connect a language model provider"
+        },
+        "addProvider": {
+          "label": "Add Provider"
+        }
+      },
       "advanced": {
         "title": "Advanced Options"
       },
@@ -1772,13 +1833,6 @@
       "betaTag": {
         "label": "beta"
       },
-      "chatNaming": {
-        "description": "Model used to auto-name chat sessions. Defaults to each session's own model — pin a small, fast model here if your main model can't serve concurrent requests.",
-        "resetButton": {
-          "label": "Reset"
-        },
-        "title": "Chat Naming Model"
-      },
       "connectors": {
         "empty": {
           "title": "No connectors set up"
@@ -1791,6 +1845,10 @@
       "deepResearch": {
         "description": "Agentic research system that works across the web and connected sources. Uses significantly more tokens per query.",
         "title": "Deep Research"
+      },
+      "defaultLanguage": {
+        "description": "The UI language for users who have not chosen one in their own settings.",
+        "title": "Default Language"
       },
       "disableDefaultChat": {
         "description": "This forces users to always start in an agent. New chats will be created in their first pinned agent. Set featured agents to help new users get started.",
@@ -1932,11 +1990,15 @@
         "title": "Temperature Control"
       },
       "toasts": {
-        "chatNamingReset": "Chat naming reset to the session's model",
-        "chatNamingResetFailed": "Failed to reset chat naming model",
-        "chatNamingUpdateFailed": "Failed to update chat naming model",
         "chatNamingUpdated": "Chat naming model updated",
+        "chatNamingReset": "Chat naming model reset to the default model",
+        "chatNamingUpdateFailed": "Failed to update chat naming model",
+        "chatNamingResetFailed": "Failed to reset chat naming model",
         "providerResolveFailed": "Could not resolve provider",
+        "searchSelectionReset": "Search selection model reset to the default model",
+        "searchSelectionResetFailed": "Failed to reset search selection model",
+        "searchSelectionUpdateFailed": "Failed to update search selection model",
+        "searchSelectionUpdated": "Search selection model updated",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "systemPromptUpdateFailed": "Failed to update system prompt",
@@ -2218,89 +2280,24 @@
         "perBatch": {
           "empty": "No per-batch stage data recorded."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Batch load"
+        "buckets": {
+          "fetchSource": {
+            "label": "Fetch Source"
           },
-          "batchTotal": {
-            "label": "Batch total"
-          },
-          "batchUnaccounted": {
-            "label": "Unaccounted"
-          },
-          "checkpointLoad": {
-            "label": "Checkpoint load"
+          "batchPreProcessing": {
+            "label": "Batch Pre-Processing"
           },
           "chunking": {
             "label": "Chunking"
           },
-          "connectorFetch": {
-            "label": "Connector fetch"
-          },
-          "connectorValidation": {
-            "label": "Connector validation"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "Coord lock acquire wait"
-          },
-          "coordinationUpdate": {
-            "label": "Coordination update"
-          },
-          "docBatchEnqueue": {
-            "label": "Doc batch enqueue"
-          },
-          "docBatchStore": {
-            "label": "Doc batch store"
-          },
-          "docDbPrepare": {
-            "label": "Doc DB prepare"
-          },
-          "docLockAcquireWait": {
-            "label": "Doc lock acquire wait"
-          },
-          "docprocessingSetup": {
-            "label": "Docprocessing setup"
-          },
           "embedding": {
             "label": "Embedding"
           },
-          "enrichmentPrep": {
-            "label": "Enrichment prep"
-          },
-          "finalization": {
-            "label": "Finalization"
-          },
-          "gcCollect": {
-            "label": "Garbage collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Hierarchy upsert"
-          },
-          "imageProcessing": {
-            "label": "Image processing"
-          },
-          "permissionValidation": {
-            "label": "Permission validation"
-          },
-          "postIndexDbUpdate": {
-            "label": "Post-index DB update"
-          },
-          "queueWait": {
-            "label": "Queue wait"
-          },
           "vectorDbWrite": {
-            "label": "Vector DB write"
+            "label": "Vector DB Write"
           },
-          "embeddingRateLimitWait": {
-            "label": "Embedding rate limit wait",
-            "description": "Time embedding requests waited for the embedding rate limit set on Index Settings. Part of Embedding, summed over embedding threads."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Embedding provider throttle wait",
-            "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
+          "postProcessing": {
+            "label": "Post-Processing"
           }
         }
       },
@@ -2320,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "Documents indexed over time",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
-          "loadError": "The chart could not load."
+          "loadError": "The chart could not load.",
+          "rangeFilter": "Runs created in this slice of the chart"
         },
         "hold": {
           "checks_running": "Running pre-index checks",
@@ -2481,6 +2479,7 @@
           "running": "{count, plural, one {# run in progress} other {# runs in progress}}",
           "succeeded": "{count, plural, one {# run succeeded} other {# runs succeeded}}",
           "failed": "{count, plural, one {# run failed} other {# runs failed}}",
+          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# check passed} other {# checks passed}}",
           "failedChecks": "{count, plural, one {# check failed} other {# checks failed}}",
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}"
@@ -2618,7 +2617,7 @@
         "tags": {
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
-          "doc_permission_sync": "{count, plural, one {# doc failed to sync} other {# docs failed to sync}}",
+          "doc_permission_sync": "{count, plural, one {# user failed to sync} other {# users failed to sync}}",
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
@@ -2660,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "Stage Details",
+        "heading": {
+          "top": "Stage",
+          "bottom": "Details"
+        },
         "calls": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",
         "uneven": {
           "tooltip": "Batch times vary widely for this stage"
+        },
+        "clipped": {
+          "label": "Bar clipped: the max runs past the scale"
         },
         "close": "Close stage details"
       }
@@ -3261,6 +3267,19 @@
             "lang": {
               "label": "Language",
               "description": "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "Configure YouTrack connector",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack URL",
+              "description": "Your YouTrack address, e.g. https://example.youtrack.cloud. For YouTrack Server, include the context path, e.g. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projects",
+              "description": "Project short names (e.g. ABC) to index. Leave empty to index every project the token can read."
             }
           }
         },
@@ -4616,6 +4635,7 @@
         "gongBaseUrl": "Optional. For data outside the US, set your region's host, like https://[region].api.gong.io.",
         "jiraUserEmail": "Required for Jira Cloud.",
         "lumappsServiceUser": "The user to index on behalf of.",
+        "youtrackToken": "A permanent token for a YouTrack user that can read every project to index. Create it in your YouTrack profile under Account Security.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
         "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
@@ -6102,8 +6122,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Enter new API key or select existing provider",
-          "idle": "Enter a new API key or select an existing provider.",
+          "idle": "Enter your API key.",
           "label": "API Key",
           "placeholder": "Enter your API key",
           "required": "API Key is required"
@@ -6148,9 +6167,6 @@
         },
         "editHeader": {
           "title": "Edit {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "Invalid provider selection"
         },
         "loading": {
           "placeholder": "Loading..."
@@ -6814,7 +6830,7 @@
       "activities": {
         "title": "Activities",
         "history": "Full Activity History",
-        "viewLogs": "View activity history",
+        "viewLogs": "View Logs",
         "panel": {
           "title": "Activity History",
           "close": "Hide activity history"
@@ -7376,6 +7392,7 @@
         "providerDeleteFailed": "Failed to delete provider: {message}",
         "providerDeleted": "Provider deleted successfully!",
         "providerLoadFailed": "Could not load the provider: {message}",
+        "providerResolveFailed": "Could not resolve provider",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
@@ -7391,6 +7408,16 @@
           "empty": "No router models found. Enable a router model on a gateway provider first.",
           "error": "Failed to load router models.",
           "retry": "Retry"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Custom Models",
+          "companyName": "LiteLLM-compatible providers"
+        },
+        "openAICompatible": {
+          "productName": "Custom Models",
+          "companyName": "OpenAI-compatible endpoints"
         }
       }
     },
@@ -10273,8 +10300,25 @@
         },
         "validation": {
           "title": "Validation",
-          "blocks": "The new settings failed validation. Fix them before you apply.",
-          "warns": "Some optional checks failed. You can still apply.",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "The new settings failed validation. Fix them before you apply."
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
           "error": {
             "title": "The settings are not valid"
           }
@@ -13789,6 +13833,7 @@
           "askOption": "Ask",
           "autoApproveOption": "Auto-approve",
           "customOption": "Custom",
+          "defaultOption": "Default",
           "description": "Choose what the agent may do. “Ask” prompts you in chat before each action runs; “Auto-approve” lets it run without prompting. Use Advanced to set a policy per action.",
           "title": "Permissions"
         },
@@ -15596,7 +15641,8 @@
       "title": "Language",
       "toasts": {
         "updateFailed": "Failed to update language preference"
-      }
+      },
+      "workspaceDefault": "Default ({language})"
     },
     "layout": {
       "header": {

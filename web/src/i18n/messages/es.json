@@ -554,9 +554,6 @@
       "loading": {
         "label": "Cargando la configuración existente..."
       },
-      "oauthLoginNotice": {
-        "description": "El paso directo de OAuth requiere un método de inicio de sesión compatible con OAuth (Google u OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} reenviará el token de acceso de OAuth del usuario directamente al servidor como cabecera Authorization. Asegúrate de que el servidor admite la autenticación con el mismo proveedor.",
         "title": "Usa el paso directo para servicios que comparten el proveedor de identidad."
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "URL del token",
         "required": "La URL del token es obligatoria"
+      },
+      "pkce": {
+        "label": "Usar PKCE",
+        "description": "Activa esta opción solo si el proveedor de OAuth admite PKCE con el método de desafío S256."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Introduce direcciones HTTPS válidas para comprobar la compatibilidad con PKCE.",
+          "checking": "Comprobando la compatibilidad anunciada con PKCE…",
+          "supported": "El proveedor anuncia compatibilidad con S256 PKCE.",
+          "unsupported": "El proveedor no anuncia compatibilidad con S256 PKCE.",
+          "unknown": "No se pudo verificar la compatibilidad con PKCE. Puedes elegir la opción manualmente."
+        },
+        "description": "Prueba estos ajustes sin guardar la configuración ni los tokens. El consentimiento del proveedor puede dar a esta aplicación acceso a tu cuenta.",
+        "testing": "Probando conexión…",
+        "test": "Probar conexión",
+        "successPkce": "Autorización correcta con parámetros PKCE. Esto no demuestra que el proveedor exija PKCE.",
+        "success": "Autorización correcta sin PKCE.",
+        "result": {
+          "blocked": "Permite las ventanas emergentes e inténtalo de nuevo.",
+          "closed": "La ventana de prueba se cerró o se desconectó. Finaliza cualquier prueba abierta o inténtalo de nuevo.",
+          "stale": "Los ajustes cambiaron. Vuelve a probar los ajustes actuales.",
+          "failed": "La prueba de autorización falló. Comprueba los ajustes e inténtalo de nuevo.",
+          "denied": "La autorización del proveedor fue rechazada o cancelada.",
+          "interrupted": "La prueba caducó o se interrumpió. Inicia una nueva prueba."
+        },
+        "returnToSettings": "Vuelve a la ventana de ajustes para ver el resultado.",
+        "close": "Cerrar ventana"
       }
     },
     "openApiCard": {
@@ -1037,6 +1062,9 @@
         },
         "lumapps": {
           "description": "Páginas y comunidades de la intranet"
+        },
+        "youtrack": {
+          "description": "Gestor de incidencias y de proyectos"
         },
         "canvas": {
           "description": "Cursos, páginas y anuncios"
@@ -1754,6 +1782,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Modelo para nombrar las sesiones de chat. Por defecto, usa el modelo de cada sesión.",
+        "resetButton": {
+          "label": "Restablecer"
+        },
+        "sessionModel": {
+          "label": "Usar modelo predeterminado"
+        },
+        "title": "Modelo de títulos de chat"
+      },
+      "searchSelectionModel": {
+        "description": "Selecciona y comprueba los documentos recuperados. Un modelo más económico puede reducir los costes de búsqueda, pero puede afectar a la calidad de las respuestas.",
+        "resetButton": {
+          "label": "Restablecer"
+        },
+        "sessionModel": {
+          "label": "Usar modelo predeterminado"
+        },
+        "title": "Modelo de selección de búsqueda"
+      },
+      "taskModels": {
+        "title": "Selección de modelos",
+        "loadFailed": "No se pudieron cargar los modelos de tareas",
+        "retry": {
+          "label": "Reintentar"
+        },
+        "noProviders": {
+          "title": "Conecta un proveedor de modelos de lenguaje"
+        },
+        "addProvider": {
+          "label": "Añadir proveedor"
+        }
+      },
       "advanced": {
         "title": "Opciones avanzadas"
       },
@@ -1772,13 +1833,6 @@
       "betaTag": {
         "label": "beta"
       },
-      "chatNaming": {
-        "description": "Modelo que se usa para nombrar automáticamente las sesiones de chat. De forma predeterminada usa el modelo de cada sesión: fija aquí un modelo pequeño y rápido si tu modelo principal no puede atender solicitudes simultáneas.",
-        "resetButton": {
-          "label": "Restablecer"
-        },
-        "title": "Modelo para nombrar chats"
-      },
       "connectors": {
         "empty": {
           "title": "No hay conectores configurados"
@@ -1791,6 +1845,10 @@
       "deepResearch": {
         "description": "Sistema de investigación agéntica que trabaja en la web y en las fuentes conectadas. Usa muchos más tokens por consulta.",
         "title": "Investigación profunda"
+      },
+      "defaultLanguage": {
+        "description": "El idioma de la interfaz para los usuarios que no han elegido uno en su configuración.",
+        "title": "Idioma predeterminado"
       },
       "disableDefaultChat": {
         "description": "Esto obliga a los usuarios a empezar siempre dentro de un agente. Los chats nuevos se crearán en su primer agente fijado. Destaca algunos agentes para ayudar a los usuarios nuevos a empezar.",
@@ -1932,11 +1990,15 @@
         "title": "Control de la temperatura"
       },
       "toasts": {
-        "chatNamingReset": "Los chats se nombrarán de nuevo con el modelo de la sesión",
-        "chatNamingResetFailed": "No se pudo restablecer el modelo para nombrar chats",
-        "chatNamingUpdateFailed": "No se pudo actualizar el modelo para nombrar chats",
         "chatNamingUpdated": "Modelo para nombrar chats actualizado",
+        "chatNamingReset": "Modelo para nombrar chats restablecido al modelo predeterminado",
+        "chatNamingUpdateFailed": "No se pudo actualizar el modelo para nombrar chats",
+        "chatNamingResetFailed": "No se pudo restablecer el modelo para nombrar chats",
         "providerResolveFailed": "No se pudo resolver el proveedor",
+        "searchSelectionReset": "Modelo de selección de búsqueda restablecido al modelo predeterminado",
+        "searchSelectionResetFailed": "No se pudo restablecer el modelo de selección de búsqueda",
+        "searchSelectionUpdateFailed": "No se pudo actualizar el modelo de selección de búsqueda",
+        "searchSelectionUpdated": "Modelo de selección de búsqueda actualizado",
         "settingsUpdateFailed": "No se pudo actualizar la configuración",
         "settingsUpdated": "Configuración actualizada",
         "systemPromptUpdateFailed": "No se pudo actualizar el prompt del sistema",
@@ -2218,89 +2280,24 @@
         "perBatch": {
           "empty": "No se registraron datos de etapa por lote."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Carga del lote"
+        "buckets": {
+          "fetchSource": {
+            "label": "Obtención de la fuente"
           },
-          "batchTotal": {
-            "label": "Total del lote"
-          },
-          "batchUnaccounted": {
-            "label": "Sin asignar"
-          },
-          "checkpointLoad": {
-            "label": "Carga del checkpoint"
+          "batchPreProcessing": {
+            "label": "Preprocesamiento de lotes"
           },
           "chunking": {
             "label": "División en fragmentos"
           },
-          "connectorFetch": {
-            "label": "Obtención del conector"
-          },
-          "connectorValidation": {
-            "label": "Validación del conector"
-          },
-          "contextualRag": {
-            "label": "RAG contextual"
-          },
-          "coordLockAcquireWait": {
-            "label": "Espera del bloqueo de coordinación"
-          },
-          "coordinationUpdate": {
-            "label": "Actualización de coordinación"
-          },
-          "docBatchEnqueue": {
-            "label": "Encolado del lote de documentos"
-          },
-          "docBatchStore": {
-            "label": "Almacenamiento del lote de documentos"
-          },
-          "docDbPrepare": {
-            "label": "Preparación de la BD de documentos"
-          },
-          "docLockAcquireWait": {
-            "label": "Espera del bloqueo de documento"
-          },
-          "docprocessingSetup": {
-            "label": "Preparación de docprocessing"
-          },
           "embedding": {
             "label": "Embeddings"
-          },
-          "enrichmentPrep": {
-            "label": "Preparación del enriquecimiento"
-          },
-          "finalization": {
-            "label": "Finalización"
-          },
-          "gcCollect": {
-            "label": "Recolección de basura"
-          },
-          "hierarchyUpsert": {
-            "label": "Escritura de la jerarquía"
-          },
-          "imageProcessing": {
-            "label": "Procesamiento de imágenes"
-          },
-          "permissionValidation": {
-            "label": "Validación de permisos"
-          },
-          "postIndexDbUpdate": {
-            "label": "Actualización de la BD tras la indexación"
-          },
-          "queueWait": {
-            "label": "Espera en la cola"
           },
           "vectorDbWrite": {
             "label": "Escritura en la BD vectorial"
           },
-          "embeddingRateLimitWait": {
-            "label": "Espera por límite de embeddings",
-            "description": "Tiempo que las solicitudes de embedding esperaron por el límite configurado en Configuración de índice. Forma parte de Embedding y se suma entre los hilos de embedding."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Espera por límite del proveedor",
-            "description": "Tiempo que las solicitudes de embedding esperaron después de que el proveedor de embeddings las limitara. Forma parte de Embedding y se suma entre los hilos de embedding."
+          "postProcessing": {
+            "label": "Posprocesamiento"
           }
         }
       },
@@ -2320,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "Documentos indexados a lo largo del tiempo",
           "tooltip": "{count, plural, one {# documento} other {# documentos}}",
-          "loadError": "No se pudo cargar el gráfico."
+          "loadError": "No se pudo cargar el gráfico.",
+          "rangeFilter": "Ejecuciones creadas en este tramo del gráfico"
         },
         "hold": {
           "checks_running": "Ejecutando comprobaciones previas a la indexación",
@@ -2481,6 +2479,7 @@
           "running": "{count, plural, one {# ejecución en curso} other {# ejecuciones en curso}}",
           "succeeded": "{count, plural, one {# ejecución correcta} other {# ejecuciones correctas}}",
           "failed": "{count, plural, one {# ejecución fallida} other {# ejecuciones fallidas}}",
+          "canceled": "{count, plural, one {# ejecución cancelada} other {# ejecuciones canceladas}}",
           "passedChecks": "{count, plural, one {# comprobación superada} other {# comprobaciones superadas}}",
           "failedChecks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
           "skippedChecks": "{count, plural, one {# comprobación omitida} other {# comprobaciones omitidas}}"
@@ -2618,7 +2617,7 @@
         "tags": {
           "stackTrace": "Seguimiento de pila",
           "indexing": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
-          "doc_permission_sync": "{count, plural, one {# documento no se sincronizó} other {# documentos no se sincronizaron}}",
+          "doc_permission_sync": "{count, plural, one {# usuario no se sincronizó} other {# usuarios no se sincronizaron}}",
           "group_sync": "{count, plural, one {# grupo no se sincronizó} other {# grupos no se sincronizaron}}",
           "resolvedDocs": "{count, plural, one {# documento resuelto} other {# documentos resueltos}}",
           "pruning": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
@@ -2660,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "Detalles de etapas",
+        "heading": {
+          "top": "Detalles",
+          "bottom": "de etapas"
+        },
         "calls": "Lotes",
         "averageTime": "Tiempo medio",
         "maxTime": "Tiempo máximo",
         "uneven": {
           "tooltip": "Los tiempos por lote varían mucho en esta etapa"
+        },
+        "clipped": {
+          "label": "Barra recortada: el máximo supera la escala"
         },
         "close": "Cerrar detalles de etapas"
       }
@@ -3261,6 +3267,19 @@
             "lang": {
               "label": "Idioma",
               "description": "Idioma usado para el título/cuerpo del contenido y las etiquetas de metadatos (ISO 639-1, p. ej. en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "Configurar el conector de YouTrack",
+          "fields": {
+            "base_url": {
+              "label": "URL de YouTrack",
+              "description": "Su dirección de YouTrack, p. ej. https://example.youtrack.cloud. Para YouTrack Server, incluya la ruta de contexto, p. ej. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Proyectos",
+              "description": "Nombres cortos de los proyectos que se indexarán (p. ej. ABC). Déjelo vacío para indexar todos los proyectos que el token puede leer."
             }
           }
         },
@@ -4616,6 +4635,7 @@
         "gongBaseUrl": "Opcional. Para datos fuera de EE. UU., indica el host de tu región, como https://[region].api.gong.io.",
         "jiraUserEmail": "Obligatorio para Jira Cloud.",
         "lumappsServiceUser": "El usuario en cuyo nombre se indexa.",
+        "youtrackToken": "Un token permanente de un usuario de YouTrack que puede leer todos los proyectos que se indexarán. Créelo en su perfil de YouTrack, en Seguridad de la cuenta.",
         "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
         "pfxFile": "Sube el archivo `.pfx` que contiene la clave privada del registro de la aplicación. Debe ocupar menos de 10 KB.",
         "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io.",
@@ -6102,8 +6122,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Introduce una nueva clave de API o selecciona un proveedor existente",
-          "idle": "Introduce una nueva clave de API o selecciona un proveedor existente.",
+          "idle": "Introduce tu clave de API.",
           "label": "Clave de API",
           "placeholder": "Introduce tu clave de API",
           "required": "La clave de API es obligatoria"
@@ -6148,9 +6167,6 @@
         },
         "editHeader": {
           "title": "Editar {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "Selección de proveedor no válida"
         },
         "loading": {
           "placeholder": "Cargando..."
@@ -6814,7 +6830,7 @@
       "activities": {
         "title": "Actividades",
         "history": "Historial completo de actividad",
-        "viewLogs": "Ver el historial de actividad",
+        "viewLogs": "Ver registros",
         "panel": {
           "title": "Historial de actividad",
           "close": "Ocultar el historial de actividad"
@@ -7376,6 +7392,7 @@
         "providerDeleteFailed": "No se pudo eliminar el proveedor: {message}",
         "providerDeleted": "¡Proveedor eliminado correctamente!",
         "providerLoadFailed": "No se pudo cargar el proveedor: {message}",
+        "providerResolveFailed": "No se pudo resolver el proveedor",
         "settingsUpdateFailed": "No se pudo actualizar la configuración",
         "settingsUpdated": "Configuración actualizada",
         "unknownError": "Error desconocido"
@@ -7391,6 +7408,16 @@
           "empty": "No se encontraron modelos de router. Primero habilite un modelo de router en un proveedor de puerta de enlace.",
           "error": "No se pudieron cargar los modelos de enrutamiento.",
           "retry": "Reintentar"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Modelos personalizados",
+          "companyName": "Proveedores compatibles con LiteLLM"
+        },
+        "openAICompatible": {
+          "productName": "Modelos personalizados",
+          "companyName": "Endpoints compatibles con OpenAI"
         }
       }
     },
@@ -10273,8 +10300,25 @@
         },
         "validation": {
           "title": "Validación",
-          "blocks": "La nueva configuración no superó la validación. Corrígela antes de aplicar.",
-          "warns": "Algunas comprobaciones opcionales fallaron. Aún puedes aplicar.",
+          "unchanged": "La configuración que requiere validación no ha cambiado.",
+          "outcome": {
+            "failed": {
+              "title": "La validación falló",
+              "description": "La nueva configuración no superó la validación. Corrígela antes de aplicar."
+            },
+            "warnings": {
+              "title": "Validación superada con advertencias",
+              "description": "Algunas comprobaciones opcionales fallaron o no se pudieron verificar. Aún puedes aplicar los cambios."
+            },
+            "incomplete": {
+              "title": "La validación no terminó",
+              "description": "Las comprobaciones terminadas se superaron. Aún puedes aplicar los cambios."
+            },
+            "passed": {
+              "title": "Validación superada",
+              "description": "La nueva configuración superó todas las comprobaciones."
+            }
+          },
           "error": {
             "title": "La configuración no es válida"
           }
@@ -13789,6 +13833,7 @@
           "askOption": "Preguntar",
           "autoApproveOption": "Aprobar automáticamente",
           "customOption": "Personalizado",
+          "defaultOption": "Predeterminado",
           "description": "Elige qué puede hacer el agente. «Preguntar» te consulta en el chat antes de ejecutar cada acción; «Aprobar automáticamente» la ejecuta sin preguntar. Usa Avanzado para definir una política por acción.",
           "title": "Permisos"
         },
@@ -15596,7 +15641,8 @@
       "title": "Idioma",
       "toasts": {
         "updateFailed": "No se pudo actualizar la preferencia de idioma"
-      }
+      },
+      "workspaceDefault": "Predeterminado ({language})"
     },
     "layout": {
       "header": {

@@ -8,6 +8,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
     canonical_json_fingerprint,
+    generate_authorization_state,
 )
 from onyx.oauth.models import AuthorizationAttempt
 from tests.unit.fakes import FakeCache
@@ -57,18 +58,30 @@ def test_store_uses_cache_provider_and_default_ttl() -> None:
         payload_type=_Payload,
     )
 
-    attempt = store.store(owner_id="user-1", payload=_Payload(target_id=1))
+    attempt = store.store(
+        state=generate_authorization_state(),
+        owner_id="user-1",
+        payload=_Payload(target_id=1),
+    )
 
     assert set(cache.expiries.values()) == {600}
     assert store.consume(owner_id="user-1", state=attempt.state) == attempt
 
 
-def test_store_generates_isolated_one_time_attempts() -> None:
+def test_store_preserves_isolated_one_time_attempts() -> None:
     cache = FakeCache()
     store = _store(cache)
 
-    first = store.store(owner_id="user-1", payload=_Payload(target_id=1))
-    second = store.store(owner_id="user-1", payload=_Payload(target_id=2))
+    first = store.store(
+        state=generate_authorization_state(),
+        owner_id="user-1",
+        payload=_Payload(target_id=1),
+    )
+    second = store.store(
+        state=generate_authorization_state(),
+        owner_id="user-1",
+        payload=_Payload(target_id=2),
+    )
 
     assert first.state != second.state
     assert set(cache.expiries.values()) == {300}
@@ -127,7 +140,11 @@ def test_same_state_is_isolated_between_owners() -> None:
 
 def test_attempt_supports_unicode_owner_id() -> None:
     store = _store(FakeCache())
-    attempt = store.store(owner_id="用户-1", payload=_Payload(target_id=1))
+    attempt = store.store(
+        state=generate_authorization_state(),
+        owner_id="用户-1",
+        payload=_Payload(target_id=1),
+    )
 
     assert store.consume(owner_id="用户-1", state=attempt.state) == attempt
 
@@ -221,7 +238,11 @@ def test_consume_rejects_and_removes_tampered_envelope(
 def test_consume_rejects_expired_attempt_after_atomic_removal() -> None:
     cache = FakeCache()
     store = _store(cache)
-    attempt = store.store(owner_id="user-1", payload=_Payload(target_id=1))
+    attempt = store.store(
+        state=generate_authorization_state(),
+        owner_id="user-1",
+        payload=_Payload(target_id=1),
+    )
     key = next(iter(cache.store))
     cache.store[key] = (
         attempt.model_copy(

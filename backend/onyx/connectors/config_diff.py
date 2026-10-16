@@ -209,18 +209,6 @@ def _validate(
         return None
 
 
-def classify_source_config_change(
-    source: DocumentSource,
-    old_config: dict[str, Any],
-    new_config: dict[str, Any],
-    override: ConnectorChangeOverride | None = None,
-) -> list[ConfigFieldChange]:
-    """``classify_config_change`` with the source's config class."""
-    return classify_config_change(
-        CONNECTOR_CLASS_MAP[source].config_class, old_config, new_config, override
-    )
-
-
 def rule_change_override(
     config_class: type[ConnectorConfig],
     old_config: dict[str, Any],
@@ -365,18 +353,6 @@ def classify_config_change(
         )
 
     return changes
-
-
-def build_source_scoped_backfill_config(
-    source: DocumentSource,
-    old_config: dict[str, Any],
-    new_config: dict[str, Any],
-    override: ConnectorChangeOverride | None = None,
-) -> dict[str, Any] | None:
-    """``build_scoped_backfill_config`` with the source's config class."""
-    return build_scoped_backfill_config(
-        CONNECTOR_CLASS_MAP[source].config_class, old_config, new_config, override
-    )
 
 
 def build_scoped_backfill_config(

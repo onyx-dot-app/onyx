@@ -8,6 +8,7 @@ from onyx.auth.login_claims_capture import get_idp_profile
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.enums import SupportedLanguage
 from onyx.db.models import Memory, User
+from onyx.server.settings.store import resolve_user_language
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -66,8 +67,9 @@ class UserMemoryContext(BaseModel):
 
 
 def supported_language_or_none(code: str | None) -> SupportedLanguage | None:
-    """The column is written through the enum, so any other value is stale or
-    corrupt data. It is logged and dropped rather than allowed to break chat."""
+    """User.language and Settings.default_language are both written through
+    the enum, so any other value is stale or corrupt data. It is logged and
+    dropped rather than allowed to break chat."""
     if not code:
         return None
     try:
@@ -96,7 +98,7 @@ def get_memories(user: User, db_session: Session) -> UserMemoryContext:
         email=user.email,
         organization_profile=profile_views.fields,
         placeholder_values=placeholder_values,
-        language=supported_language_or_none(user.language),
+        language=supported_language_or_none(resolve_user_language(user.language)),
     )
 
     user_preferences = None

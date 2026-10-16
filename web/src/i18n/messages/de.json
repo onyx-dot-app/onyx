@@ -554,9 +554,6 @@
       "loading": {
         "label": "Vorhandene Konfiguration wird geladen..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth Pass-through erfordert eine OAuth-fähige Anmeldemethode (Google oder OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} leitet das OAuth-Zugriffstoken des Benutzers direkt als Authorization-Header an den Server weiter. Stellen Sie sicher, dass der Server die Authentifizierung mit demselben Anbieter unterstützt.",
         "title": "Verwenden Sie Pass-through für Dienste mit gemeinsamem Identitätsanbieter."
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "Token-URL",
         "required": "Die Token-URL ist erforderlich"
+      },
+      "pkce": {
+        "label": "PKCE verwenden",
+        "description": "Nur aktivieren, wenn der OAuth-Anbieter PKCE mit der Challenge-Methode S256 unterstützt."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Geben Sie gültige HTTPS-Endpunkte ein, um die PKCE-Unterstützung zu prüfen.",
+          "checking": "Angegebene PKCE-Unterstützung wird geprüft…",
+          "supported": "Der Anbieter gibt Unterstützung für S256 PKCE an.",
+          "unsupported": "Der Anbieter gibt keine Unterstützung für S256 PKCE an.",
+          "unknown": "PKCE-Unterstützung konnte nicht geprüft werden. Sie können die Einstellung weiterhin manuell wählen."
+        },
+        "description": "Testet diese ungespeicherten Einstellungen, ohne Konfiguration oder Tokens zu speichern. Die Zustimmung kann dieser App Zugriff auf Ihr Konto gewähren.",
+        "testing": "Verbindung wird getestet…",
+        "test": "Verbindung testen",
+        "successPkce": "Autorisierung mit PKCE-Parametern erfolgreich. Dies beweist nicht, dass der Anbieter PKCE erzwingt.",
+        "success": "Autorisierung ohne PKCE erfolgreich.",
+        "result": {
+          "blocked": "Erlauben Sie Pop-ups und versuchen Sie es erneut.",
+          "closed": "Das Testfenster wurde geschlossen oder getrennt. Schließen Sie einen noch offenen Test ab oder versuchen Sie es erneut.",
+          "stale": "Einstellungen geändert. Testen Sie die aktuellen Einstellungen erneut.",
+          "failed": "Autorisierungstest fehlgeschlagen. Prüfen Sie die Einstellungen und versuchen Sie es erneut.",
+          "denied": "Die Autorisierung beim Anbieter wurde abgelehnt oder abgebrochen.",
+          "interrupted": "Der Test ist abgelaufen oder wurde unterbrochen. Starten Sie einen neuen Test."
+        },
+        "returnToSettings": "Kehren Sie zum Einstellungsfenster zurück, um das Ergebnis zu sehen.",
+        "close": "Fenster schließen"
       }
     },
     "openApiCard": {
@@ -1037,6 +1062,9 @@
         },
         "lumapps": {
           "description": "Intranet-Seiten und Communities"
+        },
+        "youtrack": {
+          "description": "Issue-Tracker und Projektmanagement"
         },
         "canvas": {
           "description": "Kurse, Seiten und Ankündigungen"
@@ -1754,6 +1782,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Modell zum Benennen von Chats. Standardmäßig wird das Modell der jeweiligen Sitzung verwendet.",
+        "resetButton": {
+          "label": "Zurücksetzen"
+        },
+        "sessionModel": {
+          "label": "Standardmodell verwenden"
+        },
+        "title": "Modell zur Chat-Benennung"
+      },
+      "searchSelectionModel": {
+        "description": "Wählt abgerufene Dokumente aus und prüft sie. Ein günstigeres Modell kann Suchkosten senken, aber die Antwortqualität beeinträchtigen.",
+        "resetButton": {
+          "label": "Zurücksetzen"
+        },
+        "sessionModel": {
+          "label": "Standardmodell verwenden"
+        },
+        "title": "Modell für die Dokumentauswahl"
+      },
+      "taskModels": {
+        "title": "Modellauswahl",
+        "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
+        "retry": {
+          "label": "Erneut versuchen"
+        },
+        "noProviders": {
+          "title": "Verbinden Sie einen Sprachmodellanbieter"
+        },
+        "addProvider": {
+          "label": "Anbieter hinzufügen"
+        }
+      },
       "advanced": {
         "title": "Erweiterte Optionen"
       },
@@ -1772,13 +1833,6 @@
       "betaTag": {
         "label": "Beta"
       },
-      "chatNaming": {
-        "description": "Modell, das Chat-Sitzungen automatisch benennt. Standardmäßig wird das Modell der jeweiligen Sitzung verwendet — legen Sie hier ein kleines, schnelles Modell fest, wenn Ihr Hauptmodell keine gleichzeitigen Anfragen bedienen kann.",
-        "resetButton": {
-          "label": "Zurücksetzen"
-        },
-        "title": "Modell für die Chat-Benennung"
-      },
       "connectors": {
         "empty": {
           "title": "Keine Konnektoren eingerichtet"
@@ -1791,6 +1845,10 @@
       "deepResearch": {
         "description": "Agentisches Recherchesystem, das im Web und in verbundenen Quellen arbeitet. Verbraucht deutlich mehr Token pro Abfrage.",
         "title": "Deep Research"
+      },
+      "defaultLanguage": {
+        "description": "Die Sprache der Benutzeroberfläche für Benutzer, die in ihren Einstellungen keine gewählt haben.",
+        "title": "Standardsprache"
       },
       "disableDefaultChat": {
         "description": "Dadurch starten Benutzer immer in einem Agenten. Neue Chats werden in ihrem ersten angehefteten Agenten erstellt. Legen Sie empfohlene Agenten fest, um neuen Benutzern den Einstieg zu erleichtern.",
@@ -1932,11 +1990,15 @@
         "title": "Temperatursteuerung"
       },
       "toasts": {
-        "chatNamingReset": "Die Chat-Benennung wurde auf das Modell der Sitzung zurückgesetzt",
-        "chatNamingResetFailed": "Das Modell für die Chat-Benennung konnte nicht zurückgesetzt werden",
-        "chatNamingUpdateFailed": "Das Modell für die Chat-Benennung konnte nicht aktualisiert werden",
-        "chatNamingUpdated": "Modell für die Chat-Benennung aktualisiert",
+        "chatNamingUpdated": "Modell zur Chat-Benennung aktualisiert",
+        "chatNamingReset": "Modell zur Chat-Benennung auf das Standardmodell zurückgesetzt",
+        "chatNamingUpdateFailed": "Modell zur Chat-Benennung konnte nicht aktualisiert werden",
+        "chatNamingResetFailed": "Modell zur Chat-Benennung konnte nicht zurückgesetzt werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
+        "searchSelectionReset": "Modell für die Dokumentauswahl auf das Standardmodell zurückgesetzt",
+        "searchSelectionResetFailed": "Modell für die Dokumentauswahl konnte nicht zurückgesetzt werden",
+        "searchSelectionUpdateFailed": "Modell für die Dokumentauswahl konnte nicht aktualisiert werden",
+        "searchSelectionUpdated": "Modell für die Dokumentauswahl aktualisiert",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "settingsUpdated": "Einstellungen aktualisiert",
         "systemPromptUpdateFailed": "Der System-Prompt konnte nicht aktualisiert werden",
@@ -2218,89 +2280,24 @@
         "perBatch": {
           "empty": "Keine Phasendaten pro Batch aufgezeichnet."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Batch laden"
+        "buckets": {
+          "fetchSource": {
+            "label": "Quellabruf"
           },
-          "batchTotal": {
-            "label": "Batch gesamt"
-          },
-          "batchUnaccounted": {
-            "label": "Nicht zugeordnet"
-          },
-          "checkpointLoad": {
-            "label": "Checkpoint laden"
+          "batchPreProcessing": {
+            "label": "Batch-Vorverarbeitung"
           },
           "chunking": {
             "label": "Chunking"
           },
-          "connectorFetch": {
-            "label": "Konnektor-Abruf"
-          },
-          "connectorValidation": {
-            "label": "Konnektor-Prüfung"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "Wartezeit auf Koordinationssperre"
-          },
-          "coordinationUpdate": {
-            "label": "Koordinationsaktualisierung"
-          },
-          "docBatchEnqueue": {
-            "label": "Dokument-Batch einreihen"
-          },
-          "docBatchStore": {
-            "label": "Dokument-Batch speichern"
-          },
-          "docDbPrepare": {
-            "label": "Dokument-DB vorbereiten"
-          },
-          "docLockAcquireWait": {
-            "label": "Wartezeit auf Dokumentsperre"
-          },
-          "docprocessingSetup": {
-            "label": "Docprocessing-Einrichtung"
-          },
           "embedding": {
             "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "Anreicherung vorbereiten"
-          },
-          "finalization": {
-            "label": "Abschluss"
-          },
-          "gcCollect": {
-            "label": "Garbage Collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Hierarchie-Upsert"
-          },
-          "imageProcessing": {
-            "label": "Bildverarbeitung"
-          },
-          "permissionValidation": {
-            "label": "Berechtigungsprüfung"
-          },
-          "postIndexDbUpdate": {
-            "label": "DB-Aktualisierung nach Indizierung"
-          },
-          "queueWait": {
-            "label": "Warteschlangenzeit"
           },
           "vectorDbWrite": {
             "label": "Schreiben in Vektor-DB"
           },
-          "embeddingRateLimitWait": {
-            "label": "Wartezeit Embedding-Ratenlimit",
-            "description": "Zeit, die Embedding-Anfragen auf das in den Index-Einstellungen festgelegte Ratenlimit gewartet haben. Teil von Embedding, summiert über Embedding-Threads."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Wartezeit Anbieter-Drosselung",
-            "description": "Zeit, die Embedding-Anfragen gewartet haben, nachdem der Embedding-Anbieter sie gedrosselt hat. Teil von Embedding, summiert über Embedding-Threads."
+          "postProcessing": {
+            "label": "Nachverarbeitung"
           }
         }
       },
@@ -2320,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "Indizierte Dokumente im Zeitverlauf",
           "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
-          "loadError": "Das Diagramm konnte nicht geladen werden."
+          "loadError": "Das Diagramm konnte nicht geladen werden.",
+          "rangeFilter": "In diesem Abschnitt des Diagramms erstellte Läufe"
         },
         "hold": {
           "checks_running": "Vorab-Prüfungen laufen",
@@ -2481,6 +2479,7 @@
           "running": "{count, plural, one {# Lauf aktiv} other {# Läufe aktiv}}",
           "succeeded": "{count, plural, one {# Lauf erfolgreich} other {# Läufe erfolgreich}}",
           "failed": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}",
+          "canceled": "{count, plural, one {# Lauf abgebrochen} other {# Läufe abgebrochen}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
@@ -2618,7 +2617,7 @@
         "tags": {
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
-          "doc_permission_sync": "{count, plural, one {# Dokument nicht synchronisiert} other {# Dokumente nicht synchronisiert}}",
+          "doc_permission_sync": "{count, plural, one {# Benutzer nicht synchronisiert} other {# Benutzer nicht synchronisiert}}",
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
@@ -2660,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "Phasendetails",
+        "heading": {
+          "top": "Phasen",
+          "bottom": "Details"
+        },
         "calls": "Batches",
         "averageTime": "Durchschnittszeit",
         "maxTime": "Maximalzeit",
         "uneven": {
           "tooltip": "Die Batch-Zeiten dieser Phase schwanken stark"
+        },
+        "clipped": {
+          "label": "Balken gekürzt: Das Maximum liegt außerhalb der Skala"
         },
         "close": "Phasendetails schließen"
       }
@@ -3261,6 +3267,19 @@
             "lang": {
               "label": "Sprache",
               "description": "Sprache für Titel/Text von Inhalten und Metadaten-Labels (ISO 639-1, z. B. en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "YouTrack-Connector konfigurieren",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack-URL",
+              "description": "Ihre YouTrack-Adresse, z. B. https://example.youtrack.cloud. Geben Sie bei YouTrack Server den Kontextpfad an, z. B. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projekte",
+              "description": "Kurznamen der zu indexierenden Projekte (z. B. ABC). Leer lassen, um alle Projekte zu indexieren, die das Token lesen kann."
             }
           }
         },
@@ -4616,6 +4635,7 @@
         "gongBaseUrl": "Optional. Für Daten außerhalb der USA gib den Host deiner Region an, z. B. https://[region].api.gong.io.",
         "jiraUserEmail": "Erforderlich für Jira Cloud.",
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indiziert wird.",
+        "youtrackToken": "Ein permanentes Token eines YouTrack-Benutzers, der alle zu indexierenden Projekte lesen kann. Erstellen Sie es in Ihrem YouTrack-Profil unter Kontosicherheit.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
         "pfxFile": "Lade die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
@@ -6102,8 +6122,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Neuen API-Schlüssel eingeben oder vorhandenen Anbieter auswählen",
-          "idle": "Geben Sie einen neuen API-Schlüssel ein oder wählen Sie einen vorhandenen Anbieter.",
+          "idle": "Geben Sie Ihren API-Schlüssel ein.",
           "label": "API-Schlüssel",
           "placeholder": "Geben Sie Ihren API-Schlüssel ein",
           "required": "API-Schlüssel ist erforderlich"
@@ -6148,9 +6167,6 @@
         },
         "editHeader": {
           "title": "{title} bearbeiten"
-        },
-        "invalidProviderSelection": {
-          "message": "Ungültige Anbieterauswahl"
         },
         "loading": {
           "placeholder": "Wird geladen..."
@@ -6814,7 +6830,7 @@
       "activities": {
         "title": "Aktivitäten",
         "history": "Vollständiger Aktivitätsverlauf",
-        "viewLogs": "Aktivitätsverlauf anzeigen",
+        "viewLogs": "Logs anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
           "close": "Aktivitätsverlauf ausblenden"
@@ -7376,6 +7392,7 @@
         "providerDeleteFailed": "Der Anbieter konnte nicht gelöscht werden: {message}",
         "providerDeleted": "Anbieter erfolgreich gelöscht!",
         "providerLoadFailed": "Der Anbieter konnte nicht geladen werden: {message}",
+        "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "settingsUpdated": "Einstellungen aktualisiert",
         "unknownError": "Unbekannter Fehler"
@@ -7391,6 +7408,16 @@
           "empty": "Keine Router-Modelle gefunden. Aktivieren Sie zuerst ein Router-Modell bei einem Gateway-Anbieter.",
           "error": "Router-Modelle konnten nicht geladen werden.",
           "retry": "Erneut versuchen"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Benutzerdefinierte Modelle",
+          "companyName": "LiteLLM-kompatible Anbieter"
+        },
+        "openAICompatible": {
+          "productName": "Benutzerdefinierte Modelle",
+          "companyName": "OpenAI-kompatible Endpunkte"
         }
       }
     },
@@ -10273,8 +10300,25 @@
         },
         "validation": {
           "title": "Validierung",
-          "blocks": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden.",
-          "warns": "Einige optionale Prüfungen sind fehlgeschlagen. Sie können trotzdem anwenden.",
+          "unchanged": "Einstellungen, die eine Validierung erfordern, wurden nicht geändert.",
+          "outcome": {
+            "failed": {
+              "title": "Validierung fehlgeschlagen",
+              "description": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden."
+            },
+            "warnings": {
+              "title": "Validierung mit Warnungen bestanden",
+              "description": "Einige optionale Prüfungen sind fehlgeschlagen oder konnten nicht verifiziert werden. Sie können trotzdem anwenden."
+            },
+            "incomplete": {
+              "title": "Validierung nicht abgeschlossen",
+              "description": "Die abgeschlossenen Prüfungen waren erfolgreich. Sie können trotzdem anwenden."
+            },
+            "passed": {
+              "title": "Validierung bestanden",
+              "description": "Die neuen Einstellungen haben alle Prüfungen bestanden."
+            }
+          },
           "error": {
             "title": "Die Einstellungen sind ungültig"
           }
@@ -13789,6 +13833,7 @@
           "askOption": "Nachfragen",
           "autoApproveOption": "Automatisch genehmigen",
           "customOption": "Benutzerdefiniert",
+          "defaultOption": "Standard",
           "description": "Lege fest, was der Agent tun darf. „Nachfragen“ fragt dich im Chat vor jeder Aktion; „Automatisch genehmigen“ führt sie ohne Rückfrage aus. Mit „Erweitert“ legst du eine Richtlinie pro Aktion fest.",
           "title": "Berechtigungen"
         },
@@ -15596,7 +15641,8 @@
       "title": "Sprache",
       "toasts": {
         "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
-      }
+      },
+      "workspaceDefault": "Standard ({language})"
     },
     "layout": {
       "header": {
