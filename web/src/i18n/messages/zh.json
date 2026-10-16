@@ -2548,13 +2548,11 @@
           "failures": "失败",
           "errors": "错误",
           "other": "其他",
-          "showResolved": "Show resolved",
-          "withResolved": "{level}, with resolved"
+          "resolved": "已解决"
         },
         "groups": {
           "failures": "{count, plural, other {# 次失败}}",
           "errors": "{count, plural, other {# 个错误}}",
-          "resolved": "{count, plural, other {# 个已解决}}",
           "other": "其他"
         },
         "title": {
@@ -2630,7 +2628,7 @@
           "resolvedDocs": "{count, plural, other {# 个文档已解决}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
-          "resolvedOn": "Resolved {date}"
+          "resolved": "已解决"
         },
         "more": "显示更多",
         "empty": {
@@ -2662,9 +2660,7 @@
           "copy": "复制堆栈跟踪"
         },
         "actions": {
-          "resolve": "解决",
-          "reindex": "Reindex failed docs",
-          "resolveWithoutReindex": "Resolve without reindex"
+          "resolve": "解决"
         },
         "resolveAll": {
           "button": "Resolve all shown",

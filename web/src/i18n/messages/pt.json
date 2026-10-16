@@ -2548,13 +2548,11 @@
           "failures": "Falhas",
           "errors": "Erros",
           "other": "Outros",
-          "showResolved": "Show resolved",
-          "withResolved": "{level}, with resolved"
+          "resolved": "Resolvido"
         },
         "groups": {
           "failures": "{count, plural, one {# falha} other {# falhas}}",
           "errors": "{count, plural, one {# erro} other {# erros}}",
-          "resolved": "{count, plural, one {# resolvido} other {# resolvidos}}",
           "other": "Outros"
         },
         "title": {
@@ -2630,7 +2628,7 @@
           "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
           "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
-          "resolvedOn": "Resolved {date}"
+          "resolved": "Resolvido"
         },
         "more": "Mostrar mais",
         "empty": {
@@ -2662,9 +2660,7 @@
           "copy": "Copiar o rastreamento de pilha"
         },
         "actions": {
-          "resolve": "Resolver",
-          "reindex": "Reindex failed docs",
-          "resolveWithoutReindex": "Resolve without reindex"
+          "resolve": "Resolver"
         },
         "resolveAll": {
           "button": "Resolve all shown",

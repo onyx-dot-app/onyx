@@ -2548,13 +2548,11 @@
           "failures": "실패",
           "errors": "오류",
           "other": "기타",
-          "showResolved": "Show resolved",
-          "withResolved": "{level}, with resolved"
+          "resolved": "해결됨"
         },
         "groups": {
           "failures": "{count, plural, other {실패 #개}}",
           "errors": "{count, plural, other {오류 #개}}",
-          "resolved": "{count, plural, other {해결됨 #개}}",
           "other": "기타"
         },
         "title": {
@@ -2630,7 +2628,7 @@
           "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
-          "resolvedOn": "Resolved {date}"
+          "resolved": "해결됨"
         },
         "more": "더 보기",
         "empty": {
@@ -2662,9 +2660,7 @@
           "copy": "스택 트레이스 복사"
         },
         "actions": {
-          "resolve": "해결",
-          "reindex": "Reindex failed docs",
-          "resolveWithoutReindex": "Resolve without reindex"
+          "resolve": "해결"
         },
         "resolveAll": {
           "button": "Resolve all shown",

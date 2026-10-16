@@ -2548,13 +2548,11 @@
           "failures": "Failures",
           "errors": "Errors",
           "other": "Other",
-          "showResolved": "Show resolved",
-          "withResolved": "{level}, with resolved"
+          "resolved": "Resolved"
         },
         "groups": {
           "failures": "{count, plural, one {# Failure} other {# Failures}}",
           "errors": "{count, plural, one {# Error} other {# Errors}}",
-          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}",
           "other": "Other"
         },
         "title": {
@@ -2630,7 +2628,7 @@
           "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}",
-          "resolvedOn": "Resolved {date}"
+          "resolved": "Resolved"
         },
         "more": "Show more",
         "empty": {
@@ -2662,9 +2660,7 @@
           "copy": "Copy the stack trace"
         },
         "actions": {
-          "resolve": "Resolve",
-          "reindex": "Reindex failed docs",
-          "resolveWithoutReindex": "Resolve without reindex"
+          "resolve": "Resolve"
         },
         "resolveAll": {
           "button": "Resolve all shown",

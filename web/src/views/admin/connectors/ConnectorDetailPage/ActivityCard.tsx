@@ -1,16 +1,22 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Dropdown, Popover, Tag, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  Popover,
+  SelectButton,
+  Tag,
+  Text,
+} from "@opal/components";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgAlertTriangle,
   SvgCheckAll,
   SvgCheckCircle,
-  SvgChevronDown,
+  SvgCheckSquare,
   SvgFiles,
-  SvgRefreshCw,
   SvgTextLines,
   SvgUser,
   SvgUsers,
@@ -42,22 +48,30 @@ import {
 
 const GROUP_STYLE: Record<
   ActivityGroup,
-  { color: CardColor; icon: IconFunctionComponent; stroke: string }
+  {
+    color: CardColor;
+    icon: IconFunctionComponent;
+    stroke: string;
+    closedStroke: string;
+  }
 > = {
   failures: {
     color: "status-error-00",
     icon: SvgXCircle,
     stroke: "stroke-status-error-05",
+    closedStroke: "stroke-status-error-02",
   },
   errors: {
     color: "status-warning-00",
     icon: SvgAlertTriangle,
     stroke: "stroke-theme-amber-05",
+    closedStroke: "stroke-status-warning-02",
   },
   other: {
     color: "background-tint-00",
     icon: SvgCheckCircle,
     stroke: "stroke-status-success-05",
+    closedStroke: "stroke-status-success-02",
   },
 };
 
@@ -108,7 +122,7 @@ export interface ActivityCardProps {
   ccPairId: number;
   run: CCPairRun;
   group: ActivityGroup;
-  /** The run is resolved or superseded: it keeps its level's colour, faded. */
+  /** The run is resolved or superseded: it keeps its level's icon, with every element faded. */
   closed: boolean;
   /** Names the pair in place of the run's kind, for a feed across pairs. */
   connector?: CCPairRef;
@@ -161,6 +175,7 @@ export default function ActivityCard({
   const listsChecks = run.kind === "checks" && warnings > 0;
   const state = cardState(run, group, closed);
   const resolvesRun = canResolveRuns && !closed && group !== "other";
+  const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
@@ -180,8 +195,13 @@ export default function ActivityCard({
       : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
   return (
-    <Section height="fit" className={closed ? "opacity-60" : undefined}>
-      <Card color={style.color} border="none" rounding={2} padding={1}>
+    <Section height="fit" className="group/activity">
+      <Card
+        color={closed ? "background-tint-01" : style.color}
+        border="none"
+        rounding={2}
+        padding={1}
+      >
         <Section alignItems="stretch" gap={0} height="fit">
           <Section
             flexDirection="row"
@@ -197,7 +217,10 @@ export default function ActivityCard({
               width="fit"
               height="fit"
             >
-              <StatusIcon size={16} className={style.stroke} />
+              <StatusIcon
+                size={16}
+                className={closed ? style.closedStroke : style.stroke}
+              />
             </Section>
             <Section
               alignItems="stretch"
@@ -212,7 +235,7 @@ export default function ActivityCard({
                 gap={1}
                 height="fit"
               >
-                <Text font="secondary-mono" color="text-03">
+                <Text font="secondary-mono" color={mutedColor}>
                   {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
                 </Text>
                 <Section
@@ -230,18 +253,24 @@ export default function ActivityCard({
                       color="purple"
                     />
                   )}
-                  <Text font="secondary-body" color="text-03" maxLines={1}>
+                  <Text font="secondary-body" color={mutedColor} maxLines={1}>
                     {identity}
                   </Text>
-                  <IdentityIcon size={12} className="stroke-text-03" />
+                  <IdentityIcon
+                    size={12}
+                    className={closed ? "stroke-text-02" : "stroke-text-03"}
+                  />
                 </Section>
               </Section>
               <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
-                <Text font="main-ui-body" color="text-04">
+                <Text
+                  font="main-ui-body"
+                  color={closed ? "text-03" : "text-04"}
+                >
                   {t(`title.${run.kind}.${state}`)}
                 </Text>
                 {description !== null && (
-                  <Text font="secondary-body" color="text-03" maxLines={3}>
+                  <Text font="secondary-body" color={mutedColor} maxLines={3}>
                     {description}
                   </Text>
                 )}
@@ -251,7 +280,7 @@ export default function ActivityCard({
           {(trace !== null ||
             warnings > 0 ||
             listsChecks ||
-            run.resolved_at !== null ||
+            closed ||
             resolvesRun) && (
             <Section
               flexDirection="row"
@@ -270,18 +299,6 @@ export default function ActivityCard({
                 className="min-w-0 flex-1"
                 wrap
               >
-                {run.resolved_at !== null && (
-                  <Tag
-                    icon={SvgCheckAll}
-                    title={t("tags.resolvedOn", {
-                      date: format.dateTime(
-                        new Date(run.resolved_at),
-                        RUN_TIME_FORMAT
-                      ),
-                    })}
-                    color="gray"
-                  />
-                )}
                 {trace !== null && (
                   <Popover>
                     <Popover.Trigger asChild>
@@ -337,60 +354,33 @@ export default function ActivityCard({
                   )
                 )}
               </Section>
-              {resolvable && resolvesRun ? (
-                <Dropdown>
-                  <Dropdown.Trigger asChild>
+              {closed ? (
+                <SelectButton
+                  variant="select-filter"
+                  state="selected"
+                  rightIcon={SvgCheckSquare}
+                  size="xs"
+                >
+                  {t("tags.resolved")}
+                </SelectButton>
+              ) : (
+                resolvesRun && (
+                  // Only on hover or focus, so an open list reads as its runs, not a column of actions.
+                  <Section
+                    width="fit"
+                    height="fit"
+                    className="opacity-0 transition-opacity group-hover/activity:opacity-100 group-focus-within/activity:opacity-100"
+                  >
                     <Button
-                      icon={SvgCheckAll}
-                      rightIcon={SvgChevronDown}
+                      rightIcon={SvgCheckAll}
                       prominence="tertiary"
                       size="xs"
                       disabled={resolving}
+                      onClick={onResolveRun}
                     >
                       {t("actions.resolve")}
                     </Button>
-                  </Dropdown.Trigger>
-                  <Dropdown.Data
-                    label={t("actions.resolve")}
-                    items={[
-                      {
-                        kind: "action",
-                        id: "reindex",
-                        icon: SvgRefreshCw,
-                        title: t("actions.reindex"),
-                        onSelect: () => onResolve(null),
-                      },
-                      {
-                        kind: "action",
-                        id: "resolve",
-                        icon: SvgCheckAll,
-                        title: t("actions.resolveWithoutReindex"),
-                        onSelect: onResolveRun,
-                      },
-                    ]}
-                  />
-                </Dropdown>
-              ) : resolvable ? (
-                <Button
-                  icon={SvgRefreshCw}
-                  prominence="tertiary"
-                  size="xs"
-                  disabled={resolving}
-                  onClick={() => onResolve(null)}
-                >
-                  {t("actions.reindex")}
-                </Button>
-              ) : (
-                resolvesRun && (
-                  <Button
-                    icon={SvgCheckAll}
-                    prominence="tertiary"
-                    size="xs"
-                    disabled={resolving}
-                    onClick={onResolveRun}
-                  >
-                    {t("actions.resolve")}
-                  </Button>
+                  </Section>
                 )
               )}
             </Section>
