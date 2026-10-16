@@ -13,12 +13,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.background.indexing.run_tabular_rechunk import (
-    _owners,
     _rebuild_document,
     _tabular_file_name,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    experts_from_stores_representations,
     get_experts_stores_representations,
 )
 from onyx.connectors.models import (
@@ -81,9 +81,12 @@ def test_owners_round_trip_through_their_stored_form() -> None:
     """The upsert writes owners back as their string form. If the rebuild did
     not round-trip, every re-chunked document would lose its owners."""
     stored = ["Ada Lovelace", "Grace Hopper"]
-    assert get_experts_stores_representations(_owners(stored)) == stored
-    assert _owners(None) is None
-    assert _owners([]) is None
+    assert (
+        get_experts_stores_representations(experts_from_stores_representations(stored))
+        == stored
+    )
+    assert experts_from_stores_representations(None) is None
+    assert experts_from_stores_representations([]) is None
 
 
 def test_rebuild_keeps_the_fields_the_upsert_would_overwrite() -> None:
