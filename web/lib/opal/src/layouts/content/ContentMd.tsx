@@ -316,7 +316,11 @@ function ContentMd({
               );
             })()}
 
-          {tag && <Tag {...tag} />}
+          {tag && (
+            <span className="ms-1 flex shrink-0">
+              <Tag {...tag} />
+            </span>
+          )}
 
           {editable && !editing && editHandle == null && (
             <div

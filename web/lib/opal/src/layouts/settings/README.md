@@ -26,7 +26,7 @@ Headers are only sticky when `actions` is non-empty.
 
 | Prop             | Type                      | Default | Description                                                                                                                                               |
 | ---------------- | ------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `icon`           | `IconFunctionComponent`   | —       | Page icon (required)                                                                                                                                      |
+| `icon`           | `IconFunctionComponent`   | —       | Optional page icon                                                                                                                                      |
 | `moreIcon1`      | `IconFunctionComponent`   | —       | Second icon in the title's icon row (see `Content`)                                                                                                       |
 | `moreIcon2`      | `IconFunctionComponent`   | —       | Third icon in the title's icon row (see `Content`)                                                                                                        |
 | `title`          | `string`                  | —       | Page title (required)                                                                                                                                     |
@@ -38,6 +38,7 @@ Headers are only sticky when `actions` is non-empty.
 | `children`       | `ReactNode`               | —       | Content below the title row (e.g. search bar, filters)                                                                                                    |
 | `cancel`         | `boolean \| () => void`   | `false` | Render a secondary Cancel as the first action; `true` goes back in history, a function overrides the destination                                          |
 | `divider`        | `boolean`                 | `false` | Show a horizontal divider at the bottom of the header                                                                                                     |
+| `stackActionsOnMobile` | `boolean`               | `false` | Place actions below the title on a full-width row on narrow screens                                                                                       |
 
 ### Body
 

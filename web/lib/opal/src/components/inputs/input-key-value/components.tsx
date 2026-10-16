@@ -70,7 +70,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { cn } from "@opal/utils";
-import { InputTypeIn } from "@opal/components";
+import { InputPasswordTypeIn, InputTypeIn } from "@opal/components";
 import { Button, EmptyMessageCard } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 import { Text } from "@opal/components/text/components";
@@ -103,6 +103,7 @@ interface KeyValueInputItemProps {
   onRemove: () => void;
   keyPlaceholder?: string;
   valuePlaceholder?: string;
+  valueType: NonNullable<KeyValueInputProps["valueType"]>;
   error?: KeyValueError;
   canRemove: boolean;
   index: number;
@@ -114,11 +115,14 @@ function KeyValueInputItem({
   onRemove,
   keyPlaceholder,
   valuePlaceholder,
+  valueType,
   error,
   canRemove,
   index,
 }: KeyValueInputItemProps) {
   const strings = useOpalStrings();
+  const ValueInput =
+    valueType === "password" ? InputPasswordTypeIn : InputTypeIn;
   return (
     <>
       <div className="flex flex-col gap-y-0.5">
@@ -135,7 +139,7 @@ function KeyValueInputItem({
         {error?.key && <InputErrorText>{error.key}</InputErrorText>}
       </div>
       <div className="flex flex-col gap-y-0.5">
-        <InputTypeIn
+        <ValueInput
           placeholder={valuePlaceholder}
           value={item.value}
           onChange={(e) => onChange({ ...item, value: e.target.value })}
@@ -176,6 +180,8 @@ export interface KeyValueInputProps extends WithoutStyles<
   /** Placeholder for the value input */
   valuePlaceholder?: string;
 
+  valueType?: "text" | "password";
+
   /** Array of key-value pairs */
   items: KeyValue[];
 
@@ -200,6 +206,7 @@ export default function KeyValueInput({
   valueTitle: valueTitleProp,
   keyPlaceholder,
   valuePlaceholder,
+  valueType = "text",
   items = [],
   onChange,
   mode = "line",
@@ -350,12 +357,15 @@ export default function KeyValueInput({
 
           {items.map((item, index) => (
             <KeyValueInputItem
-              key={index}
+              key={
+                valueType === "password" ? `${items.length}-${index}` : index
+              }
               item={item}
               onChange={(next) => handleItemChange(index, next)}
               onRemove={() => handleRemove(index)}
               keyPlaceholder={keyPlaceholder}
               valuePlaceholder={valuePlaceholder}
+              valueType={valueType}
               error={errors[index]}
               canRemove={canRemoveItems}
               index={index}
