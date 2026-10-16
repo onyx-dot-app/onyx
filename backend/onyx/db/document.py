@@ -60,6 +60,7 @@ from onyx.db.relationships import (
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
+from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -307,6 +308,82 @@ def get_document_ids_for_cc_pair_batch(
     if up_to_doc_id is not None:
         stmt = stmt.where(DocumentByConnectorCredentialPair.id <= up_to_doc_id)
     return list(db_session.execute(stmt).scalars().all())
+
+
+class TabularRechunkTarget(NamedTuple):
+    document: DbDocument
+    connector_id: int
+    credential_id: int
+
+
+def get_oversized_tabular_documents(
+    db_session: Session,
+    *,
+    chunk_count_above: int,
+    after_doc_id: str | None,
+    limit: int,
+) -> list[TabularRechunkTarget]:
+    """An ordered page of tabular documents still holding more chunks than the
+    current chunker can produce for one, with the cc-pair to re-index under.
+
+    Same cursor contract as `get_document_ids_for_cc_pair_batch`: ids
+    `> after_doc_id` ascending, capped at `limit`. Scanning by primary key keeps
+    every page an index scan, so the migration costs one pass of the table over
+    its whole life instead of a sort on every run.
+
+    Left out: documents whose raw file was never stored, because only a crawl
+    can rebuild their sections, and documents whose cc-pairs are all being
+    deleted.
+    """
+    stmt = (
+        select(
+            DbDocument,
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id
+                == DocumentByConnectorCredentialPair.connector_id,
+                ConnectorCredentialPair.credential_id
+                == DocumentByConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DbDocument.chunk_count > chunk_count_above,
+            DbDocument.file_id.isnot(None),
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+            or_(
+                *[
+                    func.lower(DbDocument.semantic_id).like(f"%{extension}")
+                    for extension in sorted(OnyxFileExtensions.TABULAR_EXTENSIONS)
+                ]
+            ),
+        )
+        # One row per document: a document in several cc-pairs is re-indexed
+        # under the lowest, as any of them would upsert the same row.
+        .distinct(DbDocument.id)
+        .order_by(
+            DbDocument.id,
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .limit(limit)
+    )
+    if after_doc_id is not None:
+        stmt = stmt.where(DbDocument.id > after_doc_id)
+
+    return [
+        TabularRechunkTarget(
+            document=document, connector_id=connector_id, credential_id=credential_id
+        )
+        for document, connector_id, credential_id in db_session.execute(stmt).all()
+    ]
 
 
 class PortedScope(NamedTuple):

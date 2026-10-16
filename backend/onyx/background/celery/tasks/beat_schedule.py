@@ -390,8 +390,22 @@ beat_task_templates.append(
         },
     }
 )
+
+beat_task_templates.append(
+    {
+        "name": "tabular-rechunk",
+        "task": OnyxCeleryTask.TABULAR_RECHUNK_TASK,
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.DOCPROCESSING,
+        },
+    }
+)
 # Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
+    "tabular-rechunk",
     "check-for-indexing",
     "check-for-port",
     "check-for-old-index-reclaim",
