@@ -124,8 +124,8 @@ def _access_hint(
 
 
 def _error_detail(error: JiraApiError) -> str:
-    messages: str | None = jira_error_messages(error.text)
-    return (messages or error.text or str(error))[:_ERROR_DETAIL_CHARS]
+    messages: str | None = jira_error_messages(error.body)
+    return (messages or error.body or str(error))[:_ERROR_DETAIL_CHARS]
 
 
 def _raise_for_api_error(
@@ -139,7 +139,7 @@ def _raise_for_api_error(
     explains a 403 (or a scoped token without the scope) for this probe."""
     status: int | None = error.status_code
     detail: str = _error_detail(error)
-    if status == 401 and _SCOPE_MISMATCH_TEXT in (error.text or ""):
+    if status == 401 and _SCOPE_MISMATCH_TEXT in (error.body or ""):
         raise InsufficientPermissionsError(
             f"{denied}. The scoped API token does not have the scope of this API "
             "(HTTP 401: scope does not match)."
@@ -1073,7 +1073,7 @@ def _sample_group_members(
                 max_results=_GROUP_MEMBER_PAGE_SIZE,
             )
         except JiraApiError as e:
-            if e.status_code == 404 and "does not exist" in (e.text or ""):
+            if e.status_code == 404 and "does not exist" in (e.body or ""):
                 # The group was deleted after the listing; group sync skips it.
                 continue
             _raise_for_api_error(

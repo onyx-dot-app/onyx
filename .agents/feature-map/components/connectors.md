@@ -459,6 +459,11 @@ sequentially (source APIs rate-limit) via `run_capability_checks`, mapping
 `ConnectorValidationError` to `FAILED` and anything else ambiguous to
 `INCOMPLETE`. Each result carries an `error_kind` (`models.py:CheckErrorKind`:
 rejected, permission, invalid, rate limited, timeout, unreachable, unexpected).
+It also carries an `error_detail` (`models.py:check_error_detail`): the HTTP
+status, request and a bounded response excerpt of the first `SourceApiError`
+or `requests.HTTPError` in the exception chain (the query string is dropped),
+and a stack trace for a timeout, an unreachable source or an unexpected error.
+A source gateway's API error subclasses `exceptions.py:SourceApiError`.
 One exception: on a form run (a draft run or a pair dry run) a sign-in check
 that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
 source. Stored reports may still hold the legacy `INDETERMINATE`, which reads

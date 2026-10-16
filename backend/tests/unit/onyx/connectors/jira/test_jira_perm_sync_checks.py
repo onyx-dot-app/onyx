@@ -77,7 +77,7 @@ def _run(
 
 
 def _api_error(status: int, text: str | None = None) -> JiraApiError:
-    return JiraApiError(f"HTTP {status}", status_code=status, text=text)
+    return JiraApiError(f"HTTP {status}", status_code=status, body=text)
 
 
 def _advisories(result: CapabilityCheckResult) -> list[str]:
