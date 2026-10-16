@@ -448,6 +448,7 @@ def get_resolvable_indexing_runs_count(
     level: CCPairRunLevel = Query(...),
     q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
     since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
@@ -456,7 +457,7 @@ def get_resolvable_indexing_runs_count(
 ) -> CCPairRunsResolvableCountResponse:
     """How many runs ``POST /runs/resolve`` would mark for the same filter."""
     request = CCPairRunsResolveMatchingRequest(
-        level=level, q=q, since=since, kinds=kinds
+        level=level, q=q, since=since, until=until, kinds=kinds
     )
     scoped = _operated_open_level(db_session, user, request)
     if scoped is None:

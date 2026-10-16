@@ -160,7 +160,7 @@ def open_level_filter(
         source=source,
         shared_sources=shared_sources,
         since=request.since,
-        until=None,
+        until=request.until,
         error_query=query,
         status_groups=status_groups,
         errors=errors,
