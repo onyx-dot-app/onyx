@@ -50,6 +50,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     DocumentByConnectorCredentialPair,
+    FileRecord,
     User,
 )
 from onyx.db.models import Document as DbDocument
@@ -60,7 +61,7 @@ from onyx.db.relationships import (
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -314,6 +315,9 @@ class TabularRechunkTarget(NamedTuple):
     document: DbDocument
     connector_id: int
     credential_id: int
+    # MIME type of the stored raw file. Names the format when the document's
+    # own name carries no extension, as Drive-sourced spreadsheets often do.
+    file_type: str | None
 
 
 def get_oversized_tabular_documents(
@@ -331,6 +335,11 @@ def get_oversized_tabular_documents(
     every page an index scan, so the migration costs one pass of the table over
     its whole life instead of a sort on every run.
 
+    A document counts as tabular when its name carries a tabular extension or
+    its stored file has a tabular MIME type. The second test matters for Drive:
+    a native Google Sheet keeps its original name, which usually has no
+    extension at all.
+
     Left out: documents whose raw file was never stored, because only a crawl
     can rebuild their sections, and documents whose cc-pairs are all being
     deleted.
@@ -340,11 +349,13 @@ def get_oversized_tabular_documents(
             DbDocument,
             DocumentByConnectorCredentialPair.connector_id,
             DocumentByConnectorCredentialPair.credential_id,
+            FileRecord.file_type,
         )
         .join(
             DocumentByConnectorCredentialPair,
             DocumentByConnectorCredentialPair.id == DbDocument.id,
         )
+        .outerjoin(FileRecord, FileRecord.file_id == DbDocument.file_id)
         .join(
             ConnectorCredentialPair,
             and_(
@@ -359,10 +370,13 @@ def get_oversized_tabular_documents(
             DbDocument.file_id.isnot(None),
             ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
             or_(
+                # A Drive-exported spreadsheet keeps its original name, which
+                # often has no extension, so the stored file's type decides.
+                FileRecord.file_type.in_(sorted(OnyxMimeTypes.TABULAR_MIME_TYPES)),
                 *[
                     func.lower(DbDocument.semantic_id).like(f"%{extension}")
                     for extension in sorted(OnyxFileExtensions.TABULAR_EXTENSIONS)
-                ]
+                ],
             ),
         )
         # One row per document: a document in several cc-pairs is re-indexed
@@ -380,10 +394,48 @@ def get_oversized_tabular_documents(
 
     return [
         TabularRechunkTarget(
-            document=document, connector_id=connector_id, credential_id=credential_id
+            document=document,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            file_type=file_type,
         )
-        for document, connector_id, credential_id in db_session.execute(stmt).all()
+        for document, connector_id, credential_id, file_type in db_session.execute(
+            stmt
+        ).all()
     ]
+
+
+def fetch_boost_and_hidden(
+    db_session: Session, document_ids: list[str]
+) -> dict[str, tuple[int, bool]]:
+    """The admin-managed ranking fields of the given documents.
+
+    `upsert_documents` writes the defaults over both on every upsert, so a
+    caller that re-indexes an unchanged document has to put them back.
+    """
+    if not document_ids:
+        return {}
+    rows = db_session.execute(
+        select(DbDocument.id, DbDocument.boost, DbDocument.hidden).where(
+            DbDocument.id.in_(document_ids)
+        )
+    ).all()
+    return {document_id: (boost, hidden) for document_id, boost, hidden in rows}
+
+
+def restore_boost_and_hidden(
+    db_session: Session, boost_and_hidden: dict[str, tuple[int, bool]]
+) -> None:
+    """Writes back values captured by `fetch_boost_and_hidden`. Commits."""
+    if not boost_and_hidden:
+        return
+    for document_id, (boost, hidden) in boost_and_hidden.items():
+        db_session.execute(
+            update(DbDocument)
+            .where(DbDocument.id == document_id)
+            .values(boost=boost, hidden=hidden)
+        )
+    db_session.commit()
 
 
 class PortedScope(NamedTuple):

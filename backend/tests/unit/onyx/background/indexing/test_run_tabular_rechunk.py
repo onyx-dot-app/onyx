@@ -10,7 +10,13 @@ from io import BytesIO
 from typing import IO
 from unittest.mock import MagicMock, patch
 
-from onyx.background.indexing.run_tabular_rechunk import _owners, _rebuild_document
+import pytest
+
+from onyx.background.indexing.run_tabular_rechunk import (
+    _owners,
+    _rebuild_document,
+    _tabular_file_name,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -21,6 +27,7 @@ from onyx.connectors.models import (
     convert_metadata_dict_to_list_of_strings,
 )
 from onyx.db.models import Document as DbDocument
+from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
 
 _CSV = b"region,sales\nnorth,10\nsouth,20\n"
 
@@ -61,7 +68,13 @@ def _rebuild() -> Document:
         "onyx.background.indexing.run_tabular_rechunk.get_default_file_store",
         return_value=file_store,
     ):
-        return _rebuild_document(db_doc=_db_doc(), head=_head(), stage=_stage)
+        return _rebuild_document(
+            db_doc=_db_doc(),
+            head=_head(),
+            stage=_stage,
+            file_type="text/csv",
+            parent_hierarchy_raw_node_id="folder-123",
+        )
 
 
 def test_owners_round_trip_through_their_stored_form() -> None:
@@ -87,6 +100,46 @@ def test_rebuild_keeps_the_fields_the_upsert_would_overwrite() -> None:
     assert doc.title == "Quarterly numbers"
     assert doc.metadata == {"department": "finance", "year": "2026"}
     assert doc.source == DocumentSource.FILE
+
+
+def test_rebuild_carries_the_raw_hierarchy_id() -> None:
+    """The adapter resolves ancestors from the raw id, not the resolved one.
+    Without it a rebuilt document drops out of folder-scoped search."""
+    doc = _rebuild()
+    assert doc.parent_hierarchy_raw_node_id == "folder-123"
+    assert doc.parent_hierarchy_node_id == 7
+
+
+def test_tabular_file_name_supplies_a_missing_extension() -> None:
+    """A native Google Sheet keeps its own name, which usually has no
+    extension, so the stored MIME type has to supply one for the reader to
+    dispatch on."""
+    assert _tabular_file_name("Q3 Budget", SPREADSHEET_MIME_TYPE) == "Q3 Budget.xlsx"
+    assert _tabular_file_name("Q3 Budget", "text/csv") == "Q3 Budget.csv"
+    # A name that already says what it is wins over the stored type.
+    assert _tabular_file_name("report.csv", SPREADSHEET_MIME_TYPE) == "report.csv"
+    with pytest.raises(ValueError):
+        _tabular_file_name("notes", "application/pdf")
+
+
+def test_rebuild_names_an_extensionless_document_from_its_stored_type() -> None:
+    file_store = MagicMock()
+    file_store.read_file.return_value = BytesIO(_CSV)
+    db_doc = _db_doc()
+    db_doc.semantic_id = "Q3 Budget"
+    with patch(
+        "onyx.background.indexing.run_tabular_rechunk.get_default_file_store",
+        return_value=file_store,
+    ):
+        doc = _rebuild_document(
+            db_doc=db_doc,
+            head=_head(),
+            stage=_stage,
+            file_type="text/csv",
+            parent_hierarchy_raw_node_id=None,
+        )
+    assert doc.semantic_identifier == "Q3 Budget"
+    assert isinstance(doc.sections[0], TabularSection)
 
 
 def test_rebuild_leaves_external_access_unset() -> None:

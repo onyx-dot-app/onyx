@@ -2181,6 +2181,30 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         return found
 
+    def mget_chunks_without_vectors(
+        self, chunk_ids: list[str]
+    ) -> dict[str, DocumentChunkWithoutVectors]:
+        """Fetches the named chunks by _id, keyed by the ids that were found.
+
+        Like `get_existing_chunk_ids`, this uses mget rather than a search, so
+        it sees writes that have not been refreshed yet and costs one request
+        per batch instead of a scan.
+        """
+        if not chunk_ids:
+            return {}
+
+        found: dict[str, DocumentChunkWithoutVectors] = {}
+        for start in range(0, len(chunk_ids), _MGET_BATCH_SIZE):
+            batch = chunk_ids[start : start + _MGET_BATCH_SIZE]
+            response = self._client.mget(index=self._index_name, body={"ids": batch})
+            for doc in response.get("docs", []):
+                if not doc.get("found"):
+                    continue
+                found[doc["_id"]] = DocumentChunkWithoutVectors.model_validate(
+                    doc["_source"]
+                )
+        return found
+
     @log_function_time(debug_only=True)
     def refresh_index(self) -> None:
         """Refreshes the index to make recent changes searchable.

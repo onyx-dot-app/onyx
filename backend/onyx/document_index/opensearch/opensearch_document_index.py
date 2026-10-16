@@ -682,19 +682,29 @@ class OpenSearchDocumentIndex(DocumentIndex):
         That chunk carries the document fields Postgres does not keep - title,
         metadata and owners - so a caller that rebuilds a document without
         re-fetching it from the source can restore them.
+
+        Only chunk 0 is looked up. A document that lost it is reported as
+        absent, which the caller treats as "not re-chunkable".
         """
         if not document_ids:
             return {}
-        self._client.refresh_index()
-        heads: dict[str, DocumentChunkWithoutVectors] = {}
-        for page in self._client.iter_chunks_for_doc_ids(
-            document_ids, tenant_state=self._tenant_state
-        ):
-            for chunk in page:
-                head = heads.get(chunk.document_id)
-                if head is None or chunk.chunk_index < head.chunk_index:
-                    heads[chunk.document_id] = chunk
-        return heads
+        # Fetched by deterministic id rather than scanned: an oversized
+        # document can hold hundreds of chunks, and the caller wants one.
+        chunk_id_to_document_id = {
+            get_opensearch_doc_chunk_id(
+                tenant_state=self._tenant_state,
+                document_id=document_id,
+                chunk_index=0,
+            ): document_id
+            for document_id in dict.fromkeys(document_ids)
+        }
+        found = self._client.mget_chunks_without_vectors(
+            list(chunk_id_to_document_id.keys())
+        )
+        return {
+            chunk_id_to_document_id[chunk_id]: chunk
+            for chunk_id, chunk in found.items()
+        }
 
     def get_documents_missing_chunks(self, document_ids: list[str]) -> list[str]:
         """Gets the IDs of the documents whose chunk 0 is not in this index.
