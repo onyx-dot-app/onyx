@@ -1071,6 +1071,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "jira_service_management": {
+          "description": "Atlassian service desk requests"
         }
       }
     },
@@ -4306,6 +4309,16 @@
             "mailboxes": {
               "label": "Mailboxes",
               "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Index all requests (tickets) from one Jira Service Management service project.",
+          "fields": {
+            "project_key": {
+              "label": "Service Project Key",
+              "description": "The key of the service project to index (e.g., 'SD')."
             }
           }
         }

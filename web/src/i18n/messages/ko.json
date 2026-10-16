@@ -1071,6 +1071,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "jira_service_management": {
+          "description": "Atlassian service desk requests"
         }
       }
     },
@@ -4306,6 +4309,16 @@
             "mailboxes": {
               "label": "사서함",
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Index all requests (tickets) from one Jira Service Management service project.",
+          "fields": {
+            "project_key": {
+              "label": "Service Project Key",
+              "description": "The key of the service project to index (e.g., 'SD')."
             }
           }
         }

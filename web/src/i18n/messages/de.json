@@ -1071,6 +1071,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "jira_service_management": {
+          "description": "Atlassian service desk requests"
         }
       }
     },
@@ -4306,6 +4309,16 @@
             "mailboxes": {
               "label": "Postfächer",
               "description": "Geben Sie die zu indexierenden Postfächer an (z. B. INBOX, Sent, Drafts). Leer lassen, um alle Postfächer zu indexieren."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Index all requests (tickets) from one Jira Service Management service project.",
+          "fields": {
+            "project_key": {
+              "label": "Service Project Key",
+              "description": "The key of the service project to index (e.g., 'SD')."
             }
           }
         }
