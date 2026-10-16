@@ -1104,10 +1104,14 @@ def upsert_documents(
         ]
     )
 
+    # boost and hidden are deliberately absent: admins own them
+    # (update_document_boost_for_user, update_document_hidden_for_user), and
+    # every caller inserts the defaults, so listing them here reset an admin's
+    # choice whenever a document changed at the source. A document indexed for
+    # the first time still gets the defaults, since ON CONFLICT only fires for
+    # a row that already exists.
     update_set = {
         "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
-        "boost": insert_stmt.excluded.boost,
-        "hidden": insert_stmt.excluded.hidden,
         "semantic_id": insert_stmt.excluded.semantic_id,
         "link": insert_stmt.excluded.link,
         "primary_owners": insert_stmt.excluded.primary_owners,
