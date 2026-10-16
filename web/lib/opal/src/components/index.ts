@@ -129,6 +129,7 @@ export {
   TAG_COLORS,
   TAG_REMOVE_CLASS,
   type TagProps,
+  type TagVariant,
   type TagColor,
 } from "@opal/components/tag/components";
 

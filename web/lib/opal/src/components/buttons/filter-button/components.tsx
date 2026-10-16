@@ -34,6 +34,9 @@ interface FilterButtonProps extends Omit<
 
   /** Which side the tooltip appears on. */
   tooltipSide?: TooltipSide;
+
+  /** No fill at rest; the tint shows on hover only. @default false */
+  transparent?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +50,7 @@ function FilterButton({
   tooltip,
   tooltipSide = "top",
   active = false,
+  transparent = false,
   interaction,
   ...statefulProps
 }: FilterButtonProps) {
@@ -63,6 +67,7 @@ function FilterButton({
         variant="select-filter"
         interaction={resolvedInteraction}
         state={active ? "selected" : "empty"}
+        data-filter-rest={transparent ? "transparent" : undefined}
       >
         <Interactive.Container type="button">
           <div className="flex flex-row items-center gap-1">

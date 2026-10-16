@@ -15274,7 +15274,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "Ausklappen",
+      "expand": "Alle anzeigen",
       "expandSection": "{title} ausklappen",
       "fold": "Einklappen",
       "foldSection": "{title} einklappen"

@@ -15274,7 +15274,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "펼치기",
+      "expand": "전체 보기",
       "expandSection": "{title} 펼치기",
       "fold": "접기",
       "foldSection": "{title} 접기"

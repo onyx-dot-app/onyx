@@ -12,6 +12,9 @@ import { Code } from "@opal/components";
 // With copy button (default)
 <Code>npm install @onyx/sdk</Code>
 
+// Tinted, no border
+<Code tint>{"Traceback (most recent call last): …"}</Code>
+
 // Without copy button
 <Code showCopyButton={false}>{"const x = 1;"}</Code>
 ```
@@ -22,12 +25,13 @@ import { Code } from "@opal/components";
 | ---------------- | --------- | ------- | ----------------------------------------------- |
 | `children`       | `string`  | —       | **Required.** The code text to display.         |
 | `showCopyButton` | `boolean` | `true`  | Show the hover-reveal copy-to-clipboard button. |
+| `tint`           | `boolean` | `false` | `background-tint-01` fill with no border.       |
 
 All other `HTMLElement` attributes (except `style` and `className`) are forwarded to the inner `<code>` element.
 
 ## Notes
 
 - Font: `font-secondary-mono` (12px DM Mono, consistent with the Opal design system).
-- Background and border follow the `background-tint-00` / `border-01` tokens.
+- Background and border follow the `background-tint-00` / `border-01` tokens; `tint` swaps them for `background-tint-01` and no border.
 - Long lines wrap with `break-all` to prevent horizontal overflow.
 - The copy button is absolutely positioned at the top-right and fades in on hover via `Hoverable.Item variant="appear-on-hover"`.

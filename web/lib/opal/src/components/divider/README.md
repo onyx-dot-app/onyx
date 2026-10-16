@@ -42,6 +42,7 @@ A plain line with no title or description.
 | `onOpenChange` | `(open: boolean) => void` | —              | Callback when toggled           |
 | `children`     | `ReactNode`               | —              | Content revealed when open; stays mounted while closed, inert and hidden from assistive tech, so the fold animates both ways |
 | `headerProps`  | ``Omit<HTMLAttributes<HTMLDivElement>, "onClick"> & Record<`data-${string}`, string \| number \| undefined>`` | — | Attributes for the header element, for an owner that addresses it: an id, a role, `aria-expanded`, `data-*` |
+| `chevronPosition` | `"start" \| "end"`    | `"end"`        | `"end"`: right chevron after the line. `"start"`: `SvgChevronDown` in `text-02` before the title, an `internal` button with a Fold / View All tooltip (`collapsibleFold`, `collapsibleExpand`) |
 
 ## Usage Examples
 
@@ -68,6 +69,11 @@ import { Divider } from "@opal/components";
 
 // Foldable
 <Divider title="Advanced Options" foldable>
+  <p>Hidden content here</p>
+</Divider>
+
+// Foldable, chevron before the title
+<Divider title="Hierarchy" foldable chevronPosition="start" defaultOpen>
   <p>Hidden content here</p>
 </Divider>
 

@@ -373,6 +373,8 @@ function ModalHeader({
       <DialogPrimitive.Close asChild>
         <Button
           aria-label={strings.close}
+          tooltip={strings.close}
+          tooltipSide="start"
           icon={SvgX}
           prominence="tertiary"
           size="sm"

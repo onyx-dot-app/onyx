@@ -15274,7 +15274,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "展開",
+      "expand": "すべて表示",
       "expandSection": "{title}を展開",
       "fold": "折りたたむ",
       "foldSection": "{title}を折りたたむ"

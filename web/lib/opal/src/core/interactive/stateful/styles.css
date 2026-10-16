@@ -439,6 +439,13 @@
   --interactive-foreground: var(--text-02);
   --interactive-foreground-icon: var(--text-02);
 }
+/* FilterButton `transparent`: no fill at rest, the tint shows on hover. */
+.interactive[data-interactive-variant="select-filter"][data-filter-rest="transparent"]:is(
+  [data-interactive-state="empty"],
+  [data-interactive-state="filled"]
+) {
+  @apply bg-transparent;
+}
 .interactive[data-interactive-variant="select-filter"]:is(
   [data-interactive-state="empty"],
   [data-interactive-state="filled"]

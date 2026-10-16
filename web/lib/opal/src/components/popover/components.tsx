@@ -107,6 +107,7 @@ type PopoverWidths =
   | "lg"
   | "xl"
   | "2xl"
+  | "2.5xl"
   | "3xl"
   | "trigger";
 const widthClasses: Record<PopoverWidths, string> = {
@@ -116,6 +117,7 @@ const widthClasses: Record<PopoverWidths, string> = {
   lg: "w-60",
   xl: "w-72",
   "2xl": "w-100",
+  "2.5xl": "w-120",
   "3xl": "w-158",
   trigger: "w-(--radix-popover-trigger-width)",
 };

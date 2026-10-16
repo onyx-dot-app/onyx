@@ -35,7 +35,7 @@ const [open, setOpen] = useState(false);
 | `rightChildren` | `ReactNode`               | —       | Controls before the fold button. Clicks inside do not toggle |
 | `children`      | `ReactNode`               | —       | The body that opens and closes                               |
 
-The whole header row toggles on click and drives the `Button`'s hover state. The `Button` is the keyboard control: Tab reaches it, keyboard focus shows as its hover state (no focus ring), and Enter or Space toggles. It carries `aria-expanded` and `aria-controls` pointing at the body. Its tooltip comes from `OpalStrings` (`collapsibleFold`, `collapsibleExpand`), and its accessible name includes the title (`collapsibleFoldSection`, `collapsibleExpandSection`), e.g. "Expand Schedule". The body renders from the first open and then stays mounted, so a section that starts closed does no work (fetches included) until it is opened. Reduced motion turns the animation off.
+The whole header row toggles on click and drives the `Button`'s hover state. The `Button` is the keyboard control: Tab reaches it, keyboard focus shows as its hover state (no focus ring), and Enter or Space toggles. It carries `aria-expanded` and `aria-controls` pointing at the body. Its tooltip comes from `OpalStrings`: "Fold" while open (`collapsibleFold`), "View All" while folded (`collapsibleExpand`), and its accessible name includes the title (`collapsibleFoldSection`, `collapsibleExpandSection`), e.g. "Expand Schedule". The body renders from the first open and then stays mounted, so a section that starts closed does no work (fetches included) until it is opened. Reduced motion turns the animation off.
 
 ## Composable parts
 

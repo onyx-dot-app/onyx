@@ -59,3 +59,17 @@
 .opal-divider-chevron[data-open="true"] {
   transform: rotate(90deg);
 }
+
+/* Start chevron: a down chevron in text-02, turned to point right while folded. */
+.opal-divider-chevron[data-position="start"]
+  .interactive:not(:hover, [data-interaction]) {
+  --interactive-foreground-icon: var(--text-02);
+}
+
+.opal-divider-chevron[data-position="start"][data-open="false"] {
+  transform: rotate(-90deg);
+}
+
+.opal-divider-chevron[data-position="start"][data-open="true"] {
+  transform: none;
+}

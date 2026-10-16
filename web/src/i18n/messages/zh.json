@@ -15274,7 +15274,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "展开",
+      "expand": "查看全部",
       "expandSection": "展开{title}",
       "fold": "折叠",
       "foldSection": "折叠{title}"
