@@ -9,6 +9,7 @@ from onyx.connectors.models import TabularSection, TextSection
 from onyx.file_processing.extract_file_text import detect_encoding, stage_xlsx_sheets
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.csv_utils import csv_reader
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -43,7 +44,7 @@ def _stream_delimited_file(
             # Re-serialize as CSV so downstream parsers that assume the default
             # Excel dialect read the columns correctly.
             csv.writer(tmp, lineterminator="\n").writerows(
-                csv.reader(text_in, dialect="excel-tab")
+                csv_reader(text_in, dialect="excel-tab")
             )
         else:
             started = False
