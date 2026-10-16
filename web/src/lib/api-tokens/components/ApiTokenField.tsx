@@ -59,7 +59,9 @@ export function ApiTokenField({
         onChange={(value) => {
           void helpers.setValue(value);
           // Clearing the field shows a required error at once, not on blur.
-          if (isApiTokenValueEmpty(value)) void helpers.setTouched(true);
+          // setValue already validates the new value; validating here too
+          // would read the previous render's values.
+          if (isApiTokenValueEmpty(value)) void helpers.setTouched(true, false);
         }}
         onBlur={() => void helpers.setTouched(true)}
         savedMaskedValue={savedMaskedValue}

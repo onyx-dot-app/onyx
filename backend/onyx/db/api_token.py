@@ -18,7 +18,11 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.api_token.models import ApiTokenInput, NewApiToken
+from onyx.server.manage.api_token.models import (
+    ApiTokenInput,
+    ExistingApiToken,
+    NewApiToken,
+)
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -141,6 +145,13 @@ def assign_api_token(
     """Point ``row`` at the token the input names, then drop the old token if
     nothing else uses it."""
     previous_id = row.api_token_id
+    # Lock the old and new token in id order first, so two saves that swap
+    # keys wait for each other instead of deadlocking.
+    lock_ids = {previous_id}
+    if isinstance(token_input, ExistingApiToken):
+        lock_ids.add(token_input.id)
+    for token_id in sorted(i for i in lock_ids if i is not None):
+        get_api_token(db_session, token_id, lock=True)
     token = resolve_api_token(
         db_session,
         token_input,
