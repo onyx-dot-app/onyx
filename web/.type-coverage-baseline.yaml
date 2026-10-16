@@ -52,7 +52,7 @@ packages:
   src/ee/sections: 100
   src/ee/views: 99.7
   src/hooks: 98.5
-  src/i18n: 99
+  src/i18n: 99.1
   src/i18n/messages: 100
   src/interfaces: 100
   src/layouts: 100
@@ -67,15 +67,15 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 99
+  src/lib/connectors: 99.1
   src/lib/constants: 100
-  src/lib/credentials: 98.4
+  src/lib/credentials: 98.9
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/hierarchy: 100
   src/lib/hooks: 95.8
-  src/lib/languageModels: 99
-  src/lib/mcp: 98.6
+  src/lib/languageModels: 99.1
+  src/lib/mcp: 99
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
   src/lib/oauth: 100
@@ -87,7 +87,7 @@ packages:
   src/lib/search: 99.2
   src/lib/searchFilters: 98.1
   src/lib/searchSettings: 99.5
-  src/lib/settings: 96.6
+  src/lib/settings: 96.7
   src/lib/sidebar: 100
   src/lib/skills: 97.4
   src/lib/sso: 99.3
@@ -104,7 +104,7 @@ packages:
   src/refresh-components/buttons: 99.7
   src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 99.7
-  src/refresh-components/form: 98.9
+  src/refresh-components/form: 98.8
   src/refresh-components/inputs: 100
   src/refresh-components/messages: 100
   src/refresh-components/modals: 100
@@ -131,5 +131,5 @@ packages:
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
-  src/views/admin: 98.5
+  src/views/admin: 98.6
   types: 100
