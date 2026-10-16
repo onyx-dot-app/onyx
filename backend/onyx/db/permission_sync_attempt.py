@@ -4,10 +4,10 @@ This module contains all CRUD operations for both DocPermissionSyncAttempt
 and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, delete, func, select
+from sqlalchemy import ColumnElement, delete, func, or_, select, update
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
@@ -27,6 +27,17 @@ logger = setup_logger()
 
 # Enough consecutive failures to reach the longest retry delay.
 _GROUP_SYNC_BACKOFF_LOOKBACK = 8
+
+_FAILURE_STATUSES = (PermissionSyncStatus.FAILED, PermissionSyncStatus.CANCELED)
+
+_AttemptModel = (
+    type[DocPermissionSyncAttempt] | type[ExternalGroupPermissionSyncAttempt]
+)
+
+
+class PermissionSyncAttemptLostError(RuntimeError):
+    """The attempt is no longer IN_PROGRESS, e.g. the reaper failed it after its
+    lease expired. The worker that ran it must stop."""
 
 
 # =============================================================================
@@ -123,6 +134,7 @@ def mark_doc_permission_sync_attempt_in_progress(
 
         attempt.status = PermissionSyncStatus.IN_PROGRESS
         attempt.time_started = func.now()
+        attempt.heartbeat_at = func.now()
         db_session.commit()
         return attempt
     except Exception:
@@ -159,6 +171,11 @@ def mark_doc_permission_sync_attempt_failed(
             .where(DocPermissionSyncAttempt.id == attempt_id)
             .with_for_update()
         ).scalar_one()
+
+        if attempt.status in _FAILURE_STATUSES:
+            # The reaper or a cancel already closed it; keep that reason.
+            db_session.commit()
+            return
 
         if not attempt.time_started:
             attempt.time_started = func.now()
@@ -201,6 +218,11 @@ def complete_doc_permission_sync_attempt(
             .where(DocPermissionSyncAttempt.id == attempt_id)
             .with_for_update()
         ).scalar_one()
+
+        if attempt.status != PermissionSyncStatus.IN_PROGRESS:
+            raise PermissionSyncAttemptLostError(
+                f"Doc permission sync attempt {attempt_id} is {attempt.status}, not IN_PROGRESS"
+            )
 
         # Update progress counters
         attempt.total_docs_synced = (attempt.total_docs_synced or 0) + total_docs_synced
@@ -384,6 +406,7 @@ def mark_external_group_sync_attempt_in_progress(
 
         attempt.status = PermissionSyncStatus.IN_PROGRESS
         attempt.time_started = func.now()
+        attempt.heartbeat_at = func.now()
         db_session.commit()
         return attempt
     except Exception:
@@ -413,6 +436,11 @@ def mark_external_group_sync_attempt_failed(
             .where(ExternalGroupPermissionSyncAttempt.id == attempt_id)
             .with_for_update()
         ).scalar_one()
+
+        if attempt.status in _FAILURE_STATUSES:
+            # The reaper or a cancel already closed it; keep that reason.
+            db_session.commit()
+            return
 
         if not attempt.time_started:
             attempt.time_started = func.now()
@@ -458,6 +486,11 @@ def complete_external_group_sync_attempt(
             .with_for_update()
         ).scalar_one()
 
+        if attempt.status != PermissionSyncStatus.IN_PROGRESS:
+            raise PermissionSyncAttemptLostError(
+                f"External group sync attempt {attempt_id} is {attempt.status}, not IN_PROGRESS"
+            )
+
         # Update progress counters
         attempt.total_users_processed = (
             attempt.total_users_processed or 0
@@ -482,6 +515,134 @@ def complete_external_group_sync_attempt(
         db_session.rollback()
         logger.exception("complete_external_group_sync_attempt exceptioned.")
         raise
+
+
+# =============================================================================
+# LEASES
+# =============================================================================
+
+
+def _renew_lease(model: _AttemptModel, attempt_id: int, db_session: Session) -> bool:
+    renewed = db_session.execute(
+        update(model)
+        .where(model.id == attempt_id)
+        .where(model.status == PermissionSyncStatus.IN_PROGRESS)
+        .values(heartbeat_at=func.now())
+        .returning(model.id)
+    ).first()
+    db_session.commit()
+    return renewed is not None
+
+
+def _lock_if_owned(model: _AttemptModel, attempt_id: int, db_session: Session) -> None:
+    owned = db_session.execute(
+        select(model.id)
+        .where(model.id == attempt_id)
+        .where(model.status == PermissionSyncStatus.IN_PROGRESS)
+        .with_for_update(read=True)
+    ).first()
+    if owned is None:
+        raise PermissionSyncAttemptLostError(
+            f"{model.__name__} {attempt_id} is no longer IN_PROGRESS"
+        )
+
+
+def lock_doc_permission_sync_attempt_if_owned(
+    attempt_id: int, db_session: Session
+) -> None:
+    """Takes a share lock on a running attempt, or raises
+    PermissionSyncAttemptLostError. Call it in the transaction of a sync write:
+    the reaper cannot fail the attempt until that write commits, and a write
+    after the reaper failed it is refused."""
+    _lock_if_owned(DocPermissionSyncAttempt, attempt_id, db_session)
+
+
+def lock_external_group_sync_attempt_if_owned(
+    attempt_id: int, db_session: Session
+) -> None:
+    """Takes a share lock on a running attempt, or raises
+    PermissionSyncAttemptLostError. Call it in the transaction of a sync write:
+    the reaper cannot fail the attempt until that write commits, and a write
+    after the reaper failed it is refused."""
+    _lock_if_owned(ExternalGroupPermissionSyncAttempt, attempt_id, db_session)
+
+
+def renew_doc_permission_sync_attempt_lease(
+    attempt_id: int, db_session: Session
+) -> bool:
+    """Renews the lease of a running attempt. Returns False when the attempt is
+    no longer IN_PROGRESS, which means the caller has lost it."""
+    return _renew_lease(DocPermissionSyncAttempt, attempt_id, db_session)
+
+
+def renew_external_group_sync_attempt_lease(
+    attempt_id: int, db_session: Session
+) -> bool:
+    """Renews the lease of a running attempt. Returns False when the attempt is
+    no longer IN_PROGRESS, which means the caller has lost it."""
+    return _renew_lease(ExternalGroupPermissionSyncAttempt, attempt_id, db_session)
+
+
+def _fail_expired_attempts(
+    model: _AttemptModel,
+    db_session: Session,
+    lease_timeout: timedelta,
+    not_started_timeout: timedelta,
+) -> list[int]:
+    now = func.now()
+    last_alive = func.coalesce(model.heartbeat_at, model.time_started)
+    failed_ids = list(
+        db_session.execute(
+            update(model)
+            .where(
+                or_(
+                    (model.status == PermissionSyncStatus.IN_PROGRESS)
+                    & (last_alive < now - lease_timeout),
+                    (model.status == PermissionSyncStatus.NOT_STARTED)
+                    & (model.time_created < now - not_started_timeout),
+                )
+            )
+            .values(
+                status=PermissionSyncStatus.FAILED,
+                time_started=func.coalesce(model.time_started, now),
+                time_finished=now,
+                error_message=(
+                    "The worker running this attempt stopped renewing its lease "
+                    "(it crashed, restarted, or lost its task)"
+                ),
+            )
+            .returning(model.id)
+        ).scalars()
+    )
+    db_session.commit()
+    return failed_ids
+
+
+def fail_expired_doc_permission_sync_attempts(
+    db_session: Session,
+    lease_timeout: timedelta,
+    not_started_timeout: timedelta,
+) -> list[int]:
+    """Fails IN_PROGRESS attempts whose lease expired and NOT_STARTED attempts
+    that never started. Returns the IDs it failed."""
+    return _fail_expired_attempts(
+        DocPermissionSyncAttempt, db_session, lease_timeout, not_started_timeout
+    )
+
+
+def fail_expired_external_group_sync_attempts(
+    db_session: Session,
+    lease_timeout: timedelta,
+    not_started_timeout: timedelta,
+) -> list[int]:
+    """Fails IN_PROGRESS attempts whose lease expired and NOT_STARTED attempts
+    that never started. Returns the IDs it failed."""
+    return _fail_expired_attempts(
+        ExternalGroupPermissionSyncAttempt,
+        db_session,
+        lease_timeout,
+        not_started_timeout,
+    )
 
 
 # =============================================================================

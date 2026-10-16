@@ -1,6 +1,7 @@
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from time import sleep
 from typing import Any, cast
 from uuid import uuid4
@@ -36,12 +37,17 @@ from onyx.background.celery.celery_redis import (
     celery_get_unacked_task_ids,
 )
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
+from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT,
     CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
+    PERMISSION_SYNC_HEARTBEAT_INTERVAL,
+    PERMISSION_SYNC_LEASE_OVERRUN,
+    PERMISSION_SYNC_LEASE_SELF_EXPIRY,
+    PERMISSION_SYNC_LEASE_TIMEOUT,
     DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -75,8 +81,10 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import (
     complete_doc_permission_sync_attempt,
     create_doc_permission_sync_attempt,
+    fail_expired_doc_permission_sync_attempts,
     mark_doc_permission_sync_attempt_failed,
     mark_doc_permission_sync_attempt_in_progress,
+    renew_doc_permission_sync_attempt_lease,
 )
 from onyx.db.sync_record import insert_sync_record, update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
@@ -158,6 +166,25 @@ def _fail_doc_permission_sync_attempt(
             full_exception_trace=full_exception_trace,
             total_docs_synced=total_docs_synced,
             docs_with_permission_errors=docs_with_permission_errors,
+        )
+
+
+def _renew_doc_permission_sync_lease(attempt_id: int) -> bool:
+    with get_session_with_current_tenant() as db_session:
+        return renew_doc_permission_sync_attempt_lease(attempt_id, db_session)
+
+
+def fail_expired_doc_permission_sync_attempts_for_tenant() -> None:
+    lease_timeout = timedelta(seconds=PERMISSION_SYNC_LEASE_TIMEOUT)
+    with get_session_with_current_tenant() as db_session:
+        failed_ids = fail_expired_doc_permission_sync_attempts(
+            db_session,
+            lease_timeout=lease_timeout,
+            not_started_timeout=lease_timeout,
+        )
+    if failed_ids:
+        task_logger.warning(
+            f"Failed doc permission sync attempts with expired leases: {failed_ids}"
         )
 
 
@@ -301,6 +328,9 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                     monitor_ccpair_permissions_taskset(
                         tenant_id, key_bytes, r, db_session
                     )
+
+        lock_beat.reacquire()
+        fail_expired_doc_permission_sync_attempts_for_tenant()
 
         lock_beat.reacquire()
         clear_caught_up_perm_sync_pending_marks(tenant_id)
@@ -549,6 +579,7 @@ def connector_permission_sync_generator_task(
     connector_type: str = "unknown"
     tasks_generated = 0
     docs_with_errors = 0
+    heartbeat: LeaseHeartbeat | None = None
     try:
         # Scoped to setup, never across the crawl below: on multi-tenant this session
         # is bound to one checked-out Connection, which PgBouncer closes once the gaps
@@ -633,8 +664,21 @@ def connector_permission_sync_generator_task(
             )
             redis_connector.permissions.set_fence(new_payload)
 
+            heartbeat = LeaseHeartbeat(
+                f"doc_permission_sync_attempt={attempt_id}",
+                renew=partial(_renew_doc_permission_sync_lease, attempt_id),
+                interval=PERMISSION_SYNC_HEARTBEAT_INTERVAL,
+                max_silence=PERMISSION_SYNC_LEASE_SELF_EXPIRY,
+                max_duration=JOB_TIMEOUT + PERMISSION_SYNC_LEASE_OVERRUN,
+            )
+            heartbeat.start()
+
             callback = PermissionSyncCallback(
-                redis_connector, lock, r, timeout_seconds=JOB_TIMEOUT
+                redis_connector,
+                lock,
+                r,
+                timeout_seconds=JOB_TIMEOUT,
+                lease=heartbeat,
             )
 
             connector_id = cc_pair.connector.id
@@ -742,6 +786,8 @@ def connector_permission_sync_generator_task(
         redis_connector.permissions.set_fence(None)
         raise e
     finally:
+        if heartbeat is not None:
+            heartbeat.stop()
         observe_doc_perm_sync_duration(time.monotonic() - sync_start, connector_type)
         if lock.owned():
             lock.release()
@@ -1047,6 +1093,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         redis_lock: RedisLock,
         redis_client: TenantRedisClient,
         timeout_seconds: int | None = None,
+        lease: LeaseHeartbeat | None = None,
     ):
         super().__init__()
         self.redis_connector: RedisConnector = redis_connector
@@ -1061,9 +1108,13 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         self.last_lock_monotonic = time.monotonic()
         self.start_monotonic = time.monotonic()
         self.timeout_seconds = timeout_seconds
+        self.lease = lease
 
     def should_stop(self) -> bool:
         if self.redis_connector.stop.fenced:
+            return True
+
+        if self.lease is not None and self.lease.is_lost():
             return True
 
         # Check if the task has exceeded its timeout

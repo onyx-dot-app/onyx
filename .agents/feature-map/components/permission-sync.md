@@ -238,6 +238,7 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
       create_doc_permission_sync_attempt          onyx/db/permission_sync_attempt.py
       fails the attempt if the cc_pair is no longer perm-synced
       mark_doc_permission_sync_attempt_in_progress
+      LeaseHeartbeat renews heartbeat_at          tasks/shared/lease_heartbeat.py, see §5.9
       doc_sync_func(cc_pair, fetch_existing_docs_fn, fetch_existing_doc_ids_fn, callback)
         -> Generator[ElementExternalAccess]
       for each element:
@@ -372,6 +373,7 @@ beat: CHECK_FOR_EXTERNAL_GROUP_SYNC (every 20s)
                                                        commits immediately (idle-in-transaction
                                                        safety, ee/onyx/db/external_perm.py comment)
         mark_external_group_sync_attempt_in_progress
+        LeaseHeartbeat renews heartbeat_at           see §5.9
         group_sync_func(tenant_id, cc_pair) -> Generator[ExternalUserGroup]
         for each batch of 100:
           upsert_external_groups                     sets stale=False on every touched row
@@ -554,6 +556,31 @@ document to the wrong person.
    documents of the changed pairs
    (`onyx/db/document.py:mark_cc_pair_documents_for_sync__no_commit`), so the
    index write in §4.3 applies. See [[billing]] §4.5.
+9. **An open attempt row is held by a lease in Postgres.** While a doc or group
+   sync runs, a `LeaseHeartbeat` thread
+   (`onyx/background/celery/tasks/shared/lease_heartbeat.py`) sets
+   `heartbeat_at = now()` every `PERMISSION_SYNC_HEARTBEAT_INTERVAL`, only while
+   the row is `IN_PROGRESS`. Each beat check runs
+   `fail_expired_doc_permission_sync_attempts` /
+   `fail_expired_external_group_sync_attempts`. These set `FAILED` on
+   `IN_PROGRESS` rows whose `coalesce(heartbeat_at, time_started)` is older
+   than `PERMISSION_SYNC_LEASE_TIMEOUT`, and on `NOT_STARTED` rows that are
+   that old. A worker that dies therefore cannot leave its attempt open. A
+   worker that lost its row (renewal updates no row) stops: the heartbeat
+   sets `lost`, which `PermissionSyncCallback.should_stop` and the group-sync
+   loop read through `LeaseHeartbeat.is_lost()`. `is_lost()` is also true when
+   no renewal has succeeded for `PERMISSION_SYNC_LEASE_SELF_EXPIRY`, which is
+   shorter than the reaper's timeout, so a worker that cannot reach the DB
+   stops first. The heartbeat also stops renewing `PERMISSION_SYNC_LEASE_OVERRUN`
+   after the sync's time limit (`max_duration`), so a crawl thread that hangs
+   in a source call cannot hold the lease for the life of the process. Group sync writes (`upsert_external_groups`,
+   `remove_stale_external_groups` with `owning_attempt_id`) take a share lock
+   on the attempt row in the write's own transaction
+   (`lock_external_group_sync_attempt_if_owned`). The reaper cannot fail the
+   attempt while such a write is open, and a write after it is refused. `complete_*` raises `PermissionSyncAttemptLostError` unless the
+   row is still `IN_PROGRESS`, and `mark_*_failed` keeps an existing
+   `FAILED`/`CANCELED` reason. Do not write a terminal status without this
+   check.
 
 ---
 
