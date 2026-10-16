@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { mutate } from "swr";
+import useSWR, { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import useSWRInfinite from "swr/infinite";
-import { setCCPairStatus } from "@/lib/ccPair";
+import {
+  resolveCCPairRuns,
+  resolveMatchingRuns,
+  setCCPairStatus,
+} from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type {
@@ -13,6 +17,7 @@ import type {
   CCPairRun,
   CCPairRunErrors,
   CCPairRef,
+  CCPairRunLevel,
   CCPairRunsQuery,
   CCPairRunStatusGroup,
   IndexingRun,
@@ -98,30 +103,71 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
 // useActivityItems
 // ---------------------------------------------------------------------------
 
-/** Which list of an activity panel a run sits in. "other" is every run that neither failed nor has document errors. */
-export type ActivityGroup = "failures" | "errors" | "other" | "resolved";
+/** Which level of an activity panel a run sits in. "other" is every run that neither failed nor has document errors. */
+export type ActivityGroup = "failures" | "errors" | "other";
 
-/** How each group narrows the runs feed. Resolved errors can sit on a run of any status. */
+interface ActivityGroupQuery {
+  statusGroups: CCPairRunStatusGroup[] | null;
+  errors: CCPairRunErrors | null;
+  superseded: boolean | null;
+  resolved: boolean | null;
+}
+
+const NOT_FAILED: CCPairRunStatusGroup[] = ["running", "succeeded", "canceled"];
+
+/** How each level narrows the runs feed, for its open runs and its closed ones. */
+// A closed failure was resolved or followed by a newer run of its kind. A
+// closed error run was resolved or had all its document errors resolved.
+// Nothing in "other" is open, so it has no closed runs.
 const ACTIVITY_GROUP_QUERY = {
-  failures: { statusGroups: ["failed"], errors: null },
-  errors: {
-    statusGroups: ["running", "succeeded", "canceled"],
-    errors: "unresolved",
+  failures: {
+    open: {
+      statusGroups: ["failed"],
+      errors: null,
+      superseded: false,
+      resolved: false,
+    },
+    closed: {
+      statusGroups: ["failed"],
+      errors: null,
+      superseded: true,
+      resolved: true,
+    },
   },
-  other: { statusGroups: ["running", "succeeded", "canceled"], errors: "none" },
-  resolved: { statusGroups: null, errors: "resolved" },
+  errors: {
+    open: {
+      statusGroups: NOT_FAILED,
+      errors: "unresolved",
+      superseded: null,
+      resolved: false,
+    },
+    closed: {
+      statusGroups: NOT_FAILED,
+      errors: "resolved",
+      superseded: null,
+      resolved: true,
+    },
+  },
+  other: {
+    open: {
+      statusGroups: NOT_FAILED,
+      errors: "none",
+      superseded: null,
+      resolved: null,
+    },
+    closed: null,
+  },
 } satisfies Record<
   ActivityGroup,
-  {
-    statusGroups: CCPairRunStatusGroup[] | null;
-    errors: CCPairRunErrors | null;
-  }
+  { open: ActivityGroupQuery; closed: ActivityGroupQuery | null }
 >;
 
 const ACTIVITY_PAGE_SIZE = 20;
 
-/** Which pairs an activity feed reads: one pair, with whether the viewer may resolve its runs' document errors, or every readable one. */
-export type ActivityScope = { ccPairId: number; canResolve: boolean } | "fleet";
+/** Which pairs an activity feed reads: one pair, with what the viewer may resolve on it, or every readable one. */
+export type ActivityScope =
+  | { ccPairId: number; canResolve: boolean; canResolveRuns: boolean }
+  | "fleet";
 
 /** One run in an activity panel, with the pair it ran on and what the viewer may do to it. */
 export interface ActivityItem {
@@ -131,10 +177,14 @@ export interface ActivityItem {
   connector: CCPairRef | undefined;
   /** The viewer may re-fetch single documents of the run's pair. */
   canResolve: boolean;
+  /** The viewer may mark the run resolved. */
+  canResolveRuns: boolean;
 }
 
 export interface ActivityGroupState {
   group: ActivityGroup;
+  /** Lists the level's resolved and superseded runs rather than its open ones. */
+  closed: boolean;
   runs: ActivityItem[];
   /** Runs in the group, loaded or not. */
   total: number;
@@ -162,6 +212,7 @@ function itemOf(
       run: run.run,
       connector: run.cc_pair,
       canResolve: run.cc_pair.can_resolve,
+      canResolveRuns: run.cc_pair.can_resolve_runs,
     };
   }
   // A bare run only comes from a pair's own feed.
@@ -173,49 +224,89 @@ function itemOf(
     run,
     connector: undefined,
     canResolve: pair.canResolve,
+    canResolveRuns: pair.canResolveRuns,
   };
 }
 
-/** One activity group of the scope, polled while `enabled`. `more` loads the next page and a new search starts over. */
+interface ActivityFeed {
+  ccPairId: number | null;
+  revalidate: () => Promise<void>;
+}
+
+// SWR's key-filter mutate skips useSWRInfinite keys, so each mounted feed registers its own revalidate.
+const activityFeeds = new Set<ActivityFeed>();
+
+/** The creation times an activity feed keeps, as ISO times. `until` is exclusive. */
+export interface ActivityTimeRange {
+  since: string | null;
+  until: string | null;
+}
+
+const ALL_TIME: ActivityTimeRange = { since: null, until: null };
+
+/** One activity level of the scope, its open runs or its `closed` ones, polled while `enabled`. `more` loads the next page and a new search starts over. */
 export function useActivityItems(
   scope: ActivityScope,
   group: ActivityGroup,
+  closed: boolean,
   q: string,
   enabled: boolean,
-  pollMs: number
+  pollMs: number,
+  range: ActivityTimeRange = ALL_TIME
 ): ActivityGroupState {
+  const { since, until } = range;
   const ccPairId = scope === "fleet" ? null : scope.ccPairId;
-  const canResolve = scope === "fleet" ? null : scope.canResolve;
-  const { data, error, isLoading, size, setSize } = useSWRInfinite<FeedPage>(
-    (pageIndex, previous: FeedPage | null) => {
-      if (!enabled) return null;
-      if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
-        return null;
-      }
-      const query: CCPairRunsQuery = {
-        pageNum: pageIndex,
-        pageSize: ACTIVITY_PAGE_SIZE,
-        since: null,
-        kinds: null,
-        q,
-        ...ACTIVITY_GROUP_QUERY[group],
-      };
-      return ccPairId === null
-        ? SWR_KEYS.indexMonitoringRuns(query)
-        : SWR_KEYS.ccPairRuns(ccPairId, query);
-    },
-    errorHandlingFetcher,
-    { refreshInterval: pollMs, keepPreviousData: true }
-  );
+  const pair = scope === "fleet" ? null : scope;
+  // Primitives, so a scope rebuilt every render does not remap the runs.
+  const canResolve = pair?.canResolve ?? null;
+  const canResolveRuns = pair?.canResolveRuns ?? null;
+  const groupQuery = ACTIVITY_GROUP_QUERY[group][closed ? "closed" : "open"];
+  const { data, error, isLoading, size, setSize, mutate } =
+    useSWRInfinite<FeedPage>(
+      (pageIndex, previous: FeedPage | null) => {
+        if (!enabled || groupQuery === null) return null;
+        if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
+          return null;
+        }
+        const query: CCPairRunsQuery = {
+          pageNum: pageIndex,
+          pageSize: ACTIVITY_PAGE_SIZE,
+          since,
+          until,
+          kinds: null,
+          q,
+          ...groupQuery,
+          // A search finds old failures too, under the failures group.
+          superseded: q ? null : groupQuery.superseded,
+        };
+        return ccPairId === null
+          ? SWR_KEYS.indexMonitoringRuns(query)
+          : SWR_KEYS.ccPairRuns(ccPairId, query);
+      },
+      errorHandlingFetcher,
+      { refreshInterval: pollMs, keepPreviousData: true }
+    );
   useEffect(() => {
     void setSize(1);
-  }, [q, setSize]);
+  }, [q, since, until, setSize]);
+  useEffect(() => {
+    const feed: ActivityFeed = {
+      ccPairId,
+      revalidate: async () => {
+        await mutate();
+      },
+    };
+    activityFeeds.add(feed);
+    return () => {
+      activityFeeds.delete(feed);
+    };
+  }, [ccPairId, mutate]);
   // Polling shifts the offsets, so a run can land on two pages.
   const runs = useMemo(() => {
     const itemScope: ActivityScope =
-      ccPairId === null || canResolve === null
+      ccPairId === null || canResolve === null || canResolveRuns === null
         ? "fleet"
-        : { ccPairId, canResolve };
+        : { ccPairId, canResolve, canResolveRuns };
     const seen = new Set<string>();
     return (data ?? []).flatMap((page) =>
       page.items
@@ -227,11 +318,12 @@ export function useActivityItems(
           return true;
         })
     );
-  }, [data, ccPairId, canResolve]);
+  }, [data, ccPairId, canResolve, canResolveRuns]);
   const first = data?.[0];
   const last = data?.[data.length - 1];
   return {
     group,
+    closed,
     runs,
     total: first?.total_items ?? 0,
     loaded: first !== undefined,
@@ -246,11 +338,56 @@ export function useActivityItems(
   };
 }
 
+/** Refetches the fleet feed and the given pairs' feeds. */
+function refreshFeeds(ccPairIds: number[]) {
+  const prefixes = [
+    SWR_KEYS.indexMonitoringRunsPrefix,
+    SWR_KEYS.indexMonitoringResolvableRunsCountPrefix,
+    ...ccPairIds.flatMap((ccPairId) => [
+      SWR_KEYS.ccPairIndexingErrors(ccPairId),
+      SWR_KEYS.ccPairRunsPrefix(ccPairId),
+      SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId),
+    ]),
+  ];
+  return Promise.all([
+    mutate(
+      (key) =>
+        typeof key === "string" &&
+        prefixes.some((prefix) => key.startsWith(prefix))
+    ),
+    ...Array.from(activityFeeds)
+      .filter(
+        (feed) => feed.ccPairId === null || ccPairIds.includes(feed.ccPairId)
+      )
+      .map((feed) => feed.revalidate()),
+  ]);
+}
+
+/** How many open runs of the level the batch resolve would mark for the search, on the pair or the pairs the caller operates. Null skips the fetch. */
+export function useResolvableRunsCount(
+  scope: ActivityScope,
+  level: CCPairRunLevel | null,
+  q: string,
+  pollMs: number
+): { count: number; isLoading: boolean } {
+  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  const { data, isLoading } = useSWR<{ count: number }>(
+    level === null
+      ? null
+      : ccPairId === null
+        ? SWR_KEYS.indexMonitoringResolvableRunsCount(level, q)
+        : SWR_KEYS.ccPairResolvableRunsCount(ccPairId, level, q),
+    errorHandlingFetcher,
+    { refreshInterval: pollMs, keepPreviousData: true }
+  );
+  return { count: data?.count ?? 0, isLoading };
+}
+
 // ---------------------------------------------------------------------------
 // useResolveRunErrors
 // ---------------------------------------------------------------------------
 
-/** Resolves a run's document errors and refreshes every feed they appear in, one submit at a time. */
+/** Resolves a run's document errors by a targeted reindex, or marks the run resolved, and refreshes every feed it appears in, one submit at a time. */
 export function useResolveRunErrors() {
   const tToasts = useTranslations("admin.connector.toasts");
   const [resolving, setResolving] = useState(false);
@@ -271,13 +408,7 @@ export function useResolveRunErrors() {
           tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
         );
       }
-      await mutate(
-        (key) =>
-          typeof key === "string" &&
-          (key.startsWith(SWR_KEYS.ccPairIndexingErrors(item.ccPairId)) ||
-            key.startsWith(SWR_KEYS.ccPairRunsPrefix(item.ccPairId)) ||
-            key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix))
-      );
+      await refreshFeeds([item.ccPairId]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("targetedReindexFailed", { message }));
@@ -286,5 +417,49 @@ export function useResolveRunErrors() {
     }
   }
 
-  return { resolving, resolve };
+  // Marks the run resolved without re-fetching anything: it keeps its status.
+  async function resolveRun(item: ActivityItem) {
+    if (resolving) return;
+    setResolving(true);
+    try {
+      await resolveCCPairRuns(item.ccPairId, [
+        { kind: item.run.kind, attempt_id: item.run.attempt.id },
+      ]);
+      toast.success(tToasts("runResolved"));
+      await refreshFeeds([item.ccPairId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("runResolveFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  // Marks every open run of the level the panel lists for the search resolved.
+  async function resolveMatching(
+    scope: ActivityScope,
+    level: CCPairRunLevel,
+    q: string
+  ) {
+    if (resolving) return;
+    setResolving(true);
+    const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+    try {
+      const result = await resolveMatchingRuns(ccPairId, {
+        level,
+        q: q || null,
+        since: null,
+        kinds: null,
+      });
+      toast.success(tToasts("runsResolved", { count: result.resolved_count }));
+      await refreshFeeds(ccPairId === null ? result.cc_pair_ids : [ccPairId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("runResolveFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  return { resolving, resolve, resolveRun, resolveMatching };
 }

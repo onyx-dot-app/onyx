@@ -15,7 +15,7 @@ Interactive.Stateful → Interactive.Container → content row (icon + label + t
 FilterButton is a **narrower, filter-specific** variant:
 
 - It hardcodes `variant="select-filter"` (OpenButton uses `"select-heavy"`)
-- It exposes `active?: boolean` instead of the raw `state` prop (maps to `"selected"` / `"empty"` internally)
+- It exposes `active?: boolean` and `filled?: boolean` instead of the raw `state` prop (maps to `"selected"` / `"filled"` / `"empty"` internally). `filled` is for a value that is always set, such as a time window: it keeps the chevron and no clear button, with darker text
 - When active, the chevron is hidden via `visibility` and an absolutely-positioned clear `Button` with `prominence="tertiary"` overlays it — placed as a sibling outside the `<button>` to avoid nesting buttons
 - It uses the shared `ChevronIcon` from `buttons/chevron` (same as OpenButton)
 - It does not support `foldable`, `size`, or `width` — it is always `"lg"`
@@ -46,6 +46,7 @@ div.relative                               <- bounding wrapper
 | `icon`        | `IconFunctionComponent`         | **required** | Left icon component                                                          |
 | `children`    | `string`                        | **required** | Label text between icon and trailing indicator                               |
 | `active`      | `boolean`                       | `false`      | Whether the filter has an active selection                                   |
+| `filled`      | `boolean`                       | `false`      | Shows an always-set value in darker text, with the chevron and no clear button |
 | `onClear`     | `() => void`                    | **required** | Called when the clear (X) button is clicked                                  |
 | `interaction` | `"rest" \| "hover" \| "active"` | auto         | JS-controlled interaction override. Falls back to Radix `data-state="open"` or Opal Dropdown `aria-expanded`. |
 | `tooltip`     | `string`                        | —            | Tooltip text shown on hover                                                  |
