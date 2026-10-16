@@ -10273,26 +10273,25 @@
         },
         "validation": {
           "title": "検証",
-          "unchanged": "Settings that need validation did not change.",
+          "unchanged": "検証が必要な設定は変更されていません。",
           "outcome": {
             "failed": {
-              "title": "Validation failed",
+              "title": "検証に失敗しました",
               "description": "新しい設定は検証に失敗しました。適用する前に修正してください。"
             },
             "warnings": {
-              "title": "Validation passed with warnings",
-              "description": "Some optional checks failed or could not be verified. You can still apply."
+              "title": "警告付きで検証に合格しました",
+              "description": "一部の任意のチェックが失敗したか、確認できませんでした。適用は可能です。"
             },
             "incomplete": {
-              "title": "Validation did not finish",
-              "description": "The finished checks passed. You can still apply."
+              "title": "検証が完了しませんでした",
+              "description": "完了したチェックは合格しました。適用は可能です。"
             },
             "passed": {
-              "title": "Validation passed",
-              "description": "The new settings passed every check."
+              "title": "検証に合格しました",
+              "description": "新しい設定はすべてのチェックに合格しました。"
             }
           },
-          "unfinished": "Did not finish in time",
           "error": {
             "title": "設定が無効です"
           }

@@ -10273,26 +10273,25 @@
         },
         "validation": {
           "title": "验证",
-          "unchanged": "Settings that need validation did not change.",
+          "unchanged": "需要验证的设置未发生变化。",
           "outcome": {
             "failed": {
-              "title": "Validation failed",
+              "title": "验证失败",
               "description": "新设置未通过验证。请在应用前修复。"
             },
             "warnings": {
-              "title": "Validation passed with warnings",
-              "description": "Some optional checks failed or could not be verified. You can still apply."
+              "title": "验证通过，但有警告",
+              "description": "部分可选检查失败或无法验证。你仍然可以应用。"
             },
             "incomplete": {
-              "title": "Validation did not finish",
-              "description": "The finished checks passed. You can still apply."
+              "title": "验证未完成",
+              "description": "已完成的检查均已通过。你仍然可以应用。"
             },
             "passed": {
-              "title": "Validation passed",
-              "description": "The new settings passed every check."
+              "title": "验证通过",
+              "description": "新设置通过了所有检查。"
             }
           },
-          "unfinished": "Did not finish in time",
           "error": {
             "title": "设置无效"
           }

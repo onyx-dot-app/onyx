@@ -10273,26 +10273,25 @@
         },
         "validation": {
           "title": "Validation",
-          "unchanged": "Settings that need validation did not change.",
+          "unchanged": "Les paramètres qui nécessitent une validation n'ont pas changé.",
           "outcome": {
             "failed": {
-              "title": "Validation failed",
+              "title": "Échec de la validation",
               "description": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer."
             },
             "warnings": {
-              "title": "Validation passed with warnings",
-              "description": "Some optional checks failed or could not be verified. You can still apply."
+              "title": "Validation réussie avec des avertissements",
+              "description": "Certaines vérifications facultatives ont échoué ou n'ont pas pu être vérifiées. Vous pouvez quand même appliquer."
             },
             "incomplete": {
-              "title": "Validation did not finish",
-              "description": "The finished checks passed. You can still apply."
+              "title": "La validation n'est pas terminée",
+              "description": "Les vérifications terminées ont réussi. Vous pouvez quand même appliquer."
             },
             "passed": {
-              "title": "Validation passed",
-              "description": "The new settings passed every check."
+              "title": "Validation réussie",
+              "description": "Les nouveaux paramètres ont réussi toutes les vérifications."
             }
           },
-          "unfinished": "Did not finish in time",
           "error": {
             "title": "Les paramètres ne sont pas valides"
           }

@@ -10273,26 +10273,25 @@
         },
         "validation": {
           "title": "التحقق",
-          "unchanged": "Settings that need validation did not change.",
+          "unchanged": "لم تتغير الإعدادات التي تحتاج إلى تحقق.",
           "outcome": {
             "failed": {
-              "title": "Validation failed",
+              "title": "فشل التحقق",
               "description": "فشلت الإعدادات الجديدة في التحقق. أصلحها قبل التطبيق."
             },
             "warnings": {
-              "title": "Validation passed with warnings",
-              "description": "Some optional checks failed or could not be verified. You can still apply."
+              "title": "نجح التحقق مع تحذيرات",
+              "description": "فشلت بعض الفحوصات الاختيارية أو تعذر التحقق منها. لا يزال بإمكانك التطبيق."
             },
             "incomplete": {
-              "title": "Validation did not finish",
-              "description": "The finished checks passed. You can still apply."
+              "title": "لم يكتمل التحقق",
+              "description": "نجحت الفحوصات المكتملة. لا يزال بإمكانك التطبيق."
             },
             "passed": {
-              "title": "Validation passed",
-              "description": "The new settings passed every check."
+              "title": "نجح التحقق",
+              "description": "اجتازت الإعدادات الجديدة جميع الفحوصات."
             }
           },
-          "unfinished": "Did not finish in time",
           "error": {
             "title": "الإعدادات غير صالحة"
           }

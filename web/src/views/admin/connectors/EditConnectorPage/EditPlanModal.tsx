@@ -245,7 +245,7 @@ function ValidationSection({
         check_id: checkId,
         display_name: check.display_name,
         required: check.required,
-        message: t("unfinished"),
+        message: "",
         remediation: null,
         docs_link: null,
         state: "pending",

@@ -152,7 +152,7 @@ test("shows failed checks and unfinished ones as pending with the still-running 
   expect(screen.getByText("Validation failed")).toBeVisible();
   expect(screen.getByText("Missing scope")).toBeVisible();
   expect(screen.getByText("List file permissions")).toBeVisible();
-  expect(screen.getByText("Did not finish in time")).toBeVisible();
+  expect(screen.getByText("Queued")).toBeVisible();
   expect(screen.getAllByText(stillRunning)).toHaveLength(1);
 });
 

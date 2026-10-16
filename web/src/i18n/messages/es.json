@@ -10273,26 +10273,25 @@
         },
         "validation": {
           "title": "Validación",
-          "unchanged": "Settings that need validation did not change.",
+          "unchanged": "La configuración que requiere validación no ha cambiado.",
           "outcome": {
             "failed": {
-              "title": "Validation failed",
+              "title": "La validación falló",
               "description": "La nueva configuración no superó la validación. Corrígela antes de aplicar."
             },
             "warnings": {
-              "title": "Validation passed with warnings",
-              "description": "Some optional checks failed or could not be verified. You can still apply."
+              "title": "Validación superada con advertencias",
+              "description": "Algunas comprobaciones opcionales fallaron o no se pudieron verificar. Aún puedes aplicar los cambios."
             },
             "incomplete": {
-              "title": "Validation did not finish",
-              "description": "The finished checks passed. You can still apply."
+              "title": "La validación no terminó",
+              "description": "Las comprobaciones terminadas se superaron. Aún puedes aplicar los cambios."
             },
             "passed": {
-              "title": "Validation passed",
-              "description": "The new settings passed every check."
+              "title": "Validación superada",
+              "description": "La nueva configuración superó todas las comprobaciones."
             }
           },
-          "unfinished": "Did not finish in time",
           "error": {
             "title": "La configuración no es válida"
           }

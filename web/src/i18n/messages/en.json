@@ -10292,7 +10292,6 @@
               "description": "The new settings passed every check."
             }
           },
-          "unfinished": "Did not finish in time",
           "error": {
             "title": "The settings are not valid"
           }
