@@ -6,15 +6,14 @@ import {
   Dropdown,
   InputPasswordTypeIn,
   SelectChevron,
+  Tag,
   type DropdownItem,
 } from "@opal/components";
+import { SvgKey } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { EMPTY_API_TOKEN_VALUE } from "@/lib/api-tokens/constants";
 import { useApiTokens } from "@/lib/api-tokens/hooks";
-import {
-  getApiTokenPlatformLabel,
-  nextApiTokenValue,
-} from "@/lib/api-tokens/utils";
+import { getApiTokenPlatformLabel } from "@/lib/api-tokens/utils";
 import type {
   ApiTokenPlatform,
   ApiTokenUsageKind,
@@ -127,12 +126,26 @@ export function ApiTokenInput({
           ref={inputRef}
           id={id}
           name={name}
-          value={value.type === "existing" ? maskedText : value.value}
+          // A chosen key shows as a tag; the text box stays empty, so typing
+          // starts a new key and Backspace drops the tag.
+          value={value.type === "existing" ? "" : value.value}
           onChange={(event) =>
-            onChange(nextApiTokenValue(value, event.target.value, maskedText))
+            onChange({ type: "new", value: event.target.value })
           }
+          onKeyDown={(event) => {
+            if (value.type === "existing" && event.key === "Backspace") {
+              onChange(EMPTY_API_TOKEN_VALUE);
+            }
+          }}
           onBlur={onBlur}
-          placeholder={t("input.placeholder")}
+          placeholder={
+            value.type === "existing" ? undefined : t("input.placeholder")
+          }
+          leftChildren={
+            value.type === "existing" ? (
+              <Tag color="blue" icon={SvgKey} title={maskedText} />
+            ) : undefined
+          }
           isNonRevealable={value.type === "existing"}
           disabled={disabled}
           error={error}

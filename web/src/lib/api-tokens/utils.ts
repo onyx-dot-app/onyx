@@ -33,17 +33,3 @@ export function toApiTokenPayload(
 ): ApiTokenValue | undefined {
   return isApiTokenValueEmpty(value) ? undefined : value;
 }
-
-/**
- * The value after a keystroke. A picked saved key shows its masked text, so
- * typing over it starts a new key from what was typed, never from the mask.
- */
-export function nextApiTokenValue(
-  previous: ApiTokenValue,
-  text: string,
-  maskedText: string
-): ApiTokenValue {
-  if (previous.type === "new") return { type: "new", value: text };
-  if (text.length < maskedText.length) return { type: "new", value: "" };
-  return { type: "new", value: text.replace(maskedText, "") };
-}

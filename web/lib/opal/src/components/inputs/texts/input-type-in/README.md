@@ -7,17 +7,18 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 
 ## Props
 
-| Prop            | Type                 | Default     | Description                                                                                  |
-| --------------- | -------------------- | ----------- | -------------------------------------------------------------------------------------------- |
-| `variant`       | `InputVariants`      | `"primary"` | Visual state                                                                                 |
-| `prefixText`    | `string`             | —           | Non-editable prefix rendered before the input (e.g. `"https://"`)                            |
-| `searchIcon`    | `boolean`            | `false`     | Show a search icon on the left                                                               |
-| `icon`          | `IconFunctionComponent` | —        | Leading icon after the search icon (a select's chosen option icon)                           |
-| `rightChildren` | `ReactNode`          | —           | Custom content rendered to the right of the input; suppresses the built-in clear button      |
-| `clearButton`   | `boolean`            | `false`     | Show the clear (×) button when the field has a value; suppressed when `rightChildren` is set |
-| `open`          | `boolean`            | `false`     | The list the field opens is open: keeps the focused border while focus is in the list        |
-| `value`         | `string`             | —           | Controlled value                                                                             |
-| `onChange`      | `ChangeEventHandler` | —           | Change handler                                                                               |
+| Prop            | Type                    | Default     | Description                                                                                  |
+| --------------- | ----------------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| `variant`       | `InputVariants`         | `"primary"` | Visual state                                                                                 |
+| `prefixText`    | `string`                | —           | Non-editable prefix rendered before the input (e.g. `"https://"`)                            |
+| `leftChildren`  | `ReactNode`             | —           | Content before the text, after `prefixText` (e.g. a chosen value shown as a tag)             |
+| `searchIcon`    | `boolean`               | `false`     | Show a search icon on the left                                                               |
+| `icon`          | `IconFunctionComponent` | —           | Leading icon after the search icon (a select's chosen option icon)                           |
+| `rightChildren` | `ReactNode`             | —           | Custom content rendered to the right of the input; suppresses the built-in clear button      |
+| `clearButton`   | `boolean`               | `false`     | Show the clear (×) button when the field has a value; suppressed when `rightChildren` is set |
+| `open`          | `boolean`               | `false`     | The list the field opens is open: keeps the focused border while focus is in the list        |
+| `value`         | `string`                | —           | Controlled value                                                                             |
+| `onChange`      | `ChangeEventHandler`    | —           | Change handler                                                                               |
 
 `InputTypeIn` also forwards all standard `<input>` attributes (except `disabled` and `readOnly` — use `variant="disabled"` / `variant="readOnly"` instead).
 
