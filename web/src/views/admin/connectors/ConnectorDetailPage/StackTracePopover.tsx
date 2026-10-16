@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Code, CopyButton, Popover, ShadowDiv, Text } from "@opal/components";
+import { CopyButton, Popover, ShadowDiv, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 
 export interface StackTracePopoverContentProps {
@@ -17,17 +17,23 @@ export default function StackTracePopoverContent({
   const t = useTranslations("admin.connector.activity");
   return (
     <Popover.Content
-      width="3xl"
       side="left"
       align="start"
       aria-label={t("tags.stackTrace")}
+      // Focus the panel, not its first button, so the copy tooltip opens only on hover.
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        if (event.currentTarget instanceof HTMLElement) {
+          event.currentTarget.focus();
+        }
+      }}
     >
       <Section
         alignItems="stretch"
         gap={1}
         padding={1}
         height="auto"
-        className="min-h-0"
+        className="min-h-0 w-120 max-w-full"
       >
         <Section
           flexDirection="row"
@@ -39,8 +45,9 @@ export default function StackTracePopoverContent({
         >
           <Section
             flexDirection="row"
+            justifyContent="start"
             alignItems="center"
-            gap={1}
+            gap={0.25}
             padding={1}
             height="fit"
             className="min-w-0 flex-1"
@@ -60,7 +67,12 @@ export default function StackTracePopoverContent({
           />
         </Section>
         <ShadowDiv className="max-h-120 overflow-x-auto">
-          <Code showCopyButton={false}>{trace}</Code>
+          <pre
+            dir="ltr"
+            className="m-0 p-2 rounded-08 bg-background-neutral-01 whitespace-pre-wrap break-all font-secondary-mono text-text-03"
+          >
+            {trace}
+          </pre>
         </ShadowDiv>
       </Section>
     </Popover.Content>

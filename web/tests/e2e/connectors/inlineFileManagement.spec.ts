@@ -84,14 +84,16 @@ test.describe("InlineFileManagement", () => {
     await page.waitForLoadState("networkidle");
 
     await new AdminConnectorDetailPage(page).openFilesEditor();
-    await expect(page.getByRole("button", { name: /cancel/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Cancel", exact: true })
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /save changes/i })
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /add files/i })
     ).toBeVisible();
-    await page.getByRole("button", { name: /cancel/i }).click();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(
       new AdminConnectorDetailPage(page).filesEditButton
     ).toBeVisible();
@@ -169,7 +171,7 @@ test.describe("InlineFileManagement", () => {
       "discard-test.txt",
       "This file should be discarded"
     );
-    await page.getByRole("button", { name: /cancel/i }).click();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(
       new AdminConnectorDetailPage(page).filesEditButton
     ).toBeVisible();
