@@ -21,6 +21,13 @@ export default function StackTracePopoverContent({
       side="left"
       align="start"
       aria-label={t("tags.stackTrace")}
+      // Focus the panel, not its first button, so the copy tooltip opens only on hover.
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        if (event.currentTarget instanceof HTMLElement) {
+          event.currentTarget.focus();
+        }
+      }}
     >
       <Section
         alignItems="stretch"
