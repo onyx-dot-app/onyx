@@ -155,6 +155,7 @@ so verify the callers rather than a single component.
 | `backend/onyx/image_gen/`, `server/features/image_generation/`, `server/manage/image_generation/`, `db/image_generation.py` | image-generation |
 | `backend/onyx/db/code_interpreter.py`, `server/manage/code_interpreter/` | code-execution |
 | `backend/onyx/llm/`, `server/manage/llm/`, `db/llm.py` | llm-providers |
+| `backend/onyx/db/api_token.py`, `server/manage/api_token/`, `backend/onyx/background/celery/tasks/api_tokens/` | api-tokens |
 
 ## Backend: Craft
 
@@ -173,6 +174,7 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `web/src/app/app/` | chat-frontend |
+| `web/src/lib/api-tokens/` | api-tokens |
 | `web/src/lib/mcp/` | mcp-and-custom-tools |
 | `web/src/lib/tools/components/ToolsPopover.tsx` | mcp-and-custom-tools, chat-frontend |
 | `web/src/sections/input/AppInputBar.tsx` | chat-frontend |

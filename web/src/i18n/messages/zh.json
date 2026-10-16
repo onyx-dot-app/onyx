@@ -13581,6 +13581,32 @@
         "projectId": "wode-vertex-xiangmu",
         "location": "global"
       }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "API 密钥",
+        "description": "粘贴您的 {platform} API 密钥。",
+        "reuseDescription": "粘贴您的 {platform} API 密钥，或重用已保存的密钥。"
+      },
+      "input": {
+        "placeholder": "abc***xyz",
+        "listLabel": "已保存的 {platform} API 密钥"
+      },
+      "reuse": {
+        "title": "重用 {platform} API 密钥"
+      },
+      "usedFor": "用于 {usages}",
+      "usage": {
+        "llmProvider": "模型提供商 **{name}**",
+        "imageGeneration": "图像生成 **{name}**",
+        "voiceProvider": "语音提供商 **{name}**",
+        "embeddingProvider": "嵌入提供商 **{name}**",
+        "webSearchProvider": "网页搜索提供商 **{name}**",
+        "webContentProvider": "网页内容提供商 **{name}**",
+        "tracingProvider": "追踪提供商 **{name}**",
+        "hook": "钩子 **{name}**",
+        "unstructured": "文档处理 **{name}**"
+      }
     }
   },
   "craft": {

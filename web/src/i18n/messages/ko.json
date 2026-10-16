@@ -13581,6 +13581,32 @@
         "projectId": "nae-vertex-peurojekteu",
         "location": "global"
       }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "API 키",
+        "description": "{platform} API 키를 붙여넣으세요.",
+        "reuseDescription": "{platform} API 키를 붙여넣거나 저장된 키를 재사용하세요."
+      },
+      "input": {
+        "placeholder": "abc***xyz",
+        "listLabel": "저장된 {platform} API 키"
+      },
+      "reuse": {
+        "title": "{platform} API 키 재사용"
+      },
+      "usedFor": "사용처: {usages}",
+      "usage": {
+        "llmProvider": "모델 제공업체 **{name}**",
+        "imageGeneration": "이미지 생성 **{name}**",
+        "voiceProvider": "음성 제공업체 **{name}**",
+        "embeddingProvider": "임베딩 제공업체 **{name}**",
+        "webSearchProvider": "웹 검색 제공업체 **{name}**",
+        "webContentProvider": "웹 콘텐츠 제공업체 **{name}**",
+        "tracingProvider": "추적 제공업체 **{name}**",
+        "hook": "훅 **{name}**",
+        "unstructured": "문서 처리 **{name}**"
+      }
     }
   },
   "craft": {

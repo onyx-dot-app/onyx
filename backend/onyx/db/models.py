@@ -3703,6 +3703,35 @@ class ChatMessageFeedback(Base):
     )
 
 
+class ApiToken(Base):
+    """A third-party API key that features reference instead of storing their
+    own copy. Rotating it updates every feature that points to it."""
+
+    __tablename__ = "api_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # The service the key is for, e.g. "openai" or "exa". Pickers offer only
+    # the tokens of the platform a field needs.
+    platform: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    value: Mapped[SensitiveValue[str]] = mapped_column(
+        EncryptedString(), nullable=False
+    )
+    # The endpoint the key was first saved for. In multi-tenant, a reused key
+    # may only be sent there, so it cannot be pointed at another host.
+    base_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Onyx-owned keys (Cloud defaults) never show in the token list.
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class LLMProvider(Base):
     __tablename__ = "llm_provider"
 

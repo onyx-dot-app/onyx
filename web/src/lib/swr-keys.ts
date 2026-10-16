@@ -70,6 +70,8 @@ export const SWR_KEYS = {
   llmProviderModels: (providerId: number) =>
     `/api/llm/provider/${providerId}/models`,
   adminLlmProviders: "/api/admin/llm/provider",
+  adminApiTokens: (platform: string) =>
+    `/api/admin/api-tokens?platform=${encodeURIComponent(platform)}`,
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,

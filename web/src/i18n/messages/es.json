@@ -13581,6 +13581,32 @@
         "projectId": "mi-proyecto-vertex",
         "location": "global"
       }
+    },
+    "apiTokens": {
+      "field": {
+        "title": "Clave de API",
+        "description": "Pega tu clave de API de {platform}.",
+        "reuseDescription": "Pega tu clave de API de {platform} o reutiliza una guardada."
+      },
+      "input": {
+        "placeholder": "abc***xyz",
+        "listLabel": "Claves de API de {platform} guardadas"
+      },
+      "reuse": {
+        "title": "Reutilizar claves de API de {platform}"
+      },
+      "usedFor": "Se usa para {usages}",
+      "usage": {
+        "llmProvider": "el proveedor de modelos **{name}**",
+        "imageGeneration": "la generación de imágenes **{name}**",
+        "voiceProvider": "el proveedor de voz **{name}**",
+        "embeddingProvider": "el proveedor de embeddings **{name}**",
+        "webSearchProvider": "el proveedor de búsqueda web **{name}**",
+        "webContentProvider": "el proveedor de contenido web **{name}**",
+        "tracingProvider": "el proveedor de trazas **{name}**",
+        "hook": "el hook **{name}**",
+        "unstructured": "el procesamiento de documentos **{name}**"
+      }
     }
   },
   "craft": {
