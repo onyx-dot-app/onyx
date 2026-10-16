@@ -25,8 +25,10 @@ function isBackendPlaceholder(value: string): boolean {
 
 type InputPasswordTypeInProps = Omit<
   InputTypeInProps,
-  "type" | "rightChildren" | "searchIcon" | "variant"
+  "type" | "rightChildren" | "searchIcon" | "variant" | "clearButton"
 > & {
+  /** Controls after the reveal toggle, at the field's end (a dropdown chevron). */
+  rightChildren?: React.ReactNode;
   disabled?: boolean;
   error?: boolean;
   /**
@@ -65,7 +67,7 @@ type InputPasswordTypeInProps = Omit<
  * docs): an idle ✱ overlay by default, or the browser's own dots.
  *
  * Features:
- * - Show/hide toggle button only visible when input has value or is focused
+ * - Show/hide toggle button, always visible
  * - When revealed, the toggle icon uses action style (more prominent)
  * - When hidden, the toggle icon uses the default tertiary style (muted)
  * - Optional `isNonRevealable` prop to disable reveal (for stored backend values)
@@ -80,7 +82,7 @@ function InputPasswordTypeIn({
   onBlur,
   disabled,
   error,
-  clearButton = false,
+  rightChildren,
   ...props
 }: InputPasswordTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
@@ -108,7 +110,6 @@ function InputPasswordTypeIn({
     []
   );
 
-  const showToggleButton = hasValue || isFocused;
   const isRevealed = isPasswordVisible && !effectiveNonRevealable;
   const toggleLabel = effectiveNonRevealable
     ? strings.valueCannotBeRevealed
@@ -147,7 +148,6 @@ function InputPasswordTypeIn({
         onFocus={onFocus}
         onBlur={onBlur}
         variant={disabled ? "disabled" : error ? "error" : undefined}
-        clearButton={showToggleButton ? false : clearButton}
         // Default to "new-password" so managers don't autofill the user's saved
         // login into secret fields (connector creds, API keys, …). "off" won't
         // do it, browsers deliberately ignore autocomplete="off" on password
@@ -155,7 +155,20 @@ function InputPasswordTypeIn({
         autoComplete="new-password"
         data-ph-no-capture
         rightChildren={
-          showToggleButton ? (
+          // A field inside a <label> gets clicks under the label sent on to
+          // the input. A click on a button's icon (not the button itself)
+          // can still be sent on, so icons here take no pointer events and
+          // every click lands on the button. Cancelling the click stops the
+          // rest; cancelling mousedown keeps focus in the field.
+          <div
+            role="presentation"
+            className="flex flex-row items-center gap-1 [&_svg]:pointer-events-none"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
             <Button
               disabled={disabled || effectiveNonRevealable}
               icon={isRevealed ? SvgEye : SvgEyeClosed}
@@ -172,7 +185,8 @@ function InputPasswordTypeIn({
               tooltip={toggleLabel}
               aria-label={toggleLabel}
             />
-          ) : undefined
+            {rightChildren}
+          </div>
         }
         {...props}
       />
@@ -182,7 +196,10 @@ function InputPasswordTypeIn({
         // with the hidden input text. The end inset clears the toggle.
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 start-[6px] end-10 flex items-center overflow-hidden"
+          className={cn(
+            "pointer-events-none absolute inset-y-0 start-[6px] flex items-center overflow-hidden",
+            rightChildren ? "end-[4.5rem]" : "end-10"
+          )}
         >
           <Text
             font="main-ui-body"

@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom";
+import type { ComponentProps } from "react";
 import { TextEncoder, TextDecoder } from "util";
 
 // Tell React 18+ this is a test environment where act() is available
@@ -9,6 +10,24 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 // Polyfill TextEncoder/TextDecoder (required for some libraries)
 global.TextEncoder = TextEncoder as any;
 global.TextDecoder = TextDecoder as any;
+
+// Radix tooltips need a TooltipProvider, which the app mounts once at its
+// root. Tests render components on their own, so each tooltip root brings
+// its own provider.
+jest.mock("@radix-ui/react-tooltip", () => {
+  const actual = jest.requireActual<typeof import("@radix-ui/react-tooltip")>(
+    "@radix-ui/react-tooltip"
+  );
+  const { createElement } = jest.requireActual<typeof import("react")>("react");
+  function Root(props: ComponentProps<typeof actual.Root>) {
+    return createElement(
+      actual.Provider,
+      null,
+      createElement(actual.Root, props)
+    );
+  }
+  return { ...actual, Root, Tooltip: Root };
+});
 
 // Only set up browser-specific mocks if we're in a jsdom environment
 if (typeof window !== "undefined") {

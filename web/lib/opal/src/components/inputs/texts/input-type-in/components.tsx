@@ -17,6 +17,8 @@ export interface InputTypeInProps extends WithoutStyles<
   searchIcon?: boolean;
   /** Leading icon (a select's chosen option icon). Renders after `searchIcon`. */
   icon?: IconFunctionComponent;
+  /** Content before the text, after `prefixText` (a chosen value shown as a tag). */
+  leftChildren?: React.ReactNode;
   rightChildren?: React.ReactNode;
   /** Show the clear (×) button when the field has a value. */
   clearButton?: boolean;
@@ -65,6 +67,7 @@ export default function InputTypeIn({
   ref,
   variant = "primary",
   prefixText,
+  leftChildren,
   searchIcon,
   icon: Icon,
   rightChildren,
@@ -114,6 +117,8 @@ export default function InputTypeIn({
           {prefixText}
         </span>
       )}
+
+      {leftChildren}
 
       <input
         ref={ref}
