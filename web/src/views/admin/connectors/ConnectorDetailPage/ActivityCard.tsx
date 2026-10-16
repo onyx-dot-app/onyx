@@ -90,7 +90,6 @@ type CardState =
   | "stopped"
   | "errors"
   | "resolved"
-  | "superseded"
   | "inProgress"
   | "canceled"
   | "succeeded";
@@ -107,7 +106,7 @@ function cardState(
   const closedBySystem = closed && run.resolved_at === null;
   switch (group) {
     case "failures":
-      return closedBySystem && isFailed(run) ? "superseded" : "failed";
+      return closedBySystem ? "resolved" : "failed";
     case "errors":
       if (closedBySystem) return "resolved";
       if (isActive(run)) return "running";
@@ -179,7 +178,8 @@ export default function ActivityCard({
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
-  if (state === "failed" || state === "superseded") {
+  // A failure a newer run superseded still explains itself.
+  if (isFailed(run)) {
     description =
       runErrorMessage(run) ??
       (listsChecks ? t("description.checksFailed", { count: warnings }) : null);

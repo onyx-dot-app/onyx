@@ -2561,7 +2561,6 @@
             "stopped": "Indexación detenida con errores",
             "errors": "Indexación completada con errores",
             "resolved": "Errores de indexación resueltos",
-            "superseded": "Indexing failed, a newer run followed",
             "succeeded": "Indexación completada correctamente",
             "inProgress": "Indexación en curso",
             "canceled": "Indexación detenida"
@@ -2572,7 +2571,6 @@
             "stopped": "Sincronización de permisos detenida con errores",
             "errors": "Permisos sincronizados con errores",
             "resolved": "Errores de sincronización de permisos resueltos",
-            "superseded": "Permissions sync failed, a newer run followed",
             "succeeded": "Permisos sincronizados correctamente",
             "inProgress": "Sincronizando permisos",
             "canceled": "Sincronización de permisos detenida"
@@ -2583,7 +2581,6 @@
             "stopped": "Sincronización de membresías de grupo detenida con errores",
             "errors": "Membresías de grupo sincronizadas con errores",
             "resolved": "Errores de sincronización de membresías de grupo resueltos",
-            "superseded": "Group membership sync failed, a newer run followed",
             "succeeded": "Membresías de grupo sincronizadas correctamente",
             "inProgress": "Sincronizando membresías de grupo",
             "canceled": "Sincronización de grupos detenida"
@@ -2594,7 +2591,6 @@
             "stopped": "Depuración detenida con errores",
             "errors": "Depuración completada con errores",
             "resolved": "Errores de depuración resueltos",
-            "superseded": "Pruning failed, a newer run followed",
             "succeeded": "Depuración completada correctamente",
             "inProgress": "Depuración en curso",
             "canceled": "Depuración detenida"
@@ -2605,7 +2601,6 @@
             "stopped": "Comprobaciones del conector detenidas con errores",
             "errors": "Comprobaciones del conector completadas con errores",
             "resolved": "Errores de las comprobaciones del conector resueltos",
-            "superseded": "Connector checks failed, a newer run followed",
             "succeeded": "Comprobaciones del conector superadas",
             "inProgress": "Comprobaciones del conector en curso",
             "canceled": "Comprobaciones del conector detenidas"
