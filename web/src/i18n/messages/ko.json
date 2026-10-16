@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "인트라넷 페이지와 커뮤니티"
         },
+        "youtrack": {
+          "description": "이슈 추적 및 프로젝트 관리"
+        },
         "canvas": {
           "description": "강좌, 페이지, 공지"
         },
@@ -3323,6 +3326,19 @@
             }
           }
         },
+        "youtrack": {
+          "description": "YouTrack 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack URL",
+              "description": "YouTrack 주소입니다(예: https://example.youtrack.cloud). YouTrack Server의 경우 컨텍스트 경로를 포함하세요(예: https://example.com/youtrack)."
+            },
+            "projects": {
+              "label": "프로젝트",
+              "description": "인덱싱할 프로젝트의 짧은 이름입니다(예: ABC). 비워 두면 토큰이 읽을 수 있는 모든 프로젝트를 인덱싱합니다."
+            }
+          }
+        },
         "github": {
           "description": "GitHub 커넥터 구성",
           "fields": {
@@ -4675,6 +4691,7 @@
         "gongBaseUrl": "선택 사항입니다. 미국 외 지역의 데이터는 해당 리전의 호스트를 입력하세요(예: https://[region].api.gong.io).",
         "jiraUserEmail": "Jira Cloud에 필요합니다.",
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
+        "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",

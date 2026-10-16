@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "イントラネットのページとコミュニティ"
         },
+        "youtrack": {
+          "description": "課題管理とプロジェクト管理"
+        },
         "canvas": {
           "description": "コース、ページ、お知らせ"
         },
@@ -3323,6 +3326,19 @@
             }
           }
         },
+        "youtrack": {
+          "description": "YouTrack コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack の URL",
+              "description": "YouTrack のアドレス (例: https://example.youtrack.cloud)。YouTrack Server の場合はコンテキストパスを含めます (例: https://example.com/youtrack)。"
+            },
+            "projects": {
+              "label": "プロジェクト",
+              "description": "インデックスするプロジェクトの短縮名 (例: ABC)。空欄にすると、トークンが読み取れるすべてのプロジェクトをインデックスします。"
+            }
+          }
+        },
         "github": {
           "description": "GitHub コネクターを設定",
           "fields": {
@@ -4675,6 +4691,7 @@
         "gongBaseUrl": "任意。米国外のデータを使う場合は、https://[region].api.gong.io のようにリージョンのホストを指定します。",
         "jiraUserEmail": "Jira Cloud では必須です。",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
+        "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
