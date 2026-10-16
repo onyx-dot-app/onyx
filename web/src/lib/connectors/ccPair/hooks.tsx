@@ -378,6 +378,7 @@ export function useResolvableRunsCount(
   scope: ActivityScope,
   level: CCPairRunLevel | null,
   q: string,
+  timeRange: ActivityTimeRange,
   pollMs: number
 ): { count: number; isLoading: boolean } {
   const ccPairId = scope === "fleet" ? null : scope.ccPairId;
@@ -385,8 +386,19 @@ export function useResolvableRunsCount(
     level === null
       ? null
       : ccPairId === null
-        ? SWR_KEYS.indexMonitoringResolvableRunsCount(level, q)
-        : SWR_KEYS.ccPairResolvableRunsCount(ccPairId, level, q),
+        ? SWR_KEYS.indexMonitoringResolvableRunsCount(
+            level,
+            q,
+            timeRange.since,
+            timeRange.until
+          )
+        : SWR_KEYS.ccPairResolvableRunsCount(
+            ccPairId,
+            level,
+            q,
+            timeRange.since,
+            timeRange.until
+          ),
     errorHandlingFetcher,
     { refreshInterval: pollMs, keepPreviousData: true }
   );
@@ -449,7 +461,8 @@ export function useResolveRunErrors() {
   async function resolveMatching(
     scope: ActivityScope,
     level: CCPairRunLevel,
-    q: string
+    q: string,
+    timeRange: ActivityTimeRange
   ) {
     if (resolving) return;
     setResolving(true);
@@ -458,7 +471,8 @@ export function useResolveRunErrors() {
       const result = await resolveMatchingRuns(ccPairId, {
         level,
         q: q || null,
-        since: null,
+        since: timeRange.since,
+        until: timeRange.until,
         kinds: null,
       });
       toast.success(tToasts("runsResolved", { count: result.resolved_count }));
