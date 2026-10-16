@@ -1,24 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { markdown } from "@opal/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
+  Button,
   Card,
+  Divider,
   Dropdown,
   FilterButton,
   InputTypeIn,
   MessageCard,
   Pagination,
   Tag,
+  Text,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
+import SvgLongWait from "@opal/illustrations/long-wait";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { CardLoader, IconLoader } from "@opal/loaders";
 import {
   SvgActivity,
   SvgCheckCircle,
+  SvgChevronRight,
   SvgClock,
   SvgSlowMotion,
   SvgXCircle,
@@ -97,6 +103,13 @@ export interface RunsCardProps {
   /** The page's window, shared with the status card. Without it the list keeps its own. */
   sharedWindow?: SharedWindow;
   onSharedWindowChange?: (window: PickerWindow) => void;
+  /** Called when a row's stage or checks popover opens or closes, so the page can step back around it. */
+  onFocusChange?: (focused: boolean) => void;
+}
+
+/** A run's key in the list. */
+function runKey(run: CCPairRun): string {
+  return `${run.kind}-${run.attempt.id}`;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
@@ -106,18 +119,29 @@ export default function RunsCard({
   embedded = false,
   sharedWindow,
   onSharedWindowChange,
+  onFocusChange,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const [page, setPage] = useState(1);
   const [picked, setPicked] = useState<PickedWindow>(ALL_TIME);
-  const since = sharedWindow !== undefined ? sharedWindow.since : picked.since;
+  // "View" on the empty state widens the list to all time until the shared window changes.
+  const [widened, setWidened] = useState(false);
+  const windowSince =
+    sharedWindow !== undefined ? sharedWindow.since : picked.since;
   // A new shared window starts the list over at its first page.
-  const [pagedSince, setPagedSince] = useState(since);
-  if (pagedSince !== since) {
-    setPagedSince(since);
+  const [pagedSince, setPagedSince] = useState(windowSince);
+  if (pagedSince !== windowSince) {
+    setPagedSince(windowSince);
     setPage(1);
+    setWidened(false);
   }
+  const since = widened ? null : windowSince;
+  const [openRun, setOpenRun] = useState<string | null>(null);
+  useEffect(() => {
+    onFocusChange?.(openRun !== null);
+  }, [openRun, onFocusChange]);
+  useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
   const [statusGroup, setStatusGroup] = useState<CCPairRunStatusGroup | null>(
     null
@@ -140,6 +164,30 @@ export default function RunsCard({
     errorHandlingFetcher,
     { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
   );
+  // An empty window with no other filter counts the pair's runs before it.
+  const emptyWindow =
+    data !== undefined &&
+    data.items.length === 0 &&
+    since !== null &&
+    kind === null &&
+    statusGroup === null &&
+    search === "";
+  const { data: allTime } = useSWR<CCPairRunsResponse>(
+    emptyWindow
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: 1,
+          since: null,
+          kinds: null,
+          statusGroups: null,
+          q: "",
+          errors: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: RUNS_POLL_MS }
+  );
+  const pastRuns = allTime?.total_items ?? 0;
 
   function pickWindow(window: TimeWindow) {
     setPicked({
@@ -261,7 +309,9 @@ export default function RunsCard({
               <Dropdown.Trigger asChild>
                 {/* The shared window is always set, so it shows filled with no clear button. */}
                 <FilterButton icon={SvgClock} filled onClear={() => undefined}>
-                  {t(`window.${WINDOW_LABEL_KEYS[sharedWindow.window]}`)}
+                  {widened
+                    ? t("window.all")
+                    : t(`window.${WINDOW_LABEL_KEYS[sharedWindow.window]}`)}
                 </FilterButton>
               </Dropdown.Trigger>
               <Dropdown.Data
@@ -390,37 +440,91 @@ export default function RunsCard({
               />
             ))}
           </Section>
+        ) : emptyWindow ? (
+          <Section alignItems="stretch" gap={0} height="fit">
+            <IllustrationContent
+              illustration={SvgLongWait}
+              title={t("empty.title")}
+            />
+            {pastRuns > 0 && (
+              <Section
+                flexDirection="row"
+                alignItems="center"
+                gap={0}
+                height="fit"
+              >
+                <Section height="fit" className="min-w-0 flex-1">
+                  <Divider title={t("empty.pastRuns", { count: pastRuns })} />
+                </Section>
+                <Button
+                  icon={SvgChevronRight}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltip={t("empty.view")}
+                  aria-label={t("empty.viewAria", { count: pastRuns })}
+                  onClick={() => {
+                    setWidened(true);
+                    setPage(1);
+                  }}
+                />
+              </Section>
+            )}
+          </Section>
         ) : (data?.items.length ?? 0) === 0 ? (
           <IllustrationContent
             illustration={SvgNoResult}
             title={filtered ? t("empty.filteredTitle") : t("empty.title")}
-            description={filtered ? undefined : t("empty.description")}
           />
         ) : (
           <Section alignItems="stretch" gap={1} height="fit">
             {data?.items.map((run) => (
               <RunRow
-                key={`${run.kind}-${run.attempt.id}`}
+                key={runKey(run)}
                 run={run}
                 canCancel={canOperate}
                 onCancel={() => void cancel(run)}
                 onViewLogs={() => setLogRun(run)}
+                open={openRun === runKey(run)}
+                onOpenChange={(open) =>
+                  setOpenRun((current) =>
+                    open
+                      ? runKey(run)
+                      : current === runKey(run)
+                        ? null
+                        : current
+                  )
+                }
+                dimmed={openRun !== null && openRun !== runKey(run)}
               />
             ))}
           </Section>
         )}
 
-        {totalItems > PAGE_SIZE && (
-          <Pagination
-            variant="count"
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={PAGE_SIZE}
-            totalItems={totalItems}
-            onChange={setPage}
-            units={t("units", { count: totalItems })}
-            size="sm"
-          />
+        {totalItems > 0 && (
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
+            gap={2}
+            height="fit"
+          >
+            <Text font="secondary-body" color="text-03">
+              {markdown(
+                t("showing", {
+                  from: `\`${format.number((page - 1) * PAGE_SIZE + 1)}\``,
+                  to: `\`${format.number(Math.min(page * PAGE_SIZE, totalItems))}\``,
+                  total: `\`${format.number(totalItems)}\``,
+                })
+              )}
+            </Text>
+            <Pagination
+              variant="list"
+              currentPage={page}
+              totalPages={totalPages}
+              onChange={setPage}
+              size="sm"
+            />
+          </Section>
         )}
       </Section>
     </>
@@ -433,7 +537,13 @@ export default function RunsCard({
     );
   }
   return (
-    <Card border="solid" rounding={4} padding={2} data-testid="connector-runs">
+    <Card
+      color="background-tint-01"
+      border="solid"
+      rounding={4}
+      padding={2}
+      data-testid="connector-runs"
+    >
       {body}
     </Card>
   );

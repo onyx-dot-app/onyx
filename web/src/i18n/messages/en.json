@@ -2508,7 +2508,8 @@
           "queued": "Queued",
           "running": "Running",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({minutes, number} min)"
+          "finished": "{time} ({minutes, number} min)",
+          "membershipRate": "{rate} memberships/min"
         },
         "actions": {
           "stages": "View Stage Metrics",
@@ -2543,7 +2544,8 @@
           "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# check passed} other {# checks passed}}",
           "failedChecks": "{count, plural, one {# check failed} other {# checks failed}}",
-          "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}"
+          "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}",
+          "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
         "search": {
           "placeholder": "Search indexing runs..."
@@ -2569,9 +2571,11 @@
           "title": "Couldn't load the runs."
         },
         "empty": {
-          "title": "No runs yet",
+          "title": "No recent indexing runs",
           "filteredTitle": "No runs match these filters.",
-          "description": "Runs are scheduled in the background and may take a moment to appear."
+          "pastRuns": "{count, plural, one {# Past Run} other {# Past Runs}}",
+          "view": "View",
+          "viewAria": "{count, plural, one {View # past run} other {View # past runs}}"
         },
         "units": "{count, plural, one {run} other {runs}}",
         "errorModal": {
@@ -2589,7 +2593,8 @@
           "title": "Connector Checks",
           "close": "Close",
           "count": "({count})"
-        }
+        },
+        "showing": "Showing {from}~{to} of {total}"
       },
       "activity": {
         "search": {

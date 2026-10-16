@@ -2508,7 +2508,8 @@
           "queued": "In Warteschlange",
           "running": "Läuft",
           "rate": "{rate} Dok./Min.",
-          "finished": "{time} ({minutes, number} Min.)"
+          "finished": "{time} ({minutes, number} Min.)",
+          "membershipRate": "{rate} Mitgliedschaften/Min."
         },
         "actions": {
           "stages": "Phasenmetriken anzeigen",
@@ -2543,7 +2544,8 @@
           "canceled": "{count, plural, one {# Lauf abgebrochen} other {# Läufe abgebrochen}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
-          "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
+          "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}",
+          "syncedDocs": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}"
         },
         "search": {
           "placeholder": "Indexläufe durchsuchen..."
@@ -2569,9 +2571,11 @@
           "title": "Die Läufe konnten nicht geladen werden."
         },
         "empty": {
-          "title": "Noch keine Läufe",
+          "title": "Keine aktuellen Indexierungsläufe",
           "filteredTitle": "Keine Läufe entsprechen diesen Filtern.",
-          "description": "Läufe werden im Hintergrund geplant und erscheinen eventuell erst nach kurzer Zeit."
+          "pastRuns": "{count, plural, one {# vergangener Lauf} other {# vergangene Läufe}}",
+          "view": "Anzeigen",
+          "viewAria": "{count, plural, one {# vergangenen Lauf anzeigen} other {# vergangene Läufe anzeigen}}"
         },
         "units": "{count, plural, one {Lauf} other {Läufe}}",
         "errorModal": {
@@ -2589,7 +2593,8 @@
           "title": "Connector-Prüfungen",
           "close": "Schließen",
           "count": "({count})"
-        }
+        },
+        "showing": "{from}~{to} von {total}"
       },
       "activity": {
         "search": {

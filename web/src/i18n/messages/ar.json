@@ -2508,7 +2508,8 @@
           "queued": "في قائمة الانتظار",
           "running": "قيد التشغيل",
           "rate": "{rate} مستند/دقيقة",
-          "finished": "{time} ({minutes, number} دقيقة)"
+          "finished": "{time} ({minutes, number} دقيقة)",
+          "membershipRate": "{rate} عضوية/دقيقة"
         },
         "actions": {
           "stages": "عرض مقاييس المراحل",
@@ -2543,7 +2544,8 @@
           "canceled": "{count, plural, one {تم إلغاء # تشغيل} other {تم إلغاء # تشغيلات}}",
           "passedChecks": "{count, plural, one {نجح فحص واحد} other {نجح # فحوصات}}",
           "failedChecks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
-          "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}"
+          "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}",
+          "syncedDocs": "{count, plural, one {تمت مزامنة مستند واحد} other {تمت مزامنة # مستندات}}"
         },
         "search": {
           "placeholder": "البحث في عمليات الفهرسة..."
@@ -2569,9 +2571,11 @@
           "title": "تعذر تحميل عمليات التشغيل."
         },
         "empty": {
-          "title": "لا توجد عمليات تشغيل بعد",
+          "title": "لا توجد عمليات فهرسة حديثة",
           "filteredTitle": "لا توجد عمليات تشغيل تطابق هذه المرشحات.",
-          "description": "تتم جدولة عمليات التشغيل في الخلفية وقد يستغرق ظهورها بعض الوقت."
+          "pastRuns": "{count, plural, one {عملية تشغيل سابقة واحدة} other {# عمليات تشغيل سابقة}}",
+          "view": "عرض",
+          "viewAria": "{count, plural, one {عرض عملية التشغيل السابقة} other {عرض # عمليات تشغيل سابقة}}"
         },
         "units": "{count, plural, one {تشغيل} other {عمليات تشغيل}}",
         "errorModal": {
@@ -2589,7 +2593,8 @@
           "title": "فحوصات الموصّل",
           "close": "إغلاق",
           "count": "({count})"
-        }
+        },
+        "showing": "عرض {from}~{to} من {total}"
       },
       "activity": {
         "search": {

@@ -2508,7 +2508,8 @@
           "queued": "Na fila",
           "running": "Em execução",
           "rate": "{rate} documentos/min",
-          "finished": "{time} ({minutes, number} min)"
+          "finished": "{time} ({minutes, number} min)",
+          "membershipRate": "{rate} associações/min"
         },
         "actions": {
           "stages": "Ver métricas por etapa",
@@ -2543,7 +2544,8 @@
           "canceled": "{count, plural, one {# execução cancelada} other {# execuções canceladas}}",
           "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
           "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
-          "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}"
+          "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}",
+          "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
         "search": {
           "placeholder": "Pesquisar execuções de indexação..."
@@ -2569,9 +2571,11 @@
           "title": "Não foi possível carregar as execuções."
         },
         "empty": {
-          "title": "Ainda não há execuções",
+          "title": "Nenhuma execução de indexação recente",
           "filteredTitle": "Nenhuma execução corresponde a estes filtros.",
-          "description": "As execuções são agendadas em segundo plano e podem demorar um pouco para aparecer."
+          "pastRuns": "{count, plural, one {# execução anterior} other {# execuções anteriores}}",
+          "view": "Ver",
+          "viewAria": "{count, plural, one {Ver # execução anterior} other {Ver # execuções anteriores}}"
         },
         "units": "{count, plural, one {execução} other {execuções}}",
         "errorModal": {
@@ -2589,7 +2593,8 @@
           "title": "Verificações do conector",
           "close": "Fechar",
           "count": "({count})"
-        }
+        },
+        "showing": "Mostrando {from}~{to} de {total}"
       },
       "activity": {
         "search": {

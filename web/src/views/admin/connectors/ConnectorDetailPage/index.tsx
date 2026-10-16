@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -89,6 +90,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     useState(false);
   // Counts the status card's asks to open the checks card.
   const [checksExpandRequest, setChecksExpandRequest] = useState(0);
+  const [runFocus, setRunFocus] = useState(false);
   // One window drives the status card's chart and the runs card's list.
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
     pickWindow("12h")
@@ -379,29 +381,39 @@ function Main({ ccPairId }: { ccPairId: number }) {
               <PendingBackfills backfills={ccPair.pending_backfills} />
             )}
 
-            <StatusCard
-              ccPair={ccPair}
-              canOperate={canOperate}
-              onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
-              timeWindow={timeWindow.window}
-              onTimeWindowChange={(picked) => setTimeWindow(pickWindow(picked))}
-            />
-            <PairChecksCard
-              source={source}
-              credentialId={ccPair.credential.id}
-              connectorId={ccPair.connector.id}
-              expandRequest={checksExpandRequest}
-            />
-            <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
-            <IndexConfigurationsSection
-              ccPair={ccPair}
-              onEdit={onEdit}
-              manageFiles={canManageInlineFiles}
-              onRefresh={refresh}
-            />
-            <SharingSettingsSection ccPair={ccPair} onEdit={onEdit} />
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-            <ScheduleSection ccPair={ccPair} editable={canOperate} />
+            {/* While a run row's popover is open, the sections above the runs step back. */}
+            <Section
+              alignItems="stretch"
+              gap={6}
+              height="fit"
+              className={cn("transition-opacity", runFocus && "opacity-50")}
+            >
+              <StatusCard
+                ccPair={ccPair}
+                canOperate={canOperate}
+                onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
+                timeWindow={timeWindow.window}
+                onTimeWindowChange={(picked) =>
+                  setTimeWindow(pickWindow(picked))
+                }
+              />
+              <PairChecksCard
+                source={source}
+                credentialId={ccPair.credential.id}
+                connectorId={ccPair.connector.id}
+                expandRequest={checksExpandRequest}
+              />
+              <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
+              <IndexConfigurationsSection
+                ccPair={ccPair}
+                onEdit={onEdit}
+                manageFiles={canManageInlineFiles}
+                onRefresh={refresh}
+              />
+              <SharingSettingsSection ccPair={ccPair} onEdit={onEdit} />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              <ScheduleSection ccPair={ccPair} editable={canOperate} />
+            </Section>
 
             <RunsCard
               ccPairId={ccPair.id}
@@ -410,6 +422,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               onSharedWindowChange={(picked) =>
                 setTimeWindow(pickWindow(picked))
               }
+              onFocusChange={setRunFocus}
             />
           </Section>
           <ActivityPanel

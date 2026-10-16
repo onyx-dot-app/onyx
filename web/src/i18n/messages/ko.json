@@ -2508,7 +2508,8 @@
           "queued": "대기 중",
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
-          "finished": "{time} ({minutes, number}분)"
+          "finished": "{time} ({minutes, number}분)",
+          "membershipRate": "{rate} 멤버십/분"
         },
         "actions": {
           "stages": "단계별 지표 보기",
@@ -2543,7 +2544,8 @@
           "canceled": "{count, plural, other {실행 #개 취소됨}}",
           "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
           "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
-          "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
+          "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}",
+          "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
         "search": {
           "placeholder": "인덱싱 실행 검색..."
@@ -2569,9 +2571,11 @@
           "title": "실행 목록을 불러오지 못했습니다."
         },
         "empty": {
-          "title": "아직 실행이 없습니다",
+          "title": "최근 인덱싱 실행이 없습니다",
           "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
-          "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
+          "pastRuns": "{count, plural, other {지난 실행 #개}}",
+          "view": "보기",
+          "viewAria": "{count, plural, other {지난 실행 #개 보기}}"
         },
         "units": "{count, plural, other {실행}}",
         "errorModal": {
@@ -2589,7 +2593,8 @@
           "title": "커넥터 검사",
           "close": "닫기",
           "count": "({count})"
-        }
+        },
+        "showing": "{total}개 중 {from}~{to}개 표시"
       },
       "activity": {
         "search": {

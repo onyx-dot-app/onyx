@@ -2508,7 +2508,8 @@
           "queued": "待機中",
           "running": "実行中",
           "rate": "{rate} 件/分",
-          "finished": "{time}（{minutes, number} 分）"
+          "finished": "{time}（{minutes, number} 分）",
+          "membershipRate": "{rate} メンバーシップ/分"
         },
         "actions": {
           "stages": "ステージの指標を表示",
@@ -2543,7 +2544,8 @@
           "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
-          "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"
+          "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}",
+          "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
         "search": {
           "placeholder": "インデックス実行を検索..."
@@ -2569,9 +2571,11 @@
           "title": "実行を読み込めませんでした。"
         },
         "empty": {
-          "title": "まだ実行はありません",
+          "title": "最近のインデックス実行はありません",
           "filteredTitle": "このフィルターに一致する実行はありません。",
-          "description": "実行はバックグラウンドでスケジュールされるため、表示されるまでに少し時間がかかる場合があります。"
+          "pastRuns": "{count, plural, other {過去の実行 # 件}}",
+          "view": "表示",
+          "viewAria": "{count, plural, other {過去の実行 # 件を表示}}"
         },
         "units": "{count, plural, other {件の実行}}",
         "errorModal": {
@@ -2589,7 +2593,8 @@
           "title": "コネクタチェック",
           "close": "閉じる",
           "count": "({count})"
-        }
+        },
+        "showing": "{total} 件中 {from}~{to} 件を表示"
       },
       "activity": {
         "search": {
