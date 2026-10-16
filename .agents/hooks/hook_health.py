@@ -29,8 +29,30 @@ def git_root(project: Path) -> Path | None:
     return Path(result.stdout.strip()).resolve() if result.returncode == 0 else None
 
 
-def hook_paths(project: Path, root: Path | None) -> tuple[list[Path], list[str]]:
-    config = project / ".codex" / "hooks.json"
+def hook_config_source(project: Path, root: Path) -> Path:
+    result = subprocess.run(
+        [
+            "git",
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+            "--absolute-git-dir",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    git_dirs = result.stdout.splitlines() if result.returncode == 0 else []
+    if len(git_dirs) == 2:
+        common_dir, git_dir = (Path(path) for path in git_dirs)
+        if common_dir != git_dir and common_dir.name == ".git":
+            return common_dir.parent / ".codex" / "hooks.json"
+    config_root = project
+    return config_root / ".codex" / "hooks.json"
+
+
+def hook_paths(config: Path, root: Path | None) -> tuple[list[Path], list[str]]:
     try:
         payload: Any = json.loads(config.read_text())
     except (OSError, ValueError):
@@ -89,7 +111,7 @@ def hook_paths(project: Path, root: Path | None) -> tuple[list[Path], list[str]]
     return paths, reasons
 
 
-def runtime_state(project: Path) -> tuple[str, dict[str, str], list[str]]:
+def runtime_state(source: Path) -> tuple[str, dict[str, str], list[str]]:
     config = (
         Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "config.toml"
     )
@@ -101,7 +123,6 @@ def runtime_state(project: Path) -> tuple[str, dict[str, str], list[str]]:
     states = hooks.get("state", {}) if isinstance(hooks, dict) else {}
     if not isinstance(states, dict):
         states = {}
-    source = project / ".codex" / "hooks.json"
     events: dict[str, str] = {}
     for event in EVENTS:
         key = f"{source}:{EVENT_KEYS[event]}:0:0"
@@ -123,7 +144,10 @@ def runtime_state(project: Path) -> tuple[str, dict[str, str], list[str]]:
 
 def diagnose(project: Path) -> tuple[int, dict[str, Any]]:
     root = git_root(project)
-    paths, reasons = hook_paths(project, root)
+    config_source = (
+        hook_config_source(project, root) if root else project / ".codex" / "hooks.json"
+    )
+    paths, reasons = hook_paths(config_source, root)
     if root is None:
         reasons.append("not_git_repo")
     else:
@@ -163,7 +187,7 @@ def diagnose(project: Path) -> tuple[int, dict[str, Any]]:
     else:
         static_status = "ok"
         next_action = "Inspect both project hooks in Codex /hooks and observe a turn."
-    runtime_status, event_states, runtime_reasons = runtime_state(project)
+    runtime_status, event_states, runtime_reasons = runtime_state(config_source)
     reasons.extend(runtime_reasons)
     status = static_status if static_status != "ok" else "degraded"
     exit_code = 2 if status == "failed" else 1
@@ -178,6 +202,7 @@ def diagnose(project: Path) -> tuple[int, dict[str, Any]]:
         "source": "codex-hook-health",
         "project": str(project),
         "git_root": str(root) if root else None,
+        "config_source": str(config_source),
         "hook_targets": sorted({str(path) for path in paths}),
         "reasons": sorted(set(reasons)),
         "next_action": next_action,

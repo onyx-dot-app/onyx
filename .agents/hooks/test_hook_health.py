@@ -135,6 +135,65 @@ class HookHealthTests(unittest.TestCase):
         self.assertEqual(result["runtime_status"], "disabled")
         self.assertIn("user_prompt_submit_disabled", result["reasons"])
 
+    def test_linked_worktree_uses_main_config_and_worktree_script(self) -> None:
+        (self.repo / ".pre-commit-config.yaml").write_text("repos: []\n")
+        script = self.repo / ".agents" / "hooks" / "pre_commit_on_stop.py"
+        script.parent.mkdir(parents=True)
+        script.write_text("print('main')\n")
+        self.configure(
+            self.repo,
+            script,
+            'python3 "$(git rev-parse --show-toplevel)/.agents/hooks/pre_commit_on_stop.py"',
+        )
+        subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "user.name=Hook Test",
+                "-c",
+                "user.email=hook@example.invalid",
+                "commit",
+                "-qm",
+                "baseline",
+            ],
+            cwd=self.repo,
+            check=True,
+        )
+        worktree_scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(worktree_scratch.cleanup)
+        worktree = Path(worktree_scratch.name) / "worktree"
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", str(worktree), "HEAD"],
+            cwd=self.repo,
+            check=True,
+            capture_output=True,
+        )
+        (worktree / ".codex" / "hooks.json").write_text("invalid json")
+        (worktree / ".agents" / "hooks" / "pre_commit_on_stop.py").write_text(
+            "print('worktree')\n"
+        )
+        (self.codex_home / "config.toml").write_text(
+            f'[hooks.state."{self.repo}/.codex/hooks.json:user_prompt_submit:0:0"]\n'
+            "enabled = false\n"
+        )
+
+        code, result = self.diagnose(worktree)
+
+        self.assertEqual(code, 1)
+        self.assertEqual(result["static_status"], "ok")
+        self.assertEqual(
+            result["config_source"], str(self.repo / ".codex" / "hooks.json")
+        )
+        self.assertEqual(
+            result["hook_targets"],
+            [str(worktree / ".agents" / "hooks" / "pre_commit_on_stop.py")],
+        )
+        self.assertEqual(result["runtime_status"], "disabled")
+        self.assertIn("user_prompt_submit_disabled", result["reasons"])
+
     def test_saved_trust_hash_does_not_prove_runtime_execution(self) -> None:
         (self.repo / ".pre-commit-config.yaml").write_text("repos: []\n")
         script = self.repo / "pre_commit_on_stop.py"

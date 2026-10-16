@@ -56,6 +56,24 @@ class PreCommitOnStopTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("pre-commit config", json.loads(result.stdout)["systemMessage"])
 
+    def test_git_lookup_failure_reports_coverage_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            payload = {
+                "session_id": "test-session",
+                "cwd": scratch,
+                "hook_event_name": "Stop",
+            }
+            result = subprocess.run(
+                [sys.executable, str(HOOK)],
+                input=json.dumps(payload),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Git", json.loads(result.stdout)["systemMessage"])
+
     def test_missing_snapshot_reports_coverage_gap(self) -> None:
         (self.repo / ".pre-commit-config.yaml").write_text("repos: []\n")
 

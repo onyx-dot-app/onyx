@@ -223,7 +223,7 @@ def main() -> int:
             return 0
         turn = _turn_changes(repo, session)
     except (subprocess.CalledProcessError, OSError):
-        return 0
+        return _notice("Git repository lookup failed; turn checks did not run.")
     if turn is None:
         return _notice("The prompt snapshot is missing; turn checks did not run.")
     if not turn:

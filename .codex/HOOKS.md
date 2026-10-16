@@ -7,9 +7,11 @@ python3 .agents/hooks/hook_health.py .
 ```
 
 The diagnostic prints one JSON record. `static_status` checks the hook files,
-Git root, pre-commit config, ignore rules, and pre-commit executable. A value
-of `ok` means those files and commands are available. It does not prove that
-Codex ran the hooks.
+Git root, pre-commit config, ignore rules, and pre-commit executable. It reports
+`config_source` separately from `hook_targets`. In a linked worktree, Codex
+loads hook definitions from the main checkout, while the Git-root command
+resolves the script in the worktree. A value of `ok` means those files and
+commands are available. It does not prove that Codex ran the hooks.
 
 `runtime_status` reports `disabled` when local Codex state explicitly disables
 either project event. It reports `unverified` in every other case. A saved trust
@@ -25,8 +27,8 @@ snapshot under the checkout's Git directory. The Stop event checks files
 changed after that snapshot. Review hook output for a missing prerequisite
 warning or a pre-commit failure.
 
-The hook returns a warning without stopping the turn when the project
-pre-commit config, prompt snapshot, or pre-commit executable is missing. It
+The hook returns a warning without stopping the turn when Git lookup, the
+project pre-commit config, prompt snapshot, or pre-commit executable fails. It
 still uses exit code 2 when pre-commit or the feature-map check finds work to
 fix. A repeated Stop event is allowed through to avoid a continuation loop.
 
