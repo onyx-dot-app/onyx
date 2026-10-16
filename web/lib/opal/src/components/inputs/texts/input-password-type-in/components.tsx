@@ -155,13 +155,14 @@ function InputPasswordTypeIn({
         autoComplete="new-password"
         data-ph-no-capture
         rightChildren={
-          // A field inside a <label> gets every click under the label sent
-          // on to the input, even one on a disabled toggle. Cancelling the
-          // click here stops that; cancelling mousedown keeps focus in the
-          // field.
+          // A field inside a <label> gets clicks under the label sent on to
+          // the input. A click on a button's icon (not the button itself)
+          // can still be sent on, so icons here take no pointer events and
+          // every click lands on the button. Cancelling the click stops the
+          // rest; cancelling mousedown keeps focus in the field.
           <div
             role="presentation"
-            className="flex flex-row items-center gap-1"
+            className="flex flex-row items-center gap-1 [&_svg]:pointer-events-none"
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => {
               e.preventDefault();
