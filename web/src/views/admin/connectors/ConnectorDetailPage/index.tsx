@@ -424,7 +424,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 setTimeWindow(pickWindow(picked))
               }
               range={sliceRange}
-              onClearRange={() => setSliceRange(null)}
             />
           </Section>
           <ActivityPanel

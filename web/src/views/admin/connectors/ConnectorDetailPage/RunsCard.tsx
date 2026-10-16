@@ -42,7 +42,6 @@ import type {
 } from "@/lib/connectors/types";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import {
-  SliceRangeFilter,
   rangeWithin,
   type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
@@ -102,9 +101,8 @@ export interface RunsCardProps {
   /** The page's window, shared with the status card. Without it the list keeps its own. */
   sharedWindow?: SharedWindow;
   onSharedWindowChange?: (window: PickerWindow) => void;
-  /** A chart slice that narrows the list inside the window, shown as a filter `onClearRange` removes. */
+  /** A chart slice that narrows the list inside the window; the activity panel shows its chip. */
   range?: SliceRange | null;
-  onClearRange?: () => void;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
@@ -115,7 +113,6 @@ export default function RunsCard({
   sharedWindow,
   onSharedWindowChange,
   range = null,
-  onClearRange,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
@@ -391,9 +388,6 @@ export default function RunsCard({
               ]}
             />
           </Dropdown>
-          {range !== null && onClearRange !== undefined && (
-            <SliceRangeFilter range={range} onClear={onClearRange} />
-          )}
         </Section>
 
         {error !== undefined ? (

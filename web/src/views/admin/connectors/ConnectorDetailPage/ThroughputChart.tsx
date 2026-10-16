@@ -15,6 +15,7 @@ import { Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import { LineLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
@@ -106,6 +107,9 @@ const SLICE_TIME_FORMAT = {
   hourCycle: "h23",
 } as const;
 
+// Length of the "YYYY/MM/DD" prefix of a log timestamp.
+const DATE_LENGTH = 10;
+
 export interface SliceRangeFilterProps {
   range: SliceRange;
   onClear: () => void;
@@ -114,7 +118,14 @@ export interface SliceRangeFilterProps {
 /** The picked slice's time span as an active filter, cleared by its X. */
 export function SliceRangeFilter({ range, onClear }: SliceRangeFilterProps) {
   const t = useTranslations("admin.connector.statusCard.throughput");
-  const format = useFormatter();
+  const since = formatDateTimeLog(range.since);
+  const until = formatDateTimeLog(range.until);
+  const today = formatDateTimeLog(new Date().toISOString()).slice(
+    0,
+    DATE_LENGTH
+  );
+  // A slice from today drops its date so the chip leaves the search input room.
+  const from = since.startsWith(today) ? since.slice(DATE_LENGTH + 1) : since;
   return (
     <FilterButton
       icon={SvgClock}
@@ -122,11 +133,7 @@ export function SliceRangeFilter({ range, onClear }: SliceRangeFilterProps) {
       tooltip={t("rangeFilter")}
       onClear={onClear}
     >
-      {format.dateTimeRange(
-        new Date(range.since),
-        new Date(range.until),
-        SLICE_TIME_FORMAT
-      )}
+      {`${from} – ${until.slice(DATE_LENGTH + 1)}`}
     </FilterButton>
   );
 }
