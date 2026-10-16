@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -59,7 +58,9 @@ import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/Activity
 import {
   pickWindow,
   type PickedWindow,
+  type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 
 const CC_PAIR_POLL_MS = 5000;
 
@@ -96,6 +97,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
     pickWindow("12h")
   );
+  // A clicked chart slice narrows the runs and activity inside the window.
+  const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
   const isSchedulingConnectorDeletionRef = useRef(false);
 
   const refresh = useCallback(() => {
@@ -387,15 +390,23 @@ function Main({ ccPairId }: { ccPairId: number }) {
               alignItems="stretch"
               gap={6}
               height="fit"
-              className={cn("transition-opacity", runFocus && "opacity-50")}
+              className={focusDimClass(runFocus)}
             >
               <StatusCard
                 ccPair={ccPair}
                 canOperate={canOperate}
                 onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
                 timeWindow={timeWindow.window}
-                onTimeWindowChange={(picked) =>
-                  setTimeWindow(pickWindow(picked))
+                onTimeWindowChange={(picked) => {
+                  setTimeWindow(pickWindow(picked));
+                  // The slice belongs to the old chart, so a new window drops it.
+                  setSliceRange(null);
+                }}
+                onSliceClick={(start, end) =>
+                  setSliceRange({
+                    since: start.toISOString(),
+                    until: end.toISOString(),
+                  })
                 }
               />
               <PairChecksCard
@@ -424,13 +435,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 setTimeWindow(pickWindow(picked))
               }
               onFocusChange={setRunFocus}
+              range={sliceRange}
             />
           </Section>
           <ActivityPanel
             scope={{
               ccPairId: ccPair.id,
               canResolve: canOperate && ccPair.supports_targeted_reindex,
+              canResolveRuns: canOperate,
             }}
+            range={sliceRange}
+            onClearRange={() => setSliceRange(null)}
           />
         </Section>
       </SettingsLayouts.Body>

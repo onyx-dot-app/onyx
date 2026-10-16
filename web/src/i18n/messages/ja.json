@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "イントラネットのページとコミュニティ"
         },
+        "youtrack": {
+          "description": "課題管理とプロジェクト管理"
+        },
         "canvas": {
           "description": "コース、ページ、お知らせ"
         },
@@ -2277,89 +2280,24 @@
         "perBatch": {
           "empty": "バッチごとのステージデータは記録されていません。"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "バッチ読み込み"
+        "buckets": {
+          "fetchSource": {
+            "label": "ソース取得"
           },
-          "batchTotal": {
-            "label": "バッチ合計"
-          },
-          "batchUnaccounted": {
-            "label": "未計上"
-          },
-          "checkpointLoad": {
-            "label": "チェックポイント読み込み"
+          "batchPreProcessing": {
+            "label": "バッチ前処理"
           },
           "chunking": {
             "label": "チャンク分割"
           },
-          "connectorFetch": {
-            "label": "コネクター取得"
-          },
-          "connectorValidation": {
-            "label": "コネクター検証"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "調整ロック取得待ち"
-          },
-          "coordinationUpdate": {
-            "label": "調整更新"
-          },
-          "docBatchEnqueue": {
-            "label": "ドキュメントバッチのキュー投入"
-          },
-          "docBatchStore": {
-            "label": "ドキュメントバッチ保存"
-          },
-          "docDbPrepare": {
-            "label": "ドキュメント DB の準備"
-          },
-          "docLockAcquireWait": {
-            "label": "ドキュメントロックの取得待ち"
-          },
-          "docprocessingSetup": {
-            "label": "ドキュメント処理のセットアップ"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "エンリッチメントの準備"
-          },
-          "finalization": {
-            "label": "最終処理"
-          },
-          "gcCollect": {
-            "label": "ガベージコレクション"
-          },
-          "hierarchyUpsert": {
-            "label": "階層のアップサート"
-          },
-          "imageProcessing": {
-            "label": "画像処理"
-          },
-          "permissionValidation": {
-            "label": "権限の検証"
-          },
-          "postIndexDbUpdate": {
-            "label": "インデックス後の DB 更新"
-          },
-          "queueWait": {
-            "label": "キューの待ち時間"
+            "label": "埋め込み"
           },
           "vectorDbWrite": {
             "label": "ベクトル DB への書き込み"
           },
-          "embeddingRateLimitWait": {
-            "label": "埋め込みレート制限の待機",
-            "description": "インデックス設定で設定した埋め込みのレート制限により、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "プロバイダーの制限による待機",
-            "description": "埋め込みプロバイダーがリクエストを制限した後に、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
+          "postProcessing": {
+            "label": "後処理"
           }
         }
       },
@@ -2379,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
-          "loadError": "グラフを読み込めませんでした。"
+          "loadError": "グラフを読み込めませんでした。",
+          "rangeFilter": "グラフのこの区間に作成された実行"
         },
         "hold": {
           "checks_running": "インデックス前チェックを実行中",
@@ -2407,7 +2346,10 @@
         "targetedReindexFailed": "対象を指定した再インデックス作成に失敗しました: {message}",
         "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。",
         "checkFrequencyUpdated": "コネクタのチェック頻度を更新しました",
-        "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした"
+        "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "{count, plural, other {# 件の実行}}を解決済みにしました。"
       },
       "backButton": {
         "label": "すべてのコネクタ"
@@ -2609,15 +2551,12 @@
           "all": "すべてのレベル",
           "failures": "失敗",
           "errors": "エラー",
-          "other": "その他"
-        },
-        "resolved": {
-          "label": "解決済み"
+          "other": "その他",
+          "resolved": "解決済み"
         },
         "groups": {
           "failures": "{count, plural, other {失敗 # 件}}",
           "errors": "{count, plural, other {エラー # 件}}",
-          "resolved": "{count, plural, other {解決済み # 件}}",
           "other": "その他"
         },
         "title": {
@@ -2683,16 +2622,16 @@
         "tags": {
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
-          "doc_permission_sync": "{count, plural, other {# 件のドキュメントの同期に失敗}}",
+          "doc_permission_sync": "{count, plural, other {# 人のユーザーの同期に失敗}}",
           "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
-          "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
+          "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "resolved": "解決済み"
         },
         "more": "さらに表示",
         "empty": {
           "title": "失敗もエラーもありません",
-          "resolved": "解決済みのエラーはありません",
           "filtered": "この検索に一致するものはありません。",
           "failures": "失敗はありません",
           "errors": "エラーはありません",
@@ -2716,20 +2655,34 @@
           "open": "ドキュメントを開く"
         },
         "trace": {
-          "runId": "実行 ID: {id}",
+          "runId": "• 実行 ID: {id}",
           "copy": "スタックトレースをコピー"
         },
         "actions": {
           "resolve": "解決"
+        },
+        "resolveAll": {
+          "button": "表示中をすべて解決",
+          "title": "表示中の実行をすべて解決しますか？",
+          "description": "現在のフィルターに一致する{count, plural, other {# 件の実行}}を解決済みにします。ステータスはそのままで、解決済みの下に移動します。",
+          "fleetDescription": "操作権限のあるコネクターで、現在のフィルターに一致する{count, plural, other {# 件の実行}}を解決済みにします。ステータスはそのままで、解決済みの下に移動します。",
+          "confirm": "すべて解決"
         }
       },
       "stageDetails": {
         "title": "ステージ詳細",
+        "heading": {
+          "top": "ステージ",
+          "bottom": "詳細"
+        },
         "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
         "uneven": {
           "tooltip": "このステージのバッチ時間は大きくばらついています"
+        },
+        "clipped": {
+          "label": "バーを切り詰めています：最大値が目盛りを超えています"
         },
         "close": "ステージ詳細を閉じる"
       }
@@ -3326,6 +3279,19 @@
             "lang": {
               "label": "言語",
               "description": "コンテンツのタイトル/本文とメタデータラベルに使用する言語(ISO 639-1。例: en、fr)。"
+            }
+          }
+        },
+        "youtrack": {
+          "description": "YouTrack コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack の URL",
+              "description": "YouTrack のアドレス (例: https://example.youtrack.cloud)。YouTrack Server の場合はコンテキストパスを含めます (例: https://example.com/youtrack)。"
+            },
+            "projects": {
+              "label": "プロジェクト",
+              "description": "インデックスするプロジェクトの短縮名 (例: ABC)。空欄にすると、トークンが読み取れるすべてのプロジェクトをインデックスします。"
             }
           }
         },
@@ -4681,6 +4647,7 @@
         "gongBaseUrl": "任意。米国外のデータを使う場合は、https://[region].api.gong.io のようにリージョンのホストを指定します。",
         "jiraUserEmail": "Jira Cloud では必須です。",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
+        "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
@@ -6875,7 +6842,7 @@
       "activities": {
         "title": "アクティビティ",
         "history": "アクティビティ履歴をすべて表示",
-        "viewLogs": "アクティビティ履歴を表示",
+        "viewLogs": "ログを表示",
         "panel": {
           "title": "アクティビティ履歴",
           "close": "アクティビティ履歴を閉じる"
@@ -10344,8 +10311,25 @@
         },
         "validation": {
           "title": "検証",
-          "blocks": "新しい設定は検証に失敗しました。適用する前に修正してください。",
-          "warns": "一部の任意のチェックが失敗しました。適用は可能です。",
+          "unchanged": "検証が必要な設定は変更されていません。",
+          "outcome": {
+            "failed": {
+              "title": "検証に失敗しました",
+              "description": "新しい設定は検証に失敗しました。適用する前に修正してください。"
+            },
+            "warnings": {
+              "title": "警告付きで検証に合格しました",
+              "description": "一部の任意のチェックが失敗したか、確認できませんでした。適用は可能です。"
+            },
+            "incomplete": {
+              "title": "検証が完了しませんでした",
+              "description": "完了したチェックは合格しました。適用は可能です。"
+            },
+            "passed": {
+              "title": "検証に合格しました",
+              "description": "新しい設定はすべてのチェックに合格しました。"
+            }
+          },
           "error": {
             "title": "設定が無効です"
           }

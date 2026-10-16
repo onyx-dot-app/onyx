@@ -27,7 +27,6 @@ import type {
 } from "@/lib/connectors/types";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import { cn } from "@opal/utils";
 import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
@@ -35,6 +34,7 @@ import CheckRunPopoverContent, {
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 
 export const RUN_KIND_ICONS = {
   indexing: SvgFiles,
@@ -133,6 +133,13 @@ export function isActive(run: CCPairRun): boolean {
     case "checks":
       return run.attempt.status === "running";
   }
+}
+
+/** Whether the run ended in failure, as the feed's failed status group counts it. */
+export function isFailed(run: CCPairRun): boolean {
+  return (
+    run.attempt.status === "failed" || run.attempt.status === "failed_to_run"
+  );
 }
 
 /** When the run finished, or `null` while it has not. */
@@ -490,7 +497,7 @@ export default function RunRow({
     <Section
       alignItems="stretch"
       height="fit"
-      className={cn("transition-opacity", dimmed && "opacity-50")}
+      className={focusDimClass(dimmed)}
     >
       <Popover open={open} onOpenChange={onOpenChange}>
         <Popover.Anchor asChild>

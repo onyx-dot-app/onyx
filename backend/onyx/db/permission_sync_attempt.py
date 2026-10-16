@@ -610,18 +610,23 @@ def get_external_group_sync_retry_after(
     return last_failed_at + request_retry_delay(failure_count)
 
 
+def source_group_sync_is_cc_pair_agnostic(source: DocumentSource) -> bool:
+    """Whether the source's group sync covers all its pairs in one run."""
+    is_agnostic: bool = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_group_sync_is_cc_pair_agnostic",
+        noop_return_value=False,
+    )(source)
+    return is_agnostic
+
+
 def relevant_external_group_sync_attempts_filter(
     cc_pair_id: int, source: DocumentSource
 ) -> ColumnElement[bool]:
     """A pair's group sync attempts. A source whose group sync covers all its pairs
     logs each run against one pair, so this widens to every pair of that source.
     Two sites of one source therefore share one history."""
-    is_agnostic: bool = fetch_ee_implementation_or_noop(
-        "onyx.external_permissions.sync_params",
-        "source_group_sync_is_cc_pair_agnostic",
-        noop_return_value=False,
-    )(source)
-    if not is_agnostic:
+    if not source_group_sync_is_cc_pair_agnostic(source):
         return (
             ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
             == cc_pair_id

@@ -11,6 +11,8 @@ class IndexAttemptErrorPydantic(BaseModel):
 
     document_id: str | None
     document_link: str | None
+    # The indexed document's title. None until the document lands.
+    document_name: str | None = None
 
     entity_id: str | None
     failed_time_range_start: datetime | None
@@ -26,12 +28,15 @@ class IndexAttemptErrorPydantic(BaseModel):
     error_type: str | None = None
 
     @classmethod
-    def from_model(cls, model: IndexAttemptError) -> "IndexAttemptErrorPydantic":
+    def from_model(
+        cls, model: IndexAttemptError, document_name: str | None = None
+    ) -> "IndexAttemptErrorPydantic":
         return cls(
             id=model.id,
             connector_credential_pair_id=model.connector_credential_pair_id,
             document_id=model.document_id,
             document_link=model.document_link,
+            document_name=document_name,
             entity_id=model.entity_id,
             failed_time_range_start=model.failed_time_range_start,
             failed_time_range_end=model.failed_time_range_end,
