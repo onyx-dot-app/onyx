@@ -64,6 +64,8 @@ export default function ConnectorRow({
   const warnings = attempt?.error_count ?? 0;
   // An empty display name falls back to the email, as an unset one does.
   const owner = row.creator_name?.trim() || row.creator_email;
+  // A paused or scheduled row has no run in flight, so its stages and file counts stay hidden.
+  const idle = row.status === "paused" || row.status === "scheduled";
   const toggleLabel = expanded ? t("actions.collapse") : t("actions.expand");
 
   // What the status line adds: the live rate, the place in line, or when it last ran.
@@ -193,14 +195,18 @@ export default function ConnectorRow({
                     icon={tag.icon}
                     title={tBadges(tag.labelKey)}
                     color={tag.color}
+                    variant="status"
+                    font="secondary-body"
                   />
-                  {attempt !== null && <StageDetailsTrigger />}
+                  {attempt !== null && !idle && <StageDetailsTrigger />}
                   {warnings > 0 && (
                     <Tag
                       icon={SvgAlertTriangle}
                       title={format.number(warnings)}
                       tooltip={tRuns("warnings.tooltip", { count: warnings })}
-                      color="amber"
+                      color="orange"
+                      variant="count"
+                      font="secondary-body"
                     />
                   )}
                 </Section>
@@ -237,7 +243,7 @@ export default function ConnectorRow({
                     {t("docs.label")}
                   </Text>
                 </Section>
-                {attempt !== null && <DocCounts attempt={attempt} />}
+                {attempt !== null && !idle && <DocCounts attempt={attempt} />}
               </Section>
 
               <Section
