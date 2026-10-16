@@ -36,9 +36,16 @@ function runsQueryParams(query: CCPairRunsQuery): string {
   return params.toString();
 }
 
-function resolvableCountParams(level: CCPairRunLevel, q: string): string {
+function resolvableCountParams(
+  level: CCPairRunLevel,
+  q: string,
+  since: string | null,
+  until: string | null
+): string {
   const params = new URLSearchParams({ level });
   if (q) params.set("q", q);
+  if (since) params.set("since", since);
+  if (until) params.set("until", until);
   return params.toString();
 }
 
@@ -345,9 +352,11 @@ export const SWR_KEYS = {
   ccPairResolvableRunsCount: (
     ccPairId: number,
     level: CCPairRunLevel,
-    q: string
+    q: string,
+    since: string | null,
+    until: string | null
   ) =>
-    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q)}`,
+    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until)}`,
   ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
     `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
 
@@ -371,8 +380,13 @@ export const SWR_KEYS = {
   indexMonitoringRunsPrefix: "/api/manage/admin/index-monitoring/runs?",
   indexMonitoringResolvableRunsCountPrefix:
     "/api/manage/admin/index-monitoring/runs/resolvable-count?",
-  indexMonitoringResolvableRunsCount: (level: CCPairRunLevel, q: string) =>
-    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q)}`,
+  indexMonitoringResolvableRunsCount: (
+    level: CCPairRunLevel,
+    q: string,
+    since: string | null,
+    until: string | null
+  ) =>
+    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until)}`,
   indexMonitoringRuns: (query: CCPairRunsQuery) =>
     `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query)}`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>

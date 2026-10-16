@@ -756,6 +756,7 @@ class CCPairRunsResolveMatchingRequest(BaseModel):
     level: CCPairRunLevel
     q: str | None = Field(default=None, max_length=200)
     since: datetime | None = None
+    until: datetime | None = None
     kinds: list[CCPairRunKind] | None = None
 
 
