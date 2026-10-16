@@ -114,11 +114,17 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
                 # live one on the old chunks.
                 task_logger.info("tabular re-chunk: a reindex is in flight, waiting")
                 return None
-            if port_backfill_has_pending_work(
-                db_session, active_search_settings.primary.id
+            # Only while an INSTANT swap is still backfilling from the PAST
+            # index: that port copies chunks boundary for boundary and would
+            # carry the old chunks back over finished work. Without the
+            # port_backfill_source_id check this blocks forever, because
+            # pending work means "a cc_pair has no settled port attempt",
+            # which is the normal state outside a port.
+            if active_search_settings.primary.port_backfill_source_id is not None and (
+                port_backfill_has_pending_work(
+                    db_session, active_search_settings.primary.id
+                )
             ):
-                # The port copies chunks boundary for boundary and would carry
-                # the old chunks back over finished work.
                 task_logger.info("tabular re-chunk: waiting for the reindex port")
                 return None
 
