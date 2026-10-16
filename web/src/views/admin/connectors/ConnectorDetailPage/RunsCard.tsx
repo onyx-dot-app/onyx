@@ -191,8 +191,12 @@ export default function RunsCard({
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
+  // The shared window is always set, so only a local narrowing counts as a filter.
   const filtered =
-    kind !== null || statusGroup !== null || since !== null || search !== "";
+    kind !== null ||
+    statusGroup !== null ||
+    (sharedWindow === undefined && picked.since !== null) ||
+    search !== "";
 
   const body = (
     <>

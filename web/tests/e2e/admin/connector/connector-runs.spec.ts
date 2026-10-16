@@ -234,14 +234,16 @@ test.describe("Connector runs", () => {
     await expect(detail.timeWindowPicker).toHaveText("Last 12 hours");
     await expect(detail.runsTimeFilter).toContainText("Last 12 hours");
     await expect.poll(() => chartWindows.at(-1)).toBe("12h");
-    await expect.poll(() => runsSince.at(-1) ?? null).not.toBeNull();
-    const twelveHourSince = runsSince.at(-1);
+    // The activity panel reads the same route without a window, so look at windowed reads only.
+    const lastSince = () => runsSince.filter((since) => since !== null).at(-1);
+    await expect.poll(lastSince).toBeDefined();
+    const twelveHourSince = lastSince();
 
     // The run list's filter moves the chart.
     await detail.pickTimeWindow(detail.runsTimeFilter, "Last 24 hours");
     await expect(detail.timeWindowPicker).toHaveText("Last 24 hours");
     await expect.poll(() => chartWindows.at(-1)).toBe("24h");
-    await expect.poll(() => runsSince.at(-1)).not.toBe(twelveHourSince);
+    await expect.poll(lastSince).not.toBe(twelveHourSince);
 
     // The chart's picker moves the run list.
     await detail.pickTimeWindow(detail.timeWindowPicker, "Last 7 days");
