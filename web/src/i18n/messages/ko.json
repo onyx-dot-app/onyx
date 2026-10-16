@@ -2548,7 +2548,7 @@
           "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
         "search": {
-          "placeholder": "인덱싱 실행 검색..."
+          "placeholder": "인덱싱 실행 검색…"
         },
         "window": {
           "label": "기간",
@@ -6878,7 +6878,8 @@
         "viewLogs": "활동 기록 보기",
         "panel": {
           "title": "활동 기록",
-          "close": "활동 기록 숨기기"
+          "close": "활동 기록 숨기기",
+          "pairTitle": "{name} 활동 기록"
         }
       },
       "list": {
@@ -6914,7 +6915,9 @@
           "manage": "관리",
           "manageFederated": "페더레이션 커넥터 관리",
           "expand": "세부 정보 보기",
-          "collapse": "세부 정보 숨기기"
+          "collapse": "세부 정보 숨기기",
+          "pause": "일시 중지",
+          "resume": "재개"
         },
         "federated": {
           "tag": "페더레이션"

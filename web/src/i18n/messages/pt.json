@@ -2548,7 +2548,7 @@
           "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
         "search": {
-          "placeholder": "Pesquisar execuções de indexação..."
+          "placeholder": "Pesquisar execuções de indexação…"
         },
         "window": {
           "label": "Período",
@@ -6878,7 +6878,8 @@
         "viewLogs": "Ver o histórico de atividades",
         "panel": {
           "title": "Histórico de atividades",
-          "close": "Ocultar o histórico de atividades"
+          "close": "Ocultar o histórico de atividades",
+          "pairTitle": "Histórico de atividades de {name}"
         }
       },
       "list": {
@@ -6914,7 +6915,9 @@
           "manage": "Gerenciar",
           "manageFederated": "Gerenciar conector federado",
           "expand": "Ver detalhes",
-          "collapse": "Ocultar detalhes"
+          "collapse": "Ocultar detalhes",
+          "pause": "Pausar",
+          "resume": "Retomar"
         },
         "federated": {
           "tag": "Federado"

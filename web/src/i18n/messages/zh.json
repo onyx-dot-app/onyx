@@ -2548,7 +2548,7 @@
           "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
         "search": {
-          "placeholder": "搜索索引运行..."
+          "placeholder": "搜索索引运行…"
         },
         "window": {
           "label": "时间范围",
@@ -6878,7 +6878,8 @@
         "viewLogs": "查看活动历史",
         "panel": {
           "title": "活动历史",
-          "close": "隐藏活动历史"
+          "close": "隐藏活动历史",
+          "pairTitle": "{name} 的活动历史"
         }
       },
       "list": {
@@ -6914,7 +6915,9 @@
           "manage": "管理",
           "manageFederated": "管理联合连接器",
           "expand": "查看详情",
-          "collapse": "隐藏详情"
+          "collapse": "隐藏详情",
+          "pause": "暂停",
+          "resume": "恢复"
         },
         "federated": {
           "tag": "联合"

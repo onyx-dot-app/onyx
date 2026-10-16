@@ -2548,7 +2548,7 @@
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
         "search": {
-          "placeholder": "インデックス実行を検索..."
+          "placeholder": "インデックス実行を検索…"
         },
         "window": {
           "label": "期間",
@@ -6878,7 +6878,8 @@
         "viewLogs": "アクティビティ履歴を表示",
         "panel": {
           "title": "アクティビティ履歴",
-          "close": "アクティビティ履歴を閉じる"
+          "close": "アクティビティ履歴を閉じる",
+          "pairTitle": "{name} のアクティビティ履歴"
         }
       },
       "list": {
@@ -6914,7 +6915,9 @@
           "manage": "管理",
           "manageFederated": "フェデレーテッドコネクタを管理",
           "expand": "詳細を表示",
-          "collapse": "詳細を隠す"
+          "collapse": "詳細を隠す",
+          "pause": "一時停止",
+          "resume": "再開"
         },
         "federated": {
           "tag": "フェデレーテッド"

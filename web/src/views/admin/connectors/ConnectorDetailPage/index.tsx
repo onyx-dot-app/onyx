@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -60,6 +59,7 @@ import {
   pickWindow,
   type PickedWindow,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focus";
 
 const CC_PAIR_POLL_MS = 5000;
 
@@ -387,7 +387,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               alignItems="stretch"
               gap={6}
               height="fit"
-              className={cn("transition-opacity", runFocus && "opacity-50")}
+              className={focusDimClass(runFocus)}
             >
               <StatusCard
                 ccPair={ccPair}

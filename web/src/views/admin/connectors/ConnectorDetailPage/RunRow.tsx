@@ -27,7 +27,6 @@ import type {
 } from "@/lib/connectors/types";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import { cn } from "@opal/utils";
 import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
@@ -35,6 +34,7 @@ import CheckRunPopoverContent, {
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focus";
 
 export const RUN_KIND_ICONS = {
   indexing: SvgFiles,
@@ -490,7 +490,7 @@ export default function RunRow({
     <Section
       alignItems="stretch"
       height="fit"
-      className={cn("transition-opacity", dimmed && "opacity-50")}
+      className={focusDimClass(dimmed)}
     >
       <Popover open={open} onOpenChange={onOpenChange}>
         <Popover.Anchor asChild>

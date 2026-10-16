@@ -2548,7 +2548,7 @@
           "syncedDocs": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}"
         },
         "search": {
-          "placeholder": "Indexläufe durchsuchen..."
+          "placeholder": "Indexläufe durchsuchen…"
         },
         "window": {
           "label": "Zeitraum",
@@ -6878,7 +6878,8 @@
         "viewLogs": "Aktivitätsverlauf anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
-          "close": "Aktivitätsverlauf ausblenden"
+          "close": "Aktivitätsverlauf ausblenden",
+          "pairTitle": "Aktivitätsverlauf von {name}"
         }
       },
       "list": {
@@ -6914,7 +6915,9 @@
           "manage": "Verwalten",
           "manageFederated": "Föderierten Konnektor verwalten",
           "expand": "Details anzeigen",
-          "collapse": "Details ausblenden"
+          "collapse": "Details ausblenden",
+          "pause": "Pausieren",
+          "resume": "Fortsetzen"
         },
         "federated": {
           "tag": "Föderiert"

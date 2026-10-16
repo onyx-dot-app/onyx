@@ -2548,7 +2548,7 @@
           "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
         "search": {
-          "placeholder": "Search indexing runs..."
+          "placeholder": "Search indexing runs…"
         },
         "window": {
           "label": "Time range",
@@ -6878,7 +6878,8 @@
         "viewLogs": "View activity history",
         "panel": {
           "title": "Activity History",
-          "close": "Hide activity history"
+          "close": "Hide activity history",
+          "pairTitle": "{name} Activity History"
         }
       },
       "list": {
@@ -6914,7 +6915,9 @@
           "manage": "Manage",
           "manageFederated": "Manage federated connector",
           "expand": "View Details",
-          "collapse": "Hide Details"
+          "collapse": "Hide Details",
+          "pause": "Pause",
+          "resume": "Resume"
         },
         "federated": {
           "tag": "Federated"

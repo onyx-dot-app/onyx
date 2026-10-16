@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { richNodes } from "@opal/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -51,6 +51,7 @@ import RunRow, {
   RUN_KIND_ICONS,
   runErrorText,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
+import { useFocusedRow } from "@/views/admin/connectors/ConnectorDetailPage/focus";
 
 const PAGE_SIZE = 10;
 export const RUNS_POLL_MS = 5000;
@@ -98,8 +99,10 @@ export interface RunsCardProps {
   ccPairId: number;
   /** Shows the cancel action on running or queued index attempts. */
   canOperate: boolean;
-  /** Renders the list without its own card, for a card that already frames it. */
+  /** Renders a compact list for a card that already frames it: search, the newest page of runs, no filters or pages. */
   embedded?: boolean;
+  /** Buttons beside the search in the embedded list. */
+  actions?: ReactNode;
   /** The page's window, shared with the status card. Without it the list keeps its own. */
   sharedWindow?: SharedWindow;
   onSharedWindowChange?: (window: PickerWindow) => void;
@@ -117,6 +120,7 @@ export default function RunsCard({
   ccPairId,
   canOperate,
   embedded = false,
+  actions,
   sharedWindow,
   onSharedWindowChange,
   onFocusChange,
@@ -137,11 +141,7 @@ export default function RunsCard({
     setWidened(false);
   }
   const since = widened ? null : windowSince;
-  const [openRun, setOpenRun] = useState<string | null>(null);
-  useEffect(() => {
-    onFocusChange?.(openRun !== null);
-  }, [openRun, onFocusChange]);
-  useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
+  const focus = useFocusedRow<string>(onFocusChange);
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
   const [statusGroup, setStatusGroup] = useState<CCPairRunStatusGroup | null>(
     null
@@ -246,15 +246,90 @@ export default function RunsCard({
     (sharedWindow === undefined && picked.since !== null) ||
     search !== "";
 
+  const searchInputField = (
+    <InputTypeIn
+      searchIcon
+      variant={embedded ? "primary" : "internal"}
+      placeholder={t("search.placeholder")}
+      value={searchInput}
+      onChange={(event) => {
+        setSearchInput(event.target.value);
+        setPage(1);
+      }}
+    />
+  );
+  const runList =
+    error !== undefined ? (
+      <MessageCard variant="error" title={t("loadError.title")} />
+    ) : isLoading && data === undefined ? (
+      <Section alignItems="stretch" gap={1} height="fit">
+        {Array.from({ length: LOADER_ROWS }, (_, index) => (
+          <CardLoader
+            key={index}
+            color="background-tint-00"
+            border="none"
+            rounding={2}
+            padding={2}
+          />
+        ))}
+      </Section>
+    ) : emptyWindow ? (
+      <Section alignItems="stretch" gap={0} height="fit">
+        <IllustrationContent
+          illustration={SvgLongWait}
+          title={t("empty.title")}
+        />
+        {pastRuns > 0 && (
+          <Section flexDirection="row" alignItems="center" gap={0} height="fit">
+            <Section height="fit" className="min-w-0 flex-1">
+              <Divider title={t("empty.pastRuns", { count: pastRuns })} />
+            </Section>
+            <Button
+              icon={SvgChevronRight}
+              prominence="tertiary"
+              size="sm"
+              tooltip={t("empty.view")}
+              aria-label={t("empty.viewAria", { count: pastRuns })}
+              onClick={() => {
+                setWidened(true);
+                setPage(1);
+              }}
+            />
+          </Section>
+        )}
+      </Section>
+    ) : (data?.items.length ?? 0) === 0 ? (
+      <IllustrationContent
+        illustration={SvgNoResult}
+        title={filtered ? t("empty.filteredTitle") : t("empty.title")}
+      />
+    ) : (
+      <Section alignItems="stretch" gap={1} height="fit">
+        {data?.items.map((run) => (
+          <RunRow
+            key={runKey(run)}
+            run={run}
+            canCancel={canOperate}
+            onCancel={() => void cancel(run)}
+            onViewLogs={() => setLogRun(run)}
+            open={focus.isOpen(runKey(run))}
+            onOpenChange={(open) => focus.setOpen(runKey(run), open)}
+            dimmed={focus.isDimmed(runKey(run))}
+          />
+        ))}
+      </Section>
+    );
+  const logModal = logRun !== null && (
+    <ExceptionTraceModal
+      onOutsideClick={() => setLogRun(null)}
+      exceptionTrace={runErrorText(logRun) ?? ""}
+      title={t(`errorModal.${logRun.kind}`)}
+    />
+  );
+
   const body = (
     <>
-      {logRun !== null && (
-        <ExceptionTraceModal
-          onOutsideClick={() => setLogRun(null)}
-          exceptionTrace={runErrorText(logRun) ?? ""}
-          title={t(`errorModal.${logRun.kind}`)}
-        />
-      )}
+      {logModal}
       <Section alignItems="stretch" gap={1} height="fit">
         <Section
           flexDirection="row"
@@ -263,16 +338,7 @@ export default function RunsCard({
           height="fit"
         >
           <Section height="fit" className="min-w-0 flex-1">
-            <InputTypeIn
-              searchIcon
-              variant="internal"
-              placeholder={t("search.placeholder")}
-              value={searchInput}
-              onChange={(event) => {
-                setSearchInput(event.target.value);
-                setPage(1);
-              }}
-            />
+            {searchInputField}
           </Section>
           <Section
             flexDirection="row"
@@ -426,79 +492,7 @@ export default function RunsCard({
           </Dropdown>
         </Section>
 
-        {error !== undefined ? (
-          <MessageCard variant="error" title={t("loadError.title")} />
-        ) : isLoading && data === undefined ? (
-          <Section alignItems="stretch" gap={1} height="fit">
-            {Array.from({ length: LOADER_ROWS }, (_, index) => (
-              <CardLoader
-                key={index}
-                color="background-tint-00"
-                border="none"
-                rounding={2}
-                padding={2}
-              />
-            ))}
-          </Section>
-        ) : emptyWindow ? (
-          <Section alignItems="stretch" gap={0} height="fit">
-            <IllustrationContent
-              illustration={SvgLongWait}
-              title={t("empty.title")}
-            />
-            {pastRuns > 0 && (
-              <Section
-                flexDirection="row"
-                alignItems="center"
-                gap={0}
-                height="fit"
-              >
-                <Section height="fit" className="min-w-0 flex-1">
-                  <Divider title={t("empty.pastRuns", { count: pastRuns })} />
-                </Section>
-                <Button
-                  icon={SvgChevronRight}
-                  prominence="tertiary"
-                  size="sm"
-                  tooltip={t("empty.view")}
-                  aria-label={t("empty.viewAria", { count: pastRuns })}
-                  onClick={() => {
-                    setWidened(true);
-                    setPage(1);
-                  }}
-                />
-              </Section>
-            )}
-          </Section>
-        ) : (data?.items.length ?? 0) === 0 ? (
-          <IllustrationContent
-            illustration={SvgNoResult}
-            title={filtered ? t("empty.filteredTitle") : t("empty.title")}
-          />
-        ) : (
-          <Section alignItems="stretch" gap={1} height="fit">
-            {data?.items.map((run) => (
-              <RunRow
-                key={runKey(run)}
-                run={run}
-                canCancel={canOperate}
-                onCancel={() => void cancel(run)}
-                onViewLogs={() => setLogRun(run)}
-                open={openRun === runKey(run)}
-                onOpenChange={(open) =>
-                  setOpenRun((current) =>
-                    open
-                      ? runKey(run)
-                      : current === runKey(run)
-                        ? null
-                        : current
-                  )
-                }
-                dimmed={openRun !== null && openRun !== runKey(run)}
-              />
-            ))}
-          </Section>
-        )}
+        {runList}
 
         {totalItems > 0 && (
           <Section
@@ -534,10 +528,37 @@ export default function RunsCard({
       </Section>
     </>
   );
+  // The list sits flush against the framing card's sides and bottom, which round its corners.
   if (embedded) {
     return (
-      <Section alignItems="stretch" height="fit" data-testid="connector-runs">
-        {body}
+      <Section
+        alignItems="stretch"
+        gap={0}
+        height="fit"
+        data-testid="connector-runs"
+      >
+        {logModal}
+        <Section
+          flexDirection="row"
+          alignItems="center"
+          gap={1}
+          height="fit"
+          className="px-2 pb-2"
+        >
+          <Section height="fit" className="min-w-0 flex-1">
+            {searchInputField}
+          </Section>
+          {actions}
+        </Section>
+        <Section
+          alignItems="stretch"
+          gap={1}
+          padding={2}
+          height="fit"
+          className="border-t border-border-01 bg-background-tint-01"
+        >
+          {runList}
+        </Section>
       </Section>
     );
   }
