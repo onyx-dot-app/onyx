@@ -17,13 +17,13 @@ time limits do not fire in thread pools.
 
 from celery import Task, shared_task
 from pydantic import BaseModel, ValidationError
-from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.indexing.run_tabular_rechunk import (
     TABULAR_RECHUNK_TIME_BUDGET_S,
     run_tabular_rechunk,
 )
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
     SKIP_SPREADSHEET_CONTENT,
@@ -39,10 +39,14 @@ from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.search_settings import get_active_search_settings
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.redis.redis_pool import get_redis_client
 
-# Outlives one run, so a crashed worker's claim still expires.
+# Outlives one run, so a crashed worker's claim still expires. The lease is
+# extended after every batch, because one batch can outlast the budget when
+# the embedding provider throttles.
 _LOCK_TIMEOUT_S = TABULAR_RECHUNK_TIME_BUDGET_S + 5 * 60
+# Full rescans allowed to retry documents that failed earlier. Bounded so a
+# permanently broken document cannot keep the migration running for ever.
+_MAX_RETRY_PASSES = 3
 
 
 class TabularRechunkProgress(BaseModel):
@@ -53,6 +57,10 @@ class TabularRechunkProgress(BaseModel):
     completed: bool = False
     documents_indexed: int = 0
     documents_failed: int = 0
+    # Documents left oversized by a failure. The scan rewinds to retry them
+    # rather than reporting a migration that silently skipped work.
+    failed_document_ids: list[str] = []
+    retry_passes: int = 0
 
 
 def load_progress() -> TabularRechunkProgress:
@@ -95,7 +103,7 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
         task_logger.info("tabular re-chunk: not running, %s", blocked)
         return None
 
-    lock: RedisLock = get_redis_client().lock(
+    lock = get_cache_backend().lock(
         OnyxRedisLocks.TABULAR_RECHUNK_LOCK, timeout=_LOCK_TIMEOUT_S
     )
     if not lock.acquire(blocking=False):
@@ -134,9 +142,32 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
         # than a stale copy.
         progress = load_progress()
         progress.cursor = result.last_document_id
-        progress.completed = result.finished
         progress.documents_indexed += result.documents_indexed
         progress.documents_failed += result.documents_failed
+        progress.failed_document_ids = sorted(
+            set(progress.failed_document_ids) | set(result.failed_document_ids)
+        )
+        progress.completed = result.finished
+        if result.finished and progress.failed_document_ids:
+            # The cursor has run past documents that are still oversized.
+            # Rewind and sweep again rather than calling the migration done.
+            if progress.retry_passes < _MAX_RETRY_PASSES:
+                progress.retry_passes += 1
+                progress.cursor = None
+                progress.completed = False
+                progress.failed_document_ids = []
+                task_logger.info(
+                    "tabular re-chunk: %s documents failed, starting retry pass %s",
+                    result.documents_failed,
+                    progress.retry_passes,
+                )
+            else:
+                task_logger.error(
+                    "tabular re-chunk: giving up on %s documents after %s passes: %s",
+                    len(progress.failed_document_ids),
+                    progress.retry_passes,
+                    progress.failed_document_ids,
+                )
         store_progress(progress)
 
         return result.documents_indexed or None
