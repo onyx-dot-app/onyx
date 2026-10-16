@@ -25,6 +25,9 @@ from onyx.server.features.build.session.models import (
     SnapshotResponse,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.craft_guest_diagnostics import (
+    capture_guest_facts_on_read_timeout,
+)
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -59,12 +62,13 @@ class BuildSessionManager:
         # one exists. Tests need isolation per call, so delete any existing
         # empty session before creating fresh.
         body: dict[str, Any] = {"headless": headless, **kwargs}
-        pre = client.post(
-            _sessions_url(),
-            json=body,
-            headers=user.headers,
-            cookies=user.cookies,
-        )
+        with capture_guest_facts_on_read_timeout(user):
+            pre = client.post(
+                _sessions_url(),
+                json=body,
+                headers=user.headers,
+                cookies=user.cookies,
+            )
         if pre.is_error:
             raise AssertionError(
                 f"POST /build/sessions failed: {pre.status_code} {pre.reason_phrase} "
@@ -76,12 +80,13 @@ class BuildSessionManager:
             cookies=user.cookies,
         )
 
-        response = client.post(
-            _sessions_url(),
-            json=body,
-            headers=user.headers,
-            cookies=user.cookies,
-        )
+        with capture_guest_facts_on_read_timeout(user):
+            response = client.post(
+                _sessions_url(),
+                json=body,
+                headers=user.headers,
+                cookies=user.cookies,
+            )
         if response.is_error:
             raise AssertionError(
                 f"POST /build/sessions failed: {response.status_code} {response.reason_phrase} "

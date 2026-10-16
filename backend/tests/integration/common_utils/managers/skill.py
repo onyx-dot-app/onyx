@@ -21,6 +21,9 @@ from onyx.server.features.skill.models import (
     TransferSkillOwnershipRequest,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.craft_guest_diagnostics import (
+    capture_guest_facts_on_read_timeout,
+)
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -288,11 +291,12 @@ class SkillManager:
         enabled: bool,
         replace_conflict: bool = False,
     ) -> SkillResponse:
-        response = client.put(
-            f"{API_SERVER_URL}/skills/{skill.id}/enabled",
-            json={"enabled": enabled, "replace_conflict": replace_conflict},
-            headers=user_performing_action.headers,
-        )
+        with capture_guest_facts_on_read_timeout(user_performing_action):
+            response = client.put(
+                f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+                json={"enabled": enabled, "replace_conflict": replace_conflict},
+                headers=user_performing_action.headers,
+            )
         response.raise_for_status()
         return _response_model(response, SkillResponse)
 

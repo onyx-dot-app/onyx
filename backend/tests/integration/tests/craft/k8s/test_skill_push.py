@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import io
-import re
-import shlex
 import zipfile
 from collections.abc import Callable, Generator
-from contextlib import suppress
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -36,7 +33,6 @@ from onyx.db.models import (
     UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.skill.models import SkillResponse, SkillUserShareRequest
 from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
 from onyx.skills.push import (
@@ -44,7 +40,6 @@ from onyx.skills.push import (
     push_skill_to_affected_sandboxes,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -53,7 +48,6 @@ from tests.integration.common_utils.test_models import DATestUser, DATestUserGro
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
     SandboxHandle,
     WorkspaceProxy,
-    pod_exec,
 )
 
 logger = setup_logger()
@@ -141,196 +135,6 @@ def _share_directly(
             )
         ],
     )
-
-
-def _pending_managed_push_facts(workspace: WorkspaceProxy) -> str:
-    script = """
-import os
-import signal
-import stat
-import sys
-from contextlib import suppress
-from pathlib import Path
-
-sys.excepthook = lambda *_: None
-signal.alarm(5)
-rows = []
-fd_types = {
-    stat.S_IFIFO: 'fifo', stat.S_IFSOCK: 'socket', stat.S_IFCHR: 'char',
-    stat.S_IFBLK: 'block', stat.S_IFDIR: 'directory', stat.S_IFREG: 'regular',
-    stat.S_IFLNK: 'symlink',
-}
-for process in Path('/proc').iterdir():
-    if not process.name.isascii() or not process.name.isdecimal():
-        continue
-    with suppress(OSError, ValueError, IndexError):
-        with (process / 'cmdline').open('rb') as source:
-            raw_argv = source.read(4096)
-        argv = raw_argv.split(b'\\0')
-        if len(raw_argv) == 4096 or not any(
-            argv[index:index + 3] == [b'-m', b'onyx_guest', b'push-managed']
-            for index in range(len(argv) - 2)
-        ):
-            continue
-        with (process / 'stat').open() as source:
-            fields = source.read(4096).rsplit(')', 1)[1].split()
-        row = [f'pid={int(process.name)}', f'state={fields[0]}',
-               f'utime_ticks={int(fields[11])}', f'stime_ticks={int(fields[12])}']
-        wait = 'other'
-        with suppress(OSError):
-            with (process / 'wchan').open() as source:
-                wchan = source.read(128).strip()
-            if wchan in {'pipe_read', 'pipe_wait_readable'}:
-                wait = 'pipe_read'
-            elif wchan in {'flock_lock_inode_wait', 'locks_lock_inode_wait',
-                           'posix_lock_inode_wait'}:
-                wait = 'flock_wait'
-            elif wchan in {'io_schedule', 'folio_wait_bit_common',
-                           'wait_on_page_bit_common', 'filemap_get_pages',
-                           '__wait_on_buffer', 'jbd2_log_wait_commit'}:
-                wait = 'file_io'
-        row.append(f'wait={wait}')
-        for fd in range(3):
-            with suppress(OSError):
-                kind = stat.S_IFMT((process / 'fd' / str(fd)).stat().st_mode)
-                row.append(f'fd{fd}={fd_types.get(kind, "other")}')
-        with suppress(OSError, ValueError, IndexError):
-            with (process / 'status').open() as source:
-                for line in source.read(4096).splitlines():
-                    if line.startswith('VmRSS:'):
-                        row.append(f'rss_kib={int(line.split()[1])}')
-                        break
-        rows.append('helper ' + ' '.join(row))
-        if len(rows) == 16:
-            break
-summary = [f'helper_count={len(rows)}']
-with suppress(OSError, ValueError, IndexError):
-    with Path('/proc/meminfo').open() as source:
-        for line in source.read(4096).splitlines():
-            key = {'MemTotal:': 'total_kib', 'MemAvailable:': 'available_kib'}.get(
-                line.split()[0]
-            )
-            if key:
-                summary.append(f'{key}={int(line.split()[1])}')
-print('summary ' + ' '.join(summary))
-for row in rows:
-    print(row)
-with suppress(OSError, ValueError, IndexError):
-    lock = Path('/run/onyx/managed.lock').stat()
-    owners = set()
-    waiters = set()
-    with Path('/proc/locks').open() as source:
-        for line in source.read(65536).splitlines():
-            fields = line.split()
-            waiting = fields[1] == '->'
-            if waiting:
-                fields.pop(1)
-            if fields[1] != 'FLOCK':
-                continue
-            major, minor, inode = fields[5].split(':')
-            if (int(major, 16), int(minor, 16), int(inode)) != (
-                os.major(lock.st_dev), os.minor(lock.st_dev), lock.st_ino
-            ):
-                continue
-            pids = waiters if waiting else owners
-            if len(pids) < 16:
-                pids.add(int(fields[4]))
-    for key, pids in (('owner_pid', owners), ('waiter_pid', waiters)):
-        for pid in sorted(pids):
-            print(f'lock {key}={pid}')
-"""
-    output = pod_exec(
-        workspace._k8s_client,
-        workspace._pod_name,
-        SANDBOX_NAMESPACE,
-        f"python3 -c {shlex.quote(script)}",
-        root=True,
-        timeout_s=5.0,
-    )
-    numeric_fields = {
-        "summary": {
-            "helper_count": 16,
-            "total_kib": 2**63 - 1,
-            "available_kib": 2**63 - 1,
-        },
-        "helper": {
-            "pid": 2**31 - 1,
-            "utime_ticks": 2**63 - 1,
-            "stime_ticks": 2**63 - 1,
-            "rss_kib": 2**63 - 1,
-        },
-        "lock": {"owner_pid": 2**31 - 1, "waiter_pid": 2**31 - 1},
-    }
-    categories = {
-        "state": set("RSDZTtXxIPW"),
-        "wait": {"pipe_read", "flock_wait", "file_io", "other"},
-        **{
-            f"fd{fd}": {
-                "fifo",
-                "socket",
-                "char",
-                "block",
-                "directory",
-                "regular",
-                "symlink",
-                "other",
-            }
-            for fd in range(3)
-        },
-    }
-    remaining_rows = {"summary": 1, "helper": 16, "lock": 32}
-    rows = []
-    for line in output[:4096].splitlines():
-        kind, _, raw_fields = line.partition(" ")
-        if kind not in remaining_rows or not remaining_rows[kind]:
-            continue
-        facts: dict[str, str] = {}
-        for field in raw_fields.split():
-            key, _, value = field.partition("=")
-            maximum = numeric_fields[kind].get(key)
-            if (
-                maximum is not None
-                and value.isascii()
-                and value.isdecimal()
-                and len(value) <= 20
-                and int(value) <= maximum
-                and (int(value) > 0 or not key.endswith("pid"))
-            ):
-                facts[key] = str(int(value))
-            elif kind == "helper" and value in categories.get(key, set()):
-                facts[key] = value
-        if facts and (kind != "helper" or "pid" in facts):
-            rows.append(
-                kind + " " + " ".join(f"{key}={value}" for key, value in facts.items())
-            )
-            remaining_rows[kind] -= 1
-    return " | ".join(rows) or "unavailable"
-
-
-def _enable_skill_with_pending_push_sample(
-    skill: SkillResponse, user: DATestUser, workspace: WorkspaceProxy
-) -> SkillResponse:
-    future = start_thread_future(
-        lambda: SkillManager.set_enabled(skill, user, True),
-        name="skill-enable-pending-push",
-    )
-    try:
-        return future.result(timeout=5.0)
-    except TimeoutError:
-        if future.done():
-            return future.result()
-    try:
-        print(
-            f"Managed push pending; facts={_pending_managed_push_facts(workspace)}",
-            flush=True,
-        )
-    except Exception as error:
-        error_class = type(error).__name__
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", error_class) is None:
-            error_class = "Exception"
-        with suppress(Exception):
-            print(f"Managed push sample failed; exception={error_class}", flush=True)
-    return future.result()
 
 
 @pytest.fixture
@@ -760,7 +564,7 @@ class TestSkillPush:
 
         _skill_file_path(ws_a, skill.name).wait_for_absent()
         _skill_file_path(ws_b, skill.name).wait_for_absent()
-        _enable_skill_with_pending_push_sample(skill, user_b, ws_b)
+        SkillManager.set_enabled(skill, user_b, True)
         _skill_file_path(ws_b, skill.name).wait_for_bytes(b"direct shifting shares\n")
 
     def test_replace_bundle_propagates_new_content(
