@@ -7,12 +7,10 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # extra registry access. CI overrides both with the matching Docker Hardened Images from
 # dhi.io, which need a Docker account with DHI catalog access.
 # Refresh a digest with: docker buildx imagetools inspect <image reference>
-ARG PYTHON_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
-ARG PYTHON_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
 
 # Build stage. Needs a root user plus a shell and build tooling to install the wheels,
 # which both the default slim image and the DHI "-dev" variant provide.
-FROM ${PYTHON_BUILDER_IMAGE} AS builder
+FROM python:3.13-slim-bookworm AS builder
 
 ENV ONYX_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface \
@@ -64,7 +62,7 @@ SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_rem
 # image; see USER below) and chown everything the runtime writes to it. The DHI runtime
 # variant is near-distroless: no shell or package manager, so keep this stage free of
 # RUN instructions.
-FROM ${PYTHON_RUNTIME_IMAGE} AS final
+FROM python:3.13-slim-bookworm AS final
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
