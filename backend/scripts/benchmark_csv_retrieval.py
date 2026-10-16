@@ -2,7 +2,7 @@
 Benchmark document retrieval quality against Onyx's search endpoint.
 
 Usage:
-    python backend/scripts/benchmark_csv_retrieval.py \
+    cd backend && uv run python -m scripts.benchmark_csv_retrieval \
         --input benchmark.csv \
         [--base-url http://localhost:3000] \
         [--email admin@example.com] \
@@ -16,8 +16,8 @@ Input CSV format (has header row):
     "What is the Q1 revenue?",financials.xlsx
     "Who manages the West region?",sales_territories.csv
 
-Matches expected_file against each result's semantic_identifier
-(case-insensitive substring match).
+Matches expected_file against each result's semantic_identifier by exact
+file name, ignoring case.
 
 Credentials default to $ONYX_BENCH_EMAIL / $ONYX_BENCH_PASSWORD.
 """
@@ -29,9 +29,11 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import urlencode
+from pathlib import PurePosixPath
 
 import requests
+
+from scripts.benchmark_api import REQUEST_TIMEOUT_S, SearchDoc, login
 
 
 @dataclass
@@ -46,31 +48,13 @@ class QueryResult:
     ]  # (semantic_identifier, score) for top 3
 
 
-def login(base_url: str, email: str, password: str) -> dict[str, str]:
-    resp = requests.post(
-        f"{base_url}/api/auth/login",
-        data=urlencode({"username": email, "password": password}),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        timeout=REQUEST_TIMEOUT_S,
-    )
-    resp.raise_for_status()
-    cookie = resp.cookies.get("fastapiusersauth")
-    if not cookie:
-        raise RuntimeError("Login succeeded but no session cookie returned")
-    return {
-        "Content-Type": "application/json",
-        "Cookie": f"fastapiusersauth={cookie}",
-    }
-
-
-REQUEST_TIMEOUT_S = 60
 MAX_QUERY_ATTEMPTS = 3
 RETRY_BACKOFF_S = 2
 
 
 def search(
     base_url: str, headers: dict[str, str], query: str, num_hits: int
-) -> list[dict]:
+) -> list[SearchDoc]:
     """Run one search query, retrying transient failures.
 
     Retries up to MAX_QUERY_ATTEMPTS total on any request error or
@@ -92,7 +76,8 @@ def search(
                 timeout=REQUEST_TIMEOUT_S,
             )
             resp.raise_for_status()
-            return resp.json()["search_docs"]
+            docs: list[SearchDoc] = resp.json()["search_docs"]
+            return docs
         except (requests.RequestException, ValueError, KeyError) as e:
             last_error = e
             if attempt < MAX_QUERY_ATTEMPTS:
@@ -113,11 +98,17 @@ def search(
 
 
 def find_rank(
-    documents: list[dict], expected_file: str, top_k: int
+    documents: list[SearchDoc], expected_file: str, top_k: int
 ) -> tuple[int | None, float | None]:
-    expected_lower = expected_file.lower()
+    """Rank of the expected file among the hits, matched by exact name.
+
+    A substring match would score wholesale_sales.csv as a hit for sales.csv,
+    inflating recall and hiding a regression.
+    """
+    expected = PurePosixPath(expected_file).name.lower()
     for i, doc in enumerate(documents[:top_k]):
-        if expected_lower in doc.get("semantic_identifier", "").lower():
+        name = PurePosixPath(doc.get("semantic_identifier", "")).name.lower()
+        if name == expected:
             return i + 1, doc.get("score")
     return None, None
 
@@ -132,7 +123,7 @@ def run_benchmark(
     results: list[QueryResult] = []
     for i, (query, expected_file) in enumerate(queries, 1):
         print(f"  [{i}/{len(queries)}] {query[:60]}...")
-        documents = search(base_url, headers, query, num_hits)
+        documents: list[SearchDoc] = search(base_url, headers, query, num_hits)
         rank, score = find_rank(documents, expected_file, top_k)
         top_results = [
             (doc.get("semantic_identifier", "???"), doc.get("score"))

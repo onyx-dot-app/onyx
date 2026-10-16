@@ -4,9 +4,9 @@ File-connector benchmark cycle for spreadsheet retrieval:
 1. Upload a zip of spreadsheets; the server unzips it into individual files.
 2. Create a file credential + connector over those files, producing a CC pair.
 3. Wait for the CC pair to finish its first indexing run.
-4. Run benchmark_csv_retrieval.py against the indexed corpus, retrying on
-   non-zero exit. Output file is named from --label.
-5. Trigger deletion of the CC pair and wait for it to disappear.
+4. Run scripts.benchmark_csv_retrieval against the indexed corpus, retrying
+   on non-zero exit. Output file is named from --label.
+5. Delete the CC pair, wait for it to go, then delete the credential.
 
 Each run therefore scores one chunking variant against a freshly built index.
 Celery workers cache code at start, so restart docprocessing after editing the
@@ -14,7 +14,7 @@ chunker and before the next cycle.
 
 Usage:
     export ONYX_BENCH_EMAIL=... ONYX_BENCH_PASSWORD=...
-    python backend/scripts/run_csv_benchmark_cycle.py \
+    cd backend && uv run python -m scripts.run_csv_benchmark_cycle \
         --zip ~/Downloads/corpus.zip \
         --questions ~/Documents/questions_improved.csv \
         --label fieldvalue_baseline
@@ -29,9 +29,10 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 
 import requests
+
+from scripts.benchmark_api import REQUEST_TIMEOUT_S, login
 
 INDEXING_POLL_INTERVAL_S = 10
 INDEXING_TIMEOUT_S = 60 * 60  # 1 hour
@@ -39,33 +40,13 @@ INDEXING_TIMEOUT_S = 60 * 60  # 1 hour
 DELETION_POLL_INTERVAL_S = 5
 DELETION_TIMEOUT_S = 30 * 60  # 30 min
 
-# Every request carries a timeout: a stalled call must not outlive the
-# polling deadlines above.
-REQUEST_TIMEOUT_S = 60
-
-BENCHMARK_SCRIPT = "backend/scripts/benchmark_csv_retrieval.py"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+BENCHMARK_TIMEOUT_S = 60 * 60
 MAX_BENCHMARK_ATTEMPTS = 3
 
 # Indexing finished, from the caller's point of view. A partial run still
 # yields a scoreable index, so it does not hold the cycle for an hour.
 TERMINAL_INDEX_STATUSES = {"success", "completed_with_errors"}
-
-
-def login(base_url: str, email: str, password: str) -> dict[str, str]:
-    resp = requests.post(
-        f"{base_url}/api/auth/login",
-        data=urlencode({"username": email, "password": password}),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        timeout=REQUEST_TIMEOUT_S,
-    )
-    resp.raise_for_status()
-    cookie = resp.cookies.get("fastapiusersauth")
-    if not cookie:
-        raise RuntimeError("Login succeeded but no fastapiusersauth cookie")
-    return {
-        "Content-Type": "application/json",
-        "Cookie": f"fastapiusersauth={cookie}",
-    }
 
 
 def upload_zip(
@@ -246,25 +227,32 @@ def wait_for_indexing_complete(
 def run_benchmark(
     label: str, questions: Path, base_url: str, email: str, password: str
 ) -> Path:
-    output_path = Path(f"benchmark_results_{label}.txt")
+    """Score the indexed corpus. Credentials go through the environment so the
+    password never appears in the child's command line."""
+    output_path = (Path.cwd() / f"benchmark_results_{label}.txt").resolve()
     cmd = [
         sys.executable,
-        BENCHMARK_SCRIPT,
+        "-m",
+        "scripts.benchmark_csv_retrieval",
         "--input",
         str(questions),
         "--base-url",
         base_url,
-        "--email",
-        email,
-        "--password",
-        password,
         "--output",
         str(output_path),
     ]
-    printable = " ".join(c if c != password else "***" for c in cmd)
+    env = {
+        **os.environ,
+        "ONYX_BENCH_EMAIL": email,
+        "ONYX_BENCH_PASSWORD": password,
+    }
     for attempt in range(1, MAX_BENCHMARK_ATTEMPTS + 1):
-        print(f"\n[Benchmark attempt {attempt}/{MAX_BENCHMARK_ATTEMPTS}] {printable}")
-        result = subprocess.run(cmd)
+        print(
+            f"\n[Benchmark attempt {attempt}/{MAX_BENCHMARK_ATTEMPTS}] {' '.join(cmd)}"
+        )
+        result = subprocess.run(
+            cmd, cwd=BACKEND_DIR, env=env, timeout=BENCHMARK_TIMEOUT_S
+        )
         if result.returncode == 0 and output_path.exists():
             print(f"Benchmark succeeded → {output_path}")
             return output_path
@@ -287,6 +275,19 @@ def trigger_deletion(
     if not resp.ok:
         raise RuntimeError(f"trigger_deletion failed: {resp.status_code} {resp.text}")
     print(f"Deletion triggered for connector={connector_id}, cred={credential_id}")
+
+
+def delete_credential(
+    base_url: str, headers: dict[str, str], credential_id: int
+) -> None:
+    resp = requests.delete(
+        f"{base_url}/api/manage/admin/credential/{credential_id}",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_S,
+    )
+    if not resp.ok:
+        raise RuntimeError(f"delete_credential failed: {resp.status_code} {resp.text}")
+    print(f"Deleted credential {credential_id}")
 
 
 def wait_for_deletion(base_url: str, headers: dict[str, str], cc_pair_id: int) -> None:
@@ -313,9 +314,9 @@ def cleanup(
     connector_id: int | None,
     credential_id: int | None,
     cc_pair_id: int | None,
-) -> None:
-    """Remove whatever setup managed to create. Never raises: a failure here
-    must not replace the error that caused the cleanup."""
+) -> Exception | None:
+    """Remove whatever setup managed to create. Returns the failure instead of
+    raising, so it cannot replace an exception already on its way out."""
     if cc_pair_id is None:
         if connector_id is not None or credential_id is not None:
             print(
@@ -323,17 +324,21 @@ def cleanup(
                 f"connector={connector_id} credential={credential_id}",
                 file=sys.stderr,
             )
-        return
+        return None
     if keep:
         print(f"--keep set; leaving cc_pair {cc_pair_id} in place.")
-        return
+        return None
     if connector_id is None or credential_id is None:
-        return
+        return None
     try:
         trigger_deletion(base_url, headers, connector_id, credential_id)
         wait_for_deletion(base_url, headers, cc_pair_id)
+        # Deleting the pair leaves the credential, so remove it explicitly.
+        delete_credential(base_url, headers, credential_id)
     except Exception as e:
         print(f"Cleanup failed for cc_pair {cc_pair_id}: {e!r}", file=sys.stderr)
+        return e
+    return None
 
 
 def main() -> None:
@@ -379,6 +384,7 @@ def main() -> None:
     credential_id: int | None = None
     connector_id: int | None = None
     cc_pair_id: int | None = None
+    body_failed = False
     try:
         credential_id = create_credential(args.base_url, headers, name)
         connector_id = create_connector(
@@ -394,8 +400,11 @@ def main() -> None:
         )
         wait_for_indexing_complete(args.base_url, headers, cc_pair_id)
         run_benchmark(args.label, questions, args.base_url, args.email, args.password)
+    except BaseException:
+        body_failed = True
+        raise
     finally:
-        cleanup(
+        cleanup_error = cleanup(
             base_url=args.base_url,
             headers=headers,
             keep=args.keep,
@@ -403,6 +412,9 @@ def main() -> None:
             credential_id=credential_id,
             cc_pair_id=cc_pair_id,
         )
+        # A leaked connector must fail the run, but never mask the real error.
+        if cleanup_error is not None and not body_failed:
+            raise cleanup_error
 
 
 if __name__ == "__main__":
