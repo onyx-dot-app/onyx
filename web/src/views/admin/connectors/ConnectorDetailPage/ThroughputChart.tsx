@@ -36,13 +36,45 @@ const TICK_MINUTES = {
   "7d": DAY_MINUTES,
 } satisfies Record<CCPairThroughputWindow, number>;
 
+/** A window a picker offers. */
+export type PickerWindow = CCPairThroughputWindow;
+
+// The pair chart has no 1h window: one hour of a pair is too few runs to read.
+export const PAIR_WINDOWS: readonly PickerWindow[] = ["12h", "24h", "7d"];
+
 /** Each window's label under `admin.connector.runs.window`. */
 export const WINDOW_LABEL_KEYS = {
   "1h": "h1",
   "12h": "h12",
   "24h": "h24",
   "7d": "d7",
-} as const satisfies Record<CCPairThroughputWindow, string>;
+} as const satisfies Record<PickerWindow, string>;
+
+const WINDOW_HOURS = {
+  "1h": 1,
+  "12h": 12,
+  "24h": 24,
+  "7d": 24 * 7,
+} satisfies Record<PickerWindow, number>;
+
+function windowLabelKey(window: PickerWindow) {
+  return WINDOW_LABEL_KEYS[window];
+}
+
+export interface PickedWindow {
+  window: PickerWindow;
+  /** The window's start, fixed when it is picked so polling keeps one cache key. */
+  since: string;
+}
+
+export function pickWindow(window: PickerWindow): PickedWindow {
+  return {
+    window,
+    since: new Date(
+      Date.now() - WINDOW_HOURS[window] * 3_600_000
+    ).toISOString(),
+  };
+}
 
 // The status strip's cell color for a slice a run of that status covered.
 const RUN_CELL_CLASS: Record<ValidStatuses, string> = {
@@ -122,24 +154,24 @@ function sliceStatus(
   return shown?.status ?? null;
 }
 
-export interface ThroughputWindowPickerProps {
-  windows: readonly CCPairThroughputWindow[];
-  value: CCPairThroughputWindow;
-  onChange: (window: CCPairThroughputWindow) => void;
+export interface ThroughputWindowPickerProps<W extends PickerWindow> {
+  windows: readonly W[];
+  value: W;
+  onChange: (window: W) => void;
 }
 
-/** Picks how far back a throughput chart reaches. */
-export function ThroughputWindowPicker({
+/** Picks how far back a throughput chart, and any list that shares it, reaches. */
+export function ThroughputWindowPicker<W extends PickerWindow>({
   windows,
   value,
   onChange,
-}: ThroughputWindowPickerProps) {
+}: ThroughputWindowPickerProps<W>) {
   const tWindow = useTranslations("admin.connector.runs.window");
   return (
     <Dropdown>
       <Dropdown.Trigger asChild>
         <OpenButton icon={SvgClock} state="empty">
-          {tWindow(WINDOW_LABEL_KEYS[value])}
+          {tWindow(windowLabelKey(value))}
         </OpenButton>
       </Dropdown.Trigger>
       <Dropdown.Data
@@ -152,7 +184,7 @@ export function ThroughputWindowPicker({
         items={windows.map((window) => ({
           kind: "option" as const,
           value: window,
-          title: tWindow(WINDOW_LABEL_KEYS[window]),
+          title: tWindow(windowLabelKey(window)),
         }))}
       />
     </Dropdown>

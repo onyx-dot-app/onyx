@@ -2540,6 +2540,7 @@
           "running": "{count, plural, other {# 件の実行が進行中}}",
           "succeeded": "{count, plural, other {# 件の実行が成功}}",
           "failed": "{count, plural, other {# 件の実行が失敗}}",
+          "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"

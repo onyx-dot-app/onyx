@@ -2540,6 +2540,7 @@
           "running": "{count, plural, one {# run in progress} other {# runs in progress}}",
           "succeeded": "{count, plural, one {# run succeeded} other {# runs succeeded}}",
           "failed": "{count, plural, one {# run failed} other {# runs failed}}",
+          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# check passed} other {# checks passed}}",
           "failedChecks": "{count, plural, one {# check failed} other {# checks failed}}",
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}"

@@ -2540,6 +2540,7 @@
           "running": "{count, plural, one {# exécution en cours} other {# exécutions en cours}}",
           "succeeded": "{count, plural, one {# exécution réussie} other {# exécutions réussies}}",
           "failed": "{count, plural, one {# exécution en échec} other {# exécutions en échec}}",
+          "canceled": "{count, plural, one {# exécution annulée} other {# exécutions annulées}}",
           "passedChecks": "{count, plural, one {# vérification réussie} other {# vérifications réussies}}",
           "failedChecks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
           "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}"
