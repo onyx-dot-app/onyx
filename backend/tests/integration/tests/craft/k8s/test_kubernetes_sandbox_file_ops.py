@@ -83,16 +83,20 @@ class TestHealthCheck:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as unavailable:
                     unavailable.bind(("127.0.0.1", 0))
                     original_host = runtime._exec.configuration.host
+                    original_refresh_hook = runtime._exec.configuration.refresh_api_key_hook
                     runtime._exec.configuration.host = (
                         f"http://127.0.0.1:{unavailable.getsockname()[1]}"
                     )
                     try:
+                        # In-cluster auth refresh also restores the API host.
+                        runtime._exec.configuration.refresh_api_key_hook = None
                         print("ONYX_HTTP_HEALTH_STAGE=exec_fault", flush=True)
                         try:
                             runtime._exec.run(pod_name, ["true"], timeout=1.0)
                         except SandboxExecError:
                             pass
                         else:
+                            print("ONYX_HTTP_HEALTH_STAGE=exec_unexpected_success", flush=True)
                             raise AssertionError("Exec transport did not fail")
                         print("ONYX_HTTP_HEALTH_STAGE=health_during_fault", flush=True)
                         assert manager.health_check(sandbox_id, timeout=10.0)
@@ -104,6 +108,7 @@ class TestHealthCheck:
                         assert after.metadata.deletion_timestamp is None
                     finally:
                         runtime._exec.configuration.host = original_host
+                        runtime._exec.configuration.refresh_api_key_hook = original_refresh_hook
                 print("ONYX_HTTP_HEALTH_STAGE=done", flush=True)
             except Exception as error:
                 print(f"ONYX_HTTP_HEALTH_EXCEPTION={type(error).__name__}", flush=True)
@@ -137,6 +142,7 @@ class TestHealthCheck:
             "baseline",
             "pod_before",
             "exec_fault",
+            "exec_unexpected_success",
             "health_during_fault",
             "pod_after",
             "done",
