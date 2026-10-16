@@ -5,6 +5,7 @@ import { useState, useCallback } from "react";
 import { Fold } from "@opal/components/fold/components";
 import type { OrientationVariants, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 import { Interactive, type InteractiveStatelessInteraction } from "@opal/core";
@@ -255,8 +256,8 @@ function FoldableDivider({
                     }
                     aria-label={
                       isOpen
-                        ? strings.collapsibleFold
-                        : strings.collapsibleExpand
+                        ? strings.collapsibleFoldSection(toPlainString(title))
+                        : strings.collapsibleExpandSection(toPlainString(title))
                     }
                   />
                 </div>

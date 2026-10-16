@@ -96,7 +96,7 @@
 .opal-auxiliary-tag[data-clickable]:is(
   [data-color="gray"],
   [data-variant="count"]
-):hover {
+):not([data-state="open"], [aria-expanded="true"]):hover {
   @apply bg-background-tint-03;
 }
 
