@@ -97,7 +97,7 @@ from shared_configs.model_server_models import (
     RerankRequest,
     RerankResponse,
 )
-from shared_configs.utils import batch_list
+from shared_configs.utils import batch_list, batch_within_token_budget
 
 logger = setup_logger()
 
@@ -487,32 +487,13 @@ def _batch_texts_for_vertex(
     max_inputs: int,
     max_tokens: int = _VERTEX_BATCH_TOKEN_BUDGET,
 ) -> list[list[str]]:
-    """Group ``texts`` so each request stays under both Vertex caps.
-
-    A text that exceeds the whole budget on its own goes out alone, where
-    `auto_truncate` clamps it server-side.
-    """
-    batches: list[list[str]] = []
-    current_batch: list[str] = []
-    current_tokens = 0
-
-    for text in texts:
-        text_tokens = _estimate_vertex_tokens(text)
-        if current_batch and (
-            len(current_batch) >= max_inputs
-            or current_tokens + text_tokens > max_tokens
-        ):
-            batches.append(current_batch)
-            current_batch = []
-            current_tokens = 0
-
-        current_batch.append(text)
-        current_tokens += text_tokens
-
-    if current_batch:
-        batches.append(current_batch)
-
-    return batches
+    """Group ``texts`` so each request stays under both Vertex caps."""
+    return batch_within_token_budget(
+        texts,
+        max_items=max_inputs,
+        max_tokens=max_tokens,
+        estimate_tokens=_estimate_vertex_tokens,
+    )
 
 
 def _is_vertex_token_limit_error(error: BaseException) -> bool:
