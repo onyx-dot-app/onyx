@@ -278,7 +278,7 @@ def run_tabular_rechunk(
         )
         document_index = build_opensearch_document_index(search_settings)
 
-    while not finished and time.monotonic() - start < time_budget_s:
+    while time.monotonic() - start < time_budget_s:
         with get_session_with_current_tenant() as db_session:
             targets = get_oversized_tabular_documents(
                 db_session,
@@ -288,8 +288,6 @@ def run_tabular_rechunk(
             )
         # A short page means no further matches before the end of the table.
         finished = len(targets) < INDEX_BATCH_SIZE
-        if not targets:
-            break
 
         # The pipeline adapter is per connector + credential, so a batch
         # cannot mix cc-pairs.
@@ -313,13 +311,16 @@ def run_tabular_rechunk(
             if on_batch is not None:
                 on_batch()
 
-        cursor = targets[-1].document.id
-        logger.info(
-            "tabular re-chunk: indexed=%s failed=%s cursor=%s",
-            indexed,
-            len(failed),
-            cursor,
-        )
+        if targets:
+            cursor = targets[-1].document.id
+            logger.info(
+                "tabular re-chunk: indexed=%s failed=%s cursor=%s",
+                indexed,
+                len(failed),
+                cursor,
+            )
+        if finished:
+            break
 
     logger.info(
         "tabular re-chunk: %s, indexed=%s failed=%s",
