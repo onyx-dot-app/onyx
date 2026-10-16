@@ -1,14 +1,14 @@
 import csv
 import io
-from typing import IO
+import tempfile
+from typing import IO, cast
 
 from pydantic import BaseModel
 
 from onyx.connectors.models import TabularSection, TextSection
-from onyx.file_processing.extract_file_text import file_io_to_text, stage_xlsx_sheets
+from onyx.file_processing.extract_file_text import detect_encoding, stage_xlsx_sheets
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
-from onyx.utils.csv_utils import csv_reader
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -26,14 +26,42 @@ def is_tabular_file(file_name: str) -> bool:
     return any(lowered.endswith(ext) for ext in OnyxFileExtensions.TABULAR_EXTENSIONS)
 
 
-def _tsv_to_csv(tsv_text: str) -> str:
-    """Re-serialize tab-separated text as CSV so downstream parsers that
-    assume the default Excel dialect read the columns correctly."""
-    out = io.StringIO()
-    csv.writer(out, lineterminator="\n").writerows(
-        csv_reader(io.StringIO(tsv_text), dialect="excel-tab")
-    )
-    return out.getvalue().rstrip("\n")
+def _stream_delimited_file(
+    file: IO[bytes], stage: RawFileCallback, is_tsv: bool
+) -> str | None:
+    """Transcodes a CSV or TSV to a staged UTF-8 CSV, a row at a time.
+
+    Never holds the file in memory, as `stage_xlsx_sheets` does not for a
+    workbook: a large file would otherwise peak at several times its size as a
+    decoded string plus its encoded copy. Returns None when the file holds no
+    content.
+    """
+    encoding = detect_encoding(file)
+    text_in = io.TextIOWrapper(file, encoding=encoding, errors="replace", newline="")
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="") as tmp:
+        if is_tsv:
+            # Re-serialize as CSV so downstream parsers that assume the default
+            # Excel dialect read the columns correctly.
+            csv.writer(tmp, lineterminator="\n").writerows(
+                csv.reader(text_in, dialect="excel-tab")
+            )
+        else:
+            started = False
+            for line in text_in:
+                if not started:
+                    # Matches the leading strip() this did when it read the
+                    # whole file at once, so the first header keeps its name.
+                    line = line.lstrip()
+                    if not line:
+                        continue
+                    started = True
+                tmp.write(line)
+        tmp.flush()
+        binary = cast(IO[bytes], tmp.buffer)
+        if binary.seek(0, io.SEEK_END) == 0:
+            return None
+        binary.seek(0)
+        return stage(binary, "text/csv")
 
 
 def tabular_file_to_sections(
@@ -74,16 +102,15 @@ def tabular_file_to_sections(
         ]
 
     try:
-        text = file_io_to_text(file).strip()
+        csv_file_id = _stream_delimited_file(
+            file, stage, is_tsv=lowered.endswith(".tsv")
+        )
     except Exception:
         logger.exception("Failure decoding %s", file_name)
         raise
 
-    if not text:
+    if csv_file_id is None:
         return []
-    if lowered.endswith(".tsv"):
-        text = _tsv_to_csv(text)
-    csv_file_id = stage(io.BytesIO(text.encode("utf-8")), "text/csv")
     return [TabularSection(csv_file_id=csv_file_id, link=link or file_name)]
 
 
