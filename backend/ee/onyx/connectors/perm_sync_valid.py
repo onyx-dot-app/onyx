@@ -5,6 +5,10 @@ from ee.onyx.external_permissions.linear.capability_checks import (
     build_linear_doc_permission_sync_checks,
     build_linear_group_sync_checks,
 )
+from ee.onyx.external_permissions.youtrack.capability_checks import (
+    build_youtrack_doc_permission_sync_checks,
+    build_youtrack_group_sync_checks,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
@@ -39,6 +43,8 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_group_sync_checks,
 )
 from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.youtrack.config import YouTrackConnectorConfig
+from onyx.connectors.youtrack.connector import YouTrackConnector
 from onyx.connectors.zoom.connector import ZoomConnector
 
 
@@ -151,6 +157,29 @@ def validate_linear_perm_sync(connector: LinearConnector) -> None:
         check.run(context)
 
 
+def validate_youtrack_perm_sync(connector: YouTrackConnector) -> None:
+    """Scheduled syncs validate through here, so a token that lost admin read
+    or Override Visibility Restrictions fails the sync instead of hiding every
+    restricted issue."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.YOUTRACK,
+        credential_json={},
+        connector=connector,
+        connector_specific_config=YouTrackConnectorConfig(
+            base_url=connector.base_url, projects=connector.projects
+        ).model_dump(mode="json"),
+        source_operations=connector.ops,
+    )
+    # Checks mirrored across both capabilities share an id and run once.
+    checks: dict[str, CapabilityCheck] = {
+        check.check_id: check
+        for check in build_youtrack_doc_permission_sync_checks()
+        + build_youtrack_group_sync_checks()
+    }
+    for check in checks.values():
+        check.run(context)
+
+
 def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
     """
     Permission sync reads each recording's share settings, its registered
@@ -190,6 +219,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     HubSpotConnector: validate_hubspot_perm_sync,
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
+    YouTrackConnector: validate_youtrack_perm_sync,
     ZoomConnector: validate_zoom_perm_sync,
 }
 

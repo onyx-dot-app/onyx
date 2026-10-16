@@ -66,7 +66,11 @@ def get_recent_completed_attempts_for_cc_pair(
     ignore_targeted_reindex: bool = True,
 ) -> list[IndexAttempt]:
     """Most recent to least recent. Backfills are left out: their window and
-    checkpoint never carry over to or from a normal attempt."""
+    checkpoint never carry over to or from a normal attempt.
+
+    Attempts that ended before docfetching set their window (e.g. cancelled by
+    a pause right after being scheduled) are left out too. They have no window,
+    checkpoint or batches, so a resuming attempt must look past them."""
     query = db_session.query(IndexAttempt).filter(
         IndexAttempt.connector_credential_pair_id == cc_pair_id,
         IndexAttempt.search_settings_id == search_settings_id,
@@ -74,6 +78,7 @@ def get_recent_completed_attempts_for_cc_pair(
             [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
         ),
         IndexAttempt.is_backfill.is_(False),
+        IndexAttempt.poll_range_end.is_not(None),
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))

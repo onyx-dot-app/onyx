@@ -179,7 +179,7 @@ def _setup_flow_coordinator(
     attempt_store = MagicMock()
     monkeypatch.setattr(oauth_flow, "make_oauth_provider", make_oauth_provider)
     monkeypatch.setattr(oauth_flow, "initialize_mcp_client", initialize)
-    monkeypatch.setattr(oauth_flow, "mcp_oauth_attempt_store", lambda: attempt_store)
+    monkeypatch.setattr(oauth_flow, "MCP_OAUTH_ATTEMPTS", attempt_store)
     return providers, initialize, attempt_store
 
 
