@@ -52,6 +52,7 @@ export default function SetupCard({
   userApp,
 }: SetupCardProps) {
   const t = useTranslations("craft.setupCard");
+  const tActionPolicies = useTranslations("craft.actionPolicies");
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -229,6 +230,14 @@ export default function SetupCard({
                 : t("skipped.title", { app: appName })
             }
           />
+          {connected && (
+            <Button
+              prominence="tertiary"
+              href={`/craft/v1/apps?actionPolicies=app-${externalAppId}`}
+            >
+              {tActionPolicies("title")}
+            </Button>
+          )}
         </div>
       </CometEdge>
     );

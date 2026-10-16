@@ -87,6 +87,7 @@ export interface BuiltInExternalAppDescriptor {
 }
 
 export interface ExternalAppAdminResponse {
+  users_can_manage_policies: boolean;
   id: number;
   name: string;
   app_type: ExternalAppType;

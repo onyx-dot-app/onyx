@@ -183,10 +183,21 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 
 ### Action permission ownership
 
-Task forms use the searchable action editor in `ActionPolicyRows.tsx`.
-Bulk controls change shown editable actions. Reset all copies workspace defaults into independent task choices.
-Workspace-disabled actions remain locked. Unsaved changes require discard confirmation.
-The modal updates the task draft; saving the task persists those choices.
+On the user Apps page, connected app cards have a three-dot menu for App permissions.
+The menu also offers Disconnect when the user can disconnect the app.
+Cards with a Connect button do not show this menu.
+Connect and Review skills remain visible on the card.
+Admin, personal, and task forms share the search, bulk controls, and rows in `ActionPolicyRows.tsx`. Search narrows visible actions;
+there is no policy dropdown. The matching-action count sits on the left; bulk buttons align on the right. Auto-approve, Ask every time,
+Disabled, and Reset all use the same button style.
+Workspace-disabled controls show a hover tooltip that explains the admin restriction.
+Save stays disabled until a policy changes. Closing with unsaved changes requires discard confirmation.
+Bulk policy changes affect shown editable actions.
+Personal Reset all clears overrides so choices inherit workspace defaults, regardless of search.
+Task Reset all copies workspace defaults into independent task choices. Locked choices stay unchanged.
+Admin Reset all restores catalog defaults.
+All controls change only the modal draft. Personal Save persists it; task Save changes updates the task
+form draft, which persists when the user saves the task.
 
 `workspace_action_policy` stores workspace restrictions and defaults.
 `user_action_policy` stores personal choices; `scheduled_task_action_policy`
@@ -196,7 +207,10 @@ With user management disabled, workspace settings apply. Otherwise missing
 personal settings inherit the workspace default, while missing task settings ask.
 `onyx/db/action_policy.py:resolve_action_policies` owns these rules.
 The same module owns shared app identity lookup, workspace policy storage, and batched policy reads.
-`GET /action-policies/{kind}/{target_id}` loads one app under the user or admin router.
+One-app modals use `GET /action-policies/{kind}/{target_id}` under the user or admin router.
+Personal and MCP workspace editors wait for fresh opening data before creating their draft.
+Later refreshes do not replace that draft. Saving disables the user-management switch.
+Closing a linked permissions modal removes only its `actionPolicies` query parameter.
 Reads return `effective_policy`, `workspace_policy`, and `stored_policy` for each action.
 Saves validate catalog IDs and workspace restrictions directly; they do not construct UI responses.
 All workspace write routes call `replace_workspace_action_policies` for validation and persistence. `db/external_app.py` owns app configuration and credentials.

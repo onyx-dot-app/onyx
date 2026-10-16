@@ -155,10 +155,12 @@ permission. See §5 for why the flag alone is not the real gate.
 ### User-managed permission storage
 
 `backend/alembic/versions/131ed5e307a4_add_craft_action_policy_storage.py` adds `gated_app.users_can_manage_policies`, defaulting to true.
+The admin action editor exposes this switch for external apps and MCP servers.
 Workspace DENY blocks every user and task. With user management off, workspace settings
 apply directly; with it on, personal or task settings can override ASK and ALWAYS.
 `GET /api/build/admin/action-policies` lists workspace settings.
 `GET /api/build/admin/action-policies/{kind}/{target_id}` loads one app.
+Admin, personal, and task editors share the search, bulk controls, and action rows.
 Admin editors save policies through the existing external-app and MCP update endpoints.
 The external-app update route refreshes affected sandbox skills after committing policy changes.
 Personal settings use `/api/build/action-policies` and its per-app PUT route.

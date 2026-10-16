@@ -278,18 +278,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "Clé d'API"
+          "label": "Clé d'API",
+          "description": "Utilisez une clé d'API individuelle par utilisateur ou une clé d'API partagée dans toute l'organisation."
         },
         "label": "Méthode d'authentification",
         "none": {
-          "label": "Sans authentification"
+          "label": "Sans authentification",
+          "description": "Non recommandé"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "Chaque utilisateur doit s'authentifier via OAuth avec ses propres identifiants."
         },
         "placeholder": "Sélectionner une méthode",
         "ptOauth": {
-          "label": "Transfert OAuth"
+          "label": "Transfert OAuth",
+          "description": "Transférez le jeton d'accès OAuth utilisé par l'utilisateur pour s'authentifier auprès de {appName}."
         },
         "required": "Le type d'authentification est obligatoire"
       },
@@ -320,7 +324,8 @@
         "clientRegistrationFailed": "L’enregistrement automatique du client a échoué. Utilisez votre propre client OAuth ou vérifiez les exigences de configuration du fournisseur.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",
         "connectionFailed": "Le serveur OAuth est inaccessible. Vérifiez l’URL du serveur et réessayez.",
-        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez."
+        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez.",
+        "oauthInitFailed": "Échec du lancement de OAuth : {detail}"
       },
       "header": {
         "defaultTitle": "Configurer l’authentification",
@@ -413,6 +418,13 @@
         "unreachableTitle": "Impossible de déterminer si la configuration automatique est disponible",
         "missingTitle": "Points de terminaison OAuth introuvables",
         "requiresClientTitle": "La configuration automatique est peut-être indisponible"
+      },
+      "advanced": {
+        "description": "Configurez un fournisseur OAuth connu avec des points de terminaison d'autorisation et de jeton explicites, au lieu de la découverte automatique.",
+        "title": "Avancé"
+      },
+      "knownProvider": {
+        "hint": "Le mode fournisseur connu exige la configuration des points de terminaison. Points de terminaison Google de référence : autorisation {authorizationEndpoint} et jeton {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -642,7 +654,9 @@
       },
       "credentials": {
         "perUserDescription": "Utilisez vos identifiants pour tester ce MCP et charger ses outils. Ils sont enregistrés uniquement dans votre compte.",
-        "sharedDescription": "Ces valeurs sont utilisées pour chaque utilisateur de votre organisation."
+        "sharedDescription": "Ces valeurs sont utilisées pour chaque utilisateur de votre organisation.",
+        "perUserTitle": "Uniquement pour votre propre compte",
+        "sharedTitle": "Valeurs partagées de l'organisation"
       },
       "headers": {
         "addButton": {
@@ -2605,7 +2619,8 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Impossible de réindexer pendant qu'une indexation est déjà en cours",
-            "invalid": "Corrigez la configuration du connecteur avant de réindexer"
+            "invalid": "Corrigez la configuration du connecteur avant de réindexer",
+            "paused": "Reprenez le connecteur avant de réindexer"
           }
         },
         "toggleStatus": {
@@ -2670,6 +2685,91 @@
           "postProcessing": {
             "label": "Post-traitement"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "Chargement du lot"
+          },
+          "batchTotal": {
+            "label": "Total du lot"
+          },
+          "batchUnaccounted": {
+            "label": "Non attribué"
+          },
+          "checkpointLoad": {
+            "label": "Chargement du point de reprise"
+          },
+          "chunking": {
+            "label": "Segmentation"
+          },
+          "connectorFetch": {
+            "label": "Récupération par le connecteur"
+          },
+          "connectorValidation": {
+            "label": "Validation du connecteur"
+          },
+          "contextualRag": {
+            "label": "RAG contextuel"
+          },
+          "coordLockAcquireWait": {
+            "label": "Attente du verrou de coordination"
+          },
+          "coordinationUpdate": {
+            "label": "Mise à jour de la coordination"
+          },
+          "docBatchEnqueue": {
+            "label": "Mise en file du lot de documents"
+          },
+          "docBatchStore": {
+            "label": "Enregistrement du lot de documents"
+          },
+          "docDbPrepare": {
+            "label": "Préparation DB des documents"
+          },
+          "docLockAcquireWait": {
+            "label": "Attente du verrou de document"
+          },
+          "docprocessingSetup": {
+            "label": "Configuration du docprocessing"
+          },
+          "embedding": {
+            "label": "Embedding"
+          },
+          "enrichmentPrep": {
+            "label": "Préparation de l'enrichissement"
+          },
+          "finalization": {
+            "label": "Finalisation"
+          },
+          "gcCollect": {
+            "label": "Garbage collection"
+          },
+          "hierarchyUpsert": {
+            "label": "Upsert de la hiérarchie"
+          },
+          "imageProcessing": {
+            "label": "Traitement des images"
+          },
+          "permissionValidation": {
+            "label": "Validation des autorisations"
+          },
+          "postIndexDbUpdate": {
+            "label": "Mise à jour DB après indexation"
+          },
+          "queueWait": {
+            "label": "Attente en file"
+          },
+          "vectorDbWrite": {
+            "label": "Écriture DB vectorielle"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Attente de la limite d'embedding",
+            "description": "Temps d'attente des requêtes d'embedding pour la limite définie dans les paramètres d'index. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Attente de limitation du fournisseur",
+            "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          }
         }
       },
       "statusCard": {
@@ -2701,7 +2801,8 @@
           "released": "Indexation démarrée",
           "releaseFailed": "Impossible de démarrer l'indexation",
           "viewChecks": "Voir les vérifications du connecteur"
-        }
+        },
+        "title": "État de l'indexation"
       },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",
@@ -2860,7 +2961,9 @@
           "indexed": "indexés",
           "synced": "synchronisés",
           "removed": "supprimés",
-          "checksRun": "{count, plural, one {# vérification exécutée} other {# vérifications exécutées}}"
+          "checksRun": "{count, plural, one {# vérification exécutée} other {# vérifications exécutées}}",
+          "memberships": "adhésions",
+          "checks": "vérifications exécutées"
         },
         "counts": {
           "newDocs": "{count, plural, one {# nouveau document} other {# nouveaux documents}}",
@@ -2905,7 +3008,8 @@
           "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
           "pastRuns": "{count, plural, one {# exécution passée} other {# exécutions passées}}",
           "view": "Afficher",
-          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}"
+          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}",
+          "description": "Les exécutions sont planifiées en arrière-plan et peuvent mettre un moment à apparaître."
         },
         "units": "{count, plural, one {exécution} other {exécutions}}",
         "errorModal": {
@@ -2945,7 +3049,8 @@
         "groups": {
           "failures": "{count, plural, =0 {Échecs} one {# échec} other {# échecs}}",
           "errors": "{count, plural, =0 {Erreurs} one {# erreur} other {# erreurs}}",
-          "other": "Autres"
+          "other": "Autres",
+          "resolved": "{count, plural, one {# résolue} other {# résolues}}"
         },
         "title": {
           "indexing": {
@@ -3019,7 +3124,8 @@
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
-          "resolved": "Résolu"
+          "resolved": "Résolu",
+          "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}"
         },
         "more": "Afficher plus",
         "empty": {
@@ -3050,7 +3156,8 @@
         },
         "trace": {
           "header": "Trace de la pile • ID d'exécution : {id}",
-          "copy": "Copier la trace de la pile"
+          "copy": "Copier la trace de la pile",
+          "runId": "ID d'exécution : {id}"
         },
         "actions": {
           "resolve": "Résoudre"
@@ -3061,6 +3168,9 @@
           "description": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel. Elles conservent leur statut et passent dans les éléments résolus.",
           "fleetDescription": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel, sur les connecteurs que vous gérez. Elles conservent leur statut et passent dans les éléments résolus.",
           "confirm": "Tout résoudre"
+        },
+        "resolved": {
+          "label": "Résolues"
         }
       },
       "stageDetails": {
@@ -9417,7 +9527,9 @@
         "pruned": "Élagué",
         "checking": "Vérification",
         "passed": "Terminé",
-        "failedToRun": "Non exécuté"
+        "failedToRun": "Non exécuté",
+        "completedWithErrors": "Terminé avec des erreurs",
+        "error": "Erreur"
       }
     },
     "systemInfo": {
@@ -9740,6 +9852,9 @@
       "field": {
         "required": {
           "error": "{label} est obligatoire"
+        },
+        "optional": {
+          "title": "{label} (facultatif)"
         }
       },
       "loadError": {
@@ -10568,7 +10683,9 @@
       "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
-        "inProgress": "Vérifications en cours..."
+        "inProgress": "Vérifications en cours...",
+        "completed": "Vérifications terminées.",
+        "waiting": "En attente des paramètres du connecteur..."
       },
       "advisory": {
         "title": "Certains contenus ne seront pas indexés.",
@@ -10672,7 +10789,9 @@
           },
           "error": {
             "title": "Les paramètres ne sont pas valides"
-          }
+          },
+          "blocks": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer.",
+          "warns": "Certaines vérifications facultatives ont échoué. Vous pouvez quand même appliquer."
         },
         "warnings": {
           "title": "Avertissements"
@@ -14158,7 +14277,11 @@
           "description": "Choisissez ce que l’agent peut faire. « Demander » exige une autorisation avant chaque action ; « Approbation automatique » l’exécute sans demander.",
           "title": "Autorisations"
         },
-        "savingButton": "Enregistrement…"
+        "savingButton": "Enregistrement…",
+        "advanced": {
+          "description": "Définissez une politique pour chaque action individuellement.",
+          "title": "Avancé"
+        }
       },
       "skillsStep": {
         "description": "Facultatif : associez des compétences existantes ou créez-en une pour cette app.",
