@@ -86,6 +86,7 @@ export interface CCPairRunsMatchingFilter {
   level: CCPairRunLevel;
   q: string | null;
   since: string | null;
+  until: string | null;
   kinds: CCPairRunKind[] | null;
 }
 
