@@ -5025,9 +5025,6 @@
     },
     "documentProcessing": {
       "unstructured": {
-        "apiKey": {
-          "placeholder": "Saisissez la clé d'API"
-        },
         "deleteButton": {
           "label": "Supprimer la clé d'API"
         },

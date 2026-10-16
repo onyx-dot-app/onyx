@@ -5025,9 +5025,6 @@
     },
     "documentProcessing": {
       "unstructured": {
-        "apiKey": {
-          "placeholder": "输入 API 密钥"
-        },
         "deleteButton": {
           "label": "删除 API 密钥"
         },

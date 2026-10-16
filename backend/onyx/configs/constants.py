@@ -106,7 +106,8 @@ KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY = (
     "allow_same_provider_subject_relink_override"
 )
 KV_REINDEX_KEY = "needs_reindexing"
-KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
+# Holds the id of the Unstructured API token.
+KV_UNSTRUCTURED_API_TOKEN_ID = "unstructured_api_token_id"
 KV_USER_STORE_KEY = "INVITED_USERS"
 KV_PENDING_USERS_KEY = "PENDING_USERS"
 KV_ANONYMOUS_USER_PREFERENCES_KEY = "anonymous_user_preferences"

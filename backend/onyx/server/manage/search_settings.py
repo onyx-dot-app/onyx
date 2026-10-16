@@ -91,7 +91,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.unstructured import (
     delete_unstructured_api_key,
-    get_unstructured_api_key,
+    get_unstructured_api_token,
     update_unstructured_api_key,
 )
 from onyx.indexing.port_reembed import ReembedStrategy, select_reembed_strategy
@@ -105,6 +105,7 @@ from onyx.server.manage.models import (
     FullModelVersionResponse,
     ReindexProgress,
     UnstructuredApiKeyRequest,
+    UnstructuredApiKeyStatus,
 )
 from onyx.server.models import IdReturn
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
@@ -978,24 +979,31 @@ def update_saved_search_settings(
 @router.get("/unstructured-api-key-set")
 def unstructured_api_key_set(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> bool:
-    api_key = get_unstructured_api_key()
-    return api_key is not None
+    db_session: Session = Depends(get_session),
+) -> UnstructuredApiKeyStatus:
+    token = get_unstructured_api_token(db_session)
+    return UnstructuredApiKeyStatus(
+        is_set=token is not None,
+        api_key_masked=token.value.get_value(apply_mask=True) if token else None,
+        api_token_id=token.id if token else None,
+    )
 
 
 @router.put("/upsert-unstructured-api-key")
 def upsert_unstructured_api_key(
     request: UnstructuredApiKeyRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> None:
-    update_unstructured_api_key(request.unstructured_api_key)
+    update_unstructured_api_key(db_session, request.api_key)
 
 
 @router.delete("/delete-unstructured-api-key")
 def delete_unstructured_api_key_endpoint(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> None:
-    delete_unstructured_api_key()
+    delete_unstructured_api_key(db_session)
 
 
 def validate_contextual_rag_model(

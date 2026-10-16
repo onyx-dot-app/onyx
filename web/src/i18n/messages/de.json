@@ -5025,9 +5025,6 @@
     },
     "documentProcessing": {
       "unstructured": {
-        "apiKey": {
-          "placeholder": "API-Schlüssel eingeben"
-        },
         "deleteButton": {
           "label": "API-Schlüssel löschen"
         },

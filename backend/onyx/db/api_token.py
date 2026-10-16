@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import KV_UNSTRUCTURED_API_TOKEN_ID
 from onyx.db.models import (
     ApiToken,
     CloudEmbeddingProvider,
@@ -27,6 +28,8 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.manage.api_token.models import ApiTokenInput, NewApiToken
 from shared_configs.configs import MULTI_TENANT
 
@@ -227,6 +230,17 @@ def list_api_tokens(db_session: Session, platform: str) -> list[ApiToken]:
     )
 
 
+UNSTRUCTURED_PLATFORM = "unstructured"
+
+
+def get_unstructured_api_token_id() -> int | None:
+    try:
+        stored = get_kv_store().load(KV_UNSTRUCTURED_API_TOKEN_ID)
+    except KvKeyNotFoundError:
+        return None
+    return stored if isinstance(stored, int) else None
+
+
 def _add_named_usages(
     db_session: Session,
     usages: dict[int, list[tuple[str, str]]],
@@ -323,5 +337,9 @@ def get_api_token_usages(
         )
     ):
         usages[token_id].append(("hook", name))
+
+    unstructured_id = get_unstructured_api_token_id()
+    if unstructured_id in usages:
+        usages[unstructured_id].append(("unstructured", "Unstructured"))
 
     return usages
