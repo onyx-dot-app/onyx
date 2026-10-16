@@ -24,7 +24,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CredentialCapability,
     CredentialCapabilityReport,
-    check_error_detail,
     check_error_kind,
     compute_capability_verdicts,
 )
@@ -68,11 +67,6 @@ def _synthesize_results(
     message = str(error) if error is not None else ""
     error_type = type(error).__name__ if error is not None else None
     error_kind = check_error_kind(error) if error is not None else None
-    error_detail = (
-        check_error_detail(error, error_kind)
-        if error is not None and error_kind is not None
-        else None
-    )
     results = [
         CapabilityCheckResult(
             capability=CredentialCapability.INDEXING,
@@ -83,7 +77,6 @@ def _synthesize_results(
             message=message,
             error_type=error_type,
             error_kind=error_kind,
-            error_detail=error_detail,
             is_fallback=True,
         )
     ]
@@ -98,7 +91,6 @@ def _synthesize_results(
                 message=message,
                 error_type=error_type,
                 error_kind=error_kind,
-                error_detail=error_detail,
                 is_fallback=True,
             )
             for capability in applicable - {CredentialCapability.INDEXING}
