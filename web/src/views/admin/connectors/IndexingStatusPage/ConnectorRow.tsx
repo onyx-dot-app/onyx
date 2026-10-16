@@ -192,7 +192,7 @@ export default function ConnectorRow({
             border="solid"
             rounding={4}
             padding={0}
-            shadow={expanded || focused ? "md" : "none"}
+            shadow={expanded || focused ? "sm" : "none"}
             data-testid={`indexing-connector-${row.cc_pair_id}`}
           >
             <Section alignItems="stretch" gap={0} height="fit">

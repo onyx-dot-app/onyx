@@ -42,6 +42,7 @@ function PairActivityPanel({ row, onClose }: PairActivityPanelProps) {
           ccPair !== undefined &&
           can(ccPair, "operate") &&
           ccPair.supports_targeted_reindex,
+        canResolveRuns: can(row, "operate"),
       }}
       title={t("activities.panel.pairTitle", { name: row.name })}
       onClose={onClose}

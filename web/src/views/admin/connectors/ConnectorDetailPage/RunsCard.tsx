@@ -574,7 +574,7 @@ export default function RunsCard({
           gap={1}
           padding={2}
           height="fit"
-          className="border-t border-border-01 bg-background-tint-01"
+          className="rounded-b-16 border-t border-border-01 bg-background-tint-01"
         >
           {runList}
         </Section>
