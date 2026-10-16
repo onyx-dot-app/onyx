@@ -204,6 +204,7 @@ export default function ConnectorRow({
                       tooltip={tRuns("warnings.tooltip", { count: warnings })}
                       color="orange"
                       variant="count"
+                      font="secondary-body"
                     />
                   )}
                 </Section>

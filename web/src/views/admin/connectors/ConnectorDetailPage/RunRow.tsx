@@ -468,6 +468,7 @@ export default function RunRow({
                     )}
                     color="orange"
                     variant="count"
+                    font="secondary-body"
                   />
                 )}
               </Section>
