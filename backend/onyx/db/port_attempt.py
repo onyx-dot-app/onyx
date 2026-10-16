@@ -807,6 +807,9 @@ def mark_port_terminal(
     status: PortAttemptStatus,
     error_msg: str | None = None,
 ) -> None:
+    if not status.is_terminal():
+        raise ValueError(f"Expected a terminal port status, got {status.value}")
+
     try:
         attempt = _get_locked(db_session, port_attempt_id)
         if attempt.status.is_resting():
