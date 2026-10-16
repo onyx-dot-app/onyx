@@ -8,6 +8,7 @@ the previous token once nothing uses it.
 
 from datetime import datetime
 from typing import Protocol
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,8 +41,15 @@ class HasApiToken(Protocol):
     api_token: ApiToken | None
 
 
+def _origin(url: str | None) -> tuple[str, str]:
+    parts = urlsplit(url or "")
+    return parts.scheme.lower(), parts.netloc.lower()
+
+
 def _same_base_url(a: str | None, b: str | None) -> bool:
-    return (a or "").rstrip("/") == (b or "").rstrip("/")
+    """Same scheme, host and port. The path may differ: one service can use
+    several endpoints with the same key (Firecrawl search and scrape)."""
+    return _origin(a) == _origin(b)
 
 
 def get_api_token(db_session: Session, token_id: int) -> ApiToken | None:

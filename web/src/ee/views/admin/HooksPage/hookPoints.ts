@@ -1,5 +1,5 @@
 import type { useTranslations } from "next-intl";
-import type { HookPointMeta } from "@/ee/views/admin/HooksPage/interfaces";
+import type { HookPointMeta } from "@/ee/views/admin/HooksPage/types";
 
 export type HooksTranslate = ReturnType<typeof useTranslations<"admin.hooks">>;
 

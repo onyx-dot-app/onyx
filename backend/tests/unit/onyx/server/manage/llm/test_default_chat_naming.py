@@ -9,7 +9,14 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_user
 from onyx.db.enums import LLMModelFlowType, Permission, PermissionAuthority
 from onyx.db.llm import ModelConfigurationWindow
-from onyx.db.models import LLMModelFlow, LLMProvider, ModelConfiguration, Persona, User
+from onyx.db.models import (
+    ApiToken,
+    LLMModelFlow,
+    LLMProvider,
+    ModelConfiguration,
+    Persona,
+    User,
+)
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.manage.llm import api
 from onyx.server.manage.llm.models import DefaultModel
@@ -130,7 +137,10 @@ def _provider_with_chat_naming() -> tuple[
         provider="openai",
         is_public=True,
         is_auto_mode=False,
-        api_key=make_mock_sensitive_value("sk-test-workspace-key-123456789"),
+        api_token=ApiToken(
+            platform="openai",
+            value=make_mock_sensitive_value("sk-test-workspace-key-123456789"),
+        ),
         custom_config={"api_key": "workspace-custom-secret"},
         groups=[],
         personas=[],

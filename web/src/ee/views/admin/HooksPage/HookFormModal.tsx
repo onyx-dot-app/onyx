@@ -35,7 +35,7 @@ import type {
   HookPointMeta,
   HookResponse,
   HookUpdateRequest,
-} from "@/ee/views/admin/HooksPage/interfaces";
+} from "@/ee/views/admin/HooksPage/types";
 import { ApiTokenField } from "@/lib/api-tokens/components";
 import {
   initialApiTokenValue,

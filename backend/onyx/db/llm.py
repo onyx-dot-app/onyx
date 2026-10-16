@@ -44,6 +44,7 @@ from onyx.server.manage.api_token.models import (
     ApiTokenInput,
     ExistingApiToken,
     NewApiToken,
+    keep_omitted_api_token,
 )
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
@@ -266,12 +267,18 @@ def upsert_cloud_embedding_provider(
             platform=provider.provider_type.value,
             base_url=existing_provider.api_url,
         )
-    elif "api_key" in provider.model_fields_set:
-        # Leaving api_key out keeps the current key; only null clears it.
+    else:
+        # Leaving api_key out keeps the current key; only null clears it. A
+        # kept key still goes through the check, so it cannot follow a changed
+        # api_url to another host.
         assign_api_token(
             db_session,
             existing_provider,
-            provider.api_key,
+            keep_omitted_api_token(
+                provider.api_key,
+                was_sent="api_key" in provider.model_fields_set,
+                current_token_id=existing_provider.api_token_id,
+            ),
             platform=provider.provider_type.value,
             base_url=existing_provider.api_url,
         )

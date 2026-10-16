@@ -18,12 +18,14 @@ is encrypted on the way in through ``onyx.utils.encryption`` (as revision
 from __future__ import annotations
 
 import json
+import os
 
 from alembic import op
 import sqlalchemy as sa
 
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
+from shared_configs.configs import MULTI_TENANT
 
 # revision identifiers, used by Alembic.
 revision = "eb0c14780dc5"
@@ -34,18 +36,36 @@ depends_on = None
 _OLD_UNSTRUCTURED_KEY = "unstructured_api_key"
 _NEW_UNSTRUCTURED_KEY = "unstructured_api_token_id"
 
-# (table, primary key column, platform SQL, base URL SQL)
-_CONSUMERS: list[tuple[str, str, str, str]] = [
-    ("llm_provider", "id", "provider", "api_base"),
-    ("voice_provider", "id", "provider_type", "api_base"),
+# (table, primary key column, platform SQL, base URL SQL, extra row filter)
+_CONSUMERS: list[tuple[str, str, str, str, str]] = [
+    ("llm_provider", "id", "provider", "api_base", ""),
+    ("voice_provider", "id", "provider_type", "api_base", ""),
     # The enum is stored by name (OPENAI), while every other table uses the
     # lowercase value, so the platforms line up across features.
-    ("embedding_provider", "provider_type", "lower(provider_type::text)", "api_url"),
-    ("internet_search_provider", "id", "provider_type", "config->>'base_url'"),
-    ("internet_content_provider", "id", "provider_type", "config->>'base_url'"),
-    ("tracing_provider_config", "id", "provider_type", "NULL"),
-    ("hook", "id", "'hook'", "endpoint_url"),
+    (
+        "embedding_provider",
+        "provider_type",
+        "lower(provider_type::text)",
+        "api_url",
+        "",
+    ),
+    ("internet_search_provider", "id", "provider_type", "config->>'base_url'", ""),
+    ("internet_content_provider", "id", "provider_type", "config->>'base_url'", ""),
+    ("tracing_provider_config", "id", "provider_type", "NULL", ""),
+    # A soft-deleted hook keeps no key: nothing reads it, and a token held by
+    # a deleted row would look unused yet could never be deleted.
+    ("hook", "id", "'hook'", "endpoint_url", "AND deleted = false"),
 ]
+
+# Env vars holding the Onyx-owned keys Cloud gives new tenants. Keys saved
+# from them before this revision must stay Onyx-owned (is_system), so tenant
+# admins cannot list, reuse or rotate them.
+_CLOUD_DEFAULT_KEY_ENV_VARS = (
+    "OPENAI_DEFAULT_API_KEY",
+    "ANTHROPIC_DEFAULT_API_KEY",
+    "OPENROUTER_DEFAULT_API_KEY",
+    "COHERE_DEFAULT_API_KEY",
+)
 
 
 def upgrade() -> None:
@@ -72,7 +92,7 @@ def upgrade() -> None:
     op.create_index("ix_api_token_platform", "api_token", ["platform"])
 
     conn = op.get_bind()
-    for table, pk, platform_sql, base_url_sql in _CONSUMERS:
+    for table, pk, platform_sql, base_url_sql, row_filter in _CONSUMERS:
         op.add_column(
             table,
             sa.Column(
@@ -88,7 +108,7 @@ def upgrade() -> None:
             sa.text(
                 f"SELECT {pk}::text AS pk, {platform_sql} AS platform, "
                 f"{base_url_sql} AS base_url, api_key FROM {table} "
-                "WHERE api_key IS NOT NULL"
+                f"WHERE api_key IS NOT NULL {row_filter}"
             )
         ).fetchall()
         for row in rows:
@@ -113,12 +133,17 @@ def upgrade() -> None:
 
         op.drop_column(table, "api_key")
 
+    if MULTI_TENANT:
+        _mark_cloud_default_keys(conn)
+
     stored = conn.execute(
         sa.text("SELECT value FROM key_value_store WHERE key = :key"),
         {"key": _OLD_UNSTRUCTURED_KEY},
     ).scalar_one_or_none()
     if isinstance(stored, str) and stored:
-        token_id = conn.execute(
+        # Encrypting uses a random IV. The row only exists where an
+        # Unstructured key was already set, never in the template schema.
+        token_id = conn.execute(  # migration-determinism: allow
             sa.text(
                 "INSERT INTO api_token (platform, value) "
                 "VALUES ('unstructured', :value) RETURNING id"
@@ -136,6 +161,25 @@ def upgrade() -> None:
         sa.text("DELETE FROM key_value_store WHERE key = :key"),
         {"key": _OLD_UNSTRUCTURED_KEY},
     )
+
+
+def _mark_cloud_default_keys(conn: sa.Connection) -> None:
+    """Mark keys that match a Cloud default key as Onyx-owned."""
+    # Reads the deployment's own keys to find matching rows; inserts nothing.
+    defaults = {  # migration-determinism: allow
+        value for name in _CLOUD_DEFAULT_KEY_ENV_VARS if (value := os.environ.get(name))
+    }
+    if not defaults:
+        return
+    rows = conn.execute(sa.text("SELECT id, value FROM api_token")).fetchall()
+    system_ids = [
+        row.id for row in rows if decrypt_bytes_to_string(bytes(row.value)) in defaults
+    ]
+    if system_ids:
+        conn.execute(
+            sa.text("UPDATE api_token SET is_system = true WHERE id = ANY(:ids)"),
+            {"ids": system_ids},
+        )
 
 
 def downgrade() -> None:
@@ -166,7 +210,7 @@ def downgrade() -> None:
         {"key": _NEW_UNSTRUCTURED_KEY},
     )
 
-    for table, _pk, _platform_sql, _base_url_sql in _CONSUMERS:
+    for table, _pk, _platform_sql, _base_url_sql, _row_filter in _CONSUMERS:
         op.add_column(table, sa.Column("api_key", sa.LargeBinary(), nullable=True))
         conn.execute(
             sa.text(

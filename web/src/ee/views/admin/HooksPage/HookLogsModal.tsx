@@ -16,7 +16,7 @@ import type {
   HookExecutionRecord,
   HookPointMeta,
   HookResponse,
-} from "@/ee/views/admin/HooksPage/interfaces";
+} from "@/ee/views/admin/HooksPage/types";
 import { useModalClose } from "@opal/components";
 
 interface HookLogsModalProps {

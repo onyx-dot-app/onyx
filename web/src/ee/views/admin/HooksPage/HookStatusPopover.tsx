@@ -28,7 +28,7 @@ import HookLogsModal from "@/ee/views/admin/HooksPage/HookLogsModal";
 import type {
   HookPointMeta,
   HookResponse,
-} from "@/ee/views/admin/HooksPage/interfaces";
+} from "@/ee/views/admin/HooksPage/types";
 import { cn } from "@opal/utils";
 
 function ErrorLogRow({

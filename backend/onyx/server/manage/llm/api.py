@@ -705,11 +705,13 @@ def put_llm_provider(
     # SSRF Protection: a saved key cannot be sent with a changed custom_config.
     # The API token checks the api_base.
     if existing_provider:
-        # Leaving out api_key keeps the current key.
-        if (
-            "api_key" not in llm_provider_upsert_request.model_fields_set
-            and existing_provider.api_token_id is not None
-        ):
+        # Leaving out api_key keeps the current key, as does a legacy client's
+        # null key with api_key_changed=false.
+        keeps_key = "api_key" not in llm_provider_upsert_request.model_fields_set or (
+            llm_provider_upsert_request.api_key is None
+            and llm_provider_upsert_request.api_key_changed is False
+        )
+        if keeps_key and existing_provider.api_token_id is not None:
             llm_provider_upsert_request.api_key = ExistingApiToken(
                 id=existing_provider.api_token_id
             )

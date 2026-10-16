@@ -4,7 +4,7 @@ import {
   HookResponse,
   HookUpdateRequest,
   HookValidateResponse,
-} from "@/ee/views/admin/HooksPage/interfaces";
+} from "@/ee/views/admin/HooksPage/types";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
 export class HookAuthError extends Error {}

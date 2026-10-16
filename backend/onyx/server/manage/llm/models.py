@@ -170,6 +170,10 @@ class LLMProviderUpsertRequest(LLMProvider):
     id: int | None = None
     # Absent on an edit keeps the provider's current key; null clears it.
     api_key: ApiTokenInput | None = None
+    # Legacy: older clients (the Terraform provider) send `api_key: null` with
+    # `api_key_changed: false` to mean "keep the current key". Only that pair
+    # is read; new clients leave `api_key` out instead.
+    api_key_changed: bool | None = None
     custom_config_changed: bool = False
     # The write replaces model_configurations, and the read hides obsolete and
     # dated-duplicate models, so a read-modify-write drops the hidden rows. With

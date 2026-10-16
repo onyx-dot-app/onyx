@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { ApiKeyField } from "@tests/e2e/pages/ApiKeyField";
 import { WEB_SEARCH_URL, findProviderCard, openProviderModal } from "./svc";
 
 test.describe("Web Content Provider Configuration", () => {
@@ -43,11 +44,7 @@ test.describe("Web Content Provider Configuration", () => {
       await baseUrlInput.waitFor({ state: "visible", timeout: 5000 });
       // Don't check value - it might have a custom value from previous config
 
-      // Enter API key - clear first in case modal opened with masked credentials.
-      const apiKeyInput = modalDialog.getByLabel(/api key/i);
-      await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
-      await apiKeyInput.clear();
-      await apiKeyInput.fill(FIRECRAWL_API_KEY!);
+      await new ApiKeyField(modalDialog).fill(FIRECRAWL_API_KEY!);
 
       // "Connect" on first setup, "Update" when editing existing credentials.
       const modalConnectButton = modalDialog.getByRole("button", {
@@ -101,11 +98,7 @@ test.describe("Web Content Provider Configuration", () => {
           page.getByText(/(Set up|Configure) Firecrawl/)
         ).toBeVisible();
 
-        // Enter API key - clear first in case modal opened with masked credentials.
-        const apiKeyInput = modalDialog.getByLabel(/api key/i);
-        await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
-        await apiKeyInput.clear();
-        await apiKeyInput.fill(FIRECRAWL_API_KEY!);
+        await new ApiKeyField(modalDialog).fill(FIRECRAWL_API_KEY!);
 
         await modalDialog
           .getByRole("button", { name: "Connect", exact: true })
