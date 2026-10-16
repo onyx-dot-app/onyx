@@ -3,7 +3,12 @@
  */
 import { renderHook } from "@testing-library/react";
 
-import { useLlmDefaults } from "@/lib/languageModels/hooks";
+import {
+  useAdminLanguageModels,
+  useLanguageModels,
+  useLlmDefaults,
+} from "@/lib/languageModels/hooks";
+import type { DefaultModel } from "@/lib/languageModels/types";
 
 const mockUseSWR = jest.fn();
 
@@ -23,7 +28,9 @@ interface ProviderFixture {
 
 function mockProvidersResponse(
   providers: ProviderFixture[],
-  defaultVision: { provider_id: number; model_name: string } | null
+  defaultVision: DefaultModel | null,
+  defaultChatNaming: DefaultModel | null = null,
+  defaultSearchSelection: DefaultModel | null = null
 ): void {
   mockUseSWR.mockReturnValue({
     data: {
@@ -45,7 +52,8 @@ function mockProvidersResponse(
       })),
       default_text: null,
       default_vision: defaultVision,
-      default_chat_naming: null,
+      default_search_selection: defaultSearchSelection,
+      default_chat_naming: defaultChatNaming,
       default_craft: null,
     },
     error: undefined,
@@ -109,5 +117,52 @@ describe("useLlmDefaults", () => {
     const { result } = renderHook(() => useLlmDefaults());
 
     expect(result.current.defaultVision?.providerId).toBe(54);
+  });
+});
+
+describe.each([
+  ["useLanguageModels", useLanguageModels],
+  ["useAdminLanguageModels", useAdminLanguageModels],
+])("%s task model defaults", (_name, useModels) => {
+  beforeEach(() => mockUseSWR.mockReset());
+
+  it("exposes naming and search defaults independently", () => {
+    mockProvidersResponse(
+      [
+        { id: 7, name: null },
+        { id: 8, name: "Search provider" },
+      ],
+      null,
+      { provider_id: 7, model_name: "gpt-4o-mini" },
+      { provider_id: 8, model_name: "search-mini" }
+    );
+    const { result } = renderHook(() => useModels());
+    expect(result.current.defaultChatNaming).toEqual({
+      provider_id: 7,
+      model_name: "gpt-4o-mini",
+    });
+    expect(result.current.defaultSearchSelection).toEqual({
+      provider_id: 8,
+      model_name: "search-mini",
+    });
+    expect(result.current).not.toHaveProperty("defaultFast");
+  });
+
+  it("does not derive search selection from the naming default", () => {
+    mockProvidersResponse([{ id: 7, name: null }], null, {
+      provider_id: 7,
+      model_name: "gpt-4o-mini",
+    });
+    const { result } = renderHook(() => useModels());
+    expect(result.current.defaultSearchSelection).toBeNull();
+  });
+
+  it("does not derive naming from the search default", () => {
+    mockProvidersResponse([{ id: 8, name: "Search provider" }], null, null, {
+      provider_id: 8,
+      model_name: "search-mini",
+    });
+    const { result } = renderHook(() => useModels());
+    expect(result.current.defaultChatNaming).toBeNull();
   });
 });

@@ -1779,6 +1779,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Modelo para nombrar las sesiones de chat. Por defecto, usa el modelo de cada sesión.",
+        "resetButton": {
+          "label": "Restablecer"
+        },
+        "sessionModel": {
+          "label": "Usar modelo predeterminado"
+        },
+        "title": "Modelo de títulos de chat"
+      },
+      "searchSelectionModel": {
+        "description": "Selecciona y comprueba los documentos recuperados. Un modelo más económico puede reducir los costes de búsqueda, pero puede afectar a la calidad de las respuestas.",
+        "resetButton": {
+          "label": "Restablecer"
+        },
+        "sessionModel": {
+          "label": "Usar modelo predeterminado"
+        },
+        "title": "Modelo de selección de búsqueda"
+      },
+      "taskModels": {
+        "title": "Selección de modelos",
+        "loadFailed": "No se pudieron cargar los modelos de tareas",
+        "retry": {
+          "label": "Reintentar"
+        },
+        "noProviders": {
+          "title": "Conecta un proveedor de modelos de lenguaje"
+        },
+        "addProvider": {
+          "label": "Añadir proveedor"
+        }
+      },
       "advanced": {
         "title": "Opciones avanzadas"
       },
@@ -1796,13 +1829,6 @@
       },
       "betaTag": {
         "label": "beta"
-      },
-      "chatNaming": {
-        "description": "Modelo que se usa para nombrar automáticamente las sesiones de chat. De forma predeterminada usa el modelo de cada sesión: fija aquí un modelo pequeño y rápido si tu modelo principal no puede atender solicitudes simultáneas.",
-        "resetButton": {
-          "label": "Restablecer"
-        },
-        "title": "Modelo para nombrar chats"
       },
       "connectors": {
         "empty": {
@@ -1961,11 +1987,15 @@
         "title": "Control de la temperatura"
       },
       "toasts": {
-        "chatNamingReset": "Los chats se nombrarán de nuevo con el modelo de la sesión",
-        "chatNamingResetFailed": "No se pudo restablecer el modelo para nombrar chats",
-        "chatNamingUpdateFailed": "No se pudo actualizar el modelo para nombrar chats",
         "chatNamingUpdated": "Modelo para nombrar chats actualizado",
+        "chatNamingReset": "Modelo para nombrar chats restablecido al modelo predeterminado",
+        "chatNamingUpdateFailed": "No se pudo actualizar el modelo para nombrar chats",
+        "chatNamingResetFailed": "No se pudo restablecer el modelo para nombrar chats",
         "providerResolveFailed": "No se pudo resolver el proveedor",
+        "searchSelectionReset": "Modelo de selección de búsqueda restablecido al modelo predeterminado",
+        "searchSelectionResetFailed": "No se pudo restablecer el modelo de selección de búsqueda",
+        "searchSelectionUpdateFailed": "No se pudo actualizar el modelo de selección de búsqueda",
+        "searchSelectionUpdated": "Modelo de selección de búsqueda actualizado",
         "settingsUpdateFailed": "No se pudo actualizar la configuración",
         "settingsUpdated": "Configuración actualizada",
         "systemPromptUpdateFailed": "No se pudo actualizar el prompt del sistema",
@@ -7401,6 +7431,7 @@
         "providerDeleteFailed": "No se pudo eliminar el proveedor: {message}",
         "providerDeleted": "¡Proveedor eliminado correctamente!",
         "providerLoadFailed": "No se pudo cargar el proveedor: {message}",
+        "providerResolveFailed": "No se pudo resolver el proveedor",
         "settingsUpdateFailed": "No se pudo actualizar la configuración",
         "settingsUpdated": "Configuración actualizada",
         "unknownError": "Error desconocido"

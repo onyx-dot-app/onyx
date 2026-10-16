@@ -112,6 +112,21 @@ see §9.
 `web/src/app/admin/language-models/page.tsx` is the provider list and
 edit surface. It is a thin client over the endpoints above.
 
+`web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration and the
+default chat model. Model selection for naming and search lives in Chat Preferences.
+`web/src/views/admin/ChatTaskModelSettings.tsx` renders Chat naming model and
+Search selection model inside the always-visible Model selection section.
+Its provider fetch starts on page load; the section has no disclosure control.
+Both selectors offer hidden models without changing visibility. Unset defaults
+show Use Default model inside each selector, without a separate status label.
+Each reset clears only its own designation. Each selector and reset stay
+disabled during their own save/reset, without blocking the other setting.
+CHAT_NAMING handles chat naming; SEARCH_SELECTION handles document selection
+and relevance checks. Search rewrites and answers retain the primary model.
+An unset SEARCH_SELECTION falls directly back to the primary client, never
+CHAT_NAMING. Naming uses CHAT_NAMING or the session client. The generic FAST
+designation and endpoints have been removed.
+
 ---
 
 ## 3. Data model
@@ -502,6 +517,12 @@ See `backend/AGENTS.md` for authoritative commands and required env
 
 ### What "working" looks like
 
+- Chat Preferences shows Chat naming model and Search selection model inside
+  Model selection. Selecting a hidden model saves only its task default without
+  changing CHAT or visibility. Each reset independently returns to Use Default model.
+  Language Models has no task-model controls. Configuring CHAT_NAMING alone
+  must not change query rewrites or selection; setting SEARCH_SELECTION must
+  change only selection and relevance classification.
 - `/admin/llm/test` succeeds against the real provider before the config is
   saved.
 - Exactly one row has `is_default = true` per flow type (verify with a direct

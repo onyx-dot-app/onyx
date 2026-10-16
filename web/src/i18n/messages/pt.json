@@ -1779,6 +1779,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Modelo usado para nomear sessões de chat. Por padrão, usa o modelo de cada sessão.",
+        "resetButton": {
+          "label": "Redefinir"
+        },
+        "sessionModel": {
+          "label": "Usar modelo padrão"
+        },
+        "title": "Modelo para nomear chats"
+      },
+      "searchSelectionModel": {
+        "description": "Seleciona e verifica os documentos recuperados. Um modelo mais barato pode reduzir os custos de busca, mas pode afetar a qualidade das respostas.",
+        "resetButton": {
+          "label": "Redefinir"
+        },
+        "sessionModel": {
+          "label": "Usar modelo padrão"
+        },
+        "title": "Modelo de seleção da busca"
+      },
+      "taskModels": {
+        "title": "Seleção de modelos",
+        "loadFailed": "Não foi possível carregar os modelos de tarefas",
+        "retry": {
+          "label": "Tentar novamente"
+        },
+        "noProviders": {
+          "title": "Conecte um provedor de modelos de linguagem"
+        },
+        "addProvider": {
+          "label": "Adicionar provedor"
+        }
+      },
       "advanced": {
         "title": "Opções avançadas"
       },
@@ -1796,13 +1829,6 @@
       },
       "betaTag": {
         "label": "beta"
-      },
-      "chatNaming": {
-        "description": "Modelo usado para nomear automaticamente as sessões de chat. O padrão é o próprio modelo de cada sessão — fixe aqui um modelo pequeno e rápido se o seu modelo principal não conseguir atender a solicitações simultâneas.",
-        "resetButton": {
-          "label": "Redefinir"
-        },
-        "title": "Modelo de nomeação de chats"
       },
       "connectors": {
         "empty": {
@@ -1961,11 +1987,15 @@
         "title": "Controle de temperatura"
       },
       "toasts": {
-        "chatNamingReset": "A nomeação de chats voltou ao modelo da sessão",
-        "chatNamingResetFailed": "Falha ao redefinir o modelo de nomeação de chats",
-        "chatNamingUpdateFailed": "Falha ao atualizar o modelo de nomeação de chats",
-        "chatNamingUpdated": "Modelo de nomeação de chats atualizado",
+        "chatNamingUpdated": "Modelo para nomear chats atualizado",
+        "chatNamingReset": "Modelo para nomear chats redefinido para o modelo padrão",
+        "chatNamingUpdateFailed": "Falha ao atualizar o modelo para nomear chats",
+        "chatNamingResetFailed": "Falha ao redefinir o modelo para nomear chats",
         "providerResolveFailed": "Não foi possível resolver o provedor",
+        "searchSelectionReset": "Modelo de seleção da busca redefinido para o modelo padrão",
+        "searchSelectionResetFailed": "Falha ao redefinir o modelo de seleção da busca",
+        "searchSelectionUpdateFailed": "Falha ao atualizar o modelo de seleção da busca",
+        "searchSelectionUpdated": "Modelo de seleção da busca atualizado",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas",
         "systemPromptUpdateFailed": "Falha ao atualizar o prompt de sistema",
@@ -7401,6 +7431,7 @@
         "providerDeleteFailed": "Falha ao excluir o provedor: {message}",
         "providerDeleted": "Provedor excluído com sucesso!",
         "providerLoadFailed": "Não foi possível carregar o provedor: {message}",
+        "providerResolveFailed": "Não foi possível resolver o provedor",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas",
         "unknownError": "Erro desconhecido"

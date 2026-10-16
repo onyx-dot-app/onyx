@@ -1779,6 +1779,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Model used to name chat sessions. Defaults to each session's model.",
+        "resetButton": {
+          "label": "Reset"
+        },
+        "sessionModel": {
+          "label": "Use Default model"
+        },
+        "title": "Chat naming model"
+      },
+      "searchSelectionModel": {
+        "description": "Selects and checks retrieved documents. A lower-cost model can reduce search costs, but may affect answer quality.",
+        "resetButton": {
+          "label": "Reset"
+        },
+        "sessionModel": {
+          "label": "Use Default model"
+        },
+        "title": "Search selection model"
+      },
+      "taskModels": {
+        "title": "Model selection",
+        "loadFailed": "Could not load task models",
+        "retry": {
+          "label": "Retry"
+        },
+        "noProviders": {
+          "title": "Connect a language model provider"
+        },
+        "addProvider": {
+          "label": "Add Provider"
+        }
+      },
       "advanced": {
         "title": "Advanced Options"
       },
@@ -1796,13 +1829,6 @@
       },
       "betaTag": {
         "label": "beta"
-      },
-      "chatNaming": {
-        "description": "Model used to auto-name chat sessions. Defaults to each session's own model — pin a small, fast model here if your main model can't serve concurrent requests.",
-        "resetButton": {
-          "label": "Reset"
-        },
-        "title": "Chat Naming Model"
       },
       "connectors": {
         "empty": {
@@ -1961,11 +1987,15 @@
         "title": "Temperature Control"
       },
       "toasts": {
-        "chatNamingReset": "Chat naming reset to the session's model",
-        "chatNamingResetFailed": "Failed to reset chat naming model",
-        "chatNamingUpdateFailed": "Failed to update chat naming model",
         "chatNamingUpdated": "Chat naming model updated",
+        "chatNamingReset": "Chat naming model reset to the default model",
+        "chatNamingUpdateFailed": "Failed to update chat naming model",
+        "chatNamingResetFailed": "Failed to reset chat naming model",
         "providerResolveFailed": "Could not resolve provider",
+        "searchSelectionReset": "Search selection model reset to the default model",
+        "searchSelectionResetFailed": "Failed to reset search selection model",
+        "searchSelectionUpdateFailed": "Failed to update search selection model",
+        "searchSelectionUpdated": "Search selection model updated",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "systemPromptUpdateFailed": "Failed to update system prompt",
@@ -7401,6 +7431,7 @@
         "providerDeleteFailed": "Failed to delete provider: {message}",
         "providerDeleted": "Provider deleted successfully!",
         "providerLoadFailed": "Could not load the provider: {message}",
+        "providerResolveFailed": "Could not resolve provider",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
