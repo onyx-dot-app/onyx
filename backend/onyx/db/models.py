@@ -6220,6 +6220,10 @@ class DocPermissionSyncAttempt(Base):
     heartbeat_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Last time the sync fetched or wrote something; the counts above are written with it
+    last_progress_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
@@ -6292,6 +6296,10 @@ class ExternalGroupPermissionSyncAttempt(Base):
     )
     # Lease renewed by the running worker; the reaper fails the attempt when it expires
     heartbeat_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Last time the sync fetched or wrote something; the counts above are written with it
+    last_progress_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
 

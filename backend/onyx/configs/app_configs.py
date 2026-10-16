@@ -1734,6 +1734,10 @@ MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
+# A full permission or group sync of a large source can take longer than other jobs
+PERMISSION_SYNC_TIMEOUT = int(
+    os.environ.get("PERMISSION_SYNC_TIMEOUT_SECONDS") or JOB_TIMEOUT
+)
 # Logs Onyx only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
