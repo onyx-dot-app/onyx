@@ -1,7 +1,7 @@
 """add api_token table
 
 Revision ID: eb0c14780dc5
-Revises: 1c7b6cce66ac
+Revises: c92b67e56ec4
 Create Date: 2026-10-15 23:58:00.000000
 
 Moves every admin-entered third-party API key into one ``api_token`` table.
@@ -27,7 +27,7 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 
 # revision identifiers, used by Alembic.
 revision = "eb0c14780dc5"
-down_revision = "1c7b6cce66ac"
+down_revision = "c92b67e56ec4"
 branch_labels = None
 depends_on = None
 

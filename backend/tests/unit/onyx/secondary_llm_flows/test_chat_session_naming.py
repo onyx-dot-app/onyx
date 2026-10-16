@@ -7,7 +7,7 @@ from fastapi import Request
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.models import ChatMessage, LLMProvider, ModelConfiguration
+from onyx.db.models import ApiToken, ChatMessage, LLMProvider, ModelConfiguration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.interfaces import LLM, LLMConfig
@@ -39,7 +39,7 @@ def utility_model() -> ModelConfiguration:
         id=1,
         name="utility-provider",
         provider="openai",
-        api_key="utility-key",
+        api_token=ApiToken(platform="openai", value="utility-key"),
         is_public=True,
         is_auto_mode=False,
         model_configurations=[model],
