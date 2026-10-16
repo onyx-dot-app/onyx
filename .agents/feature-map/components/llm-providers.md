@@ -23,7 +23,8 @@ An admin adds an LLM provider (OpenAI, Anthropic, Bedrock, Ollama, a custom
 OpenAI-compatible endpoint, and more) under **Admin > LLM**, enters credentials,
 and picks which of the provider's models are visible to end users. The admin
 then marks one model as the default for chat, and optionally separate defaults
-for vision, contextual RAG, chat-naming, and Craft.
+for vision, contextual RAG, chat naming, search selection, and Craft.
+The search-selection designation is stored independently of the chat default.
 
 A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
@@ -58,6 +59,7 @@ Admin router, prefix `/admin/llm`:
 | POST | `/admin/llm/default` | `set_provider_as_default` | Sets the CHAT default. |
 | POST | `/admin/llm/default-vision` | `set_provider_as_default_vision` | Rejects a model that fails `model_supports_image_input`. |
 | POST/DELETE | `/admin/llm/default-chat-naming` | `set_provider_as_default_chat_naming` / `clear_default_chat_naming` | |
+| POST/DELETE | `/admin/llm/default-search-selection` | `set_provider_as_default_search_selection` / `clear_default_search_selection` | Independent optional model for selecting and checking retrieved sections. |
 | POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Craft has no capability check; see §9. |
 | GET | `/admin/llm/built-in/options`, `/built-in/options/{provider_name}` | `fetch_llm_options`, `fetch_llm_provider_options` | The well-known-provider catalogue. |
 | GET | `/admin/llm/custom-provider-names` | `fetch_custom_provider_names` | Names for the custom provider option. |
@@ -140,7 +142,7 @@ edit surface. It is a thin client over the endpoints above.
     one default per flow across the whole table, not per provider. It does not
     guarantee that a default exists. Seed a default separately.
 - **`LLMModelFlowType`** (`db/enums.py`): `CHAT`, `VISION`, `CONTEXTUAL_RAG`,
-  `REASONING`, `CHAT_NAMING`, `CRAFT`. Stored on `llm_model_flow` as
+  `REASONING`, `CHAT_NAMING`, `SEARCH_SELECTION`, `CRAFT`. Stored on `llm_model_flow` as
   `Enum(LLMModelFlowType, native_enum=False)`, which SQLAlchemy renders as a
   plain `VARCHAR` column with **no `CHECK` constraint**
   (`alembic/versions/f220515df7b4_add_flow_mapping_table.py:upgrade`,
@@ -220,18 +222,32 @@ joins `ModelConfiguration` to `LLMModelFlow` and filters on
 `llm_model_flow_type == flow_type AND is_default == true`. Thin wrappers exist
 per flow: `fetch_default_llm_model` (CHAT), `fetch_default_vision_model`,
 `fetch_default_contextual_rag_model`, `fetch_default_chat_naming_model`,
-`fetch_default_craft_model`.
+`fetch_default_search_selection_model`, `fetch_default_craft_model`.
 
 Setting a new default goes through `db/llm.py:_update_default_model`, which
 clears the prior `is_default` row for that flow type and sets the new one in
 the same transaction, so the partial unique index is never violated mid-write.
 `update_default_provider` (CHAT), `update_default_vision_provider` (checks
 `model_supports_image_input` first), `update_default_chat_naming_provider`,
-and `update_default_craft_provider` (creates the `LLMModelFlow` row first via
-`create_new_flow_mapping__no_commit`, because nothing else ever populates a
-CRAFT-flow row) all call it. `fetch_existing_models(db_session, flow_types)`
+`update_default_search_selection_provider`, and
+`update_default_craft_provider` all call it.
+The naming, selection, and Craft setters share `_update_default_pointer_model`, which
+validates the selected model and creates its pointer mapping through
+`create_new_flow_mapping__no_commit`. `fetch_existing_models(db_session, flow_types)`
 returns every `ModelConfiguration` that has an `LLMModelFlow` row matching any
 flow type in the list.
+
+CHAT_NAMING and SEARCH_SELECTION preserve `ModelConfiguration.is_visible`; they do
+not add a model to the user picker. Provider edits can change a task-only default's visibility, but
+cannot remove its model until the default is cleared. Auto-mode sync does not
+restore visibility solely because a model holds either designation. Admin listings expose and
+pin `default_chat_naming` and `default_search_selection`, including hidden models.
+User and persona listings leave both descriptors empty and do not pin their models.
+
+Migration `c92b67e56ec4` converts draft FAST mappings into CHAT_NAMING mappings.
+Existing canonical naming defaults take precedence. Duplicate mappings merge,
+and model visibility remains unchanged. The downgrade does not reverse the
+merge because original and converted naming rows cannot be distinguished.
 
 ### 4.4 The LiteLLM wrapper: `LitellmLLM`
 

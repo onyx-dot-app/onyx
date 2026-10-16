@@ -683,6 +683,7 @@ class LLMModelFlowType(str, PyEnum):
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
+    SEARCH_SELECTION = "search_selection"
     CRAFT = "craft"
 
 
