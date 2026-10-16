@@ -51,6 +51,7 @@ def login(base_url: str, email: str, password: str) -> dict[str, str]:
         f"{base_url}/api/auth/login",
         data=urlencode({"username": email, "password": password}),
         headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=REQUEST_TIMEOUT_S,
     )
     resp.raise_for_status()
     cookie = resp.cookies.get("fastapiusersauth")
@@ -62,6 +63,7 @@ def login(base_url: str, email: str, password: str) -> dict[str, str]:
     }
 
 
+REQUEST_TIMEOUT_S = 60
 MAX_QUERY_ATTEMPTS = 3
 RETRY_BACKOFF_S = 2
 
@@ -87,7 +89,7 @@ def search(
                     "stream": False,
                 },
                 headers=headers,
-                timeout=60,
+                timeout=REQUEST_TIMEOUT_S,
             )
             resp.raise_for_status()
             return resp.json()["search_docs"]

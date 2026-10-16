@@ -39,6 +39,10 @@ INDEXING_TIMEOUT_S = 60 * 60  # 1 hour
 DELETION_POLL_INTERVAL_S = 5
 DELETION_TIMEOUT_S = 30 * 60  # 30 min
 
+# Every request carries a timeout: a stalled call must not outlive the
+# polling deadlines above.
+REQUEST_TIMEOUT_S = 60
+
 BENCHMARK_SCRIPT = "backend/scripts/benchmark_csv_retrieval.py"
 MAX_BENCHMARK_ATTEMPTS = 3
 
@@ -52,6 +56,7 @@ def login(base_url: str, email: str, password: str) -> dict[str, str]:
         f"{base_url}/api/auth/login",
         data=urlencode({"username": email, "password": password}),
         headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=REQUEST_TIMEOUT_S,
     )
     resp.raise_for_status()
     cookie = resp.cookies.get("fastapiusersauth")
@@ -101,7 +106,10 @@ def create_credential(base_url: str, headers: dict[str, str], name: str) -> int:
         "groups": [],
     }
     resp = requests.post(
-        f"{base_url}/api/manage/credential", json=body, headers=headers
+        f"{base_url}/api/manage/credential",
+        json=body,
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_S,
     )
     if not resp.ok:
         raise RuntimeError(f"create_credential failed: {resp.status_code} {resp.text}")
@@ -134,7 +142,10 @@ def create_connector(
         "groups": [],
     }
     resp = requests.post(
-        f"{base_url}/api/manage/admin/connector", json=body, headers=headers
+        f"{base_url}/api/manage/admin/connector",
+        json=body,
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_S,
     )
     if not resp.ok:
         raise RuntimeError(f"create_connector failed: {resp.status_code} {resp.text}")
@@ -160,6 +171,7 @@ def link_connector_to_credential(
         f"{base_url}/api/manage/connector/{connector_id}/credential/{credential_id}",
         json=body,
         headers=headers,
+        timeout=REQUEST_TIMEOUT_S,
     )
     if not resp.ok:
         raise RuntimeError(
@@ -174,7 +186,9 @@ def get_cc_pair(
     base_url: str, headers: dict[str, str], cc_pair_id: int
 ) -> dict[str, Any] | None:
     resp = requests.get(
-        f"{base_url}/api/manage/admin/cc-pair/{cc_pair_id}", headers=headers
+        f"{base_url}/api/manage/admin/cc-pair/{cc_pair_id}",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_S,
     )
     if resp.status_code == 404:
         return None
@@ -265,7 +279,10 @@ def trigger_deletion(
 ) -> None:
     body = {"connector_id": connector_id, "credential_id": credential_id}
     resp = requests.post(
-        f"{base_url}/api/manage/admin/deletion-attempt", json=body, headers=headers
+        f"{base_url}/api/manage/admin/deletion-attempt",
+        json=body,
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_S,
     )
     if not resp.ok:
         raise RuntimeError(f"trigger_deletion failed: {resp.status_code} {resp.text}")
@@ -287,6 +304,36 @@ def wait_for_deletion(base_url: str, headers: dict[str, str], cc_pair_id: int) -
             last_status = status
         time.sleep(DELETION_POLL_INTERVAL_S)
     raise TimeoutError(f"cc_pair {cc_pair_id} not deleted within {DELETION_TIMEOUT_S}s")
+
+
+def cleanup(
+    base_url: str,
+    headers: dict[str, str],
+    keep: bool,
+    connector_id: int | None,
+    credential_id: int | None,
+    cc_pair_id: int | None,
+) -> None:
+    """Remove whatever setup managed to create. Never raises: a failure here
+    must not replace the error that caused the cleanup."""
+    if cc_pair_id is None:
+        if connector_id is not None or credential_id is not None:
+            print(
+                f"Setup failed before linking. Left behind: "
+                f"connector={connector_id} credential={credential_id}",
+                file=sys.stderr,
+            )
+        return
+    if keep:
+        print(f"--keep set; leaving cc_pair {cc_pair_id} in place.")
+        return
+    if connector_id is None or credential_id is None:
+        return
+    try:
+        trigger_deletion(base_url, headers, connector_id, credential_id)
+        wait_for_deletion(base_url, headers, cc_pair_id)
+    except Exception as e:
+        print(f"Cleanup failed for cc_pair {cc_pair_id}: {e!r}", file=sys.stderr)
 
 
 def main() -> None:
@@ -329,28 +376,33 @@ def main() -> None:
     file_locations, file_names, zip_metadata_file_id = upload_zip(
         args.base_url, headers, zip_path
     )
-    credential_id = create_credential(args.base_url, headers, name)
-    connector_id = create_connector(
-        args.base_url,
-        headers,
-        name,
-        file_locations,
-        file_names,
-        zip_metadata_file_id,
-    )
-    cc_pair_id = link_connector_to_credential(
-        args.base_url, headers, connector_id, credential_id, name
-    )
-
+    credential_id: int | None = None
+    connector_id: int | None = None
+    cc_pair_id: int | None = None
     try:
+        credential_id = create_credential(args.base_url, headers, name)
+        connector_id = create_connector(
+            args.base_url,
+            headers,
+            name,
+            file_locations,
+            file_names,
+            zip_metadata_file_id,
+        )
+        cc_pair_id = link_connector_to_credential(
+            args.base_url, headers, connector_id, credential_id, name
+        )
         wait_for_indexing_complete(args.base_url, headers, cc_pair_id)
         run_benchmark(args.label, questions, args.base_url, args.email, args.password)
     finally:
-        if args.keep:
-            print(f"--keep set; leaving cc_pair {cc_pair_id} in place.")
-        else:
-            trigger_deletion(args.base_url, headers, connector_id, credential_id)
-            wait_for_deletion(args.base_url, headers, cc_pair_id)
+        cleanup(
+            base_url=args.base_url,
+            headers=headers,
+            keep=args.keep,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            cc_pair_id=cc_pair_id,
+        )
 
 
 if __name__ == "__main__":
