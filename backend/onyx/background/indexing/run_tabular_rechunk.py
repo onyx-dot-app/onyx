@@ -22,9 +22,6 @@ from onyx.configs.app_configs import (
     TABULAR_MAX_CHUNKS_PER_WORKBOOK,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    experts_from_stores_representations,
-)
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
@@ -34,12 +31,7 @@ from onyx.connectors.models import (
     IndexAttemptMetadata,
     convert_metadata_list_of_strings_to_dict,
 )
-from onyx.db.document import (
-    TabularRechunkTarget,
-    fetch_boost_and_hidden,
-    get_oversized_tabular_documents,
-    restore_boost_and_hidden,
-)
+from onyx.db.document import TabularRechunkTarget, get_oversized_tabular_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document as DbDocument
 from onyx.db.search_settings import get_current_search_settings
@@ -105,9 +97,11 @@ def _rebuild_document(
     stage: RawFileCallback,
     file_type: str | None,
 ) -> Document:
-    """Rebuilds the connector Document for one tabular file: sections from the
-    stored workbook, searchable fields from its own chunk, the rest from the
-    row - including what the upsert would otherwise overwrite."""
+    """Rebuilds the connector Document for one tabular file.
+
+    Only what chunking and chunk enrichment read. The run skips the document
+    upsert, so no other row value has to be reproduced faithfully.
+    """
     if db_doc.file_id is None:
         raise ValueError(f"{db_doc.id} has no stored file")
 
@@ -133,16 +127,11 @@ def _rebuild_document(
             else {}
         ),
         sections=sections,
+        # post_index writes these two back.
         doc_updated_at=db_doc.doc_updated_at,
         doc_created_at=db_doc.doc_created_at,
-        primary_owners=experts_from_stores_representations(db_doc.primary_owners),
-        secondary_owners=experts_from_stores_representations(db_doc.secondary_owners),
-        from_ingestion_api=db_doc.from_ingestion_api,
-        doc_metadata=db_doc.doc_metadata,
+        # Chunk enrichment resolves the document's ancestors from this.
         parent_hierarchy_node_id=db_doc.parent_hierarchy_node_id,
-        file_id=db_doc.file_id,
-        # Unset so the upsert leaves the ACL columns alone.
-        external_access=None,
     )
 
 
@@ -156,13 +145,7 @@ def _rechunk_batch(
     batch_num: int,
 ) -> tuple[int, list[str]]:
     """Re-chunks one batch of tabular documents. Returns (indexed, failed ids)."""
-    document_ids = [target.document.id for target in targets]
-    heads = document_index.get_chunk_heads(document_ids)
-
-    # The upsert resets these, which is right when content changed. This
-    # re-chunks the same content, so the signals go back after the batch.
-    with get_session_with_current_tenant() as db_session:
-        boost_and_hidden = fetch_boost_and_hidden(db_session, document_ids)
+    heads = document_index.get_chunk_heads([t.document.id for t in targets])
 
     # No index attempt here for the standard staging reapers to key on.
     stage, staged_csv_ids = build_tracking_raw_file_callback(
@@ -212,6 +195,9 @@ def _rechunk_batch(
             # never moves, because content_hash() ignores TabularSections.
             ignore_time_skip=True,
             force_update=True,
+            # Only the chunks and chunk_count change here; nothing re-fetched
+            # the document, so its row has nothing newer to receive.
+            skip_document_row_writes=True,
             tenant_id=tenant_id,
             document_batch=documents,
             request_id=metadata.request_id,
@@ -227,9 +213,6 @@ def _rechunk_batch(
             staged_csv_ids,
             context=f"tabular-rechunk staging cleanup connector={connector_id}",
         )
-
-    with get_session_with_current_tenant() as db_session:
-        restore_boost_and_hidden(db_session, boost_and_hidden)
 
     pipeline_failed = {
         failure.failed_document.document_id

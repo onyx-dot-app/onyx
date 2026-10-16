@@ -17,10 +17,6 @@ from onyx.background.indexing.run_tabular_rechunk import (
     _tabular_file_name,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    experts_from_stores_representations,
-    get_experts_stores_representations,
-)
 from onyx.connectors.models import (
     Document,
     TabularSection,
@@ -76,27 +72,12 @@ def _rebuild() -> Document:
         )
 
 
-def test_owners_round_trip_through_their_stored_form() -> None:
-    """The upsert writes owners back as their string form. If the rebuild did
-    not round-trip, every re-chunked document would lose its owners."""
-    stored = ["Ada Lovelace", "Grace Hopper"]
-    assert (
-        get_experts_stores_representations(experts_from_stores_representations(stored))
-        == stored
-    )
-    assert experts_from_stores_representations(None) is None
-    assert experts_from_stores_representations([]) is None
-
-
 def test_rebuild_keeps_the_fields_the_upsert_would_overwrite() -> None:
     doc = _rebuild()
 
     # Carried from the row: the upsert's update_set writes all of these.
-    assert doc.file_id == "file-abc"
-    assert doc.doc_metadata == {"owner_team": "finance"}
     assert doc.parent_hierarchy_node_id == 7
     assert doc.semantic_identifier == "quarterly.csv"
-    assert get_experts_stores_representations(doc.primary_owners) == ["Ada Lovelace"]
 
     # Recovered from the stored chunk: Postgres does not keep either.
     assert doc.title == "Quarterly numbers"
@@ -133,12 +114,6 @@ def test_rebuild_names_an_extensionless_document_from_its_stored_type() -> None:
         )
     assert doc.semantic_identifier == "Q3 Budget"
     assert isinstance(doc.sections[0], TabularSection)
-
-
-def test_rebuild_leaves_external_access_unset() -> None:
-    """With no document carrying external_access, upsert_documents leaves the
-    ACL columns alone. Setting it here would wipe perm-synced access."""
-    assert _rebuild().external_access is None
 
 
 def test_rebuild_sections_come_from_the_stored_workbook() -> None:

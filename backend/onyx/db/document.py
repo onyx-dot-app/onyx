@@ -405,42 +405,6 @@ def get_oversized_tabular_documents(
     ]
 
 
-def fetch_boost_and_hidden(
-    db_session: Session, document_ids: list[str]
-) -> dict[str, tuple[int, bool]]:
-    """The ranking signals a document has accumulated.
-
-    `upsert_documents` resets both, which is right when a document's content
-    changed: ENDORSE/REJECT feedback was about the text people saw. A caller
-    that re-indexes identical content has no such excuse and must put them
-    back.
-    """
-    if not document_ids:
-        return {}
-    rows = db_session.execute(
-        select(DbDocument.id, DbDocument.boost, DbDocument.hidden).where(
-            DbDocument.id.in_(document_ids)
-        )
-    ).all()
-    return {document_id: (boost, hidden) for document_id, boost, hidden in rows}
-
-
-def restore_boost_and_hidden(
-    db_session: Session, boost_and_hidden: dict[str, tuple[int, bool]]
-) -> None:
-    """Writes back values captured by `fetch_boost_and_hidden`. Commits."""
-    if not boost_and_hidden:
-        return
-    db_session.execute(
-        update(DbDocument),
-        [
-            {"id": document_id, "boost": boost, "hidden": hidden}
-            for document_id, (boost, hidden) in boost_and_hidden.items()
-        ],
-    )
-    db_session.commit()
-
-
 class PortedScope(NamedTuple):
     connector_id: int
     credential_id: int
