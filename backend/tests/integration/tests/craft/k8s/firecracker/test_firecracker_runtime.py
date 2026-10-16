@@ -81,6 +81,7 @@ class _HeldShimInput(BytesIO):
             self.finished.set()
 
 
+@pytest.mark.usefixtures("db_session")
 @pytest.mark.skipif(
     os.environ.get("SANDBOX_TEST_SHIM_PPROF") != "true",
     reason="Set SANDBOX_TEST_SHIM_PPROF=true in owned Firecracker CI",
