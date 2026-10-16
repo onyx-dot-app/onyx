@@ -41,7 +41,6 @@ from onyx.db.document import (
     restore_boost_and_hidden,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.hierarchy import get_raw_node_ids_by_id
 from onyx.db.models import Document as DbDocument
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import build_opensearch_document_index
@@ -105,7 +104,6 @@ def _rebuild_document(
     head: DocumentChunkWithoutVectors,
     stage: RawFileCallback,
     file_type: str | None,
-    parent_hierarchy_raw_node_id: str | None,
 ) -> Document:
     """Rebuilds the connector Document for one tabular file: sections from the
     stored workbook, searchable fields from its own chunk, the rest from the
@@ -142,8 +140,6 @@ def _rebuild_document(
         from_ingestion_api=db_doc.from_ingestion_api,
         doc_metadata=db_doc.doc_metadata,
         parent_hierarchy_node_id=db_doc.parent_hierarchy_node_id,
-        # The adapter resolves ancestors from the raw id, not the resolved one.
-        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         file_id=db_doc.file_id,
         # Unset so the upsert leaves the ACL columns alone.
         external_access=None,
@@ -160,16 +156,12 @@ def _rechunk_batch(
     batch_num: int,
 ) -> tuple[int, list[str]]:
     """Re-chunks one batch of tabular documents. Returns (indexed, failed ids)."""
-    db_docs = [target.document for target in targets]
-    document_ids = [db_doc.id for db_doc in db_docs]
-    node_ids = [
-        d.parent_hierarchy_node_id for d in db_docs if d.parent_hierarchy_node_id
-    ]
+    document_ids = [target.document.id for target in targets]
     heads = document_index.get_chunk_heads(document_ids)
 
+    # The upsert resets these, which is right when content changed. This
+    # re-chunks the same content, so the signals go back after the batch.
     with get_session_with_current_tenant() as db_session:
-        raw_node_ids = get_raw_node_ids_by_id(db_session, node_ids)
-        # The upsert resets both; they go back after the batch lands.
         boost_and_hidden = fetch_boost_and_hidden(db_session, document_ids)
 
     # No index attempt here for the standard staging reapers to key on.
@@ -197,9 +189,6 @@ def _rechunk_batch(
                         head,
                         stage,
                         file_type=target.file_type,
-                        parent_hierarchy_raw_node_id=raw_node_ids.get(
-                            db_doc.parent_hierarchy_node_id or 0
-                        ),
                     )
                 )
             except Exception:

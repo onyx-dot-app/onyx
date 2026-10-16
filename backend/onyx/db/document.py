@@ -408,10 +408,12 @@ def get_oversized_tabular_documents(
 def fetch_boost_and_hidden(
     db_session: Session, document_ids: list[str]
 ) -> dict[str, tuple[int, bool]]:
-    """The admin-managed ranking fields of the given documents.
+    """The ranking signals a document has accumulated.
 
-    `upsert_documents` writes the defaults over both on every upsert, so a
-    caller that re-indexes an unchanged document has to put them back.
+    `upsert_documents` resets both, which is right when a document's content
+    changed: ENDORSE/REJECT feedback was about the text people saw. A caller
+    that re-indexes identical content has no such excuse and must put them
+    back.
     """
     if not document_ids:
         return {}
@@ -1242,6 +1244,8 @@ def upsert_documents(
     # a row that already exists.
     update_set = {
         "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
+        "boost": insert_stmt.excluded.boost,
+        "hidden": insert_stmt.excluded.hidden,
         "semantic_id": insert_stmt.excluded.semantic_id,
         "link": insert_stmt.excluded.link,
         "primary_owners": insert_stmt.excluded.primary_owners,

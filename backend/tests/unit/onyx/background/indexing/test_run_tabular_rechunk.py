@@ -73,7 +73,6 @@ def _rebuild() -> Document:
             head=_head(),
             stage=_stage,
             file_type="text/csv",
-            parent_hierarchy_raw_node_id="folder-123",
         )
 
 
@@ -105,14 +104,6 @@ def test_rebuild_keeps_the_fields_the_upsert_would_overwrite() -> None:
     assert doc.source == DocumentSource.FILE
 
 
-def test_rebuild_carries_the_raw_hierarchy_id() -> None:
-    """The adapter resolves ancestors from the raw id, not the resolved one.
-    Without it a rebuilt document drops out of folder-scoped search."""
-    doc = _rebuild()
-    assert doc.parent_hierarchy_raw_node_id == "folder-123"
-    assert doc.parent_hierarchy_node_id == 7
-
-
 def test_tabular_file_name_supplies_a_missing_extension() -> None:
     """A native Google Sheet keeps its own name, which usually has no
     extension, so the stored MIME type has to supply one for the reader to
@@ -139,7 +130,6 @@ def test_rebuild_names_an_extensionless_document_from_its_stored_type() -> None:
             head=_head(),
             stage=_stage,
             file_type="text/csv",
-            parent_hierarchy_raw_node_id=None,
         )
     assert doc.semantic_identifier == "Q3 Budget"
     assert isinstance(doc.sections[0], TabularSection)
