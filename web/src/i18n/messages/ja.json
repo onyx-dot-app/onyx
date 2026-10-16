@@ -2595,6 +2595,10 @@
       },
       "stageDetails": {
         "title": "ステージ詳細",
+        "heading": {
+          "top": "ステージ",
+          "bottom": "詳細"
+        },
         "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",

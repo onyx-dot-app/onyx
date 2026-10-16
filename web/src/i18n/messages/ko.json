@@ -2595,6 +2595,10 @@
       },
       "stageDetails": {
         "title": "단계 세부 정보",
+        "heading": {
+          "top": "단계",
+          "bottom": "세부 정보"
+        },
         "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",

@@ -2595,6 +2595,10 @@
       },
       "stageDetails": {
         "title": "Détails des étapes",
+        "heading": {
+          "top": "Détails",
+          "bottom": "des étapes"
+        },
         "calls": "Lots",
         "averageTime": "Temps moyen",
         "maxTime": "Temps max",

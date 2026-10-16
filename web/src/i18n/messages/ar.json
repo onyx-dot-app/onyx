@@ -2595,6 +2595,10 @@
       },
       "stageDetails": {
         "title": "تفاصيل المراحل",
+        "heading": {
+          "top": "تفاصيل",
+          "bottom": "المراحل"
+        },
         "calls": "الدفعات",
         "averageTime": "متوسط الوقت",
         "maxTime": "أقصى وقت",

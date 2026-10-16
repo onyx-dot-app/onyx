@@ -2595,6 +2595,10 @@
       },
       "stageDetails": {
         "title": "Stage Details",
+        "heading": {
+          "top": "Stage",
+          "bottom": "Details"
+        },
         "calls": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",

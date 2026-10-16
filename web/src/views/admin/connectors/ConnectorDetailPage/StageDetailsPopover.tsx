@@ -139,8 +139,9 @@ function isUneven({ avgMs, stdDevMs }: BucketTiming): boolean {
 const NAME_WIDTH = 9.25;
 const BATCHES_WIDTH = 3.5;
 const AVERAGE_WIDTH = 8.5;
-const BAR_WIDTH = 5.75;
 const MAX_WIDTH = 4;
+// Room after the max column for the uneven marker or the close button; the bar takes the rest.
+const TRAILING_WIDTH = 6;
 // Seconds with three decimals, as the mock prints every figure here.
 export function formatSeconds(ms: number | null | undefined): string {
   return ms == null ? "-" : `${(ms / 1000).toFixed(3)}s`;
@@ -194,7 +195,7 @@ function Cell({ width, align = "start", children }: CellProps) {
     <Section
       alignItems={align}
       justifyContent="start"
-      gap={1}
+      gap={0}
       padding={1}
       width={width}
       height="fit"
@@ -224,16 +225,30 @@ function Average({ avgMs, stdDevMs = null }: AverageProps) {
       alignItems="center"
       justifyContent="start"
       gap={1}
-      width="fit"
+      width="full"
       height="fit"
     >
       <Text font="secondary-mono-label" color="text-04">
         {formatSeconds(avgMs)}
       </Text>
       {stdDevMs !== null && (
-        <Text font="secondary-mono" color="text-03">
-          {`± ${formatSeconds(stdDevMs)}`}
-        </Text>
+        <>
+          <Text font="secondary-mono" color="text-03">
+            ±
+          </Text>
+          {/* Spreads right-align so their decimal points line up down the column. */}
+          <Section
+            flexDirection="row"
+            justifyContent="end"
+            width="auto"
+            height="fit"
+            className="min-w-0 flex-1"
+          >
+            <Text font="secondary-mono" color="text-03">
+              {formatSeconds(stdDevMs)}
+            </Text>
+          </Section>
+        </>
       )}
     </Section>
   );
@@ -269,6 +284,7 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
       alignItems="center"
       justifyContent="start"
       gap={1}
+      padding={0.5}
       height="fit"
     >
       <Cell width={NAME_WIDTH}>
@@ -284,7 +300,14 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
       <Cell width={AVERAGE_WIDTH}>
         <Average avgMs={timing?.avgMs} stdDevMs={timing?.stdDevMs} />
       </Cell>
-      <Cell width={BAR_WIDTH}>
+      <Section
+        alignItems="start"
+        justifyContent="start"
+        padding={1}
+        width="auto"
+        height="fit"
+        className="min-w-0 flex-1"
+      >
         {timing === undefined ? (
           <Text font="secondary-mono" color="text-03">
             -
@@ -316,7 +339,7 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
             )}
           </div>
         )}
-      </Cell>
+      </Section>
       <Cell width={MAX_WIDTH} align="end">
         <Text font="secondary-mono" color="text-03">
           {formatSeconds(timing?.maxMs)}
@@ -326,9 +349,9 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
         flexDirection="row"
         alignItems="center"
         justifyContent="end"
-        width="auto"
+        width={TRAILING_WIDTH}
         height="fit"
-        className="min-w-0 flex-1"
+        className="shrink-0"
       >
         {timing !== undefined && isUneven(timing) && (
           <IconTooltip
@@ -410,11 +433,13 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
         alignItems="start"
         justifyContent="start"
         gap={1}
+        padding={0.5}
         height="fit"
         className="shrink-0"
       >
         <Cell width={NAME_WIDTH}>
-          <ColumnTitle>{t("stageDetails.title")}</ColumnTitle>
+          <ColumnTitle>{t("stageDetails.heading.top")}</ColumnTitle>
+          <ColumnTitle>{t("stageDetails.heading.bottom")}</ColumnTitle>
         </Cell>
         <Cell width={BATCHES_WIDTH} align="end">
           <ColumnTitle>{t("stageDetails.calls")}</ColumnTitle>
@@ -429,19 +454,27 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
             stdDevMs={total?.std_dev_duration_ms}
           />
         </Cell>
-        <Cell width={BAR_WIDTH + MAX_WIDTH} align="end">
+        <Section
+          alignItems="end"
+          justifyContent="start"
+          gap={0}
+          padding={1}
+          width="auto"
+          height="fit"
+          className="min-w-0 flex-1"
+        >
           <ColumnTitle>{t("stageDetails.maxTime")}</ColumnTitle>
           <Text font="secondary-mono" color="text-03">
             {formatSeconds(total?.max_duration_ms)}
           </Text>
-        </Cell>
+        </Section>
         <Section
           flexDirection="row"
           alignItems="start"
           justifyContent="end"
-          width="auto"
+          width={TRAILING_WIDTH}
           height="fit"
-          className="min-w-0 flex-1"
+          className="shrink-0"
         >
           <Popover.Close asChild>
             <Button
