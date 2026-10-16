@@ -40,8 +40,8 @@ from onyx.connectors.capability_checks.draft_runs import (
     load_draft_run,
     mark_draft_results_in_flight,
     pending_in_run_order,
-    required_check_failed,
     save_draft_run,
+    settled_results,
     wait_for_draft_result,
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
@@ -253,6 +253,7 @@ def run_capability_checks_task(
             access_type=parsed_access_type,
             on_result=progress.on_result if progress is not None else None,
             check_ids=run_check_id_set,
+            prior_results=merged_prior,
         )
         if merged_prior:
             report = merge_capability_results(report, merged_prior)
@@ -358,7 +359,7 @@ def run_draft_capability_checks_task(
     try:
         # Inside the try, so a failure here marks the run FAILED_TO_RUN rather
         # than leaving it RUNNING until its lease runs out.
-        pending = pending_in_run_order(snapshot)
+        pending = pending_in_run_order(snapshot, get_capability_checks(snapshot.source))
         pending_result_keys = list(
             dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
         )
@@ -396,7 +397,7 @@ def run_draft_capability_checks_task(
             on_result=on_result,
             check_ids=frozenset(check.check_id for check in pending),
             timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
-            required_check_failed=required_check_failed(snapshot),
+            prior_results=settled_results(snapshot),
             form_run=True,
         )
         snapshot.status = DraftRunStatus.COMPLETED
