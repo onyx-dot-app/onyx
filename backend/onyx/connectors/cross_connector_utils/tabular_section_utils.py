@@ -8,6 +8,7 @@ from onyx.connectors.models import TabularSection
 from onyx.file_processing.extract_file_text import file_io_to_text, stage_xlsx_sheets
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.csv_utils import csv_reader
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -28,7 +29,7 @@ def _tsv_to_csv(tsv_text: str) -> str:
     assume the default Excel dialect read the columns correctly."""
     out = io.StringIO()
     csv.writer(out, lineterminator="\n").writerows(
-        csv.reader(io.StringIO(tsv_text), dialect="excel-tab")
+        csv_reader(io.StringIO(tsv_text), dialect="excel-tab")
     )
     return out.getvalue().rstrip("\n")
 
