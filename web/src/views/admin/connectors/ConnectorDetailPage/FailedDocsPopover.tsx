@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import useSWRInfinite from "swr/infinite";
 import {
   Button,
@@ -15,6 +15,7 @@ import {
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
+import { formatTimestamp } from "@opal/time";
 import { SvgCheckAll, SvgCheckSquare, SvgExternalLink } from "@opal/icons";
 import type {
   IndexAttemptError,
@@ -22,7 +23,6 @@ import type {
 } from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { RUN_TIME_FORMAT } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import {
   RUNS_POLL_MS,
   SEARCH_DELAY_MS,
@@ -47,7 +47,6 @@ function FailedDocRow({
   onResolve,
 }: FailedDocRowProps) {
   const t = useTranslations("admin.connector.activity.docs");
-  const format = useFormatter();
   const [expanded, setExpanded] = useState(false);
   const [message, setMessage] = useState<HTMLElement | null>(null);
   const clipped = useOverflow(message);
@@ -69,7 +68,7 @@ function FailedDocRow({
         className="shrink-0"
       >
         <Text font="secondary-mono" color="text-03">
-          {format.dateTime(new Date(error.time_created), RUN_TIME_FORMAT)}
+          {formatTimestamp(error.time_created)}
         </Text>
         {/* The label truncates in its column, and the link rides on an icon beside it. */}
         <Section

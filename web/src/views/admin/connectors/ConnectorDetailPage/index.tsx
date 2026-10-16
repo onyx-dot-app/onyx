@@ -31,6 +31,7 @@ import {
   SvgSettings,
   SvgTrash,
 } from "@opal/icons";
+import { markdown } from "@opal/utils";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -232,7 +233,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       id: "full-reindex",
       icon: SvgRefreshCw,
       title: t("manageMenu.fullReindex.label"),
-      description: t("manageMenu.fullReindex.description"),
+      description: markdown(t("manageMenu.fullReindex.description")),
       tooltip: reIndexBlocked,
       disabled: reIndexBlocked !== undefined,
       onSelect: () => void triggerReIndex(true),

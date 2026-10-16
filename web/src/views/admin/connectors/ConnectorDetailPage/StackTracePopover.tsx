@@ -45,11 +45,8 @@ export default function StackTracePopoverContent({
             height="fit"
             className="min-w-0 flex-1"
           >
-            <Text font="secondary-action" color="text-04">
-              {t("tags.stackTrace")}
-            </Text>
             <Text font="secondary-body" color="text-03" maxLines={1}>
-              {t("trace.runId", { id: runId })}
+              {t("trace.header", { id: runId })}
             </Text>
           </Section>
           <CopyButton

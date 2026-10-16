@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Section, SettingsLayouts, useToastFromQuery } from "@opal/layouts";
-import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
 import ActivitiesCard from "@/views/admin/connectors/IndexingStatusPage/ActivitiesCard";
@@ -15,7 +14,6 @@ const route = ADMIN_ROUTES.INDEXING_STATUS;
 /** Every connector's indexing at a glance: the fleet's throughput and newest failures, then each connector with its latest run. */
 export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
-  const adminRouteTitle = useAdminRouteTitle();
   const [historyOpen, setHistoryOpen] = useState(false);
 
   useToastFromQuery({
@@ -28,11 +26,7 @@ export default function IndexingStatusPage() {
   // The history panel takes the Activities card's place and widens the page to fit beside the column.
   return (
     <SettingsLayouts.Root width={historyOpen ? "xl" : "md"}>
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title={adminRouteTitle(route)}
-        divider
-      />
+      <SettingsLayouts.Header icon={route.icon} title={t("title")} divider />
       <SettingsLayouts.Body>
         <Section
           flexDirection="row"

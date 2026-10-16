@@ -37,7 +37,9 @@ export class AdminConnectorDetailPage {
     this.runsSection = page.getByTestId("connector-runs");
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
-    this.noRunsMessage = page.getByText("No runs yet", { exact: true });
+    this.noRunsMessage = page.getByText("No recent indexing runs", {
+      exact: true,
+    });
     this.activityPanel = page.getByTestId("connector-activity");
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
@@ -103,7 +105,7 @@ export class AdminConnectorDetailPage {
 
   /** The activity panel has loaded with nothing to show. */
   async expectNoActivity(): Promise<void> {
-    await expect(this.activityPanel).toContainText("No failures or errors", {
+    await expect(this.activityPanel).toContainText("No recent activity", {
       timeout: 30000,
     });
   }

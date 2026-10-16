@@ -4,6 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
+import { formatTimestamp } from "@opal/time";
 import {
   SvgAlertTriangle,
   SvgCheckAll,
@@ -28,7 +29,6 @@ import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPa
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import {
   RUN_KIND_ICONS,
-  RUN_TIME_FORMAT,
   isActive,
   runErrorMessage,
   runMinutes,
@@ -100,6 +100,24 @@ function cardState(run: CCPairRun, group: ActivityGroup): CardState {
   }
 }
 
+interface FailureReason {
+  /** The error's first sentence, without its end mark. */
+  reason: string;
+  /** What follows the first sentence; `null` when nothing does. */
+  rest: string | null;
+}
+
+/** Splits an error into its first sentence and the rest. */
+function splitReason(message: string): FailureReason {
+  const trimmed = message.trim();
+  const first = /^[\s\S]+?[.!?](?=\s|$)/.exec(trimmed)?.[0] ?? trimmed;
+  const rest = trimmed.slice(first.length).trim();
+  return {
+    reason: first.replace(/[.!?]+$/, ""),
+    rest: rest === "" ? null : rest,
+  };
+}
+
 export interface ActivityCardProps {
   ccPairId: number;
   run: CCPairRun;
@@ -148,11 +166,20 @@ export default function ActivityCard({
   const listsChecks = run.kind === "checks" && warnings > 0;
 
   // A failure explains itself. A run with errors reports what it still did.
+  // A failure's title carries the error's first sentence, its description the rest.
   let description: string | null = null;
+  let title = t(`title.${run.kind}.${cardState(run, group)}`);
   if (group === "failures") {
-    description =
-      runErrorMessage(run) ??
-      (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
+    const message = runErrorMessage(run);
+    const split = message ? splitReason(message) : null;
+    if (split !== null && split.reason !== "") {
+      title = t(`title.${run.kind}.failedWith`, { reason: split.reason });
+      description = split.rest;
+    } else {
+      description = listsChecks
+        ? t("description.checksFailed", { count: warnings })
+        : null;
+    }
   } else if (minutes !== null) {
     description = t(`description.${run.kind}`, {
       count: runMoved(run),
@@ -197,7 +224,7 @@ export default function ActivityCard({
               height="fit"
             >
               <Text font="secondary-mono" color="text-03">
-                {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
+                {formatTimestamp(run.time_created)}
               </Text>
               <Section
                 flexDirection="row"
@@ -222,7 +249,7 @@ export default function ActivityCard({
             </Section>
             <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
               <Text font="main-ui-body" color="text-04">
-                {t(`title.${run.kind}.${cardState(run, group)}`)}
+                {title}
               </Text>
               {description !== null && (
                 <Text font="secondary-body" color="text-03" maxLines={3}>

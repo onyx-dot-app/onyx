@@ -114,13 +114,30 @@ export default function StatusCard({
     ccPair.overall_indexing_speed !== null &&
     ccPair.num_docs_indexed > 0
       ? ccPair.overall_indexing_speed.toLocaleString(locale, {
-          minimumFractionDigits: 1,
-          maximumFractionDigits: 1,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
         })
       : null;
   const recent = latestIndexAttempt?.total_docs_indexed ?? 0;
+  const lastIndexed = t("lastIndexed.value", {
+    when: timeAgo(ccPair.last_indexed, locale) ?? "-",
+  });
+  // A paused pair names only its last run. Others lead with the card's title.
+  const statusLine =
+    ccPair.status === ConnectorCredentialPairStatus.PAUSED
+      ? lastIndexed
+      : t("statusLine", {
+          detail:
+            hold !== null
+              ? t(`hold.${hold.reason}`)
+              : speed === null
+                ? lastIndexed
+                : t("indexingSpeed", { speed }),
+        });
 
   const chart = !FIRST_RUN_STATUSES.has(ccPair.status);
+  // Before the first run, or while it is held, there is no recent run to count.
+  const totalOnly = !chart || hold !== null;
 
   // The stage details popover spans the card, so the card is its anchor.
   return (
@@ -168,16 +185,7 @@ export default function StatusCard({
                   )}
                 </Section>
                 <Text font="secondary-body" color="text-03">
-                  {t("title")}
-                </Text>
-                <Text font="secondary-body" color="text-03">
-                  {hold !== null
-                    ? t(`hold.${hold.reason}`)
-                    : speed === null
-                      ? t("lastIndexed.value", {
-                          when: timeAgo(ccPair.last_indexed, locale) ?? "-",
-                        })
-                      : t("indexingSpeed", { speed })}
+                  {statusLine}
                 </Text>
                 {/* A run in flight ends on its own; the other holds wait for the admin. */}
                 {hold !== null &&
@@ -204,16 +212,21 @@ export default function StatusCard({
                   height="fit"
                 >
                   <Text font="main-content-emphasis" color="text-04">
-                    {recent.toLocaleString(locale)}
+                    {(totalOnly
+                      ? ccPair.num_docs_indexed
+                      : recent
+                    ).toLocaleString(locale)}
                   </Text>
-                  <Text font="main-content-body" color="text-04">
-                    {t("documents.total", {
-                      total: ccPair.num_docs_indexed.toLocaleString(locale),
-                    })}
-                  </Text>
+                  {!totalOnly && (
+                    <Text font="main-content-body" color="text-04">
+                      {t("documents.total", {
+                        total: ccPair.num_docs_indexed.toLocaleString(locale),
+                      })}
+                    </Text>
+                  )}
                 </Section>
                 <Text font="secondary-body" color="text-03">
-                  {t("documents.label")}
+                  {totalOnly ? t("documents.totalLabel") : t("documents.label")}
                 </Text>
                 <Text font="secondary-body" color="text-03">
                   {t("documentsIndexed.label")}
