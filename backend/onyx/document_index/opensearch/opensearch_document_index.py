@@ -679,9 +679,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> dict[str, DocumentChunkWithoutVectors]:
         """Gets the lowest-indexed stored chunk of each of the given documents.
 
-        That chunk carries the document fields Postgres does not keep - title,
-        metadata and owners - so a caller that rebuilds a document without
-        re-fetching it from the source can restore them.
+        That chunk carries the document fields Postgres does not keep - the
+        title and the metadata tags - so a caller that rebuilds a document
+        without re-fetching it from the source can restore them.
 
         Only chunk 0 is looked up. A document that lost it is reported as
         absent, which the caller treats as "not re-chunkable".
