@@ -2,7 +2,7 @@
 
 **Import:** `import { Collapsible, type CollapsibleProps } from "@opal/components";`
 
-A section whose header opens and closes the body under it. The header is a title, description and optional tag (an Opal `ContentAction` at the `main-content` size (`main-content-emphasis` title), not overridable) with a Fold/Expand `Button` on the right; `children` is the body. The body is a `Collapsible.Content` with `paddingTop={3}` (0.75rem) under the header, inside the part that animates, so it closes with the body. The section is a preset of the composable parts below: one state, one toggle, one spacing mechanism. The body animates its height, and while closed it is `inert`, so its fields cannot take focus. No Radix.
+A section whose header opens and closes the body under it. The header is a title, description and optional tag (an Opal `ContentAction` at the `main-content` size (`main-content-emphasis` title), not overridable) with a Fold/View All `Button` on the right; `children` is the body. The body is a `Collapsible.Content` with `paddingTop={3}` (0.75rem) under the header, inside the part that animates, so it closes with the body. The section is a preset of the composable parts below: one state, one toggle, one spacing mechanism. The body animates its height, and while closed it is `inert`, so its fields cannot take focus. No Radix.
 
 ## Usage
 
