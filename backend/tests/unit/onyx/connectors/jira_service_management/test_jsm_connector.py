@@ -175,6 +175,14 @@ def test_validate_rejects_software_project(
         connector.validate_connector_settings()
 
 
+def test_validate_rejects_missing_project_type(
+    connector: JiraServiceManagementConnector, source_operations: MagicMock
+) -> None:
+    source_operations.get_project.return_value = {"key": "SD"}
+    with pytest.raises(ConnectorValidationError, match="service_desk"):
+        connector.validate_connector_settings()
+
+
 def test_validate_requires_credentials() -> None:
     c = JiraServiceManagementConnector(jira_base_url=BASE_URL, project_key="SD")
     with pytest.raises(ConnectorMissingCredentialError):

@@ -1073,7 +1073,7 @@
           "description": "查询时搜索 Slack"
         },
         "jira_service_management": {
-          "description": "Atlassian service desk requests"
+          "description": "Atlassian 服务台请求"
         }
       }
     },
@@ -4313,12 +4313,12 @@
           }
         },
         "jira_service_management": {
-          "description": "Configure Jira Service Management connector",
-          "subtext": "Index all requests (tickets) from one Jira Service Management service project.",
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "从单个 Jira Service Management 服务项目索引所有请求（工单）。",
           "fields": {
             "project_key": {
-              "label": "Service Project Key",
-              "description": "The key of the service project to index (e.g., 'SD')."
+              "label": "服务项目键",
+              "description": "要索引的服务项目的键（例如 “SD”）。"
             }
           }
         }

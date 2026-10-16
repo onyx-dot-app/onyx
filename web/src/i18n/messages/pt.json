@@ -1073,7 +1073,7 @@
           "description": "Pesquisar no Slack na consulta"
         },
         "jira_service_management": {
-          "description": "Atlassian service desk requests"
+          "description": "Solicitações do service desk da Atlassian"
         }
       }
     },
@@ -4313,12 +4313,12 @@
           }
         },
         "jira_service_management": {
-          "description": "Configure Jira Service Management connector",
-          "subtext": "Index all requests (tickets) from one Jira Service Management service project.",
+          "description": "Configurar conector do Jira Service Management",
+          "subtext": "Indexe todas as solicitações (tickets) de um projeto de serviço do Jira Service Management.",
           "fields": {
             "project_key": {
-              "label": "Service Project Key",
-              "description": "The key of the service project to index (e.g., 'SD')."
+              "label": "Chave do projeto de serviço",
+              "description": "A chave do projeto de serviço a indexar (por exemplo, 'SD')."
             }
           }
         }

@@ -900,6 +900,13 @@ class JiraConnector(
                         )
                     )
 
+                issue_labels = get_issue_field(issue, _FIELD_LABELS) or []
+                if self.labels_to_skip and any(
+                    label in issue_labels for label in self.labels_to_skip
+                ):
+                    current_offset += 1
+                    continue
+
                 # Now add the slim document
                 doc_id = build_jira_url(self.jira_base, _issue_key(issue))
 

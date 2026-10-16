@@ -142,9 +142,10 @@ class JiraServiceManagementConnector(JiraConnector):
             return
 
         project_type = project.get("projectTypeKey")
-        if project_type and project_type != JSM_PROJECT_TYPE_KEY:
+        if project_type != JSM_PROJECT_TYPE_KEY:
+            shown = project_type or "unknown"
             raise ConnectorValidationError(
-                f"Project '{self.jira_project}' is a '{project_type}' project, "
+                f"Project '{self.jira_project}' is a '{shown}' project, "
                 "not a Jira Service Management (service_desk) project. "
                 "Use the Jira connector for it instead."
             )

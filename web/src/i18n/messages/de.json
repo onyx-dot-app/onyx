@@ -1073,7 +1073,7 @@
           "description": "Slack zur Abfragezeit durchsuchen"
         },
         "jira_service_management": {
-          "description": "Atlassian service desk requests"
+          "description": "Atlassian-Service-Desk-Anfragen"
         }
       }
     },
@@ -4313,12 +4313,12 @@
           }
         },
         "jira_service_management": {
-          "description": "Configure Jira Service Management connector",
-          "subtext": "Index all requests (tickets) from one Jira Service Management service project.",
+          "description": "Jira-Service-Management-Connector konfigurieren",
+          "subtext": "Indexieren Sie alle Anfragen (Tickets) aus einem Jira-Service-Management-Serviceprojekt.",
           "fields": {
             "project_key": {
-              "label": "Service Project Key",
-              "description": "The key of the service project to index (e.g., 'SD')."
+              "label": "Serviceprojektschlüssel",
+              "description": "Der Schlüssel des zu indexierenden Serviceprojekts (z. B. 'SD')."
             }
           }
         }
