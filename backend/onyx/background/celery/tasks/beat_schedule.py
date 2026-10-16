@@ -167,6 +167,20 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        # Daily. Every write path already deletes the tokens it drops; this
+        # catches any orphan that slips past it.
+        "name": "cleanup-orphaned-api-tokens",
+        "task": OnyxCeleryTask.CLEANUP_ORPHANED_API_TOKENS,
+        "schedule": timedelta(days=1),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         # Daily: the retention window selects by age, so the cadence only bounds
         # how far past the window a run can live.
         "name": "cleanup-old-capability-check-runs",

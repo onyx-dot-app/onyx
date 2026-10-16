@@ -6,6 +6,7 @@ new-or-existing input into a token, points the feature row at it, and deletes
 the previous token once nothing uses it.
 """
 
+from datetime import datetime
 from typing import Protocol
 
 from sqlalchemy import select
@@ -184,6 +185,21 @@ def release_api_token(db_session: Session, token_id: int) -> None:
     if token is not None:
         db_session.delete(token)
         db_session.flush()
+
+
+def delete_orphaned_api_tokens(db_session: Session, *, unused_since: datetime) -> int:
+    """Delete tokens that no feature uses and that were last changed before
+    ``unused_since``. Every write path already releases the tokens it drops;
+    this catches any that slip past it. Returns the number deleted."""
+    candidates = list(
+        db_session.scalars(select(ApiToken).where(ApiToken.time_updated < unused_since))
+    )
+    usages = get_api_token_usages(db_session, [token.id for token in candidates])
+    orphans = [token for token in candidates if not usages[token.id]]
+    for token in orphans:
+        db_session.delete(token)
+    db_session.commit()
+    return len(orphans)
 
 
 def rotate_api_token(db_session: Session, token_id: int, value: str) -> ApiToken:

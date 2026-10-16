@@ -8,7 +8,8 @@
 **Edition:** CE
 **Owns:**
 `backend/onyx/db/api_token.py`, `backend/onyx/server/manage/api_token/`
-(`api.py`, `models.py`), `web/src/lib/api-tokens/`
+(`api.py`, `models.py`), `backend/onyx/background/celery/tasks/api_tokens/`,
+`web/src/lib/api-tokens/`
 
 ---
 
@@ -34,6 +35,13 @@ keys.
 |---|---|---|---|
 | GET | `/admin/api-tokens?platform=` | `list_tokens` | Saved keys for one platform, masked, with usages. Onyx-owned keys are left out. Full admin. |
 | PATCH | `/admin/api-tokens/{token_id}` | `rotate_token` | Replaces a key's value for every feature that uses it. Full admin. |
+
+### Celery task
+
+`cleanup_orphaned_api_tokens` (`background/celery/tasks/api_tokens/tasks.py`),
+daily on the primary queue: deletes tokens no feature uses that were last
+changed over an hour ago (`db/api_token.py:delete_orphaned_api_tokens`). Write
+paths already release the tokens they drop; this catches any that slip past.
 
 ### Request field
 

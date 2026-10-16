@@ -155,7 +155,7 @@ so verify the callers rather than a single component.
 | `backend/onyx/image_gen/`, `server/features/image_generation/`, `server/manage/image_generation/`, `db/image_generation.py` | image-generation |
 | `backend/onyx/db/code_interpreter.py`, `server/manage/code_interpreter/` | code-execution |
 | `backend/onyx/llm/`, `server/manage/llm/`, `db/llm.py` | llm-providers |
-| `backend/onyx/db/api_token.py`, `server/manage/api_token/` | api-tokens |
+| `backend/onyx/db/api_token.py`, `server/manage/api_token/`, `backend/onyx/background/celery/tasks/api_tokens/` | api-tokens |
 
 ## Backend: Craft
 
