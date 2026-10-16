@@ -1,6 +1,7 @@
+import re
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import cached_property
@@ -38,6 +39,7 @@ from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import SourceOperations
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.utils.logger import setup_logger
+from onyx.utils.redaction import scrub_sensitive_values
 
 logger = setup_logger()
 
@@ -213,6 +215,8 @@ _UNKNOWN_CAUSE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
 # results live in stored reports and in every draft snapshot write.
 MAX_RESPONSE_EXCERPT_CHARS: int = 500
 MAX_STACK_TRACE_CHARS: int = 4000
+# A URL's query string and fragment, which can hold secrets.
+_URL_QUERY_PATTERN = re.compile(r"(https?://[^\s?#'\"]+)[?#][^\s'\"]*")
 
 
 class CheckErrorDetail(BaseModel):
@@ -237,6 +241,26 @@ def _request_line(method: str | None, url: str | None) -> str | None:
     # Host and path only: the query string and user info can hold secrets.
     location = f"{parsed.hostname or ''}{f':{parsed.port}' if parsed.port else ''}{parsed.path}"
     return f"{method} {location}" if method else location
+
+
+def credential_strings(credential_json: Any) -> list[str]:
+    """Every string in a credential's values, nested ones included, to redact
+    from what a check stores."""
+    if isinstance(credential_json, str):
+        return [credential_json]
+    if isinstance(credential_json, dict):
+        return [
+            text
+            for value in credential_json.values()
+            for text in credential_strings(value)
+        ]
+    if isinstance(credential_json, list):
+        return [text for value in credential_json for text in credential_strings(value)]
+    return []
+
+
+def _scrubbed(text: str, secrets: Iterable[str]) -> str:
+    return scrub_sensitive_values(_URL_QUERY_PATTERN.sub(r"\1", text), secrets)
 
 
 def _http_detail(error: BaseException) -> CheckErrorDetail | None:
@@ -265,13 +289,18 @@ def _http_detail(error: BaseException) -> CheckErrorDetail | None:
 
 
 def check_error_detail(
-    error: Exception, error_kind: CheckErrorKind
+    error: Exception, error_kind: CheckErrorKind, secrets: Iterable[str]
 ) -> CheckErrorDetail | None:
     """The detail of a check's exception: the HTTP response it carries, and a
-    stack trace when the cause is unknown. None when it has neither."""
+    stack trace when the cause is unknown. None when it has neither. URL query
+    strings and every value of ``secrets`` (the run's credential values) are
+    removed from the response and the trace."""
+    secrets = list(secrets)
     detail = _http_detail(error) or CheckErrorDetail()
+    if detail.response_excerpt is not None:
+        detail.response_excerpt = _scrubbed(detail.response_excerpt, secrets)
     if error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
-        trace = "".join(traceback.format_exception(error))
+        trace = _scrubbed("".join(traceback.format_exception(error)), secrets)
         detail.stack_trace = trace[-MAX_STACK_TRACE_CHARS:]
     return detail if detail != CheckErrorDetail() else None
 

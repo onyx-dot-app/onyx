@@ -9,6 +9,7 @@ from onyx.connectors.capability_checks.models import (
     CheckErrorKind,
     check_error_detail,
     check_error_kind,
+    credential_strings,
 )
 from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
@@ -30,7 +31,7 @@ def _detail(error: Exception) -> CheckErrorDetail | None:
     try:
         raise error
     except Exception as raised:
-        return check_error_detail(raised, check_error_kind(raised))
+        return check_error_detail(raised, check_error_kind(raised), [])
 
 
 def test_a_mapped_http_error_keeps_the_response_but_not_the_query() -> None:
@@ -40,7 +41,7 @@ def test_a_mapped_http_error_keeps_the_response_but_not_the_query() -> None:
     try:
         raise InsufficientPermissionsError("No permission.") from http_error
     except InsufficientPermissionsError as error:
-        detail = check_error_detail(error, CheckErrorKind.PERMISSION)
+        detail = check_error_detail(error, CheckErrorKind.PERMISSION, [])
 
     assert detail == CheckErrorDetail(
         status_code=403,
@@ -60,7 +61,7 @@ def test_a_source_api_error_gives_its_response() -> None:
     try:
         raise UnexpectedValidationError("Unexpected Jira response.") from api_error
     except UnexpectedValidationError as error:
-        detail = check_error_detail(error, CheckErrorKind.INVALID)
+        detail = check_error_detail(error, CheckErrorKind.INVALID, [])
 
     assert detail is not None
     assert detail.status_code == 404
@@ -80,3 +81,27 @@ def test_an_unknown_cause_keeps_a_stack_trace() -> None:
 
 def test_a_known_cause_without_a_response_has_no_detail() -> None:
     assert _detail(InsufficientPermissionsError("No scope.")) is None
+
+
+def test_credential_values_and_url_queries_are_redacted() -> None:
+    secrets = credential_strings(
+        {"token": "sk-secret-value", "nested": {"refresh": "rt-secret-value"}}
+    )
+    http_error = _http_error(
+        500,
+        "https://api.example.com/v1/items?key=sk-secret-value",
+        "Bad token sk-secret-value and rt-secret-value.",
+    )
+    try:
+        raise RuntimeError(
+            "Failed: https://api.example.com/v1/items?key=sk-secret-value"
+        ) from http_error
+    except RuntimeError as error:
+        detail = check_error_detail(error, CheckErrorKind.UNEXPECTED, secrets)
+
+    assert detail is not None
+    assert detail.response_excerpt == "Bad token [REDACTED] and [REDACTED]."
+    assert detail.stack_trace is not None
+    assert "sk-secret-value" not in detail.stack_trace
+    assert "rt-secret-value" not in detail.stack_trace
+    assert "?key=" not in detail.stack_trace
