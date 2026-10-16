@@ -119,7 +119,7 @@ export class AdminConnectorDetailPage {
 
   /** The activity panel has loaded with nothing to show. */
   async expectNoActivity(): Promise<void> {
-    await expect(this.activityPanel).toContainText("No failures or errors", {
+    await expect(this.activityPanel).toContainText("No recent activity", {
       timeout: 30000,
     });
   }
