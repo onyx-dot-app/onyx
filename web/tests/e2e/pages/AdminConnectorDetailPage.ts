@@ -47,7 +47,9 @@ export class AdminConnectorDetailPage {
       .getByRole("button", { name: /Last \d+ (hours|days)/ })
       .first();
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
-    this.noRunsMessage = page.getByText("No runs yet", { exact: true });
+    this.noRunsMessage = page.getByText("No recent indexing runs", {
+      exact: true,
+    });
     this.activityPanel = page.getByTestId("connector-activity");
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
