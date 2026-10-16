@@ -127,6 +127,15 @@ def _run_oauth_provider_cleanup() -> None:
     cleanup_oauth_provider_clients.run()
 
 
+def _run_api_token_cleanup() -> None:
+    from onyx.background.celery.tasks.api_tokens.tasks import (
+        cleanup_orphaned_api_tokens,
+    )
+    from shared_configs.contextvars import get_current_tenant_id
+
+    cleanup_orphaned_api_tokens.run(tenant_id=get_current_tenant_id())
+
+
 def _run_fleet_telemetry() -> None:
     from onyx.utils.fleet_telemetry_collector import collect_snapshots
     from shared_configs.contextvars import get_current_tenant_id
@@ -136,6 +145,7 @@ def _run_fleet_telemetry() -> None:
 
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
 _OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS = 24 * 3600
+_API_TOKEN_CLEANUP_INTERVAL_SECONDS = 24 * 3600
 # The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
 _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
@@ -197,6 +207,14 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
             interval_seconds=_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS,
             lock_id=PERIODIC_TASK_LOCK_BASE + 4,
             run_fn=_run_oauth_provider_cleanup,
+        )
+    )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="api-token-cleanup",
+            interval_seconds=_API_TOKEN_CLEANUP_INTERVAL_SECONDS,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 6,
+            run_fn=_run_api_token_cleanup,
         )
     )
     if not DISABLE_TELEMETRY:

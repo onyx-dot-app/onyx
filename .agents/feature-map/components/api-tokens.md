@@ -42,6 +42,8 @@ keys.
 daily on the primary queue: deletes tokens no feature uses that were last
 changed over an hour ago (`db/api_token.py:delete_orphaned_api_tokens`). Write
 paths already release the tokens they drop; this catches any that slip past.
+Lite (NO_VECTOR_DB) deployments run no Celery workers, so the API server's
+periodic poller (`background/periodic_poller.py`) runs the same task daily.
 
 ### Request field
 
@@ -56,7 +58,9 @@ Every consumer's request carries the key as `api_key: ApiTokenInput | None`
 
 ### Consumers
 
-LLM providers (and image generation through its hidden LLM provider row), voice
+Each feature moves its key over in its own PR, stacked on the one that adds
+the table, in this order: LLM providers (and image generation through its
+hidden LLM provider row), voice
 providers (`api_key` only; `api_secret` stays on the row), cloud embedding
 providers, web search and web content providers, tracing providers, hooks (EE),
 and the Unstructured key (the key-value store holds its token id under
@@ -69,12 +73,14 @@ and the Unstructured key (the key-value store holds its token id under
 - `ApiToken` (`api_token`, `db/models.py`): `platform` (e.g. `openai`, `exa`),
   `value` (`EncryptedString`), `base_url` (where the key was first saved),
   `is_system` (Onyx-owned Cloud keys), timestamps.
-- Each consumer table has `api_token_id` (FK, `ON DELETE RESTRICT`), an
+- Each consumer table gets `api_token_id` (FK, `ON DELETE RESTRICT`), an
   `api_token` relationship loaded with the row, and a read-only `api_key`
   property that returns the token's value.
-- Migration `eb0c14780dc5` moved every stored key into its own row, copying the
-  encrypted bytes, and moved the plaintext Unstructured key into an encrypted
-  row.
+- Revision 3b2ad4fe0d6a adds the table. Each consumer's own revision then moves
+  its stored keys into rows, copying the encrypted bytes: 62d0b3353c2a (LLM
+  providers), 15059666a6e7 (voice), defc8c8f4519 (embedding), 783fc0761f69
+  (web search and content), 5992fce31c65 (tracing), 04fc892ede01 (hooks) and
+  a64903edf1d4 (the plaintext Unstructured key, encrypted on the way in).
 
 ---
 
@@ -104,6 +110,8 @@ and the Unstructured key (the key-value store holds its token id under
   it is the row's current token.
 - In multi-tenant, a saved key is only sent to the base URL it was saved for.
   This replaced the per-feature "stored key, same base URL" guards.
+- Release and reuse of a token lock its row (`get_api_token(lock=True)`), so a
+  concurrent release and pick of the same token run one after the other.
 - Deleting a consumer row must release its token after the row is gone.
   Soft-deleted hooks clear `api_token_id` first.
 - Responses never return a raw key. Views carry a masked value and

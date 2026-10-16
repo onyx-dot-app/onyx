@@ -72,12 +72,12 @@ export function ApiTokenInput({
   const t = useTranslations("common.apiTokens");
   const format = useFormatter();
   const platformLabel = getApiTokenPlatformLabel(platform);
-  const { tokens, error: listError } = useApiTokens(platform);
+  const { tokens, error: listError, isLoading } = useApiTokens(platform);
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Only full admins can list saved keys. For anyone else the list stays
-  // shut, rather than claiming there are none.
-  const canList = listError === undefined;
+  // Only full admins can list saved keys. For anyone else, and until the
+  // keys have loaded, the list stays shut rather than claiming there are none.
+  const canList = listError === undefined && !isLoading;
 
   const picked =
     value.type === "existing"

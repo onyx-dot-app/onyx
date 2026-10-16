@@ -38,8 +38,12 @@ def _same_base_url(a: str | None, b: str | None) -> bool:
     return _origin(a) == _origin(b)
 
 
-def get_api_token(db_session: Session, token_id: int) -> ApiToken | None:
-    return db_session.get(ApiToken, token_id)
+def get_api_token(
+    db_session: Session, token_id: int, *, lock: bool = False
+) -> ApiToken | None:
+    """``lock`` takes a row lock, so a concurrent release and reuse of the same
+    token run one after the other."""
+    return db_session.get(ApiToken, token_id, with_for_update=lock)
 
 
 def create_api_token(
@@ -85,7 +89,7 @@ def resolve_api_token(
             base_url=base_url,
         )
 
-    token = get_api_token(db_session, token_input.id)
+    token = get_api_token(db_session, token_input.id, lock=True)
     if token is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "API key not found")
     is_current = token.id == current_token_id
@@ -172,13 +176,13 @@ def assign_system_api_token(
 
 
 def release_api_token(db_session: Session, token_id: int) -> None:
-    """Delete a token that no feature uses anymore."""
-    if get_api_token_usages(db_session, [token_id]).get(token_id):
+    """Delete a token that no feature uses anymore. The row lock is taken
+    before the usage check, so a save picking this token waits for it."""
+    token = get_api_token(db_session, token_id, lock=True)
+    if token is None or get_api_token_usages(db_session, [token_id]).get(token_id):
         return
-    token = get_api_token(db_session, token_id)
-    if token is not None:
-        db_session.delete(token)
-        db_session.flush()
+    db_session.delete(token)
+    db_session.flush()
 
 
 def delete_orphaned_api_tokens(db_session: Session, *, unused_since: datetime) -> int:
@@ -186,7 +190,12 @@ def delete_orphaned_api_tokens(db_session: Session, *, unused_since: datetime) -
     ``unused_since``. Every write path already releases the tokens it drops;
     this catches any that slip past it. Returns the number deleted."""
     candidates = list(
-        db_session.scalars(select(ApiToken).where(ApiToken.time_updated < unused_since))
+        db_session.scalars(
+            select(ApiToken)
+            .where(ApiToken.time_updated < unused_since)
+            # A token a save is working with is skipped, not waited on.
+            .with_for_update(skip_locked=True)
+        )
     )
     usages = get_api_token_usages(db_session, [token.id for token in candidates])
     orphans = [token for token in candidates if not usages[token.id]]
