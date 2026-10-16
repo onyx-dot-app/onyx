@@ -379,11 +379,19 @@ def _dependency_not_run_outcome(
     """The outcome of a check that a dependency stops, or None when its
     dependencies let it run. A dependency without a result, or one that does
     not apply, does not stop it. The first stopping dependency, in the order
-    the check lists them, names the cause."""
+    the check lists them, names the cause. A dependency that a gate stopped
+    passes its cause on, so a whole chain names the check that failed."""
     for dependency_id in check.depends_on:
         dependency = results_by_check_id.get(dependency_id)
         if dependency is None or not dependency.applicable:
             continue
+        if dependency.not_run_reason is not None:
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED,
+                message=dependency.message,
+                not_run_reason=dependency.not_run_reason,
+                blocked_by=dependency.blocked_by,
+            )
         reason = _NOT_RUN_REASON_BY_DEPENDENCY_STATUS.get(dependency.status)
         if reason is None:
             continue

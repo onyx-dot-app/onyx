@@ -117,8 +117,10 @@ def test_a_failed_dependency_stops_its_chain_without_calling_it() -> None:
     assert results["list"].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
     assert results["list"].blocked_by == "sign_in"
     assert results["list"].message == "Not run: Run sign_in failed"
-    assert results["content"].not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
-    assert results["content"].blocked_by == "list"
+    # The chain names the check that failed.
+    assert results["content"].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert results["content"].blocked_by == "sign_in"
+    assert results["content"].message == "Not run: Run sign_in failed"
     assert results["other"].status == CapabilityCheckStatus.PASSED
 
 
@@ -186,7 +188,8 @@ def test_results_that_ran_side_by_side_report_their_dependency() -> None:
         ("sign_in", CapabilityCheckStatus.FAILED),
         ("list", CapabilityCheckStatus.SKIPPED),
     ]
-    assert results[0].not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
+    assert results[0].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert results[0].blocked_by == "sign_in"
     assert results[2].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
 
 
@@ -229,3 +232,18 @@ def test_a_check_waits_while_its_dependency_waits() -> None:
     for check_id in ("content", "comments"):
         assert states[check_id].state == DraftCheckStateKind.WAITING
         assert states[check_id].missing_fields == ["space"]
+
+
+def test_a_dependency_skipped_for_its_own_reason_stops_its_dependent() -> None:
+    """A dependency that waits for a setting stops its dependent; a discovery
+    check that a required failure skipped does not apply, so it does not."""
+    results = _run(
+        [_Check("count", depends_on=("find_space", "listing"))],
+        prior_results=[
+            _result("listing", CapabilityCheckStatus.SKIPPED, applicable=False),
+            _result("find_space", CapabilityCheckStatus.SKIPPED),
+        ],
+    )
+
+    assert results["count"].not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
+    assert results["count"].blocked_by == "find_space"
