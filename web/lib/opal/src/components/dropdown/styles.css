@@ -147,6 +147,10 @@
 .opal-dropdown-group {
   @apply flex flex-col;
 }
+/* A titled group's divider gets 4px more room above it than a plain one. */
+.opal-dropdown-titled {
+  @apply pt-1;
+}
 .opal-dropdown-group-rows {
   @apply flex flex-col gap-1 pt-1;
 }

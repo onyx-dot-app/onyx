@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Mapping
 from typing import Any, ClassVar
 
@@ -6,6 +6,8 @@ import requests
 from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import ExternalAppType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.oauth.protocol import build_authorization_code_token_body
@@ -85,7 +87,11 @@ class OrgCredentialField(BaseModel):
 class OAuthFlowSpec(BaseModel):
     """Initial-grant OAuth 2.0 parameters for a provider. Consumed by the
     External-App OAuth routes to build the authorize URL and exchange the
-    code for a token."""
+    code for a token.
+
+    ``authorize_url`` and ``token_url`` may carry ``{placeholder}`` fields for a
+    per-account provider, so read them through
+    :meth:`OAuthExternalAppProvider.resolve_oauth_flow`, not off the spec."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -152,7 +158,7 @@ class TokenExchangeRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     headers: dict[str, str]
-    body: dict[str, str]
+    body: dict[str, Any]
     # How ``body`` is encoded on the wire: JSON (``requests.post(json=...)``)
     # when True, RFC-6749 form-encoded (``data=...``) when False. The callback
     # route maps this to exactly one of `data`/`json` so `requests` never sees
@@ -191,6 +197,27 @@ class ExternalAppProvider(ABC):
     def payload_decoders(self) -> Mapping[str, PayloadDecoder]:
         """Display decoders for this provider's request bodies, keyed by
         ``action_type``. Empty by default; override to register decoders."""
+        return {}
+
+    def resolve_upstream_url_patterns(
+        self,
+        org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
+        submitted: list[str],
+    ) -> list[str]:
+        """Resolve account-specific hosts; fixed-host providers keep submitted patterns."""
+        return submitted
+
+    def skill_template_values(
+        self,
+        org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
+    ) -> dict[str, str]:
+        """Values substituted into this provider's ``SKILL.md.template`` as
+        ``{{APP:<key>}}``. Empty unless the skill needs something only this
+        app's configuration knows (Zendesk's account base URL).
+
+        The rendered SKILL.md ships to the sandbox, so never return a secret;
+        ``org_credentials`` holds only the provider's non-secret fields. May
+        raise ``OnyxError(INVALID_INPUT)`` on a malformed value."""
         return {}
 
 
@@ -252,7 +279,8 @@ class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
 
 class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     """A provider whose users authenticate via OAuth 2.0. Subclasses supply an
-    :class:`OAuthProviderSpec` and implement :meth:`extract_credentials`.
+    :class:`OAuthProviderSpec`. Override :meth:`extract_credentials` for a
+    nonstandard token response.
 
     :meth:`refresh_credentials` is a template method: a divergent provider
     overrides one hook (`build_refresh_request`, `classify_token_response`) or
@@ -271,12 +299,37 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     # (RFC 6749 §5.2).
     terminal_refresh_errors: ClassVar[frozenset[str]] = frozenset({"invalid_grant"})
 
-    @abstractmethod
+    # Mirrors ``TokenExchangeRequest.json_encoded``, for the refresh POST.
+    refresh_json_encoded: ClassVar[bool] = False
+
+    def resolve_oauth_flow(
+        self,
+        org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
+    ) -> OAuthFlowSpec:
+        """Resolve account-specific URLs while preserving the provider's OAuth settings."""
+        return self.spec.oauth
+
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
-        """Map a successful token response (initial grant *or* refresh) to the
-        credentials to persist for the user (e.g. pull the user access token out
-        of Slack's nested ``authed_user``). Raise ``OnyxError`` if the expected
-        token is absent."""
+        """Map standard OAuth token fields for both initial grants and refreshes.
+
+        Override for provider-specific fields or nested tokens such as Slack's.
+        Omit absent refresh fields so refresh merging preserves stored values.
+        """
+        access_token = response_data.get("access_token")
+        if not access_token:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"{self.spec.app_name} OAuth response did not contain an access token.",
+            )
+        credentials: dict[str, Any] = {
+            "access_token": access_token,
+            "token_type": response_data.get("token_type"),
+            "scope": response_data.get("scope"),
+        }
+        for key in ("refresh_token", "expires_in"):
+            if response_data.get(key):
+                credentials[key] = response_data[key]
+        return credentials
 
     def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
         """The scopes the user granted, from the connect-time token response, or
@@ -323,12 +376,15 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         stored: dict[str, Any],
         client_id: str,
         client_secret: str,
+        *,
+        token_url: str,
     ) -> dict[str, Any]:
         """Exchange the stored refresh token for a fresh access token (RFC-6749).
 
         Clockless (the caller stamps ``expires_at``), mirroring
         :meth:`extract_credentials`. Override `build_refresh_request` /
-        `classify_token_response` for a divergent provider.
+        `classify_token_response` for a divergent provider. ``token_url``
+        comes from :meth:`resolve_oauth_flow` for a per-account provider.
 
         Raises:
             TokenRefreshTerminalError: the grant is dead (reconnect required).
@@ -340,18 +396,24 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
                 "No refresh token stored; the user must reconnect."
             )
 
+        body = self.build_refresh_request(refresh_token, client_id, client_secret)
+        json_encoded = self.refresh_json_encoded
         try:
             response = requests.post(
-                self.spec.oauth.token_url,
+                token_url,
                 # Ask for JSON so providers that default to form-encoded
                 # refresh responses (e.g. GitHub) still parse via response.json().
                 headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Type": (
+                        "application/json"
+                        if json_encoded
+                        else "application/x-www-form-urlencoded"
+                    ),
                     "Accept": "application/json",
                 },
-                data=self.build_refresh_request(
-                    refresh_token, client_id, client_secret
-                ),
+                # Exactly one of data/json, or `requests` drops the form body.
+                data=None if json_encoded else body,
+                json=body if json_encoded else None,
                 timeout=self.refresh_http_timeout_seconds,
             )
         except requests.RequestException as exc:
@@ -388,9 +450,10 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
 
     def build_refresh_request(
         self, refresh_token: str, client_id: str, client_secret: str
-    ) -> dict[str, str]:
-        """The refresh POST form body. Override to add provider-specific params
-        (scope, resource, audience, …) or change the grant."""
+    ) -> dict[str, Any]:
+        """The refresh POST body. Override to add provider-specific params
+        (scope, resource, audience, …) or change the grant. Same value-typing
+        rule as :class:`TokenExchangeRequest.body`."""
         return {
             "grant_type": "refresh_token",
             "client_id": client_id,

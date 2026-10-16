@@ -33,7 +33,10 @@
   border-color: var(--border-05);
 }
 
-.opal-input[data-variant="primary"]:focus-within:not(:active) {
+/* An open list keeps the focused look, even when focus moves into it
+   (its search field). */
+.opal-input[data-variant="primary"]:focus-within:not(:active),
+.opal-input[data-variant="primary"][data-open] {
   border-color: var(--border-05);
   box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
 }
@@ -48,7 +51,8 @@
   border: 1px solid var(--status-error-05);
 }
 
-.opal-input[data-variant="error"]:focus-within:not(:active) {
+.opal-input[data-variant="error"]:focus-within:not(:active),
+.opal-input[data-variant="error"][data-open] {
   box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
 }
 

@@ -81,6 +81,20 @@ pytest --count=10 backend/tests/unit/path/to/test_file.py
 
 ## Best Practices
 
+### Leave nothing behind
+
+A test may reset or wipe shared state before it runs. It must not leave its own
+state behind for a later test to see: rows, changed global defaults, Redis keys,
+OpenSearch indexes, running threads, or settings on a pooled database connection.
+Undo each change in a `finally` or a yield-fixture teardown.
+
+External dependency unit tests check one case of this automatically. After each
+test, an autouse fixture (`no_leaked_db_session_settings`) fails the test if it
+returned a pooled connection with a session-level Postgres setting on it, such as
+a plain `SET lock_timeout`. To change session state, use `SET LOCAL`, reset the
+setting, or run on the `isolated_engine` fixture. Migration tests that run
+migrations in-process must use `isolated_engine`.
+
 ### Use `enable_ee` fixture instead of inlining
 
 Enables EE mode for a test, with proper teardown and cache clearing.

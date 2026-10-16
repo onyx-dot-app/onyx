@@ -9,7 +9,10 @@ from pydantic import BaseModel
 
 from onyx.cache.interface import CacheBackend
 from onyx.error_handling.exceptions import OnyxError
-from onyx.oauth.authorization_attempt import AuthorizationAttemptStore
+from onyx.oauth.authorization_attempt import (
+    AuthorizationAttemptStore,
+    generate_authorization_state,
+)
 
 
 class _Payload(BaseModel):
@@ -23,7 +26,11 @@ def test_concurrent_callbacks_claim_attempt_once(cache: CacheBackend) -> None:
         payload_type=_Payload,
     )
     owner_id = str(uuid4())
-    attempt = store.store(owner_id=owner_id, payload=_Payload(target_id=7))
+    attempt = store.store(
+        state=generate_authorization_state(),
+        owner_id=owner_id,
+        payload=_Payload(target_id=7),
+    )
     barrier = Barrier(8)
 
     def claim() -> int | None:
@@ -51,7 +58,11 @@ def test_wrong_owner_cannot_consume_attempt(cache: CacheBackend) -> None:
         payload_type=_Payload,
     )
     owner_id = str(uuid4())
-    attempt = store.store(owner_id=owner_id, payload=_Payload(target_id=9))
+    attempt = store.store(
+        state=generate_authorization_state(),
+        owner_id=owner_id,
+        payload=_Payload(target_id=9),
+    )
     with pytest.raises(
         OnyxError, match="Invalid or expired OAuth authorization attempt"
     ):

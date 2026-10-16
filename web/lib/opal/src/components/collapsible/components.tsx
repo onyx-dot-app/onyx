@@ -32,7 +32,7 @@ interface CollapsibleProps {
 /**
  * A titled section: a header with a title, description and fold button, over
  * a body that opens and closes. It is a preset of the composable parts below:
- * `Collapsible.Root` holds the state, and the body is a `Collapsible.Content`
+ * the state of `Collapsible.Root`, and a body that is a `Collapsible.Content`
  * with `paddingTop={3}`.
  */
 function CollapsibleSection({
@@ -42,15 +42,17 @@ function CollapsibleSection({
   disabled = false,
   ...props
 }: CollapsibleProps) {
+  // No root element: the layout's own element is the section's root, so it
+  // fills the width of a flex parent.
   return (
-    <CollapsibleRoot
+    <CollapsibleProvider
       open={open}
       onOpenChange={onOpenChange}
       defaultOpen={defaultOpen}
       disabled={disabled}
     >
       <CollapsibleSectionLayout disabled={disabled} {...props} />
-    </CollapsibleRoot>
+    </CollapsibleProvider>
   );
 }
 
@@ -200,7 +202,29 @@ interface CollapsibleRootProps {
  * `Collapsible.Trigger` and `Collapsible.Content`. For a titled section with
  * Opal's own header and fold button, use `Collapsible` itself.
  */
-function CollapsibleRoot({
+function CollapsibleRoot({ children, ...props }: CollapsibleRootProps) {
+  return (
+    <CollapsibleProvider {...props}>
+      <CollapsibleRootElement>{children}</CollapsibleRootElement>
+    </CollapsibleProvider>
+  );
+}
+
+/** The root's element, with the state as data attributes. */
+function CollapsibleRootElement({ children }: { children?: React.ReactNode }) {
+  const { open, disabled } = useCollapsibleContext("Root");
+  return (
+    <div
+      data-state={open ? "open" : "closed"}
+      data-disabled={disabled || undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** The state of a collapsible, without an element of its own. */
+function CollapsibleProvider({
   open: openProp,
   onOpenChange,
   defaultOpen = false,
@@ -220,12 +244,7 @@ function CollapsibleRoot({
 
   return (
     <CollapsibleContext.Provider value={{ open, disabled, toggle, contentId }}>
-      <div
-        data-state={open ? "open" : "closed"}
-        data-disabled={disabled || undefined}
-      >
-        {children}
-      </div>
+      {children}
     </CollapsibleContext.Provider>
   );
 }

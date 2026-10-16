@@ -23,7 +23,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
@@ -41,11 +41,11 @@ from onyx.db.tools import create_tool_call_no_commit
 
 
 def test_execution_metadata_upgrade_retry_downgrade_upgrade(
-    db_session: Session,
+    isolated_engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     schema = f"response_migration_{uuid4().hex}"
-    with db_session.connection().engine.connect() as connection:
+    with isolated_engine.connect() as connection:
         try:
             connection.execute(CreateSchema(schema))
             connection.execute(

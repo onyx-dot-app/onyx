@@ -18,6 +18,7 @@ from onyx.oauth.protocol import OAuthFlowParams
         {"access_token": "token", "expires_in": "3600"},
         {"access_token": "token", "expires_in": float("inf")},
         {"access_token": "token", "expires_in": -1},
+        {"access_token": "token", "expires_in": 10**400},
     ],
 )
 def test_exchange_rejects_invalid_token_payload(

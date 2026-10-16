@@ -177,6 +177,49 @@ describe("ConfigureProviderModal", () => {
     expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
   });
 
+  it("sends account input to the backend for gateway resolution", async () => {
+    const perAccountDescriptor: BuiltInExternalAppDescriptor = {
+      ...DESCRIPTOR,
+      app_type: "ZENDESK",
+      name: "Zendesk",
+      upstream_url_patterns: ["https://{subdomain}\\.zendesk\\.com/api/v2/.*"],
+      required_org_credential_fields: [
+        {
+          key: "subdomain",
+          label: "Subdomain",
+          description: "Your Zendesk subdomain",
+          secret: false,
+        },
+      ],
+    };
+    jest
+      .mocked(externalAppsService.createBuiltInExternalApp)
+      .mockResolvedValue({ ...APP, associated_skills: [] });
+
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={perAccountDescriptor}
+        existingApp={null}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Subdomain"), {
+      target: { value: "acme" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(externalAppsService.createBuiltInExternalApp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          upstream_url_patterns: perAccountDescriptor.upstream_url_patterns,
+          organization_credentials: { subdomain: "acme" },
+        })
+      )
+    );
+  });
+
   it("guards unsaved provider edits before skill creation", () => {
     const { onClose } = renderExistingProvider();
     fireEvent.change(screen.getByPlaceholderText("Token"), {

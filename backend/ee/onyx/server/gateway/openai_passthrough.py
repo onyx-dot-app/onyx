@@ -43,7 +43,6 @@ from onyx.server.gateway.models import (
 from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -261,10 +260,6 @@ def _non_streaming_error_response(response: httpx.Response) -> JSONResponse:
     raise OnyxError(OnyxErrorCode.BAD_GATEWAY, _SANITIZED_ERROR)
 
 
-def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return llm_gateway_trace(flow, model)
-
-
 def handle_openai_responses_passthrough(
     request: ResponsesRequest,
     provider: LLMProviderView,
@@ -297,7 +292,7 @@ def handle_openai_responses_passthrough(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=request.input, tools=request.tools
         ) as span,
@@ -424,7 +419,7 @@ def _openai_passthrough_stream_worker(
     # Runs on its own thread after the endpoint returned, so the trace must be
     # opened here or the generation span sees no active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=input_messages, tools=tools
         ) as span,

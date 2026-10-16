@@ -26,7 +26,7 @@ from onyx.oauth.authorization_attempt import (
 )
 from onyx.oauth.protocol import (
     OAuthFlowParams,
-    build_oauth_authorization_url,
+    build_authorization_url,
     validate_authorization_params,
 )
 from onyx.server.features.mcp.client import initialize_mcp_client
@@ -56,6 +56,12 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 MCP_OAUTH_FLOW_TTL_SECONDS = 10 * 60
+MCP_OAUTH_ATTEMPTS = AuthorizationAttemptStore(
+    cache_backend_provider=get_cache_backend,
+    namespace="mcp",
+    payload_type=MCPOAuthFlowState,
+    ttl_seconds=MCP_OAUTH_FLOW_TTL_SECONDS,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,15 +183,6 @@ def validate_mcp_oauth_flow_configuration(
         )
 
 
-def mcp_oauth_attempt_store() -> AuthorizationAttemptStore[MCPOAuthFlowState]:
-    return AuthorizationAttemptStore(
-        cache_backend_provider=get_cache_backend,
-        namespace="mcp",
-        payload_type=MCPOAuthFlowState,
-        ttl_seconds=MCP_OAUTH_FLOW_TTL_SECONDS,
-    )
-
-
 async def _start_oauth_from_well_known_metadata(
     oauth_provider: OAuthClientProvider,
     server_url: str,
@@ -239,15 +236,19 @@ def start_known_provider_oauth_flow(
     pkce = PKCEParameters.generate()
     redirect_uri = mcp_oauth_redirect_uri()
     resource = mcp_server.server_url if include_resource_param else None
-    authorization_url = build_oauth_authorization_url(
-        _known_provider_flow_params(mcp_server, client_information),
-        redirect_uri,
-        state,
+    params = _known_provider_flow_params(mcp_server, client_information)
+    authorization_url = build_authorization_url(
+        authorization_url=params.authorization_url,
+        client_id=params.client_id,
+        redirect_uri=redirect_uri,
+        state=state,
+        scope=" ".join(params.scopes) if params.scopes else None,
+        additional_params=params.additional_params,
         code_challenge=pkce.code_challenge,
         resource=resource,
         owns_resource=True,
     )
-    mcp_oauth_attempt_store().store(
+    MCP_OAUTH_ATTEMPTS.store(
         owner_id=user_id,
         state=state,
         payload=_build_mcp_oauth_attempt_payload(
@@ -291,7 +292,7 @@ async def _start_auto_discovery_oauth_flow_once(
                 OnyxErrorCode.INVALID_INPUT,
                 "MCP OAuth discovery did not produce a redirect URI.",
             )
-        mcp_oauth_attempt_store().store(
+        MCP_OAUTH_ATTEMPTS.store(
             owner_id=user_id,
             state=authorization.state,
             payload=_build_mcp_oauth_attempt_payload(

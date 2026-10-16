@@ -223,12 +223,6 @@ def _required_cc_pairs_for_switchover(
     return [cc_pair for cc_pair in all_cc_pairs if cc_pair.id in portable_ids]
 
 
-def _required_users_for_switchover(db_session: Session) -> list[UUID]:
-    """Portable users whose port must finish before a port-flow swap — the same set
-    check_for_port ports. Switchover-agnostic (users have no paused concept)."""
-    return fetch_port_scope_user_ids(db_session)
-
-
 def _verification_backoff_key(search_settings_id: int) -> str:
     return f"port_swap_verify_failed:{search_settings_id}"
 
@@ -469,7 +463,8 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
             db_session, all_cc_pairs, switchover_type
         )
 
-        required_user_ids = _required_users_for_switchover(db_session)
+        # Use the same users as check_for_port; users cannot be paused.
+        required_user_ids = fetch_port_scope_user_ids(db_session)
         if _port_swap_ready(
             db_session, new_search_settings, required_cc_pairs, required_user_ids
         ):
