@@ -60,7 +60,6 @@ const CC_PAIR_POLL_MS = 5000;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
-  const editT = useTranslations("admin.connectorEdit");
   const router = useRouter();
 
   const {
@@ -311,7 +310,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                         icon={SvgEdit}
                         onClick={openEditForm}
                       >
-                        {editT("editButton.label")}
+                        {t("configuration.editButton.label")}
                       </Button>,
                     ]
                   : []),
