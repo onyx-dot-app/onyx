@@ -52,7 +52,7 @@ export interface HookCreateRequest {
 export interface HookUpdateRequest {
   name?: string;
   endpoint_url?: string;
-  /** Omit to keep the current key; `null` clears it. */
+  /** Omit to keep the current key. */
   api_key?: ApiTokenValue;
   fail_strategy?: HookFailStrategy;
   timeout_seconds?: number;

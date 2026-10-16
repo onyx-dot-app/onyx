@@ -264,6 +264,8 @@ class TestUpsertVoiceProvider:
         existing_provider.api_token_id = 7
         existing_provider.api_token = token
         mock_db_session.scalar.return_value = existing_provider
+        # The kept key is looked up and checked against the base URL.
+        mock_db_session.get.return_value = token
 
         upsert_voice_provider(
             db_session=mock_db_session,
@@ -275,7 +277,6 @@ class TestUpsertVoiceProvider:
         )
 
         assert existing_provider.api_token is token
-        mock_db_session.get.assert_not_called()
 
     def test_creates_api_token_for_new_key(self, mock_db_session: MagicMock) -> None:
         existing_provider = _make_voice_provider(id=1)

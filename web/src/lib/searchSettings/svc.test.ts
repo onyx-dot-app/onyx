@@ -61,7 +61,7 @@ describe("Bifrost embedding provider", () => {
 describe("Google embedding authentication", () => {
   afterEach(() => jest.restoreAllMocks());
 
-  test("tests keyless credentials before saving and sends no key", async () => {
+  test("tests keyless credentials before saving and clears the old key", async () => {
     const fetchSpy = jest
       .spyOn(global, "fetch")
       .mockImplementation(async () => testEmbeddingResponse(768));
@@ -92,8 +92,8 @@ describe("Google embedding authentication", () => {
     expect(testBody.vertex_config).toEqual(vertexConfig);
     expect(testBody).not.toHaveProperty("api_key");
     expect(saveBody.vertex_config).toEqual(vertexConfig);
-    // The backend clears the old key for keyless Vertex auth itself.
-    expect(saveBody).not.toHaveProperty("api_key");
+    // Keyless Workload Identity auth explicitly clears any saved key.
+    expect(saveBody.api_key).toBeNull();
     expect(saveBody).not.toHaveProperty("api_key_changed");
   });
 

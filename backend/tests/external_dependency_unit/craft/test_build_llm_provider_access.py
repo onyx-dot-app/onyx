@@ -19,6 +19,7 @@ from onyx.db.llm import (
     upsert_llm_provider,
 )
 from onyx.db.models import (
+    ApiToken,
     LLMProvider,
     LLMProvider__Persona,
     LLMProvider__UserGroup,
@@ -98,7 +99,7 @@ def _make_llm_provider(
     provider = LLMProvider(
         name=f"sandbox-credential-{uuid4().hex[:8]}",
         provider=provider_type,
-        api_key=api_key,
+        api_token=ApiToken(platform=provider_type, value=api_key),
         is_public=is_public,
     )
     db_session.add(provider)

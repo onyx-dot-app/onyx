@@ -8,7 +8,10 @@ from onyx.db.api_token import assign_api_token, release_api_token
 from onyx.db.models import User, VoiceProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.api_token.models import ApiTokenInput
+from onyx.server.manage.api_token.models import (
+    ApiTokenInput,
+    keep_omitted_api_token,
+)
 from onyx.voice.interface import normalize_provider_type
 
 MIN_VOICE_PLAYBACK_SPEED = 0.5
@@ -91,7 +94,8 @@ def upsert_voice_provider(
     activate_tts: bool = False,
 ) -> VoiceProvider:
     """Create or update a voice provider. ``update_api_key=False`` keeps the
-    row's current key (the request left ``api_key`` out)."""
+    row's current key (the request left ``api_key`` out), still checked
+    against ``api_base``."""
     provider: VoiceProvider | None = None
 
     if provider_id is not None:
@@ -121,14 +125,19 @@ def upsert_voice_provider(
         provider.api_secret = api_secret  # ty: ignore[invalid-assignment]
 
     db_session.flush()
-    if update_api_key:
-        assign_api_token(
-            db_session,
-            provider,
+    # A kept key still goes through the check, so it cannot follow a changed
+    # api_base to another host.
+    assign_api_token(
+        db_session,
+        provider,
+        keep_omitted_api_token(
             api_key,
-            platform=provider_type,
-            base_url=api_base,
-        )
+            was_sent=update_api_key,
+            current_token_id=provider.api_token_id,
+        ),
+        platform=provider_type,
+        base_url=api_base,
+    )
 
     if activate_stt:
         set_default_stt_provider(db_session=db_session, provider_id=provider.id)

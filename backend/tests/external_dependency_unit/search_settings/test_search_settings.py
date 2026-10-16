@@ -31,6 +31,7 @@ from onyx.indexing.indexing_pipeline import (
     IndexingPipelineResult,
     run_indexing_pipeline,
 )
+from onyx.server.manage.api_token.models import NewApiToken
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -64,7 +65,7 @@ def _create_llm_provider_and_model(
         LLMProviderUpsertRequest(
             name=provider_name,
             provider="openai",
-            api_key="test-api-key",
+            api_key=NewApiToken(value="test-api-key"),
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=model_name,
