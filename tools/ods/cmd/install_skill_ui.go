@@ -34,9 +34,9 @@ type installUI struct {
 	readString func(question string) string
 	choose     func(header string, options []string, defaultIndex int) int
 
-	// Skill directories already filled in this run, so agents that share one
-	// (Claude and Codex) do not repeat the work.
-	linkedSkillDirs map[string]bool
+	// Set once on-demand skills are installed this run, so agents that share
+	// the directory (Claude and Codex) do not repeat the work.
+	manualSkillsLinked bool
 
 	// Set once the user picks "overwrite all conflicts".
 	overwriteAll bool

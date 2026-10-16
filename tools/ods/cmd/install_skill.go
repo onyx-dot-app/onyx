@@ -299,49 +299,75 @@ func linkManualSkills(
 	if len(skills) == 0 {
 		return nil
 	}
-	skillsDir := filepath.Join(repoRoot, projectSkillsDir)
-	// Claude and Codex share this directory; one pass is enough.
-	if ui.linkedSkillDirs[skillsDir] {
+	// Claude and Codex share one directory; one pass is enough.
+	if ui.manualSkillsLinked {
 		return nil
 	}
-	if ui.linkedSkillDirs == nil {
-		ui.linkedSkillDirs = make(map[string]bool)
-	}
-	ui.linkedSkillDirs[skillsDir] = true
+	ui.manualSkillsLinked = true
 
-	var manual []agentContextSkill
+	var candidates []agentContextSkill
 	for _, skill := range skills {
-		if skill.Enforced {
-			continue
+		if !skill.Enforced {
+			candidates = append(candidates, skill)
 		}
-		rel := path.Join(projectSkillsDir, skill.Name)
-		if isTrackedByGit(repoRoot, rel) {
-			_, _ = fmt.Fprintf(
-				cmd.ErrOrStderr(),
-				"Warning: skipping skill %q: %s is committed in this repo.\n", skill.Name, rel,
-			)
-			continue
-		}
-		manual = append(manual, skill)
 	}
 
+	skillsDir := filepath.Join(repoRoot, projectSkillsDir)
 	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
 		// Nothing installed here before, so nothing to clean up either.
-		if len(manual) == 0 {
+		if len(candidates) == 0 {
 			return nil
 		}
+		// The user may pick another directory, so every check below runs
+		// against the resolved one.
 		if skillsDir, err = ui.resolveTargetDir("Agent skills", skillsDir); err != nil {
 			return err
 		}
 	}
 
-	// The exclusion comes first, so a failure leaves nothing untracked behind.
-	patterns := make([]string, 0, len(manual))
-	for _, skill := range manual {
-		patterns = append(patterns, "/"+path.Join(projectSkillsDir, skill.Name))
+	// Resolve symlinks (.claude/skills points at .agents/skills) so git
+	// paths and exclusions name the real location.
+	realDir, err := filepath.EvalSymlinks(skillsDir)
+	if err != nil {
+		return fmt.Errorf("could not resolve %s: %w", skillsDir, err)
 	}
-	if err := excludeFromGit(repoRoot, patterns...); err != nil {
-		return err
+	skillsDir = realDir
+	realRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		return fmt.Errorf("could not resolve %s: %w", repoRoot, err)
+	}
+	// A directory outside the repo has no committed files to protect and
+	// nothing git could show as untracked.
+	dirRel, err := filepath.Rel(realRoot, skillsDir)
+	inRepo := err == nil && dirRel != ".." && !strings.HasPrefix(dirRel, ".."+string(filepath.Separator))
+
+	manual := candidates
+	if inRepo {
+		manual = nil
+		for _, skill := range candidates {
+			rel := path.Join(filepath.ToSlash(dirRel), skill.Name)
+			tracked, err := isTrackedByGit(realRoot, rel)
+			if err != nil {
+				return err
+			}
+			if tracked {
+				_, _ = fmt.Fprintf(
+					cmd.ErrOrStderr(),
+					"Warning: skipping skill %q: %s is committed in this repo.\n", skill.Name, rel,
+				)
+				continue
+			}
+			manual = append(manual, skill)
+		}
+
+		// The exclusion comes first, so a failure leaves nothing untracked behind.
+		patterns := make([]string, 0, len(manual))
+		for _, skill := range manual {
+			patterns = append(patterns, "/"+path.Join(filepath.ToSlash(dirRel), skill.Name))
+		}
+		if err := excludeFromGit(realRoot, patterns...); err != nil {
+			return err
+		}
 	}
 
 	// Every skill sits at <source>/<tier>/<name>, so any of them names the
@@ -428,12 +454,17 @@ func removeStaleSkillLinks(
 	return nil
 }
 
-// isTrackedByGit reports whether git tracks anything at the repo-relative path.
-func isTrackedByGit(repoRoot, rel string) bool {
+// isTrackedByGit reports whether git tracks anything at the repo-relative
+// path. A failing git is an error, never an answer of "not tracked", since the
+// caller would then replace what may be a committed file.
+func isTrackedByGit(repoRoot, rel string) (bool, error) {
 	gitCmd := exec.Command("git", "ls-files", "--", rel)
 	gitCmd.Dir = repoRoot
 	out, err := gitCmd.Output()
-	return err == nil && strings.TrimSpace(string(out)) != ""
+	if err != nil {
+		return false, fmt.Errorf("could not check whether %s is committed: %w", rel, err)
+	}
+	return strings.TrimSpace(string(out)) != "", nil
 }
 
 func copySkill(srcDir, dstDir string) error {

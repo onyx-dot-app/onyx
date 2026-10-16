@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -152,6 +153,83 @@ func TestInstallSkill_installsIntoTheSharedSkillsDirWithoutDirtyingTheTree(t *te
 	}
 	if status := gittest.Git(t, repoRoot, "status", "--porcelain", "--", ".agents"); status != "" {
 		t.Fatalf("expected installed skills to stay out of git status, got %q", status)
+	}
+}
+
+func TestLinkManualSkills_protectsCommittedSkillsInAChosenDirectory(t *testing.T) {
+	_, repoRoot := skillEnv(t)
+	chosen := filepath.Join(repoRoot, "my-skills")
+	deployWriteFile(t, filepath.Join(chosen, "review", "SKILL.md"), "committed")
+	gittest.Git(t, repoRoot, "add", "-A")
+	gittest.Git(t, repoRoot, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "skills")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
+	skillWriteSource(t, source)
+	deployWriteFile(t, filepath.Join(source, "skills", "fresh", "SKILL.md"), "fresh")
+	// .agents/skills is missing, so the user is asked and picks another directory.
+	ui := &installUI{
+		interactive: true,
+		out:         io.Discard,
+		confirm:     func(string) bool { return false },
+		readString:  func(string) string { return chosen },
+	}
+	var stderr bytes.Buffer
+	cmd := NewInstallSkillCommand()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(&stderr)
+
+	// --copy leaves real files behind, the case an exclusion has to cover.
+	if err := linkManualSkills(cmd, ui, discover(t, source), repoRoot, true); err != nil {
+		t.Fatalf("linkManualSkills: %v", err)
+	}
+
+	if got := skillReadFile(t, filepath.Join(chosen, "review", "SKILL.md")); got != "committed" {
+		t.Fatalf("a committed skill in the chosen directory must not be replaced, got %q", got)
+	}
+	if !strings.Contains(stderr.String(), `skipping skill "review"`) {
+		t.Fatalf("expected a warning about the committed skill, got %q", stderr.String())
+	}
+	if got := skillReadFile(t, filepath.Join(chosen, "fresh", "SKILL.md")); got != "fresh" {
+		t.Fatalf("expected the skill in the chosen directory, got %q", got)
+	}
+	if status := gittest.Git(t, repoRoot, "status", "--porcelain"); status != "" {
+		t.Fatalf("expected the chosen directory to stay out of git status, got %q", status)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, ".agents")); !os.IsNotExist(err) {
+		t.Fatalf("expected the default directory not to be created, got %v", err)
+	}
+}
+
+func TestInstallSkill_failingGitLsFilesStopsBeforeChangingAnything(t *testing.T) {
+	_, repoRoot := skillEnv(t)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not installed")
+	}
+	dir := t.TempDir()
+	t.Setenv("ODS_TEST_REAL_GIT", realGit)
+	deployWriteFile(t, filepath.Join(dir, "git"),
+		"#!/bin/sh\nif [ \"$1\" = ls-files ]; then echo 'fatal: index file corrupt' >&2; exit 128; fi\n"+
+			"exec \"$ODS_TEST_REAL_GIT\" \"$@\"\n")
+	if err := os.Chmod(filepath.Join(dir, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	skillsDir := filepath.Join(repoRoot, ".agents", "skills")
+	deployWriteFile(t, filepath.Join(skillsDir, "review", "SKILL.md"), "committed")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
+	skillWriteSource(t, source)
+
+	_, err = skillRun(t, "--source", source, "--no-pull", "--agent", "codex")
+
+	if err == nil || !strings.Contains(err.Error(), "could not check whether .agents/skills/review is committed") {
+		t.Fatalf("expected the git failure to be reported, got %v", err)
+	}
+	if got := skillReadFile(t, filepath.Join(skillsDir, "review", "SKILL.md")); got != "committed" {
+		t.Fatalf("the existing skill must be untouched, got %q", got)
+	}
+	if exclude, err := os.ReadFile(filepath.Join(repoRoot, ".git", "info", "exclude")); err == nil &&
+		strings.Contains(string(exclude), ".agents/skills") {
+		t.Fatalf("expected no exclusion to be written, got %q", exclude)
 	}
 }
 
