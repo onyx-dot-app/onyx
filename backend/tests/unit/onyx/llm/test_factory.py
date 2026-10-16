@@ -514,7 +514,7 @@ class TestPolicyFnForwarding:
     def test_get_default_llm_forwards(self) -> None:
         with (
             patch("onyx.llm.factory.get_session_with_current_tenant"),
-            patch("onyx.llm.factory.fetch_default_llm_model", return_value=MagicMock()),
+            patch("onyx.llm.factory.fetch_default_model", return_value=MagicMock()),
             patch("onyx.llm.factory.LLMProviderView"),
             patch("onyx.llm.factory.llm_from_provider") as mock_from_provider,
         ):

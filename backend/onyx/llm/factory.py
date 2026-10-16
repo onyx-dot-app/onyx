@@ -9,10 +9,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
-    fetch_default_contextual_rag_model,
-    fetch_default_llm_model,
     fetch_default_model,
-    fetch_default_vision_model,
     fetch_existing_llm_provider,
     fetch_model_configuration_by_id,
     fetch_user_group_ids,
@@ -253,7 +250,7 @@ def get_default_llm_with_vision(
     model nobody chose.
     """
     with get_session_with_current_tenant() as db_session:
-        default_model = fetch_default_vision_model(db_session)
+        default_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
         if default_model is None:
             logger.warning(
                 "No default vision model is set — image summarization will be "
@@ -380,7 +377,7 @@ def get_contextual_rag_llm_for_search_settings(
     mc_id = search_settings.contextual_rag_model_configuration_id
     if mc_id is None:
         with get_session_with_current_tenant() as db_session:
-            mc = fetch_default_contextual_rag_model(db_session)
+            mc = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
         mc_id = mc.id if mc else None
     return get_llm_for_contextual_rag(mc_id) if mc_id is not None else None
 
@@ -392,7 +389,7 @@ def get_default_llm(
     user_defaults: UserChatDefaults | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        model = fetch_default_llm_model(db_session)
+        model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
         if not model:
             raise ValueError("No default LLM model found")

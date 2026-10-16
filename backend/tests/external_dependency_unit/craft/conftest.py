@@ -20,11 +20,12 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
     AccountType,
     BuildSessionStatus,
+    LLMModelFlowType,
     SandboxStatus,
     SkillSharePermission,
 )
 from onyx.db.llm import (
-    fetch_default_llm_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
     update_default_provider,
@@ -97,7 +98,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
     seeded_name: str | None = None
     try:
         with get_session_with_current_tenant() as session:
-            if fetch_default_llm_model(session) is None:
+            if fetch_default_model(session, LLMModelFlowType.CHAT) is None:
                 seeded_name = f"craft-ci-default-{uuid4().hex[:8]}"
                 provider = upsert_llm_provider(
                     LLMProviderUpsertRequest(

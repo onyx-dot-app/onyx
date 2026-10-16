@@ -168,11 +168,11 @@ def _provider_with_chat_naming() -> tuple[
 @pytest.fixture
 def listing_defaults() -> Generator[None, None, None]:
     with (
-        patch.object(api, "fetch_default_llm_model", return_value=None),
-        patch.object(api, "fetch_default_vision_model", return_value=None),
-        patch.object(api, "fetch_default_chat_naming_model", return_value=None),
-        patch.object(api, "fetch_default_craft_model", return_value=None),
-        patch.object(api, "fetch_default_search_selection_model", return_value=None),
+        patch.object(
+            api,
+            "fetch_default_model",
+            return_value=None,
+        ),
         patch.object(api, "has_global_permission", return_value=False),
         patch.object(api, "fetch_user_group_ids", return_value=set()),
         patch.object(
@@ -190,7 +190,13 @@ def test_admin_listing_pins_hidden_chat_naming_and_masks_credentials() -> None:
     provider, visible, naming = _provider_with_chat_naming()
     with (
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
-        patch.object(api, "fetch_default_chat_naming_model", return_value=naming),
+        patch.object(
+            api,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {LLMModelFlowType.CHAT_NAMING: naming}.get(
+                flow
+            ),
+        ),
         patch.object(
             api,
             "fetch_model_configurations_page",
@@ -232,7 +238,13 @@ def test_user_listings_do_not_publish_or_pin_chat_naming(
     provider.is_public = provider_is_public
     with (
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
-        patch.object(api, "fetch_default_chat_naming_model", return_value=naming),
+        patch.object(
+            api,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {LLMModelFlowType.CHAT_NAMING: naming}.get(
+                flow
+            ),
+        ),
         patch.object(
             api,
             "fetch_model_configurations_page",

@@ -19,11 +19,7 @@ from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     ModelConfigurationWindow,
     can_user_access_llm_provider,
-    fetch_default_chat_naming_model,
-    fetch_default_craft_model,
-    fetch_default_llm_model,
-    fetch_default_search_selection_model,
-    fetch_default_vision_model,
+    fetch_default_model,
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
     fetch_existing_models,
@@ -562,11 +558,15 @@ def list_llm_providers(
         include_model_configurations=not page_models,
         include_model_flows=not page_models,
     )
-    default_text_model = fetch_default_llm_model(db_session)
-    default_vision_model = fetch_default_vision_model(db_session)
-    default_chat_naming_model = fetch_default_chat_naming_model(db_session)
-    default_search_selection_model = fetch_default_search_selection_model(db_session)
-    default_craft_model = fetch_default_craft_model(db_session)
+    default_text_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    default_vision_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
+    default_chat_naming_model = fetch_default_model(
+        db_session, LLMModelFlowType.CHAT_NAMING
+    )
+    default_search_selection_model = fetch_default_model(
+        db_session, LLMModelFlowType.SEARCH_SELECTION
+    )
+    default_craft_model = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
     # page_models is opt-in: the admin UI takes one page per provider plus the
     # defaults, callers that omit it still get every model.
     windows = (
@@ -844,7 +844,7 @@ def delete_llm_provider(
         # Only the chat default blocks a provider delete. Deleting a provider
         # that holds another flow's default clears that default deliberately —
         # see test_delete_default_vision_provider_clears_vision_default.
-        model = fetch_default_llm_model(db_session)
+        model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
         if model and model.llm_provider_id == provider_id:
             raise OnyxError(
@@ -1028,7 +1028,7 @@ def get_vision_capable_providers(
     return LLMProviderResponse[VisionProviderResponse].from_models(
         providers=vision_provider_response,
         default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
+            fetch_default_model(db_session, LLMModelFlowType.VISION)
         ),
     )
 
@@ -1168,9 +1168,9 @@ def list_llm_provider_basics(
     all_providers = fetch_existing_llm_providers(
         db_session, [], include_model_configurations=False
     )
-    default_text_model = fetch_default_llm_model(db_session)
-    default_vision_model = fetch_default_vision_model(db_session)
-    default_craft_model = fetch_default_craft_model(db_session)
+    default_text_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    default_vision_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
+    default_craft_model = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
 
     # Use centralized access control logic with persona=None since we're
     # listing providers without a specific persona context. This correctly:
@@ -1323,8 +1323,8 @@ def list_llm_providers_for_persona(
         include_model_configurations=False,
     )
 
-    default_text_model = fetch_default_llm_model(db_session)
-    default_vision_model = fetch_default_vision_model(db_session)
+    default_text_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    default_vision_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
 
     # Build default_text and default_vision using the persona's model config FK when
     # available, falling back to the global defaults.

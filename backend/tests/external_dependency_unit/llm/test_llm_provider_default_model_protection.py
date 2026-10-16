@@ -15,10 +15,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     add_model_to_flow,
-    fetch_default_chat_naming_model,
-    fetch_default_contextual_rag_model,
-    fetch_default_craft_model,
-    fetch_default_vision_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
     update_default_contextual_model,
@@ -271,11 +268,11 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
     ) -> None:
         provider = _create_test_provider(db_session, provider_name)
         update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
-        assert fetch_default_craft_model(db_session) is not None
+        assert fetch_default_model(db_session, LLMModelFlowType.CRAFT) is not None
 
         self._update_provider(db_session, provider.id, provider_name)
 
-        default_craft = fetch_default_craft_model(db_session)
+        default_craft = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
         assert default_craft is not None
         assert default_craft.name == "gpt-4o-mini"
 
@@ -294,11 +291,15 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
             model_configuration_id=model_config.id,
         )
         db_session.commit()
-        assert fetch_default_contextual_rag_model(db_session) is not None
+        assert (
+            fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG) is not None
+        )
 
         self._update_provider(db_session, provider.id, provider_name)
 
-        default_contextual = fetch_default_contextual_rag_model(db_session)
+        default_contextual = fetch_default_model(
+            db_session, LLMModelFlowType.CONTEXTUAL_RAG
+        )
         assert default_contextual is not None
         assert default_contextual.name == "gpt-4o-mini"
 
@@ -386,11 +387,11 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         assert flow is not None
         flow.is_default = True
         db_session.commit()
-        assert fetch_default_chat_naming_model(db_session) is not None
+        assert fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING) is not None
 
         self._update_provider(db_session, provider.id, provider_name)
 
-        default_naming = fetch_default_chat_naming_model(db_session)
+        default_naming = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
         assert default_naming is not None
         assert default_naming.name == "gpt-4o-mini"
 
@@ -501,7 +502,7 @@ class TestEveryFlowDefaultIsGuarded:
             ],
         )
 
-        default_vision = fetch_default_vision_model(db_session)
+        default_vision = fetch_default_model(db_session, LLMModelFlowType.VISION)
         assert default_vision is not None
         assert default_vision.name == "gpt-4o"
 
@@ -541,7 +542,7 @@ class TestEveryFlowDefaultIsGuarded:
         assert LLMModelFlowType.VISION not in flows
         assert LLMModelFlowType.CRAFT in flows
 
-        default_craft = fetch_default_craft_model(db_session)
+        default_craft = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
         assert default_craft is not None
         assert default_craft.name == "gpt-4o"
 
@@ -580,7 +581,7 @@ class TestCapabilityChangesCannotEraseADefault:
                 db_session=db_session,
             )
 
-        assert fetch_default_vision_model(db_session) is not None
+        assert fetch_default_model(db_session, LLMModelFlowType.VISION) is not None
 
     def test_omitting_image_support_keeps_the_stored_capability(
         self,
@@ -610,7 +611,7 @@ class TestCapabilityChangesCannotEraseADefault:
             db_session=db_session,
         )
 
-        default_vision = fetch_default_vision_model(db_session)
+        default_vision = fetch_default_model(db_session, LLMModelFlowType.VISION)
         assert default_vision is not None
         assert default_vision.name == "gpt-4o"
 

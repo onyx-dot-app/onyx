@@ -221,23 +221,22 @@ over everything else (used for things like incognito retention suppression).
 It then constructs `onyx.llm.multi_llm.LitellmLLM`.
 
 Other entry points, all funneling through `llm_from_provider`:
-- `get_default_llm()`: fetches `db/llm.py:fetch_default_llm_model` (CHAT flow).
-- `get_default_llm_with_vision()`: uses `fetch_default_vision_model`. If that
+- `get_default_llm()`: fetches `db/llm.py:fetch_default_model(..., LLMModelFlowType.CHAT)` (CHAT flow).
+- `get_default_llm_with_vision()`: uses `fetch_default_model(..., LLMModelFlowType.VISION)`. If that
   model is absent or does not support image input, it returns `None` and image
   summarization is off. It has no fallback and does not scan other models.
 - `get_llm_for_contextual_rag(model_configuration_id)` and
   `get_contextual_rag_llm_for_search_settings(search_settings)`: the latter
   uses the search settings' explicit `contextual_rag_model_configuration_id`
-  if set, else `fetch_default_contextual_rag_model`.
+  if set, else `fetch_default_model(..., LLMModelFlowType.CONTEXTUAL_RAG)`.
 
 ### 4.3 Default resolution in the DB layer
 
 `db/llm.py:fetch_default_model(db_session, flow_type)` is the shared query: it
 joins `ModelConfiguration` to `LLMModelFlow` and filters on
-`llm_model_flow_type == flow_type AND is_default == true`. Thin wrappers exist
-per flow: `fetch_default_llm_model` (CHAT), `fetch_default_vision_model`,
-`fetch_default_contextual_rag_model`, `fetch_default_chat_naming_model`,
-`fetch_default_search_selection_model`, `fetch_default_craft_model`.
+`llm_model_flow_type == flow_type AND is_default == true`. Callers pass an explicit
+`LLMModelFlowType`: `CHAT`, `VISION`, `CONTEXTUAL_RAG`, `CHAT_NAMING`,
+`SEARCH_SELECTION`, or `CRAFT`.
 
 Setting a new default goes through `db/llm.py:_update_default_model`, which
 clears the prior `is_default` row for that flow type and sets the new one in
@@ -475,10 +474,10 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 
 | If your change… | Also check |
 |---|---|
-| adds a new `LLMModelFlowType` value | No database migration is required (the column is a plain `VARCHAR` with no `CHECK` constraint); but you must seed or backfill an `LLMModelFlow` row for it, add a `fetch_default_*` wrapper if callers need one, and decide the fallback behavior when no row exists yet (see §9) |
+| adds a new `LLMModelFlowType` value | No database migration is required (the column is a plain `VARCHAR` with no `CHECK` constraint); but you must seed or backfill an `LLMModelFlow` row for it, pass the new flow to `fetch_default_model` where needed, and decide the fallback behavior when no row exists yet (see §9) |
 | adds a provider | `llm/well_known_providers/`, `_build_provider_extra_headers` if it needs special header handling, `PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING` if it needs a synthesized Authorization header, the admin UI catalogue, and a `/admin/llm/{provider}/available-models` endpoint if it supports live model discovery |
 | changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`llm_step.py`), `model_response.py:MessageAccumulator`, the gateway's `stream_bridge.py:merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
-| changes default resolution (`fetch_default_model`, `_update_default_model`) | the partial unique index still holds after a migration or backfill; `get_default_llm` and every `get_default_*` wrapper still returns a model, not `None`, where callers assume one exists |
+| changes default resolution (`fetch_default_model`, `_update_default_model`) | the partial unique index still holds after a migration or backfill; `get_default_llm` and every `get_default_*` factory still returns a model, not `None`, where callers assume one exists |
 | adds a new LLM call site | tag it with an `LLMFlow` via `llm_generation_span` or `traced_llm_call`; verify in a Braintrust/Langfuse trace that it does not show up as `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` |
 | changes retry behavior in `LitellmLLM.stream_raw` | the `yielded_any` gate must still prevent post-first-chunk retries; confirm against the retryable exception tuple, which is intentionally narrow |
 | changes provider credential handling | confirm masking still happens in every response path in `server/manage/llm/api.py`, and that `_restore_masked_custom_config_values` still round-trips a masked value back to the stored one on update |
@@ -549,7 +548,7 @@ See `backend/AGENTS.md` for authoritative commands and required env
 - **A flow with no seeded `LLMModelFlow` row does not default silently.**
   `fetch_default_model` returns `None` for that flow; callers like
   `get_default_llm` raise (`"No default LLM model found"`) while others
-  (`fetch_default_chat_naming_model`) return `None` and the caller must decide
+  (`get_chat_naming_llm`) return `None` and the caller must decide
   the fallback. Check the specific caller before assuming a flow is
   populated. Craft in particular is what `db/llm.py:update_default_craft_provider`
   calls a "pointer flow, not a capability": nothing populates a CRAFT

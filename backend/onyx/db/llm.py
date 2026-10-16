@@ -1131,36 +1131,6 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_llm_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CHAT)
-
-
-def fetch_default_vision_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.VISION)
-
-
-def fetch_default_contextual_rag_model(
-    db_session: Session,
-) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
-
-
-def fetch_default_chat_naming_model(
-    db_session: Session,
-) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
-
-
-def fetch_default_search_selection_model(
-    db_session: Session,
-) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
-
-
-def fetch_default_craft_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CRAFT)
-
-
 def fetch_default_flows_by_model_id(
     db_session: Session,
 ) -> dict[int, set[LLMModelFlowType]]:
@@ -1604,7 +1574,7 @@ def sync_auto_mode_models(
 
     recommended_default = llm_recommendations.get_default_model(provider.provider)
     if recommended_default:
-        current_default = fetch_default_llm_model(db_session)
+        current_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
         if (
             current_default

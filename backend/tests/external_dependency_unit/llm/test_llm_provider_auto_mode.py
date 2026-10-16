@@ -16,8 +16,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     fetch_auto_mode_providers,
-    fetch_default_craft_model,
-    fetch_default_llm_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
     fetch_existing_llm_providers,
     fetch_llm_provider_view,
@@ -173,7 +172,7 @@ class TestAutoModeSyncFeature:
             update_default_provider(provider.id, expected_default_model, db_session)
 
             # Step 5: Fetch the default provider and verify
-            default_model = fetch_default_llm_model(db_session)
+            default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_model is not None, "Default provider should exist"
             assert default_model.llm_provider.name == provider_name, (
                 "Default provider should be our test provider"
@@ -571,7 +570,7 @@ class TestAutoModeSyncFeature:
 
             # Step 3: Verify provider 1 is still the default
             db_session.expire_all()
-            default_model = fetch_default_llm_model(db_session)
+            default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_model is not None
             assert default_model.llm_provider.name == provider_1_name
             assert default_model.name == provider_1_default_model
@@ -586,7 +585,7 @@ class TestAutoModeSyncFeature:
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()
-            default_model = fetch_default_llm_model(db_session)
+            default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_model is not None
             assert default_model.llm_provider.name == provider_2_name
             assert default_model.name == provider_2_default_model
@@ -751,7 +750,7 @@ class TestAutoModeTransitionsAndResync:
             assert provider is not None
             update_default_provider(provider.id, "gpt-4o", db_session)
 
-            default_before = fetch_default_llm_model(db_session)
+            default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
             assert default_before.name == "gpt-4o"
             assert default_before.llm_provider_id == provider.id
@@ -778,7 +777,7 @@ class TestAutoModeTransitionsAndResync:
 
             # Step 3: Default should be preserved on this provider
             db_session.expire_all()
-            default_after = fetch_default_llm_model(db_session)
+            default_after = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_after is not None, (
                 "Default model should not be None after transitioning to auto mode — "
                 "the provider was the default before and should remain so"
@@ -1067,7 +1066,7 @@ class TestAutoModeTransitionsAndResync:
         2. Set gpt-4o as the global default.
         3. Re-sync with config: default=gpt-4o-mini (gpt-4o removed entirely).
         4. Verify gpt-4o is hidden, gpt-4o-mini is visible, and
-           fetch_default_llm_model still returns a result (the flow row persists).
+           fetch_default_model still returns a result (the flow row persists).
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
@@ -1107,7 +1106,7 @@ class TestAutoModeTransitionsAndResync:
             assert provider is not None
             update_default_provider(provider.id, "gpt-4o", db_session)
 
-            default_before = fetch_default_llm_model(db_session)
+            default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
             assert default_before.name == "gpt-4o"
 
@@ -1142,7 +1141,7 @@ class TestAutoModeTransitionsAndResync:
             # should update the global default to the new recommended default
             # (gpt-4o-mini) so that it is not silently lost.
             db_session.expire_all()
-            default_after = fetch_default_llm_model(db_session)
+            default_after = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_after is not None, (
                 "Default model should not be None — sync should set the new recommended default when the old one is hidden"
             )
@@ -1208,7 +1207,7 @@ class TestAutoModeTransitionsAndResync:
             assert provider is not None
             update_default_provider(provider.id, "gpt-4o", db_session)
 
-            default_before = fetch_default_llm_model(db_session)
+            default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
             assert default_before.name == "gpt-4o"
 
@@ -1239,7 +1238,7 @@ class TestAutoModeTransitionsAndResync:
             assert visibility["gpt-4o-mini"] is True
 
             # The CHAT default should now be gpt-4o-mini
-            default_after = fetch_default_llm_model(db_session)
+            default_after = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_after is not None
             assert default_after.name == "gpt-4o-mini", (
                 f"Default should be updated to 'gpt-4o-mini', got '{default_after.name}'"
@@ -1321,7 +1320,7 @@ class TestAutoModeTransitionsAndResync:
             )
 
             # Default should still be gpt-4o
-            default_model = fetch_default_llm_model(db_session)
+            default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_model is not None
             assert default_model.name == "gpt-4o"
 
@@ -1410,7 +1409,7 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 "the config drops it"
             )
 
-            craft_default = fetch_default_craft_model(db_session)
+            craft_default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
             assert craft_default is not None
             assert craft_default.name == "gpt-4o-mini"
 
@@ -1483,13 +1482,13 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
             )
 
             db_session.expire_all()
-            chat_default = fetch_default_llm_model(db_session)
+            chat_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert chat_default is not None
             assert chat_default.name == "gpt-4o-mini", (
                 "The chat default should follow the new recommendation"
             )
 
-            craft_default = fetch_default_craft_model(db_session)
+            craft_default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
             assert craft_default is not None
             assert craft_default.name == "gpt-4o"
 
@@ -1597,7 +1596,7 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 "still held a default"
             )
 
-            craft_default = fetch_default_craft_model(db_session)
+            craft_default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
             assert craft_default is not None
             assert craft_default.name == "gpt-4o-mini"
 

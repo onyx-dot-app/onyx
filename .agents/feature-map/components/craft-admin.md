@@ -124,7 +124,7 @@ permission. See §5 for why the flag alone is not the real gate.
   has no `default_policy` column. `default_policy` is a catalog field on
   `EndpointDescriptor`, and it only seeds the admin form.
 - `LLMModelFlow` row with `llm_model_flow_type = LLMModelFlowType.CRAFT`
-  (`backend/onyx/db/llm.py`, `fetch_default_craft_model`): the Preferences
+  (`backend/onyx/db/llm.py`, `fetch_default_model(..., LLMModelFlowType.CRAFT)`): the Preferences
   page's default-model selection. See `[[llm-providers]]`.
 
 ---

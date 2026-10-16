@@ -16,11 +16,8 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
-    fetch_default_chat_naming_model,
-    fetch_default_craft_model,
     fetch_default_flows_by_model_id,
-    fetch_default_llm_model,
-    fetch_default_search_selection_model,
+    fetch_default_model,
     fetch_existing_llm_provider_by_id,
     remove_llm_provider,
     sync_auto_mode_models,
@@ -146,7 +143,7 @@ def test_setting_chat_naming_creates_one_mapping_and_preserves_visibility(
     update_default_chat_naming_provider(provider.id, model_name, db_session)
     update_default_chat_naming_provider(provider.id, model_name, db_session)
 
-    default = fetch_default_chat_naming_model(db_session)
+    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
@@ -171,7 +168,7 @@ def test_search_selection_persists_hidden_mapping_and_resets_independently(
     update_default_search_selection_provider(provider.id, "gpt-5-nano", db_session)
     db_session.expire_all()
 
-    selection = fetch_default_search_selection_model(db_session)
+    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
     assert selection is not None
     assert (selection.name, selection.is_visible) == ("gpt-5-nano", False)
     mappings = db_session.scalars(
@@ -184,13 +181,15 @@ def test_search_selection_persists_hidden_mapping_and_resets_independently(
     assert mappings[0].is_default
 
     update_no_default_chat_naming_provider(db_session)
-    assert fetch_default_chat_naming_model(db_session) is None
-    assert fetch_default_search_selection_model(db_session) is selection
+    assert fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING) is None
+    assert (
+        fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION) is selection
+    )
     update_default_chat_naming_provider(provider.id, "gpt-5-mini", db_session)
     update_no_default_search_selection_provider(db_session)
     update_no_default_search_selection_provider(db_session)
-    assert fetch_default_search_selection_model(db_session) is None
-    naming = fetch_default_chat_naming_model(db_session)
+    assert fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION) is None
+    naming = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert naming is not None and naming.name == "gpt-5-mini"
 
 
@@ -223,7 +222,7 @@ def test_search_selection_survives_edit_discovery_and_auto_sync(
             },
         ),
     )
-    selection = fetch_default_search_selection_model(db_session)
+    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
     assert selection is not None
     assert (selection.name, selection.is_visible) == ("gpt-5-nano", False)
     assert LLMModelFlowType.REASONING in selection.llm_model_flow_types
@@ -234,7 +233,7 @@ def test_search_selection_can_be_hidden_but_not_removed(
 ) -> None:
     update_default_search_selection_provider(provider.id, "gpt-5-mini", db_session)
     _update_provider(db_session, provider, mini_visible=False)
-    selection = fetch_default_search_selection_model(db_session)
+    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
     assert selection is not None and not selection.is_visible
     with pytest.raises(ValueError, match="Cannot remove the default model"):
         upsert_llm_provider(
@@ -254,8 +253,8 @@ def test_invalid_search_selection_preserves_existing_defaults(
         update_default_search_selection_provider(
             provider.id, "missing-model", db_session
         )
-    selection = fetch_default_search_selection_model(db_session)
-    naming = fetch_default_chat_naming_model(db_session)
+    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
+    naming = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert selection is not None and selection.name == "gpt-5-nano"
     assert naming is not None and naming.name == "gpt-5-mini"
 
@@ -277,7 +276,7 @@ def test_replacing_and_clearing_chat_naming_preserves_chat_and_search_selection(
     update_default_chat_naming_provider(provider.id, "gpt-5-mini", db_session)
     update_default_chat_naming_provider(provider.id, "gpt-5-nano", db_session)
 
-    default = fetch_default_chat_naming_model(db_session)
+    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
     assert (default.name, default.is_visible) == ("gpt-5-nano", False)
     assert (
@@ -291,10 +290,10 @@ def test_replacing_and_clearing_chat_naming_preserves_chat_and_search_selection(
     update_no_default_chat_naming_provider(db_session)
     update_no_default_chat_naming_provider(db_session)
 
-    assert fetch_default_chat_naming_model(db_session) is None
+    assert fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING) is None
     for model in [
-        fetch_default_llm_model(db_session),
-        fetch_default_search_selection_model(db_session),
+        fetch_default_model(db_session, LLMModelFlowType.CHAT),
+        fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION),
     ]:
         assert model is not None
         assert (model.llm_provider_id, model.name, model.is_visible) == (
@@ -320,7 +319,7 @@ def test_hidden_chat_naming_default_survives_provider_edit_and_discovery(
         ],
     )
 
-    default = fetch_default_chat_naming_model(db_session)
+    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
     assert (default.name, default.is_visible) == ("gpt-5-nano", False)
     assert {
@@ -335,7 +334,7 @@ def test_chat_naming_only_default_can_be_hidden_but_shared_chat_default_cannot(
 ) -> None:
     update_default_chat_naming_provider(provider.id, "gpt-5-mini", db_session)
     _update_provider(db_session, provider, mini_visible=False)
-    default = fetch_default_chat_naming_model(db_session)
+    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
     assert (default.name, default.is_visible) == ("gpt-5-mini", False)
 
@@ -382,7 +381,7 @@ def test_auto_sync_does_not_restore_hidden_chat_naming_only_default(
         ),
     )
 
-    default = fetch_default_chat_naming_model(db_session)
+    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
     assert (default.name, default.is_visible) == ("gpt-5-nano", False)
 
@@ -395,7 +394,7 @@ def test_invalid_selection_preserves_existing_chat_naming_default(
     with pytest.raises(ValueError, match="is not a valid model"):
         update_default_chat_naming_provider(provider.id, model_name, db_session)
 
-    default = fetch_default_chat_naming_model(db_session)
+    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
@@ -408,7 +407,7 @@ def test_invalid_selection_preserves_existing_chat_naming_default(
 def test_setting_craft_creates_one_mapping_and_makes_model_visible(
     db_session: Session, provider: LLMProviderView, model_name: str
 ) -> None:
-    assert fetch_default_craft_model(db_session) is None
+    assert fetch_default_model(db_session, LLMModelFlowType.CRAFT) is None
     assert (
         db_session.scalars(
             select(LLMModelFlow).where(
@@ -422,7 +421,7 @@ def test_setting_craft_creates_one_mapping_and_makes_model_visible(
     update_default_craft_provider(provider.id, model_name, db_session)
     db_session.rollback()
 
-    default = fetch_default_craft_model(db_session)
+    default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
@@ -451,7 +450,7 @@ def test_invalid_selection_preserves_existing_craft_default(
     assert str(exc_info.value) == (
         f"Model '{model_name}' is not a valid model for provider_id={provider.id}"
     )
-    default = fetch_default_craft_model(db_session)
+    default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
@@ -541,6 +540,6 @@ def test_migrate_draft_fast_preserves_naming_and_search_defaults(
         .where(LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING)
     ).tuples()
     assert set(naming_rows) == expected
-    selection = fetch_default_search_selection_model(db_session)
+    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
     assert selection is not None and selection.name == "gpt-5-nano"
     assert {model.name: model.is_visible for model in models} == visibility_before
