@@ -370,6 +370,7 @@ def resolve_cc_pair_runs(
         source=cc_pair.connector.source,
         shared_sources=set(),
         since=None,
+        until=None,
         error_query=None,
         status_groups=None,
         errors=None,
