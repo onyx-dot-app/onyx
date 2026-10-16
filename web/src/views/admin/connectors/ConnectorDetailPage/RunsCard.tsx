@@ -298,7 +298,7 @@ export default function RunsCard({
           illustration={SvgLongWait}
           title={t("empty.title")}
         />
-        {pastRuns > 0 && (
+        {pastRuns > 0 && !embedded && (
           <Section flexDirection="row" alignItems="center" gap={0} height="fit">
             <Section height="fit" className="min-w-0 flex-1">
               <Divider title={t("empty.pastRuns", { count: pastRuns })} />
