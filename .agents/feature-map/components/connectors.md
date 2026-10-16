@@ -457,7 +457,12 @@ instantiates the connector in isolation with a timeout guard, builds the
 source's `SourceOperations` gateway if one is registered, and runs checks
 sequentially (source APIs rate-limit) via `run_capability_checks`, mapping
 `ConnectorValidationError` to `FAILED` and anything else ambiguous to
-`INDETERMINATE`, never to `FAILED`. `CapabilityCheckTrigger`
+`INCOMPLETE`. Each result carries an `error_kind` (`models.py:CheckErrorKind`:
+rejected, permission, invalid, rate limited, timeout, unreachable, unexpected).
+One exception: on a form run (a draft run or a pair dry run) a sign-in check
+that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
+source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
+as `INCOMPLETE`. `CapabilityCheckTrigger`
 (`backend/onyx/db/enums.py`): `MANUAL`, `CREDENTIAL_CREATED`,
 `CC_PAIR_VALIDATION`, `INDEXING_ATTEMPT`, `PERM_SYNC_ATTEMPT`. The simpler,
 existing blocking-validation path in `factory.py:validate_ccpair_for_user`

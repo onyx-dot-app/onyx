@@ -640,7 +640,7 @@ def test_refused_file_listing_names_the_grant() -> None:
         _run("sharepoint_documents_read", _context(gateway, _config()))
 
 
-def test_throttled_listing_is_indeterminate() -> None:
+def test_throttled_listing_is_incomplete() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_drives.side_effect = _refusal(429, "tooManyRequests")
 
@@ -657,7 +657,7 @@ def test_documents_check_is_skipped_when_documents_are_off() -> None:
     )
 
 
-def test_no_library_anywhere_is_indeterminate() -> None:
+def test_no_library_anywhere_is_incomplete() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = []
 

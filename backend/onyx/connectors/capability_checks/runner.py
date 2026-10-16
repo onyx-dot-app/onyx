@@ -14,11 +14,13 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CheckAdvisory,
+    CheckErrorKind,
     CheckFinding,
     CheckNotApplicableError,
     CheckOutput,
     CredentialCapability,
     CredentialCapabilityReport,
+    check_error_kind,
     compute_capability_verdicts,
 )
 from onyx.connectors.capability_checks.registry import (
@@ -27,10 +29,7 @@ from onyx.connectors.capability_checks.registry import (
 )
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
-from onyx.connectors.exceptions import (
-    ConnectorValidationError,
-    UnexpectedValidationError,
-)
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
@@ -102,6 +101,7 @@ class _CheckOutcome(BaseModel):
     status: CapabilityCheckStatus
     message: str = ""
     error_type: str | None = None
+    error_kind: CheckErrorKind | None = None
     duration_ms: int | None = None
     applicable: bool = True
     findings: list[CheckFinding] = []
@@ -119,6 +119,7 @@ def _build_result(
         status=outcome.status,
         message=outcome.message,
         error_type=outcome.error_type,
+        error_kind=outcome.error_kind,
         is_fallback=check.is_fallback,
         remediation=check.remediation,
         docs_link=check.docs_link,
@@ -131,7 +132,28 @@ def _build_result(
     )
 
 
-def _missing_instance_outcome(instantiation_error: Exception | None) -> _CheckOutcome:
+def _error_outcome(
+    check: CapabilityCheck,
+    error: Exception,
+    form_run: bool,
+    message: str | None = None,
+    duration_ms: int | None = None,
+) -> _CheckOutcome:
+    """Maps a check's exception to an outcome, per the check exception
+    contract and the check's ``outcome_status``."""
+    error_kind = check_error_kind(error)
+    return _CheckOutcome(
+        status=check.outcome_status(error_kind, form_run),
+        message=str(error) if message is None else message,
+        error_type=type(error).__name__,
+        error_kind=error_kind,
+        duration_ms=duration_ms,
+    )
+
+
+def _missing_instance_outcome(
+    check: CapabilityCheck, instantiation_error: Exception | None, form_run: bool
+) -> _CheckOutcome:
     """
     Maps a missing connector instance to an outcome for an instance-requiring
     check.
@@ -139,25 +161,14 @@ def _missing_instance_outcome(instantiation_error: Exception | None) -> _CheckOu
     A config-less run skips: most connectors cannot be constructed without
     configuration, and that is not a credential problem. A construction failure
     with a supplied config is real signal and follows the check exception
-    contract (``ConnectorValidationError`` is FAILED, anything else
-    INDETERMINATE).
+    contract.
     """
     if instantiation_error is None:
         return _CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_NEEDS_INSTANCE_MESSAGE,
         )
-    if isinstance(instantiation_error, ConnectorValidationError):
-        return _CheckOutcome(
-            status=CapabilityCheckStatus.FAILED,
-            message=str(instantiation_error),
-            error_type=type(instantiation_error).__name__,
-        )
-    return _CheckOutcome(
-        status=CapabilityCheckStatus.INDETERMINATE,
-        message=str(instantiation_error),
-        error_type=type(instantiation_error).__name__,
-    )
+    return _error_outcome(check, instantiation_error, form_run)
 
 
 def effective_check_timeout_seconds(check: CapabilityCheck[Any]) -> float:
@@ -173,12 +184,13 @@ def _execute_check(
     check: CapabilityCheck,
     context: CapabilityCheckContext,
     timeout_cap_seconds: float | None,
+    form_run: bool,
 ) -> _CheckOutcome:
     """
     Executes one check under its hang guard and maps the outcome to a status.
 
-    A timeout maps to INDETERMINATE, never FAILED; a slow source is not proof of
-    a broken credential.
+    A timeout is INCOMPLETE: a slow source is not proof of a broken credential.
+    On a form run, a check that ``fails_when_unreachable`` FAILS instead.
     """
     timeout_seconds = _capped(
         effective_check_timeout_seconds(check), timeout_cap_seconds
@@ -200,13 +212,6 @@ def _execute_check(
             applicable=False,
             duration_ms=elapsed_ms(),
         )
-    except ConnectorValidationError as e:
-        return _CheckOutcome(
-            status=CapabilityCheckStatus.FAILED,
-            message=str(e),
-            error_type=type(e).__name__,
-            duration_ms=elapsed_ms(),
-        )
     except TimeoutError as e:
         # ``run_with_timeout`` abandons the probe thread on timeout -- Python
         # has no safe thread cancellation -- so the probe may still have a
@@ -219,31 +224,17 @@ def _execute_check(
             check.check_id,
             timeout_seconds,
         )
-        return _CheckOutcome(
-            status=CapabilityCheckStatus.INDETERMINATE,
-            message=_TIMEOUT_MESSAGE,
-            error_type=type(e).__name__,
-            duration_ms=elapsed_ms(),
-        )
-    except UnexpectedValidationError as e:
-        return _CheckOutcome(
-            status=CapabilityCheckStatus.INDETERMINATE,
-            message=str(e),
-            error_type=type(e).__name__,
-            duration_ms=elapsed_ms(),
+        return _error_outcome(
+            check, e, form_run, message=_TIMEOUT_MESSAGE, duration_ms=elapsed_ms()
         )
     except Exception as e:
-        logger.warning(
-            "Capability check %s raised an unexpected error: %s",
-            check.check_id,
-            e,
-        )
-        return _CheckOutcome(
-            status=CapabilityCheckStatus.INDETERMINATE,
-            message=str(e),
-            error_type=type(e).__name__,
-            duration_ms=elapsed_ms(),
-        )
+        if check_error_kind(e) == CheckErrorKind.UNEXPECTED:
+            logger.warning(
+                "Capability check %s raised an unexpected error: %s",
+                check.check_id,
+                e,
+            )
+        return _error_outcome(check, e, form_run, duration_ms=elapsed_ms())
     output = output or CheckOutput()
     return _CheckOutcome(
         status=CapabilityCheckStatus.PASSED,
@@ -336,6 +327,7 @@ def run_capability_checks(
     on_result: CapabilityCheckProgressCallback | None = None,
     timeout_cap_seconds: float | None = None,
     required_check_failed: bool = False,
+    form_run: bool = False,
 ) -> list[CapabilityCheckResult]:
     """Runs checks sequentially and maps their outcomes to statuses.
 
@@ -353,6 +345,9 @@ def run_capability_checks(
     progress before the run completes; an exception from it propagates.
 
     ``timeout_cap_seconds`` caps each check's hang guard.
+
+    ``form_run`` marks a run for a connector form (a draft run or a dry run of
+    a pair): see ``CapabilityCheck.fails_when_unreachable``.
     """
     # A check_id may repeat only as one check mirrored across capabilities;
     # anything else is a registration bug, caught before it silently collapses
@@ -398,14 +393,14 @@ def run_capability_checks(
             if discovery_outcome is not None:
                 record(check, discovery_outcome)
                 continue
-        unrunnable_outcome = _unrunnable_outcome(check, context)
+        unrunnable_outcome = _unrunnable_outcome(check, context, form_run)
         if unrunnable_outcome is not None:
             record(check, unrunnable_outcome)
             continue
 
         if check.check_id not in outcome_by_check_id:
             outcome_by_check_id[check.check_id] = _execute_check(
-                check, context, timeout_cap_seconds
+                check, context, timeout_cap_seconds, form_run
             )
         record(check, outcome_by_check_id[check.check_id])
     return results
@@ -466,7 +461,7 @@ def decide_check_readiness(
 
 
 def _unrunnable_outcome(
-    check: CapabilityCheck[Any], context: CapabilityCheckContext
+    check: CapabilityCheck[Any], context: CapabilityCheckContext, form_run: bool
 ) -> _CheckOutcome | None:
     """The outcome of a check that must not run in this context, or None when
     it can run."""
@@ -475,12 +470,15 @@ def _unrunnable_outcome(
         case CheckReadinessKind.RUNNABLE:
             return None
         case CheckReadinessKind.NEEDS_INSTANCE:
-            return _missing_instance_outcome(context.instantiation_error)
+            return _missing_instance_outcome(
+                check, context.instantiation_error, form_run
+            )
         case CheckReadinessKind.INVALID_FIELDS:
             return _CheckOutcome(
                 status=CapabilityCheckStatus.FAILED,
                 message=readiness.message,
                 error_type=ConnectorValidationError.__name__,
+                error_kind=CheckErrorKind.INVALID,
             )
         case CheckReadinessKind.NOT_APPLICABLE:
             return _CheckOutcome(
@@ -548,6 +546,7 @@ def generate_capability_report(
     check_ids: frozenset[str] | None = None,
     timeout_cap_seconds: float | None = None,
     required_check_failed: bool = False,
+    form_run: bool = False,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -569,7 +568,8 @@ def generate_capability_report(
     connector only when a selected check needs the instance.
 
     ``timeout_cap_seconds`` caps every hang guard of the run: each check's and
-    the connector instantiation's.
+    the connector instantiation's. ``form_run`` is forwarded to
+    ``run_capability_checks``.
     """
     source = source or credential.source
     checks = get_capability_checks(source)
@@ -670,6 +670,7 @@ def generate_capability_report(
         on_result=on_result,
         timeout_cap_seconds=timeout_cap_seconds,
         required_check_failed=required_check_failed,
+        form_run=form_run,
     )
     return CredentialCapabilityReport(
         credential_id=credential.id,

@@ -78,7 +78,9 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
     UnexpectedValidationError,
+    UnreachableValidationError,
 )
 from onyx.utils.logger import setup_logger
 
@@ -200,8 +202,8 @@ def _raise_for_http_error(
         raise ConnectorValidationError(f"{not_found} (HTTP 404).") from error
     if status == 400 and bad_request is not None:
         raise ConnectorValidationError(f"{bad_request} (HTTP 400): {detail}") from error
-    if status == 429:
-        raise UnexpectedValidationError(
+    if status == _RATE_LIMITED_STATUS:
+        raise RateLimitedValidationError(
             "Confluence rate limited the check. Run the checks again in a minute."
         ) from error
     raise UnexpectedValidationError(
@@ -261,6 +263,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         validates_binding: bool = False,
         discovery: bool = False,
+        fails_when_unreachable: bool = False,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -273,6 +276,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
             docs_link=_DOCS_LINK,
             validates_binding=validates_binding,
             discovery=discovery,
+            fails_when_unreachable=fails_when_unreachable,
         )
 
 
@@ -290,6 +294,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
             super().__init__(
                 check_id="confluence_scoped_token_auth",
                 validates_binding=True,
+                fails_when_unreachable=True,
                 display_name="Scoped API token signs in to the site",
                 remediation=(
                     "Scoped API tokens work only with Confluence Cloud. Check the "
@@ -300,6 +305,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
             super().__init__(
                 check_id="confluence_auth",
                 validates_binding=True,
+                fails_when_unreachable=True,
                 display_name="Credential signs in to the site",
                 remediation=(
                     "Check the site URL and the Cloud setting. For an API token, "
@@ -328,7 +334,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
         except HTTPError as e:
             response = e.response
             # tenant_info needs no auth: a 4xx means the URL is not a Cloud
-            # site. 429 and 5xx fall through as INDETERMINATE.
+            # site. 429 and 5xx fall through as INCOMPLETE.
             if (
                 self._scoped
                 and response is not None
@@ -354,7 +360,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
                 ),
             )
         except (requests.ConnectionError, requests.Timeout) as e:
-            raise UnexpectedValidationError(
+            raise UnreachableValidationError(
                 f"Onyx cannot connect to {config.wiki_base}. Check the site URL."
             ) from e
 
@@ -797,7 +803,7 @@ class _UserNamesCheck(_ConfluenceCheck):
                 "checks again."
             ) from e
         except (requests.ConnectionError, requests.Timeout) as e:
-            raise UnexpectedValidationError(
+            raise UnreachableValidationError(
                 f"Onyx cannot connect to {config.wiki_base} to read user details."
             ) from e
         if name is None:

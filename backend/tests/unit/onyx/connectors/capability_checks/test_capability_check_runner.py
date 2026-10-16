@@ -102,7 +102,7 @@ def test_connector_validation_error_maps_to_failed() -> None:
     assert "channels:read" in results[0].message
 
 
-def test_unexpected_validation_error_maps_to_indeterminate() -> None:
+def test_unexpected_validation_error_maps_to_incomplete() -> None:
     """Verifies that ``UnexpectedValidationError`` is transient, not FAILED."""
 
     # Precondition.
@@ -115,11 +115,11 @@ def test_unexpected_validation_error_maps_to_indeterminate() -> None:
     results = run_capability_checks([check], _context())
 
     # Postcondition.
-    assert results[0].status == CapabilityCheckStatus.INDETERMINATE
+    assert results[0].status == CapabilityCheckStatus.INCOMPLETE
     assert results[0].error_type == "UnexpectedValidationError"
 
 
-def test_unknown_exception_maps_to_indeterminate() -> None:
+def test_unknown_exception_maps_to_incomplete() -> None:
     """Verifies that unrecognized exceptions never count as real failures."""
 
     # Precondition.
@@ -132,7 +132,7 @@ def test_unknown_exception_maps_to_indeterminate() -> None:
     results = run_capability_checks([check], _context())
 
     # Postcondition.
-    assert results[0].status == CapabilityCheckStatus.INDETERMINATE
+    assert results[0].status == CapabilityCheckStatus.INCOMPLETE
     assert results[0].error_type == "RuntimeError"
 
 
@@ -172,9 +172,9 @@ def test_validation_instantiation_error_fails_instance_checks() -> None:
     run.assert_not_called()
 
 
-def test_unexpected_instantiation_error_is_indeterminate() -> None:
+def test_unexpected_instantiation_error_is_incomplete() -> None:
     """
-    Verifies an unrecognized construction failure maps to INDETERMINATE.
+    Verifies an unrecognized construction failure maps to INCOMPLETE.
     """
     # Precondition.
     check = _CallableCheck(MagicMock(), requires_connector_instance=True)
@@ -186,7 +186,7 @@ def test_unexpected_instantiation_error_is_indeterminate() -> None:
     results = run_capability_checks([check], context)
 
     # Postcondition.
-    assert results[0].status == CapabilityCheckStatus.INDETERMINATE
+    assert results[0].status == CapabilityCheckStatus.INCOMPLETE
     assert results[0].error_type == "RuntimeError"
 
 
@@ -251,9 +251,9 @@ def test_failure_does_not_stop_subsequent_checks() -> None:
     ]
 
 
-def test_timeout_maps_to_indeterminate() -> None:
+def test_timeout_maps_to_incomplete() -> None:
     """
-    Verifies that the per-check hang guard yields INDETERMINATE, not FAILED.
+    Verifies that the per-check hang guard yields INCOMPLETE, not FAILED.
     """
     # Precondition.
     # The sleep must exceed the timeout.
@@ -270,7 +270,7 @@ def test_timeout_maps_to_indeterminate() -> None:
     results = run_capability_checks([check], _context())
 
     # Postcondition.
-    assert results[0].status == CapabilityCheckStatus.INDETERMINATE
+    assert results[0].status == CapabilityCheckStatus.INCOMPLETE
     assert results[0].error_type == "TimeoutError"
     assert "timed out" in results[0].message
 

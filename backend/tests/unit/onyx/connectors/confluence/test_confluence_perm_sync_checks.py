@@ -676,7 +676,7 @@ def test_group_membership_reads_a_person_before_apps() -> None:
     gateway.list_user_groups.assert_called_once_with(user_id="a-1")
 
 
-def test_group_membership_without_groups_is_indeterminate() -> None:
+def test_group_membership_without_groups_is_incomplete() -> None:
     # Group sync reads every user, so ungrouped sampled users prove nothing.
     gateway = _gateway()
     gateway.list_user_groups.side_effect = lambda **_: iter([])

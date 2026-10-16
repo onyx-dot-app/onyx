@@ -85,6 +85,7 @@ interface ConnectorChecksSession {
 const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
   "passed",
   "failed",
+  "incomplete",
   "indeterminate",
   "skipped",
 ]);
@@ -96,6 +97,7 @@ function blocks(check: DraftCheckState): boolean {
     case "skipped":
     case "not_applicable":
       return false;
+    case "incomplete":
     case "indeterminate":
       return INDETERMINATE_CHECKS_BLOCK;
     case "failed":
@@ -134,6 +136,7 @@ export const NO_CHECKS: Record<DraftCheckStateKind, number> = {
   running: 0,
   passed: 0,
   failed: 0,
+  incomplete: 0,
   indeterminate: 0,
   skipped: 0,
   waiting: 0,

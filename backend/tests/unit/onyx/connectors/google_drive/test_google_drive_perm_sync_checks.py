@@ -137,14 +137,14 @@ def test_a_file_denied_by_id_is_skipped_for_the_next() -> None:
     )
 
 
-def test_every_sampled_file_denied_is_indeterminate() -> None:
+def test_every_sampled_file_denied_is_incomplete() -> None:
     ops = _ops()
     ops.list_files.side_effect = _listing({"id": "f1", "permissionIds": ["p"]})
     ops.list_file_permissions.side_effect = _http_error(403)
 
     result = _run("google_drive_file_permissions", ops)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_a_missing_scope_on_the_permission_read_fails() -> None:

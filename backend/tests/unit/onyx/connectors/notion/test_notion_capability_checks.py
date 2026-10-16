@@ -131,13 +131,13 @@ def test_auth_fails_for_a_rejected_token() -> None:
     ],
     ids=["rate-limited", "unavailable", "network"],
 )
-def test_auth_is_indeterminate_for_transient_errors(error: NotionApiError) -> None:
+def test_auth_is_incomplete_for_transient_errors(error: NotionApiError) -> None:
     gateway: MagicMock = _gateway()
     gateway.get_bot_user.side_effect = error
 
     result: CapabilityCheckResult = _run("notion_auth", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 # --- notion_shared_content ---
@@ -297,12 +297,12 @@ def test_page_content_reads_the_root_page_when_search_is_empty() -> None:
     )
 
 
-def test_page_content_is_indeterminate_when_nothing_is_shared() -> None:
+def test_page_content_is_incomplete_when_nothing_is_shared() -> None:
     result: CapabilityCheckResult = _run(
         "notion_page_content", _gateway(pages=[], data_sources=[])
     )
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_page_content_passes_when_only_empty_databases_are_shared() -> None:
@@ -334,7 +334,7 @@ def test_page_content_leaves_an_unreadable_root_page_to_its_check() -> None:
         "notion_page_content", gateway, {"root_page_id": "root"}
     )
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 # --- notion_database_rows ---
@@ -404,10 +404,10 @@ def test_user_info_warns_without_the_user_capability() -> None:
     assert "without email addresses" in result.message
 
 
-def test_user_info_is_indeterminate_when_rate_limited() -> None:
+def test_user_info_is_incomplete_when_rate_limited() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_users.side_effect = _api_error(429, "rate_limited")
 
     result: CapabilityCheckResult = _run("notion_user_info", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
