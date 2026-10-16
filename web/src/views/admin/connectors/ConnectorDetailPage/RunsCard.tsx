@@ -47,11 +47,15 @@ import type {
   CCPairRunStatusGroup,
 } from "@/lib/connectors/types";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
+import {
+  rangeWithin,
+  type SliceRange,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import RunRow, {
   RUN_KIND_ICONS,
   runErrorText,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
-import { useFocusedRow } from "@/views/admin/connectors/ConnectorDetailPage/focus";
+import { useFocusedRow } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 
 const PAGE_SIZE = 10;
 export const RUNS_POLL_MS = 5000;
@@ -106,6 +110,8 @@ export interface RunsCardProps {
   /** The page's window, shared with the status card. Without it the list keeps its own. */
   sharedWindow?: SharedWindow;
   onSharedWindowChange?: (window: PickerWindow) => void;
+  /** A chart slice that narrows the list inside the window; the activity panel shows its chip. */
+  range?: SliceRange | null;
   /** Called when a row's stage or checks popover opens or closes, so the page can step back around it. */
   onFocusChange?: (focused: boolean) => void;
 }
@@ -124,23 +130,29 @@ export default function RunsCard({
   sharedWindow,
   onSharedWindowChange,
   onFocusChange,
+  range = null,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const [page, setPage] = useState(1);
   const [picked, setPicked] = useState<PickedWindow>(ALL_TIME);
-  // "View" on the empty state widens the list to all time until the shared window changes.
+  // "View" on the empty state widens the list to all time until the window or slice changes.
   const [widened, setWidened] = useState(false);
   const windowSince =
     sharedWindow !== undefined ? sharedWindow.since : picked.since;
-  // A new shared window starts the list over at its first page.
-  const [pagedSince, setPagedSince] = useState(windowSince);
-  if (pagedSince !== windowSince) {
-    setPagedSince(windowSince);
+  const windowRange = rangeWithin(windowSince, range);
+  // A new window or slice starts the list over at its first page.
+  const [pagedRange, setPagedRange] = useState(windowRange);
+  if (
+    pagedRange.since !== windowRange.since ||
+    pagedRange.until !== windowRange.until
+  ) {
+    setPagedRange(windowRange);
     setPage(1);
     setWidened(false);
   }
-  const since = widened ? null : windowSince;
+  const since = widened ? null : windowRange.since;
+  const until = widened ? null : windowRange.until;
   const focus = useFocusedRow<string>(onFocusChange);
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
   const [statusGroup, setStatusGroup] = useState<CCPairRunStatusGroup | null>(
@@ -154,10 +166,13 @@ export default function RunsCard({
     pageNum: page - 1,
     pageSize: PAGE_SIZE,
     since,
+    until,
     kinds: kind === null ? null : [kind],
     statusGroups: statusGroup === null ? null : [statusGroup],
     q: search,
     errors: null,
+    superseded: null,
+    resolved: null,
   });
   const { data, error, isLoading } = useSWR<CCPairRunsResponse>(
     key,
@@ -182,6 +197,9 @@ export default function RunsCard({
           statusGroups: null,
           q: "",
           errors: null,
+          until: null,
+          superseded: null,
+          resolved: null,
         })
       : null,
     errorHandlingFetcher,
@@ -244,6 +262,7 @@ export default function RunsCard({
     kind !== null ||
     statusGroup !== null ||
     (sharedWindow === undefined && picked.since !== null) ||
+    range !== null ||
     search !== "";
 
   const searchInputField = (

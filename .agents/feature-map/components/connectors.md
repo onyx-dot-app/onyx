@@ -435,7 +435,7 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub have
+calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack have
 a gateway today (`<source>/source_operations.py`); most connectors still call their SDK directly.
 SharePoint's gateway is also the only importer of `msal`, `requests` and `office365`
 under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
@@ -449,7 +449,7 @@ JSON into the models in `github/models.py`, so no PyGithub object leaves it.
 `EXTERNAL_GROUP_SYNC`) is the vocabulary. `capability_checks/applicability.py`
 decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
-source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub
+source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack
 register real ones today; every other source gets a synthesized fallback wrapping
 `validate_connector_settings`). A source with named checks must have a
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
@@ -517,6 +517,11 @@ When one has `FAILED` in the form's latest run, Create first opens an advisory
 (`web/src/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal.tsx`)
 that states the count and offers to show the checks card or to create the
 connector anyway. Edit mode skips the advisory: its plan lists failed checks itself.
+When an edit changes the config, the credential or the access type, the plan modal
+(`web/src/views/admin/connectors/EditConnectorPage/EditPlanModal.tsx`) lists every
+check of the blocking validation with the checks card's rows, titled with the outcome;
+a check that did not finish in time shows as pending. Apply records the validation as
+a check run with trigger `CONNECTOR_CONFIG_UPDATE`, which the pair's run feed lists.
 
 An admin can start the held attempt from the connector page's status card
 (`POST /admin/cc-pair/{id}/release-indexing-hold`), which stamps
@@ -711,7 +716,7 @@ family keep the source's shape and stay usable by that source only.
 | changes `interfaces.py` (adds/renames a base class or method) | `factory.py:_validate_connector_supports_input_type` and `identify_connector_class`; `connector_runner.py`'s `isinstance` branches; every connector implementing the affected interface |
 | changes checkpoint serialization (`ConnectorCheckpoint` or a subclass) | `validate_checkpoint_json` for that connector; any in-flight, persisted checkpoint from a prior run becomes unreadable, which [[indexing-pipeline]]'s resume logic must handle |
 | changes `capabilities.py` or the `CredentialCapability` enum | `capability_checks/applicability.py`, `registry.py`, `runner.py`, and the `credential_capability_report` schema; the admin UI surface that reads capability reports |
-| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook`, `jira`, `linear`, `hubspot`, `google_drive`, `notion`, `sharepoint`, `github` `source_operations.py`) and the import-fence test guarding SDK imports |
+| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook`, `jira`, `linear`, `hubspot`, `google_drive`, `notion`, `sharepoint`, `github`, `youtrack` `source_operations.py`) and the import-fence test guarding SDK imports |
 | changes pruning's diff logic | the invariant in §5.5; verify a connector auth failure still raises rather than producing an empty slim result |
 | touches `credentials_provider.py` | the Redis lock TTL and rotation semantics for every `CredentialsConnector`; static-credential paths used by daily tests |
 
@@ -803,8 +808,8 @@ lack of a key, ask instead. The shared helper
   not assume a checkpoint is small or simple when reasoning about serialization
   changes.
 - **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
-  OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub have a gateway; most connectors still make source-API
-  calls inline, so the "one file that talks to the source" guarantee only holds for those eleven today.
+  OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack have a gateway; most connectors still make source-API
+  calls inline, so the "one file that talks to the source" guarantee only holds for those twelve today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`
   to preserve existing behavior for connector rows that predate the setting.

@@ -28,6 +28,7 @@ from onyx.db.enums import (
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
+    Document,
     IndexAttempt,
     IndexAttemptError,
     SearchSettings,
@@ -1311,6 +1312,34 @@ def get_index_attempt_errors_for_cc_pair(
         stmt = stmt.offset(page * page_size).limit(page_size)
 
     return list(db_session.scalars(stmt).all())
+
+
+def get_index_attempt_errors_with_document_names_for_cc_pair(
+    cc_pair_id: int,
+    unresolved_only: bool,
+    db_session: Session,
+    page: int,
+    page_size: int,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
+) -> list[tuple[IndexAttemptError, str | None]]:
+    """One page of the pair's errors, newest first, each with the title of its
+    document. A document that never landed has no row, so its title is None."""
+    stmt = _cc_pair_errors(
+        select(IndexAttemptError, Document.semantic_id).outerjoin(
+            Document, Document.id == IndexAttemptError.document_id
+        ),
+        cc_pair_id,
+        unresolved_only,
+        index_attempt_id,
+        query,
+    )
+    stmt = (
+        stmt.order_by(desc(IndexAttemptError.time_created))
+        .offset(page * page_size)
+        .limit(page_size)
+    )
+    return [(error, name) for error, name in db_session.execute(stmt).tuples()]
 
 
 def get_index_attempt_errors_across_connectors(

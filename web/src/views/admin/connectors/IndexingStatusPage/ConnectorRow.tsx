@@ -34,7 +34,7 @@ import { can } from "@/lib/permissions/resource-actions";
 import type { AccessType } from "@/lib/types";
 import { DocCounts } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
-import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focus";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 import { connectorRowStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,

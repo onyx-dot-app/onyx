@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "Páginas e comunidades da intranet"
         },
+        "youtrack": {
+          "description": "Rastreador de issues e gestão de projetos"
+        },
         "canvas": {
           "description": "Cursos, páginas e avisos"
         },
@@ -2277,89 +2280,24 @@
         "perBatch": {
           "empty": "Nenhum dado de etapa por lote registrado."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Carga do lote"
+        "buckets": {
+          "fetchSource": {
+            "label": "Busca na fonte"
           },
-          "batchTotal": {
-            "label": "Total do lote"
-          },
-          "batchUnaccounted": {
-            "label": "Não contabilizado"
-          },
-          "checkpointLoad": {
-            "label": "Carga do checkpoint"
+          "batchPreProcessing": {
+            "label": "Pré-processamento de lotes"
           },
           "chunking": {
             "label": "Divisão em chunks"
           },
-          "connectorFetch": {
-            "label": "Busca do conector"
-          },
-          "connectorValidation": {
-            "label": "Validação do conector"
-          },
-          "contextualRag": {
-            "label": "RAG contextual"
-          },
-          "coordLockAcquireWait": {
-            "label": "Espera pelo bloqueio de coordenação"
-          },
-          "coordinationUpdate": {
-            "label": "Atualização da coordenação"
-          },
-          "docBatchEnqueue": {
-            "label": "Enfileiramento do lote de documentos"
-          },
-          "docBatchStore": {
-            "label": "Armazenamento do lote de documentos"
-          },
-          "docDbPrepare": {
-            "label": "Preparação do banco de documentos"
-          },
-          "docLockAcquireWait": {
-            "label": "Espera pelo bloqueio de documento"
-          },
-          "docprocessingSetup": {
-            "label": "Configuração do docprocessing"
-          },
           "embedding": {
             "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "Preparação do enriquecimento"
-          },
-          "finalization": {
-            "label": "Finalização"
-          },
-          "gcCollect": {
-            "label": "Coleta de lixo"
-          },
-          "hierarchyUpsert": {
-            "label": "Upsert da hierarquia"
-          },
-          "imageProcessing": {
-            "label": "Processamento de imagens"
-          },
-          "permissionValidation": {
-            "label": "Validação de permissões"
-          },
-          "postIndexDbUpdate": {
-            "label": "Atualização do banco após a indexação"
-          },
-          "queueWait": {
-            "label": "Espera na fila"
           },
           "vectorDbWrite": {
             "label": "Gravação no banco vetorial"
           },
-          "embeddingRateLimitWait": {
-            "label": "Espera pelo limite de embedding",
-            "description": "Tempo que as requisições de embedding esperaram pelo limite definido nas Configurações de índice. Parte de Embedding, somado entre as threads de embedding."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Espera por limitação do provedor",
-            "description": "Tempo que as requisições de embedding esperaram depois que o provedor de embedding as limitou. Parte de Embedding, somado entre as threads de embedding."
+          "postProcessing": {
+            "label": "Pós-processamento"
           }
         }
       },
@@ -2379,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "Documentos indexados ao longo do tempo",
           "tooltip": "{count, plural, one {# documento} other {# documentos}}",
-          "loadError": "Não foi possível carregar o gráfico."
+          "loadError": "Não foi possível carregar o gráfico.",
+          "rangeFilter": "Execuções criadas neste trecho do gráfico"
         },
         "hold": {
           "checks_running": "Executando verificações pré-indexação",
@@ -2407,7 +2346,10 @@
         "targetedReindexFailed": "Falha na reindexação direcionada: {message}",
         "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados.",
         "checkFrequencyUpdated": "Frequência de verificação do conector atualizada com sucesso",
-        "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector"
+        "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "{count, plural, one {# execução marcada como resolvida} other {# execuções marcadas como resolvidas}}."
       },
       "backButton": {
         "label": "Todos os conectores"
@@ -2609,15 +2551,12 @@
           "all": "Todos os níveis",
           "failures": "Falhas",
           "errors": "Erros",
-          "other": "Outros"
-        },
-        "resolved": {
-          "label": "Resolvidos"
+          "other": "Outros",
+          "resolved": "Resolvido"
         },
         "groups": {
           "failures": "{count, plural, one {# falha} other {# falhas}}",
           "errors": "{count, plural, one {# erro} other {# erros}}",
-          "resolved": "{count, plural, one {# resolvido} other {# resolvidos}}",
           "other": "Outros"
         },
         "title": {
@@ -2683,16 +2622,16 @@
         "tags": {
           "stackTrace": "Rastreamento de pilha",
           "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
-          "doc_permission_sync": "{count, plural, one {# documento não sincronizado} other {# documentos não sincronizados}}",
+          "doc_permission_sync": "{count, plural, one {# usuário não sincronizado} other {# usuários não sincronizados}}",
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
-          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}"
+          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
+          "resolved": "Resolvido"
         },
         "more": "Mostrar mais",
         "empty": {
           "title": "Sem falhas ou erros",
-          "resolved": "Sem erros resolvidos",
           "filtered": "Nada corresponde a esta pesquisa.",
           "failures": "Sem falhas",
           "errors": "Sem erros",
@@ -2716,20 +2655,34 @@
           "open": "Abrir o documento"
         },
         "trace": {
-          "runId": "ID da execução: {id}",
+          "runId": "• ID da execução: {id}",
           "copy": "Copiar o rastreamento de pilha"
         },
         "actions": {
           "resolve": "Resolver"
+        },
+        "resolveAll": {
+          "button": "Resolver tudo o que é exibido",
+          "title": "Resolver todas as execuções exibidas?",
+          "description": "Isso marca como {count, plural, one {resolvida # execução} other {resolvidas # execuções}} que correspondem ao filtro atual. Elas mantêm o status e passam para a seção de resolvidas.",
+          "fleetDescription": "Isso marca como {count, plural, one {resolvida # execução} other {resolvidas # execuções}} que correspondem ao filtro atual, nos conectores que você gerencia. Elas mantêm o status e passam para a seção de resolvidas.",
+          "confirm": "Resolver tudo"
         }
       },
       "stageDetails": {
         "title": "Detalhes das etapas",
+        "heading": {
+          "top": "Detalhes",
+          "bottom": "das etapas"
+        },
         "calls": "Lotes",
         "averageTime": "Tempo médio",
         "maxTime": "Tempo máximo",
         "uneven": {
           "tooltip": "Os tempos por lote variam muito nesta etapa"
+        },
+        "clipped": {
+          "label": "Barra cortada: o máximo ultrapassa a escala"
         },
         "close": "Fechar detalhes das etapas"
       }
@@ -3326,6 +3279,19 @@
             "lang": {
               "label": "Idioma",
               "description": "Idioma usado no título/corpo do conteúdo e nos rótulos de metadados (ISO 639-1, por exemplo en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "Configurar o conector do YouTrack",
+          "fields": {
+            "base_url": {
+              "label": "URL do YouTrack",
+              "description": "Seu endereço do YouTrack, por ex. https://example.youtrack.cloud. Para o YouTrack Server, inclua o caminho de contexto, por ex. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projetos",
+              "description": "Nomes curtos dos projetos a indexar (por ex. ABC). Deixe vazio para indexar todos os projetos que o token pode ler."
             }
           }
         },
@@ -4681,6 +4647,7 @@
         "gongBaseUrl": "Opcional. Para dados fora dos EUA, defina o host da sua região, como https://[region].api.gong.io.",
         "jiraUserEmail": "Obrigatório para o Jira Cloud.",
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
+        "youtrackToken": "Um token permanente de um usuário do YouTrack que pode ler todos os projetos a indexar. Crie-o no seu perfil do YouTrack, em Segurança da conta.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
@@ -6875,7 +6842,7 @@
       "activities": {
         "title": "Atividades",
         "history": "Histórico completo de atividades",
-        "viewLogs": "Ver o histórico de atividades",
+        "viewLogs": "Ver registros",
         "panel": {
           "title": "Histórico de atividades",
           "close": "Ocultar o histórico de atividades",
@@ -10347,8 +10314,25 @@
         },
         "validation": {
           "title": "Validação",
-          "blocks": "As novas configurações falharam na validação. Corrija-as antes de aplicar.",
-          "warns": "Algumas verificações opcionais falharam. Você ainda pode aplicar.",
+          "unchanged": "As configurações que exigem validação não foram alteradas.",
+          "outcome": {
+            "failed": {
+              "title": "A validação falhou",
+              "description": "As novas configurações falharam na validação. Corrija-as antes de aplicar."
+            },
+            "warnings": {
+              "title": "Validação aprovada com avisos",
+              "description": "Algumas verificações opcionais falharam ou não puderam ser confirmadas. Você ainda pode aplicar."
+            },
+            "incomplete": {
+              "title": "A validação não terminou",
+              "description": "As verificações concluídas foram aprovadas. Você ainda pode aplicar."
+            },
+            "passed": {
+              "title": "Validação aprovada",
+              "description": "As novas configurações passaram em todas as verificações."
+            }
+          },
           "error": {
             "title": "As configurações não são válidas"
           }

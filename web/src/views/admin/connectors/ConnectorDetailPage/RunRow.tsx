@@ -34,7 +34,7 @@ import CheckRunPopoverContent, {
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
-import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focus";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 
 export const RUN_KIND_ICONS = {
   indexing: SvgFiles,
@@ -133,6 +133,13 @@ export function isActive(run: CCPairRun): boolean {
     case "checks":
       return run.attempt.status === "running";
   }
+}
+
+/** Whether the run ended in failure, as the feed's failed status group counts it. */
+export function isFailed(run: CCPairRun): boolean {
+  return (
+    run.attempt.status === "failed" || run.attempt.status === "failed_to_run"
+  );
 }
 
 /** When the run finished, or `null` while it has not. */

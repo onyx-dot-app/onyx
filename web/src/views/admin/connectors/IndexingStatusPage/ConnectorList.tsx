@@ -38,7 +38,7 @@ import type { FederatedConnectorStatus } from "@/lib/types";
 import {
   focusDimClass,
   useFocusedRow,
-} from "@/views/admin/connectors/ConnectorDetailPage/focus";
+} from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 import {
   SEARCH_DELAY_MS,
   SEARCH_MAX_LENGTH,
@@ -223,19 +223,22 @@ export default function ConnectorList({ onViewLogs }: ConnectorListProps) {
             width="fit"
             height="fit"
           >
-            {COUNT_TAGS.map(({ status: counted, icon, color }) => (
-              <Tag
-                key={counted}
-                icon={icon}
-                title={format.number(data?.status_counts[counted] ?? 0)}
-                tooltip={t(`counts.${counted}`, {
-                  count: data?.status_counts[counted] ?? 0,
-                })}
-                color={color}
-                variant="status"
-                size="md"
-              />
-            ))}
+            {COUNT_TAGS.map(({ status: counted, icon, color }) => {
+              const count = data?.status_counts[counted] ?? 0;
+              return (
+                count > 0 && (
+                  <Tag
+                    key={counted}
+                    icon={icon}
+                    title={format.number(count)}
+                    tooltip={t(`counts.${counted}`, { count })}
+                    color={color}
+                    variant="status"
+                    size="md"
+                  />
+                )
+              );
+            })}
           </Section>
         </Section>
       </Section>
