@@ -72,9 +72,10 @@ sync (`server.py:_Readiness`).
 |---|---|---|---|
 | GET | `/api/build/apps/{id}/oauth/start` | `start_external_app_oauth` (`server/features/build/external_apps/oauth.py`) | Begins a user's per-user OAuth connect flow for a built-in app. |
 | POST | `/api/build/apps/oauth/callback` | `handle_external_app_oauth_callback` (`oauth.py`) | Exchanges the authorization code, stamps `expires_at`, stores per-user credentials. |
-| GET | `/api/build/approvals/sessions/{session_id}/live` | `list_live_approvals` (`server/features/build/approvals/api.py`) | Polled by the frontend to render pending approval cards. |
-| POST | `/api/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | Accepts `APPROVED` or `REJECTED`. |
-| POST | `/api/build/approvals/{approval_id}/session-grant` | `submit_session_grant` (`approvals/api.py`) | Approves and remembers the grant for the rest of the session (see §4.5). |
+| GET | `/api/build/approvals/sessions/{session_id}/live` | `list_live_approvals` (`server/features/build/approvals/api.py`) | Returns pending approval cards. |
+| GET | `/api/build/approvals/sessions/{session_id}/status` | `list_session_approval_status` (`approvals/api.py`) | Polls IDs, decisions, and server liveness without loading request payloads. |
+| GET | `/api/build/approvals/sessions/{session_id}` | `list_session_approvals` (`approvals/api.py`) | Owner-scoped: all live requests plus the 50 most recent outcomes, including rejected and expired requests. |
+| POST | `/api/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | Accepts `approve_once`, `approve_session`, or `reject`. |
 
 Admin CRUD for `ExternalApp` (`/api/build/admin/apps*`) is owned by
 `[[craft-admin]]`; this document owns what those settings mean at request
@@ -209,8 +210,8 @@ Reads return `effective_policy`, `workspace_policy`, and `stored_policy` for eac
 Saves validate catalog IDs and workspace restrictions directly; they do not construct UI responses.
 All workspace write routes call `replace_workspace_action_policies` for validation and persistence. `db/external_app.py` owns app configuration and credentials.
 
-`ApprovalDecision` stores `APPROVED`, `REJECTED`, or `EXPIRED`.
-The decision endpoint accepts APPROVED or REJECTED. Approve for session uses the session-grant endpoint.
+`ApprovalChoice` accepts `approve_once`, `approve_session`, or `reject`. These are request choices;
+`ApprovalDecision` stores `APPROVED`, `REJECTED`, or `EXPIRED`. There is one decision endpoint.
 
 The migration preserves workspace policy values and converts known actions in
 pre-approved task apps into task policy rows. It adds no permission snapshots.
@@ -438,8 +439,9 @@ For an `ASK`-policied action with no applicable grant,
 adds it to an in-memory `ParkedApprovals` set, and best-effort `RPUSH`es its
 id onto `approval:announce:{session_id}` (`approval_cache.py:announce_approval`)
 so the chat-stream merger can surface the card on the live SSE stream; a miss
-just falls back to the frontend's next pending-request poll
-(`GET /api/build/approvals/sessions/{session_id}/live`). The proxy then
+just falls back to the frontend's next status poll
+(`GET /api/build/approvals/sessions/{session_id}/status`). A status change refreshes
+the full history once. The proxy then
 `BLPOP`s `approval:wake:{approval_id}` for up to
 `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`
 (`approval_cache.py:wait_for_wake`); the user's decision
@@ -453,8 +455,12 @@ the session and its live stream are structured; see
 `[[observability]]` for notification delivery
 (`_notify_approval_requested`).
 
-Approval endpoints check ownership and the existing 180-second eligibility window.
-Conditional writes arbitrate approval, rejection, and proxy expiry.
+The shared decision handler checks ownership and the existing 180-second eligibility window.
+Conditional writes arbitrate approval, rejection, and proxy expiry. Identical retries return the
+saved result; retries cannot change approval scope. Session grants and matching pending decisions
+commit before cache updates and wake notifications. Session grants lock the parent session before updating approval rows to prevent concurrent grants from deadlocking. `ApprovalView.expires_at` is computed from
+creation time and configuration for display; no deadline column is stored.
+`can_approve_for_session` is false for unrecognized external actions and deleted targets.
 
 A **session grant** (`_session_grant`) can approve the currently permitted
 `ASK` actions after the user chooses "Approve for session". Cached action IDs
@@ -698,7 +704,7 @@ they can never disagree about which server owns a request; see
 | changes identity resolution (`sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`, `sandbox_identity/docker.py`) | the duplicate-IP fail-loud check at initial sync; `/healthz` readiness semantics; the session-tag verification in `resolve_session_by_id` (§4.3); both `SandboxIPLookup` backends must stay behavior-identical |
 | changes credential injection (`credential_injection.py`, any resolver) | the first-claim-wins resolver order in `server.py:build_resolvers`; whether a claim with no headers (`CLAIMED`) vs. a hard failure (`BLOCKED`) is still correct for the new resolver; `logging_utils.py`'s "header names only, never values" invariant |
 | changes the CA bootstrap or persistence (`certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`, `certificate_authority/docker.py`) | every running sandbox's trust store (a rotated CA without a coordinated sandbox restart breaks every in-flight TLS interception); the K8s cross-namespace `ConfigMap` projection; the half-written-state fail-loud recovery path |
-| changes the approval flow (`gate.py`'s park/wake, `approval_cache.py`, `action_approval.py`) | `[[craft-sessions]]`'s live-stream announce path; the SIGTERM drain (`GateAddon.drain_inflight`) that must terminalize every parked approval before the proxy pod exits; the frontend's pending-approval polling fallback |
+| changes the approval flow (`gate.py`'s park/wake, `approval_cache.py`, `action_approval.py`) | `[[craft-sessions]]`'s live-stream announce path; the SIGTERM drain (`GateAddon.drain_inflight`) that must terminalize every parked approval before the proxy pod exits; the frontend's approval-status polling fallback |
 | changes the request body cap (`PARSER_MAX_BODY_BYTES`) | §9's body-limit footgun; whether the new limit still matches or exceeds the relevant upstream's own limit, so the proxy is never the more restrictive failure |
 | changes `GatedApp`/`WorkspaceActionPolicy` | both consumers: `external_apps/api.py` (admin writes) and this document's live enforcement (`request_evaluator.py`, `addons/gate.py`); MCP servers share this table with external apps |
 

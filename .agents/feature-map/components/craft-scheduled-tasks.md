@@ -197,7 +197,8 @@ per tenant every 30 s):
 5. On success, marks `succeeded` with a summary
    (`_summary_from_state`/`_summary_from_session_messages`). On a
    `RequestPermissionRequest` the agent can't resolve alone, marks
-   `awaiting_approval` and notifies (`NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL`).
+   `failed` with `agent_permission_required` and notifies (`NotificationType.SCHEDULED_TASK_FAILED`).
+   Closing the event stream aborts the underlying turn; no durable resume is claimed.
    On any executor-level failure (crash, budget exceeded, terminal agent error, a cancelled turn), marks
    `failed` and notifies (`NotificationType.SCHEDULED_TASK_FAILED`). There
    are no retries in this version: a failed run is one row, and the user
@@ -237,7 +238,8 @@ run ended cannot fall back to personal permissions. Separate interactive convers
 
 Approve for session remains available. It satisfies ASK for specific actions in that session and
 never overrides DENY. The proxy keeps its bounded 180-second wait; execution is not durably paused.
-A recovered action failure does not automatically change the executor's success result.
+Rejected and expired requests remain visible in approval history. A recovered action failure does
+not automatically change the executor's success result.
 
 Create and patch accept `action_policies`, a list of app IDs and action-policy maps. Omitted settings
 on patch remain unchanged. The editor sends the choices shown in its draft. Empty maps clear editable choices;
@@ -249,7 +251,8 @@ settings and lock reasons for the task owner.
 
 ## 5. Contracts and invariants
 
-1. **Task permissions apply only to the active RUNNING execution.** Recheck after waits;
+1. **Task permissions apply only to the active RUNNING execution.** Losing the prompt
+   lease closes the producer and aborts the scheduled turn; there is no successor runner. Recheck after waits;
    a finished run cannot authorize later requests through a cached grant. Requests
    from scheduled sessions without a running task are blocked, rather than using
    personal settings. A newly opened task editor waits for fresh policy data;

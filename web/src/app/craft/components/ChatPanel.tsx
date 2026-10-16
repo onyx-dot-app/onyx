@@ -53,7 +53,7 @@ import ScheduledRunBanner, {
 } from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
-import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
+import SessionApprovalsRegion from "@/app/craft/components/approvals/SessionApprovalsRegion";
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
@@ -680,7 +680,7 @@ function ChatPanelContent({
                               <span>{t("responseStopped.label")}</span>
                             </div>
                           )}
-                          <LiveApprovalsRegion
+                          <SessionApprovalsRegion
                             sessionId={sessionId ?? existingSessionId ?? null}
                           />
                         </>

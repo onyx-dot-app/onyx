@@ -90,7 +90,11 @@ interface SummaryCellProps {
 function SummaryCell({ row }: SummaryCellProps) {
   const tReason = useTranslations("craft.tasks.runHistory.nonClickable");
   const reason = getNonClickableReason(row, tReason);
-  const raw = row.summary ?? row.skip_reason ?? row.error_class;
+  const tActionPolicies = useTranslations("craft.actionPolicies");
+  const raw =
+    row.error_class === "agent_permission_required"
+      ? tActionPolicies("agentPermissionRequired")
+      : (row.summary ?? row.skip_reason ?? row.error_class);
   // Heading strip must run before toPlainString collapses newlines.
   const stripped = raw
     ? toPlainString(markdown(raw.replace(/^#{1,6}\s+/gm, "")))

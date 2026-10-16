@@ -46,6 +46,7 @@ function approval(overrides: Partial<ApprovalView>): ApprovalView {
     actions: [SLACK_POST_MESSAGE],
     app_name: "Slack",
     payload: {},
+    expires_at: null,
     created_at: "2026-05-28T15:42:11Z",
     decision: null,
     decided_at: null,
