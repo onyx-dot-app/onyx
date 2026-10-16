@@ -36,7 +36,10 @@ from onyx.indexing.models import (
     IndexingBatchAdapter,
     UpdatableChunkData,
 )
-from onyx.redis.redis_hierarchy import get_ancestors_from_raw_id
+from onyx.redis.redis_hierarchy import (
+    get_ancestors_from_node_id,
+    get_ancestors_from_raw_id,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -200,14 +203,24 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         result: dict[str, list[int]] = {}
 
         for doc in documents:
-            # Use parent_hierarchy_raw_node_id directly from the document
-            # If None, get_ancestors_from_raw_id will return just the SOURCE node
-            ancestors = get_ancestors_from_raw_id(
-                redis_client=redis_client,
-                source=doc.source,
-                parent_hierarchy_raw_node_id=doc.parent_hierarchy_raw_node_id,
-                db_session=db_session,
-            )
+            # A document rebuilt from its stored row carries the resolved id
+            # but not the connector's raw one, so prefer the resolved id and
+            # skip the raw lookup. If neither is set, get_ancestors_from_raw_id
+            # returns just the SOURCE node.
+            if doc.parent_hierarchy_node_id is not None:
+                ancestors = get_ancestors_from_node_id(
+                    redis_client=redis_client,
+                    source=doc.source,
+                    node_id=doc.parent_hierarchy_node_id,
+                    db_session=db_session,
+                )
+            else:
+                ancestors = get_ancestors_from_raw_id(
+                    redis_client=redis_client,
+                    source=doc.source,
+                    parent_hierarchy_raw_node_id=doc.parent_hierarchy_raw_node_id,
+                    db_session=db_session,
+                )
             result[doc.id] = ancestors
 
         return result

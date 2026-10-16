@@ -435,6 +435,21 @@ def _walk_ancestor_chain(
     return ancestors
 
 
+def get_ancestors_from_node_id(
+    redis_client: TenantRedisClient,
+    source: DocumentSource,
+    node_id: int,
+    db_session: Session,
+) -> list[int]:
+    """Get all ancestor hierarchy node IDs from a resolved node ID.
+
+    Preferred over `get_ancestors_from_raw_id` when the caller already holds
+    the database ID, since it skips the raw-to-node lookup and the cache miss
+    that lookup can take.
+    """
+    return _walk_ancestor_chain(redis_client, source, node_id, db_session)
+
+
 def get_ancestors_from_raw_id(
     redis_client: TenantRedisClient,
     source: DocumentSource,
