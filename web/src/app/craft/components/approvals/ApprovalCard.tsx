@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 
 import { Button, Collapsible, Text, Tooltip } from "@opal/components";
@@ -15,10 +15,9 @@ import {
 import {
   ApprovalConflictError,
   postApprovalDecision,
-  postApprovalSessionGrant,
 } from "@/app/craft/services/apiServices";
 import {
-  ApprovalAction,
+  ApprovalDecision,
   ApprovalSubmitDecision,
   ApprovalView,
 } from "@/app/craft/types/approvals";
@@ -33,47 +32,7 @@ interface ApprovalCardProps {
   approval: ApprovalView;
   defaultOpen?: boolean;
   /** Seed a decided state for Storybook (real approvals start pending). */
-  defaultDecision?: ApprovalSubmitDecision | null;
-}
-
-type ApprovalsTranslate = ReturnType<typeof useTranslations<"craft.approvals">>;
-
-// Single-action: name the action; multi-action: just count them. The
-// per-action breakdown (with descriptions) is always shown in the body.
-function approvalHeadline(
-  approval: ApprovalView,
-  t: ApprovalsTranslate
-): string {
-  if (approval.actions.length === 1) {
-    return t("headline.singleAction", {
-      action: approval.actions[0]!.display_name,
-      app: approval.app_name,
-    });
-  }
-  return t("headline.multiAction", {
-    count: approval.actions.length,
-    app: approval.app_name,
-  });
-}
-
-function ActionList({ actions }: { actions: ApprovalAction[] }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {actions.map((action) => (
-        <div
-          key={action.action_type}
-          className="flex flex-col gap-0.5 px-3 py-2 rounded-08 bg-background-neutral-01 border-[0.5px] border-border-01"
-        >
-          <Text font="main-ui-action" color="text-05">
-            {action.display_name}
-          </Text>
-          <Text font="secondary-body" color="text-03">
-            {action.description}
-          </Text>
-        </div>
-      ))}
-    </div>
-  );
+  defaultDecision?: Exclude<ApprovalDecision, "EXPIRED"> | null;
 }
 
 /**
@@ -88,47 +47,58 @@ export default function ApprovalCard({
 }: ApprovalCardProps) {
   const t = useTranslations("craft.approvals");
   const { mutate } = useSWRConfig();
+  const format = useFormatter();
+  const tActionPolicies = useTranslations("craft.actionPolicies");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  // Optimistic decision so the comet settles before the row drops from /live.
-  const [decision, setDecision] = useState<ApprovalSubmitDecision | null>(
-    defaultDecision
+  // Optimistic decision so the comet settles before the row is refreshed.
+  const [decision, setDecision] = useState<ApprovalDecision | null>(
+    defaultDecision ?? approval.decision
   );
 
   // Guards setState after the post-decision SWR revalidation drops
-  // this row from /live and the card unmounts mid-await.
+  // this row and the card unmounts mid-await.
   const mountedRef = useRef(true);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       if (settleTimer.current) clearTimeout(settleTimer.current);
     };
   }, []);
 
-  const swrKey = SWR_KEYS.buildSessionLiveApprovals(approval.session_id);
-  const decided = decision !== null;
+  const swrKey = SWR_KEYS.buildSessionApprovals(approval.session_id);
+  const expired =
+    decision === "EXPIRED" || (decision === null && !approval.is_live);
+  const decided = decision !== null || expired;
   const approved = decision === "APPROVED";
-  const headline = approvalHeadline(approval, t);
+  const action = approval.actions[0];
+  const headline =
+    approval.actions.length === 1 && action
+      ? t("headline.singleAction", {
+          action: action.display_name,
+          app: approval.app_name,
+        })
+      : t("headline.multiAction", {
+          count: approval.actions.length,
+          app: approval.app_name,
+        });
   const headerText = decided ? headline : t("header.required", { headline });
 
-  async function submitDecision(
-    next: ApprovalSubmitDecision,
-    request: () => Promise<void>,
-    refetchDelayMs = SETTLE_HOLD_MS
-  ) {
+  async function submitDecision(choice: ApprovalSubmitDecision) {
     setSubmitting(true);
     setErrorMessage(null);
-    setDecision(next);
+    setDecision(choice === "reject" ? "REJECTED" : "APPROVED");
     try {
-      await request();
-      if (refetchDelayMs === 0) {
+      await postApprovalDecision(approval.approval_id, choice);
+      if (choice === "approve_session") {
         void mutate(swrKey);
       } else {
         settleTimer.current = setTimeout(() => {
           void mutate(swrKey);
-        }, refetchDelayMs);
+        }, SETTLE_HOLD_MS);
       }
     } catch (e) {
       // 409 = already resolved (by someone else, or expired by the
@@ -218,7 +188,13 @@ export default function ApprovalCard({
                   color="inherit"
                   wordWrap="whitespace-nowrap"
                 >
-                  {approved ? t("status.approved") : t("status.rejected")}
+                  {t(
+                    approved
+                      ? "status.approved"
+                      : expired
+                        ? "status.expired"
+                        : "status.rejected"
+                  )}
                 </Text>
               </div>
             ) : null}
@@ -241,58 +217,58 @@ export default function ApprovalCard({
               </button>
             </Collapsible.Trigger>
           </div>
+          {(expired || decision === "REJECTED") && (
+            <div className="px-3 pb-2">
+              <Text font="secondary-body" color="status-error-05">
+                {tActionPolicies(expired ? "expired" : "rejected")}
+              </Text>
+            </div>
+          )}
+          {!decided && approval.expires_at && (
+            <div className="px-3 pb-2">
+              <Text font="secondary-body" color="text-03">
+                {tActionPolicies("deadline", {
+                  time: format.dateTime(new Date(approval.expires_at), {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  }),
+                })}
+              </Text>
+            </div>
+          )}
           {!decided && (
             <div className="flex flex-wrap items-center justify-end gap-1 px-3 pb-2">
               <Button
                 prominence="primary"
                 size="sm"
                 disabled={submitting}
-                onClick={() =>
-                  void submitDecision("APPROVED", async () => {
-                    await postApprovalDecision(
-                      approval.approval_id,
-                      "APPROVED"
-                    );
-                  })
-                }
+                onClick={() => void submitDecision("approve_once")}
                 aria-label={t("approveOnce.ariaLabel")}
               >
                 {t("approveOnce.button")}
               </Button>
-              <Tooltip
-                tooltip={t("approveSession.tooltip")}
-                delayDuration={200}
-              >
-                <Button
-                  prominence="secondary"
-                  size="sm"
-                  disabled={submitting}
-                  onClick={() =>
-                    void submitDecision(
-                      "APPROVED",
-                      async () => {
-                        await postApprovalSessionGrant(approval.approval_id);
-                      },
-                      0
-                    )
-                  }
-                  aria-label={t("approveSession.tooltip")}
+              {approval.can_approve_for_session !== false && (
+                <Tooltip
+                  tooltip={t("approveSession.tooltip")}
+                  delayDuration={200}
                 >
-                  {t("approveSession.button")}
-                </Button>
-              </Tooltip>
+                  <Button
+                    prominence="secondary"
+                    size="sm"
+                    disabled={submitting}
+                    onClick={() => void submitDecision("approve_session")}
+                    aria-label={t("approveSession.tooltip")}
+                  >
+                    {t("approveSession.button")}
+                  </Button>
+                </Tooltip>
+              )}
               <Button
                 prominence="secondary"
                 size="sm"
                 disabled={submitting}
-                onClick={() =>
-                  void submitDecision("REJECTED", async () => {
-                    await postApprovalDecision(
-                      approval.approval_id,
-                      "REJECTED"
-                    );
-                  })
-                }
+                onClick={() => void submitDecision("reject")}
                 aria-label={t("reject.ariaLabel")}
               >
                 {t("reject.button")}
@@ -301,7 +277,21 @@ export default function ApprovalCard({
           )}
           <Collapsible.Content>
             <div className="p-2 flex flex-col gap-3">
-              <ActionList actions={approval.actions} />
+              <div className="flex flex-col gap-2">
+                {approval.actions.map((action) => (
+                  <div
+                    key={action.action_type}
+                    className="flex flex-col gap-0.5 px-3 py-2 rounded-08 bg-background-neutral-01 border-[0.5px] border-border-01"
+                  >
+                    <Text font="main-ui-action" color="text-05">
+                      {action.display_name}
+                    </Text>
+                    <Text font="secondary-body" color="text-03">
+                      {action.description}
+                    </Text>
+                  </div>
+                ))}
+              </div>
               <PayloadView payload={approval.display_payload} />
               {errorMessage && (
                 <div className="text-status-error-05">

@@ -515,6 +515,7 @@ class ScheduledTaskErrorClass(str, PyEnum):
     TIMEOUT = "timeout"
     STUCK = "stuck"
     AGENT_EXCEPTION = "agent_exception"
+    AGENT_PERMISSION_REQUIRED = "agent_permission_required"
 
 
 class ScheduledTaskSkipReason(str, PyEnum):

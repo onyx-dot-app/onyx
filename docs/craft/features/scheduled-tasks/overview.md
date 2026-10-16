@@ -90,8 +90,8 @@ dispatch_due_scheduled_tasks          run_scheduled_task(run_id)
      ├─ insert queued run                  session, task.prompt):
      ├─ next_run_at = croniter             _persist_acp_events([event])
      │     .next(now)                    if budget exceeded → failed
-     └─ enqueue run_scheduled_task ───►   if approval required →
-            (run_id, expires=900,             awaiting_approval
+     └─ enqueue run_scheduled_task ───►   if agent permission required → failed
+            (run_id, expires=900,         proxy action approval → wait up to 180s
              queue=scheduled_tasks)       mark succeeded / failed
   COMMIT;                                emit Notification if failed
 
@@ -195,13 +195,13 @@ PATCH/POST.
 ```
 queued ─► running ─► succeeded
             │   └─► failed (executor crash | budget | ACP error)
-            └─► awaiting_approval ─► (approvals project resumes) ─► running ─► ...
+            └─► failed (agent permission required; no durable resume)
 
 dispatcher also writes: skipped (prior run still in flight; next_run_at advances)
 ```
 
-Resume mechanics for `awaiting_approval` are owned by the approvals
-project; until that ships, treat as terminal-for-display.
+Agent permission requests stop execution and produce Failed with a clear reason.
+Proxy action approvals keep their existing 180-second wait. They do not durably pause the run.
 
 Multiple scheduled runs and the interactive `send_message` path can
 execute against the same sandbox concurrently — there is no

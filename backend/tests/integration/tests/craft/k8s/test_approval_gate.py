@@ -250,9 +250,9 @@ def _submit_decision_response(
     return http_client.post(
         f"{API_SERVER_URL}/build/approvals/{approval_id}/decision",
         json={
-            "decision": "REJECTED"
+            "decision": "reject"
             if decision == ApprovalDecision.REJECTED
-            else "APPROVED"
+            else "approve_once"
         },
         headers=api_user.headers,
         cookies=api_user.cookies,

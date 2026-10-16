@@ -171,7 +171,7 @@ jest.mock("@/app/craft/components/SkillsStaleNotice", () => ({
   __esModule: true,
   default: () => null,
 }));
-jest.mock("@/app/craft/components/approvals/LiveApprovalsRegion", () => ({
+jest.mock("@/app/craft/components/approvals/SessionApprovalsRegion", () => ({
   __esModule: true,
   default: () => null,
 }));

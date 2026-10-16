@@ -263,8 +263,10 @@ export const SWR_KEYS = {
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
   buildBaseInstructions: "/api/build/admin/base-instructions",
-  buildSessionLiveApprovals: (sessionId: string) =>
-    `/api/build/approvals/sessions/${sessionId}/live`,
+  buildSessionApprovalStatus: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}/status`,
+  buildSessionApprovals: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
