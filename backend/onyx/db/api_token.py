@@ -219,7 +219,9 @@ def delete_orphaned_api_tokens(db_session: Session, *, unused_since: datetime) -
 
 
 def rotate_api_token(db_session: Session, token_id: int, value: str) -> ApiToken:
-    token = get_api_token(db_session, token_id)
+    # Locked like release_api_token, so a concurrent release cannot delete the
+    # row between this read and the update.
+    token = get_api_token(db_session, token_id, lock=True)
     if token is None or token.is_system:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "API key not found")
     if not value.strip():
