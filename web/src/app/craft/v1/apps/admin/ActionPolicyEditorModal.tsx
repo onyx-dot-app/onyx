@@ -355,15 +355,13 @@ function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
               className="flex items-center justify-between gap-3"
             >
               <div className="flex min-w-0 flex-1 flex-col">
-                <Text font="main-ui-action" maxLines={1} title={item.name}>
+                <Text font="main-ui-action" wordWrap="wrap-anywhere">
                   {item.name}
                 </Text>
                 <Text
                   font="secondary-body"
                   color="text-03"
-                  maxLines={2}
                   wordWrap="wrap-anywhere"
-                  title={item.description}
                 >
                   {item.description}
                 </Text>
