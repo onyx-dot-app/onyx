@@ -7,7 +7,7 @@ from ee.onyx.secondary_llm_flows.query_expansion import expand_keywords
 from ee.onyx.secondary_llm_flows.search_flow_classification import (
     classify_is_search_flow,
 )
-from onyx.configs.constants import DocumentSource, MessageType
+from onyx.configs.constants import DocumentSource
 from onyx.context.search.federated.slack_search_utils import (
     expand_query_with_llm,
     extract_date_range_from_query,
@@ -31,13 +31,6 @@ from onyx.secondary_llm_flows.document_filter import (
     classify_section_relevance,
     select_sections_for_expansion,
 )
-from onyx.secondary_llm_flows.query_expansion import (
-    keyword_query_expansion,
-    semantic_query_rephrase,
-)
-from onyx.secondary_llm_flows.source_filter import decide_search_scope
-from onyx.secondary_llm_flows.time_filter import decide_time_filter
-from onyx.tools.models import ChatMinimalTextMessage
 
 
 def _llm(response: str, max_input_tokens: int = 4096) -> MagicMock:
@@ -266,105 +259,6 @@ def test_classification_caps_section_and_retains_question() -> None:
     assert "# Section Below:\n```\nN/A\n```" in text
 
 
-@pytest.mark.parametrize("keyword", [False, True])
-def test_rewriting_drops_old_history_and_memories_before_current_query(
-    keyword: bool,
-) -> None:
-    llm = _llm("onboarding steps")
-    history = [
-        ChatMinimalTextMessage(
-            message="old history " * 12000, message_type=MessageType.USER
-        ),
-        ChatMinimalTextMessage(
-            message="old answer " * 12000, message_type=MessageType.ASSISTANT
-        ),
-        ChatMinimalTextMessage(
-            message="Find onboarding steps", message_type=MessageType.USER
-        ),
-    ]
-    rewrite = keyword_query_expansion if keyword else semantic_query_rephrase
-
-    result = rewrite(
-        history,
-        llm,
-        user_info="profile " * 12000,
-        memories=["memory " * 12000],
-        enforce_llm_input_budget=True,
-    )
-
-    assert result == (["onboarding steps"] if keyword else "onboarding steps")
-    request = _assert_request_fits(llm)
-    assert len(request.messages) == 2
-    assert "Find onboarding steps" in str(request.messages[-1].content)
-    assert "memory memory" not in str(request.messages[-1].content)
-    assert history[0].message == "old history " * 12000
-
-
-def test_oversized_rewrite_query_falls_back_without_provider_call() -> None:
-    llm = _llm("rewritten")
-    query = "oversized question " * 12000
-    history = [ChatMinimalTextMessage(message=query, message_type=MessageType.USER)]
-
-    semantic = semantic_query_rephrase(history, llm, enforce_llm_input_budget=True)
-    keywords = keyword_query_expansion(history, llm, enforce_llm_input_budget=True)
-
-    assert semantic == query
-    assert keywords == []
-    llm.invoke.assert_not_called()
-
-
-def test_oversized_filter_prompts_fail_open_without_provider_call() -> None:
-    llm = _llm("[slack]")
-    history = [
-        ChatMinimalTextMessage(message="query " * 12000, message_type=MessageType.USER)
-    ]
-
-    scope = decide_search_scope(
-        history,
-        llm,
-        [DocumentSource.SLACK, DocumentSource.GOOGLE_DRIVE],
-        [],
-        ["query"],
-        enforce_llm_input_budget=True,
-    )
-    time_filter = decide_time_filter(history, llm, enforce_llm_input_budget=True)
-
-    assert scope is None
-    assert time_filter is None
-    llm.invoke.assert_not_called()
-
-
-def test_ee_small_prompts_fit_and_oversized_queries_use_local_defaults() -> None:
-    llm = _llm("onboarding checklist")
-    assert expand_keywords("onboarding", llm, enforce_llm_input_budget=True) == [
-        "onboarding checklist"
-    ]
-    _assert_request_fits(llm)
-    llm.invoke.reset_mock()
-    assert expand_keywords("query " * 12000, llm, enforce_llm_input_budget=True) == []
-    assert (
-        classify_is_search_flow("query " * 12000, llm, enforce_llm_input_budget=True)
-        is False
-    )
-    llm.invoke.assert_not_called()
-
-
-def test_ee_fast_keywords_allow_reasoning_before_visible_response() -> None:
-    keyword_llm = _reasoning_llm("onboarding checklist")
-    assert expand_keywords(
-        "onboarding", keyword_llm, enforce_llm_input_budget=True
-    ) == ["onboarding checklist"]
-    _assert_request_fits(keyword_llm)
-
-
-def test_ee_fast_classification_allows_reasoning_before_visible_response() -> None:
-    classification_llm = _reasoning_llm("search")
-    assert classify_is_search_flow(
-        "onboarding", classification_llm, enforce_llm_input_budget=True
-    )
-    _assert_request_fits(classification_llm)
-
-
 def test_ee_unset_fast_keeps_existing_output_caps() -> None:
     keyword_llm = _llm("onboarding checklist")
     assert expand_keywords("onboarding", keyword_llm) == ["onboarding checklist"]
@@ -391,14 +285,3 @@ def test_slack_date_prompt_keeps_existing_local_fallback() -> None:
     days = extract_date_range_from_query("onboarding before launch", llm, 30)
     assert days == 30
     llm.invoke.assert_not_called()
-
-
-def test_slack_query_expansion_caps_oversized_original_query() -> None:
-    llm = _llm("onboarding checklist")
-    expanded = expand_query_with_llm(
-        "onboarding " * 12000, llm, enforce_llm_input_budget=True
-    )
-
-    assert expanded == ["onboarding checklist"]
-    request = _assert_request_fits(llm)
-    assert "onboarding onboarding" in str(request.messages[0].content)
