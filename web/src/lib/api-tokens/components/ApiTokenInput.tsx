@@ -129,9 +129,11 @@ export function ApiTokenInput({
           // A chosen key shows as a tag; the text box stays empty, so typing
           // starts a new key and Backspace drops the tag.
           value={value.type === "existing" ? "" : value.value}
-          onChange={(event) =>
-            onChange({ type: "new", value: event.target.value })
-          }
+          // Typing means a new key, so the saved-key list gets out of the way.
+          onChange={(event) => {
+            setOpen(false);
+            onChange({ type: "new", value: event.target.value });
+          }}
           onKeyDown={(event) => {
             if (value.type === "existing" && event.key === "Backspace") {
               onChange(EMPTY_API_TOKEN_VALUE);
