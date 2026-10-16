@@ -156,6 +156,9 @@ class DraftRerunMode(str, Enum):
 
 class DraftCheckState(BaseModel):
     check_id: str
+    # The row the check shows on (``CapabilityCheck.row_id``). None in runs
+    # started before rows, which read it as the check_id.
+    row_id: str | None = None
     display_name: str
     capability: CredentialCapability
     required: bool
@@ -232,6 +235,7 @@ def settled_results(snapshot: DraftCheckRunSnapshot) -> list[CapabilityCheckResu
         CapabilityCheckResult(
             capability=check.capability,
             check_id=check.check_id,
+            row_id=check.row_id,
             display_name=check.display_name,
             required=check.required,
             status=_result_status(check.state),
@@ -310,6 +314,7 @@ def decide_draft_check_state(
     readiness = decide_check_readiness(check, context)
     state = DraftCheckState(
         check_id=check.check_id,
+        row_id=check.row_id,
         display_name=check.display_name,
         capability=check.capability,
         required=check.required,
@@ -538,6 +543,7 @@ def cached_check_result(
     return CapabilityCheckResult(
         capability=check.capability,
         check_id=check.check_id,
+        row_id=check.row_id,
         display_name=check.display_name,
         required=check.required,
         status=_result_status(cached.state),

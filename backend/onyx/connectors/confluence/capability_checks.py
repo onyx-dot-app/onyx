@@ -25,8 +25,10 @@ user's Confluence permissions.
 import re
 from collections.abc import Iterator
 from typing import Any, NoReturn, TypeVar
+from urllib.parse import urlparse
 
 import requests
+from pydantic import BaseModel
 from requests import HTTPError
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
@@ -35,6 +37,7 @@ from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
     CredentialCapability,
@@ -77,6 +80,7 @@ from onyx.connectors.confluence.source_operations import (
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
+    CredentialInvalidError,
     InsufficientPermissionsError,
     RateLimitedValidationError,
     UnexpectedValidationError,
@@ -101,6 +105,10 @@ _ERROR_DETAIL_CHARS = 300
 
 _TENANT_INFO_PATH = "/_edge/tenant_info"
 _RATE_LIMITED_STATUS = 429
+# What Confluence Cloud answers, with HTTP 403, to basic auth it does not
+# accept: it treats the request as anonymous.
+_ANONYMOUS_CALLER_TEXT = "caller cannot access Confluence"
+_CONFLUENCE_USERNAME_KEY = "confluence_username"
 # Results of the CQL query whose content types the CQL check inspects.
 _CQL_SAMPLE_RESULTS = 5
 _PAGE_TYPE = "page"
@@ -168,6 +176,36 @@ def _access_hint(
     return f"The token acts as its Confluence user. Give that user {user_permission}."
 
 
+def _need(
+    context: CapabilityCheckContext,
+    config: ConfluenceConnectorConfig,
+    *,
+    oauth_scope: str,
+    user_permission: str,
+    scoped_token_scope: str | None = None,
+) -> str:
+    """The row description's line of what a denied probe needs, for the
+    account type in use. ``_access_hint`` is the full text for the message."""
+    if OAUTH_REFRESH_TOKEN_KEY in context.credential_json:
+        return f"Required scope: {oauth_scope}"
+    if config.scoped_token:
+        return f"Required scope: {scoped_token_scope or oauth_scope}"
+    return f"Give the token's user {user_permission}."
+
+
+class _RowText(BaseModel):
+    """The row text of one outcome of a probe."""
+
+    summary: str
+    description: str
+
+
+_REFUSED_ROW = _RowText(
+    summary="Requests refused or rate limited",
+    description="Confluence refused or rate limited every try. (HTTP 403 or 429)",
+)
+
+
 def _error_detail(error: HTTPError) -> str:
     response = error.response
     if response is None:
@@ -184,24 +222,46 @@ def _raise_for_http_error(
     error: HTTPError,
     *,
     denied: str,
+    denied_row: _RowText | None = None,
     not_found: str | None = None,
+    not_found_row: _RowText | None = None,
     bad_request: str | None = None,
+    bad_request_row: _RowText | None = None,
 ) -> NoReturn:
     """Maps a Confluence HTTP error onto the validation-exception family.
-    ``denied`` explains a 403 for this probe."""
+    ``denied`` explains a 403 for this probe; each ``*_row`` is the row text
+    of that status."""
     status = error.response.status_code if error.response is not None else None
     detail = _error_detail(error)
     if status == 401:
         raise CredentialExpiredError(
             "Confluence rejected the credential (HTTP 401). The token is wrong, "
-            "expired, or revoked, or the email does not match the token."
+            "expired, or revoked, or the email does not match the token.",
+            summary="Sign-in rejected",
+            description=(
+                "Confluence rejected the credential. (HTTP 401)\n"
+                "The token is incorrect, expired or revoked, or does not match "
+                "the email."
+            ),
         ) from error
     if status == 403:
-        raise InsufficientPermissionsError(f"{denied} (HTTP 403).") from error
+        raise InsufficientPermissionsError(
+            f"{denied} (HTTP 403).",
+            summary=denied_row.summary if denied_row else None,
+            description=denied_row.description if denied_row else None,
+        ) from error
     if status == 404 and not_found is not None:
-        raise ConnectorValidationError(f"{not_found} (HTTP 404).") from error
+        raise ConnectorValidationError(
+            f"{not_found} (HTTP 404).",
+            summary=not_found_row.summary if not_found_row else None,
+            description=not_found_row.description if not_found_row else None,
+        ) from error
     if status == 400 and bad_request is not None:
-        raise ConnectorValidationError(f"{bad_request} (HTTP 400): {detail}") from error
+        raise ConnectorValidationError(
+            f"{bad_request} (HTTP 400): {detail}",
+            summary=bad_request_row.summary if bad_request_row else None,
+            description=bad_request_row.description if bad_request_row else None,
+        ) from error
     if status == _RATE_LIMITED_STATUS:
         raise RateLimitedValidationError(
             "Confluence rate limited the check. Run the checks again in a minute.",
@@ -221,15 +281,22 @@ def _raise_for_http_error(
     ) from error
 
 
-def _raise_for_sample_error(error: HTTPError, *, denied: str) -> NoReturn:
+def _raise_for_sample_error(
+    error: HTTPError, *, denied: str, denied_row: _RowText
+) -> NoReturn:
     """Like ``_raise_for_http_error``, for a probe that first samples in-scope
     pages. A rejected scope query is the scope checks' failure, not this one."""
     if error.response is not None and error.response.status_code == 400:
         raise UnexpectedValidationError(
             "Confluence rejected the indexing scope query, so this check cannot "
-            "run. Fix the scope settings first."
+            "run. Fix the scope settings first.",
+            summary="Confluence rejected the page query",
+            description=(
+                "Confluence did not accept the indexing scope query. (HTTP 400)\n"
+                "Check Spaces, Pages or CQL Query."
+            ),
         ) from error
-    _raise_for_http_error(error, denied=denied)
+    _raise_for_http_error(error, denied=denied, denied_row=denied_row)
 
 
 _ItemT = TypeVar("_ItemT")
@@ -312,11 +379,13 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
         validates_binding: bool = False,
         discovery: bool = False,
         fails_when_unreachable: bool = False,
+        row_id: str | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
             check_id=check_id,
             display_name=display_name,
+            row_id=row_id,
             required=required,
             requires_connector_instance=False,
             requires_fields=_SITE_FIELDS,
@@ -342,9 +411,10 @@ class _SiteAuthCheck(_ConfluenceCheck):
         if scoped:
             super().__init__(
                 check_id="confluence_scoped_token_auth",
+                row_id="confluence_auth",
                 validates_binding=True,
                 fails_when_unreachable=True,
-                display_name="Scoped API token signs in to the site",
+                display_name="Sign in to Confluence",
                 remediation=(
                     "Scoped API tokens work only with Confluence Cloud. Check the "
                     "site URL, and create a new scoped token if it expired."
@@ -355,7 +425,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
                 check_id="confluence_auth",
                 validates_binding=True,
                 fails_when_unreachable=True,
-                display_name="Credential signs in to the site",
+                display_name="Sign in to Confluence",
                 remediation=(
                     "Check the site URL and the Cloud setting. For an API token, "
                     "use the email of the token's Atlassian account. Create a new "
@@ -367,7 +437,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return form_state.config.scoped_token == self._scoped
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         try:
             _gateway(context).probe_site(
@@ -379,7 +449,17 @@ class _SiteAuthCheck(_ConfluenceCheck):
             )
         except ConfluenceNoVisibleSpacesError:
             # Sign-in worked; confluence_spaces_visible reports the empty site.
-            return
+            return CheckOutput(
+                summary="Signed in; no spaces visible",
+                advisories=[
+                    CheckAdvisory(
+                        message=(
+                            "The credential works, but it sees no space. List "
+                            "spaces reports this as a failure."
+                        )
+                    )
+                ],
+            )
         except HTTPError as e:
             response = e.response
             # tenant_info needs no auth: a 4xx means the URL is not a Cloud
@@ -394,24 +474,96 @@ class _SiteAuthCheck(_ConfluenceCheck):
                 raise ConnectorValidationError(
                     "Onyx cannot get the Atlassian cloud id of "
                     f"{config.wiki_base} (`{_TENANT_INFO_PATH}`). Scoped API "
-                    "tokens work only with Confluence Cloud; check the site URL."
+                    "tokens work only with Confluence Cloud; check the site URL.",
+                    summary="Site URL is not a Confluence Cloud site",
+                    description=(
+                        "Scoped tokens go through Atlassian's API gateway, which "
+                        "needs a Confluence Cloud site."
+                    ),
                 ) from e
+            self._raise_for_rejected_token(context, config, e)
             _raise_for_http_error(
                 e,
                 denied=(
                     "The credential signs in, but Confluence does not let its "
                     "user use Confluence on this site"
                 ),
+                denied_row=_RowText(
+                    summary="No Confluence access on this site",
+                    description=(
+                        "The token is valid, but its user cannot use Confluence "
+                        "on this site. (HTTP 403)"
+                    ),
+                ),
                 not_found=(
                     f"Confluence has no API at {config.wiki_base}. Check the site "
                     "URL; a Cloud URL ends in /wiki "
                     "(https://your-domain.atlassian.net/wiki)"
                 ),
+                not_found_row=_RowText(
+                    summary="No Confluence API at the Site URL",
+                    description=(
+                        "The Site URL does not point to a Confluence API. "
+                        "(HTTP 404)\nCheck the Site URL. A Cloud URL ends in "
+                        "/wiki, e.g. https://your-domain.atlassian.net/wiki."
+                    ),
+                ),
             )
         except (requests.ConnectionError, requests.Timeout) as e:
             raise UnreachableValidationError(
-                f"Onyx cannot connect to {config.wiki_base}. Check the site URL."
+                f"Onyx cannot connect to {config.wiki_base}. Check the site URL.",
+                summary=f"Cannot reach {urlparse(config.wiki_base).hostname}",
+                description=(
+                    "The server could not connect to the Site URL.\nCheck the Site URL."
+                ),
             ) from e
+        return CheckOutput(summary=self._signed_in_line(context, config))
+
+    def _signed_in_line(
+        self, context: CapabilityCheckContext, config: ConfluenceConnectorConfig
+    ) -> str:
+        """Cloud basic auth signs in as the account email, so the line can
+        name it. OAuth and Data Center tokens name no user without another
+        call."""
+        username = context.credential_json.get(_CONFLUENCE_USERNAME_KEY)
+        if (
+            config.is_cloud
+            and username
+            and OAUTH_REFRESH_TOKEN_KEY not in context.credential_json
+        ):
+            return f"Signed in as {username}"
+        return "Signed in"
+
+    def _raise_for_rejected_token(
+        self,
+        context: CapabilityCheckContext,
+        config: ConfluenceConnectorConfig,
+        error: HTTPError,
+    ) -> None:
+        """Confluence Cloud answers basic auth it does not accept with HTTP
+        403, as an anonymous caller: for an API token, that is a rejected
+        token, not a missing permission."""
+        response = error.response
+        if (
+            response is None
+            or response.status_code != 403
+            or not config.is_cloud
+            or OAUTH_REFRESH_TOKEN_KEY in context.credential_json
+            or _ANONYMOUS_CALLER_TEXT not in response.text
+        ):
+            return
+        raise CredentialInvalidError(
+            "Confluence did not accept the API token (HTTP 403): it treats the "
+            "request as anonymous. The token is wrong, expired, or revoked, or "
+            "the email does not match the token.",
+            summary="Sign-in rejected",
+            description=(
+                "Confluence rejected the API token. (HTTP 403)\n"
+                "Token is incorrect/expired/revoked, or does not match the "
+                "email. Check “This is an API token with scopes” if you are "
+                "using one."
+            ),
+        ) from error
 
 
 class _SpacesVisibleCheck(_ConfluenceCheck):
@@ -419,7 +571,7 @@ class _SpacesVisibleCheck(_ConfluenceCheck):
         super().__init__(
             check_id="confluence_spaces_visible",
             validates_binding=True,
-            display_name="Spaces are visible",
+            display_name="List spaces",
             remediation=(
                 "Give the token's user view permission on the spaces to index. "
                 "OAuth: the `read:space:confluence` scope. Scoped API token: the "
@@ -427,7 +579,7 @@ class _SpacesVisibleCheck(_ConfluenceCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         # OAuth lists spaces through the v2 API (granular scope); scoped
         # tokens use v1 (classic scope).
@@ -438,16 +590,31 @@ class _SpacesVisibleCheck(_ConfluenceCheck):
             scoped_token_scope="read:confluence-space.summary",
             user_permission="view permission on the spaces to index",
         )
+        need = _need(
+            context,
+            config,
+            oauth_scope="read:space:confluence",
+            scoped_token_scope="read:confluence-space.summary",
+            user_permission="view permission on the spaces to index",
+        )
         try:
             first_space = next(_gateway(context).list_spaces(limit=1), None)
         except HTTPError as e:
             _raise_for_http_error(
-                e, denied=f"The credential cannot list Confluence spaces. {hint}"
+                e,
+                denied=f"The credential cannot list Confluence spaces. {hint}",
+                denied_row=_RowText(
+                    summary="No permission to list spaces",
+                    description=f"The account cannot list spaces. (HTTP 403)\n{need}",
+                ),
             )
         if first_space is None:
             raise InsufficientPermissionsError(
-                f"No Confluence space is visible to this credential. {hint}"
+                f"No Confluence space is visible to this credential. {hint}",
+                summary="No spaces visible to the account",
+                description=f"The account sees no space.\n{need}",
             )
+        return CheckOutput(summary="Spaces visible")
 
 
 class _SpaceListingCheck(_ConfluenceCheck):
@@ -457,7 +624,8 @@ class _SpaceListingCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_space_listing",
-            display_name="Lists the visible spaces",
+            row_id="confluence_spaces_visible",
+            display_name="List spaces",
             remediation="Give the token's user view permission on the spaces to index.",
             discovery=True,
         )
@@ -473,16 +641,22 @@ class _SpaceListingCheck(_ConfluenceCheck):
             )
         except HTTPError as e:
             _raise_for_http_error(
-                e, denied="The credential cannot list Confluence spaces."
+                e,
+                denied="The credential cannot list Confluence spaces.",
+                denied_row=_RowText(
+                    summary="No permission to list spaces",
+                    description="The account cannot list spaces. (HTTP 403)",
+                ),
             )
-        return CheckOutput(findings=[finding])
+        count = f"{len(finding.options):,}{'+' if finding.truncated else ''}"
+        return CheckOutput(summary=f"{count} spaces visible", findings=[finding])
 
 
 class _ConfiguredSpaceCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_configured_space",
-            display_name="Configured space is readable",
+            display_name="Find selected spaces",
             remediation=(
                 "Use the space key, not the space name (e.g. `KB`; keys are case "
                 "sensitive), and give the token's user view permission on it."
@@ -492,33 +666,52 @@ class _ConfiguredSpaceCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return _mode(form_state.config) == ConfluenceIndexingMode.SPACE
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         space_key = config.space.strip()
         try:
-            _gateway(context).get_space(space_key=space_key)
+            space = _gateway(context).get_space(space_key=space_key)
         except ConfluenceSpaceNotFoundError as e:
             raise ConnectorValidationError(
                 f"No space with the key `{space_key}` is visible to this "
                 "credential. Check the key (keys are case sensitive), or give the "
-                "token's user view permission on the space."
+                "token's user view permission on the space.",
+                summary="No selected space found",
+                description=(
+                    f"{space_key} is not visible to this account. (HTTP 404)\n"
+                    "Requires view access to the space. Keys are case sensitive."
+                ),
             ) from e
         except HTTPError as e:
             _raise_for_http_error(
-                e, denied=f"The credential cannot read the space `{space_key}`"
+                e,
+                denied=f"The credential cannot read the space `{space_key}`",
+                denied_row=_RowText(
+                    summary=f"No permission to read {space_key}",
+                    description=(
+                        "The account cannot read the selected space. (HTTP 403)\n"
+                        "Give the account view permission on the space."
+                    ),
+                ),
             )
         except ConfluenceRetriesExhaustedError as e:
             raise UnexpectedValidationError(
                 f"Confluence did not return the space `{space_key}`: it refused "
-                "or rate limited every try. Run the checks again."
+                "or rate limited every try. Run the checks again.",
+                summary=_REFUSED_ROW.summary,
+                description=(
+                    f"{_REFUSED_ROW.description}\n"
+                    "Repeated refusals can mean no access to the space."
+                ),
             ) from e
+        return CheckOutput(summary=f"Found space {space.get('name') or space_key}")
 
 
 class _ConfiguredPageCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_configured_page",
-            display_name="Configured page is readable",
+            display_name="Find selected pages",
             remediation=(
                 "Use the number after /pages/ in the page URL, and give the "
                 "token's user view permission on the page and its space."
@@ -528,13 +721,15 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return _mode(form_state.config) == ConfluenceIndexingMode.PAGE
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         page_id = config.page_id.strip()
         if not page_id.isdigit():
             raise ConnectorValidationError(
                 f"The page ID `{page_id}` is not a number. Use the number after "
-                "/pages/ in the page URL, e.g. `131368`."
+                "/pages/ in the page URL, e.g. `131368`.",
+                summary=f"No page with ID {page_id}",
+                description="Enter the number from the page URL, e.g. 131368.",
             )
         try:
             page = next(
@@ -550,14 +745,36 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied=f"The credential cannot search for the page `{page_id}`",
+                denied_row=_RowText(
+                    summary="No permission to search for the page",
+                    description=(
+                        "The account cannot search Confluence. (HTTP 403)\n"
+                        "Give the token's user view permission on the page and "
+                        "its space."
+                    ),
+                ),
                 bad_request=f"Confluence rejected the page ID `{page_id}`",
+                bad_request_row=_RowText(
+                    summary="Confluence rejected a page ID",
+                    description=(
+                        "Confluence did not accept a page ID in a search. "
+                        "(HTTP 400)\nUse the number after /pages/ in the page "
+                        "URL, e.g. 131368."
+                    ),
+                ),
             )
         if page is None:
             raise ConnectorValidationError(
                 f"No page with the ID `{page_id}` is visible to this credential. "
                 "Check the ID, or give the token's user view permission on the "
-                "page and its space."
+                "page and its space.",
+                summary=f"No page with ID {page_id}",
+                description=(
+                    "The page ID matches no page the account can see.\n"
+                    "Use the number after /pages/ in the page URL."
+                ),
             )
+        return CheckOutput(summary=f"Found page {page.get('title') or page_id}")
 
 
 def _validate_cql_shape(cql: str) -> None:
@@ -567,12 +784,22 @@ def _validate_cql_shape(cql: str) -> None:
     if _LAST_MODIFIED_PATTERN.search(unquoted):
         raise ConnectorValidationError(
             "Remove the lastModified filter from the CQL query. Onyx adds its "
-            "own lastModified filter on each poll, and the two conflict."
+            "own lastModified filter on each poll, and the two conflict.",
+            summary="Unsupported filter: lastModified",
+            description=(
+                "The connector adds its own lastModified filter on each poll, "
+                "and the two conflict."
+            ),
         )
     if _ORDER_BY_PATTERN.search(unquoted):
         raise ConnectorValidationError(
             "Remove ORDER BY from the CQL query. Onyx adds filters after the "
-            "query and orders the results itself."
+            "query and orders the results itself.",
+            summary="Unsupported clause: ORDER BY",
+            description=(
+                "The connector adds filters after the query and sorts the "
+                "results itself."
+            ),
         )
 
 
@@ -580,7 +807,7 @@ class _CqlQueryCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_cql_query",
-            display_name="CQL query selects pages",
+            display_name="Run CQL query",
             remediation=(
                 "Select only pages: join `type=page` to the other filters with "
                 "AND. Use no lastModified filter and no ORDER BY. Test the query "
@@ -591,7 +818,7 @@ class _CqlQueryCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return _mode(form_state.config) == ConfluenceIndexingMode.CQL
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         _validate_cql_shape((config.cql_query or "").strip())
         try:
@@ -609,13 +836,33 @@ class _CqlQueryCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied="The credential cannot run CQL searches",
+                denied_row=_RowText(
+                    summary="No permission to run CQL searches",
+                    description=(
+                        "The account cannot search Confluence. (HTTP 403)\n"
+                        "Give the token's user view permission on the pages to "
+                        "index."
+                    ),
+                ),
                 bad_request="Confluence rejected the CQL query",
+                bad_request_row=_RowText(
+                    summary="Confluence rejected the CQL Query",
+                    description=(
+                        "Confluence cannot parse the query. (HTTP 400)\n"
+                        "Fix CQL Query. Test it in Confluence search first."
+                    ),
+                ),
             )
         if not results:
             # Not FAILED: the scope can be empty on purpose (pages come later).
             raise UnexpectedValidationError(
                 "The CQL query matches no page that this credential can read, so "
-                "Onyx cannot verify it. Check the query if pages exist."
+                "Onyx cannot verify it. Check the query if pages exist.",
+                summary="No pages match the query",
+                description=(
+                    "The query matches no page the account can read.\n"
+                    "Check CQL Query if pages should match."
+                ),
             )
         other_types = sorted(
             {str(result.get("type")) for result in results} - {_PAGE_TYPE}
@@ -625,8 +872,14 @@ class _CqlQueryCheck(_ConfluenceCheck):
                 "The CQL query selects content that is not a page (found: "
                 f"{', '.join(other_types)}). Join `type=page` to the other "
                 "filters with AND. Onyx indexes pages, and reads the comments "
-                "and attachments of each page itself."
+                "and attachments of each page itself.",
+                summary=f"Query returns {', '.join(other_types)}, not only pages",
+                description=(
+                    "The connector indexes pages only and reads their comments "
+                    "and attachments itself."
+                ),
             )
+        return CheckOutput(summary=f"First {len(results)} matches are all pages")
 
 
 class _ContentReadCheck(_ConfluenceCheck):
@@ -636,7 +889,7 @@ class _ContentReadCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_content_read",
-            display_name="Page content is readable",
+            display_name="Sample page content",
             remediation=(
                 "Give the token's user view permission on the pages to index. "
                 "OAuth: the `read:confluence-content.all` and `search:confluence` "
@@ -644,9 +897,15 @@ class _ContentReadCheck(_ConfluenceCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         hint = _access_hint(
+            context,
+            config,
+            oauth_scope="read:confluence-content.all",
+            user_permission="view permission on the pages to index",
+        )
+        need = _need(
             context,
             config,
             oauth_scope="read:confluence-content.all",
@@ -664,26 +923,47 @@ class _ContentReadCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied=f"The credential cannot search Confluence pages. {hint}",
+                denied_row=_RowText(
+                    summary="No permission to search pages",
+                    description=(
+                        f"The account cannot search Confluence pages. (HTTP 403)\n{need}"
+                    ),
+                ),
                 bad_request="Confluence rejected the page query",
+                bad_request_row=_RowText(
+                    summary="Confluence rejected the page query",
+                    description=(
+                        "Confluence did not accept the indexing scope query. "
+                        "(HTTP 400)\nCheck Spaces, Pages or CQL Query."
+                    ),
+                ),
             )
         if page is None:
             # Not FAILED: the scope can be empty on purpose (pages come later).
             raise UnexpectedValidationError(
                 "The indexing scope has no page that this credential can read, so "
-                f"Onyx cannot verify that page content is readable. {hint}"
+                f"Onyx cannot verify that page content is readable. {hint}",
+                summary="No pages in the selected scope",
+                description=f"The scope has no page the account can read.\n{need}",
             )
         body = page.get("body") or {}
         if not (body.get("storage") or body.get("view")):
             raise InsufficientPermissionsError(
-                f"Confluence returned a page without its content. {hint}"
+                f"Confluence returned a page without its content. {hint}",
+                summary="Page came back without its content",
+                description=f"Pages would index empty.\n{need}",
             )
+        space_key = (page.get("space") or {}).get("key")
+        return CheckOutput(
+            summary=f"Read a page in {space_key}" if space_key else "Read a page"
+        )
 
 
 class _CommentsReadCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_comments_read",
-            display_name="Page comments are readable",
+            display_name="Sample comments",
             required=False,
             remediation=(
                 "Without comments, pages index without their comments. OAuth: "
@@ -691,10 +971,16 @@ class _CommentsReadCheck(_ConfluenceCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         gateway = _gateway(context)
         hint = _access_hint(
+            context,
+            config,
+            oauth_scope="read:confluence-content.all",
+            user_permission="view permission on the page comments",
+        )
+        need = _need(
             context,
             config,
             oauth_scope="read:confluence-content.all",
@@ -704,8 +990,8 @@ class _CommentsReadCheck(_ConfluenceCheck):
             page = next(_sample_pages(context, config, "version"), None)
             if page is None:
                 # confluence_content_read reports a scope with no pages.
-                return
-            next(
+                return CheckOutput()
+            comment = next(
                 gateway.search_comments(
                     cql=build_comment_cql(str(page["id"]), _label_filter(config)),
                     expand=",".join(COMMENT_EXPANSION_FIELDS),
@@ -715,8 +1001,27 @@ class _CommentsReadCheck(_ConfluenceCheck):
             )
         except HTTPError as e:
             _raise_for_sample_error(
-                e, denied=f"The credential cannot read page comments. {hint}"
+                e,
+                denied=f"The credential cannot read page comments. {hint}",
+                denied_row=_RowText(
+                    summary="No permission to read comments",
+                    description=(
+                        f"Pages would index without their comments. (HTTP 403)\n{need}"
+                    ),
+                ),
             )
+        return CheckOutput(
+            summary="Read comments on a page" if comment is not None else None
+        )
+
+
+def _file_size(size_bytes: int) -> str:
+    """A size as the row line shows it, e.g. 12 KB."""
+    for unit in ("B", "KB"):
+        if size_bytes < 1024:
+            return f"{size_bytes} {unit}"
+        size_bytes //= 1024
+    return f"{size_bytes} MB"
 
 
 def _probe_attachment(attachments: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -739,7 +1044,7 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_attachments_read",
-            display_name="Attachments are readable",
+            display_name="Sample attachments",
             required=False,
             remediation=(
                 "Without attachment access, attachments are not indexed. OAuth: "
@@ -751,10 +1056,16 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return form_state.config.include_attachments
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         gateway = _gateway(context)
         hint = _access_hint(
+            context,
+            config,
+            oauth_scope="readonly:content.attachment:confluence",
+            user_permission="view permission on the page attachments",
+        )
+        need = _need(
             context,
             config,
             oauth_scope="readonly:content.attachment:confluence",
@@ -765,7 +1076,7 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
             for _ in range(_SAMPLE_PAGES):
                 page = next(pages, None)
                 if page is None:
-                    return
+                    return CheckOutput()
                 page_id = str(page["id"])
                 attachments = _take(
                     gateway.search_attachments(
@@ -779,20 +1090,32 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
                     continue
                 attachment = _probe_attachment(attachments)
                 if attachment is None:
-                    return
-                gateway.download_attachment(
+                    return CheckOutput()
+                content = gateway.download_attachment(
                     attachment=attachment, parent_content_id=page_id
                 )
-                return
+                return CheckOutput(
+                    summary=f"Downloaded a {_file_size(len(content))} attachment"
+                )
         except HTTPError as e:
             _raise_for_sample_error(
-                e, denied=f"The credential cannot read attachments. {hint}"
+                e,
+                denied=f"The credential cannot read attachments. {hint}",
+                denied_row=_RowText(
+                    summary="No permission to read attachments",
+                    description=(
+                        f"The account cannot read attachments. (HTTP 403)\n{need}"
+                    ),
+                ),
             )
         except ConfluenceRetriesExhaustedError as e:
             raise UnexpectedValidationError(
                 "The attachment download did not finish: Confluence refused or "
-                f"rate limited every try. {hint}"
+                f"rate limited every try. {hint}",
+                summary=_REFUSED_ROW.summary,
+                description=_REFUSED_ROW.description,
             ) from e
+        return CheckOutput()
 
 
 def _author_id(page: dict[str, Any]) -> str | None:
@@ -813,7 +1136,7 @@ class _UserNamesCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_user_names",
-            display_name="User names are readable",
+            display_name="Read user names",
             required=False,
             remediation=(
                 "Without user details, mentions index as 'Unknown Confluence "
@@ -822,8 +1145,14 @@ class _UserNamesCheck(_ConfluenceCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
+        need = _need(
+            context,
+            config,
+            oauth_scope="read:confluence-user",
+            user_permission="permission to view user profiles",
+        )
         try:
             page = next(
                 _sample_pages(
@@ -835,25 +1164,44 @@ class _UserNamesCheck(_ConfluenceCheck):
             )
         except HTTPError as e:
             _raise_for_sample_error(
-                e, denied="The credential cannot search Confluence pages"
+                e,
+                denied="The credential cannot search Confluence pages",
+                denied_row=_RowText(
+                    summary="No permission to search pages",
+                    description="The account cannot search Confluence pages. (HTTP 403)",
+                ),
             )
         if page is None:
-            return
+            return CheckOutput()
         user_id = _author_id(page)
         if user_id is None:
-            return
+            return CheckOutput()
         try:
             name = _gateway(context).lookup_user_display_name(user_id=user_id)
         except HTTPError as e:
-            _raise_for_http_error(e, denied="The credential cannot read user details")
+            _raise_for_http_error(
+                e,
+                denied="The credential cannot read user details",
+                denied_row=_RowText(
+                    summary="No permission to read user details",
+                    description=(
+                        "Mentions and authors would index as Unknown Confluence "
+                        f"User. (HTTP 403)\n{need}"
+                    ),
+                ),
+            )
         except ConfluenceRetriesExhaustedError as e:
             raise UnexpectedValidationError(
                 "Confluence rate limited or refused every user lookup. Run the "
-                "checks again."
+                "checks again.",
+                summary=_REFUSED_ROW.summary,
+                description=_REFUSED_ROW.description,
             ) from e
         except (requests.ConnectionError, requests.Timeout) as e:
             raise UnreachableValidationError(
-                f"Onyx cannot connect to {config.wiki_base} to read user details."
+                f"Onyx cannot connect to {config.wiki_base} to read user details.",
+                summary=f"Cannot reach {urlparse(config.wiki_base).hostname}",
+                description="The server could not connect to the Site URL.",
             ) from e
         if name is None:
             hint = _access_hint(
@@ -865,8 +1213,13 @@ class _UserNamesCheck(_ConfluenceCheck):
             raise InsufficientPermissionsError(
                 "Onyx cannot read the name of a page author, so user mentions "
                 "index as 'Unknown Confluence User'. The author's account can also "
-                f"be deactivated. {hint}"
+                f"be deactivated. {hint}",
+                summary="Cannot read user names",
+                description=(
+                    f"Mentions and authors would index as Unknown Confluence User.\n{need}"
+                ),
             )
+        return CheckOutput(summary="Read the name of a page author")
 
 
 def build_confluence_indexing_checks() -> list[CapabilityCheck]:
@@ -913,6 +1266,13 @@ _CLOUD_EMAIL_HINT = (
     "anyone (Profile and visibility > Contact), or when the organization makes "
     "emails visible to apps. Users without a visible email get no access in Onyx."
 )
+_SPACE_ADMIN_NEED = (
+    "Make the token's user a space admin of every space to sync, or a Confluence admin."
+)
+_EMAIL_NEED = "Ask users to make their email visible to anyone."
+_DC_EMAIL_NEED = (
+    "Set 'Email address visibility' to allow emails in Security Configuration."
+)
 _REMOTE_API_HINT = (
     "Turn on 'Remote API (XML-RPC & SOAP)' in General Configuration > Further "
     "Configuration, and turn off 'Secure administrator sessions' (WebSudo) in "
@@ -930,12 +1290,21 @@ def _probe_space_key(
     try:
         space = next(_gateway(context).list_spaces(limit=1), None)
     except HTTPError as e:
-        _raise_for_http_error(e, denied="The credential cannot list Confluence spaces")
+        _raise_for_http_error(
+            e,
+            denied="The credential cannot list Confluence spaces",
+            denied_row=_RowText(
+                summary="No permission to list spaces",
+                description="The account cannot list spaces. (HTTP 403)",
+            ),
+        )
     key = space.get("key") if space is not None else None
     if not key:
         raise UnexpectedValidationError(
             "No Confluence space is visible, so Onyx cannot read space "
-            "permissions. confluence_spaces_visible reports why."
+            "permissions. confluence_spaces_visible reports why.",
+            summary="No space to read",
+            description="The account sees no space. List spaces reports why.",
         )
     return str(key)
 
@@ -949,21 +1318,25 @@ def _read_cloud_space_permissions(
         )
     except ConfluenceSpaceNotFoundError as e:
         raise ConnectorValidationError(
-            f"The space `{space_key}` is not visible to this credential."
+            f"The space `{space_key}` is not visible to this credential.",
+            summary=f"Space {space_key} is not visible",
+            description=(
+                "The account cannot see the space. (HTTP 404)\n"
+                "Give the account view permission on the space, or check Spaces."
+            ),
         ) from e
     except ConfluenceRetriesExhaustedError as e:
         raise UnexpectedValidationError(
             f"Confluence refused or rate limited every try to read the "
-            f"permissions of the space `{space_key}`. {_SPACE_ADMIN_HINT}"
+            f"permissions of the space `{space_key}`. {_SPACE_ADMIN_HINT}",
+            summary=_REFUSED_ROW.summary,
+            description=(
+                f"{_REFUSED_ROW.description}\n"
+                "Repeated refusals can mean the account is not a space admin."
+            ),
         ) from e
     except HTTPError as e:
-        _raise_for_http_error(
-            e,
-            denied=(
-                f"The credential cannot read the permissions of the space "
-                f"`{space_key}`. {_SPACE_ADMIN_HINT}"
-            ),
-        )
+        _raise_for_space_permission_error(e, space_key=space_key)
 
 
 def _cloud_subjects(permission: dict[str, Any], kind: str) -> list[dict[str, Any]]:
@@ -989,11 +1362,22 @@ def _restrictions_hint(
     )
 
 
+def _restrictions_need(
+    context: CapabilityCheckContext, config: ConfluenceConnectorConfig
+) -> str:
+    return _need(
+        context,
+        config,
+        oauth_scope="read:confluence-content.permission",
+        user_permission="view permission on the pages to sync",
+    )
+
+
 def _probe_restrictions(
     context: CapabilityCheckContext,
     config: ConfluenceConnectorConfig,
     expand_fields: list[str],
-) -> None:
+) -> str | None:
     """Reads one in-scope page (and one of its attachments) with ``expand_fields``,
     and the restrictions of that page through ``restriction/byOperation``, the
     per-page lookup of the CONFCLOUD-77618 fallback."""
@@ -1007,7 +1391,7 @@ def _probe_restrictions(
     )
     if page is None:
         # confluence_content_read reports a scope with no pages.
-        return
+        return None
     page_id = str(page["id"])
     # Read on every run: the sync can meet CONFCLOUD-77618 on pages this
     # sample does not read, and then the fallback needs this lookup.
@@ -1024,14 +1408,25 @@ def _probe_restrictions(
     hint = _restrictions_hint(context, config)
     if not _has_read_restrictions(page.get("restrictions")):
         raise InsufficientPermissionsError(
-            f"Confluence returned a page without its read restrictions. {hint}"
+            f"Confluence returned a page without its read restrictions. {hint}",
+            summary="Page came back without restrictions",
+            description=(
+                "Confluence did not return who can read the page.\n"
+                f"{_restrictions_need(context, config)}"
+            ),
         )
     if page_restrictions is None:
         raise InsufficientPermissionsError(
             "Confluence does not return the restrictions of a readable page "
             "(restriction/byOperation). Permission sync needs this lookup when "
-            f"CONFCLOUD-77618 blocks the batch read. {hint}"
+            f"CONFCLOUD-77618 blocks the batch read. {hint}",
+            summary="Cannot look up a page's restrictions",
+            description=(
+                "The per-page lookup that sync uses when the batch read fails "
+                "is refused."
+            ),
         )
+    return (page.get("space") or {}).get("key")
 
 
 class _PageRestrictionsReadCheck(_ConfluenceCheck):
@@ -1042,22 +1437,35 @@ class _PageRestrictionsReadCheck(_ConfluenceCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="confluence_page_restrictions_read",
-            display_name="Page restrictions are readable",
+            display_name="Read page restrictions",
             remediation=(
                 "Give the token's user view permission on the pages to sync. "
                 "OAuth: the `read:confluence-content.permission` scope."
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         try:
             try:
-                _probe_restrictions(context, config, RESTRICTIONS_EXPANSION_FIELDS)
+                space_key = _probe_restrictions(
+                    context, config, RESTRICTIONS_EXPANSION_FIELDS
+                )
             except Confcloud77618Error:
                 # confluence_restrictions_batch_read reports the slower sync.
                 _probe_restrictions(
                     context, config, PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS
+                )
+                return CheckOutput(
+                    summary="Read restrictions page by page",
+                    advisories=[
+                        CheckAdvisory(
+                            message=(
+                                "A draft or trashed parent page blocks fast read. "
+                                "The check proved the slower per-page path."
+                            )
+                        )
+                    ],
                 )
         except HTTPError as e:
             _raise_for_sample_error(
@@ -1066,7 +1474,21 @@ class _PageRestrictionsReadCheck(_ConfluenceCheck):
                     "The credential cannot read page restrictions. "
                     f"{_restrictions_hint(context, config)}"
                 ),
+                denied_row=_RowText(
+                    summary="No permission to read restrictions",
+                    description=(
+                        "Permission sync cannot read who can view each page. "
+                        f"(HTTP 403)\n{_restrictions_need(context, config)}"
+                    ),
+                ),
             )
+        return CheckOutput(
+            summary=(
+                f"Read page restrictions in {space_key}"
+                if space_key
+                else "Read page restrictions"
+            )
+        )
 
 
 class _RestrictionsBatchReadCheck(_ConfluenceCheck):
@@ -1079,7 +1501,7 @@ class _RestrictionsBatchReadCheck(_ConfluenceCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="confluence_restrictions_batch_read",
-            display_name="Ancestor restrictions read in one request",
+            display_name="Batch-read restrictions",
             required=False,
             remediation=(
                 "No action is necessary: permission sync is slower but correct. "
@@ -1088,7 +1510,7 @@ class _RestrictionsBatchReadCheck(_ConfluenceCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         try:
             _take(
@@ -1103,13 +1525,21 @@ class _RestrictionsBatchReadCheck(_ConfluenceCheck):
             raise ConnectorValidationError(
                 "Confluence cannot read the restrictions of a parent page "
                 "(CONFCLOUD-77618), so permission sync reads the parent pages "
-                "of each page one at a time. Sync is slower but correct."
+                "of each page one at a time. Sync is slower but correct.",
+                summary="Reads parent pages one at a time",
+                description=(
+                    "A draft or trashed parent page blocks fast read. Sync is "
+                    "slower but correct."
+                ),
             ) from e
         except HTTPError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read page restrictions, so this check cannot run. "
-                "confluence_page_restrictions_read reports why."
+                "confluence_page_restrictions_read reports why.",
+                summary="Cannot read page restrictions",
+                description="Read page restrictions reports why.",
             ) from e
+        return CheckOutput(summary="Read restrictions in one request")
 
 
 class _CloudSpacePermissionsCheck(_ConfluenceCheck):
@@ -1117,7 +1547,7 @@ class _CloudSpacePermissionsCheck(_ConfluenceCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="confluence_space_permissions_read",
-            display_name="Space permissions are readable",
+            display_name="Read space permissions",
             remediation=(
                 "Make the token's user a space admin of every space to sync, or "
                 "a Confluence admin. OAuth: the `read:confluence-space.summary` "
@@ -1128,7 +1558,7 @@ class _CloudSpacePermissionsCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return form_state.config.is_cloud
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         space_key = _probe_space_key(context, config)
         permissions = _read_cloud_space_permissions(context, space_key)
@@ -1139,16 +1569,34 @@ class _CloudSpacePermissionsCheck(_ConfluenceCheck):
         ):
             raise InsufficientPermissionsError(
                 f"Confluence returned the permissions of the space `{space_key}` "
-                f"without the users and groups they grant. {_SPACE_ADMIN_HINT}"
+                f"without the users and groups they grant. {_SPACE_ADMIN_HINT}",
+                summary=f"No view permissions on {space_key}",
+                description=(
+                    "Confluence returned no one who can view the space.\n"
+                    f"{_SPACE_ADMIN_NEED}"
+                ),
             )
+        return CheckOutput(summary=f"Read who can view {space_key}")
 
 
-def _raise_for_dc_permission_error(error: HTTPError, *, space_key: str) -> NoReturn:
+def _raise_for_space_permission_error(error: HTTPError, *, space_key: str) -> NoReturn:
+    """Maps an error of a space-permission read, on Cloud or Data Center."""
     _raise_for_http_error(
         error,
         denied=(
             f"The credential cannot read the permissions of the space "
             f"`{space_key}`. {_SPACE_ADMIN_HINT}"
+        ),
+        denied_row=_not_space_admin_row(space_key, status=403),
+    )
+
+
+def _not_space_admin_row(space_key: str, *, status: int) -> _RowText:
+    return _RowText(
+        summary=f"Not a space admin of {space_key}",
+        description=(
+            f"Only a space admin sees who can view a space. (HTTP {status})\n"
+            f"{_SPACE_ADMIN_NEED}"
         ),
     )
 
@@ -1161,7 +1609,8 @@ class _DcRestSpacePermissionsCheck(_ConfluenceCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="confluence_space_permissions_read_dc_rest",
-            display_name="Space permissions are readable (Data Center 9.1+ REST)",
+            row_id="confluence_space_permissions_read",
+            display_name="Read space permissions",
             remediation=(
                 "Make the token's user a space admin of every space to sync, or "
                 "a Confluence admin. Without admin rights this API returns HTTP "
@@ -1172,29 +1621,38 @@ class _DcRestSpacePermissionsCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return not form_state.config.is_cloud
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         space_key = _probe_space_key(context, config)
         try:
             subjects = read_dc_rest_space_subjects(_gateway(context), space_key)
         except InsufficientPermissionsError as e:
+            not_admin = _not_space_admin_row(space_key, status=500)
             raise InsufficientPermissionsError(
                 f"Confluence returned HTTP 500 for the permissions of the space "
                 f"`{space_key}`, which means the user is not an admin "
-                f"(CONFSERVER-99908). {_SPACE_ADMIN_HINT}"
+                f"(CONFSERVER-99908). {_SPACE_ADMIN_HINT}",
+                summary=not_admin.summary,
+                description=not_admin.description,
             ) from e
         except HTTPError as e:
-            _raise_for_dc_permission_error(e, space_key=space_key)
+            _raise_for_space_permission_error(e, space_key=space_key)
         if subjects is None:
             logger.debug(
                 "No DC REST space-permissions API; the JSON-RPC check applies."
             )
-            return
+            return CheckOutput()
         if not subjects.users and not subjects.groups:
             raise InsufficientPermissionsError(
                 f"Confluence returned no view permissions for the space "
-                f"`{space_key}`. {_SPACE_ADMIN_HINT}"
+                f"`{space_key}`. {_SPACE_ADMIN_HINT}",
+                summary=f"No view permissions on {space_key}",
+                description=(
+                    "Confluence returned no one who can view the space.\n"
+                    f"{_SPACE_ADMIN_NEED}"
+                ),
             )
+        return CheckOutput(summary=f"Read who can view {space_key}")
 
 
 class _DcJsonRpcSpacePermissionsCheck(_ConfluenceCheck):
@@ -1205,7 +1663,8 @@ class _DcJsonRpcSpacePermissionsCheck(_ConfluenceCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="confluence_space_permissions_read_dc_jsonrpc",
-            display_name="Space permissions are readable (Data Center JSON-RPC)",
+            row_id="confluence_space_permissions_read",
+            display_name="Read space permissions",
             remediation=(
                 f"{_REMOTE_API_HINT} Make the token's user a space admin of every "
                 "space to sync, or a Confluence admin."
@@ -1215,7 +1674,7 @@ class _DcJsonRpcSpacePermissionsCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return not form_state.config.is_cloud
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         gateway = _gateway(context)
         space_key = _probe_space_key(context, config)
@@ -1226,24 +1685,34 @@ class _DcJsonRpcSpacePermissionsCheck(_ConfluenceCheck):
                 "Permission sync uses the DC REST API; "
                 "confluence_space_permissions_read_dc_rest reports its errors."
             )
-            return
+            return CheckOutput()
         if rest_subjects is not None:
             logger.debug("Permission sync uses the DC REST API.")
-            return
+            return CheckOutput()
         try:
             subjects = read_dc_jsonrpc_space_subjects(gateway, space_key)
         except HTTPError as e:
             if e.response is not None and e.response.status_code == 401:
                 raise ConnectorValidationError(
                     "Confluence rejected the JSON-RPC call for space permissions "
-                    f"(HTTP 401). {_REMOTE_API_HINT}"
+                    f"(HTTP 401). {_REMOTE_API_HINT}",
+                    summary="Remote API is turned off",
+                    description=(
+                        "Data Center before 9.1 shares space permissions only "
+                        "over JSON-RPC, and it refused the call. (HTTP 401)"
+                    ),
                 ) from e
-            _raise_for_dc_permission_error(e, space_key=space_key)
+            _raise_for_space_permission_error(e, space_key=space_key)
         if not subjects.raw_permissions:
             raise InsufficientPermissionsError(
                 f"Confluence returned no permissions for the space `{space_key}` "
-                f"over JSON-RPC. {_SPACE_ADMIN_HINT}"
+                f"over JSON-RPC. {_SPACE_ADMIN_HINT}",
+                summary=f"No permissions returned for {space_key}",
+                description=(
+                    f"The JSON-RPC call returned no permissions.\n{_SPACE_ADMIN_NEED}"
+                ),
             )
+        return CheckOutput(summary=f"Read who can view {space_key}")
 
 
 class _PermissionUserEmailsCheck(_ConfluenceCheck):
@@ -1259,64 +1728,96 @@ class _PermissionUserEmailsCheck(_ConfluenceCheck):
                 if is_cloud
                 else "confluence_permission_user_emails_dc"
             ),
-            display_name="Users in permissions have emails",
+            row_id="confluence_permission_user_emails",
+            display_name="Read user emails",
             remediation=_CLOUD_EMAIL_HINT if is_cloud else _DC_EMAIL_HINT,
         )
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return form_state.config.is_cloud == self._is_cloud
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         space_key = _probe_space_key(context, config)
         if self._is_cloud:
-            self._run_cloud(context, space_key)
+            with_email, sampled = self._sample_cloud(context, space_key)
         else:
-            self._run_dc(context, space_key)
+            with_email, sampled = self._sample_dc(context, space_key)
+        if not sampled:
+            return CheckOutput()
+        if not with_email:
+            raise InsufficientPermissionsError(
+                f"No user in the permissions of the space `{space_key}` has a "
+                f"visible email, so their access cannot map to Onyx users. "
+                f"{_CLOUD_EMAIL_HINT if self._is_cloud else _DC_EMAIL_HINT}",
+                summary="No user email is visible",
+                description=(
+                    "Users without a visible email would get no access to synced "
+                    f"pages.\n{_EMAIL_NEED if self._is_cloud else _DC_EMAIL_NEED}"
+                ),
+            )
+        missing = sampled - with_email
+        return CheckOutput(
+            summary=f"{with_email} of {sampled} users show an email",
+            advisories=(
+                [
+                    CheckAdvisory(
+                        message=(
+                            f"{missing} users without a visible email get no "
+                            "access to synced pages."
+                        )
+                    )
+                ]
+                if missing
+                else []
+            ),
+        )
 
-    def _run_cloud(self, context: CapabilityCheckContext, space_key: str) -> None:
+    def _sample_cloud(
+        self, context: CapabilityCheckContext, space_key: str
+    ) -> tuple[int, int]:
+        """Users with an email, and users sampled. Permission sync reads only
+        the first user of each permission."""
         try:
             permissions = _read_cloud_space_permissions(context, space_key)
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read the space permissions, so this check cannot "
-                "run. confluence_space_permissions_read reports why."
+                "run. confluence_space_permissions_read reports why.",
+                summary="Cannot read space permissions",
+                description="Read space permissions reports why.",
             ) from e
-        # Permission sync reads only the first user of each permission.
         users = [
             subjects[0]
             for permission in permissions
             if (subjects := _cloud_subjects(permission, "user"))
             and subjects[0].get("accountType") != _APP_USER_TYPE
         ]
-        if users and not any(user.get("email") for user in users):
-            raise InsufficientPermissionsError(
-                f"No user in the permissions of the space `{space_key}` has a "
-                f"visible email, so their access cannot map to Onyx users. "
-                f"{_CLOUD_EMAIL_HINT}"
-            )
+        return sum(1 for user in users if user.get("email")), len(users)
 
-    def _run_dc(self, context: CapabilityCheckContext, space_key: str) -> None:
+    def _sample_dc(
+        self, context: CapabilityCheckContext, space_key: str
+    ) -> tuple[int, int]:
+        """Users with an email, and users sampled. Each needs a lookup."""
         gateway = _gateway(context)
         try:
             subjects = read_dc_space_subjects(gateway, space_key)
         except (HTTPError, ConnectorValidationError) as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read the space permissions, so this check cannot "
-                "run. The space-permission checks report why."
+                "run. The space-permission checks report why.",
+                summary="Cannot read space permissions",
+                description="Read space permissions reports why.",
             ) from e
         sample = sorted(subjects.users)[:_SAMPLE_PERMISSION_USERS]
-        if sample and not any(
-            gateway.get_user_email(
+        with_email = sum(
+            1
+            for user in sample
+            if gateway.get_user_email(
                 variant=subjects.user_email_variant(), user=user, cached=False
             )
-            for user in sample
-        ):
-            raise InsufficientPermissionsError(
-                f"Onyx cannot read the email of any user in the permissions of "
-                f"the space `{space_key}`, so their access cannot map to Onyx "
-                f"users. {_DC_EMAIL_HINT}"
-            )
+        )
+        return with_email, len(sample)
 
 
 class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
@@ -1327,7 +1828,7 @@ class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="confluence_anonymous_space_access",
-            display_name="Anonymous space access is readable",
+            display_name="Read anonymous access",
             required=False,
             remediation=(
                 "Without it, spaces open to anonymous users sync as not public. "
@@ -1338,19 +1839,29 @@ class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return not form_state.config.is_cloud
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         space_key = _probe_space_key(context, config)
         try:
-            _gateway(context).get_anonymous_space_permissions(space_key=space_key)
+            operations = _gateway(context).get_anonymous_space_permissions(
+                space_key=space_key
+            )
         except InsufficientPermissionsError as e:
             raise InsufficientPermissionsError(
                 f"Confluence returned HTTP 500 for the anonymous permissions of "
                 f"the space `{space_key}`, which means the user is not an admin "
-                f"(CONFSERVER-99908). {_SPACE_ADMIN_HINT}"
+                f"(CONFSERVER-99908). {_SPACE_ADMIN_HINT}",
+                summary=f"Not an admin of {space_key}",
+                description=(
+                    "Without admin rights, spaces open to anonymous users sync as "
+                    "not public. (HTTP 500)"
+                ),
             ) from e
         except HTTPError as e:
-            _raise_for_dc_permission_error(e, space_key=space_key)
+            _raise_for_space_permission_error(e, space_key=space_key)
+        return CheckOutput(
+            summary=f"{space_key} anonymous access: {'on' if operations else 'off'}"
+        )
 
 
 def _user_list_variant(is_cloud: bool) -> ConfluenceUserListVariant:
@@ -1361,6 +1872,17 @@ def _user_listing_hint(
     context: CapabilityCheckContext, config: ConfluenceConnectorConfig
 ) -> str:
     return _access_hint(
+        context,
+        config,
+        oauth_scope="read:confluence-user",
+        user_permission="the global permission to browse users",
+    )
+
+
+def _user_listing_need(
+    context: CapabilityCheckContext, config: ConfluenceConnectorConfig
+) -> str:
+    return _need(
         context,
         config,
         oauth_scope="read:confluence-user",
@@ -1389,6 +1911,13 @@ def _sample_users(
                 "The credential cannot list Confluence users. "
                 f"{_user_listing_hint(context, config)}"
             ),
+            denied_row=_RowText(
+                summary="No permission to list users",
+                description=(
+                    "The account cannot list users. (HTTP 403)\n"
+                    f"{_user_listing_need(context, config)}"
+                ),
+            ),
         )
     return sorted(users, key=lambda user: user.type == _APP_USER_TYPE)
 
@@ -1408,6 +1937,7 @@ class _GroupSyncCheck(_ConfluenceCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id=check_id if is_cloud else f"{check_id}_dc",
+            row_id=check_id,
             display_name=display_name,
             remediation=remediation,
         )
@@ -1421,7 +1951,7 @@ class _UserListingCheck(_GroupSyncCheck):
         super().__init__(
             is_cloud=is_cloud,
             check_id="confluence_user_listing",
-            display_name="Users can be listed",
+            display_name="List users",
             remediation=(
                 "Give the token's user the global permission to browse users. "
                 "OAuth: the `read:confluence-user` scope. Data Center before "
@@ -1430,12 +1960,19 @@ class _UserListingCheck(_GroupSyncCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
-        if not _sample_users(context, config, self._is_cloud):
+        users = _sample_users(context, config, self._is_cloud)
+        if not users:
             raise InsufficientPermissionsError(
-                f"Confluence listed no users. {_user_listing_hint(context, config)}"
+                f"Confluence listed no users. {_user_listing_hint(context, config)}",
+                summary="Confluence listed no users",
+                description=(
+                    f"The account sees no users.\n{_user_listing_need(context, config)}"
+                ),
             )
+        count = f"{len(users)}{'+' if len(users) >= _SAMPLE_USERS else ''}"
+        return CheckOutput(summary=f"{count} users listed")
 
 
 class _GroupMembershipCheck(_GroupSyncCheck):
@@ -1443,17 +1980,23 @@ class _GroupMembershipCheck(_GroupSyncCheck):
         super().__init__(
             is_cloud=is_cloud,
             check_id="confluence_group_membership",
-            display_name="Group memberships are readable",
+            display_name="Read group members",
             remediation=(
                 "Give the token's user the global permission to browse users. "
                 "OAuth: the `read:confluence-groups` scope."
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         gateway = _gateway(context)
         hint = _access_hint(
+            context,
+            config,
+            oauth_scope="read:confluence-groups",
+            user_permission="the global permission to browse users",
+        )
+        need = _need(
             context,
             config,
             oauth_scope="read:confluence-groups",
@@ -1463,21 +2006,34 @@ class _GroupMembershipCheck(_GroupSyncCheck):
         if not users:
             raise UnexpectedValidationError(
                 "Confluence listed no users, so Onyx cannot read group "
-                "memberships. confluence_user_listing reports why."
+                "memberships. confluence_user_listing reports why.",
+                summary="No users to sample",
+                description="List users reports why.",
             )
         try:
             for user in users[:_SAMPLE_PERMISSION_USERS]:
                 if next(gateway.list_user_groups(user_id=user.user_id), None):
-                    return
+                    return CheckOutput(summary="Read the groups of a listed user")
         except HTTPError as e:
             _raise_for_http_error(
-                e, denied=f"The credential cannot read group memberships. {hint}"
+                e,
+                denied=f"The credential cannot read group memberships. {hint}",
+                denied_row=_RowText(
+                    summary="No permission to read groups",
+                    description=(
+                        f"The account cannot read group memberships. (HTTP 403)\n{need}"
+                    ),
+                ),
             )
         # The reads succeeded: the sampled users can have no groups, and group
         # sync reads every user.
         raise UnexpectedValidationError(
             "The first listed users are in no group, so Onyx cannot verify that "
-            f"group memberships are readable. {hint}"
+            f"group memberships are readable. {hint}",
+            summary=f"First {_SAMPLE_PERMISSION_USERS} users are in no group",
+            description=(
+                f"The reads worked, but the sampled users have no groups.\n{need}"
+            ),
         )
 
 
@@ -1489,11 +2045,11 @@ class _GroupUserEmailsCheck(_GroupSyncCheck):
         super().__init__(
             is_cloud=is_cloud,
             check_id="confluence_group_user_emails",
-            display_name="Listed users have emails",
+            display_name="Read member emails",
             remediation=_CLOUD_EMAIL_HINT if is_cloud else _DC_EMAIL_HINT,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         gateway = _gateway(context)
         people = [
@@ -1503,22 +2059,35 @@ class _GroupUserEmailsCheck(_GroupSyncCheck):
         ]
         if not people:
             # confluence_user_listing reports an empty listing.
-            return
+            return CheckOutput()
         if self._is_cloud or CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE:
             # The listing carries the emails, so every listed person costs
             # nothing extra.
-            has_email = any(user.email for user in people)
+            sampled = len(people)
+            with_email = sum(1 for user in people if user.email)
         else:
-            has_email = any(
-                gateway.get_listed_user_email(username=user.username, cached=False)
-                for user in people[:_SAMPLE_PERMISSION_USERS]
-                if user.username
+            usernames = [user.username for user in people if user.username][
+                :_SAMPLE_PERMISSION_USERS
+            ]
+            sampled = len(usernames)
+            with_email = sum(
+                1
+                for username in usernames
+                if gateway.get_listed_user_email(username=username, cached=False)
             )
-        if not has_email:
+        if not with_email:
             raise InsufficientPermissionsError(
                 "No listed user has an email, so group members cannot map to "
-                f"Onyx users. {_CLOUD_EMAIL_HINT if self._is_cloud else _DC_EMAIL_HINT}"
+                f"Onyx users. {_CLOUD_EMAIL_HINT if self._is_cloud else _DC_EMAIL_HINT}",
+                summary="No user email is visible",
+                description=(
+                    "Members without a visible email would be left out of synced "
+                    f"groups.\n{_EMAIL_NEED if self._is_cloud else _DC_EMAIL_NEED}"
+                ),
             )
+        return CheckOutput(
+            summary=f"{with_email} of {sampled} listed users have emails"
+        )
 
 
 def build_confluence_doc_permission_sync_checks() -> list[CapabilityCheck]:

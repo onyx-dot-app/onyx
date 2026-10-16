@@ -335,6 +335,7 @@ def _unfinished_results(
         ) or CapabilityCheckResult(
             capability=check.capability,
             check_id=check.check_id,
+            row_id=check.row_id,
             display_name=check.display_name,
             required=check.required,
             status=CapabilityCheckStatus.INCOMPLETE,
@@ -541,6 +542,7 @@ def _discovery_not_run_result(check: CapabilityCheck[Any]) -> CapabilityCheckRes
     return CapabilityCheckResult(
         capability=check.capability,
         check_id=check.check_id,
+        row_id=check.row_id,
         display_name=check.display_name,
         required=False,
         status=CapabilityCheckStatus.SKIPPED,
