@@ -13563,7 +13563,7 @@
       },
       "usedFor": "Verwendet für {usages}",
       "usage": {
-        "llmProvider": "LLM-Anbieter **{name}**",
+        "llmProvider": "Modellanbieter **{name}**",
         "imageGeneration": "Bildgenerierung **{name}**",
         "voiceProvider": "Sprachanbieter **{name}**",
         "embeddingProvider": "Embedding-Anbieter **{name}**",

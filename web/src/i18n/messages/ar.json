@@ -13563,7 +13563,7 @@
       },
       "usedFor": "مستخدم في {usages}",
       "usage": {
-        "llmProvider": "موفر LLM **{name}**",
+        "llmProvider": "موفر النماذج **{name}**",
         "imageGeneration": "إنشاء الصور **{name}**",
         "voiceProvider": "موفر الصوت **{name}**",
         "embeddingProvider": "موفر التضمين **{name}**",

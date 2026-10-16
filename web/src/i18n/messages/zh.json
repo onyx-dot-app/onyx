@@ -13563,7 +13563,7 @@
       },
       "usedFor": "用于 {usages}",
       "usage": {
-        "llmProvider": "LLM 提供商 **{name}**",
+        "llmProvider": "模型提供商 **{name}**",
         "imageGeneration": "图像生成 **{name}**",
         "voiceProvider": "语音提供商 **{name}**",
         "embeddingProvider": "嵌入提供商 **{name}**",

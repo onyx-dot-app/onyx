@@ -13563,7 +13563,7 @@
       },
       "usedFor": "사용처: {usages}",
       "usage": {
-        "llmProvider": "LLM 제공업체 **{name}**",
+        "llmProvider": "모델 제공업체 **{name}**",
         "imageGeneration": "이미지 생성 **{name}**",
         "voiceProvider": "음성 제공업체 **{name}**",
         "embeddingProvider": "임베딩 제공업체 **{name}**",
