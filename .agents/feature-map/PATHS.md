@@ -162,6 +162,7 @@ so verify the callers rather than a single component.
 | `backend/onyx/server/features/build/` | craft-sessions |
 | `backend/onyx/server/features/build/sandbox/` | craft-sandboxes, craft-sessions |
 | `backend/onyx/server/features/build/sandbox/image/guest/` | craft-sandboxes, craft-sessions |
+| `backend/tests/integration/tests/craft/k8s/test_session_provisioning_api.py` | craft-sandboxes, craft-sessions |
 | `backend/onyx/sandbox_proxy/` | craft-webapp-proxy |
 | `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
 | `backend/onyx/onyxbot/discord/` | discord-bot |
