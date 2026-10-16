@@ -47,7 +47,9 @@ export class AdminConnectorDetailPage {
       .getByRole("button", { name: /Last \d+ (hours|days)/ })
       .first();
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
-    this.noRunsMessage = page.getByText("No runs yet", { exact: true });
+    this.noRunsMessage = page.getByText("No recent indexing runs", {
+      exact: true,
+    });
     this.activityPanel = page.getByTestId("connector-activity");
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
@@ -57,10 +59,11 @@ export class AdminConnectorDetailPage {
     this.deleteMenuItem = page.getByRole("menuitem", { name: /Delete/i });
     // By id: the header's title pencil is also a button named "Edit".
     this.filesEditButton = page.getByTestId("file-manager-edit");
-    this.editConnectorButton = page.getByRole("button", {
-      name: "Edit connector",
-      exact: true,
-    });
+    // The header button comes first; an open Index Configurations section
+    // shows a second "Edit Configs" button.
+    this.editConnectorButton = page
+      .getByRole("button", { name: "Edit Configs", exact: true })
+      .first();
     this.indexConfigurationsToggle = page.getByRole("button", {
       name: "Expand Index Configurations",
     });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -12,6 +12,7 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
+import { formatTimestamp } from "@opal/time";
 import {
   SvgAlertTriangle,
   SvgCheckAll,
@@ -37,7 +38,6 @@ import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPa
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import {
   RUN_KIND_ICONS,
-  RUN_TIME_FORMAT,
   isActive,
   isFailed,
   runErrorMessage,
@@ -123,6 +123,24 @@ function cardState(
   }
 }
 
+interface FailureReason {
+  /** The error's first sentence, without its end mark. */
+  reason: string;
+  /** What follows the first sentence; `null` when nothing does. */
+  rest: string | null;
+}
+
+/** Splits an error into its first sentence and the rest. */
+function splitReason(message: string): FailureReason {
+  const trimmed = message.trim();
+  const first = /^[\s\S]+?[.!?](?=\s|$)/.exec(trimmed)?.[0] ?? trimmed;
+  const rest = trimmed.slice(first.length).trim();
+  return {
+    reason: first.replace(/[.!?]+$/, ""),
+    rest: rest === "" ? null : rest,
+  };
+}
+
 export interface ActivityCardProps {
   ccPairId: number;
   run: CCPairRun;
@@ -168,7 +186,6 @@ export default function ActivityCard({
       open ? popover : current === popover ? null : current
     );
   const tRuns = useTranslations("admin.connector.runs");
-  const format = useFormatter();
   const active = isActive(run);
   const style = GROUP_STYLE[group];
   const StatusIcon = active ? IconLoader : style.icon;
@@ -193,12 +210,22 @@ export default function ActivityCard({
   const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure explains itself. A run with errors reports what it still did.
+  // A failure's title carries the error's first sentence, its description the rest.
   let description: string | null = null;
   // A failure a newer run superseded still explains itself.
+  // A failure's title carries the error's first sentence, its description the rest.
+  let title = t(`title.${run.kind}.${state}`);
   if (isFailed(run)) {
-    description =
-      runErrorMessage(run) ??
-      (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
+    const message = runErrorMessage(run);
+    const split = message ? splitReason(message) : null;
+    if (split !== null && split.reason !== "") {
+      title = t(`title.${run.kind}.failedWith`, { reason: split.reason });
+      description = split.rest;
+    } else {
+      description = listsChecks
+        ? t("description.checksFailed", { count: warnings })
+        : null;
+    }
   } else if (minutes !== null) {
     description = t(`description.${run.kind}`, {
       count: runMoved(run),
@@ -287,7 +314,7 @@ export default function ActivityCard({
                   color={mutedColor}
                   wordWrap="whitespace-nowrap"
                 >
-                  {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
+                  {formatTimestamp(run.time_created)}
                 </Text>
                 <Section
                   flexDirection="row"
@@ -315,7 +342,7 @@ export default function ActivityCard({
                   font="main-ui-body"
                   color={closed ? "text-03" : "text-04"}
                 >
-                  {t(`title.${run.kind}.${state}`)}
+                  {title}
                 </Text>
                 {description !== null && (
                   <Text font="secondary-body" color={mutedColor} maxLines={3}>

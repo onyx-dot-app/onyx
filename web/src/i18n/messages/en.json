@@ -2237,18 +2237,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Cannot re-index while indexing is already in progress",
-            "invalid": "Fix the connector configuration before re-indexing",
-            "paused": "Resume the connector before re-indexing"
+            "invalid": "Fix the connector configuration before re-indexing"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pause Indexing",
-            "description": "Cancel all in-progress and future indexing runs and syncs."
+            "label": "Pause Indexing & Syncs",
+            "description": "Cancel in-progress and future indexing runs and permission syncs. Indexed docs will fall out-of-sync but remain searchable."
           },
           "resume": {
-            "label": "Resume Indexing",
-            "description": "Allow scheduled indexing runs and syncs again."
+            "label": "Resume Indexing & Syncs",
+            "description": "Restart indexing runs and permission syncs."
           },
           "tooltip": {
             "updating": "Status update in progress"
@@ -2263,7 +2262,11 @@
         },
         "fullReindex": {
           "label": "Full Re-index",
-          "description": "Re-index all docs from the source. This may take hours or days depending on corpus size."
+          "description": "Re-index all docs from the source. This may take **hours or days** depending on corpus size."
+        },
+        "startIndexing": {
+          "label": "Start Indexing",
+          "description": "Skip connector checks and index now."
         }
       },
       "reEnableModal": {
@@ -2303,16 +2306,17 @@
       },
       "statusCard": {
         "documentsIndexed": {
-          "label": "Documents Indexed"
+          "label": "Indexed documents"
         },
         "indexingSpeed": "{speed} docs/min",
         "lastIndexed": {
           "value": "Last indexed {when}"
         },
-        "title": "Indexing Status",
+        "statusLine": "Indexing Status - {detail}",
         "documents": {
           "label": "Recent / Total",
-          "total": "/ {total}"
+          "total": "/ {total}",
+          "totalLabel": "Total"
         },
         "throughput": {
           "ariaLabel": "Documents indexed over time",
@@ -2408,7 +2412,8 @@
           "displayName": "• {name}",
           "docsUnit": "{count, plural, one {doc} other {docs}}"
         },
-        "summary": "{realm} • {counts}"
+        "summary": "{realm} • {counts}",
+        "hostPrefix": "{host}: {realm}"
       },
       "sharing": {
         "title": "Sharing Settings",
@@ -2469,9 +2474,8 @@
         "figures": {
           "indexed": "indexed",
           "synced": "synced",
-          "memberships": "memberships",
           "removed": "removed",
-          "checks": "checks run"
+          "checksRun": "{count, plural, one {# check run} other {# checks run}}"
         },
         "counts": {
           "newDocs": "{count, plural, one {# new document} other {# new documents}}",
@@ -2488,7 +2492,7 @@
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}"
         },
         "search": {
-          "placeholder": "Search indexing runs..."
+          "placeholder": "Search indexing runs…"
         },
         "window": {
           "label": "Time range",
@@ -2511,7 +2515,7 @@
           "title": "Couldn't load the runs."
         },
         "empty": {
-          "title": "No runs yet",
+          "title": "No recent indexing runs",
           "filteredTitle": "No runs match these filters.",
           "description": "Runs are scheduled in the background and may take a moment to appear."
         },
@@ -2535,7 +2539,7 @@
       },
       "activity": {
         "search": {
-          "placeholder": "Search activity history..."
+          "placeholder": "Search activity history…"
         },
         "counts": {
           "failures": "{count, plural, one {# run failed} other {# runs failed}}",
@@ -2543,7 +2547,7 @@
         },
         "filter": {
           "label": "Show",
-          "all": "All levels",
+          "all": "All Levels",
           "failures": "Failures",
           "errors": "Errors",
           "other": "Other",
@@ -2556,60 +2560,65 @@
         },
         "title": {
           "indexing": {
-            "failed": "Indexing failed",
-            "running": "Indexing in progress with errors",
-            "stopped": "Indexing stopped with errors",
-            "errors": "Indexing completed with errors",
-            "resolved": "Indexing errors resolved",
-            "succeeded": "Indexing completed successfully",
-            "inProgress": "Indexing in progress",
-            "canceled": "Indexing stopped"
+            "failed": "Indexing failed.",
+            "failedWith": "Indexing failed: {reason}.",
+            "running": "Indexing in progress with errors.",
+            "stopped": "Indexing stopped with errors.",
+            "errors": "Indexing completed with errors.",
+            "resolved": "Indexing errors resolved.",
+            "succeeded": "Indexing completed successfully.",
+            "inProgress": "Indexing in progress.",
+            "canceled": "Indexing stopped."
           },
           "doc_permission_sync": {
-            "failed": "Permissions sync failed",
-            "running": "Permissions syncing with errors",
-            "stopped": "Permissions sync stopped with errors",
-            "errors": "Permissions synced with errors",
-            "resolved": "Permissions sync errors resolved",
-            "succeeded": "Permissions synced successfully",
-            "inProgress": "Permissions syncing",
-            "canceled": "Permissions sync stopped"
+            "failed": "Permissions sync failed.",
+            "failedWith": "Permissions sync failed: {reason}.",
+            "running": "Permissions syncing with errors.",
+            "stopped": "Permissions sync stopped with errors.",
+            "errors": "Permissions synced with errors.",
+            "resolved": "Permissions sync errors resolved.",
+            "succeeded": "Permissions synced successfully.",
+            "inProgress": "Permissions syncing.",
+            "canceled": "Permissions sync stopped."
           },
           "group_sync": {
-            "failed": "Group membership sync failed",
-            "running": "Group membership syncing with errors",
-            "stopped": "Group membership sync stopped with errors",
-            "errors": "Group membership synced with errors",
-            "resolved": "Group membership sync errors resolved",
-            "succeeded": "Group membership synced successfully",
-            "inProgress": "Group membership syncing",
-            "canceled": "Group membership sync stopped"
+            "failed": "Group membership sync failed.",
+            "failedWith": "Group membership sync failed: {reason}.",
+            "running": "Group membership syncing with errors.",
+            "stopped": "Group membership sync stopped with errors.",
+            "errors": "Group membership synced with errors.",
+            "resolved": "Group membership sync errors resolved.",
+            "succeeded": "Group membership synced successfully.",
+            "inProgress": "Group membership syncing.",
+            "canceled": "Group membership sync stopped."
           },
           "pruning": {
-            "failed": "Pruning failed",
-            "running": "Pruning in progress with errors",
-            "stopped": "Pruning stopped with errors",
-            "errors": "Pruning completed with errors",
-            "resolved": "Pruning errors resolved",
-            "succeeded": "Pruning completed successfully",
-            "inProgress": "Pruning in progress",
-            "canceled": "Pruning stopped"
+            "failed": "Pruning failed.",
+            "failedWith": "Pruning failed: {reason}.",
+            "running": "Pruning in progress with errors.",
+            "stopped": "Pruning stopped with errors.",
+            "errors": "Pruning completed with errors.",
+            "resolved": "Pruning errors resolved.",
+            "succeeded": "Pruning completed successfully.",
+            "inProgress": "Pruning in progress.",
+            "canceled": "Pruning stopped."
           },
           "checks": {
-            "failed": "Connector checks failed",
-            "running": "Connector checks running with errors",
-            "stopped": "Connector checks stopped with errors",
-            "errors": "Connector checks completed with errors",
-            "resolved": "Connector check errors resolved",
-            "succeeded": "Connector checks passed",
-            "inProgress": "Connector checks running",
-            "canceled": "Connector checks stopped"
+            "failed": "Connector checks failed.",
+            "failedWith": "Connector checks failed: {reason}.",
+            "running": "Connector checks running with errors.",
+            "stopped": "Connector checks stopped with errors.",
+            "errors": "Connector checks completed with errors.",
+            "resolved": "Connector check errors resolved.",
+            "succeeded": "Connector checks passed.",
+            "inProgress": "Connector checks running.",
+            "canceled": "Connector checks stopped."
           }
         },
         "description": {
           "indexing": "{count, plural, one {# doc indexed} other {# docs indexed}}. Index run time {minutes, plural, one {# minute} other {# minutes}}.",
-          "doc_permission_sync": "{count, plural, one {# doc synced} other {# docs synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
-          "group_sync": "{count, plural, one {# membership synced} other {# memberships synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "doc_permission_sync": "{count, plural, one {# user permission synced} other {# user permissions synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "group_sync": "{count, plural, one {# group synced} other {# groups synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
           "pruning": "{count, plural, one {# doc removed} other {# docs removed}}. Pruning run time {minutes, plural, one {# minute} other {# minutes}}.",
           "checks": "{count, plural, one {# check run} other {# checks run}}. Check run time {minutes, plural, one {# minute} other {# minutes}}.",
           "checksFailed": "{count, plural, one {# check failed} other {# checks failed}}."
@@ -2627,6 +2636,7 @@
         "more": "Show more",
         "empty": {
           "title": "No recent activity",
+          "resolved": "No resolved errors",
           "filtered": "Nothing matches this search.",
           "failures": "No failures",
           "errors": "No errors",
@@ -2650,7 +2660,7 @@
           "open": "Open the document"
         },
         "trace": {
-          "runId": "• Run ID: {id}",
+          "header": "Stack Trace • Run ID: {id}",
           "copy": "Copy the stack trace"
         },
         "actions": {
@@ -6840,12 +6850,12 @@
         "viewLogs": "View Logs",
         "panel": {
           "title": "Activity History",
-          "close": "Hide activity history"
+          "close": "Close Panel"
         }
       },
       "list": {
         "search": {
-          "placeholder": "Search connectors..."
+          "placeholder": "Search connectors…"
         },
         "statusFilter": {
           "label": "Status",
@@ -6888,7 +6898,8 @@
         },
         "loadError": "Couldn't load the connectors.",
         "units": "{count, plural, one {connector} other {connectors}}"
-      }
+      },
+      "title": "Connector Indexing Status"
     },
     "languageModels": {
       "availableProviders": {
@@ -10182,7 +10193,7 @@
       "groups": {
         "failed": "{count} Failed",
         "indeterminate": "{count} Unverified",
-        "passed": "{count} Completed",
+        "passed": "{count} Successful",
         "skipped": "{count} Skipped",
         "running": "{count} Running",
         "expected": "{count} Expected"
@@ -10207,7 +10218,7 @@
       },
       "foldButton": {
         "fold": "Fold",
-        "expand": "Expand"
+        "expand": "View All"
       },
       "titleCount": "({complete}/{total})",
       "summary": {
