@@ -2234,18 +2234,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Cannot re-index while indexing is already in progress",
-            "invalid": "Fix the connector configuration before re-indexing",
-            "paused": "Resume the connector before re-indexing"
+            "invalid": "Fix the connector configuration before re-indexing"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pause Indexing",
-            "description": "Cancel all in-progress and future indexing runs and syncs."
+            "label": "Pause Indexing & Syncs",
+            "description": "Cancel in-progress and future indexing runs and permission syncs. Indexed docs will fall out-of-sync but remain searchable."
           },
           "resume": {
-            "label": "Resume Indexing",
-            "description": "Allow scheduled indexing runs and syncs again."
+            "label": "Resume Indexing & Syncs",
+            "description": "Restart indexing runs and permission syncs."
           },
           "tooltip": {
             "updating": "Status update in progress"
@@ -2260,7 +2259,11 @@
         },
         "fullReindex": {
           "label": "Full Re-index",
-          "description": "Re-index all docs from the source. This may take hours or days depending on corpus size."
+          "description": "Re-index all docs from the source. This may take **hours or days** depending on corpus size."
+        },
+        "startIndexing": {
+          "label": "Start Indexing",
+          "description": "Skip connector checks and index now."
         }
       },
       "reEnableModal": {

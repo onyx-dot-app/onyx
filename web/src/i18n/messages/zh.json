@@ -2234,18 +2234,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "索引正在进行中，无法重新索引",
-            "invalid": "重新索引前请先修复连接器配置",
-            "paused": "重新索引前请先恢复连接器"
+            "invalid": "重新索引前请先修复连接器配置"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "暂停索引",
-            "description": "取消所有进行中和未来的索引运行与同步。"
+            "label": "暂停索引与同步",
+            "description": "取消进行中和未来的索引运行与权限同步。已索引的文档将不再同步，但仍可搜索。"
           },
           "resume": {
-            "label": "恢复索引",
-            "description": "重新允许计划的索引运行与同步。"
+            "label": "恢复索引与同步",
+            "description": "重新启动索引运行与权限同步。"
           },
           "tooltip": {
             "updating": "状态更新进行中"
@@ -2260,7 +2259,11 @@
         },
         "fullReindex": {
           "label": "完全重新索引",
-          "description": "重新索引来源中的所有文档。视语料规模可能需要数小时或数天。"
+          "description": "重新索引来源中的所有文档。视语料规模可能需要 **数小时或数天**。"
+        },
+        "startIndexing": {
+          "label": "开始索引",
+          "description": "跳过连接器检查并立即索引。"
         }
       },
       "reEnableModal": {

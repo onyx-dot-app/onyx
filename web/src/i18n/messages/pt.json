@@ -2234,18 +2234,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Não é possível reindexar enquanto uma indexação está em andamento",
-            "invalid": "Corrija a configuração do conector antes de reindexar",
-            "paused": "Retome o conector antes de reindexar"
+            "invalid": "Corrija a configuração do conector antes de reindexar"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pausar indexação",
-            "description": "Cancelar todas as indexações e sincronizações em andamento e futuras."
+            "label": "Pausar indexação e sincronizações",
+            "description": "Cancelar as indexações e sincronizações de permissões em andamento e futuras. Os documentos indexados ficarão dessincronizados, mas continuarão pesquisáveis."
           },
           "resume": {
-            "label": "Retomar indexação",
-            "description": "Permitir novamente as indexações e sincronizações agendadas."
+            "label": "Retomar indexação e sincronizações",
+            "description": "Reiniciar as indexações e as sincronizações de permissões."
           },
           "tooltip": {
             "updating": "Atualização de status em andamento"
@@ -2260,7 +2259,11 @@
         },
         "fullReindex": {
           "label": "Reindexar tudo",
-          "description": "Reindexar todos os documentos da fonte. Pode levar horas ou dias dependendo do tamanho."
+          "description": "Reindexar todos os documentos da fonte. Pode levar **horas ou dias** dependendo do tamanho."
+        },
+        "startIndexing": {
+          "label": "Iniciar indexação",
+          "description": "Ignorar as verificações do conector e indexar agora."
         }
       },
       "reEnableModal": {

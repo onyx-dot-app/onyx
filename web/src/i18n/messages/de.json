@@ -2234,18 +2234,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Eine Neuindizierung ist nicht möglich, während bereits eine Indizierung läuft",
-            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung",
-            "paused": "Setzen Sie den Konnektor vor der Neuindizierung fort"
+            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "Indizierung pausieren",
-            "description": "Alle laufenden und künftigen Indexläufe und Synchronisationen abbrechen."
+            "label": "Indizierung & Synchronisation pausieren",
+            "description": "Laufende und künftige Indexläufe und Berechtigungssynchronisationen abbrechen. Indizierte Dokumente sind dann nicht mehr synchron, bleiben aber durchsuchbar."
           },
           "resume": {
-            "label": "Indizierung fortsetzen",
-            "description": "Geplante Indexläufe und Synchronisationen wieder zulassen."
+            "label": "Indizierung & Synchronisation fortsetzen",
+            "description": "Indexläufe und Berechtigungssynchronisationen wieder starten."
           },
           "tooltip": {
             "updating": "Statusaktualisierung läuft"
@@ -2260,7 +2259,11 @@
         },
         "fullReindex": {
           "label": "Vollständig neu indizieren",
-          "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang Stunden oder Tage dauern."
+          "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang **Stunden oder Tage** dauern."
+        },
+        "startIndexing": {
+          "label": "Indexierung starten",
+          "description": "Konnektorprüfungen überspringen und jetzt indexieren."
         }
       },
       "reEnableModal": {
