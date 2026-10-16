@@ -25,7 +25,7 @@ function isBackendPlaceholder(value: string): boolean {
 
 type InputPasswordTypeInProps = Omit<
   InputTypeInProps,
-  "type" | "rightChildren" | "searchIcon" | "variant"
+  "type" | "rightChildren" | "searchIcon" | "variant" | "clearButton"
 > & {
   /** Controls after the reveal toggle, at the field's end (a dropdown chevron). */
   rightChildren?: React.ReactNode;
@@ -67,7 +67,7 @@ type InputPasswordTypeInProps = Omit<
  * docs): an idle ✱ overlay by default, or the browser's own dots.
  *
  * Features:
- * - Show/hide toggle button only visible when input has value or is focused
+ * - Show/hide toggle button, always visible
  * - When revealed, the toggle icon uses action style (more prominent)
  * - When hidden, the toggle icon uses the default tertiary style (muted)
  * - Optional `isNonRevealable` prop to disable reveal (for stored backend values)
@@ -82,7 +82,6 @@ function InputPasswordTypeIn({
   onBlur,
   disabled,
   error,
-  clearButton = false,
   rightChildren,
   ...props
 }: InputPasswordTypeInProps) {
@@ -111,7 +110,6 @@ function InputPasswordTypeIn({
     []
   );
 
-  const showToggleButton = hasValue || isFocused;
   const isRevealed = isPasswordVisible && !effectiveNonRevealable;
   const toggleLabel = effectiveNonRevealable
     ? strings.valueCannotBeRevealed
@@ -150,7 +148,6 @@ function InputPasswordTypeIn({
         onFocus={onFocus}
         onBlur={onBlur}
         variant={disabled ? "disabled" : error ? "error" : undefined}
-        clearButton={showToggleButton ? false : clearButton}
         // Default to "new-password" so managers don't autofill the user's saved
         // login into secret fields (connector creds, API keys, …). "off" won't
         // do it, browsers deliberately ignore autocomplete="off" on password
@@ -158,41 +155,37 @@ function InputPasswordTypeIn({
         autoComplete="new-password"
         data-ph-no-capture
         rightChildren={
-          showToggleButton || rightChildren ? (
-            // A field inside a <label> gets every click under the label sent
-            // on to the input, even one on a disabled toggle. Cancelling the
-            // click here stops that; cancelling mousedown keeps focus in the
-            // field.
-            <div
-              role="presentation"
-              className="flex flex-row items-center gap-1"
-              onMouseDown={(e) => e.preventDefault()}
+          // A field inside a <label> gets every click under the label sent
+          // on to the input, even one on a disabled toggle. Cancelling the
+          // click here stops that; cancelling mousedown keeps focus in the
+          // field.
+          <div
+            role="presentation"
+            className="flex flex-row items-center gap-1"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <Button
+              disabled={disabled || effectiveNonRevealable}
+              icon={isRevealed ? SvgEye : SvgEyeClosed}
+              // stopPropagation keeps the nested toggle click off the field.
               onClick={(e) => {
-                e.preventDefault();
                 e.stopPropagation();
+                setIsPasswordVisible((v) => !v);
               }}
-            >
-              {showToggleButton && (
-                <Button
-                  disabled={disabled || effectiveNonRevealable}
-                  icon={isRevealed ? SvgEye : SvgEyeClosed}
-                  // stopPropagation keeps the nested toggle click off the field.
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsPasswordVisible((v) => !v);
-                  }}
-                  type="button"
-                  variant={isRevealed ? "action" : undefined}
-                  prominence="tertiary"
-                  size="sm"
-                  tooltipSide="start"
-                  tooltip={toggleLabel}
-                  aria-label={toggleLabel}
-                />
-              )}
-              {rightChildren}
-            </div>
-          ) : undefined
+              type="button"
+              variant={isRevealed ? "action" : undefined}
+              prominence="tertiary"
+              size="sm"
+              tooltipSide="start"
+              tooltip={toggleLabel}
+              aria-label={toggleLabel}
+            />
+            {rightChildren}
+          </div>
         }
         {...props}
       />

@@ -73,10 +73,12 @@ export function ApiTokenInput({
   const t = useTranslations("common.apiTokens");
   const format = useFormatter();
   const platformLabel = getApiTokenPlatformLabel(platform);
-  const { tokens } = useApiTokens(platform);
+  const { tokens, error: listError } = useApiTokens(platform);
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const hasSavedKeys = tokens.length > 0;
+  // Only full admins can list saved keys. For anyone else the list stays
+  // shut, rather than claiming there are none.
+  const canList = listError === undefined;
 
   const picked =
     value.type === "existing"
@@ -113,9 +115,9 @@ export function ApiTokenInput({
 
   return (
     <Dropdown
-      open={open && hasSavedKeys}
+      open={open && canList}
       onOpenChange={setOpen}
-      disabled={disabled || !hasSavedKeys}
+      disabled={disabled || !canList}
       tabKey="leave"
     >
       {/* Toggle, not open: a click on the field's label reaches the input,
@@ -135,7 +137,7 @@ export function ApiTokenInput({
           disabled={disabled}
           error={error}
           rightChildren={
-            hasSavedKeys ? (
+            canList ? (
               <SelectChevron
                 isOpen={open}
                 disabled={disabled}
