@@ -144,6 +144,25 @@ def _build_result(
     )
 
 
+def _safe_error_detail(
+    check: CapabilityCheck,
+    context: CapabilityCheckContext,
+    error: Exception,
+    error_kind: CheckErrorKind,
+) -> CheckErrorDetail | None:
+    """The error's detail, or None when building it fails: a detail is for
+    support, and must never fail the run."""
+    try:
+        return check_error_detail(
+            error, error_kind, credential_strings(context.credential_json)
+        )
+    except Exception:
+        logger.exception(
+            "Could not build the error detail of capability check %s", check.check_id
+        )
+        return None
+
+
 def _error_outcome(
     check: CapabilityCheck,
     context: CapabilityCheckContext,
@@ -160,9 +179,7 @@ def _error_outcome(
         message=str(error) if message is None else message,
         error_type=type(error).__name__,
         error_kind=error_kind,
-        error_detail=check_error_detail(
-            error, error_kind, credential_strings(context.credential_json)
-        ),
+        error_detail=_safe_error_detail(check, context, error, error_kind),
         duration_ms=duration_ms,
     )
 

@@ -121,3 +121,26 @@ def test_urls_keep_only_host_and_path_whatever_their_form() -> None:
     assert "files.example.com/x" in detail.stack_trace
     for leaked in ("user:pw", "admin:pw", "p=1", "k=v", "#f", "bad:port"):
         assert leaked not in detail.stack_trace
+
+
+def test_a_secret_at_the_excerpt_cut_is_still_redacted() -> None:
+    secret = "sk-secret-value-that-is-long"
+    body = "x" * (MAX_RESPONSE_EXCERPT_CHARS - 5) + secret
+    try:
+        raise UnexpectedValidationError("Bad.") from SourceApiError(
+            "HTTP 500", status_code=500, body=body
+        )
+    except UnexpectedValidationError as error:
+        detail = check_error_detail(error, CheckErrorKind.INVALID, [secret])
+
+    assert detail is not None and detail.response_excerpt is not None
+    assert detail.response_excerpt.endswith("[REDA")
+    assert "sk-se" not in detail.response_excerpt
+
+
+def test_a_url_that_does_not_parse_is_replaced() -> None:
+    detail = _detail(RuntimeError("Tried http://[::1/path?token=t and more"))
+
+    assert detail is not None and detail.stack_trace is not None
+    assert "[URL]" in detail.stack_trace
+    assert "token=t" not in detail.stack_trace
