@@ -2215,110 +2215,28 @@
         "loadError": {
           "title": "Die Phasenmetriken konnten nicht geladen werden"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Batch laden"
+        "perBatch": {
+          "empty": "Keine Phasendaten pro Batch aufgezeichnet."
+        },
+        "buckets": {
+          "fetchSource": {
+            "label": "Quellabruf"
           },
-          "batchTotal": {
-            "label": "Batch gesamt"
-          },
-          "batchUnaccounted": {
-            "label": "Nicht zugeordnet"
-          },
-          "checkpointLoad": {
-            "label": "Checkpoint laden"
+          "batchPreProcessing": {
+            "label": "Batch-Vorverarbeitung"
           },
           "chunking": {
             "label": "Chunking"
           },
-          "connectorFetch": {
-            "label": "Konnektor-Abruf"
-          },
-          "connectorValidation": {
-            "label": "Konnektor-Prüfung"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "Wartezeit auf Koordinationssperre"
-          },
-          "coordinationUpdate": {
-            "label": "Koordinationsaktualisierung"
-          },
-          "docBatchEnqueue": {
-            "label": "Dokument-Batch einreihen"
-          },
-          "docBatchStore": {
-            "label": "Dokument-Batch speichern"
-          },
-          "docDbPrepare": {
-            "label": "Dokument-DB vorbereiten"
-          },
-          "docLockAcquireWait": {
-            "label": "Wartezeit auf Dokumentsperre"
-          },
-          "docprocessingSetup": {
-            "label": "Docprocessing-Einrichtung"
-          },
           "embedding": {
             "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "Anreicherung vorbereiten"
-          },
-          "finalization": {
-            "label": "Abschluss"
-          },
-          "gcCollect": {
-            "label": "Garbage Collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Hierarchie-Upsert"
-          },
-          "imageProcessing": {
-            "label": "Bildverarbeitung"
-          },
-          "permissionValidation": {
-            "label": "Berechtigungsprüfung"
-          },
-          "postIndexDbUpdate": {
-            "label": "DB-Aktualisierung nach Indizierung"
-          },
-          "queueWait": {
-            "label": "Warteschlangenzeit"
           },
           "vectorDbWrite": {
             "label": "Schreiben in Vektor-DB"
           },
-          "embeddingRateLimitWait": {
-            "label": "Wartezeit Embedding-Ratenlimit",
-            "description": "Zeit, die Embedding-Anfragen auf das in den Index-Einstellungen festgelegte Ratenlimit gewartet haben. Teil von Embedding, summiert über Embedding-Threads."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Wartezeit Anbieter-Drosselung",
-            "description": "Zeit, die Embedding-Anfragen gewartet haben, nachdem der Embedding-Anbieter sie gedrosselt hat. Teil von Embedding, summiert über Embedding-Threads."
+          "postProcessing": {
+            "label": "Nachverarbeitung"
           }
-        },
-        "phases": {
-          "fetch": {
-            "label": "Fetch"
-          },
-          "queue": {
-            "label": "Queue"
-          },
-          "process": {
-            "label": "Process"
-          },
-          "write": {
-            "label": "Write"
-          },
-          "finish": {
-            "label": "Finish"
-          }
-        },
-        "notReached": {
-          "label": "Not reached"
         }
       },
       "statusCard": {

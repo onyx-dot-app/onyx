@@ -1,45 +1,138 @@
 "use client";
 
-import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
   Divider,
-  Fold,
   IconTooltip,
   Popover,
   ShadowDiv,
-  Spacer,
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
-import { useOpalStrings } from "@opal/strings";
-import { formatDurationMs } from "@opal/time";
-import {
-  SvgAlertTriangle,
-  SvgChevronDown,
-  SvgChevronUp,
-  SvgStackLine,
-  SvgX,
-} from "@opal/icons";
+import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
 import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
-import type { IndexAttemptStageMetric } from "@/lib/types";
-import {
-  PHASE_LABEL_KEYS,
-  STAGE_LABEL_KEYS,
-} from "@/lib/connectors/stageMetrics/constants";
-import {
-  isUneven,
-  phaseScale,
-  summarizePhases,
-  type PhaseStage,
-  type PhaseSummary,
-} from "@/lib/connectors/stageMetrics/phases";
+import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 
-// BATCH_TOTAL feeds the header; the phase rows hold the other batch-level stages.
+// BATCH_TOTAL feeds the header; the bucket rows hold the other batch-level stages.
 const SUMMARY_STAGE = "BATCH_TOTAL";
+
+export const STAGE_BUCKETS = [
+  "fetchSource",
+  "batchPreProcessing",
+  "chunking",
+  "embedding",
+  "vectorDbWrite",
+  "postProcessing",
+] as const;
+
+export type StageBucket = (typeof STAGE_BUCKETS)[number];
+
+// The row each stage counts toward. Attempt-level stages and the BATCH_TOTAL
+// and BATCH_UNACCOUNTED aggregates get no row.
+const STAGE_BUCKET = {
+  CONNECTOR_VALIDATION: null,
+  PERMISSION_VALIDATION: null,
+  CHECKPOINT_LOAD: null,
+  CONNECTOR_FETCH: "fetchSource",
+  HIERARCHY_UPSERT: "fetchSource",
+  DOC_BATCH_STORE: "batchPreProcessing",
+  DOC_BATCH_ENQUEUE: "batchPreProcessing",
+  QUEUE_WAIT: "batchPreProcessing",
+  DOCPROCESSING_SETUP: "batchPreProcessing",
+  BATCH_LOAD: "batchPreProcessing",
+  DOC_DB_PREPARE: "batchPreProcessing",
+  IMAGE_PROCESSING: "batchPreProcessing",
+  CHUNKING: "chunking",
+  CONTEXTUAL_RAG: "chunking",
+  EMBEDDING: "embedding",
+  EMBEDDING_RATE_LIMIT_WAIT: "embedding",
+  EMBEDDING_PROVIDER_THROTTLE_WAIT: "embedding",
+  DOC_LOCK_ACQUIRE_WAIT: "vectorDbWrite",
+  ENRICHMENT_PREP: "vectorDbWrite",
+  VECTOR_DB_WRITE: "vectorDbWrite",
+  POST_INDEX_DB_UPDATE: "postProcessing",
+  COORD_LOCK_ACQUIRE_WAIT: "postProcessing",
+  COORDINATION_UPDATE: "postProcessing",
+  FINALIZATION: "postProcessing",
+  GC_COLLECT: "postProcessing",
+  BATCH_UNACCOUNTED: null,
+  BATCH_TOTAL: null,
+} as const satisfies Record<IndexAttemptStage, StageBucket | null>;
+
+// Timed inside EMBEDDING, so adding them to the bucket would count that time twice.
+const INSIDE_EMBEDDING: ReadonlySet<IndexAttemptStage> = new Set([
+  "EMBEDDING_RATE_LIMIT_WAIT",
+  "EMBEDDING_PROVIDER_THROTTLE_WAIT",
+]);
+
+const BUCKET_LABEL_KEYS = {
+  fetchSource: "stageMetrics.buckets.fetchSource.label",
+  batchPreProcessing: "stageMetrics.buckets.batchPreProcessing.label",
+  chunking: "stageMetrics.buckets.chunking.label",
+  embedding: "stageMetrics.buckets.embedding.label",
+  vectorDbWrite: "stageMetrics.buckets.vectorDbWrite.label",
+  postProcessing: "stageMetrics.buckets.postProcessing.label",
+} as const satisfies Record<StageBucket, string>;
+
+export interface BucketTiming {
+  /** The most batches any one stage of the bucket saw. */
+  batchCount: number;
+  avgMs: number | null;
+  stdDevMs: number | null;
+  minMs: number | null;
+  maxMs: number | null;
+}
+
+export interface BucketSummary {
+  bucket: StageBucket;
+  /** `undefined` when the attempt recorded none of the bucket's stages. */
+  timing: BucketTiming | undefined;
+}
+
+function sumOrNull(values: (number | null)[]): number | null {
+  const present = values.filter((value): value is number => value !== null);
+  return present.length === 0
+    ? null
+    : present.reduce((total, value) => total + value, 0);
+}
+
+/** One summary per bucket, in pipeline order. Times are the sums of the stages' times; the spread is the root of the summed variances. */
+export function summarizeBuckets(
+  metrics: IndexAttemptStageMetric[]
+): BucketSummary[] {
+  return STAGE_BUCKETS.map((bucket) => {
+    const stages = metrics.filter(
+      (metric) =>
+        metric.scope === "BATCH_LEVEL" &&
+        STAGE_BUCKET[metric.stage] === bucket &&
+        !INSIDE_EMBEDDING.has(metric.stage)
+    );
+    if (stages.length === 0) return { bucket, timing: undefined };
+    const variance = sumOrNull(
+      stages.map(({ std_dev_duration_ms: sd }) =>
+        sd === null ? null : sd * sd
+      )
+    );
+    return {
+      bucket,
+      timing: {
+        batchCount: Math.max(...stages.map((stage) => stage.event_count)),
+        avgMs: sumOrNull(stages.map((stage) => stage.avg_duration_ms)),
+        stdDevMs: variance === null ? null : Math.sqrt(variance),
+        minMs: sumOrNull(stages.map((stage) => stage.min_duration_ms)),
+        maxMs: sumOrNull(stages.map((stage) => stage.max_duration_ms)),
+      },
+    };
+  });
+}
+
+/** A spread above the mean means batch times vary wildly. */
+function isUneven({ avgMs, stdDevMs }: BucketTiming): boolean {
+  return stdDevMs !== null && avgMs !== null && stdDevMs > avgMs;
+}
 
 // Column widths from the mock, in rem: the stage name, the batch count, the
 // average with its spread, the bar and the max. The actions take the rest.
@@ -48,11 +141,9 @@ const BATCHES_WIDTH = 3.5;
 const AVERAGE_WIDTH = 8.5;
 const BAR_WIDTH = 5.75;
 const MAX_WIDTH = 4;
-// Stage rows sit under their phase row, indented by this much, in rem.
-const STAGE_INDENT = 0.75;
-
-function formatMs(ms: number | null | undefined): string {
-  return ms == null ? "-" : formatDurationMs(ms);
+// Seconds with three decimals, as the mock prints every figure here.
+export function formatSeconds(ms: number | null | undefined): string {
+  return ms == null ? "-" : `${(ms / 1000).toFixed(3)}s`;
 }
 
 function percent(ms: number, scale: number): string {
@@ -120,11 +211,11 @@ function Average({ avgMs, stdDevMs = null }: AverageProps) {
       height="fit"
     >
       <Text font="secondary-mono-label" color="text-04">
-        {formatDurationMs(avgMs)}
+        {formatSeconds(avgMs)}
       </Text>
       {stdDevMs !== null && (
         <Text font="secondary-mono" color="text-03">
-          {`± ${formatDurationMs(stdDevMs)}`}
+          {`± ${formatSeconds(stdDevMs)}`}
         </Text>
       )}
     </Section>
@@ -142,33 +233,13 @@ function ColumnTitle({ children }: ColumnTitleProps) {
   );
 }
 
-interface TimingRowProps {
-  label: string;
-  /** Stage rows sit indented under their phase row. */
-  indented?: boolean;
-  /** `undefined` when the attempt never reached this stage or phase. */
-  timing:
-    | {
-        batchCount: number;
-        avgMs: number | null;
-        stdDevMs: number | null;
-        minMs: number | null;
-        maxMs: number | null;
-        uneven: boolean;
-      }
-    | undefined;
-  /** The longest max across the listed rows, which the bars scale to. */
+interface BucketRowProps {
+  summary: BucketSummary;
+  /** The longest max across the rows, which the bars scale to. */
   scale: number;
-  action?: React.ReactNode;
 }
 /** One row: batch count, average, a min-to-max bar with the average marked, and max. */
-function TimingRow({
-  label,
-  indented = false,
-  timing,
-  scale,
-  action,
-}: TimingRowProps) {
+function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
   const t = useTranslations("admin.connector");
   const format = useFormatter();
   const min = timing?.minMs ?? 0;
@@ -183,27 +254,9 @@ function TimingRow({
       height="fit"
     >
       <Cell width={NAME_WIDTH}>
-        <Section
-          flexDirection="row"
-          alignItems="center"
-          justifyContent="start"
-          gap={0}
-          height="fit"
-        >
-          {indented && <Spacer orientation="horizontal" rem={STAGE_INDENT} />}
-          <Text
-            font="secondary-action"
-            color={
-              timing === undefined
-                ? "text-02"
-                : indented
-                  ? "text-03"
-                  : "text-04"
-            }
-          >
-            {label}
-          </Text>
-        </Section>
+        <Text font="secondary-action" color="text-03">
+          {t(BUCKET_LABEL_KEYS[bucket])}
+        </Text>
       </Cell>
       <Cell width={BATCHES_WIDTH} align="end">
         <Text font="secondary-mono" color="text-03">
@@ -215,8 +268,8 @@ function TimingRow({
       </Cell>
       <Cell width={BAR_WIDTH}>
         {timing === undefined ? (
-          <Text font="secondary-body" color="text-02">
-            {t("stageMetrics.notReached.label")}
+          <Text font="secondary-mono" color="text-03">
+            -
           </Text>
         ) : (
           <div className="relative my-1.5 h-1 w-full rounded-sm bg-background-tint-01">
@@ -240,107 +293,25 @@ function TimingRow({
       </Cell>
       <Cell width={MAX_WIDTH} align="end">
         <Text font="secondary-mono" color="text-03">
-          {formatMs(timing?.maxMs)}
+          {formatSeconds(timing?.maxMs)}
         </Text>
       </Cell>
       <Section
         flexDirection="row"
         alignItems="center"
         justifyContent="end"
-        gap={0}
         width="auto"
         height="fit"
         className="min-w-0 flex-1"
       >
-        {timing?.uneven && (
+        {timing !== undefined && isUneven(timing) && (
           <IconTooltip
             icon={SvgAlertTriangle}
-            status="warning"
             tooltip={t("stageDetails.uneven.tooltip")}
             aria-label={t("stageDetails.uneven.tooltip")}
           />
         )}
-        {action}
       </Section>
-    </Section>
-  );
-}
-
-interface StageRowProps {
-  stage: PhaseStage;
-  scale: number;
-}
-function StageRow({ stage: { stage, metric }, scale }: StageRowProps) {
-  const t = useTranslations("admin.connector");
-  return (
-    <TimingRow
-      label={t(STAGE_LABEL_KEYS[stage])}
-      indented
-      scale={scale}
-      timing={
-        metric && {
-          batchCount: metric.event_count,
-          avgMs: metric.avg_duration_ms,
-          stdDevMs: metric.std_dev_duration_ms,
-          minMs: metric.min_duration_ms,
-          maxMs: metric.max_duration_ms,
-          uneven: isUneven(metric),
-        }
-      }
-    />
-  );
-}
-
-interface PhaseRowsProps {
-  phase: PhaseSummary;
-  scale: number;
-}
-/** A phase's totals, folding open to every one of its stages. */
-function PhaseRows({ phase, scale }: PhaseRowsProps) {
-  const t = useTranslations("admin.connector");
-  const strings = useOpalStrings();
-  const [open, setOpen] = useState(false);
-  const label = t(PHASE_LABEL_KEYS[phase.phase]);
-  return (
-    <Section alignItems="stretch" gap={0} height="fit">
-      <TimingRow
-        label={label}
-        scale={scale}
-        timing={
-          phase.reached
-            ? {
-                batchCount: phase.batchCount,
-                avgMs: phase.avgDurationMs,
-                // Stage spreads do not add up to a phase spread.
-                stdDevMs: null,
-                minMs: phase.minDurationMs,
-                maxMs: phase.maxDurationMs,
-                uneven: phase.uneven,
-              }
-            : undefined
-        }
-        action={
-          <Button
-            icon={open ? SvgChevronUp : SvgChevronDown}
-            prominence="tertiary"
-            size="xs"
-            aria-label={
-              open
-                ? strings.collapsibleFoldSection(label)
-                : strings.collapsibleExpandSection(label)
-            }
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          />
-        }
-      />
-      <Fold open={open}>
-        <Section alignItems="stretch" gap={0} height="fit">
-          {phase.stages.map((stage) => (
-            <StageRow key={stage.stage} stage={stage} scale={scale} />
-          ))}
-        </Section>
-      </Fold>
     </Section>
   );
 }
@@ -368,12 +339,21 @@ function StageRows({ stages, loaded, failed }: StageRowsProps) {
       </Section>
     );
   }
-  const phases = summarizePhases(stages);
-  const scale = phaseScale(phases);
+  const buckets = summarizeBuckets(stages);
+  if (buckets.every(({ timing }) => timing === undefined)) {
+    return (
+      <Section padding={1} height="fit">
+        <Text font="secondary-body" color="text-03">
+          {t("stageMetrics.perBatch.empty")}
+        </Text>
+      </Section>
+    );
+  }
+  const scale = Math.max(0, ...buckets.map(({ timing }) => timing?.maxMs ?? 0));
   return (
     <ShadowDiv>
-      {phases.map((phase) => (
-        <PhaseRows key={phase.phase} phase={phase} scale={scale} />
+      {buckets.map((summary) => (
+        <BucketRow key={summary.bucket} summary={summary} scale={scale} />
       ))}
     </ShadowDiv>
   );
@@ -383,7 +363,7 @@ interface StageDetailsBodyProps {
   indexAttemptId: number;
 }
 
-/** How long each pipeline phase and its stages took per batch of one index attempt. The header carries the attempt's totals under each column title. */
+/** How long each pipeline step took per batch of one index attempt. The header carries the attempt's totals under each column title. */
 function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
   const t = useTranslations("admin.connector");
   const format = useFormatter();
@@ -426,7 +406,7 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
         <Cell width={BAR_WIDTH + MAX_WIDTH} align="end">
           <ColumnTitle>{t("stageDetails.maxTime")}</ColumnTitle>
           <Text font="secondary-mono" color="text-03">
-            {formatMs(total?.max_duration_ms)}
+            {formatSeconds(total?.max_duration_ms)}
           </Text>
         </Cell>
         <Section

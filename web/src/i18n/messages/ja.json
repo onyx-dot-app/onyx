@@ -2215,110 +2215,28 @@
         "loadError": {
           "title": "ステージメトリクスの読み込みに失敗しました"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "バッチ読み込み"
+        "perBatch": {
+          "empty": "バッチごとのステージデータは記録されていません。"
+        },
+        "buckets": {
+          "fetchSource": {
+            "label": "ソース取得"
           },
-          "batchTotal": {
-            "label": "バッチ合計"
-          },
-          "batchUnaccounted": {
-            "label": "未計上"
-          },
-          "checkpointLoad": {
-            "label": "チェックポイント読み込み"
+          "batchPreProcessing": {
+            "label": "バッチ前処理"
           },
           "chunking": {
             "label": "チャンク分割"
           },
-          "connectorFetch": {
-            "label": "コネクター取得"
-          },
-          "connectorValidation": {
-            "label": "コネクター検証"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "調整ロック取得待ち"
-          },
-          "coordinationUpdate": {
-            "label": "調整更新"
-          },
-          "docBatchEnqueue": {
-            "label": "ドキュメントバッチのキュー投入"
-          },
-          "docBatchStore": {
-            "label": "ドキュメントバッチ保存"
-          },
-          "docDbPrepare": {
-            "label": "ドキュメント DB の準備"
-          },
-          "docLockAcquireWait": {
-            "label": "ドキュメントロックの取得待ち"
-          },
-          "docprocessingSetup": {
-            "label": "ドキュメント処理のセットアップ"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "エンリッチメントの準備"
-          },
-          "finalization": {
-            "label": "最終処理"
-          },
-          "gcCollect": {
-            "label": "ガベージコレクション"
-          },
-          "hierarchyUpsert": {
-            "label": "階層のアップサート"
-          },
-          "imageProcessing": {
-            "label": "画像処理"
-          },
-          "permissionValidation": {
-            "label": "権限の検証"
-          },
-          "postIndexDbUpdate": {
-            "label": "インデックス後の DB 更新"
-          },
-          "queueWait": {
-            "label": "キューの待ち時間"
+            "label": "埋め込み"
           },
           "vectorDbWrite": {
             "label": "ベクトル DB への書き込み"
           },
-          "embeddingRateLimitWait": {
-            "label": "埋め込みレート制限の待機",
-            "description": "インデックス設定で設定した埋め込みのレート制限により、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "プロバイダーの制限による待機",
-            "description": "埋め込みプロバイダーがリクエストを制限した後に、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
+          "postProcessing": {
+            "label": "後処理"
           }
-        },
-        "phases": {
-          "fetch": {
-            "label": "Fetch"
-          },
-          "queue": {
-            "label": "Queue"
-          },
-          "process": {
-            "label": "Process"
-          },
-          "write": {
-            "label": "Write"
-          },
-          "finish": {
-            "label": "Finish"
-          }
-        },
-        "notReached": {
-          "label": "Not reached"
         }
       },
       "statusCard": {

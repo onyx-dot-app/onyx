@@ -2215,110 +2215,28 @@
         "loadError": {
           "title": "단계별 지표를 불러오지 못했습니다"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "배치 로드"
+        "perBatch": {
+          "empty": "배치별 단계 데이터가 기록되지 않았습니다."
+        },
+        "buckets": {
+          "fetchSource": {
+            "label": "소스 가져오기"
           },
-          "batchTotal": {
-            "label": "배치 전체"
-          },
-          "batchUnaccounted": {
-            "label": "미분류"
-          },
-          "checkpointLoad": {
-            "label": "체크포인트 로드"
+          "batchPreProcessing": {
+            "label": "배치 전처리"
           },
           "chunking": {
             "label": "청킹"
           },
-          "connectorFetch": {
-            "label": "커넥터 가져오기"
-          },
-          "connectorValidation": {
-            "label": "커넥터 검증"
-          },
-          "contextualRag": {
-            "label": "컨텍스트 기반 RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "조정 잠금 대기"
-          },
-          "coordinationUpdate": {
-            "label": "조정 업데이트"
-          },
-          "docBatchEnqueue": {
-            "label": "문서 배치 큐 등록"
-          },
-          "docBatchStore": {
-            "label": "문서 배치 저장"
-          },
-          "docDbPrepare": {
-            "label": "문서 DB 준비"
-          },
-          "docLockAcquireWait": {
-            "label": "문서 잠금 획득 대기"
-          },
-          "docprocessingSetup": {
-            "label": "문서 처리 설정"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "보강 준비"
-          },
-          "finalization": {
-            "label": "마무리"
-          },
-          "gcCollect": {
-            "label": "가비지 컬렉션"
-          },
-          "hierarchyUpsert": {
-            "label": "계층 업서트"
-          },
-          "imageProcessing": {
-            "label": "이미지 처리"
-          },
-          "permissionValidation": {
-            "label": "권한 검증"
-          },
-          "postIndexDbUpdate": {
-            "label": "인덱싱 후 DB 업데이트"
-          },
-          "queueWait": {
-            "label": "큐 대기"
+            "label": "임베딩"
           },
           "vectorDbWrite": {
             "label": "벡터 DB 쓰기"
           },
-          "embeddingRateLimitWait": {
-            "label": "임베딩 요청 한도 대기",
-            "description": "인덱스 설정에서 지정한 임베딩 요청 한도 때문에 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "제공자 제한 대기",
-            "description": "임베딩 제공자가 요청을 제한한 후 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
+          "postProcessing": {
+            "label": "후처리"
           }
-        },
-        "phases": {
-          "fetch": {
-            "label": "Fetch"
-          },
-          "queue": {
-            "label": "Queue"
-          },
-          "process": {
-            "label": "Process"
-          },
-          "write": {
-            "label": "Write"
-          },
-          "finish": {
-            "label": "Finish"
-          }
-        },
-        "notReached": {
-          "label": "Not reached"
         }
       },
       "statusCard": {

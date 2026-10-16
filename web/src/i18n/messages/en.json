@@ -2215,110 +2215,28 @@
         "loadError": {
           "title": "Failed to load stage metrics"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Batch load"
+        "perBatch": {
+          "empty": "No per-batch stage data recorded."
+        },
+        "buckets": {
+          "fetchSource": {
+            "label": "Fetch Source"
           },
-          "batchTotal": {
-            "label": "Batch total"
-          },
-          "batchUnaccounted": {
-            "label": "Unaccounted"
-          },
-          "checkpointLoad": {
-            "label": "Checkpoint load"
+          "batchPreProcessing": {
+            "label": "Batch Pre-Processing"
           },
           "chunking": {
             "label": "Chunking"
           },
-          "connectorFetch": {
-            "label": "Connector fetch"
-          },
-          "connectorValidation": {
-            "label": "Connector validation"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "Coord lock acquire wait"
-          },
-          "coordinationUpdate": {
-            "label": "Coordination update"
-          },
-          "docBatchEnqueue": {
-            "label": "Doc batch enqueue"
-          },
-          "docBatchStore": {
-            "label": "Doc batch store"
-          },
-          "docDbPrepare": {
-            "label": "Doc DB prepare"
-          },
-          "docLockAcquireWait": {
-            "label": "Doc lock acquire wait"
-          },
-          "docprocessingSetup": {
-            "label": "Docprocessing setup"
-          },
           "embedding": {
             "label": "Embedding"
           },
-          "enrichmentPrep": {
-            "label": "Enrichment prep"
-          },
-          "finalization": {
-            "label": "Finalization"
-          },
-          "gcCollect": {
-            "label": "Garbage collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Hierarchy upsert"
-          },
-          "imageProcessing": {
-            "label": "Image processing"
-          },
-          "permissionValidation": {
-            "label": "Permission validation"
-          },
-          "postIndexDbUpdate": {
-            "label": "Post-index DB update"
-          },
-          "queueWait": {
-            "label": "Queue wait"
-          },
           "vectorDbWrite": {
-            "label": "Vector DB write"
+            "label": "Vector DB Write"
           },
-          "embeddingRateLimitWait": {
-            "label": "Embedding rate limit wait",
-            "description": "Time embedding requests waited for the embedding rate limit set on Index Settings. Part of Embedding, summed over embedding threads."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Embedding provider throttle wait",
-            "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
+          "postProcessing": {
+            "label": "Post-Processing"
           }
-        },
-        "phases": {
-          "fetch": {
-            "label": "Fetch"
-          },
-          "queue": {
-            "label": "Queue"
-          },
-          "process": {
-            "label": "Process"
-          },
-          "write": {
-            "label": "Write"
-          },
-          "finish": {
-            "label": "Finish"
-          }
-        },
-        "notReached": {
-          "label": "Not reached"
         }
       },
       "statusCard": {

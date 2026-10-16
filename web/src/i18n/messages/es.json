@@ -2215,110 +2215,28 @@
         "loadError": {
           "title": "No se pudieron cargar las métricas por etapa"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Carga del lote"
+        "perBatch": {
+          "empty": "No se registraron datos de etapa por lote."
+        },
+        "buckets": {
+          "fetchSource": {
+            "label": "Obtención de la fuente"
           },
-          "batchTotal": {
-            "label": "Total del lote"
-          },
-          "batchUnaccounted": {
-            "label": "Sin asignar"
-          },
-          "checkpointLoad": {
-            "label": "Carga del checkpoint"
+          "batchPreProcessing": {
+            "label": "Preprocesamiento de lotes"
           },
           "chunking": {
             "label": "División en fragmentos"
           },
-          "connectorFetch": {
-            "label": "Obtención del conector"
-          },
-          "connectorValidation": {
-            "label": "Validación del conector"
-          },
-          "contextualRag": {
-            "label": "RAG contextual"
-          },
-          "coordLockAcquireWait": {
-            "label": "Espera del bloqueo de coordinación"
-          },
-          "coordinationUpdate": {
-            "label": "Actualización de coordinación"
-          },
-          "docBatchEnqueue": {
-            "label": "Encolado del lote de documentos"
-          },
-          "docBatchStore": {
-            "label": "Almacenamiento del lote de documentos"
-          },
-          "docDbPrepare": {
-            "label": "Preparación de la BD de documentos"
-          },
-          "docLockAcquireWait": {
-            "label": "Espera del bloqueo de documento"
-          },
-          "docprocessingSetup": {
-            "label": "Preparación de docprocessing"
-          },
           "embedding": {
             "label": "Embeddings"
-          },
-          "enrichmentPrep": {
-            "label": "Preparación del enriquecimiento"
-          },
-          "finalization": {
-            "label": "Finalización"
-          },
-          "gcCollect": {
-            "label": "Recolección de basura"
-          },
-          "hierarchyUpsert": {
-            "label": "Escritura de la jerarquía"
-          },
-          "imageProcessing": {
-            "label": "Procesamiento de imágenes"
-          },
-          "permissionValidation": {
-            "label": "Validación de permisos"
-          },
-          "postIndexDbUpdate": {
-            "label": "Actualización de la BD tras la indexación"
-          },
-          "queueWait": {
-            "label": "Espera en la cola"
           },
           "vectorDbWrite": {
             "label": "Escritura en la BD vectorial"
           },
-          "embeddingRateLimitWait": {
-            "label": "Espera por límite de embeddings",
-            "description": "Tiempo que las solicitudes de embedding esperaron por el límite configurado en Configuración de índice. Forma parte de Embedding y se suma entre los hilos de embedding."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Espera por límite del proveedor",
-            "description": "Tiempo que las solicitudes de embedding esperaron después de que el proveedor de embeddings las limitara. Forma parte de Embedding y se suma entre los hilos de embedding."
+          "postProcessing": {
+            "label": "Posprocesamiento"
           }
-        },
-        "phases": {
-          "fetch": {
-            "label": "Fetch"
-          },
-          "queue": {
-            "label": "Queue"
-          },
-          "process": {
-            "label": "Process"
-          },
-          "write": {
-            "label": "Write"
-          },
-          "finish": {
-            "label": "Finish"
-          }
-        },
-        "notReached": {
-          "label": "Not reached"
         }
       },
       "statusCard": {

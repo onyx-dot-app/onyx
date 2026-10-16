@@ -2215,110 +2215,28 @@
         "loadError": {
           "title": "加载阶段指标失败"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "批次加载"
+        "perBatch": {
+          "empty": "未记录按批次的阶段数据。"
+        },
+        "buckets": {
+          "fetchSource": {
+            "label": "源数据抓取"
           },
-          "batchTotal": {
-            "label": "批次总计"
-          },
-          "batchUnaccounted": {
-            "label": "未归类"
-          },
-          "checkpointLoad": {
-            "label": "检查点加载"
+          "batchPreProcessing": {
+            "label": "批次预处理"
           },
           "chunking": {
             "label": "分块"
           },
-          "connectorFetch": {
-            "label": "连接器抓取"
-          },
-          "connectorValidation": {
-            "label": "连接器验证"
-          },
-          "contextualRag": {
-            "label": "上下文 RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "协调锁获取等待"
-          },
-          "coordinationUpdate": {
-            "label": "协调更新"
-          },
-          "docBatchEnqueue": {
-            "label": "文档批次入队"
-          },
-          "docBatchStore": {
-            "label": "文档批次存储"
-          },
-          "docDbPrepare": {
-            "label": "文档数据库准备"
-          },
-          "docLockAcquireWait": {
-            "label": "文档锁等待"
-          },
-          "docprocessingSetup": {
-            "label": "文档处理初始化"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "元数据填充准备"
-          },
-          "finalization": {
-            "label": "收尾"
-          },
-          "gcCollect": {
-            "label": "垃圾回收"
-          },
-          "hierarchyUpsert": {
-            "label": "层级写入"
-          },
-          "imageProcessing": {
-            "label": "图片处理"
-          },
-          "permissionValidation": {
-            "label": "权限校验"
-          },
-          "postIndexDbUpdate": {
-            "label": "索引后数据库更新"
-          },
-          "queueWait": {
-            "label": "队列等待"
+            "label": "向量嵌入"
           },
           "vectorDbWrite": {
             "label": "向量数据库写入"
           },
-          "embeddingRateLimitWait": {
-            "label": "嵌入速率限制等待",
-            "description": "嵌入请求因索引设置中的嵌入速率限制而等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "提供商限流等待",
-            "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          "postProcessing": {
+            "label": "后处理"
           }
-        },
-        "phases": {
-          "fetch": {
-            "label": "Fetch"
-          },
-          "queue": {
-            "label": "Queue"
-          },
-          "process": {
-            "label": "Process"
-          },
-          "write": {
-            "label": "Write"
-          },
-          "finish": {
-            "label": "Finish"
-          }
-        },
-        "notReached": {
-          "label": "Not reached"
         }
       },
       "statusCard": {

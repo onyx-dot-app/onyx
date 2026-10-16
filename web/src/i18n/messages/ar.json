@@ -2215,110 +2215,28 @@
         "loadError": {
           "title": "فشل تحميل مقاييس المراحل"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "تحميل الدفعة"
+        "perBatch": {
+          "empty": "لم تُسجل بيانات مراحل لكل دفعة."
+        },
+        "buckets": {
+          "fetchSource": {
+            "label": "جلب المصدر"
           },
-          "batchTotal": {
-            "label": "إجمالي الدفعة"
-          },
-          "batchUnaccounted": {
-            "label": "غير محسوب"
-          },
-          "checkpointLoad": {
-            "label": "تحميل نقطة التحقق"
+          "batchPreProcessing": {
+            "label": "المعالجة المسبقة للدفعات"
           },
           "chunking": {
             "label": "التقسيم"
           },
-          "connectorFetch": {
-            "label": "جلب الموصل"
-          },
-          "connectorValidation": {
-            "label": "التحقق من الموصل"
-          },
-          "contextualRag": {
-            "label": "RAG السياقي"
-          },
-          "coordLockAcquireWait": {
-            "label": "انتظار قفل التنسيق"
-          },
-          "coordinationUpdate": {
-            "label": "تحديث التنسيق"
-          },
-          "docBatchEnqueue": {
-            "label": "إدراج دفعة المستندات في الطابور"
-          },
-          "docBatchStore": {
-            "label": "تخزين دفعة المستندات"
-          },
-          "docDbPrepare": {
-            "label": "تجهيز قاعدة بيانات المستندات"
-          },
-          "docLockAcquireWait": {
-            "label": "انتظار قفل المستند"
-          },
-          "docprocessingSetup": {
-            "label": "إعداد معالجة المستندات"
-          },
           "embedding": {
             "label": "التضمين"
-          },
-          "enrichmentPrep": {
-            "label": "تجهيز الإثراء"
-          },
-          "finalization": {
-            "label": "الإنهاء"
-          },
-          "gcCollect": {
-            "label": "جمع القمامة"
-          },
-          "hierarchyUpsert": {
-            "label": "تحديث التسلسل الهرمي"
-          },
-          "imageProcessing": {
-            "label": "معالجة الصور"
-          },
-          "permissionValidation": {
-            "label": "التحقق من الأذونات"
-          },
-          "postIndexDbUpdate": {
-            "label": "تحديث قاعدة البيانات بعد الفهرسة"
-          },
-          "queueWait": {
-            "label": "انتظار الطابور"
           },
           "vectorDbWrite": {
             "label": "الكتابة في قاعدة المتجهات"
           },
-          "embeddingRateLimitWait": {
-            "label": "انتظار حد معدل التضمين",
-            "description": "الوقت الذي انتظرته طلبات التضمين بسبب حد المعدل المحدد في إعدادات الفهرس. جزء من التضمين، ومجموع عبر خيوط التضمين."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "انتظار تقييد المزوّد",
-            "description": "الوقت الذي انتظرته طلبات التضمين بعد أن قيّدها مزوّد التضمين. جزء من التضمين، ومجموع عبر خيوط التضمين."
+          "postProcessing": {
+            "label": "المعالجة اللاحقة"
           }
-        },
-        "phases": {
-          "fetch": {
-            "label": "Fetch"
-          },
-          "queue": {
-            "label": "Queue"
-          },
-          "process": {
-            "label": "Process"
-          },
-          "write": {
-            "label": "Write"
-          },
-          "finish": {
-            "label": "Finish"
-          }
-        },
-        "notReached": {
-          "label": "Not reached"
         }
       },
       "statusCard": {
