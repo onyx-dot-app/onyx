@@ -354,9 +354,17 @@ function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
               key={item.id}
               className="flex items-center justify-between gap-3"
             >
-              <div className="flex flex-col">
-                <Text font="main-ui-action">{item.name}</Text>
-                <Text font="secondary-body" color="text-03">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <Text font="main-ui-action" maxLines={1} title={item.name}>
+                  {item.name}
+                </Text>
+                <Text
+                  font="secondary-body"
+                  color="text-03"
+                  maxLines={2}
+                  wordWrap="wrap-anywhere"
+                  title={item.description}
+                >
                   {item.description}
                 </Text>
               </div>
