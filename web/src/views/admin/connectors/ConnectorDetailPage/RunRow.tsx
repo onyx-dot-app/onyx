@@ -554,6 +554,8 @@ export default function RunRow({
                     icon={tag.icon}
                     title={tBadges(tag.labelKey)}
                     color={tag.color}
+                    variant="status"
+                    font="secondary-body"
                   />
                   {run.kind === "indexing" && run.attempt.is_new_model && (
                     <Tag
@@ -579,7 +581,9 @@ export default function RunRow({
                           : "warnings.tooltip",
                         { count: warnings }
                       )}
-                      color="amber"
+                      color="orange"
+                      variant="count"
+                      font="secondary-body"
                     />
                   )}
                 </Section>

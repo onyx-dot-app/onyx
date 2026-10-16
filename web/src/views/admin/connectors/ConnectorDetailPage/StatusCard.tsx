@@ -110,6 +110,7 @@ export default function StatusCard({
     return <CardLoader descriptionLines={2} />;
   }
   const latestIndexAttempt = latestIndexAttempts?.items[0];
+  const paused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
   const status = ccPairStatusTag(
     ccPair.status,
     ccPair.in_repeated_error_state,
@@ -160,18 +161,21 @@ export default function StatusCard({
                     icon={status.icon}
                     title={tBadges(status.labelKey)}
                     color={status.color}
+                    variant="status"
+                    font="secondary-body"
                   />
                   {hold !== null ? (
                     <Button
                       icon={SvgListCheck}
-                      prominence="tertiary"
+                      prominence="internal"
                       size="xs"
                       tooltip={t("hold.viewChecks")}
                       aria-label={t("hold.viewChecks")}
                       onClick={onViewChecks}
                     />
                   ) : (
-                    latestIndexAttempt !== undefined && <StageDetailsTrigger />
+                    latestIndexAttempt !== undefined &&
+                    !paused && <StageDetailsTrigger />
                   )}
                 </Section>
                 <Text font="secondary-body" color="text-03">

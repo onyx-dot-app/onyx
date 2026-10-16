@@ -9087,7 +9087,6 @@
     "status": {
       "badges": {
         "canceled": "キャンセル済み",
-        "completedWithErrors": "エラーありで完了",
         "deleting": "削除中",
         "error": "エラー",
         "failed": "失敗",
@@ -9105,7 +9104,7 @@
         "pruning": "プルーニング中",
         "pruned": "プルーニング済み",
         "checking": "チェック中",
-        "passed": "成功",
+        "passed": "完了",
         "failedToRun": "実行できませんでした"
       }
     },

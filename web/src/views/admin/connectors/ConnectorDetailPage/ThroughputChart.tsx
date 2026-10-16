@@ -320,6 +320,7 @@ export function ThroughputBars({
             <Tooltip
               cursor={{ fill: "var(--background-tint-02)" }}
               content={<SliceTooltip sliceMs={sliceMs} />}
+              isAnimationActive={false}
             />
             <Bar
               dataKey="docs"

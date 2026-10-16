@@ -271,7 +271,9 @@ function FoldableDivider({
                   {title}
                 </Text>
               </div>
-              <div className="opal-divider-line" />
+              {chevronPosition === "end" && (
+                <div className="opal-divider-line" />
+              )}
               {chevronPosition === "end" && (
                 <div className="opal-divider-chevron" data-open={isOpen}>
                   <Button
