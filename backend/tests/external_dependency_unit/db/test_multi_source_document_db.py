@@ -29,6 +29,12 @@ from onyx.db.models import (
     Document,
     DocumentByConnectorCredentialPair,
 )
+from onyx.db.permission_sync_attempt import (
+    create_doc_permission_sync_attempt,
+    delete_doc_permission_sync_attempts__no_commit,
+    get_open_doc_permission_sync_attempt,
+    mark_doc_permission_sync_attempt_in_progress,
+)
 from onyx.indexing.indexing_pipeline import _upsert_documents_in_db
 from onyx.kg.models import KGStage
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -72,7 +78,18 @@ def _add_cc_pair(
     return cc_pair
 
 
+def _running_attempt_id(db_session: Session, cc_pair_id: int) -> int:
+    """Permission writes happen only under the cc_pair's running sync attempt."""
+    attempt = get_open_doc_permission_sync_attempt(cc_pair_id, db_session)
+    if attempt is not None:
+        return attempt.id
+    attempt_id = create_doc_permission_sync_attempt(cc_pair_id, db_session)
+    mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
+    return attempt_id
+
+
 def _run_permission_update(
+    attempt_id: int,
     connector_id: int,
     credential_id: int,
     source: DocumentSource,
@@ -81,6 +98,7 @@ def _run_permission_update(
 ) -> None:
     assert element_update_permissions(
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        attempt_id=attempt_id,
         permissions=DocExternalAccess(
             external_access=ExternalAccess(
                 external_user_emails=set(),
@@ -103,6 +121,7 @@ def _write_permissions(
     group_id: str,
 ) -> None:
     _run_permission_update(
+        _running_attempt_id(db_session, cc_pair.id),
         cc_pair.connector_id,
         cc_pair.credential_id,
         source,
@@ -215,6 +234,8 @@ def _delete_test_data(
         )
     )
     db_session.execute(delete(Document).where(Document.id.in_(document_ids)))
+    for cc_pair in cc_pairs:
+        delete_doc_permission_sync_attempts__no_commit(db_session, cc_pair.id)
     db_session.execute(
         delete(ConnectorCredentialPair).where(
             ConnectorCredentialPair.connector_id.in_(connector_ids)
@@ -801,8 +822,16 @@ def test_document_lock_prevents_concurrent_sharepoint_final_write(
         document_id,
         has_been_indexed=True,
     )
-    onedrive_ids = (onedrive.connector_id, onedrive.credential_id)
-    sharepoint_ids = (sharepoint.connector_id, sharepoint.credential_id)
+    onedrive_ids = (
+        _running_attempt_id(db_session, onedrive.id),
+        onedrive.connector_id,
+        onedrive.credential_id,
+    )
+    sharepoint_ids = (
+        _running_attempt_id(db_session, sharepoint.id),
+        sharepoint.connector_id,
+        sharepoint.credential_id,
+    )
 
     lock_acquired = Event()
     release_onedrive = Event()

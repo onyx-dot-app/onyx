@@ -1,5 +1,5 @@
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -164,6 +164,7 @@ def construct_tools(
     file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
+    selection_llm_factory: Callable[[], LLM] | None = None,
 ) -> dict[int, list[Tool]]:
     """Build tools from captured settings; resolve current service credentials."""
     with get_session_with_current_tenant_if_none(db_session) as db_session:
@@ -173,6 +174,7 @@ def construct_tools(
             emitter=emitter,
             user=user,
             llm=llm,
+            selection_llm_factory=selection_llm_factory,
             search_tool_config=search_tool_config,
             custom_tool_config=custom_tool_config,
             file_reader_tool_config=file_reader_tool_config,
@@ -192,6 +194,7 @@ def _construct_tools_impl(
     file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
+    selection_llm_factory: Callable[[], LLM] | None = None,
 ) -> dict[int, list[Tool]]:
     tool_dict: dict[int, list[Tool]] = {}
 
@@ -216,6 +219,7 @@ def _construct_tools_impl(
             user=user,
             persona_search_info=configuration.search,
             llm=llm,
+            selection_llm_factory=selection_llm_factory,
             document_index=document_index,
             user_selected_filters=config.user_selected_filters,
             project_id_filter=config.project_id_filter,

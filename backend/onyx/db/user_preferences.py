@@ -207,10 +207,10 @@ def update_user_theme_preference(
 
 def update_user_language(
     user_id: UUID,
-    language: str,
+    language: str | None,
     db_session: Session,
 ) -> None:
-    """Update user's language setting."""
+    """Update user's language setting. None = follow the workspace default."""
     db_session.execute(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]

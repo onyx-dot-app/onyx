@@ -1639,6 +1639,21 @@ MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
 )
 
+
+# A sheet whose rows fit in this many chunks keeps all its rows verbatim;
+# bigger sheets get a profile instead.
+TABULAR_FULL_ROWS_MAX_CHUNKS = max(
+    0, int(os.environ.get("TABULAR_FULL_ROWS_MAX_CHUNKS") or 3)
+)
+# Chunks of frequent text values added for each large sheet.
+TABULAR_VALUE_CHUNKS_PER_SHEET = max(
+    0, int(os.environ.get("TABULAR_VALUE_CHUNKS_PER_SHEET") or 2)
+)
+# Upper bound on the chunks of one workbook or CSV file.
+TABULAR_MAX_CHUNKS_PER_WORKBOOK = max(
+    1, int(os.environ.get("TABULAR_MAX_CHUNKS_PER_WORKBOOK") or 24)
+)
+
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
 # or hang); this is the timeout before the subprocess is killed and pypdf runs.
 PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(
@@ -1719,6 +1734,10 @@ MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
+# A full permission or group sync of a large source can take longer than other jobs
+PERMISSION_SYNC_TIMEOUT = int(
+    os.environ.get("PERMISSION_SYNC_TIMEOUT_SECONDS") or JOB_TIMEOUT
+)
 # Logs Onyx only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"

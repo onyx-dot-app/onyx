@@ -11,7 +11,6 @@ from onyx.db.oauth_config import get_user_oauth_token, upsert_user_oauth_token
 from onyx.oauth.protocol import (
     OAuthFlowParams,
     build_authorization_code_token_body,
-    build_oauth_authorization_url,
 )
 from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import get_security_settings
@@ -60,9 +59,14 @@ def exchange_oauth_code_for_token(
         code_verifier=code_verifier,
     )
 
-    validate_oauth_endpoint_url(params.token_url)
+    return _post_oauth_token_request(params.token_url, data)
+
+
+def _post_oauth_token_request(token_url: str, data: dict[str, str]) -> dict[str, Any]:
+    """Validate the endpoint and token response before callers persist tokens."""
+    validate_oauth_endpoint_url(token_url)
     response = requests.post(
-        params.token_url,
+        token_url,
         data=data,
         headers={"Accept": "application/json"},
         timeout=30,
@@ -81,12 +85,16 @@ def exchange_oauth_code_for_token(
         raise ValueError("OAuth token response must contain a non-empty access token")
     if "expires_in" in token_data:
         expires_in = token_data["expires_in"]
-        if (
-            isinstance(expires_in, bool)
-            or not isinstance(expires_in, (int, float))
-            or not math.isfinite(expires_in)
-            or expires_in < 0
-        ):
+        try:
+            valid_expiration = (
+                not isinstance(expires_in, bool)
+                and isinstance(expires_in, (int, float))
+                and math.isfinite(expires_in)
+                and expires_in >= 0
+            )
+        except OverflowError:
+            valid_expiration = False
+        if not valid_expiration:
             raise ValueError("OAuth token response has an invalid expiration")
         token_data["expires_at"] = int(time.time()) + expires_in
     return token_data
@@ -146,26 +154,10 @@ class OAuthTokenManager:
         data: dict[str, str] = {
             "grant_type": "refresh_token",
             "refresh_token": token_data["refresh_token"],
-            "client_id": self._unwrap_sensitive_str(self.oauth_config.client_id),
-            "client_secret": self._unwrap_sensitive_str(
-                self.oauth_config.client_secret
-            ),
+            "client_id": _unwrap_sensitive_str(self.oauth_config.client_id),
+            "client_secret": _unwrap_sensitive_str(self.oauth_config.client_secret),
         }
-        validate_oauth_endpoint_url(self.oauth_config.token_url)
-        response = requests.post(
-            self.oauth_config.token_url,
-            data=data,
-            headers={"Accept": "application/json"},
-        )
-        response.raise_for_status()
-
-        new_token_data = response.json()
-
-        # Calculate expires_at if expires_in is present
-        if "expires_in" in new_token_data:
-            new_token_data["expires_at"] = (
-                int(time.time()) + new_token_data["expires_in"]
-            )
+        new_token_data = _post_oauth_token_request(self.oauth_config.token_url, data)
 
         # Preserve refresh_token if not returned (some providers don't return it)
         if "refresh_token" not in new_token_data and "refresh_token" in token_data:
@@ -200,55 +192,6 @@ class OAuthTokenManager:
         # Add 60 second buffer to avoid race conditions
         return int(time.time()) + 60 >= expires_at
 
-    def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
-        """Exchange authorization code for access token"""
-        if (
-            self.oauth_config.client_id is None
-            or self.oauth_config.client_secret is None
-        ):
-            raise ValueError(
-                "OAuth client_id and client_secret are required for code exchange"
-            )
-
-        return exchange_oauth_code_for_token(
-            self._flow_params(self.oauth_config), code, redirect_uri
-        )
-
-    @staticmethod
-    def build_authorization_url(
-        oauth_config: OAuthConfig, redirect_uri: str, state: str
-    ) -> str:
-        """Build OAuth authorization URL"""
-        if oauth_config.client_id is None:
-            raise ValueError("OAuth client_id is required to build authorization URL")
-        return build_oauth_authorization_url(
-            OAuthTokenManager._flow_params(oauth_config), redirect_uri, state
-        )
-
-    @staticmethod
-    def _flow_params(oauth_config: OAuthConfig) -> OAuthFlowParams:
-        if oauth_config.client_id is None:
-            raise ValueError("OAuth client_id is required")
-        client_secret = (
-            OAuthTokenManager._unwrap_sensitive_str(oauth_config.client_secret)
-            if oauth_config.client_secret is not None
-            else None
-        )
-        return OAuthFlowParams(
-            authorization_url=oauth_config.authorization_url,
-            token_url=oauth_config.token_url,
-            client_id=OAuthTokenManager._unwrap_sensitive_str(oauth_config.client_id),
-            client_secret=client_secret,
-            scopes=oauth_config.scopes,
-            additional_params=oauth_config.additional_params,
-        )
-
-    @staticmethod
-    def _unwrap_sensitive_str(value: SensitiveValue[str] | str) -> str:
-        if isinstance(value, SensitiveValue):
-            return value.get_value(apply_mask=False)  # ty: ignore[invalid-return-type]
-        return value
-
     @staticmethod
     def _unwrap_token_data(
         token_data: SensitiveValue[dict[str, Any]] | dict[str, Any],
@@ -258,3 +201,39 @@ class OAuthTokenManager:
                 apply_mask=False
             )
         return token_data
+
+
+def _unwrap_sensitive_str(value: SensitiveValue[str] | str) -> str:
+    if isinstance(value, SensitiveValue):
+        return value.get_value(apply_mask=False)  # ty: ignore[invalid-return-type]
+    return value
+
+
+def oauth_flow_params_from_config(
+    oauth_config: OAuthConfig, *, allow_missing_credentials: bool = False
+) -> OAuthFlowParams:
+    """Read protocol inputs without loading or changing a user's tokens."""
+    if not allow_missing_credentials and (
+        oauth_config.client_id is None or oauth_config.client_secret is None
+    ):
+        raise ValueError("OAuth client_id and client_secret are required")
+    client_id = (
+        _unwrap_sensitive_str(oauth_config.client_id)
+        if oauth_config.client_id is not None
+        else ""
+    )
+    client_secret = (
+        _unwrap_sensitive_str(oauth_config.client_secret)
+        if oauth_config.client_secret is not None
+        else None
+    )
+    if not client_id and not allow_missing_credentials:
+        raise ValueError("OAuth client_id is required")
+    return OAuthFlowParams(
+        authorization_url=oauth_config.authorization_url,
+        token_url=oauth_config.token_url,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=oauth_config.scopes,
+        additional_params=oauth_config.additional_params,
+    )

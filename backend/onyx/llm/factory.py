@@ -6,12 +6,10 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import Permission
+from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
-    fetch_default_contextual_rag_model,
-    fetch_default_llm_model,
-    fetch_default_vision_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
     fetch_model_configuration_by_id,
     fetch_user_group_ids,
@@ -32,8 +30,10 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -250,7 +250,7 @@ def get_default_llm_with_vision(
     model nobody chose.
     """
     with get_session_with_current_tenant() as db_session:
-        default_model = fetch_default_vision_model(db_session)
+        default_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
         if default_model is None:
             logger.warning(
                 "No default vision model is set — image summarization will be "
@@ -377,7 +377,7 @@ def get_contextual_rag_llm_for_search_settings(
     mc_id = search_settings.contextual_rag_model_configuration_id
     if mc_id is None:
         with get_session_with_current_tenant() as db_session:
-            mc = fetch_default_contextual_rag_model(db_session)
+            mc = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
         mc_id = mc.id if mc else None
     return get_llm_for_contextual_rag(mc_id) if mc_id is not None else None
 
@@ -389,7 +389,7 @@ def get_default_llm(
     user_defaults: UserChatDefaults | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        model = fetch_default_llm_model(db_session)
+        model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
         if not model:
             raise ValueError("No default LLM model found")
@@ -402,6 +402,47 @@ def get_default_llm(
             policy_fn=policy_fn,
             user_defaults=user_defaults,
         )
+
+
+def get_default_utility_llm(
+    flow_type: LLMModelFlowType,
+    additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+) -> LLM | None:
+    with get_session_with_current_tenant() as db_session:
+        model = fetch_default_model(db_session, flow_type)
+        if model is None:
+            return None
+        provider = LLMProviderView.from_model(
+            model.llm_provider, model_configurations=[model]
+        )
+        model_name = model.name
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=provider.api_key,
+        )
+
+    return llm_from_provider(
+        model_name=model_name,
+        llm_provider=provider,
+        additional_headers=additional_headers,
+        policy_fn=policy_fn,
+    )
+
+
+def get_search_selection_llm(
+    *,
+    fallback: LLM,
+    additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+) -> LLM:
+    return (
+        get_default_utility_llm(
+            LLMModelFlowType.SEARCH_SELECTION, additional_headers, policy_fn
+        )
+        or fallback
+    )
 
 
 def get_llm(

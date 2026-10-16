@@ -309,7 +309,7 @@ Computed **at upload time**, before any chat turn runs:
 `projects_file_utils.py:categorize_uploaded_files` resolves a tokenizer via
 `natural_language_processing/utils.py:get_tokenizer(model_name, provider_type)`
 from the workspace's default LLM model
-(`db/llm.py:fetch_default_llm_model`), falling back to
+(`db/llm.py:fetch_default_model(..., LLMModelFlowType.CHAT)`), falling back to
 `_get_default_tokenizer()` (`HuggingFaceTokenizer(DOCUMENT_ENCODER_MODEL)`)
 when the provider type is unrecognized. Text/document files are counted with
 `natural_language_processing/utils.py:count_tokens` against the extracted

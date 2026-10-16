@@ -681,7 +681,7 @@ function Rows({
               key={group.key}
               role="group"
               aria-label={group.title}
-              className="opal-dropdown-group"
+              className="opal-dropdown-group opal-dropdown-titled"
             >
               <Divider
                 title={group.title}
@@ -711,7 +711,9 @@ function Rows({
         return (
           <React.Fragment key={group.key}>
             {group.title !== undefined ? (
-              <Divider title={group.title} />
+              <div className="opal-dropdown-titled">
+                <Divider title={group.title} />
+              </div>
             ) : (
               groupIndex > 0 && <Divider />
             )}

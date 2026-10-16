@@ -41,6 +41,7 @@ from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 
 _BUILT_IN_SLUGS = list(EXTERNAL_APP_BUILT_IN_SKILL_IDS.values())
 _MANAGED_APP_TYPES = [d.app_type for d in fetch_onyx_managed_built_in_apps()]
+_BUILT_IN_APP_TYPES = list(EXTERNAL_APP_BUILT_IN_SKILL_IDS)
 _GMAIL_CREDS = {"client_id": "cid", "client_secret": "sec"}
 _GMAIL_PATTERNS = ["https://gmail\\.googleapis\\.com/gmail/.*"]
 
@@ -51,7 +52,7 @@ def _noop(*_args: object, **_kwargs: object) -> None:
 
 def _cleanup(db_session: Session) -> None:
     db_session.execute(
-        delete(ExternalApp).where(ExternalApp.app_type.in_(_MANAGED_APP_TYPES))
+        delete(ExternalApp).where(ExternalApp.app_type.in_(_BUILT_IN_APP_TYPES))
     )
     db_session.execute(delete(Skill).where(Skill.name.in_(_BUILT_IN_SLUGS)))
     db_session.commit()
@@ -110,13 +111,18 @@ def _create_request(
 # ---------------------------------------------------------------------------
 
 
-def test_all_built_ins_are_onyx_managed() -> None:
-    """Every built-in skill id has a registered provider, and all are currently
-    Onyx-managed. When a future built-in opts out (not an ``OnyxManagedExtApp``,
-    e.g. admins supply their own OAuth app), update this deliberately."""
+# Built-ins whose OAuth client Onyx cannot own: Zendesk registers clients per
+# customer account, so admins supply their own.
+_SELF_CONFIGURED_APP_TYPES = {ExternalAppType.ZENDESK}
+
+
+def test_built_ins_are_onyx_managed_except_the_self_configured_ones() -> None:
+    """Every built-in skill id has a registered provider, and each is
+    Onyx-managed unless listed in ``_SELF_CONFIGURED_APP_TYPES``. A built-in
+    that opts out belongs in that set deliberately, not by accident."""
     built_in = set(EXTERNAL_APP_BUILT_IN_SKILL_IDS)
     assert set(PROVIDERS) == built_in  # provider registry ↔ built-in skill ids
-    assert set(_MANAGED_APP_TYPES) == built_in
+    assert set(_MANAGED_APP_TYPES) == built_in - _SELF_CONFIGURED_APP_TYPES
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +226,10 @@ def test_self_hosted_built_in_response_shows_config_and_masked_creds(
     )
 
     assert resp.upstream_url_patterns  # config visible
-    # Creds are present but masked — not the same raw values, not blanked away.
+    # All organization credential values remain masked.
     assert resp.organization_credentials != {}
     assert resp.organization_credentials != _GMAIL_CREDS
+    assert resp.organization_credentials["client_id"] != _GMAIL_CREDS["client_id"]
+    assert (
+        resp.organization_credentials["client_secret"] != _GMAIL_CREDS["client_secret"]
+    )
