@@ -194,13 +194,13 @@ def test_auth_fails_for_an_unsafe_enterprise_server_url() -> None:
     assert result.status == CapabilityCheckStatus.FAILED
 
 
-def test_auth_is_indeterminate_when_rate_limited() -> None:
+def test_auth_is_incomplete_when_rate_limited() -> None:
     gateway = _gateway()
     gateway.get_token_info.side_effect = _RATE_LIMITED
 
     result = _run("github_auth", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert "secondary rate limit" in result.message
 
 
@@ -290,11 +290,11 @@ def test_owner_names_missing_saml_authorization() -> None:
     assert "authorizing-a-personal-access-token" in result.message
 
 
-def test_owner_is_indeterminate_when_rate_limited() -> None:
+def test_owner_is_incomplete_when_rate_limited() -> None:
     gateway = _gateway()
     gateway.get_organization.side_effect = _RATE_LIMITED
 
-    assert _run("github_owner", gateway).status == CapabilityCheckStatus.INDETERMINATE
+    assert _run("github_owner", gateway).status == CapabilityCheckStatus.INCOMPLETE
 
 
 # --- github_repositories_visible ---
@@ -394,13 +394,13 @@ def test_configured_repositories_tell_apart_a_denial() -> None:
     assert "SAML single sign-on" in result.message
 
 
-def test_configured_repositories_are_indeterminate_when_rate_limited() -> None:
+def test_configured_repositories_are_incomplete_when_rate_limited() -> None:
     gateway = _gateway()
     gateway.get_repository.side_effect = _RATE_LIMITED
 
     result = _run("github_configured_repositories", gateway, _config(repositories="a"))
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 # --- github_branch ---
@@ -465,13 +465,13 @@ def test_pull_requests_pass_when_the_repository_has_them_turned_off() -> None:
     assert _run("github_pull_requests", gateway).status == CapabilityCheckStatus.PASSED
 
 
-def test_pull_requests_are_indeterminate_without_a_readable_repository() -> None:
+def test_pull_requests_are_incomplete_without_a_readable_repository() -> None:
     gateway = _gateway()
     gateway.list_organization_repositories.return_value = []
 
     result = _run("github_pull_requests", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert "github_repositories_visible" in result.message
 
 
@@ -530,7 +530,7 @@ def test_files_leave_a_missing_branch_to_the_branch_check() -> None:
 
     result = _run("github_files", gateway, _config(branch="gh-pages"))
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert "github_branch" in result.message
 
 
@@ -547,13 +547,13 @@ def test_files_probe_the_listed_repositories() -> None:
     gateway.get_git_tree.assert_called_once_with(repo_full_name="acme/b", ref="main")
 
 
-def test_configured_repositories_are_indeterminate_during_a_github_outage() -> None:
+def test_configured_repositories_are_incomplete_during_a_github_outage() -> None:
     gateway = _gateway()
     gateway.get_repository.side_effect = _api_error(502, "Bad Gateway")
 
     result = _run("github_configured_repositories", gateway, _config(repositories="a"))
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_configured_repositories_need_readable_contents() -> None:
@@ -618,7 +618,7 @@ def test_branch_applies_to_a_single_listed_repository_without_files() -> None:
     assert result.status == CapabilityCheckStatus.FAILED
 
 
-def test_branch_is_indeterminate_when_a_repository_read_fails() -> None:
+def test_branch_is_incomplete_when_a_repository_read_fails() -> None:
     gateway = _gateway()
     gateway.get_repository.side_effect = _api_error(502, "Bad Gateway")
 
@@ -626,7 +626,7 @@ def test_branch_is_indeterminate_when_a_repository_read_fails() -> None:
         "github_branch", gateway, _config(branch="gh-pages", repositories="docs")
     )
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     gateway.get_branch.assert_not_called()
 
 

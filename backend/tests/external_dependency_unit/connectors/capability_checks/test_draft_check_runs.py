@@ -665,7 +665,7 @@ def test_latest_run_marker_lives_as_long_as_the_run(
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_draft_check_slower_than_the_cap_is_indeterminate(
+def test_draft_check_slower_than_the_cap_is_incomplete(
     db_session: Session,
     harness: _Harness,
     users: tuple[User, User],
@@ -685,4 +685,4 @@ def test_draft_check_slower_than_the_cap_is_indeterminate(
 
     done = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
     assert done.status == DraftRunStatus.COMPLETED
-    assert _states(done)[_TOKEN] == DraftCheckStateKind.INDETERMINATE
+    assert _states(done)[_TOKEN] == DraftCheckStateKind.INCOMPLETE

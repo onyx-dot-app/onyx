@@ -145,10 +145,10 @@ def test_auth_passes_and_opens_the_admin_my_drive() -> None:
         ),
         (
             _http_error(403, "userRateLimitExceeded"),
-            CapabilityCheckStatus.INDETERMINATE,
+            CapabilityCheckStatus.INCOMPLETE,
             "rate limited",
         ),
-        (_http_error(500), CapabilityCheckStatus.INDETERMINATE, "HTTP 500"),
+        (_http_error(500), CapabilityCheckStatus.INCOMPLETE, "HTTP 500"),
     ],
 )
 def test_auth_explains_each_failure(

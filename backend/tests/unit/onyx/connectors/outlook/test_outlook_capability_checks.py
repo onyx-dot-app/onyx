@@ -142,7 +142,7 @@ def test_token_check_maps_msal_refusals_to_invalid_credential(code: str) -> None
 
 
 @pytest.mark.parametrize("code", ["temporarily_unavailable", "server_error"])
-def test_token_check_is_indeterminate_on_a_transient_oauth_error(code: str) -> None:
+def test_token_check_is_incomplete_on_a_transient_oauth_error(code: str) -> None:
     gateway = _gateway()
     gateway.check_token.side_effect = OutlookAuthError(code, "AADSTS90033 try later")
 
@@ -150,7 +150,7 @@ def test_token_check_is_indeterminate_on_a_transient_oauth_error(code: str) -> N
         _run("outlook_token_auth", _context(gateway))
 
 
-def test_token_check_is_indeterminate_when_the_token_endpoint_is_unreachable() -> None:
+def test_token_check_is_incomplete_when_the_token_endpoint_is_unreachable() -> None:
     gateway = _gateway()
     gateway.check_token.side_effect = OutlookGraphError(
         None, "ConnectionError", "login unreachable"
@@ -183,7 +183,7 @@ def test_listing_check_names_the_missing_permission_on_403() -> None:
         _run("outlook_mailbox_listing", _context(gateway))
 
 
-def test_listing_check_maps_401_to_expired_and_429_to_indeterminate() -> None:
+def test_listing_check_maps_401_to_expired_and_429_to_incomplete() -> None:
     gateway = _gateway()
     gateway.list_mailbox_users.side_effect = graph_error(
         401, "InvalidAuthenticationToken"
@@ -264,7 +264,7 @@ def test_mailbox_count_stops_at_the_cap() -> None:
     assert gateway.list_mailbox_users.call_count == 2
 
 
-def test_mailbox_count_is_indeterminate_when_the_listing_does_not_end() -> None:
+def test_mailbox_count_is_incomplete_when_the_listing_does_not_end() -> None:
     gateway = _gateway()
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(
         mailboxes=[], next_link="https://next"
@@ -286,7 +286,7 @@ def test_mailbox_count_403_fails_and_leaves_the_verdict_alone() -> None:
     assert _CHECKS_BY_ID["outlook_mailbox_count"].required is False
 
 
-def test_mailbox_count_maps_401_to_expired_and_429_to_indeterminate() -> None:
+def test_mailbox_count_maps_401_to_expired_and_429_to_incomplete() -> None:
     gateway = _gateway()
     gateway.list_mailbox_users.side_effect = graph_error(
         401, "InvalidAuthenticationToken"
@@ -447,7 +447,7 @@ def test_mail_read_check_follows_an_empty_user_page() -> None:
     gateway.probe_mailbox.assert_called_once_with(mailbox_id=MAILBOX_ID)
 
 
-def test_mail_read_check_is_indeterminate_when_no_user_has_a_mailbox() -> None:
+def test_mail_read_check_is_incomplete_when_no_user_has_a_mailbox() -> None:
     gateway = _gateway()
     gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
 
@@ -545,7 +545,7 @@ def test_mail_read_check_tells_read_basic_apart_from_read() -> None:
         _run("outlook_mail_read", _context(gateway))
 
 
-def test_mail_read_check_is_indeterminate_without_any_user() -> None:
+def test_mail_read_check_is_incomplete_without_any_user() -> None:
     gateway = _gateway()
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[])
 

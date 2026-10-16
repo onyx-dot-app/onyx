@@ -170,7 +170,7 @@ def test_validation_failure_records_failed_and_still_raises(
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_unexpected_failure_records_indeterminate(
+def test_unexpected_failure_records_incomplete(
     db_session: Session,
     blocking_validation: tuple[ConnectorCredentialPair, MagicMock],
 ) -> None:
@@ -210,7 +210,7 @@ def test_wrapped_creation_failure_records_the_original_exception(
 ) -> None:
     """
     Verifies the creation gate raises its wrapper while the report keeps the
-    original exception: an unexpected error is INDETERMINATE, never FAILED.
+    original exception: an unexpected error is INCOMPLETE, never FAILED.
     """
     # Precondition.
     cc_pair, connector_mock = blocking_validation

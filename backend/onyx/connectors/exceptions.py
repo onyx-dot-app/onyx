@@ -29,6 +29,22 @@ class UnexpectedValidationError(ValidationError):
         super().__init__(message)
 
 
+class RateLimitedValidationError(UnexpectedValidationError):
+    """Raised when the source rate limits a validation. The credential may be
+    fine: run the validation again later."""
+
+    def __init__(self, message: str = "The source rate limited the validation"):
+        super().__init__(message)
+
+
+class UnreachableValidationError(UnexpectedValidationError):
+    """Raised when Onyx cannot reach the source: the connection fails, or the
+    address does not answer as the source's API."""
+
+    def __init__(self, message: str = "Onyx cannot reach the source"):
+        super().__init__(message)
+
+
 class CredentialInvalidError(ConnectorValidationError):
     """Raised when a connector's credential is invalid."""
 

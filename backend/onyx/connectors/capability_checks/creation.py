@@ -7,7 +7,7 @@ source's checks for the pairing's access type and stores the full report. A
 fresh result of a draft run on the same form (for an edit, of a dry run on the
 same pair and proposed state) is reused, so the check does not run again. Only
 a required check that failed within the blocking budget blocks the pairing:
-INDETERMINATE is transient, and skipped checks do not apply. A check that is
+INCOMPLETE is transient, and skipped checks do not apply. A check that is
 still running at the end of the budget does not block; a background run
 produces its result.
 """
@@ -312,15 +312,15 @@ def _run_checks_within_budget(
 def _unfinished_results(
     checks: list[CapabilityCheck[Any]], unfinished: frozenset[str], message: str
 ) -> list[CapabilityCheckResult]:
-    """INDETERMINATE rows for checks with no result, for a report that is
-    stored without a background run."""
+    """INCOMPLETE rows for checks with no result, for a report that is stored
+    without a background run."""
     return [
         CapabilityCheckResult(
             capability=check.capability,
             check_id=check.check_id,
             display_name=check.display_name,
             required=check.required,
-            status=CapabilityCheckStatus.INDETERMINATE,
+            status=CapabilityCheckStatus.INCOMPLETE,
             message=message,
             is_fallback=check.is_fallback,
             remediation=check.remediation,

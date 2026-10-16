@@ -113,7 +113,7 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
             continue
         if result.status is CapabilityCheckStatus.FAILED:
             raise ConnectorValidationError(result.message)
-        if result.status is CapabilityCheckStatus.INDETERMINATE:
+        if result.status is CapabilityCheckStatus.INCOMPLETE:
             raise UnexpectedValidationError(result.message)
 
 

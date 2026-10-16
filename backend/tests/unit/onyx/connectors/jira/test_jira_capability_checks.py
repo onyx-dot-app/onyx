@@ -202,13 +202,13 @@ def test_scoped_auth_fails_when_tenant_info_is_not_json() -> None:
     assert "cloud id" in result.message
 
 
-def test_auth_is_indeterminate_when_the_site_is_unreachable() -> None:
+def test_auth_is_incomplete_when_the_site_is_unreachable() -> None:
     gateway: MagicMock = _gateway(is_cloud=True)
     gateway.get_myself.side_effect = requests.ConnectionError("refused")
 
     result: CapabilityCheckResult = _run("jira_auth", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 # --- jira_projects_visible ---
@@ -439,7 +439,7 @@ def test_issue_read_leaves_a_bad_scope_to_the_scope_checks() -> None:
         "jira_issue_read", gateway, _config(jql_query="project = (")
     )
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 @pytest.mark.parametrize(
