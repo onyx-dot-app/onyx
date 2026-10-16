@@ -72,16 +72,16 @@ def resolve_api_token(
 ) -> ApiToken | None:
     """Turn a request's key input into the token a feature should use.
 
-    ``None`` clears the key. A new key creates a token. An existing key must
-    be for the same platform, and an Onyx-owned key can only be kept, not
-    picked. In multi-tenant, a stored key is only sent to the base URL it was
+    ``None`` clears the key. A new key creates a token and cannot be blank.
+    An existing key must be for the same platform, and an Onyx-owned key can
+    only be kept, not picked. In multi-tenant, a stored key is only sent to the base URL it was
     saved for, so an admin cannot point it at another host.
     """
     if token_input is None:
         return None
     if isinstance(token_input, NewApiToken):
         if not token_input.value.strip():
-            return None
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "API key cannot be empty")
         return create_api_token(
             db_session,
             platform=platform,
@@ -117,7 +117,9 @@ def peek_api_token_value(
     if token_input is None:
         return None
     if isinstance(token_input, NewApiToken):
-        return token_input.value.strip() or None
+        if not token_input.value.strip():
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "API key cannot be empty")
+        return token_input.value.strip()
     token = resolve_api_token(
         db_session,
         token_input,
