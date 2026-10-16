@@ -10035,11 +10035,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "الصق مفتاح API من {provider} للاتصال."
-        },
-        "placeholder": "مفتاح API",
-        "title": "مفتاح API",
         "withLink": {
           "description": "الصق [مفتاح API]({url}) من {provider} للاتصال."
         }

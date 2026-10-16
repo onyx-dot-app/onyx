@@ -10035,11 +10035,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "接続するには、{provider} の API キーを貼り付けてください。"
-        },
-        "placeholder": "API キー",
-        "title": "API キー",
         "withLink": {
           "description": "接続するには、{provider} の [API キー]({url}) を貼り付けてください。"
         }

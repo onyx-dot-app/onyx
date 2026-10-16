@@ -10035,11 +10035,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "Cole sua chave de API do {provider} para conectar."
-        },
-        "placeholder": "Chave de API",
-        "title": "Chave de API",
         "withLink": {
           "description": "Cole sua [chave de API]({url}) do {provider} para conectar."
         }

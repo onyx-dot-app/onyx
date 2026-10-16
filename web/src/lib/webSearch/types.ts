@@ -1,5 +1,6 @@
 import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 
 // Registry text (content subtitles, config fields) lives in "admin.webSearch".
 export type WebSearchTranslate = ReturnType<
@@ -53,6 +54,7 @@ export interface WebSearchProviderView {
   is_active: boolean;
   config: Record<string, string> | null;
   masked_api_key: string | null;
+  api_token_id: number | null;
 }
 
 export interface WebContentProviderView {
@@ -62,6 +64,7 @@ export interface WebContentProviderView {
   is_active: boolean;
   config: Record<string, string> | null;
   masked_api_key: string | null;
+  api_token_id: number | null;
 }
 
 // ── UI state ──────────────────────────────────────────────────────────────────
@@ -77,8 +80,7 @@ export interface DisconnectTargetState {
 
 export type ProviderTestPayload = {
   provider_type: string;
-  api_key: string | null;
-  use_stored_key: boolean;
+  api_key: ApiTokenValue | undefined;
   config: Record<string, string>;
 };
 
@@ -86,8 +88,7 @@ export type ProviderUpsertPayload = {
   id: number | null;
   name: string;
   provider_type: string;
-  api_key: string | null;
-  api_key_changed: boolean;
+  api_key: ApiTokenValue | undefined;
   config: Record<string, string>;
   activate: boolean;
 };

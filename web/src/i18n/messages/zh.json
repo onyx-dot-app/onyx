@@ -10035,11 +10035,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "粘贴来自 {provider} 的 API 密钥以进行连接。"
-        },
-        "placeholder": "API 密钥",
-        "title": "API 密钥",
         "withLink": {
           "description": "粘贴来自 {provider} 的 [API 密钥]({url}) 以进行连接。"
         }

@@ -17,6 +17,8 @@ from onyx.db.models import (
     ApiToken,
     CloudEmbeddingProvider,
     ImageGenerationConfig,
+    InternetContentProvider,
+    InternetSearchProvider,
     LLMProvider,
     ModelConfiguration,
     VoiceProvider,
@@ -289,5 +291,20 @@ def get_api_token_usages(
         ).where(CloudEmbeddingProvider.api_token_id.in_(token_ids))
     ):
         usages[token_id].append(("embedding_provider", provider_type.value))
+
+    _add_named_usages(
+        db_session,
+        usages,
+        "web_search_provider",
+        InternetSearchProvider.api_token_id,
+        InternetSearchProvider.name,
+    )
+    _add_named_usages(
+        db_session,
+        usages,
+        "web_content_provider",
+        InternetContentProvider.api_token_id,
+        InternetContentProvider.name,
+    )
 
     return usages

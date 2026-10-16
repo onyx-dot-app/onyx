@@ -10035,11 +10035,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "Paste your API key from {provider} to connect."
-        },
-        "placeholder": "API Key",
-        "title": "API Key",
         "withLink": {
           "description": "Paste your [API key]({url}) from {provider} to connect."
         }

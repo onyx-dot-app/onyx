@@ -10035,11 +10035,6 @@
     },
     "webSearch": {
       "apiKeyField": {
-        "noLink": {
-          "description": "Fügen Sie Ihren API-Schlüssel von {provider} ein, um eine Verbindung herzustellen."
-        },
-        "placeholder": "API-Schlüssel",
-        "title": "API-Schlüssel",
         "withLink": {
           "description": "Fügen Sie Ihren [API-Schlüssel]({url}) von {provider} ein, um eine Verbindung herzustellen."
         }
