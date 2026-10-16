@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from chonkie import SentenceChunker
 
 from onyx.connectors.models import (
@@ -38,13 +40,14 @@ class DocumentChunker:
         self.blurb_splitter = blurb_splitter
         self.mini_chunk_splitter = mini_chunk_splitter
 
+        self._tabular_chunker = TabularChunker(tokenizer=tokenizer)
         self._dispatch: dict[SectionType, SectionChunker] = {
             SectionType.TEXT: TextChunker(
                 tokenizer=tokenizer,
                 chunk_splitter=chunk_splitter,
             ),
             SectionType.IMAGE: ImageChunker(),
-            SectionType.TABULAR: TabularChunker(tokenizer=tokenizer),
+            SectionType.TABULAR: self._tabular_chunker,
         }
 
     def chunk(
@@ -86,8 +89,30 @@ class DocumentChunker:
     ) -> list[ChunkPayload]:
         accumulator = AccumulatorState()
         payloads: list[ChunkPayload] = []
+        # Sheets of one file are chunked together, at the first of them. A
+        # document can carry more than one file, so group by link rather than
+        # merging unrelated workbooks into one.
+        workbooks: dict[str, list[TabularSection]] = defaultdict(list)
+        for section in sections:
+            if isinstance(section, TabularSection):
+                workbooks[section.link or ""].append(section)
+        chunked_workbooks: set[str] = set()
 
         for section_idx, section in enumerate(sections):
+            if isinstance(section, TabularSection):
+                link = section.link or ""
+                if link not in chunked_workbooks:
+                    chunked_workbooks.add(link)
+                    result = self._tabular_chunker.chunk_workbook(
+                        sections=workbooks[link],
+                        accumulator=accumulator,
+                        content_token_limit=content_token_limit,
+                        file_name=document.semantic_identifier,
+                    )
+                    payloads.extend(result.payloads)
+                    accumulator = result.accumulator
+                continue
+
             section_text = clean_text(str(section.text or ""))
             # File-backed tabular sections hold their content in csv_file_id, not
             # text, so they look empty here — keep them for the tabular chunker.
