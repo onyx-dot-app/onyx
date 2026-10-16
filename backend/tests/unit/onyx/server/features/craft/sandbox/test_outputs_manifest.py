@@ -6,6 +6,7 @@ import importlib
 import os
 import subprocess
 import sys
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -154,6 +155,8 @@ def test_same_size_overwrite_with_preserved_mtime_changes_metadata(
     original = report.stat()
     before = manifest_module.build_outputs_manifest(session_id).entries[0]
 
+    # Allow filesystems with coarse ctime ticks to record the next write.
+    time.sleep(0.02)
     report.write_text("other")
     os.utime(report, ns=(original.st_atime_ns, original.st_mtime_ns))
     after = manifest_module.build_outputs_manifest(session_id).entries[0]
