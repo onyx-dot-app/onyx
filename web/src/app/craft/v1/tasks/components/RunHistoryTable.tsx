@@ -32,7 +32,7 @@ import {
 import type {
   ScheduledRunListResponse,
   ScheduledRunSummary,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 import {
   formatAbsolute,
   formatRelativeShort,

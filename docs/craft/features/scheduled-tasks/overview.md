@@ -48,7 +48,7 @@ browser open, and clicks any past run to open the completed session.
   touch `next_run_at`).
 - **Runs execute as the task author.**
   `create_session__no_commit(user_id=task.user_id)` — skills, Onyx search,
-  OAuth grants, approval policies all flow through the same user-scoped
+  OAuth grants, action policies all flow through the same user-scoped
   paths the interactive UI uses.
 - **Soft-delete preserves history.** `deleted=true` stops dispatch; runs
   and sessions stay so users can open past runs from the task's run

@@ -20,14 +20,15 @@ import {
   runScheduledTaskNow,
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
+import { TaskActionPoliciesSummary } from "@/app/craft/v1/tasks/components/TaskActionPolicies";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
-import PreApprovalSummary from "@/app/craft/v1/tasks/components/PreApprovalSummary";
+
 import { taskStatusTag } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
   ScheduledTaskDetail,
   ScheduledTaskStatus,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 import { humanReadableScheduleFromCron } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -203,13 +204,7 @@ export default function ScheduledTaskDetailPage() {
           </Text>
         ) : (
           <div className="flex flex-col gap-6">
-            {(data.pre_approved_app_ids.length > 0 ||
-              data.pre_approved_mcp_server_ids.length > 0) && (
-              <PreApprovalSummary
-                appIds={data.pre_approved_app_ids}
-                mcpServerIds={data.pre_approved_mcp_server_ids}
-              />
-            )}
+            <TaskActionPoliciesSummary taskId={data.id} />
             <RunHistoryTable taskId={data.id} />
           </div>
         )}

@@ -1,3 +1,4 @@
+import type { TaskAppActionPolicies } from "@/app/craft/v1/apps/action-policies/types";
 /**
  * Shared types for the Scheduled Tasks feature.
  *
@@ -78,8 +79,7 @@ export interface ScheduledTaskDetail {
   next_run_at: string | null;
   next_runs: string[];
   last_run: ScheduledRunSummary | null;
-  pre_approved_app_ids: number[];
-  pre_approved_mcp_server_ids: number[];
+  action_policies: TaskAppActionPolicies[];
   created_at: string;
   updated_at: string;
 }
@@ -91,8 +91,7 @@ export interface ScheduledTaskCreateBody {
   editor_payload: EditorPayload;
   status?: ScheduledTaskStatus;
   run_immediately?: boolean;
-  pre_approved_app_ids?: number[];
-  pre_approved_mcp_server_ids?: number[];
+  action_policies?: TaskAppActionPolicies[];
 }
 
 export interface ScheduledTaskPatchBody {
@@ -101,8 +100,7 @@ export interface ScheduledTaskPatchBody {
   editor_mode?: EditorMode;
   editor_payload?: EditorPayload;
   status?: ScheduledTaskStatus;
-  pre_approved_app_ids?: number[];
-  pre_approved_mcp_server_ids?: number[];
+  action_policies?: TaskAppActionPolicies[];
 }
 
 export interface ScheduledTaskListResponse {

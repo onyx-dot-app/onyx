@@ -1,4 +1,4 @@
-import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
+import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/types";
 import { downloadFile } from "@/lib/download";
 import { FetchError } from "@/lib/fetcher";
 import {

@@ -43,7 +43,8 @@ Proxy runtime:
 Approval persistence and API:
 
 - `backend/onyx/db/models.py` defines `ActionApproval`,
-  `ExternalAppPolicy`, and `ScheduledTaskPreApprovedTarget`.
+  `WorkspaceActionPolicy`, `UserActionPolicy`, `ScheduledTaskActionPolicy`,
+  and `ScheduledTaskEnabledApp`.
 - `backend/onyx/db/enums.py` defines `ActionPolicy`,
   `ApprovalDecision`, and `ApprovalDecidedVia`.
 - `backend/onyx/server/features/build/db/action_approval.py` owns approval DB
