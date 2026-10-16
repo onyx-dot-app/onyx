@@ -79,14 +79,6 @@ def basic_expert_info_representation(info: BasicExpertInfo) -> str | None:
     return None
 
 
-def experts_from_stores_representations(
-    names: list[str] | None,
-) -> list[BasicExpertInfo] | None:
-    """Inverse of `get_experts_stores_representations`, which returns
-    `display_name` when it is the only field set."""
-    return [BasicExpertInfo(display_name=name) for name in names] if names else None
-
-
 def get_experts_stores_representations(
     experts: list[BasicExpertInfo] | None,
 ) -> list[str] | None:
@@ -145,8 +137,19 @@ def process_onyx_metadata(
     Users may set Onyx metadata and custom tags in text files. https://docs.onyx.app/admins/connectors/official/file
     Any unrecognized fields are treated as custom tags.
     """
-    p_owners = experts_from_stores_representations(metadata.get("primary_owners"))
-    s_owners = experts_from_stores_representations(metadata.get("secondary_owners"))
+    p_owner_names = metadata.get("primary_owners")
+    p_owners = (
+        [BasicExpertInfo(display_name=name) for name in p_owner_names]
+        if p_owner_names
+        else None
+    )
+
+    s_owner_names = metadata.get("secondary_owners")
+    s_owners = (
+        [BasicExpertInfo(display_name=name) for name in s_owner_names]
+        if s_owner_names
+        else None
+    )
     source_type = _parse_document_source(metadata.get("connector_type"))
 
     dt_str = metadata.get("doc_updated_at")
