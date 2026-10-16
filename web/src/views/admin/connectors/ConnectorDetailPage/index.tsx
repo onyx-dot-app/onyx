@@ -92,7 +92,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [checksExpandRequest, setChecksExpandRequest] = useState(0);
   // One window drives the status card's chart and the runs card's list.
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
-    pickWindow("all")
+    pickWindow("12h")
   );
   // A clicked chart slice narrows the runs and activity inside the window.
   const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
@@ -419,7 +419,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
             <RunsCard
               ccPairId={ccPair.id}
               canOperate={canOperate}
-              since={timeWindow.since}
+              sharedWindow={timeWindow}
+              onSharedWindowChange={(picked) =>
+                setTimeWindow(pickWindow(picked))
+              }
               range={sliceRange}
               onClearRange={() => setSliceRange(null)}
             />

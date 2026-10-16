@@ -2321,7 +2321,7 @@
           "ariaLabel": "المستندات المفهرسة بمرور الوقت",
           "tooltip": "{count, plural, one {# مستند} other {# مستندات}}",
           "loadError": "تعذر تحميل الرسم البياني.",
-          "rangeFilter": "Runs created in this slice of the chart"
+          "rangeFilter": "عمليات التشغيل التي أُنشئت في هذا الجزء من المخطط"
         },
         "hold": {
           "checks_running": "جارٍ تشغيل فحوصات ما قبل الفهرسة",
@@ -2482,7 +2482,7 @@
           "running": "{count, plural, one {تشغيل واحد قيد التنفيذ} other {# عمليات تشغيل قيد التنفيذ}}",
           "succeeded": "{count, plural, one {نجح تشغيل واحد} other {نجحت # عمليات تشغيل}}",
           "failed": "{count, plural, one {فشل تشغيل واحد} other {فشلت # عمليات تشغيل}}",
-          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
+          "canceled": "{count, plural, one {تم إلغاء # تشغيل} other {تم إلغاء # تشغيلات}}",
           "passedChecks": "{count, plural, one {نجح فحص واحد} other {نجح # فحوصات}}",
           "failedChecks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
           "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}"
@@ -2496,7 +2496,16 @@
           "h1": "آخر ساعة",
           "h12": "آخر 12 ساعة",
           "h24": "آخر 24 ساعة",
-          "d7": "آخر 7 أيام"
+          "d7": "آخر 7 أيام",
+          "d30": "آخر 30 يومًا"
+        },
+        "statusGroups": {
+          "label": "الحالة",
+          "all": "كل الحالات",
+          "running": "قيد التشغيل",
+          "succeeded": "ناجح",
+          "failed": "فشل",
+          "canceled": "ملغى"
         },
         "loadError": {
           "title": "تعذر تحميل عمليات التشغيل."

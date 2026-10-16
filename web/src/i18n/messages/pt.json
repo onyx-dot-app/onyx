@@ -2321,7 +2321,7 @@
           "ariaLabel": "Documentos indexados ao longo do tempo",
           "tooltip": "{count, plural, one {# documento} other {# documentos}}",
           "loadError": "Não foi possível carregar o gráfico.",
-          "rangeFilter": "Runs created in this slice of the chart"
+          "rangeFilter": "Execuções criadas neste trecho do gráfico"
         },
         "hold": {
           "checks_running": "Executando verificações pré-indexação",
@@ -2482,7 +2482,7 @@
           "running": "{count, plural, one {# execução em andamento} other {# execuções em andamento}}",
           "succeeded": "{count, plural, one {# execução bem-sucedida} other {# execuções bem-sucedidas}}",
           "failed": "{count, plural, one {# execução com falha} other {# execuções com falha}}",
-          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
+          "canceled": "{count, plural, one {# execução cancelada} other {# execuções canceladas}}",
           "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
           "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
           "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}"
@@ -2496,7 +2496,16 @@
           "h1": "Última hora",
           "h12": "Últimas 12 horas",
           "h24": "Últimas 24 horas",
-          "d7": "Últimos 7 dias"
+          "d7": "Últimos 7 dias",
+          "d30": "Últimos 30 dias"
+        },
+        "statusGroups": {
+          "label": "Status",
+          "all": "Todos os status",
+          "running": "Em execução",
+          "succeeded": "Bem-sucedidas",
+          "failed": "Com falha",
+          "canceled": "Canceladas"
         },
         "loadError": {
           "title": "Não foi possível carregar as execuções."

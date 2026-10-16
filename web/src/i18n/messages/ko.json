@@ -2321,7 +2321,7 @@
           "ariaLabel": "시간별 인덱싱된 문서",
           "tooltip": "{count, plural, one {문서 #개} other {문서 #개}}",
           "loadError": "차트를 불러올 수 없습니다.",
-          "rangeFilter": "Runs created in this slice of the chart"
+          "rangeFilter": "차트의 이 구간에 생성된 실행"
         },
         "hold": {
           "checks_running": "인덱싱 전 검사 실행 중",
@@ -2482,7 +2482,7 @@
           "running": "{count, plural, other {실행 #개 진행 중}}",
           "succeeded": "{count, plural, other {실행 #개 성공}}",
           "failed": "{count, plural, other {실행 #개 실패}}",
-          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
+          "canceled": "{count, plural, other {실행 #개 취소됨}}",
           "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
           "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
@@ -2496,7 +2496,16 @@
           "h1": "최근 1시간",
           "h12": "최근 12시간",
           "h24": "최근 24시간",
-          "d7": "최근 7일"
+          "d7": "최근 7일",
+          "d30": "최근 30일"
+        },
+        "statusGroups": {
+          "label": "상태",
+          "all": "모든 상태",
+          "running": "실행 중",
+          "succeeded": "성공",
+          "failed": "실패",
+          "canceled": "취소됨"
         },
         "loadError": {
           "title": "실행 목록을 불러오지 못했습니다."

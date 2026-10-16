@@ -2321,7 +2321,7 @@
           "ariaLabel": "Indizierte Dokumente im Zeitverlauf",
           "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
           "loadError": "Das Diagramm konnte nicht geladen werden.",
-          "rangeFilter": "Runs created in this slice of the chart"
+          "rangeFilter": "In diesem Abschnitt des Diagramms erstellte Läufe"
         },
         "hold": {
           "checks_running": "Vorab-Prüfungen laufen",
@@ -2482,7 +2482,7 @@
           "running": "{count, plural, one {# Lauf aktiv} other {# Läufe aktiv}}",
           "succeeded": "{count, plural, one {# Lauf erfolgreich} other {# Läufe erfolgreich}}",
           "failed": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}",
-          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
+          "canceled": "{count, plural, one {# Lauf abgebrochen} other {# Läufe abgebrochen}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
@@ -2496,7 +2496,16 @@
           "h1": "Letzte Stunde",
           "h12": "Letzte 12 Stunden",
           "h24": "Letzte 24 Stunden",
-          "d7": "Letzte 7 Tage"
+          "d7": "Letzte 7 Tage",
+          "d30": "Letzte 30 Tage"
+        },
+        "statusGroups": {
+          "label": "Status",
+          "all": "Alle Status",
+          "running": "Läuft",
+          "succeeded": "Erfolgreich",
+          "failed": "Fehlgeschlagen",
+          "canceled": "Abgebrochen"
         },
         "loadError": {
           "title": "Die Läufe konnten nicht geladen werden."

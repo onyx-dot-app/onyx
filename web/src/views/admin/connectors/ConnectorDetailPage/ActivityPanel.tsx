@@ -270,6 +270,9 @@ export default function ActivityPanel({
                 width="fit"
                 height="fit"
               >
+                {range !== null && onClearRange !== undefined && (
+                  <SliceRangeFilter range={range} onClear={onClearRange} />
+                )}
                 <ActivityCountTags
                   failures={failures.total}
                   errors={errors.total}
@@ -318,9 +321,6 @@ export default function ActivityPanel({
               >
                 {t("resolved.label")}
               </SelectButton>
-              {range !== null && onClearRange !== undefined && (
-                <SliceRangeFilter range={range} onClear={onClearRange} />
-              )}
             </Section>
           </Section>
 

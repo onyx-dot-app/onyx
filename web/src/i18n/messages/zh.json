@@ -2321,7 +2321,7 @@
           "ariaLabel": "随时间索引的文档",
           "tooltip": "{count, plural, one {# 个文档} other {# 个文档}}",
           "loadError": "无法加载图表。",
-          "rangeFilter": "Runs created in this slice of the chart"
+          "rangeFilter": "在图表此时间段内创建的运行"
         },
         "hold": {
           "checks_running": "正在运行索引前检查",
@@ -2482,7 +2482,7 @@
           "running": "{count, plural, other {# 个运行进行中}}",
           "succeeded": "{count, plural, other {# 个运行成功}}",
           "failed": "{count, plural, other {# 个运行失败}}",
-          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
+          "canceled": "{count, plural, other {已取消 # 次运行}}",
           "passedChecks": "{count, plural, one {# 项检查通过} other {# 项检查通过}}",
           "failedChecks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}"
@@ -2496,7 +2496,16 @@
           "h1": "过去 1 小时",
           "h12": "过去 12 小时",
           "h24": "过去 24 小时",
-          "d7": "过去 7 天"
+          "d7": "过去 7 天",
+          "d30": "过去 30 天"
+        },
+        "statusGroups": {
+          "label": "状态",
+          "all": "所有状态",
+          "running": "运行中",
+          "succeeded": "成功",
+          "failed": "失败",
+          "canceled": "已取消"
         },
         "loadError": {
           "title": "无法加载运行记录。"

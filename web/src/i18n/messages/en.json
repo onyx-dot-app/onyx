@@ -2496,7 +2496,16 @@
           "h1": "Last hour",
           "h12": "Last 12 hours",
           "h24": "Last 24 hours",
-          "d7": "Last 7 days"
+          "d7": "Last 7 days",
+          "d30": "Last 30 days"
+        },
+        "statusGroups": {
+          "label": "Status",
+          "all": "All Status",
+          "running": "Running",
+          "succeeded": "Succeeded",
+          "failed": "Failed",
+          "canceled": "Canceled"
         },
         "loadError": {
           "title": "Couldn't load the runs."

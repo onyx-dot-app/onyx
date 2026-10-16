@@ -46,21 +46,6 @@ export const AllColorsWithIcon: Story = {
   ),
 };
 
-export const Toggle: Story = {
-  render: () => (
-    <div className="flex items-center gap-2">
-      <Tag title="12" color="green" tooltip="12 succeeded" onClick={() => {}} />
-      <Tag
-        title="3"
-        color="red"
-        tooltip="3 failed"
-        selected
-        onClick={() => {}}
-      />
-    </div>
-  ),
-};
-
 export const Editable: Story = {
   args: {
     title: "Label",

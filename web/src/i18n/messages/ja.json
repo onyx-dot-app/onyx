@@ -2321,7 +2321,7 @@
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
           "loadError": "グラフを読み込めませんでした。",
-          "rangeFilter": "Runs created in this slice of the chart"
+          "rangeFilter": "グラフのこの区間に作成された実行"
         },
         "hold": {
           "checks_running": "インデックス前チェックを実行中",
@@ -2482,7 +2482,7 @@
           "running": "{count, plural, other {# 件の実行が進行中}}",
           "succeeded": "{count, plural, other {# 件の実行が成功}}",
           "failed": "{count, plural, other {# 件の実行が失敗}}",
-          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
+          "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"
@@ -2496,7 +2496,16 @@
           "h1": "過去 1 時間",
           "h12": "過去 12 時間",
           "h24": "過去 24 時間",
-          "d7": "過去 7 日間"
+          "d7": "過去 7 日間",
+          "d30": "過去 30 日間"
+        },
+        "statusGroups": {
+          "label": "ステータス",
+          "all": "すべてのステータス",
+          "running": "実行中",
+          "succeeded": "成功",
+          "failed": "失敗",
+          "canceled": "キャンセル済み"
         },
         "loadError": {
           "title": "実行を読み込めませんでした。"
