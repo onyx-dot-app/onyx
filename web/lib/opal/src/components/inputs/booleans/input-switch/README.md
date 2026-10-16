@@ -47,7 +47,7 @@ Hover and keyboard focus (`:focus-visible`) both darken the track by one step. T
 
 ## Focus
 
-`disabled` sets `aria-disabled`, not the native `disabled` attribute. Callers often disable a switch while its change saves, and a browser drops focus from a natively disabled button. So a focused switch keeps focus through that save, and Enter or Space toggles it again without tabbing back. A disabled switch is still skipped by Tab (`tabIndex={-1}`).
+`disabled` sets `aria-disabled`, not the native `disabled` attribute. Callers often disable a switch while its change saves, and a browser drops focus from a natively disabled button. So a focused switch keeps focus through that save. While it is disabled, Enter and Space do nothing. When the save ends, they toggle it again without tabbing back. A disabled switch is still skipped by Tab (`tabIndex={-1}`).
 
 ## Formik
 
