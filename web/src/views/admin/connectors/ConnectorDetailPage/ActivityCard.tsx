@@ -356,7 +356,7 @@ export default function ActivityCard({
               </Section>
               {closed ? (
                 <SelectButton
-                  variant="select-filter"
+                  variant="select-heavy"
                   state="selected"
                   rightIcon={SvgCheckSquare}
                   size="xs"
