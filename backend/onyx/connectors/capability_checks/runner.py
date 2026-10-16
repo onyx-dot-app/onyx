@@ -15,6 +15,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CheckAdvisory,
+    CheckErrorDetail,
     CheckErrorKind,
     CheckFinding,
     CheckNotApplicableError,
@@ -22,6 +23,7 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
     CredentialCapabilityReport,
+    check_error_detail,
     check_error_kind,
     compute_capability_verdicts,
 )
@@ -105,6 +107,7 @@ class _CheckOutcome(BaseModel):
     message: str = ""
     error_type: str | None = None
     error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
     duration_ms: int | None = None
@@ -125,6 +128,7 @@ def _build_result(
         message=outcome.message,
         error_type=outcome.error_type,
         error_kind=outcome.error_kind,
+        error_detail=outcome.error_detail,
         not_run_reason=outcome.not_run_reason,
         blocked_by=outcome.blocked_by,
         is_fallback=check.is_fallback,
@@ -154,6 +158,7 @@ def _error_outcome(
         message=str(error) if message is None else message,
         error_type=type(error).__name__,
         error_kind=error_kind,
+        error_detail=check_error_detail(error, error_kind),
         duration_ms=duration_ms,
     )
 

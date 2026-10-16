@@ -203,7 +203,7 @@ def test_sdk_errors_become_jira_api_errors() -> None:
         _gateway(client).get_project(project_key="NOPE")
 
     assert exc_info.value.status_code == 404
-    assert "No project could be found" in (exc_info.value.text or "")
+    assert "No project could be found" in (exc_info.value.body or "")
 
 
 def test_http_errors_become_jira_api_errors() -> None:
@@ -219,7 +219,7 @@ def test_http_errors_become_jira_api_errors() -> None:
         _gateway(client).search_issue_ids(jql="project = AS")
 
     assert exc_info.value.status_code == 400
-    assert "Error in the JQL Query" in (exc_info.value.text or "")
+    assert "Error in the JQL Query" in (exc_info.value.body or "")
 
 
 @pytest.mark.parametrize(

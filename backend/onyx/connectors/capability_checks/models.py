@@ -1,10 +1,13 @@
+import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from functools import cached_property
 from typing import Annotated, Any, Generic, Literal
+from urllib.parse import urlparse
 
+import requests
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -27,6 +30,7 @@ from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InsufficientPermissionsError,
     RateLimitedValidationError,
+    SourceApiError,
     UnreachableValidationError,
 )
 from onyx.connectors.interfaces import BaseConnector
@@ -199,6 +203,77 @@ TRANSIENT_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
         CheckErrorKind.UNEXPECTED,
     }
 )
+
+
+# Kinds whose cause the check does not know: their result keeps a stack trace.
+_UNKNOWN_CAUSE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
+    {CheckErrorKind.TIMEOUT, CheckErrorKind.UNREACHABLE, CheckErrorKind.UNEXPECTED}
+)
+# Bounds what a result stores of the source's response and of a stack trace:
+# results live in stored reports and in every draft snapshot write.
+MAX_RESPONSE_EXCERPT_CHARS: int = 500
+MAX_STACK_TRACE_CHARS: int = 4000
+
+
+class CheckErrorDetail(BaseModel):
+    """What support needs about a check that did not pass, beyond its
+    message. The form shows it as Error Details."""
+
+    # The source's HTTP status, request and response, when the error carries
+    # an HTTP response. The request has no query string, which can hold
+    # secrets.
+    status_code: int | None = None
+    request: str | None = None
+    response_excerpt: str | None = None
+    # Only when the cause is unknown: a timeout, an unreachable source or an
+    # unexpected error.
+    stack_trace: str | None = None
+
+
+def _request_line(method: str | None, url: str | None) -> str | None:
+    if url is None:
+        return None
+    parsed = urlparse(url)
+    # Host and path only: the query string and user info can hold secrets.
+    location = f"{parsed.hostname or ''}{f':{parsed.port}' if parsed.port else ''}{parsed.path}"
+    return f"{method} {location}" if method else location
+
+
+def _http_detail(error: BaseException) -> CheckErrorDetail | None:
+    """The HTTP response of the first error in the chain that has one."""
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, SourceApiError):
+            return CheckErrorDetail(
+                status_code=current.status_code,
+                request=_request_line(current.method, current.url),
+                response_excerpt=(current.body or "")[:MAX_RESPONSE_EXCERPT_CHARS]
+                or None,
+            )
+        if isinstance(current, requests.HTTPError) and current.response is not None:
+            response = current.response
+            return CheckErrorDetail(
+                status_code=response.status_code,
+                request=_request_line(
+                    response.request.method if response.request else None,
+                    response.url,
+                ),
+                response_excerpt=response.text[:MAX_RESPONSE_EXCERPT_CHARS] or None,
+            )
+        current = current.__cause__
+    return None
+
+
+def check_error_detail(
+    error: Exception, error_kind: CheckErrorKind
+) -> CheckErrorDetail | None:
+    """The detail of a check's exception: the HTTP response it carries, and a
+    stack trace when the cause is unknown. None when it has neither."""
+    detail = _http_detail(error) or CheckErrorDetail()
+    if error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
+        trace = "".join(traceback.format_exception(error))
+        detail.stack_trace = trace[-MAX_STACK_TRACE_CHARS:]
+    return detail if detail != CheckErrorDetail() else None
 
 
 class CheckNotRunReason(str, Enum):
@@ -470,6 +545,7 @@ class CapabilityCheckResult(BaseModel):
     error_type: str | None = None
     # Why a FAILED or INCOMPLETE check did not pass.
     error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
     # Why a SKIPPED check did not run, and the dependency that stopped it.
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None

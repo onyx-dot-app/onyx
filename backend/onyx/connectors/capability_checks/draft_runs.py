@@ -40,6 +40,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CapabilityVerdict,
     CheckAdvisory,
+    CheckErrorDetail,
     CheckErrorKind,
     CheckFinding,
     CheckNotApplicableError,
@@ -163,6 +164,7 @@ class DraftCheckState(BaseModel):
     # Exception class name of a failure, for support diagnosis.
     error_type: str | None = None
     error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
     # Why a SKIPPED check did not run, and the dependency that stopped it.
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
@@ -283,6 +285,7 @@ class CachedDraftResult(BaseModel):
     duration_ms: int | None
     error_type: str | None = None
     error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
     findings: list[CheckFinding] = []
     advisories: list[CheckAdvisory] = []
 
@@ -447,6 +450,7 @@ def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
         duration_ms=result.duration_ms,
         error_type=result.error_type,
         error_kind=result.error_kind,
+        error_detail=result.error_detail,
         findings=result.findings,
         advisories=result.advisories,
     )
@@ -533,6 +537,7 @@ def cached_check_result(
         message=cached.message,
         error_type=cached.error_type,
         error_kind=cached.error_kind,
+        error_detail=cached.error_detail,
         is_fallback=check.is_fallback,
         remediation=check.remediation,
         docs_link=check.docs_link,
@@ -553,6 +558,7 @@ def apply_check_result(
     check_state.message = result.message
     check_state.error_type = result.error_type
     check_state.error_kind = result.error_kind
+    check_state.error_detail = result.error_detail
     check_state.not_run_reason = result.not_run_reason
     check_state.blocked_by = result.blocked_by
     check_state.duration_ms = result.duration_ms
@@ -567,6 +573,7 @@ def apply_cached_result(
     check_state.message = cached.message
     check_state.error_type = cached.error_type
     check_state.error_kind = cached.error_kind
+    check_state.error_detail = cached.error_detail
     check_state.duration_ms = cached.duration_ms
     check_state.findings = cached.findings if check_findings_enabled() else []
     check_state.advisories = cached.advisories
