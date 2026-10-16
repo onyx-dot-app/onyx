@@ -9438,9 +9438,6 @@
         "title": "{label} trennen"
       },
       "field": {
-        "optional": {
-          "title": "{label} (Optional)"
-        },
         "required": {
           "error": "{label} ist erforderlich"
         }

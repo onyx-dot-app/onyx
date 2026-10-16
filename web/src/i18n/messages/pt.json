@@ -9438,9 +9438,6 @@
         "title": "Desconectar {label}"
       },
       "field": {
-        "optional": {
-          "title": "{label} (opcional)"
-        },
         "required": {
           "error": "{label} é obrigatório"
         }

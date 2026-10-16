@@ -9438,9 +9438,6 @@
         "title": "{label} を切断"
       },
       "field": {
-        "optional": {
-          "title": "{label}(任意)"
-        },
         "required": {
           "error": "{label} は必須です"
         }

@@ -9438,9 +9438,6 @@
         "title": "断开 {label} 的连接"
       },
       "field": {
-        "optional": {
-          "title": "{label}（可选）"
-        },
         "required": {
           "error": "{label} 为必填项"
         }
