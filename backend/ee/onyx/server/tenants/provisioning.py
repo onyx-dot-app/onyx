@@ -534,12 +534,14 @@ def configure_default_api_keys(db_session: Session) -> None:
     if COHERE_DEFAULT_API_KEY:
         cloud_embedding_provider = CloudEmbeddingProviderCreationRequest(
             provider_type=EmbeddingProvider.COHERE,
-            api_key=COHERE_DEFAULT_API_KEY,
+            api_key=NewApiToken(value=COHERE_DEFAULT_API_KEY),
         )
 
         try:
             logger.info("Attempting to upsert Cohere cloud embedding provider")
-            upsert_cloud_embedding_provider(db_session, cloud_embedding_provider)
+            upsert_cloud_embedding_provider(
+                db_session, cloud_embedding_provider, system_key=True
+            )
             logger.info("Successfully upserted Cohere cloud embedding provider")
 
             logger.info("Updating search settings with Cohere embedding model details")

@@ -6426,10 +6426,6 @@
         "unknownError": "Erreur inconnue"
       },
       "fields": {
-        "apiKey": {
-          "description": "Collez votre [clé d'API]({link}) de {provider} pour accéder à vos modèles.",
-          "title": "Clé d'API"
-        },
         "googleCredentials": {
           "title": "Téléverser le fichier d'identifiants JSON"
         },

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.db.api_token import peek_api_token_value
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import (
@@ -22,6 +23,8 @@ from onyx.natural_language_processing.embedding_auth import (
     CloudEmbeddingAuth,
     build_embedding_auth,
 )
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
+from onyx.server.manage.api_token.models import ExistingApiToken
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
     CloudEmbeddingProviderCreationRequest,
@@ -40,12 +43,12 @@ basic_router = APIRouter(prefix="/embedding")
 
 
 def _build_request_auth(
-    request: TestEmbeddingRequest | CloudEmbeddingProviderCreationRequest,
+    provider_type: EmbeddingProvider,
+    api_key: str | None,
+    vertex_config: VertexEmbeddingConfig | None,
 ) -> CloudEmbeddingAuth:
     try:
-        return build_embedding_auth(
-            request.provider_type, request.api_key, request.vertex_config
-        )
+        return build_embedding_auth(provider_type, api_key, vertex_config)
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
 
@@ -56,15 +59,20 @@ def test_embedding_configuration(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TestEmbeddingResponse:
-    auth = _build_request_auth(test_llm_request)
-    api_key = test_llm_request.api_key
-    if api_key is None and auth.uses_api_key:
+    current_token_id: int | None = None
+    if isinstance(test_llm_request.api_key, ExistingApiToken):
         existing = fetch_embedding_provider(db_session, test_llm_request.provider_type)
-        if existing is not None and existing.api_key is not None:
-            api_key = existing.api_key.get_value(apply_mask=False)
-            auth = build_embedding_auth(
-                test_llm_request.provider_type, api_key, test_llm_request.vertex_config
-            )
+        current_token_id = existing.api_token_id if existing is not None else None
+    api_key = peek_api_token_value(
+        db_session,
+        test_llm_request.api_key,
+        platform=test_llm_request.provider_type.value,
+        base_url=test_llm_request.api_url,
+        current_token_id=current_token_id,
+    )
+    auth = _build_request_auth(
+        test_llm_request.provider_type, api_key, test_llm_request.vertex_config
+    )
     dimension: int = probe_embedding_dimension(
         provider_type=test_llm_request.provider_type,
         api_key=api_key,
@@ -138,9 +146,7 @@ def put_cloud_embedding_provider(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CloudEmbeddingProvider:
-    auth = _build_request_auth(provider)
+    auth = _build_request_auth(provider.provider_type, None, provider.vertex_config)
     if not auth.uses_api_key:
-        provider = provider.model_copy(
-            update={"api_key": None, "api_key_changed": True}
-        )
+        provider = provider.model_copy(update={"api_key": None})
     return upsert_cloud_embedding_provider(db_session, provider)

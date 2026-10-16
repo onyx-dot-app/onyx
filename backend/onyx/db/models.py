@@ -3996,7 +3996,10 @@ class CloudEmbeddingProvider(Base):
         Enum(EmbeddingProvider), primary_key=True
     )
     api_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(EncryptedString())
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_token.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    api_token: Mapped["ApiToken | None"] = relationship("ApiToken", lazy="joined")
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
     vertex_config: Mapped[VertexEmbeddingConfigDict | None] = mapped_column(
@@ -4010,6 +4013,10 @@ class CloudEmbeddingProvider(Base):
 
     def __repr__(self) -> str:
         return f"<EmbeddingProvider(type='{self.provider_type}')>"
+
+    @property
+    def api_key(self) -> SensitiveValue[str] | None:
+        return self.api_token.value if self.api_token else None
 
 
 class InternetSearchProvider(Base):

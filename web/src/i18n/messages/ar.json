@@ -6426,10 +6426,6 @@
         "unknownError": "خطأ غير معروف"
       },
       "fields": {
-        "apiKey": {
-          "description": "الصق [مفتاح API]({link}) من {provider} للوصول إلى نماذجك.",
-          "title": "مفتاح API"
-        },
         "googleCredentials": {
           "title": "ارفع ملف بيانات اعتماد JSON"
         },

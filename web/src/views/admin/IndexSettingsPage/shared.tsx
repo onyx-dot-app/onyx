@@ -3,18 +3,13 @@
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
-import { markdown } from "@opal/utils";
 import { Divider } from "@opal/components";
 import { InputSingleUploadField } from "@opal/form";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
-import type {
-  EmbeddingProvider,
-  IndexSettingsTranslator,
-} from "@/lib/searchSettings/types";
+import type { IndexSettingsTranslator } from "@/lib/searchSettings/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 
 // ---------------------------------------------------------------------------
 // Formik-aware field components
@@ -24,31 +19,6 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 // on the Opal `InputVertical` / `InputHorizontal` wires the `<label htmlFor>`
 // AND the inline error-text rendered by `FormikInputError`.
 // ---------------------------------------------------------------------------
-
-interface ApiKeyFieldProps {
-  provider: EmbeddingProvider;
-  optional?: boolean;
-}
-
-export function ApiKeyField({ provider, optional = false }: ApiKeyFieldProps) {
-  const t = useTranslations("admin.indexSettings");
-
-  return (
-    <InputVertical
-      title={t("fields.apiKey.title")}
-      suffix={optional ? t("fields.optional.suffix") : undefined}
-      withLabel="apiKey"
-      subDescription={markdown(
-        t("fields.apiKey.description", {
-          link: provider.apiLink ?? "",
-          provider: provider.displayName,
-        })
-      )}
-    >
-      <PasswordInputTypeInField name="apiKey" />
-    </InputVertical>
-  );
-}
 
 interface ApiUrlFieldProps {
   title: string;

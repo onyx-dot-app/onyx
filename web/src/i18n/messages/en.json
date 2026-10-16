@@ -6426,10 +6426,6 @@
         "unknownError": "Unknown error"
       },
       "fields": {
-        "apiKey": {
-          "description": "Paste your [API key]({link}) from {provider} to access your models.",
-          "title": "API Key"
-        },
         "googleCredentials": {
           "title": "Upload JSON credentials file"
         },

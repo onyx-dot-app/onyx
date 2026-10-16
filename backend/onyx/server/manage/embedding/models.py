@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
+from onyx.server.manage.api_token.models import ApiTokenInput
 from shared_configs.enums import EmbeddingProvider
 
 if TYPE_CHECKING:
@@ -15,7 +16,7 @@ class SearchSettingsDeleteRequest(BaseModel):
 
 class TestEmbeddingRequest(BaseModel):
     provider_type: EmbeddingProvider
-    api_key: str | None = None
+    api_key: ApiTokenInput | None = None
     api_url: str | None = None
     model_name: str | None = None
     api_version: str | None = None
@@ -33,6 +34,7 @@ class TestEmbeddingResponse(BaseModel):
 class CloudEmbeddingProvider(BaseModel):
     provider_type: EmbeddingProvider
     api_key: str | None = None
+    api_token_id: int | None = None
     api_url: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
@@ -49,6 +51,7 @@ class CloudEmbeddingProvider(BaseModel):
                 if cloud_provider_model.api_key
                 else None
             ),
+            api_token_id=cloud_provider_model.api_token_id,
             api_url=cloud_provider_model.api_url,
             api_version=cloud_provider_model.api_version,
             deployment_name=cloud_provider_model.deployment_name,
@@ -62,11 +65,7 @@ class CloudEmbeddingProvider(BaseModel):
 
 class CloudEmbeddingProviderCreationRequest(BaseModel):
     provider_type: EmbeddingProvider
-    api_key: str | None = None
-    # Absent means the caller does not use the flag, which is distinct from
-    # False and keeps callers predating it able to rotate a key. Read through
-    # ApiKeyIntent, which names all three cases.
-    api_key_changed: bool | None = None
+    api_key: ApiTokenInput | None = None
     api_url: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None

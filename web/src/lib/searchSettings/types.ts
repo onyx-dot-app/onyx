@@ -159,7 +159,10 @@ export interface VertexEmbeddingConfig {
 
 export interface ConfiguredEmbeddingProvider {
   provider_type: EmbeddingProviderName;
+  /** Masked API key. Non-null means a key is stored. */
   api_key: string | null;
+  /** ID of the stored API key. Sent back as an existing key to keep it. */
+  api_token_id: number | null;
   api_url: string | null;
   api_version: string | null;
   deployment_name: string | null;

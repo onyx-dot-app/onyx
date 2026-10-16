@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { ApiKeyField } from "@tests/e2e/pages/ApiKeyField";
 import { IndexSettingsPage } from "./IndexSettingsPage";
 
 const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
@@ -236,7 +237,6 @@ test.describe("Index Settings Page @exclusive", () => {
         expect(route.request().postDataJSON()).toMatchObject({
           provider_type: "google",
           api_key: null,
-          api_key_changed: true,
           vertex_config: vertexConfig,
         });
         providerSaved = true;
@@ -250,9 +250,10 @@ test.describe("Index Settings Page @exclusive", () => {
       expect(body).toMatchObject({
         provider_type: "google",
         model_name: "gemini-embedding-2",
-        api_key: null,
         vertex_config: vertexConfig,
       });
+      // Keyless Workload Identity auth sends no key at all.
+      expect(body).not.toHaveProperty("api_key");
       await route.fulfill({ status: 200, body: JSON.stringify({}) });
     });
 
@@ -307,9 +308,8 @@ test.describe("Index Settings Page @exclusive", () => {
       const modal = page.getByRole("dialog", { name: /manage openai/i });
       await expect(modal).toBeVisible({ timeout: 10000 });
 
-      // API key field should show a masked value (not be blank)
-      const apiKeyInput = modal.getByLabel(/api key/i);
-      await expect(apiKeyInput).not.toHaveValue("");
+      // The saved key shows as a tag with its masked value.
+      await expect(new ApiKeyField(modal).savedKey).toBeVisible();
 
       await modal.getByRole("button", { name: /cancel/i }).click();
       await expect(modal).not.toBeVisible({ timeout: 10000 });

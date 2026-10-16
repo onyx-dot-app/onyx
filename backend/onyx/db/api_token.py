@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import (
     ApiToken,
+    CloudEmbeddingProvider,
     ImageGenerationConfig,
     LLMProvider,
     ModelConfiguration,
@@ -281,5 +282,12 @@ def get_api_token_usages(
         VoiceProvider.api_token_id,
         VoiceProvider.name,
     )
+
+    for token_id, provider_type in db_session.execute(
+        select(
+            CloudEmbeddingProvider.api_token_id, CloudEmbeddingProvider.provider_type
+        ).where(CloudEmbeddingProvider.api_token_id.in_(token_ids))
+    ):
+        usages[token_id].append(("embedding_provider", provider_type.value))
 
     return usages

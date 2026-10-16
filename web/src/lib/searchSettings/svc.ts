@@ -13,6 +13,7 @@ import {
   type VertexEmbeddingConfig,
 } from "@/lib/searchSettings/types";
 import { isCloudBased } from "@/lib/searchSettings";
+import type { ApiTokenValue } from "@/lib/api-tokens/types";
 
 /** Mirrors backend `TestEmbeddingResponse`. */
 interface TestEmbeddingResponse {
@@ -22,7 +23,7 @@ interface TestEmbeddingResponse {
 interface TestEmbeddingArgs {
   provider_type: string;
   modelName: string;
-  apiKey: string | null;
+  apiKey: ApiTokenValue | undefined;
   apiUrl: string | null;
   apiVersion: string | null;
   deploymentName: string | null;
@@ -66,12 +67,14 @@ export async function testEmbedding({
  * non-Azure providers should pass `null`.
  *
  * Returns the vector length of the test embedding, or `null` when no test ran.
- * `alwaysTest` runs the test even when the stored key is kept, for providers
- * whose model is free text (Bifrost).
+ * No test runs when the provider keeps its saved key (`savedTokenId`).
+ * `alwaysTest` runs the test anyway, for providers whose model is free text
+ * (Bifrost).
  */
 export async function connectEmbeddingProvider({
   providerType,
   apiKey,
+  savedTokenId = null,
   apiUrl,
   modelName = "",
   apiVersion,
@@ -80,7 +83,9 @@ export async function connectEmbeddingProvider({
   alwaysTest = false,
 }: {
   providerType: string;
-  apiKey: string | null;
+  apiKey: ApiTokenValue | undefined;
+  /** The token the saved provider already uses, if any. */
+  savedTokenId?: number | null;
   apiUrl: string;
   modelName?: string;
   apiVersion: string | null;
@@ -89,8 +94,10 @@ export async function connectEmbeddingProvider({
   alwaysTest?: boolean;
 }): Promise<number | null> {
   const useWorkloadIdentity = vertexConfig?.auth_method === "workload_identity";
+  const keepsSavedKey =
+    apiKey?.type === "existing" && apiKey.id === savedTokenId;
   let dimension: number | null = null;
-  if (alwaysTest || apiKey !== null || vertexConfig != null) {
+  if (alwaysTest || !keepsSavedKey || vertexConfig != null) {
     const testResponse = await testEmbedding({
       provider_type: providerType,
       modelName,
@@ -109,8 +116,7 @@ export async function connectEmbeddingProvider({
     dimension = result.dimension;
   }
 
-  // A null input preserves the stored key, except when switching to Workload
-  // Identity, which explicitly clears the credential.
+  // Workload Identity has no key, so switching to it clears the saved one.
   const body = {
     provider_type: providerType,
     api_url: apiUrl,
@@ -119,10 +125,7 @@ export async function connectEmbeddingProvider({
     is_default_provider: false,
     is_configured: true,
     vertex_config: vertexConfig,
-    api_key_changed: apiKey !== null || useWorkloadIdentity,
-    ...((apiKey !== null || useWorkloadIdentity) && {
-      api_key: useWorkloadIdentity ? null : apiKey,
-    }),
+    api_key: useWorkloadIdentity ? null : apiKey,
   };
 
   const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {

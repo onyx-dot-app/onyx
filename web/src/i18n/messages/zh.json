@@ -6426,10 +6426,6 @@
         "unknownError": "未知错误"
       },
       "fields": {
-        "apiKey": {
-          "description": "粘贴来自 {provider} 的 [API 密钥]({link})，以访问您的模型。",
-          "title": "API 密钥"
-        },
         "googleCredentials": {
           "title": "上传 JSON 凭证文件"
         },

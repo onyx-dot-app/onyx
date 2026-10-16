@@ -6426,10 +6426,6 @@
         "unknownError": "Unbekannter Fehler"
       },
       "fields": {
-        "apiKey": {
-          "description": "Fügen Sie Ihren [API-Schlüssel]({link}) von {provider} ein, um auf Ihre Modelle zuzugreifen.",
-          "title": "API-Schlüssel"
-        },
         "googleCredentials": {
           "title": "JSON-Datei mit Anmeldedaten hochladen"
         },

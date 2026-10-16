@@ -6426,10 +6426,6 @@
         "unknownError": "Error desconocido"
       },
       "fields": {
-        "apiKey": {
-          "description": "Pega tu [clave de API]({link}) de {provider} para acceder a tus modelos.",
-          "title": "Clave de API"
-        },
         "googleCredentials": {
           "title": "Sube el archivo de credenciales JSON"
         },

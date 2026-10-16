@@ -6426,10 +6426,6 @@
         "unknownError": "알 수 없는 오류"
       },
       "fields": {
-        "apiKey": {
-          "description": "모델에 접근하려면 {provider}의 [API 키]({link})를 붙여넣으세요.",
-          "title": "API 키"
-        },
         "googleCredentials": {
           "title": "JSON 자격 증명 파일 업로드"
         },

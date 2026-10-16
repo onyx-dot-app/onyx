@@ -22,7 +22,6 @@ def test_saved_workload_identity_embeds_indexing_chunks_and_titles() -> None:
         reduced_dimension=2,
         cloud_provider=CloudEmbeddingProvider(
             provider_type=EmbeddingProvider.GOOGLE,
-            api_key=None,
             vertex_config={
                 "auth_method": "workload_identity",
                 "project_id": "vertex-project",

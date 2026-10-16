@@ -6426,10 +6426,6 @@
         "unknownError": "不明なエラー"
       },
       "fields": {
-        "apiKey": {
-          "description": "モデルにアクセスするには、{provider} の [API キー]({link}) を貼り付けてください。",
-          "title": "API キー"
-        },
         "googleCredentials": {
           "title": "JSON 認証情報ファイルをアップロード"
         },
