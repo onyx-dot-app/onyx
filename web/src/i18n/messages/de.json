@@ -13555,7 +13555,7 @@
         "reuseDescription": "Fügen Sie Ihren {platform}-API-Schlüssel ein oder verwenden Sie einen gespeicherten erneut."
       },
       "input": {
-        "placeholder": "API-Schlüssel eingeben",
+        "placeholder": "abc***xyz",
         "listLabel": "Gespeicherte {platform}-API-Schlüssel"
       },
       "reuse": {

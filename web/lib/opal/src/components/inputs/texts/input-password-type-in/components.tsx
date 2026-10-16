@@ -27,6 +27,8 @@ type InputPasswordTypeInProps = Omit<
   InputTypeInProps,
   "type" | "rightChildren" | "searchIcon" | "variant"
 > & {
+  /** Controls after the reveal toggle, at the field's end (a dropdown chevron). */
+  rightChildren?: React.ReactNode;
   disabled?: boolean;
   error?: boolean;
   /**
@@ -81,6 +83,7 @@ function InputPasswordTypeIn({
   disabled,
   error,
   clearButton = false,
+  rightChildren,
   ...props
 }: InputPasswordTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
@@ -155,23 +158,28 @@ function InputPasswordTypeIn({
         autoComplete="new-password"
         data-ph-no-capture
         rightChildren={
-          showToggleButton ? (
-            <Button
-              disabled={disabled || effectiveNonRevealable}
-              icon={isRevealed ? SvgEye : SvgEyeClosed}
-              // stopPropagation keeps the nested toggle click off the field.
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsPasswordVisible((v) => !v);
-              }}
-              type="button"
-              variant={isRevealed ? "action" : undefined}
-              prominence="tertiary"
-              size="sm"
-              tooltipSide="start"
-              tooltip={toggleLabel}
-              aria-label={toggleLabel}
-            />
+          showToggleButton || rightChildren ? (
+            <div className="flex flex-row items-center gap-1">
+              {showToggleButton && (
+                <Button
+                  disabled={disabled || effectiveNonRevealable}
+                  icon={isRevealed ? SvgEye : SvgEyeClosed}
+                  // stopPropagation keeps the nested toggle click off the field.
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsPasswordVisible((v) => !v);
+                  }}
+                  type="button"
+                  variant={isRevealed ? "action" : undefined}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltipSide="start"
+                  tooltip={toggleLabel}
+                  aria-label={toggleLabel}
+                />
+              )}
+              {rightChildren}
+            </div>
           ) : undefined
         }
         {...props}
@@ -182,7 +190,10 @@ function InputPasswordTypeIn({
         // with the hidden input text. The end inset clears the toggle.
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 start-[6px] end-10 flex items-center overflow-hidden"
+          className={cn(
+            "pointer-events-none absolute inset-y-0 start-[6px] flex items-center overflow-hidden",
+            rightChildren ? "end-[4.5rem]" : "end-10"
+          )}
         >
           <Text
             font="main-ui-body"

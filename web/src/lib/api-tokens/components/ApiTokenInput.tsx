@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Dropdown,
   InputPasswordTypeIn,
+  SelectChevron,
   type DropdownItem,
 } from "@opal/components";
 import { markdown } from "@opal/utils";
@@ -73,6 +74,8 @@ export function ApiTokenInput({
   const platformLabel = getApiTokenPlatformLabel(platform);
   const { tokens } = useApiTokens(platform);
   const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const hasSavedKeys = tokens.length > 0;
 
   const picked =
     value.type === "existing"
@@ -109,13 +112,16 @@ export function ApiTokenInput({
 
   return (
     <Dropdown
-      open={open && tokens.length > 0}
+      open={open && hasSavedKeys}
       onOpenChange={setOpen}
-      disabled={disabled || tokens.length === 0}
+      disabled={disabled || !hasSavedKeys}
       tabKey="leave"
     >
-      <Dropdown.Trigger asChild typeIn>
+      {/* Toggle, not open: a click on the field's label reaches the input,
+          and it should close an open list like the chevron does. */}
+      <Dropdown.Trigger asChild typeIn behavior="toggle">
         <InputPasswordTypeIn
+          ref={inputRef}
           id={id}
           name={name}
           value={value.type === "existing" ? maskedText : value.value}
@@ -127,6 +133,18 @@ export function ApiTokenInput({
           isNonRevealable={value.type === "existing"}
           disabled={disabled}
           error={error}
+          rightChildren={
+            hasSavedKeys ? (
+              <SelectChevron
+                isOpen={open}
+                disabled={disabled}
+                onToggle={() => {
+                  setOpen((previous) => !previous);
+                  inputRef.current?.focus();
+                }}
+              />
+            ) : undefined
+          }
         />
       </Dropdown.Trigger>
       <Dropdown.Data

@@ -13555,7 +13555,7 @@
         "reuseDescription": "粘贴您的 {platform} API 密钥，或重用已保存的密钥。"
       },
       "input": {
-        "placeholder": "输入 API 密钥",
+        "placeholder": "abc***xyz",
         "listLabel": "已保存的 {platform} API 密钥"
       },
       "reuse": {

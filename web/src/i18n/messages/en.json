@@ -13555,7 +13555,7 @@
         "reuseDescription": "Paste your {platform} API key, or reuse a saved one."
       },
       "input": {
-        "placeholder": "Enter API key",
+        "placeholder": "abc***xyz",
         "listLabel": "Saved {platform} API keys"
       },
       "reuse": {

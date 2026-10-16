@@ -13555,7 +13555,7 @@
         "reuseDescription": "Pega tu clave de API de {platform} o reutiliza una guardada."
       },
       "input": {
-        "placeholder": "Introduce la clave de API",
+        "placeholder": "abc***xyz",
         "listLabel": "Claves de API de {platform} guardadas"
       },
       "reuse": {

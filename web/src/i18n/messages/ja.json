@@ -13555,7 +13555,7 @@
         "reuseDescription": "{platform} の API キーを貼り付けるか、保存済みのキーを再利用してください。"
       },
       "input": {
-        "placeholder": "API キーを入力",
+        "placeholder": "abc***xyz",
         "listLabel": "保存済みの {platform} API キー"
       },
       "reuse": {

@@ -13555,7 +13555,7 @@
         "reuseDescription": "Collez votre clé d'API {platform} ou réutilisez une clé enregistrée."
       },
       "input": {
-        "placeholder": "Saisissez la clé d'API",
+        "placeholder": "abc***xyz",
         "listLabel": "Clés d'API {platform} enregistrées"
       },
       "reuse": {

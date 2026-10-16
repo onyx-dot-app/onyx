@@ -13555,7 +13555,7 @@
         "reuseDescription": "الصق مفتاح API الخاص بـ {platform}، أو أعد استخدام مفتاح محفوظ."
       },
       "input": {
-        "placeholder": "أدخل مفتاح API",
+        "placeholder": "abc***xyz",
         "listLabel": "مفاتيح API المحفوظة لـ {platform}"
       },
       "reuse": {

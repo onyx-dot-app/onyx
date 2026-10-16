@@ -13555,7 +13555,7 @@
         "reuseDescription": "Cole sua chave de API do {platform} ou reutilize uma salva."
       },
       "input": {
-        "placeholder": "Insira a chave de API",
+        "placeholder": "abc***xyz",
         "listLabel": "Chaves de API do {platform} salvas"
       },
       "reuse": {

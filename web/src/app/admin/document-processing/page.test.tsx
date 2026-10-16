@@ -29,7 +29,7 @@ it("saves the document processing key in JSON instead of the URL", async () => {
   const user = setupUser();
   render(<Page />);
   await user.type(
-    await screen.findByPlaceholderText("Enter API key"),
+    await screen.findByPlaceholderText("abc***xyz"),
     "test-key&value"
   );
   await user.click(screen.getByRole("button", { name: /save/i }));
@@ -48,7 +48,7 @@ it.each(["", "   "])("prevents blank API key submissions (%j)", async (key) => {
   const fetchMock = mockFetch();
   const user = setupUser();
   render(<Page />);
-  const input = await screen.findByPlaceholderText("Enter API key");
+  const input = await screen.findByPlaceholderText("abc***xyz");
   if (key) await user.type(input, key);
   const save = screen.getByRole("button", { name: /save/i });
   await user.click(save);
