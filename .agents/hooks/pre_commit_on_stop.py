@@ -13,7 +13,7 @@ those files it:
 When either has something to say, the hook exits with code 2 and prints it to
 stderr. Both agents treat that as "keep going". A second stop in the same turn
 (`stop_hook_active`) is let through, so a check the agent cannot fix never loops.
-Without a record for the session, the stop does nothing.
+Missing prerequisites produce a warning without continuing the turn.
 """
 
 import hashlib
@@ -107,7 +107,12 @@ def _pre_commit(repo: Path) -> str | None:
     if on_path:
         return on_path
     in_venv = repo / ".venv" / "bin" / "pre-commit"
-    return str(in_venv) if in_venv.exists() else None
+    return str(in_venv) if in_venv.is_file() and os.access(in_venv, os.X_OK) else None
+
+
+def _notice(message: str) -> int:
+    print(json.dumps({"systemMessage": message}))
+    return 0
 
 
 def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
@@ -209,12 +214,18 @@ def main() -> int:
                 Path(payload.get("cwd") or os.getcwd()), "rev-parse", "--show-toplevel"
             ).strip()
         )
+        if not (repo / ".pre-commit-config.yaml").is_file():
+            return _notice(
+                "Project pre-commit config is missing at the Git root; turn checks did not run."
+            )
         if payload.get("hook_event_name") == "UserPromptSubmit":
             _record_turn_start(repo, session)
             return 0
         turn = _turn_changes(repo, session)
     except (subprocess.CalledProcessError, OSError):
         return 0
+    if turn is None:
+        return _notice("The prompt snapshot is missing; turn checks did not run.")
     if not turn:
         return 0
     try:
@@ -222,6 +233,9 @@ def main() -> int:
     except (subprocess.CalledProcessError, OSError):
         reminder = None
     files = sorted(path for path in turn if (repo / path).is_file())
+    if files and _pre_commit(repo) is None:
+        warning = "The pre-commit executable is missing; pre-commit did not run."
+        return _notice("\n".join(message for message in (warning, reminder) if message))
     messages = [
         message for message in (_pre_commit_failures(repo, files), reminder) if message
     ]
