@@ -34,7 +34,11 @@ from onyx.connectors.capability_checks.registry import (
 )
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
-from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    NothingToCheckError,
+    ValidationError,
+)
 from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
@@ -278,6 +282,17 @@ def _execute_check(
             applicable=False,
             duration_ms=elapsed_ms(),
         )
+    except NothingToCheckError as e:
+        # Unlike a check that does not apply, it keeps its row: the scope is
+        # what the admin should know about.
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=str(e),
+            summary=e.summary,
+            description=e.description,
+            not_run_reason=CheckNotRunReason.NOTHING_IN_SCOPE,
+            duration_ms=elapsed_ms(),
+        )
     except TimeoutError as e:
         # ``run_with_timeout`` abandons the probe thread on timeout -- Python
         # has no safe thread cancellation -- so the probe may still have a
@@ -435,6 +450,7 @@ _NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
     CheckNotRunReason.DEPENDENCY_INCOMPLETE: "Not run: {name} incomplete",
     CheckNotRunReason.DEPENDENCY_SKIPPED: "Not run: {name} did not run",
 }
+_NOTHING_IN_SCOPE_LINE = "Not run: {name} found nothing to test"
 
 
 def _dependency_not_run_outcome(
@@ -450,6 +466,15 @@ def _dependency_not_run_outcome(
         dependency = results_by_check_id.get(dependency_id)
         if dependency is None or not dependency.applicable:
             continue
+        if dependency.not_run_reason == CheckNotRunReason.NOTHING_IN_SCOPE:
+            line = _NOTHING_IN_SCOPE_LINE.format(name=dependency.display_name)
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED,
+                message=line,
+                summary=line,
+                not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
+                blocked_by=dependency_id,
+            )
         if dependency.not_run_reason is not None:
             return _CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED,

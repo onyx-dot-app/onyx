@@ -29,6 +29,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     CredentialInvalidError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
     RateLimitedValidationError,
     SourceApiError,
@@ -192,6 +193,8 @@ class CheckErrorKind(str, Enum):
     RATE_LIMITED = "rate_limited"
     TIMEOUT = "timeout"
     UNREACHABLE = "unreachable"
+    # The probe ran, but its sample cannot decide.
+    INCONCLUSIVE = "inconclusive"
     # An error the check does not know.
     UNEXPECTED = "unexpected"
 
@@ -352,8 +355,15 @@ class CheckNotRunReason(str, Enum):
     DEPENDENCY_SKIPPED = "dependency_skipped"
     # The source rate limited an earlier check, so the run stopped.
     RATE_LIMITED = "rate_limited"
+    # The check found nothing in scope to test (``NothingToCheckError``).
+    NOTHING_IN_SCOPE = "nothing_in_scope"
 
 
+# Kinds that leave the check INCOMPLETE: they prove nothing about the
+# credential.
+_INCOMPLETE_ERROR_KINDS: frozenset[CheckErrorKind] = TRANSIENT_ERROR_KINDS | {
+    CheckErrorKind.INCONCLUSIVE
+}
 _UNREACHABLE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
     {CheckErrorKind.TIMEOUT, CheckErrorKind.UNREACHABLE}
 )
@@ -369,6 +379,8 @@ def check_error_kind(error: Exception) -> CheckErrorKind:
         return CheckErrorKind.INVALID
     if isinstance(error, RateLimitedValidationError):
         return CheckErrorKind.RATE_LIMITED
+    if isinstance(error, InconclusiveValidationError):
+        return CheckErrorKind.INCONCLUSIVE
     if isinstance(error, TimeoutError):
         return CheckErrorKind.TIMEOUT
     if isinstance(error, UnreachableValidationError):
@@ -544,7 +556,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self, error_kind: CheckErrorKind, form_run: bool
     ) -> CapabilityCheckStatus:
         """The status of a check that raised an error of ``error_kind``."""
-        if error_kind not in TRANSIENT_ERROR_KINDS or (
+        if error_kind not in _INCOMPLETE_ERROR_KINDS or (
             form_run
             and self.fails_when_unreachable
             and error_kind in _UNREACHABLE_ERROR_KINDS

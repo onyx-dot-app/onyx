@@ -153,3 +153,51 @@ def test_variants_and_steps_share_a_row() -> None:
     assert len({check.check_id for check in checks}) == 25
     assert len(rows) == 17
     assert all(len(check.display_name) <= 24 for check in checks)
+
+
+def _run_check(
+    check_id: str, gateway: MagicMock, config: dict[str, Any]
+) -> CapabilityCheckResult:
+    checks = [
+        check
+        for check in [
+            *build_confluence_indexing_checks(),
+            *build_confluence_doc_permission_sync_checks(),
+        ]
+        if check.check_id == check_id
+    ]
+    context = CapabilityCheckContext(
+        source=DocumentSource.CONFLUENCE,
+        credential_json=_API_TOKEN,
+        connector_specific_config=config,
+        source_operations=gateway,
+    )
+    (result,) = run_capability_checks(checks, context)
+    return result
+
+
+def test_a_space_granted_only_to_groups_has_no_email_to_check() -> None:
+    gateway = _gateway()
+    gateway.get_space_permissions.return_value = [
+        {"subjects": {"group": {"results": [{"name": "eng"}]}}}
+    ]
+
+    result = _run_check(
+        "confluence_permission_user_emails", gateway, _form(space="ENG")
+    )
+
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.applicable
+    assert result.summary == "No users in space permissions"
+
+
+def test_a_page_without_comments_is_incomplete() -> None:
+    gateway = _gateway()
+    gateway.search_pages.side_effect = lambda **_: iter([{"id": "42"}])
+    gateway.search_comments.side_effect = lambda **_: iter([])
+
+    result = _run_check("confluence_comments_read", gateway, _form())
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.error_kind == CheckErrorKind.INCONCLUSIVE
+    assert result.summary == "No comments found to test"
