@@ -343,6 +343,10 @@ Run only the gates that match the change:
   successful stdout. The report uses `xunit1` for `record_property` compatibility
   and excludes captured stderr and pytest logs. Report artifact names include
   the shard, run ID, and run attempt.
+  CI-only `SANDBOX_TEST_SHIM_PPROF=true` enables the existing root-only Unix
+  profiler. Failure capture emits bounded counts for one owned sandbox, not
+  raw stacks. Production profiling stays off. A native stdin control must
+  prove the capture before its results support a diagnosis.
   Workflow configuration checks do not prove RunsOn capacity or live acceptance.
 - Craft frontend E2E that starts a session, streams a turn, writes files,
   serves a preview, snapshots, restores, and reaps.

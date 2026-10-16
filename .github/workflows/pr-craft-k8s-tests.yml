@@ -432,6 +432,7 @@ jobs:
       DISABLE_TELEMETRY: "true"
       DISABLE_VECTOR_DB: "false"
       SANDBOX_TEST_FIRECRACKER: "true"
+      SANDBOX_TEST_SHIM_PPROF: "true"
       SANDBOX_TEST_FRONTEND_URL: "http://127.0.0.1:3000"
       SANDBOX_TEST_KUBE_CONTEXT: "kind-onyx-craft-ci"
       SANDBOX_TEST_IP_FAMILY: "ipv4"

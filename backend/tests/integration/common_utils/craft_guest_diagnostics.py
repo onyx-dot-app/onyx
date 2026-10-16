@@ -5,9 +5,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import selectors
+import shutil
 import subprocess
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
+from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -26,10 +31,15 @@ from onyx.server.features.build.sandbox.labels import (
     SANDBOX_PROTOCOL_VERSION,
 )
 from shared_configs.contextvars import get_current_tenant_id
+from tests.integration.common_utils.craft_shim_diagnostics import (
+    _fixed_facts,
+    _unavailable,
+)
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 _CI_KUBE_CONTEXT = "kind-onyx-craft-ci"
+_CI_NODE = "onyx-craft-ci-control-plane"
 _MANAGED_PUSH_PROBE = """
 import os
 import signal
@@ -168,7 +178,22 @@ def capture_guest_facts_on_read_timeout(user: DATestUser) -> Iterator[None]:
                 and CRAFT_SANDBOX_RUNTIME == "kubernetes_firecracker"
                 and client.base_url == httpx.URL("")
             ):
-                facts = _owned_guest_facts(user, context)
+                target = _owned_target(user, context)
+                if (
+                    target is not None
+                    and os.environ.get("SANDBOX_TEST_SHIM_PPROF") == "true"
+                ):
+                    try:
+                        shim_facts = _owned_shim_facts(target)
+                    except Exception:
+                        shim_facts = _unavailable("capture_failed")
+                    with suppress(Exception):
+                        print(
+                            f"Craft shim timeout facts; target_sandbox_id={target.sandbox_id} "
+                            f"shim_forwarder_facts={shim_facts}",
+                            flush=True,
+                        )
+                facts = _owned_guest_facts(target)
                 print(
                     f"Craft HTTP read timeout; managed_push_facts={facts}", flush=True
                 )
@@ -183,23 +208,38 @@ def capture_guest_facts_on_read_timeout(user: DATestUser) -> Iterator[None]:
         raise
 
 
-def _owned_guest_facts(user: DATestUser, context: str) -> str:
+@dataclass(frozen=True)
+class _OwnedTarget:
+    sandbox_id: UUID
+    pod_uid: str
+    node_name: str
+    container_id: str
+    command: tuple[str, ...]
+
+
+def _owned_target(user: DATestUser, context: str) -> _OwnedTarget | None:
     user_id = UUID(user.id)
     tenant_id = get_current_tenant_id()
     with get_session_with_current_tenant() as db_session:
         sandbox = get_sandbox_by_user_id(db_session, user_id)
         if sandbox is None:
-            return "unavailable"
+            return None
         if sandbox.user_id != user_id:
             raise ValueError("Sandbox ownership mismatch")
         sandbox_id = UUID(str(sandbox.id))
-    pod_name = f"sandbox-{sandbox_id.hex}"
     command = ["kubectl", "--context", context, "--namespace", SANDBOX_NAMESPACE]
+    return _read_owned_pod(sandbox_id, tenant_id, tuple(command))
+
+
+def _read_owned_pod(
+    sandbox_id: UUID, tenant_id: str, command: tuple[str, ...], timeout: float = 5.0
+) -> _OwnedTarget:
+    pod_name = f"sandbox-{sandbox_id.hex}"
     metadata = subprocess.run(
         [*command, "get", "pod", pod_name, "-o", "json"],
         capture_output=True,
         text=True,
-        timeout=5.0,
+        timeout=timeout,
         check=True,
     )
     pod = json.loads(metadata.stdout)
@@ -221,9 +261,30 @@ def _owned_guest_facts(user: DATestUser, context: str) -> str:
         != ["sandbox-firewall"]
     ):
         raise ValueError("Sandbox pod shape mismatch")
+    statuses = pod.get("status", {}).get("containerStatuses", [])
+    container_id = ""
+    if (
+        len(statuses) == 1
+        and statuses[0].get("name") == "sandbox"
+        and "running" in statuses[0].get("state", {})
+    ):
+        container_id = statuses[0].get("containerID", "")
+    return _OwnedTarget(
+        sandbox_id,
+        pod["metadata"]["uid"],
+        pod["spec"].get("nodeName", ""),
+        container_id,
+        command,
+    )
+
+
+def _owned_guest_facts(target: _OwnedTarget | None) -> str:
+    if target is None:
+        return "unavailable"
+    pod_name = f"sandbox-{target.sandbox_id.hex}"
     output = subprocess.run(
         [
-            *command,
+            *target.command,
             "exec",
             pod_name,
             "-c",
@@ -238,7 +299,132 @@ def _owned_guest_facts(user: DATestUser, context: str) -> str:
         timeout=20.0,
         check=True,
     )
-    return f"target_sandbox_id={sandbox_id} | {_managed_push_facts(output.stdout)}"
+    return (
+        f"target_sandbox_id={target.sandbox_id} | {_managed_push_facts(output.stdout)}"
+    )
+
+
+def _bounded_command(
+    command: list[str], payload: bytes, deadline: float, maximum: int
+) -> tuple[int, bytes]:
+    with subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    ) as process:
+        if process.stdin is None or process.stdout is None:
+            raise RuntimeError("Missing diagnostic pipe")
+        try:
+            process.stdin.write(payload)
+            process.stdin.close()
+            output = bytearray()
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not selector.select(remaining):
+                        raise TimeoutError
+                    chunk = os.read(
+                        process.stdout.fileno(), min(4096, maximum + 1 - len(output))
+                    )
+                    if not chunk:
+                        break
+                    output.extend(chunk)
+                    if len(output) > maximum:
+                        raise OverflowError
+            return process.wait(timeout=max(0.001, deadline - time.monotonic())), bytes(
+                output
+            )
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=0.5)
+
+
+def _owned_shim_facts(target: _OwnedTarget | None) -> str:
+    if target is None:
+        return _unavailable("missing_target")
+    if (
+        target.node_name != _CI_NODE
+        or re.fullmatch(r"containerd://[0-9a-f]{64}", target.container_id) is None
+    ):
+        return _unavailable("missing_target")
+    if (
+        not os.path.isfile("/usr/bin/python3")
+        or os.uname().sysname != "Linux"
+        or shutil.which("sudo") is None
+        or shutil.which("timeout") is None
+    ):
+        return _unavailable("unsupported")
+    deadline = time.monotonic() + 8
+    try:
+        code, output = _bounded_command(
+            [
+                "docker",
+                "inspect",
+                "--type",
+                "container",
+                "--format",
+                '{{.State.Pid}} {{index .Config.Labels "io.x-k8s.kind.cluster"}}',
+                _CI_NODE,
+            ],
+            b"",
+            min(deadline, time.monotonic() + 1),
+            128,
+        )
+        match = re.fullmatch(rb"([1-9][0-9]{0,9}) onyx-craft-ci\n", output)
+        if code or match is None:
+            return _unavailable("missing_target")
+        payload = json.dumps(
+            {
+                "node_pid": int(match[1]),
+                "container_id": target.container_id.removeprefix("containerd://"),
+                "pod_uid": target.pod_uid,
+                "namespace": SANDBOX_NAMESPACE,
+            }
+        ).encode("ascii")
+        helper = Path(__file__).with_name("craft_shim_diagnostics.py")
+        code, output = _bounded_command(
+            [
+                "sudo",
+                "-n",
+                "timeout",
+                "--signal=KILL",
+                "6s",
+                "/usr/bin/python3",
+                "-I",
+                str(helper),
+            ],
+            payload,
+            min(deadline, time.monotonic() + 6.5),
+            256,
+        )
+        if code:
+            return _unavailable(
+                "deadline" if code in {124, 137, 142, -9, -14} else "denied"
+            )
+        facts = _fixed_facts(output.decode("ascii"))
+        if time.monotonic() >= deadline:
+            return _unavailable("deadline")
+        try:
+            current = _read_owned_pod(
+                target.sandbox_id,
+                get_current_tenant_id(),
+                target.command,
+                deadline - time.monotonic(),
+            )
+        except (KeyError, TypeError, ValueError, subprocess.CalledProcessError):
+            return _unavailable("target_changed")
+        if current != target:
+            return _unavailable("target_changed")
+        return facts
+    except (TimeoutError, subprocess.TimeoutExpired):
+        return _unavailable("deadline")
+    except OverflowError:
+        return _unavailable("oversized")
+    except Exception:
+        return _unavailable("capture_failed")
 
 
 def _managed_push_facts(output: str) -> str:

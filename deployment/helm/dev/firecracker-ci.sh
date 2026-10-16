@@ -291,6 +291,73 @@ verify_pinned_firecracker() {
   done
 }
 
+validate_shim_pprof_opt_in() {
+  case "${SANDBOX_TEST_SHIM_PPROF:-false}" in
+    false) return ;;
+    true) ;;
+    *)
+      echo "::error::SANDBOX_TEST_SHIM_PPROF must be true or false" >&2
+      exit 1
+      ;;
+  esac
+  if [ "${GITHUB_ACTIONS:-false}" != true ] || \
+    [ "${SANDBOX_TEST_FIRECRACKER:-false}" != true ] || \
+    [ "${SANDBOX_TEST_KUBE_CONTEXT:-}" != kind-onyx-craft-ci ] || \
+    [ "${KIND_CLUSTER_NAME}" != onyx-craft-ci ]; then
+    echo "::error::shim pprof requires the owned GitHub Firecracker CI cluster" >&2
+    exit 1
+  fi
+}
+
+verify_shim_pprof_config() {
+  [ "${SANDBOX_TEST_SHIM_PPROF:-false}" = true ] || return 0
+  require_bin docker
+  local node verified
+  verified=0
+  IFS=',' read -r -a nodes <<< "${KATA_INSTALL_NODE_NAMES}"
+  for node in "${nodes[@]}"; do
+    node="$(trim_space "${node}")"
+    [ -n "${node}" ] || continue
+    assert_kind_node_for_cluster "${node}"
+    docker exec -i "${node}" bash -s <<'NODE'
+set -euo pipefail
+
+expected=/opt/kata/share/defaults/kata-containers/runtimes/fc/configuration-fc.toml
+export LC_ALL=C
+config="$(containerd config dump | awk '
+  /^[[:space:]]*\[/ { section = $0; gsub(/[[:space:]\047"]/, "", section) }
+  section ~ /^\[plugins\.(io\.containerd\.cri\.v1\.runtime|io\.containerd\.grpc\.v1\.cri)\.containerd\.runtimes\.kata-fc\.options\]$/ && $1 == "ConfigPath" && $2 == "=" {
+    value = $3; gsub(/[\047"]/, "", value); print value; count++
+  }
+  END { if (count != 1) exit 1 }
+')" || { echo '::error::missing or ambiguous kata-fc ConfigPath' >&2; exit 1; }
+if [ "${config}" != "${expected}" ] || [ ! -f "${config}" ] || [ -L "${config}" ]; then
+  echo '::error::unsupported kata-fc runtime config for shim pprof' >&2
+  exit 1
+fi
+drop_in="${config%/*}/config.d/50-user-overrides.toml"
+if [ ! -d "${config%/*}/config.d" ] || [ -L "${config%/*}/config.d" ] || \
+  [ ! -f "${drop_in}" ] || [ -L "${drop_in}" ] || \
+  [ "$(cat "${drop_in}")" != $'[runtime]\nenable_pprof = true' ]; then
+  echo '::error::missing or unsupported kata-fc shim pprof drop-in' >&2
+  exit 1
+fi
+for candidate in "${config%/*}/config.d/"*; do
+  if [[ "${candidate##*/}" > 50-user-overrides.toml ]]; then
+    echo '::error::unsupported later kata-fc drop-in for shim pprof' >&2
+    exit 1
+  fi
+done
+echo 'Verified kata-fc runtime.enable_pprof=true before sandbox creation'
+NODE
+    verified=$((verified + 1))
+  done
+  if [ "${verified}" -eq 0 ]; then
+    echo '::error::shim pprof requires at least one owned Kata install node' >&2
+    exit 1
+  fi
+}
+
 install_kata() {
   require_bin curl
   require_bin helm
@@ -327,6 +394,11 @@ install_kata() {
     echo "  disableAll: true"
     echo "  fc:"
     echo "    enabled: true"
+    if [ "${SANDBOX_TEST_SHIM_PPROF:-false}" = true ]; then
+      echo "    dropIn: |"
+      echo "      [runtime]"
+      echo "      enable_pprof = true"
+    fi
     echo "    containerd:"
     echo "      snapshotter: devmapper"
     echo "defaultShim:"
@@ -350,6 +422,7 @@ install_kata() {
   kubectl get node "${KIND_NODE_NAME}" \
     -o jsonpath='{.metadata.labels.katacontainers\.io/kata-runtime}' | grep -qx 'true'
   install_pinned_firecracker
+  verify_shim_pprof_config
 }
 
 verify_devmapper_snapshot() (
@@ -430,6 +503,7 @@ verify_runtime() {
   require_bin kubectl
   verify_pinned_firecracker
   verify_devmapper_snapshot
+  verify_shim_pprof_config
 
   local smoke_name
   smoke_name="kata-fc-smoke"
@@ -486,6 +560,7 @@ case "${1:-}" in
       echo "::error::set ONYX_FIRECRACKER_DEDICATED_HOST=true only on a dedicated disposable Linux host or test VM; setup shares host /dev and device metadata" >&2
       exit 1
     fi
+    validate_shim_pprof_opt_in
     ;;
 esac
 

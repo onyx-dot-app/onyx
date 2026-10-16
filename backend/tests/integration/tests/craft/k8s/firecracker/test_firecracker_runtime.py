@@ -2,13 +2,17 @@
 
 import json
 import os
+import re
 import subprocess
 import time
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from io import BytesIO
 from threading import Event
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
@@ -20,6 +24,9 @@ from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRunt
 from onyx.server.features.build.sandbox.models import SandboxExecError
 from onyx.server.features.build.user_library.api import UploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.craft_guest_diagnostics import (
+    capture_guest_facts_on_read_timeout,
+)
 from tests.integration.common_utils.http_client import client
 from tests.integration.tests.craft.k8s.networking.test_networking import (
     Sandbox,
@@ -45,6 +52,171 @@ from tests.integration.tests.craft.user_library_http import (
     delete_user_library_file,
     upload_user_library_files,
 )
+
+shim_control_sandbox = sandbox
+
+
+class _HeldShimInput(BytesIO):
+    def __init__(self) -> None:
+        super().__init__(b"shim-prefix\n" + bytes(range(32)) + b"shim-suffix\n")
+        self.release = Event()
+        self.waiting = Event()
+        self.finished = Event()
+
+    def read(self, size: int | None = -1, /) -> bytes:
+        prefix_remaining = len(b"shim-prefix\n") - self.tell()
+        if prefix_remaining > 0:
+            return super().read(
+                prefix_remaining
+                if size is None or size < 0
+                else min(size, prefix_remaining)
+            )
+        self.finished.clear()
+        self.waiting.set()
+        try:
+            if not self.release.wait(timeout=90):
+                raise TimeoutError("held shim input was not released")
+            return super().read(size)
+        finally:
+            self.finished.set()
+
+
+@pytest.mark.skipif(
+    os.environ.get("SANDBOX_TEST_SHIM_PPROF") != "true",
+    reason="Set SANDBOX_TEST_SHIM_PPROF=true in owned Firecracker CI",
+)
+def test_shim_timeout_capture_preserves_controlled_stdin(
+    shim_control_sandbox: Sandbox,
+    capsys: pytest.CaptureFixture[str],
+    record_property: Callable[[str, object], None],
+) -> None:
+    instance = shim_control_sandbox
+    namespace = sandbox_namespace()
+    pod = json.loads(kubectl(namespace, "get", "pod", instance.pod, "-o", "json"))
+    assert pod["spec"]["runtimeClassName"] == "kata-fc"
+    assert [status["name"] for status in pod["status"]["containerStatuses"]] == [
+        "sandbox"
+    ]
+    container_id = pod["status"]["containerStatuses"][0]["containerID"]
+    assert re.fullmatch(r"containerd://[0-9a-f]{64}", container_id)
+    sandbox_id = UUID(pod["metadata"]["labels"]["onyx.app/sandbox-id"])
+    assert instance.pod == f"sandbox-{sandbox_id.hex}"
+    record_property("shim_control_pod_uid", pod["metadata"]["uid"])
+    record_property("shim_control_pod_created", pod["metadata"]["creationTimestamp"])
+    record_property("shim_control_container_id", container_id)
+    record_property("shim_control_sandbox_id", str(sandbox_id))
+
+    def capture_fifo_read() -> tuple[str, int]:
+        capsys.readouterr()
+        timeout = httpx.ReadTimeout("controlled shim capture")
+        with pytest.raises(httpx.ReadTimeout) as captured:
+            with capture_guest_facts_on_read_timeout(instance.owner):
+                raise timeout
+        assert captured.value is timeout
+        rows = [
+            row
+            for row in capsys.readouterr().out.splitlines()
+            if row.startswith("Craft shim timeout facts;")
+        ]
+        assert len(rows) == 1, rows
+        counts = re.fullmatch(
+            rf"Craft shim timeout facts; target_sandbox_id={sandbox_id} "
+            r"shim_forwarder_facts=availability=observed fifo_read=([0-9]{1,5}) "
+            r"rpc_send=[0-9]{1,5} rpc_response_wait=[0-9]{1,5} "
+            r"rpc_other=[0-9]{1,5} forwarder_other=[0-9]{1,5}",
+            rows[0],
+        )
+        assert counts is not None, rows[0]
+        return rows[0], int(counts.group(1))
+
+    baseline_row, baseline_fifo = capture_fifo_read()
+    record_property("shim_control_baseline", baseline_row)
+    configuration = k8s_client.Configuration()
+    k8s_config.load_kube_config(
+        context=os.environ["SANDBOX_TEST_KUBE_CONTEXT"],
+        client_configuration=configuration,
+    )
+    probe = """
+import hashlib
+import sys
+from onyx_guest.input import FramedInput
+
+source = FramedInput(sys.stdin.buffer)
+chunks = source.chunks(max_bytes=56)
+prefix = next(chunks)
+assert prefix == b'shim-prefix\\n'
+sys.stdout.buffer.write(b'READY\\n')
+sys.stdout.buffer.flush()
+payload = prefix + b''.join(chunks)
+assert len(payload) == 56
+receipt = b'RECEIVED ' + payload.hex().encode() + b' SHA256 ' + hashlib.sha256(payload).hexdigest().encode() + b'\\n'
+sys.stdout.buffer.write(receipt)
+sys.stdout.buffer.flush()
+"""
+    expected_stdout = (
+        b"READY\nRECEIVED "
+        b"7368696d2d7072656669780a000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f7368696d2d7375666669780a"
+        b" SHA256 a7a3c665ce1f94a2180873529236162b7c3435eccd35dd3aadde86aa6a72a0ef\n"
+    )
+    ready = Event()
+    held_input = _HeldShimInput()
+
+    def receive() -> bytes:
+        output = bytearray()
+        chunks = ExecClient(configuration, namespace).stream(
+            instance.pod,
+            [GUEST_PYTHON, "-I", "-c", probe],
+            stdin=FramedStdin(held_input),
+            timeout=90,
+        )
+        assert isinstance(chunks, Generator)
+        with closing(chunks):
+            for chunk in chunks:
+                output.extend(chunk)
+                assert len(output) <= 256
+                if output.startswith(b"READY\n"):
+                    ready.set()
+        return bytes(output)
+
+    with ThreadPoolExecutor(max_workers=1) as threads:
+        completed = threads.submit(receive)
+        try:
+            assert ready.wait(timeout=20), "controlled guest did not report READY"
+            assert held_input.waiting.wait(timeout=10)
+            record_property("shim_control_ready_stdout", "READY")
+            assert not completed.done()
+            held_row, held_fifo = capture_fifo_read()
+            record_property("shim_control_held", held_row)
+            assert not completed.done()
+            assert not held_input.release.is_set()
+            assert held_fifo > baseline_fifo, (baseline_row, held_row)
+            record_property("shim_control_capture_before_input_release", True)
+            held_input.release.set()
+            assert completed.result(timeout=20) == expected_stdout
+            assert held_input.finished.wait(timeout=10)
+            assert not held_input.closed
+            record_property("shim_control_exit_status", 0)
+            record_property("shim_control_input_bytes", 56)
+            record_property(
+                "shim_control_input_sha256",
+                "a7a3c665ce1f94a2180873529236162b7c3435eccd35dd3aadde86aa6a72a0ef",
+            )
+        finally:
+            held_input.release.set()
+            try:
+                completed.result(timeout=15)
+            finally:
+                released = not held_input.waiting.is_set() or held_input.finished.wait(
+                    timeout=10
+                )
+                held_input.close()
+                assert released, "held shim source read did not finish"
+
+    current = json.loads(kubectl(namespace, "get", "pod", instance.pod, "-o", "json"))
+    assert current["metadata"]["uid"] == pod["metadata"]["uid"]
+    assert current["status"]["containerStatuses"][0]["containerID"] == container_id
+    print(baseline_row, flush=True)
+    print(held_row, flush=True)
 
 
 class _HeldRestoreInput(BytesIO):
