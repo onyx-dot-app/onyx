@@ -9438,9 +9438,6 @@
         "title": "{label} 연결 해제"
       },
       "field": {
-        "optional": {
-          "title": "{label} (선택 사항)"
-        },
         "required": {
           "error": "{label}은(는) 필수 항목입니다"
         }

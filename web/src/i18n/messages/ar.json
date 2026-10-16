@@ -9438,9 +9438,6 @@
         "title": "قطع الاتصال بـ {label}"
       },
       "field": {
-        "optional": {
-          "title": "{label} (اختياري)"
-        },
         "required": {
           "error": "{label} مطلوب"
         }
