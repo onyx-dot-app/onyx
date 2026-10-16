@@ -20,7 +20,7 @@ import { CardLoader, IconLoader } from "@opal/loaders";
 import {
   SvgActivity,
   SvgCheckCircle,
-  SvgPauseCircle,
+  SvgPause,
   SvgSettings,
   SvgXOctagon,
 } from "@opal/icons";
@@ -50,7 +50,7 @@ const COUNT_TAGS = [
   { status: "indexed", icon: SvgCheckCircle, color: "green" },
   { status: "indexing", icon: IconLoader, color: "blue" },
   { status: "failed", icon: SvgXOctagon, color: "red" },
-  { status: "paused", icon: SvgPauseCircle, color: "amber" },
+  { status: "paused", icon: SvgPause, color: "amber" },
 ] as const;
 
 interface FederatedRowProps {
@@ -211,17 +211,22 @@ export default function ConnectorList() {
             width="fit"
             height="fit"
           >
-            {COUNT_TAGS.map(({ status: counted, icon, color }) => (
-              <Tag
-                key={counted}
-                icon={icon}
-                title={format.number(data?.status_counts[counted] ?? 0)}
-                tooltip={t(`counts.${counted}`, {
-                  count: data?.status_counts[counted] ?? 0,
-                })}
-                color={color}
-              />
-            ))}
+            {COUNT_TAGS.map(({ status: counted, icon, color }) => {
+              const count = data?.status_counts[counted] ?? 0;
+              return (
+                count > 0 && (
+                  <Tag
+                    key={counted}
+                    icon={icon}
+                    title={format.number(count)}
+                    tooltip={t(`counts.${counted}`, { count })}
+                    color={color}
+                    variant="status"
+                    size="md"
+                  />
+                )
+              );
+            })}
           </Section>
         </Section>
       </Section>

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.16
+version: 0.9.17
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,11 +21,8 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Add PERMISSION_SYNC_TIMEOUT_SECONDS, the time limit for one
-        document permission sync or group sync.
-    - kind: removed
-      description: Remove CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT and
-        CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT. These syncs now hold their lock in Postgres.
+      description: Add YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY and
+        YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY for YouTrack permission sync.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

@@ -123,6 +123,13 @@ export function isActive(run: CCPairRun): boolean {
   }
 }
 
+/** Whether the run ended in failure, as the feed's failed status group counts it. */
+export function isFailed(run: CCPairRun): boolean {
+  return (
+    run.attempt.status === "failed" || run.attempt.status === "failed_to_run"
+  );
+}
+
 /** When the run finished, or `null` while it has not. */
 export function finishedAt(run: CCPairRun): string | null {
   if (isActive(run)) return null;
@@ -433,6 +440,8 @@ export default function RunRow({
                   icon={tag.icon}
                   title={tBadges(tag.labelKey)}
                   color={tag.color}
+                  variant="status"
+                  font="secondary-body"
                 />
                 {run.kind === "indexing" && run.attempt.is_new_model && (
                   <Tag
@@ -454,7 +463,9 @@ export default function RunRow({
                         : "warnings.tooltip",
                       { count: warnings }
                     )}
-                    color="amber"
+                    color="orange"
+                    variant="count"
+                    font="secondary-body"
                   />
                 )}
               </Section>
