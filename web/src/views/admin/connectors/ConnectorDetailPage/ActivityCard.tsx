@@ -294,10 +294,7 @@ export default function ActivityCard({
                   <Text font="secondary-body" color={mutedColor} maxLines={1}>
                     {identity}
                   </Text>
-                  <IdentityIcon
-                    size={12}
-                    className="stroke-text-02"
-                  />
+                  <IdentityIcon size={12} className="stroke-text-02" />
                 </Section>
               </Section>
               <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
