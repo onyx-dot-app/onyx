@@ -149,6 +149,8 @@ export function ApiTokenInput({
             ) : undefined
           }
           isNonRevealable={value.type === "existing"}
+          // The browser's own dots, focused or not: no idle ✱ overlay.
+          mask="native"
           disabled={disabled}
           error={error}
           rightChildren={
