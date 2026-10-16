@@ -1009,6 +1009,9 @@
         "s3": {
           "description": "حاويات تخزين AWS"
         },
+        "azureDatalake": {
+          "description": "Azure datalake storage"
+        },
         "r2": {
           "description": "حاويات التخزين السحابي"
         },

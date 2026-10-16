@@ -69,6 +69,7 @@ export enum ValidSources {
   Lumapps = "lumapps",
   Canvas = "canvas",
   Zoom = "zoom",
+  AzureDatalake = "azure_datalake",
 
   // Craft-specific sources
   CraftFile = "craft_file",

@@ -57,6 +57,7 @@ import {
   SvgZendesk,
   SvgZoom,
   SvgZulip,
+  SvgAzure,
 } from "@opal/logos";
 
 /**
@@ -148,6 +149,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",
   [ValidSources.OneDrive]: "sources.onedrive.description",
   [ValidSources.Zoom]: "sources.zoom.description",
+  [ValidSources.AzureDatalake]: "sources.azureDatalake.description",
 } as const satisfies Record<ValidSources, string>;
 
 // ---------------------------------------------------------------------------
@@ -325,6 +327,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Amazon S3",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/s3`,
+  },
+  azure_datalake: {
+    icon: SvgAzure,
+    displayName: "Azure Storage",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/azure_datalake`,
   },
   google_cloud_storage: {
     icon: SvgGoogleCloud,

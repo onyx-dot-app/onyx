@@ -1009,6 +1009,9 @@
         "s3": {
           "description": "AWS 스토리지 버킷"
         },
+        "azureDatalake": {
+          "description": "Azure datalake storage"
+        },
         "r2": {
           "description": "클라우드 스토리지 버킷"
         },

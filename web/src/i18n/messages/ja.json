@@ -1009,6 +1009,9 @@
         "s3": {
           "description": "AWS ストレージバケット"
         },
+        "azureDatalake": {
+          "description": "Azure datalake storage"
+        },
         "r2": {
           "description": "クラウドストレージバケット"
         },

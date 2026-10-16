@@ -1757,6 +1757,27 @@ export const connectorConfigs: Record<
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  azure_datalake: {
+    description: "Configure Azure Datalake connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the container name:",
+        label: "Container Name",
+        name: "container_name",
+        optional: false,
+      },
+      {
+        type: "text",
+        query: "Enter the path prefix:",
+        label: "Path refix",
+        name: "path_prefix",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24,
+  },
   r2: {
     description: "connectors.r2.description",
     values: [

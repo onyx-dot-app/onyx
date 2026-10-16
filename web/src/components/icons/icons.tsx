@@ -7,6 +7,7 @@ import openSourceIcon from "@public/OpenSource.png";
 import trelloIcon from "@public/Trello.png";
 import serviceNowIcon from "@public/Servicenow.png";
 import zAIIcon from "@public/Z_AI.png";
+import adlsIcon from "@public/azure_datalake.svg";
 
 export interface IconProps {
   size?: number;
@@ -237,3 +238,4 @@ export const OpenSourceIcon = createLogoIcon(openSourceIcon);
 export const ServiceNowIcon = createLogoIcon(serviceNowIcon);
 export const TrelloIcon = createLogoIcon(trelloIcon);
 export const ZAIIcon = createLogoIcon(zAIIcon);
+export const AdlsIcon = createLogoIcon(adlsIcon);
