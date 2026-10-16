@@ -92,6 +92,7 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
             <ActivityCountTags
               failures={failures.total}
               errors={errors.total}
+              variant="count"
             />
             <Button
               icon={SvgTextLines}

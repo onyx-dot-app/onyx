@@ -13,7 +13,6 @@ import {
   SvgTextLines,
   SvgUserShield,
   SvgUsers,
-  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import type { CardColor, IconFunctionComponent } from "@opal/types";
@@ -51,14 +50,14 @@ const GROUP_STYLE: Record<
 > = {
   failures: {
     color: "status-error-00",
-    icon: SvgXCircle,
+    icon: SvgXOctagon,
     stroke: "stroke-status-error-05",
     outline: "outline-status-error-02",
   },
   errors: {
     color: "status-warning-00",
     icon: SvgAlertTriangle,
-    stroke: "stroke-theme-amber-05",
+    stroke: "stroke-status-warning-05",
     outline: "outline-status-warning-02",
   },
   other: {
@@ -226,7 +225,10 @@ export default function ActivityCard({
               width="fit"
               height="fit"
             >
-              <StatusIcon size={16} className={style.stroke} />
+              <StatusIcon
+                size={16}
+                className={active ? "stroke-status-info-05" : style.stroke}
+              />
             </Section>
             <Section
               alignItems="stretch"
@@ -262,7 +264,7 @@ export default function ActivityCard({
                   <Text font="secondary-body" color="text-03" maxLines={1}>
                     {identity}
                   </Text>
-                  <IdentityIcon size={12} className="stroke-text-03" />
+                  <IdentityIcon size={12} className="stroke-text-02" />
                 </Section>
               </Section>
               <Section alignItems="stretch" gap={0} padding={0.5} height="fit">

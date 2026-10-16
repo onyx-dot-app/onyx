@@ -25,7 +25,7 @@ Interactive.Stateless          <- variant, prominence, interaction, disabled, hr
 | -------------------- | ------------------------------------------------------ | ----------- | -------------------------------------- |
 | `variant`            | `"default" \| "action" \| "danger" \| "none"`          | `"default"` | Color variant                          |
 | `prominence`         | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` | Color prominence                       |
-| `interaction`        | `"rest" \| "hover" \| "active"`                        | auto        | JS-controlled interaction override. On a popup trigger (`aria-haspopup` set) it falls back to `"hover"` while `data-state="open"` or `aria-expanded="true"` |
+| `interaction`        | `"rest" \| "hover" \| "active"`                        | auto        | JS-controlled interaction override. On a popup trigger (`aria-haspopup` set) it falls back to `"hover"` while `data-state="open"` or `aria-expanded="true"`. An open `secondary` trigger keeps its rest fill with a `border-05` outline and `text-04` label instead |
 | `icon`               | `IconFunctionComponent`                                | —           | Left icon                              |
 | `children`           | `string`                                               | —           | Label text. Omit for icon-only buttons |
 | `rightIcon`          | `IconFunctionComponent`                                | —           | Right icon                             |
@@ -53,7 +53,7 @@ import { SvgPlus, SvgArrowRight } from "@opal/icons";
 // Secondary button (auto border)
 <Button rightIcon={SvgArrowRight} prominence="secondary">Continue</Button>
 
-// Popover trigger: keeps the hover look while the popover is open
+// Popover trigger: a secondary trigger keeps a border-05 outline while open
 <Popover.Trigger asChild>
   <Button icon={SvgFilter} prominence="tertiary" />
 </Popover.Trigger>

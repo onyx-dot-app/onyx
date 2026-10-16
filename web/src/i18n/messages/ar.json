@@ -9081,7 +9081,6 @@
     "status": {
       "badges": {
         "canceled": "ملغاة",
-        "completedWithErrors": "اكتملت مع أخطاء",
         "deleting": "جارٍ الحذف",
         "error": "خطأ",
         "failed": "فشلت",
@@ -9099,7 +9098,7 @@
         "pruning": "جارٍ التقليم",
         "pruned": "تم التقليم",
         "checking": "جارٍ الفحص",
-        "passed": "ناجح",
+        "passed": "مكتمل",
         "failedToRun": "تعذر التشغيل"
       }
     },

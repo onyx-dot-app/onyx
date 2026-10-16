@@ -9081,7 +9081,6 @@
     "status": {
       "badges": {
         "canceled": "Cancelado",
-        "completedWithErrors": "Completado con errores",
         "deleting": "Eliminando",
         "error": "Error",
         "failed": "Fallido",
@@ -9099,7 +9098,7 @@
         "pruning": "Depurando",
         "pruned": "Depurado",
         "checking": "Comprobando",
-        "passed": "Superado",
+        "passed": "Completado",
         "failedToRun": "No se ejecutó"
       }
     },

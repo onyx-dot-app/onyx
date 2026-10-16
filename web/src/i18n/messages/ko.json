@@ -9081,7 +9081,6 @@
     "status": {
       "badges": {
         "canceled": "취소됨",
-        "completedWithErrors": "오류와 함께 완료됨",
         "deleting": "삭제 중",
         "error": "오류",
         "failed": "실패",
@@ -9099,7 +9098,7 @@
         "pruning": "정리 중",
         "pruned": "정리됨",
         "checking": "검사 중",
-        "passed": "통과",
+        "passed": "완료",
         "failedToRun": "실행 실패"
       }
     },
