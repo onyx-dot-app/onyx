@@ -80,13 +80,12 @@ class MiniMaxImageGenerationProvider(ImageGenerationProvider):
             "prompt": prompt,
             "aspect_ratio": self._ASPECT_RATIOS.get(size, "1:1"),
             "n": n,
-            # MiniMax returns generated assets in data.image_urls. Downloading
-            # those short-lived URLs lets Onyx retain the same base64 response
-            # contract as its other image-generation providers.
-            "response_format": "url",
+            # Onyx requires base64 image data. Prefer MiniMax's inline format
+            # when requested by the caller; URL responses are downloaded below.
+            "response_format": (
+                "base64" if kwargs.get("response_format") in ("base64", "b64_json") else "url"
+            ),
         }
-        if quality:
-            payload["quality"] = quality
         for field in (
             "subject_reference",
             "width",
@@ -119,22 +118,30 @@ class MiniMaxImageGenerationProvider(ImageGenerationProvider):
         if response_json.get("base_resp", {}).get("status_code") not in (None, 0):
             raise RuntimeError("MiniMax image generation returned an error.")
 
-        image_urls = response_json.get("data", {}).get("image_urls") or []
-        if not image_urls:
+        response_data = response_json.get("data", {})
+        image_base64 = response_data.get("image_base64") or []
+        image_urls = response_data.get("image_urls") or []
+        if not image_base64 and not image_urls:
             raise RuntimeError("MiniMax image generation returned no image URLs.")
 
         from litellm.types.utils import ImageObject, ImageResponse
 
         generated = []
-        for image_url in image_urls[:n]:
-            image_response = requests.get(image_url, timeout=120)
-            image_response.raise_for_status()
-            generated.append(
-                ImageObject(
-                    b64_json=base64.b64encode(image_response.content).decode("ascii"),
-                    revised_prompt=prompt,
-                )
+        if image_base64:
+            generated.extend(
+                ImageObject(b64_json=image, revised_prompt=prompt)
+                for image in image_base64[:n]
             )
+        else:
+            for image_url in image_urls[:n]:
+                image_response = requests.get(image_url, timeout=120)
+                image_response.raise_for_status()
+                generated.append(
+                    ImageObject(
+                        b64_json=base64.b64encode(image_response.content).decode("ascii"),
+                        revised_prompt=prompt,
+                    )
+                )
         if not generated:
             raise RuntimeError(
                 "MiniMax image generation returned no downloadable images."
