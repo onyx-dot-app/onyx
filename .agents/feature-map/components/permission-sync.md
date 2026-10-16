@@ -67,8 +67,8 @@ admin UI renders from `PermissionSyncAttempt` rows (owned by
 |---|---|---|
 | `CHECK_FOR_DOC_PERMISSIONS_SYNC` | Beat, every 30s, EE-gated | `doc_permission_syncing/tasks.py:check_for_doc_permissions_sync`. Scans perm-synced cc_pairs (`get_all_auto_sync_cc_pairs`), fails expired attempts (§5.9), decides which are due (`_is_external_doc_permissions_sync_due`) among pairs with no open attempt, and dispatches one generator task per due cc_pair. |
 | `CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK` | Dispatched by the check task | `doc_permission_syncing/tasks.py:connector_permission_sync_generator_task`. Runs one source's `doc_sync_func`, streams `DocExternalAccess`/`NodeExternalAccess` into Postgres. |
-| `CHECK_FOR_EXTERNAL_GROUP_SYNC` | Beat, every 20s, EE-gated | `external_group_syncing/tasks.py:check_for_external_group_sync`. Same shape as the doc check task, for group sync. |
-| `CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK` | Dispatched by the check task | `external_group_syncing/tasks.py:connector_external_group_sync_generator_task` -> `_perform_external_group_sync` -> `_timed_perform_external_group_sync`. Runs one source's `group_sync_func`, upserts `ExternalUserGroup` rows. |
+| `CHECK_FOR_EXTERNAL_GROUP_SYNC` | Beat, every 20s, EE-gated | `external_group_syncing/tasks.py:check_for_external_group_sync`. Same shape as the doc check task, for group sync; dispatches one cc_pair per cc_pair-agnostic source. |
+| `CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK` | Dispatched by the check task | `external_group_syncing/tasks.py:connector_external_group_sync_generator_task` (claims the attempt, runs the lease) -> `_timed_perform_external_group_sync`. Runs one source's `group_sync_func`, upserts `ExternalUserGroup` rows. |
 
 Both beat entries are registered in `backend/onyx/background/celery/tasks/beat_schedule.py`
 (not the `ee/` file of the same name, which is empty of these entries) and are
@@ -357,25 +357,29 @@ sync safe to lag doc sync.
 ```
 beat: CHECK_FOR_EXTERNAL_GROUP_SYNC (every 20s)
   check_for_external_group_sync                  external_group_syncing/tasks.py
+    fail_expired_external_group_sync_attempts_for_tenant   see §5.9
     get_all_auto_sync_cc_pairs                     every perm-synced cc_pair
     (filter in check_for_external_group_sync)      keeps only active statuses (not PAUSED,
                                                    INVALID, DELETING); for agnostic sources
-                                                   keeps the lowest-id active cc_pair
+                                                   keeps the lowest-id active cc_pair; skips
+                                                   pairs with an open attempt
     is_external_group_sync_due(cc_pair)            per cc_pair, per §2 frequency table
     get_external_group_sync_retry_after            backs off after consecutive FAILED attempts
                                                    (request_retry_delay: 5 min doubling to 6 h);
                                                    the manual sync endpoint ignores it
-    try_creating_external_group_sync_task          fences, inserts SyncRecord, dispatches:
+    try_creating_external_group_sync_task
+      try_create_external_group_sync_attempt       NOT_STARTED row with celery_task_id,
+                                                   None if one is open
+      send_task(attempt_id=..., expires=PERMISSION_SYNC_TASK_EXPIRES)
   CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK
-    connector_external_group_sync_generator_task -> _perform_external_group_sync
-      create_external_group_sync_attempt
+    connector_external_group_sync_generator_task
+      mark_external_group_sync_attempt_in_progress  skips an attempt closed while queued
+      LeaseHeartbeat renews heartbeat_at            see §5.9
       _timed_perform_external_group_sync:
         remove_stale_external_groups(cc_pair_id)     clears LAST cycle's leftovers, see §5.4
         mark_old_external_groups_as_stale(cc_pair_id) tags this cycle's starting rows stale=True,
                                                        commits immediately (idle-in-transaction
                                                        safety, ee/onyx/db/external_perm.py comment)
-        mark_external_group_sync_attempt_in_progress
-        LeaseHeartbeat renews heartbeat_at           see §5.9
         group_sync_func(tenant_id, cc_pair) -> Generator[ExternalUserGroup]
         for each batch of 100:
           upsert_external_groups                     sets stale=False on every touched row
@@ -596,21 +600,23 @@ document to the wrong person.
    `JOB_TIMEOUT`); the attempt's `error_message` names the real stop cause
    (timeout, stop signal, or lost lease), because connectors raise a generic
    "Stop signal detected" for all of them.
-   For doc sync, the open attempt is also the per-cc_pair lock. The partial
-   unique index `uq_doc_permission_sync_attempt_open_cc_pair` allows one
-   `NOT_STARTED`/`IN_PROGRESS` row per cc_pair, and dispatch creates that row
-   before it sends the task, so there is no Redis fence. Pruning, connector
-   deletion, and the manual `sync-permissions` endpoint read
-   `get_open_doc_permission_sync_attempt`. Deletion revokes the row's
-   `celery_task_id`, and after its stop timeout it cancels the row
-   (`cancel_open_doc_permission_sync_attempt`), which makes the worker lose
-   its lease. A `NOT_STARTED` attempt older than
-   `PERMISSION_SYNC_LOST_TASK_GRACE` whose `celery_task_id` is in neither the
-   broker queue nor the unacked set lost its task, and the beat fails it
-   (`fail_lost_queued_doc_permission_sync_attempts`). A task a worker already
-   took looks lost too; its claim then fails and the beat dispatches again. As
-   a backstop, the reaper fails any `NOT_STARTED` row after
-   `PERMISSION_SYNC_TASK_EXPIRES` plus the lease timeout. Doc sync writes no `SyncRecord`.
+   The open attempt is also the per-cc_pair lock, for doc sync and group sync.
+   The partial unique indexes `uq_doc_permission_sync_attempt_open_cc_pair`
+   and `uq_group_sync_attempt_open_cc_pair` allow one `NOT_STARTED`/`IN_PROGRESS`
+   row per cc_pair. Dispatch creates that row before it sends the task, so
+   there is no Redis fence. An open doc attempt blocks pruning and connector
+   deletion (`get_open_doc_permission_sync_attempt`); an open group attempt
+   blocks neither. The manual `sync-permissions` / `sync-groups` endpoints
+   return 409 while the matching attempt is open. Deletion revokes the
+   `celery_task_id` of both open attempts, and after its stop timeout it
+   cancels both (`cancel_open_*`), which makes their workers lose their leases.
+   A `NOT_STARTED` attempt older than `PERMISSION_SYNC_LOST_TASK_GRACE` whose
+   `celery_task_id` is in neither the broker queue nor the unacked set lost
+   its task, and the beat fails it (`fail_lost_queued_*_attempts`). A task a
+   worker already took looks lost too; its claim then fails and the beat
+   dispatches again. As a backstop, the reaper fails any `NOT_STARTED` row
+   after `PERMISSION_SYNC_TASK_EXPIRES` plus the lease timeout. Neither sync
+   writes a `SyncRecord`.
 
 ---
 
@@ -624,8 +630,8 @@ document to the wrong person.
 - [[cc-pairs-and-credentials]]: `ConnectorCredentialPair.access_type` of `SYNC` or `SYNC_RESTRICTED`
   is what makes a cc_pair eligible at all; `last_time_perm_sync`/
   `last_time_external_group_sync` live on that model.
-- [[background-jobs]]: the Celery beat and fence machinery
-  (`RedisConnectorExternalGroupSync`, `SyncRecord`) group sync is built on.
+- [[background-jobs]]: the Celery beat schedule and the Heavy worker both
+  syncs run on. Neither uses a Redis fence (§5.9).
 - [[editions-and-gating]]: `onyx/utils/variable_functionality.py:is_ee_available`
   gates both beat entries
   (`onyx/background/celery/tasks/beat_schedule.py`).

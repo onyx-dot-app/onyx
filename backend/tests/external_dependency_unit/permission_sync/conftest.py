@@ -9,7 +9,9 @@ from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import Connector, ConnectorCredentialPair, Credential
 from onyx.db.permission_sync_attempt import (
     create_doc_permission_sync_attempt,
+    create_external_group_sync_attempt,
     mark_doc_permission_sync_attempt_failed,
+    mark_external_group_sync_attempt_failed,
 )
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -68,6 +70,17 @@ def create_finished_doc_permission_sync_attempt(
     """A cc_pair has at most one open attempt, so history is made of finished ones."""
     attempt_id = create_doc_permission_sync_attempt(cc_pair_id, db_session)
     mark_doc_permission_sync_attempt_failed(
+        attempt_id, db_session, error_message="finished"
+    )
+    return attempt_id
+
+
+def create_finished_external_group_sync_attempt(
+    cc_pair_id: int, db_session: Session
+) -> int:
+    """A cc_pair has at most one open attempt, so history is made of finished ones."""
+    attempt_id = create_external_group_sync_attempt(cc_pair_id, db_session)
+    mark_external_group_sync_attempt_failed(
         attempt_id, db_session, error_message="finished"
     )
     return attempt_id
