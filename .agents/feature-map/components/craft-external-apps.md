@@ -428,6 +428,10 @@ identical in shape whether a human or a grant decided.
 
 ### 4.6 OAuth connect and token refresh
 
+OAuth start accepts an optional safe internal `return_path`. The authorization attempt
+stores it and the callback returns it after saving credentials. Omitting the path
+retains the existing callback behavior. External and unsafe paths are rejected.
+
 Connect: `GET /api/build/apps/{id}/oauth/start` builds the provider's
 authorize URL through the shared OAuth builder (`server/features/build/external_apps/oauth.py`).
 Each attempt is bound to the user, tenant, app, and OAuth configuration.

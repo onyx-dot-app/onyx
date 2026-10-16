@@ -134,6 +134,7 @@ class OAuthCallbackRequest(BaseModel):
 class OAuthCallbackResponse(BaseModel):
     success: bool
     external_app_id: int
+    return_path: str | None = None
 
 
 class ConnectAppDecisionRequest(BaseModel):

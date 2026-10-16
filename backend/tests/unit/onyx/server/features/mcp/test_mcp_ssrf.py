@@ -233,3 +233,41 @@ def test_server_url_allows_http() -> None:
     api._validate_mcp_server_url(
         "http://8.8.8.8/mcp", "server_url", require_https=False
     )
+
+
+def test_async_guard_offloads_validation_and_preserves_tenant_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+    validation_threads: list[int] = []
+    tenant_ids: list[str | None] = []
+    loop_threads: list[int] = []
+
+    def validate(url: str) -> str:
+        validation_threads.append(threading.get_ident())
+        tenant_ids.append(CURRENT_TENANT_ID_CONTEXTVAR.get())
+        return url
+
+    async def send(
+        _transport: httpx.AsyncHTTPTransport, request: httpx.Request
+    ) -> httpx.Response:
+        loop_threads.append(threading.get_ident())
+        return httpx.Response(200, request=request)
+
+    async def run() -> None:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("discovery-test-tenant")
+        try:
+            async with mcp_ssrf.mcp_ssrf_httpx_client_factory() as client:
+                await client.get("https://example.com/mcp")
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    monkeypatch.setattr(mcp_ssrf, "validate_mcp_outbound_url", validate)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
+    asyncio.run(run())
+    assert len(validation_threads) == 1
+    assert validation_threads[0] != loop_threads[0]
+    assert tenant_ids == ["discovery-test-tenant"]

@@ -36,6 +36,7 @@ from onyx.db.mcp import (
     create_mcp_server__no_commit,
     get_connection_config_by_id,
     update_mcp_server__no_commit,
+    upsert_mcp_server_user_preferences__no_commit,
 )
 from onyx.db.models import MCPServer, OAuthAccount, User
 from onyx.external_apps.matching.engine import (
@@ -50,7 +51,7 @@ from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.server.features.mcp.credentials import extract_connection_data
 from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 CraftServerFactory = Callable[..., MCPServer]
 
@@ -493,6 +494,34 @@ def test_admin_managed_server_detail_points_to_admin(
     detail = exc_info.value.sandbox_detail or ""
     assert "admin" in detail.lower()
     assert "Apps page in Craft" not in detail
+
+
+def test_personal_craft_optout_keeps_host_claim_and_blocks_live_resolve(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    user = create_test_user(db_session, "mcp_resolver_personal_optout")
+    other = create_test_user(db_session, "mcp_resolver_personal_other")
+    server = craft_server(
+        auth_type=MCPAuthenticationType.NONE,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    resolver = MCPServerResolver()
+    request = _request(_server_host(server))
+    try:
+        assert resolver.claims(request, _ctx(user)) is True
+        assert resolver.resolve(request, _ctx(user)) == {}
+        upsert_mcp_server_user_preferences__no_commit(
+            server.id, user.id, db_session, enabled_in_craft=False
+        )
+        db_session.commit()
+        assert resolver.claims(request, _ctx(user)) is True
+        with pytest.raises(CredentialUnavailableError, match="disabled MCP server"):
+            resolver.resolve(request, _ctx(user))
+        assert resolver.resolve(request, _ctx(other)) == {}
+    finally:
+        db_session.rollback()
+        delete_test_user(db_session, user, other)
+        db_session.commit()
 
 
 def test_none_auth_claims_without_injecting(

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
 from sqlalchemy import Select, func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.auth.permissions import has_permission
@@ -17,6 +18,7 @@ from onyx.db.models import (
     Persona__UserGroup,
     Tool,
     ToolCall,
+    ToolUserPreference,
     User,
 )
 from onyx.server.features.tool.models import Header
@@ -30,6 +32,37 @@ if TYPE_CHECKING:
     pass
 
 logger = setup_logger()
+
+
+def get_tool_user_preferences(
+    tool_ids: list[int], user_id: UUID, db_session: Session
+) -> dict[int, ToolUserPreference]:
+    if not tool_ids:
+        return {}
+    return {
+        preference.tool_id: preference
+        for preference in db_session.scalars(
+            select(ToolUserPreference).where(
+                ToolUserPreference.user_id == user_id,
+                ToolUserPreference.tool_id.in_(tool_ids),
+            )
+        )
+    }
+
+
+def upsert_tool_user_preference__no_commit(
+    tool_id: int, user_id: UUID, db_session: Session, *, enabled_in_chat: bool
+) -> ToolUserPreference:
+    stmt = insert(ToolUserPreference).values(
+        user_id=user_id, tool_id=tool_id, enabled_in_chat=enabled_in_chat
+    )
+    return db_session.scalars(
+        stmt.on_conflict_do_update(
+            index_elements=[ToolUserPreference.user_id, ToolUserPreference.tool_id],
+            set_={"enabled_in_chat": enabled_in_chat},
+        ).returning(ToolUserPreference),
+        execution_options={"populate_existing": True},
+    ).one()
 
 
 def capture_persona_tool_configuration(persona: Persona) -> PersonaToolConfiguration:
@@ -103,6 +136,23 @@ def get_tools_by_ids(tool_ids: list[int], db_session: Session) -> list[Tool]:
         return []
     stmt = select(Tool).where(Tool.id.in_(tool_ids))
     return list(db_session.scalars(stmt).all())
+
+
+def get_default_chat_tool_ids(tool_ids: list[int], db_session: Session) -> set[int]:
+    if not tool_ids:
+        return set()
+    stmt = (
+        select(Tool.id)
+        .join(Persona__Tool, Persona__Tool.tool_id == Tool.id)
+        .join(Persona, Persona.id == Persona__Tool.persona_id)
+        .where(
+            Persona.builtin_persona.is_(True),
+            Persona.deleted.is_(False),
+            Tool.id.in_(tool_ids),
+        )
+        .distinct()
+    )
+    return set(db_session.scalars(stmt))
 
 
 def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:

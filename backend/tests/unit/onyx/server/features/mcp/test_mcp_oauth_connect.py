@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 
+from onyx.db import mcp as mcp_db
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -267,7 +268,7 @@ def test_server_url_change_invalidates_old_credentials_without_losing_new_client
         "delete_all_user_connection_configs_for_server_no_commit",
         delete_user_configs,
     )
-    monkeypatch.setattr(api, "delete_connection_config", delete_admin_config)
+    monkeypatch.setattr(mcp_db, "delete_connection_config", delete_admin_config)
     monkeypatch.setattr(api, "update_mcp_server__no_commit", update_server)
 
     def persist_admin_config(

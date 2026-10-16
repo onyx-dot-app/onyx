@@ -1,7 +1,7 @@
 import datetime
 import re
 from enum import Enum
-from typing import Any, List, Literal, NotRequired, Optional, TypedDict
+from typing import Annotated, Any, List, Literal, NotRequired, Optional, TypedDict
 from uuid import UUID
 
 from mcp.shared.auth import (
@@ -421,6 +421,9 @@ class MCPToolUpdateRequest(BaseModel):
 
 
 class MCPServerSimpleCreateRequest(BaseModel):
+    available_in_craft: bool = Field(
+        default=False, description="Whether the Craft agent may use this server"
+    )
     name: str = Field(..., description="Name of the MCP server")
     description: Optional[str] = Field(
         None, description="Description of the MCP server"
@@ -511,6 +514,53 @@ class MCPOAuthConnectResponse(BaseModel):
     oauth_url: str = Field(..., description="OAuth URL to redirect user to")
     state: str = Field(..., description="OAuth state parameter")
     pending_tool: dict = Field(..., description="Pending tool configuration")
+
+
+class MCPOAuthDiscoveryRequest(BaseModel):
+    server_id: int
+
+
+class MCPOAuthDiscoveryResponse(BaseModel):
+    status: Literal["metadata_found", "metadata_missing", "unreachable"]
+    supports_automatic_registration: bool | None = None
+    authorization_endpoint: str | None = None
+    token_endpoint: str | None = None
+
+
+class MCPSetupProbeRequest(BaseModel):
+    server_url: str
+
+
+class MCPPublicProbeResult(BaseModel):
+    kind: Literal["public"] = "public"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE]
+    tool_count: int
+    server_name: str
+
+
+class MCPOAuthProbeResult(BaseModel):
+    kind: Literal["oauth"] = "oauth"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE] | None = None
+    discovery: MCPOAuthDiscoveryResponse
+
+
+class MCPUnknownAuthProbeResult(BaseModel):
+    kind: Literal["auth_unknown"] = "auth_unknown"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE] | None = None
+
+
+class MCPUnreachableProbeResult(BaseModel):
+    kind: Literal["unreachable"] = "unreachable"
+    reason: Literal["blocked", "connection_failed"] = "connection_failed"
+
+
+MCPSetupProbeResult = Annotated[
+    MCPPublicProbeResult
+    | MCPOAuthProbeResult
+    | MCPUnknownAuthProbeResult
+    | MCPUnreachableProbeResult,
+    Field(discriminator="kind"),
+]
 
 
 class MCPUserOAuthConnectRequest(BaseModel):
@@ -694,6 +744,24 @@ class MCPApiKeyResponse(BaseModel):
     )
 
 
+class MCPUserPreferencesUpdateRequest(BaseModel):
+    enabled_in_chat: bool | None = None
+    enabled_in_craft: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_preferences(self) -> "MCPUserPreferencesUpdateRequest":
+        if self.enabled_in_chat is None and self.enabled_in_craft is None:
+            raise ValueError("At least one preference is required")
+        if any(value is None for value in self.model_dump(exclude_unset=True).values()):
+            raise ValueError("Preferences must be booleans")
+        return self
+
+
+class MCPUserPreferencesResponse(BaseModel):
+    enabled_in_chat: bool
+    enabled_in_craft: bool
+
+
 class MCPServer(BaseModel):
     id: int
     name: str
@@ -715,6 +783,15 @@ class MCPServer(BaseModel):
     groups: list[int] = Field(default_factory=list)
     users: list[UUID] = Field(default_factory=list)
     available_in_craft: bool = False
+    user_enabled_in_chat: bool = True
+    user_enabled_in_craft: bool = True
+    default_chat_enabled: bool | None = Field(
+        None,
+        description=(
+            "Whether any server tool is selected for the default assistant. "
+            "Computed by member and admin listings, independently of credentials and tool enablement."
+        ),
+    )
     tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
         None,
         description=(
