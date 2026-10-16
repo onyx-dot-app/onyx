@@ -56,11 +56,7 @@ function FailedDocRow({
   const [expanded, setExpanded] = useState(false);
   const [message, setMessage] = useState<HTMLElement | null>(null);
   const clipped = useOverflow(message);
-  const label =
-    error.document_name ??
-    error.document_id ??
-    error.entity_id ??
-    t("unknownDocument");
+  const id = error.document_id ?? error.entity_id;
   return (
     <Section
       flexDirection="row"
@@ -80,55 +76,52 @@ function FailedDocRow({
         <Text font="secondary-mono" color="text-03">
           {format.dateTime(new Date(error.time_created), RUN_TIME_FORMAT)}
         </Text>
-        {/* The label truncates in its column, and the link rides on an icon beside it. */}
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          alignItems="center"
-          gap={0.5}
-          height="fit"
-        >
-          <Section alignItems="start" gap={0} height="fit" className="min-w-0">
+        {error.document_name !== null && (
+          <OverflowText
+            font="secondary-body"
+            color="text-03"
+            wordWrap="wrap-anywhere"
+          >
+            {error.document_name}
+          </OverflowText>
+        )}
+        {/* The id stays visible under a title so it can still be copied. */}
+        {id !== null ? (
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            gap={0.25}
+            height="fit"
+            className="min-w-0"
+          >
+            <SvgFile size={12} className="shrink-0 stroke-text-02" />
             <OverflowText
-              font="secondary-body"
-              color="text-03"
+              font="secondary-mono"
+              color="text-02"
               wordWrap="wrap-anywhere"
             >
-              {label}
+              {id}
             </OverflowText>
-            {/* A title hides the id, so the id stays below it to copy. */}
-            {error.document_name !== null && error.document_id !== null && (
-              <Section
-                flexDirection="row"
-                justifyContent="start"
-                alignItems="center"
-                gap={0.25}
-                height="fit"
-                className="min-w-0"
-              >
-                <SvgFile size={12} className="shrink-0 stroke-text-02" />
-                <OverflowText
-                  font="secondary-mono"
-                  color="text-02"
-                  wordWrap="wrap-anywhere"
-                >
-                  {error.document_id}
-                </OverflowText>
-              </Section>
+            {error.document_link !== null && (
+              <Button
+                icon={SvgExternalLink}
+                prominence="tertiary"
+                size="2xs"
+                href={error.document_link}
+                target="_blank"
+                aria-label={t("open")}
+                tooltip={t("open")}
+              />
             )}
           </Section>
-          {error.document_link !== null && (
-            <Button
-              icon={SvgExternalLink}
-              prominence="tertiary"
-              size="xs"
-              href={error.document_link}
-              target="_blank"
-              aria-label={t("open")}
-              tooltip={t("open")}
-            />
-          )}
-        </Section>
+        ) : (
+          error.document_name === null && (
+            <Text font="secondary-body" color="text-03">
+              {t("unknownDocument")}
+            </Text>
+          )
+        )}
       </Section>
       <Section
         alignItems="start"
