@@ -215,6 +215,9 @@ _UNKNOWN_CAUSE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
 # results live in stored reports and in every draft snapshot write.
 MAX_RESPONSE_EXCERPT_CHARS: int = 500
 MAX_STACK_TRACE_CHARS: int = 4000
+# How much of a response body is redacted before the excerpt is cut from it.
+# Far past the excerpt, so a secret cut at this bound never reaches it.
+_MAX_REDACTED_BODY_CHARS: int = 64 * 1024
 # A URL anywhere in a text, with any scheme. Each match is rebuilt by
 # ``_safe_location``, the parser the request line uses too.
 _URL_PATTERN = re.compile(r"\b[a-z][a-z0-9+.\-]*://[^\s'\"<>]+", re.IGNORECASE)
@@ -240,12 +243,13 @@ def _safe_location(url: str) -> str:
     """A URL's host, port and path only: its user info, parameters, query
     string and fragment can hold secrets. A URL that does not parse is
     replaced whole."""
-    parsed = urlparse(url)
     try:
+        parsed = urlparse(url)
         port = parsed.port
+        host = parsed.hostname or ""
     except ValueError:
         return _UNPARSABLE_URL
-    return f"{parsed.hostname or ''}{f':{port}' if port else ''}{parsed.path}"
+    return f"{host}{f':{port}' if port else ''}{parsed.path}"
 
 
 def _request_line(method: str | None, url: str | None) -> str | None:
@@ -277,15 +281,15 @@ def _scrubbed(text: str, secrets: Iterable[str]) -> str:
 
 
 def _http_detail(error: BaseException) -> CheckErrorDetail | None:
-    """The HTTP response of the first error in the chain that has one."""
+    """The HTTP response of the first error in the chain that has one, with
+    the whole body: ``check_error_detail`` redacts it, then cuts it."""
     current: BaseException | None = error
     while current is not None:
         if isinstance(current, SourceApiError):
             return CheckErrorDetail(
                 status_code=current.status_code,
                 request=_request_line(current.method, current.url),
-                response_excerpt=(current.body or "")[:MAX_RESPONSE_EXCERPT_CHARS]
-                or None,
+                response_excerpt=current.body or None,
             )
         if isinstance(current, requests.HTTPError) and current.response is not None:
             response = current.response
@@ -295,7 +299,7 @@ def _http_detail(error: BaseException) -> CheckErrorDetail | None:
                     response.request.method if response.request else None,
                     response.url,
                 ),
-                response_excerpt=response.text[:MAX_RESPONSE_EXCERPT_CHARS] or None,
+                response_excerpt=response.text or None,
             )
         current = current.__cause__
     return None
@@ -307,11 +311,14 @@ def check_error_detail(
     """The detail of a check's exception: the HTTP response it carries, and a
     stack trace when the cause is unknown. None when it has neither. URL query
     strings and every value of ``secrets`` (the run's credential values) are
-    removed from the response and the trace."""
+    removed from the response and the trace before either is cut to size,
+    so a cut cannot leave part of a secret."""
     secrets = list(secrets)
     detail = _http_detail(error) or CheckErrorDetail()
     if detail.response_excerpt is not None:
-        detail.response_excerpt = _scrubbed(detail.response_excerpt, secrets)
+        detail.response_excerpt = _scrubbed(
+            detail.response_excerpt[:_MAX_REDACTED_BODY_CHARS], secrets
+        )[:MAX_RESPONSE_EXCERPT_CHARS]
     if error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
         trace = _scrubbed("".join(traceback.format_exception(error)), secrets)
         detail.stack_trace = trace[-MAX_STACK_TRACE_CHARS:]
