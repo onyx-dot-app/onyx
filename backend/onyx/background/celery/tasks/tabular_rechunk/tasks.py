@@ -117,7 +117,11 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
                 task_logger.info("tabular re-chunk: waiting for the reindex port")
                 return None
 
-        result = run_tabular_rechunk(tenant_id=tenant_id, after_doc_id=progress.cursor)
+        result = run_tabular_rechunk(
+            tenant_id=tenant_id,
+            after_doc_id=progress.cursor,
+            on_batch=lambda: lock.extend(_LOCK_TIMEOUT_S),
+        )
 
         # Re-read: the run took minutes, so write onto current state rather
         # than a stale copy.
