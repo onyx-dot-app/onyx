@@ -43,6 +43,8 @@ Their reads auto-approve and their writes require approval by default.
 The permissions selector shows Default when effective policies match
 the catalog and Custom for mixed overrides. Default restores each catalog policy.
 The shared MCP editor uses the same control, with Ask as each tool’s default.
+Policy rows keep controls on the right. Names and descriptions wrap within the
+remaining width so the full text stays visible without hover or expansion.
 On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
 credentials, so the admin can only toggle them on and set policy. Custom apps
 on Cloud keep a normal credential form, as does a built-in whose OAuth client
