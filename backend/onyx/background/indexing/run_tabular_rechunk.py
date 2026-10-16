@@ -1,18 +1,13 @@
-"""Re-chunk one cc_pair's tabular documents with the current chunker.
+"""Re-chunk tabular documents that predate the current chunker.
 
-The migration never calls the connector. A tabular document's raw workbook stays
-in the file store (`Document.file_id`), and the searchable fields Postgres does
-not keep - title and metadata - are read back from the document's own stored
-chunk, the way the reindex port rebuilds documents it cannot re-fetch.
+The connector is never called: the raw workbook stays in the file store, and
+the fields Postgres does not keep - title and metadata - are read back from the
+document's own stored chunk, as the reindex port does. Writes go through the
+normal indexing pipeline, which replaces a document's chunks in one call.
 
-Writes go through the normal indexing pipeline, so the document index replaces
-each document's chunks in one call and nothing is left without chunks for longer
-than that call.
-
-A tabular document holding more chunks than the current chunker could produce
-must predate it, so the scan skips everything already re-chunked and everything
-an in-flight crawl writes. The scan walks the primary key, which keeps each page
-an index scan and costs one pass of the table over the migration's whole life.
+Holding more chunks than the current chunker could produce is what marks a
+document as stale, so the scan skips its own output and anything an in-flight
+crawl writes.
 """
 
 import time
@@ -27,12 +22,14 @@ from onyx.configs.app_configs import (
     TABULAR_MAX_CHUNKS_PER_WORKBOOK,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    experts_from_stores_representations,
+)
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
 )
 from onyx.connectors.models import (
-    BasicExpertInfo,
     Document,
     IndexAttemptMetadata,
     convert_metadata_list_of_strings_to_dict,
@@ -69,42 +66,29 @@ from onyx.utils.middleware import make_randomized_onyx_request_id
 
 logger = setup_logger()
 
-# The run holds its worker thread for at most this long, then returns its
-# cursor. The next beat tick resumes the cc_pair from there.
+# After this the run returns its cursor and the next tick resumes from it.
 TABULAR_RECHUNK_TIME_BUDGET_S = 4 * 60
 
-
-# Most chunks the current chunker can produce for one tabular document: the
-# per-workbook cap plus the large chunks multipass derives from them. A
-# document holding more than this predates the current chunker. Counting the
-# large chunks even when multipass is off only loosens the bound, which costs
-# a few small documents not worth re-chunking anyway.
+# Per-workbook cap plus the large chunks multipass derives from it. Counting
+# those even when multipass is off only loosens the bound.
 TABULAR_CHUNK_CEILING = TABULAR_MAX_CHUNKS_PER_WORKBOOK + (
     TABULAR_MAX_CHUNKS_PER_WORKBOOK // LARGE_CHUNK_RATIO
 )
 
 
 class TabularRechunkResult(BaseModel):
-    """Outcome of one run."""
+    """Outcome of one run. Documents in `failed_document_ids` stay oversized,
+    so a finished scan containing them is not a finished migration."""
 
-    # Resume point: the last document id scanned.
     last_document_id: str | None
     documents_indexed: int
-    documents_failed: int
-    # Documents the run could not re-chunk. They stay oversized, so the caller
-    # must not treat a scan containing them as a finished migration.
     failed_document_ids: list[str]
-    # True when the scan reached the end of the table.
     finished: bool
 
 
 def _tabular_file_name(semantic_id: str, file_type: str | None) -> str:
-    """A name the tabular reader can dispatch on.
-
-    Drive keeps a native Google Sheet's own name, which usually carries no
-    extension, so the stored file's MIME type supplies one - the same
-    synthesis the Drive connector does at fetch time.
-    """
+    """A name the tabular reader can dispatch on. Drive keeps a native Sheet's
+    own name, which carries no extension, so the stored type supplies one."""
     if is_tabular_file(semantic_id):
         return semantic_id
     if file_type in SPREADSHEET_MIME_TYPES:
@@ -116,17 +100,6 @@ def _tabular_file_name(semantic_id: str, file_type: str | None) -> str:
     )
 
 
-def _owners(stored: list[str] | None) -> list[BasicExpertInfo] | None:
-    """Rebuilds owners from their stored string form.
-
-    `basic_expert_info_representation` returns `display_name` when it is the
-    only field set, so the upsert writes back exactly what it read.
-    """
-    if not stored:
-        return None
-    return [BasicExpertInfo(display_name=name) for name in stored]
-
-
 def _rebuild_document(
     db_doc: DbDocument,
     head: DocumentChunkWithoutVectors,
@@ -134,12 +107,9 @@ def _rebuild_document(
     file_type: str | None,
     parent_hierarchy_raw_node_id: str | None,
 ) -> Document:
-    """Rebuilds the connector Document for one tabular file.
-
-    The sections come from the stored workbook, the searchable fields from the
-    document's own chunk, and the rest from the row - including the fields the
-    upsert would otherwise overwrite with NULL.
-    """
+    """Rebuilds the connector Document for one tabular file: sections from the
+    stored workbook, searchable fields from its own chunk, the rest from the
+    row - including what the upsert would otherwise overwrite."""
     if db_doc.file_id is None:
         raise ValueError(f"{db_doc.id} has no stored file")
 
@@ -156,9 +126,8 @@ def _rebuild_document(
         id=db_doc.id,
         source=DocumentSource(head.source_type),
         semantic_identifier=db_doc.semantic_id,
-        # "" rather than None reproduces an empty source title. None would fall
-        # back to semantic_identifier and add a title vector the document never
-        # had.
+        # None would fall back to semantic_identifier and add a title vector
+        # the document never had.
         title=head.title if head.title is not None else "",
         metadata=(
             convert_metadata_list_of_strings_to_dict(head.metadata_list)
@@ -168,18 +137,15 @@ def _rebuild_document(
         sections=sections,
         doc_updated_at=db_doc.doc_updated_at,
         doc_created_at=db_doc.doc_created_at,
-        primary_owners=_owners(db_doc.primary_owners),
-        secondary_owners=_owners(db_doc.secondary_owners),
+        primary_owners=experts_from_stores_representations(db_doc.primary_owners),
+        secondary_owners=experts_from_stores_representations(db_doc.secondary_owners),
         from_ingestion_api=db_doc.from_ingestion_api,
         doc_metadata=db_doc.doc_metadata,
         parent_hierarchy_node_id=db_doc.parent_hierarchy_node_id,
-        # The adapter resolves ancestors from the RAW id, not the resolved one,
-        # so without this a rebuilt document keeps only its source node and
-        # drops out of folder-scoped search.
+        # The adapter resolves ancestors from the raw id, not the resolved one.
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         file_id=db_doc.file_id,
-        # Left unset on purpose. With no document carrying external_access the
-        # upsert leaves the ACL columns alone, so perm-synced access survives.
+        # Unset so the upsert leaves the ACL columns alone.
         external_access=None,
     )
 
@@ -196,22 +162,17 @@ def _rechunk_batch(
     """Re-chunks one batch of tabular documents. Returns (indexed, failed ids)."""
     db_docs = [target.document for target in targets]
     document_ids = [db_doc.id for db_doc in db_docs]
+    node_ids = [
+        d.parent_hierarchy_node_id for d in db_docs if d.parent_hierarchy_node_id
+    ]
     heads = document_index.get_chunk_heads(document_ids)
 
-    node_ids = [
-        db_doc.parent_hierarchy_node_id
-        for db_doc in db_docs
-        if db_doc.parent_hierarchy_node_id is not None
-    ]
     with get_session_with_current_tenant() as db_session:
         raw_node_ids = get_raw_node_ids_by_id(db_session, node_ids)
-        # The upsert resets both to their defaults on every write, so they are
-        # captured here and put back once the batch has landed.
+        # The upsert resets both; they go back after the batch lands.
         boost_and_hidden = fetch_boost_and_hidden(db_session, document_ids)
 
-    # Tabular sections stage a CSV per sheet through this callback. This path
-    # has no index attempt for the standard reapers to key on, so track the ids
-    # and reap them here.
+    # No index attempt here for the standard staging reapers to key on.
     stage, staged_csv_ids = build_tracking_raw_file_callback(
         metadata={"connector_id": str(connector_id), "tenant_id": tenant_id}
     )
@@ -223,8 +184,7 @@ def _rechunk_batch(
             db_doc = target.document
             head = heads.get(db_doc.id)
             if head is None:
-                # No stored chunk means no title or metadata to preserve, and
-                # no old chunks to replace. A crawl owns this document.
+                # Nothing to preserve and nothing to replace; a crawl owns it.
                 logger.warning(
                     "tabular re-chunk: %s has no chunks, skipping", db_doc.id
                 )
@@ -238,7 +198,7 @@ def _rechunk_batch(
                         stage,
                         file_type=target.file_type,
                         parent_hierarchy_raw_node_id=raw_node_ids.get(
-                            db_doc.parent_hierarchy_node_id or -1
+                            db_doc.parent_hierarchy_node_id or 0
                         ),
                     )
                 )
@@ -300,16 +260,16 @@ def run_tabular_rechunk(
     """Re-chunks oversized tabular documents from the cursor until the scan
     reaches the end of the table or the time budget runs out.
 
-    `on_batch` runs after every batch. The caller uses it to keep a lock lease
-    alive: a single batch can outlast the budget when the embedding provider
-    throttles, and the budget is only checked between pages.
+    `on_batch` runs after every batch, so the caller can keep a lock lease
+    alive: the budget is only checked between pages, and one batch can outlast
+    it when the embedding provider throttles.
     """
     start = time.monotonic()
-    ceiling = TABULAR_CHUNK_CEILING
     cursor = after_doc_id
     indexed = 0
     failed: list[str] = []
     batch_num = 0
+    finished = False
 
     with get_session_with_current_tenant() as db_session:
         search_settings = get_current_search_settings(db_session)
@@ -318,31 +278,21 @@ def run_tabular_rechunk(
         )
         document_index = build_opensearch_document_index(search_settings)
 
-    while time.monotonic() - start < time_budget_s:
+    while not finished and time.monotonic() - start < time_budget_s:
         with get_session_with_current_tenant() as db_session:
             targets = get_oversized_tabular_documents(
                 db_session,
-                chunk_count_above=ceiling,
+                chunk_count_above=TABULAR_CHUNK_CEILING,
                 after_doc_id=cursor,
                 limit=INDEX_BATCH_SIZE,
             )
-
+        # A short page means no further matches before the end of the table.
+        finished = len(targets) < INDEX_BATCH_SIZE
         if not targets:
-            logger.info(
-                "tabular re-chunk: scan complete, indexed=%s failed=%s",
-                indexed,
-                len(failed),
-            )
-            return TabularRechunkResult(
-                last_document_id=cursor,
-                documents_indexed=indexed,
-                documents_failed=len(failed),
-                failed_document_ids=failed,
-                finished=True,
-            )
+            break
 
-        # The pipeline adapter is per connector + credential, so a batch cannot
-        # mix cc-pairs.
+        # The pipeline adapter is per connector + credential, so a batch
+        # cannot mix cc-pairs.
         grouped: dict[tuple[int, int], list[TabularRechunkTarget]] = defaultdict(list)
         for target in targets:
             grouped[(target.connector_id, target.credential_id)].append(target)
@@ -371,23 +321,15 @@ def run_tabular_rechunk(
             cursor,
         )
 
-        # A short page means the scan found no further matches before the end
-        # of the table. A document that did not shrink is simply passed once:
-        # the cursor never revisits it.
-        if len(targets) < INDEX_BATCH_SIZE:
-            logger.info("tabular re-chunk: scan complete at cursor=%s", cursor)
-            return TabularRechunkResult(
-                last_document_id=cursor,
-                documents_indexed=indexed,
-                documents_failed=len(failed),
-                failed_document_ids=failed,
-                finished=True,
-            )
-
+    logger.info(
+        "tabular re-chunk: %s, indexed=%s failed=%s",
+        "scan complete" if finished else "budget spent",
+        indexed,
+        len(failed),
+    )
     return TabularRechunkResult(
         last_document_id=cursor,
         documents_indexed=indexed,
-        documents_failed=len(failed),
         failed_document_ids=failed,
-        finished=False,
+        finished=finished,
     )

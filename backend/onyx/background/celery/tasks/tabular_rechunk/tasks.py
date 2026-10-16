@@ -1,18 +1,12 @@
 """Beat task for the one-time tabular re-chunk migration.
 
-`TABULAR_RECHUNK_ENABLED` arms the migration, so an operator turns it on by
-deploying with the variable set and nothing else.
+`TABULAR_RECHUNK_ENABLED` arms it; the stored record stops it, so leaving the
+variable set across restarts re-runs nothing. To run it again, delete the
+record through the KV store, which clears the Redis copy a raw SQL delete
+would leave behind.
 
-What stops it is the stored record. The scan walks the document table by
-primary key, re-chunking only documents that hold more chunks than the current
-chunker could produce; once it reaches the end the record says so, and every
-later tick costs one cached read. Leaving the variable set therefore re-runs
-nothing. Delete the record through the KV store - which clears the Redis copy
-too, unlike a raw SQL delete - to run it again.
-
-One batch of documents runs per tick, on the docprocessing queue where the
-embedding belongs. The run is bounded by its own time budget because Celery
-time limits do not fire in thread pools.
+Runs on the docprocessing queue, where the embedding belongs, and bounds
+itself because Celery time limits do not fire in thread pools.
 """
 
 from celery import Task, shared_task
@@ -40,25 +34,20 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 
-# Outlives one run, so a crashed worker's claim still expires. The lease is
-# extended after every batch, because one batch can outlast the budget when
-# the embedding provider throttles.
+# Outlives one run so a crashed worker's claim expires; extended after each
+# batch, since one batch can outlast the budget under provider throttling.
 _LOCK_TIMEOUT_S = TABULAR_RECHUNK_TIME_BUDGET_S + 5 * 60
-# Full rescans allowed to retry documents that failed earlier. Bounded so a
-# permanently broken document cannot keep the migration running for ever.
+# Bounded so a permanently broken document cannot rescan for ever.
 _MAX_RETRY_PASSES = 3
 
 
 class TabularRechunkProgress(BaseModel):
     """How far the migration has got, per tenant. Durable in the KV store."""
 
-    # Last document id scanned. The scan resumes past it.
     cursor: str | None = None
     completed: bool = False
     documents_indexed: int = 0
     documents_failed: int = 0
-    # Documents left oversized by a failure. The scan rewinds to retry them
-    # rather than reporting a migration that silently skipped work.
     failed_document_ids: list[str] = []
     retry_passes: int = 0
 
@@ -87,8 +76,7 @@ def _blocked_reason() -> str | None:
     if DISABLE_VECTOR_DB:
         return "the vector DB is disabled"
     if SKIP_SPREADSHEET_CONTENT:
-        # Connectors index tabular files as a title plus a placeholder, so
-        # there is no tabular content to re-chunk.
+        # Tabular files index as a title plus a placeholder; nothing to chunk.
         return "SKIP_SPREADSHEET_CONTENT is set"
     return None
 
@@ -117,17 +105,14 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
             if active_search_settings.secondary is not None:
-                # run_indexing_pipeline writes to the secondary whenever a
-                # FUTURE exists, which would fill the new index and leave the
-                # live one on the old chunks.
+                # The pipeline writes to the secondary whenever a FUTURE
+                # exists, leaving the live index on the old chunks.
                 task_logger.info("tabular re-chunk: a reindex is in flight, waiting")
                 return None
-            # Only while an INSTANT swap is still backfilling from the PAST
-            # index: that port copies chunks boundary for boundary and would
-            # carry the old chunks back over finished work. Without the
-            # port_backfill_source_id check this blocks forever, because
-            # pending work means "a cc_pair has no settled port attempt",
-            # which is the normal state outside a port.
+            # Only while an INSTANT swap is still backfilling: the port copies
+            # chunks boundary for boundary over finished work. Without the
+            # source-id check this blocks for ever, because "pending work"
+            # means a cc_pair has no settled port attempt - the normal state.
             if active_search_settings.primary.port_backfill_source_id is not None and (
                 port_backfill_has_pending_work(
                     db_session, active_search_settings.primary.id
@@ -143,14 +128,13 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
         progress = load_progress()
         progress.cursor = result.last_document_id
         progress.documents_indexed += result.documents_indexed
-        progress.documents_failed += result.documents_failed
+        progress.documents_failed += len(result.failed_document_ids)
         progress.failed_document_ids = sorted(
             set(progress.failed_document_ids) | set(result.failed_document_ids)
         )
         progress.completed = result.finished
         if result.finished and progress.failed_document_ids:
-            # The cursor has run past documents that are still oversized.
-            # Rewind and sweep again rather than calling the migration done.
+            # The cursor ran past documents that are still oversized.
             if progress.retry_passes < _MAX_RETRY_PASSES:
                 progress.retry_passes += 1
                 progress.cursor = None
@@ -158,7 +142,7 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
                 progress.failed_document_ids = []
                 task_logger.info(
                     "tabular re-chunk: %s documents failed, starting retry pass %s",
-                    result.documents_failed,
+                    len(result.failed_document_ids),
                     progress.retry_passes,
                 )
             else:

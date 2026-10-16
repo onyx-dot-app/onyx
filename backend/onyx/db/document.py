@@ -429,12 +429,13 @@ def restore_boost_and_hidden(
     """Writes back values captured by `fetch_boost_and_hidden`. Commits."""
     if not boost_and_hidden:
         return
-    for document_id, (boost, hidden) in boost_and_hidden.items():
-        db_session.execute(
-            update(DbDocument)
-            .where(DbDocument.id == document_id)
-            .values(boost=boost, hidden=hidden)
-        )
+    db_session.execute(
+        update(DbDocument),
+        [
+            {"id": document_id, "boost": boost, "hidden": hidden}
+            for document_id, (boost, hidden) in boost_and_hidden.items()
+        ],
+    )
     db_session.commit()
 
 
