@@ -543,18 +543,24 @@ class CCPairIndexRun(BaseModel):
     kind: Literal[CCPairRunKind.INDEXING] = CCPairRunKind.INDEXING
     time_created: datetime
     attempt: IndexAttemptSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
 
 
 class CCPairDocPermissionSyncRun(BaseModel):
     kind: Literal[CCPairRunKind.DOC_PERMISSION_SYNC] = CCPairRunKind.DOC_PERMISSION_SYNC
     time_created: datetime
     attempt: DocPermissionSyncAttemptSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
 
 
 class CCPairGroupSyncRun(BaseModel):
     kind: Literal[CCPairRunKind.GROUP_SYNC] = CCPairRunKind.GROUP_SYNC
     time_created: datetime
     attempt: ExternalGroupSyncAttemptSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
 
 
 class PruneRunSnapshot(BaseModel):
@@ -624,12 +630,16 @@ class CCPairPruneRun(BaseModel):
     kind: Literal[CCPairRunKind.PRUNING] = CCPairRunKind.PRUNING
     time_created: datetime
     attempt: PruneRunSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
 
 
 class CCPairChecksRun(BaseModel):
     kind: Literal[CCPairRunKind.CHECKS] = CCPairRunKind.CHECKS
     time_created: datetime
     attempt: CheckRunSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
 
 
 CCPairRun = Annotated[
@@ -720,6 +730,45 @@ class IndexingOverviewResponse(BaseModel):
     throughput: CCPairThroughputResponse
 
 
+class CCPairRunKey(BaseModel):
+    kind: CCPairRunKind
+    attempt_id: int
+
+
+class CCPairRunsResolveRequest(BaseModel):
+    runs: list[CCPairRunKey] = Field(max_length=500)
+
+
+class CCPairRunLevel(str, Enum):
+    """An activity panel level that holds open runs."""
+
+    FAILURES = "failures"
+    ERRORS = "errors"
+
+
+class CCPairRunsResolveMatchingRequest(BaseModel):
+    """The open runs of one activity level, narrowed as the runs feed narrows them."""
+
+    level: CCPairRunLevel
+    q: str | None = Field(default=None, max_length=200)
+    since: datetime | None = None
+    kinds: list[CCPairRunKind] | None = None
+
+
+class CCPairRunsResolveResponse(BaseModel):
+    resolved_count: int
+
+
+class CCPairRunsResolveMatchingResponse(BaseModel):
+    resolved_count: int
+    # The pairs that had a run marked, so a client refetches only their feeds.
+    cc_pair_ids: list[int]
+
+
+class CCPairRunsResolvableCountResponse(BaseModel):
+    count: int
+
+
 class CCPairRef(BaseModel):
     """A pair named in a fleet-wide feed."""
 
@@ -729,6 +778,9 @@ class CCPairRef(BaseModel):
     # The caller may re-fetch single documents of this pair: they may submit a
     # targeted reindex, operate the pair, and its connector resolves documents.
     can_resolve: bool
+    # The caller may mark this pair's runs resolved: they may submit a targeted
+    # reindex and operate the pair, whatever the connector supports.
+    can_resolve_runs: bool
 
 
 class IndexingRun(BaseModel):

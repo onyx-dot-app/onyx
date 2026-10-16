@@ -1063,6 +1063,9 @@
         "lumapps": {
           "description": "内网页面和社区"
         },
+        "youtrack": {
+          "description": "问题跟踪与项目管理"
+        },
         "canvas": {
           "description": "课程、页面和公告"
         },
@@ -2277,89 +2280,24 @@
         "perBatch": {
           "empty": "未记录按批次的阶段数据。"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "批次加载"
+        "buckets": {
+          "fetchSource": {
+            "label": "源数据抓取"
           },
-          "batchTotal": {
-            "label": "批次总计"
-          },
-          "batchUnaccounted": {
-            "label": "未归类"
-          },
-          "checkpointLoad": {
-            "label": "检查点加载"
+          "batchPreProcessing": {
+            "label": "批次预处理"
           },
           "chunking": {
             "label": "分块"
           },
-          "connectorFetch": {
-            "label": "连接器抓取"
-          },
-          "connectorValidation": {
-            "label": "连接器验证"
-          },
-          "contextualRag": {
-            "label": "上下文 RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "协调锁获取等待"
-          },
-          "coordinationUpdate": {
-            "label": "协调更新"
-          },
-          "docBatchEnqueue": {
-            "label": "文档批次入队"
-          },
-          "docBatchStore": {
-            "label": "文档批次存储"
-          },
-          "docDbPrepare": {
-            "label": "文档数据库准备"
-          },
-          "docLockAcquireWait": {
-            "label": "文档锁等待"
-          },
-          "docprocessingSetup": {
-            "label": "文档处理初始化"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "元数据填充准备"
-          },
-          "finalization": {
-            "label": "收尾"
-          },
-          "gcCollect": {
-            "label": "垃圾回收"
-          },
-          "hierarchyUpsert": {
-            "label": "层级写入"
-          },
-          "imageProcessing": {
-            "label": "图片处理"
-          },
-          "permissionValidation": {
-            "label": "权限校验"
-          },
-          "postIndexDbUpdate": {
-            "label": "索引后数据库更新"
-          },
-          "queueWait": {
-            "label": "队列等待"
+            "label": "向量嵌入"
           },
           "vectorDbWrite": {
             "label": "向量数据库写入"
           },
-          "embeddingRateLimitWait": {
-            "label": "嵌入速率限制等待",
-            "description": "嵌入请求因索引设置中的嵌入速率限制而等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "提供商限流等待",
-            "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          "postProcessing": {
+            "label": "后处理"
           }
         }
       },
@@ -2379,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "随时间索引的文档",
           "tooltip": "{count, plural, one {# 个文档} other {# 个文档}}",
-          "loadError": "无法加载图表。"
+          "loadError": "无法加载图表。",
+          "rangeFilter": "在图表此时间段内创建的运行"
         },
         "hold": {
           "checks_running": "正在运行索引前检查",
@@ -2407,7 +2346,10 @@
         "targetedReindexFailed": "定向重新索引失败：{message}",
         "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。",
         "checkFrequencyUpdated": "连接器检查频率已更新",
-        "checkFrequencyUpdateFailed": "无法更新连接器检查频率"
+        "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。"
       },
       "backButton": {
         "label": "所有连接器"
@@ -2540,6 +2482,7 @@
           "running": "{count, plural, other {# 个运行进行中}}",
           "succeeded": "{count, plural, other {# 个运行成功}}",
           "failed": "{count, plural, other {# 个运行失败}}",
+          "canceled": "{count, plural, other {已取消 # 次运行}}",
           "passedChecks": "{count, plural, one {# 项检查通过} other {# 项检查通过}}",
           "failedChecks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}"
@@ -2603,15 +2546,12 @@
           "all": "所有级别",
           "failures": "失败",
           "errors": "错误",
-          "other": "其他"
-        },
-        "resolved": {
-          "label": "已解决"
+          "other": "其他",
+          "resolved": "已解决"
         },
         "groups": {
           "failures": "{count, plural, other {# 次失败}}",
           "errors": "{count, plural, other {# 个错误}}",
-          "resolved": "{count, plural, other {# 个已解决}}",
           "other": "其他"
         },
         "title": {
@@ -2677,16 +2617,16 @@
         "tags": {
           "stackTrace": "堆栈跟踪",
           "indexing": "{count, plural, other {# 个文档失败}}",
-          "doc_permission_sync": "{count, plural, other {# 个文档同步失败}}",
+          "doc_permission_sync": "{count, plural, other {# 个用户同步失败}}",
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "resolvedDocs": "{count, plural, other {# 个文档已解决}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
-          "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}"
+          "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
+          "resolved": "已解决"
         },
         "more": "显示更多",
         "empty": {
           "title": "没有失败或错误",
-          "resolved": "没有已解决的错误",
           "filtered": "没有与此搜索匹配的内容。",
           "failures": "没有失败",
           "errors": "没有错误",
@@ -2710,20 +2650,34 @@
           "open": "打开文档"
         },
         "trace": {
-          "runId": "运行 ID：{id}",
+          "runId": "• 运行 ID：{id}",
           "copy": "复制堆栈跟踪"
         },
         "actions": {
           "resolve": "解决"
+        },
+        "resolveAll": {
+          "button": "解决全部显示项",
+          "title": "解决所有显示的运行？",
+          "description": "这会将符合当前筛选条件的 {count, plural, other {# 次运行}}标记为已解决。它们保留原有状态，并移到已解决下方。",
+          "fleetDescription": "这会将您可操作的连接器上符合当前筛选条件的 {count, plural, other {# 次运行}}标记为已解决。它们保留原有状态，并移到已解决下方。",
+          "confirm": "全部解决"
         }
       },
       "stageDetails": {
         "title": "阶段详情",
+        "heading": {
+          "top": "阶段",
+          "bottom": "详情"
+        },
         "calls": "批次",
         "averageTime": "平均时间",
         "maxTime": "最长时间",
         "uneven": {
           "tooltip": "此阶段各批次耗时差异很大"
+        },
+        "clipped": {
+          "label": "条形已截断：最大值超出刻度"
         },
         "close": "关闭阶段详情"
       }
@@ -3320,6 +3274,19 @@
             "lang": {
               "label": "语言",
               "description": "用于内容标题/正文和元数据标签的语言（ISO 639-1，例如 en、fr）。"
+            }
+          }
+        },
+        "youtrack": {
+          "description": "配置 YouTrack 连接器",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack URL",
+              "description": "您的 YouTrack 地址，例如 https://example.youtrack.cloud。对于 YouTrack Server，请包含上下文路径，例如 https://example.com/youtrack。"
+            },
+            "projects": {
+              "label": "项目",
+              "description": "要索引的项目简称（例如 ABC）。留空则索引令牌可读取的所有项目。"
             }
           }
         },
@@ -4675,6 +4642,7 @@
         "gongBaseUrl": "可选。美国以外的数据请设置你所在区域的主机，例如 https://[region].api.gong.io。",
         "jiraUserEmail": "Jira Cloud 必填。",
         "lumappsServiceUser": "要代表其建立索引的用户。",
+        "youtrackToken": "可读取所有待索引项目的 YouTrack 用户的永久令牌。请在 YouTrack 个人资料的“账户安全”中创建。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
@@ -10338,8 +10306,25 @@
         },
         "validation": {
           "title": "验证",
-          "blocks": "新设置未通过验证。请在应用前修复。",
-          "warns": "部分可选检查失败。你仍然可以应用。",
+          "unchanged": "需要验证的设置未发生变化。",
+          "outcome": {
+            "failed": {
+              "title": "验证失败",
+              "description": "新设置未通过验证。请在应用前修复。"
+            },
+            "warnings": {
+              "title": "验证通过，但有警告",
+              "description": "部分可选检查失败或无法验证。你仍然可以应用。"
+            },
+            "incomplete": {
+              "title": "验证未完成",
+              "description": "已完成的检查均已通过。你仍然可以应用。"
+            },
+            "passed": {
+              "title": "验证通过",
+              "description": "新设置通过了所有检查。"
+            }
+          },
           "error": {
             "title": "设置无效"
           }

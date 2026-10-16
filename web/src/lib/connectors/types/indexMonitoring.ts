@@ -78,6 +78,8 @@ export interface CCPairRef {
   source: ValidSources;
   /** The viewer may re-fetch single documents of this pair. */
   can_resolve: boolean;
+  /** The viewer may mark this pair's runs resolved. */
+  can_resolve_runs: boolean;
 }
 
 /** Mirrors `IndexingRun`: one run in the fleet-wide feed, with the pair it ran on. */

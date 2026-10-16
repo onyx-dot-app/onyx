@@ -204,16 +204,20 @@ def _runs(
     kinds: list[CCPairRunKind] | None = None,
     q: str | None = None,
     errors: CCPairRunErrors | None = None,
+    superseded: bool | None = None,
 ) -> CCPairRunsResponse:
     return get_cc_pair_runs(
         cc_pair_id=cc_pair.id,
         page_num=0,
         page_size=10,
         since=None,
+        until=None,
         kinds=kinds,
         status_groups=None,
         q=q,
         errors=errors,
+        superseded=superseded,
+        resolved=None,
         user=user,
         db_session=db_session,
     )
