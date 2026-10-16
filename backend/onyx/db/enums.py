@@ -562,6 +562,7 @@ class ExternalAppType(str, PyEnum):
     GITHUB = "GITHUB"
     HUBSPOT = "HUBSPOT"
     NOTION = "NOTION"
+    ZENDESK = "ZENDESK"
     CUSTOM = "CUSTOM"
 
     @property
@@ -682,6 +683,7 @@ class LLMModelFlowType(str, PyEnum):
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
+    SEARCH_SELECTION = "search_selection"
     CRAFT = "craft"
 
 

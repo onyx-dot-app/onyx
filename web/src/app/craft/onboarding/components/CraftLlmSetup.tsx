@@ -7,6 +7,7 @@ import { Divider } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import LLMProviderCard from "@/sections/onboarding/components/LLMProviderCard";
 import { getProvider } from "@/lib/languageModels/utils";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 import {
   CRAFT_PROVIDERS,
@@ -25,6 +26,7 @@ const craftKeys: string[] = CRAFT_PROVIDERS;
 
 export default function CraftLlmSetup() {
   const t = useTranslations("craft.onboarding.llmSetup");
+  const providerNames = useProviderNames();
   const { openProviderModal } = useOnboarding();
   const { llmProviderOptions } = useLLMProviderOptions();
 
@@ -51,7 +53,7 @@ export default function CraftLlmSetup() {
       <Divider />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 w-full max-h-56 overflow-y-auto [&>*:last-child:nth-child(odd)]:col-span-full">
         {providerKeys.map((key) => {
-          const { productName, companyName } = getProvider(key);
+          const { productName, companyName } = providerNames(getProvider(key));
           return (
             <LLMProviderCard
               key={key}

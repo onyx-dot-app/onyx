@@ -354,6 +354,7 @@ def _pinned_get(
     port: int,
     headers: dict[str, str] | None,
     timeout: float | tuple[float, float],
+    trust_env: bool = True,
     **kwargs: Any,
 ) -> requests.Response:
     """GET the already-validated IP directly, presenting ``hostname`` for the
@@ -369,6 +370,7 @@ def _pinned_get(
     request_headers["Host"] = f"{hostname}:{port}" if port != default_port else hostname
 
     with _NoRedirectSession() as session:
+        session.trust_env = trust_env
         if parsed.scheme == "https":
             session.mount("https://", _PinnedHostAdapter(hostname))
         return session.get(
@@ -480,6 +482,7 @@ def ssrf_safe_get(
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
     https_only: bool = False,
+    trust_env: bool = True,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -498,6 +501,7 @@ def ssrf_safe_get(
             IPs. Use only when the operator has explicitly opted in (e.g. trusted
             self-hosted deployment fetching internal docs). Scheme, credential, and
             blocked-hostname checks still apply on each hop.
+        trust_env: Use environment proxies, CA bundles, and netrc credentials.
         **kwargs: Additional arguments passed to requests.get()
 
     Returns:
@@ -516,6 +520,7 @@ def ssrf_safe_get(
         block_loopback_and_link_local=block_loopback_and_link_local,
         block_link_local_only=block_link_local_only,
         https_only=https_only,
+        trust_env=trust_env,
         **kwargs,
     )
 
@@ -557,6 +562,7 @@ def ssrf_safe_get(
                 block_loopback_and_link_local=block_loopback_and_link_local,
                 block_link_local_only=block_link_local_only,
                 https_only=https_only,
+                trust_env=trust_env,
                 **kwargs,
             )
 

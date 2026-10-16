@@ -10,9 +10,10 @@ import {
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
-import type { RichStr } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
 import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
+import { cn } from "@opal/utils";
 import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
 import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 
@@ -67,6 +68,11 @@ const INSIDE_EMBEDDING: ReadonlySet<IndexAttemptStage> = new Set([
   "EMBEDDING_RATE_LIMIT_WAIT",
   "EMBEDDING_PROVIDER_THROTTLE_WAIT",
 ]);
+
+// The uneven marker is a muted hint, one step darker than IconTooltip's default stroke.
+const UnevenIcon: IconFunctionComponent = ({ className, ...props }) => (
+  <SvgAlertTriangle {...props} className={cn(className, "stroke-text-02")} />
+);
 
 const BUCKET_LABEL_KEYS = {
   fetchSource: "stageMetrics.buckets.fetchSource.label",
@@ -355,7 +361,7 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
       >
         {timing !== undefined && isUneven(timing) && (
           <IconTooltip
-            icon={SvgAlertTriangle}
+            icon={UnevenIcon}
             tooltip={t("stageDetails.uneven.tooltip")}
             aria-label={t("stageDetails.uneven.tooltip")}
           />

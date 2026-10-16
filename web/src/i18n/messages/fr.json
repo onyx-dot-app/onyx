@@ -554,9 +554,6 @@
       "loading": {
         "label": "Chargement de la configuration existante..."
       },
-      "oauthLoginNotice": {
-        "description": "Le transfert OAuth exige une méthode de connexion compatible OAuth (Google ou OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} transférera le jeton d'accès OAuth de l'utilisateur directement au serveur, dans un en-tête Authorization. Assurez-vous que le serveur prend en charge l'authentification avec le même fournisseur.",
         "title": "Utilisez le transfert pour les services qui partagent le même fournisseur d'identité."
@@ -577,6 +574,34 @@
       "tokenUrl": {
         "label": "URL de jeton",
         "required": "L'URL de jeton est obligatoire"
+      },
+      "pkce": {
+        "label": "Utiliser PKCE",
+        "description": "Activez cette option uniquement si le fournisseur OAuth prend en charge PKCE avec la méthode de défi S256."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Saisissez des URL HTTPS valides pour vérifier la prise en charge de PKCE.",
+          "checking": "Vérification de la prise en charge annoncée de PKCE…",
+          "supported": "Le fournisseur annonce la prise en charge de S256 PKCE.",
+          "unsupported": "Le fournisseur n’annonce pas la prise en charge de S256 PKCE.",
+          "unknown": "Impossible de vérifier la prise en charge de PKCE. Vous pouvez choisir le réglage manuellement."
+        },
+        "description": "Teste ces réglages non enregistrés sans sauvegarder la configuration ni les jetons. Le consentement peut autoriser cette application à accéder à votre compte.",
+        "testing": "Test de connexion…",
+        "test": "Tester la connexion",
+        "successPkce": "Autorisation réussie avec les paramètres PKCE. Cela ne prouve pas que le fournisseur impose PKCE.",
+        "success": "Autorisation réussie sans PKCE.",
+        "result": {
+          "blocked": "Autorisez les fenêtres contextuelles et réessayez.",
+          "closed": "La fenêtre de test a été fermée ou déconnectée. Terminez tout test encore ouvert ou réessayez.",
+          "stale": "Les réglages ont changé. Testez les réglages actuels.",
+          "failed": "Le test d’autorisation a échoué. Vérifiez les réglages et réessayez.",
+          "denied": "L’autorisation du fournisseur a été refusée ou annulée.",
+          "interrupted": "Le test a expiré ou a été interrompu. Lancez un nouveau test."
+        },
+        "returnToSettings": "Revenez à la fenêtre des réglages pour voir le résultat.",
+        "close": "Fermer la fenêtre"
       }
     },
     "openApiCard": {
@@ -1037,6 +1062,9 @@
         },
         "lumapps": {
           "description": "Pages et communautés de l'intranet"
+        },
+        "youtrack": {
+          "description": "Suivi des tickets et gestion de projets"
         },
         "canvas": {
           "description": "Cours, pages et annonces"
@@ -1754,6 +1782,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Modèle utilisé pour nommer les discussions. Utilise par défaut le modèle de chaque session.",
+        "resetButton": {
+          "label": "Réinitialiser"
+        },
+        "sessionModel": {
+          "label": "Utiliser le modèle par défaut"
+        },
+        "title": "Modèle pour nommer les discussions"
+      },
+      "searchSelectionModel": {
+        "description": "Sélectionne et vérifie les documents récupérés. Un modèle moins coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
+        "resetButton": {
+          "label": "Réinitialiser"
+        },
+        "sessionModel": {
+          "label": "Utiliser le modèle par défaut"
+        },
+        "title": "Modèle de sélection pour la recherche"
+      },
+      "taskModels": {
+        "title": "Sélection des modèles",
+        "loadFailed": "Impossible de charger les modèles de tâches",
+        "retry": {
+          "label": "Réessayer"
+        },
+        "noProviders": {
+          "title": "Connectez un fournisseur de modèles de langage"
+        },
+        "addProvider": {
+          "label": "Ajouter un fournisseur"
+        }
+      },
       "advanced": {
         "title": "Options avancées"
       },
@@ -1772,13 +1833,6 @@
       "betaTag": {
         "label": "bêta"
       },
-      "chatNaming": {
-        "description": "Modèle utilisé pour nommer automatiquement les sessions de discussion. Par défaut, chaque session utilise son propre modèle. Fixez ici un petit modèle rapide si votre modèle principal ne peut pas traiter des requêtes simultanées.",
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
-        "title": "Modèle de nommage des discussions"
-      },
       "connectors": {
         "empty": {
           "title": "Aucun connecteur configuré"
@@ -1791,6 +1845,10 @@
       "deepResearch": {
         "description": "Système de recherche agentique qui travaille sur le web et les sources connectées. Consomme beaucoup plus de jetons par requête.",
         "title": "Recherche approfondie"
+      },
+      "defaultLanguage": {
+        "description": "La langue de l'interface pour les utilisateurs qui n'en ont pas choisi une dans leurs paramètres.",
+        "title": "Langue par défaut"
       },
       "disableDefaultChat": {
         "description": "Cette option oblige les utilisateurs à toujours démarrer dans un agent. Les nouvelles discussions seront créées dans leur premier agent épinglé. Mettez des agents en avant pour aider les nouveaux utilisateurs à démarrer.",
@@ -1932,11 +1990,15 @@
         "title": "Contrôle de la température"
       },
       "toasts": {
-        "chatNamingReset": "Nommage des discussions réinitialisé sur le modèle de la session",
-        "chatNamingResetFailed": "Échec de la réinitialisation du modèle de nommage des discussions",
-        "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
         "chatNamingUpdated": "Modèle de nommage des discussions mis à jour",
+        "chatNamingReset": "Modèle de nommage des discussions réinitialisé sur le modèle par défaut",
+        "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
+        "chatNamingResetFailed": "Échec de la réinitialisation du modèle de nommage des discussions",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
+        "searchSelectionReset": "Modèle de sélection pour la recherche réinitialisé sur le modèle par défaut",
+        "searchSelectionResetFailed": "Échec de la réinitialisation du modèle de sélection pour la recherche",
+        "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection pour la recherche",
+        "searchSelectionUpdated": "Modèle de sélection pour la recherche mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour",
         "systemPromptUpdateFailed": "Échec de la mise à jour du prompt système",
@@ -2553,7 +2615,7 @@
         "tags": {
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
-          "doc_permission_sync": "{count, plural, one {# document non synchronisé} other {# documents non synchronisés}}",
+          "doc_permission_sync": "{count, plural, one {# utilisateur non synchronisé} other {# utilisateurs non synchronisés}}",
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
@@ -3203,6 +3265,19 @@
             "lang": {
               "label": "Langue",
               "description": "Langue utilisée pour le titre et le corps du contenu et pour les libellés de métadonnées (ISO 639-1, par ex. en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "Configurer le connecteur YouTrack",
+          "fields": {
+            "base_url": {
+              "label": "URL de YouTrack",
+              "description": "Votre adresse YouTrack, par ex. https://example.youtrack.cloud. Pour YouTrack Server, incluez le chemin de contexte, par ex. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projets",
+              "description": "Noms courts des projets à indexer (par ex. ABC). Laissez vide pour indexer tous les projets que le jeton peut lire."
             }
           }
         },
@@ -4558,6 +4633,7 @@
         "gongBaseUrl": "Facultatif. Pour les données hors des États-Unis, indiquez l'hôte de votre région, par exemple https://[region].api.gong.io.",
         "jiraUserEmail": "Obligatoire pour Jira Cloud.",
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
+        "youtrackToken": "Un jeton permanent d'un utilisateur YouTrack qui peut lire tous les projets à indexer. Créez-le dans votre profil YouTrack, sous Sécurité du compte.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
@@ -6044,8 +6120,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Saisissez une nouvelle clé d'API ou sélectionnez un fournisseur existant",
-          "idle": "Saisissez une nouvelle clé d'API ou sélectionnez un fournisseur existant.",
+          "idle": "Saisissez votre clé d'API.",
           "label": "Clé d'API",
           "placeholder": "Saisissez votre clé d'API",
           "required": "La clé d'API est obligatoire"
@@ -6090,9 +6165,6 @@
         },
         "editHeader": {
           "title": "Modifier {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "Sélection de fournisseur non valide"
         },
         "loading": {
           "placeholder": "Chargement..."
@@ -6756,7 +6828,7 @@
       "activities": {
         "title": "Activités",
         "history": "Historique complet de l'activité",
-        "viewLogs": "Voir l'historique de l'activité",
+        "viewLogs": "Afficher les journaux",
         "panel": {
           "title": "Historique de l'activité",
           "close": "Masquer l'historique de l'activité"
@@ -7318,6 +7390,7 @@
         "providerDeleteFailed": "Échec de la suppression du fournisseur : {message}",
         "providerDeleted": "Fournisseur supprimé avec succès !",
         "providerLoadFailed": "Impossible de charger le fournisseur : {message}",
+        "providerResolveFailed": "Impossible de résoudre le fournisseur",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"
@@ -7333,6 +7406,16 @@
           "empty": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle.",
           "error": "Impossible de charger les modèles de routage.",
           "retry": "Réessayer"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Modèles personnalisés",
+          "companyName": "Fournisseurs compatibles LiteLLM"
+        },
+        "openAICompatible": {
+          "productName": "Modèles personnalisés",
+          "companyName": "Points de terminaison compatibles OpenAI"
         }
       }
     },
@@ -13731,6 +13814,7 @@
           "askOption": "Demander",
           "autoApproveOption": "Approbation automatique",
           "customOption": "Personnalisé",
+          "defaultOption": "Par défaut",
           "description": "Choisissez ce que l'agent peut faire. « Demander » vous sollicite dans le chat avant chaque action ; « Approbation automatique » l'exécute sans demander. Utilisez Avancé pour définir une politique par action.",
           "title": "Autorisations"
         },
@@ -15538,7 +15622,8 @@
       "title": "Langue",
       "toasts": {
         "updateFailed": "Impossible de mettre à jour la préférence de langue"
-      }
+      },
+      "workspaceDefault": "Par défaut ({language})"
     },
     "layout": {
       "header": {

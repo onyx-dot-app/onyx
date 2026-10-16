@@ -5,10 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     can_user_access_llm_provider,
     fetch_user_group_ids,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
@@ -67,7 +68,12 @@ def _create_llm_provider(
         db_session=db_session,
     )
     if is_default:
-        update_default_provider(_provider.id, default_model_name, db_session)
+        update_default_model(
+            provider_id=_provider.id,
+            model=default_model_name,
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
 
     provider = db_session.get(LLMProviderModel, _provider.id)
     if not provider:

@@ -163,6 +163,14 @@ passes the availability check but is never added to `tool_dict`.
 tool-name disambiguation and custom-tool schemas can expand one DB row into more
 than one runtime tool).
 
+The optional `selection_llm_factory` is passed only to internal search. Search
+resolves it lazily for section selection and relevance classification, after
+retrieval returns sections. Rewrites, filters, the answer client, and other tools
+keep the supplied `llm`. Constructing tools, exposing schemas, or finding no
+results does not resolve SEARCH_SELECTION or check its provider budget.
+If the factory raises, search logs a warning and selects with the supplied `llm`.
+The independent CHAT_NAMING default is not used by search tools.
+
 For each `db_tool_model` in `persona.tools`, in order:
 1. Skip if `db_tool_model.enabled` is `False`.
 2. Skip if `allowed_tool_ids` is given and the tool's id is not in it (the

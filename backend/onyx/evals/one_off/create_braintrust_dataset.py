@@ -13,12 +13,12 @@ Usage:
 """
 
 import argparse
-import csv
 import os
 import sys
 from typing import Any, Dict, List
 
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
+from onyx.utils.csv_utils import csv_reader
 
 try:
     from braintrust import init_dataset
@@ -53,7 +53,7 @@ def parse_csv_file(csv_path: str) -> List[Dict[str, Any]]:
                 break
 
         # Parse the CSV data starting from the data_start line
-        csv_reader = csv.reader(lines[data_start:])
+        csv_rows = csv_reader(lines[data_start:])
 
         # Define Google Sheets column references for easy modification
         SHOULD_USE_COL = "C"  # "Should we use it?"
@@ -63,7 +63,7 @@ def parse_csv_file(csv_path: str) -> List[Dict[str, Any]]:
         OPENAI_DEEP_COL = "AA"  # "OpenAI Deep Answer"
         OPENAI_THINKING_COL = "O"  # "OpenAI Thinking Answer"
 
-        for row_num, row in enumerate(csv_reader, start=data_start + 1):
+        for row_num, row in enumerate(csv_rows, start=data_start + 1):
             if len(row) < 15:  # Ensure we have enough columns
                 continue
 

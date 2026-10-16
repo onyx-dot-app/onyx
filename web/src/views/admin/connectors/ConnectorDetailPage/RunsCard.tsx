@@ -212,17 +212,20 @@ export default function RunsCard({
             width="fit"
             height="fit"
           >
-            {COUNT_TAGS.map(({ group, icon, color }) => (
-              <Tag
-                key={group}
-                icon={icon}
-                title={format.number(data?.status_counts[group] ?? 0)}
-                tooltip={t(`counts.${group}`, {
-                  count: data?.status_counts[group] ?? 0,
-                })}
-                color={color}
-              />
-            ))}
+            {COUNT_TAGS.map(({ group, icon, color }) => {
+              const count = data?.status_counts[group] ?? 0;
+              return (
+                count > 0 && (
+                  <Tag
+                    key={group}
+                    icon={icon}
+                    title={format.number(count)}
+                    tooltip={t(`counts.${group}`, { count })}
+                    color={color}
+                  />
+                )
+              );
+            })}
           </Section>
         </Section>
 
