@@ -240,8 +240,10 @@ old provisioners with a new template or relabel an old pod into compatibility.
 - **RuntimeClass is not proof.** Verify the pod boots and serves real Craft
    traffic before claiming Firecracker coverage.
 - **Helm launcher and exec prerequisites are checked.** Enabled Craft requires
-   `kubernetes_firecracker` and Kubernetes 1.30 or newer. WebSocket v5 also
-   requires the API server's default-enabled `TranslateStreamCloseWebsocketRequests` gate.
+   `kubernetes_firecracker` and Kubernetes 1.30 or newer. Framed helpers request
+   only WebSocket v4 and bypass API-server WebSocket-to-SPDY translation.
+   Raw stdin tests retain v5 EOF and require the default-enabled
+   `TranslateStreamCloseWebsocketRequests` gate.
 - **No sidecar.** Do not reintroduce push ports, sidecar clients, or
    signature keys.
 - **Main container has no `NET_ADMIN`.** Firewall setup belongs to the init

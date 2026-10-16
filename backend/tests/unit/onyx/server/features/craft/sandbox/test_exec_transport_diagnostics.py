@@ -3,9 +3,10 @@ from __future__ import annotations
 import io
 import logging
 import threading
+import time
 from collections.abc import Generator
 from contextlib import closing
-from typing import cast
+from typing import BinaryIO, Literal, cast
 from unittest.mock import Mock
 
 import pytest
@@ -19,6 +20,40 @@ from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
 _PREFIX = "Sandbox exec transport "
 _STATUS = b'{"status":"Success"}'
+
+
+@pytest.mark.parametrize(
+    ("protocol", "negotiated"),
+    [
+        ("v4.channel.k8s.io", "v4.channel.k8s.io"),
+        ("v5.channel.k8s.io", "v5.channel.k8s.io"),
+        ("v4.channel.k8s.io", "v5.channel.k8s.io"),
+        ("v5.channel.k8s.io", "v4.channel.k8s.io"),
+        ("v4.channel.k8s.io", "v3.channel.k8s.io"),
+        ("v5.channel.k8s.io", "v3.channel.k8s.io"),
+        ("v4.channel.k8s.io", None),
+        ("v5.channel.k8s.io", None),
+    ],
+)
+def test_request_advertises_one_protocol_and_requires_exact_negotiation(
+    monkeypatch: pytest.MonkeyPatch,
+    protocol: Literal["v4.channel.k8s.io", "v5.channel.k8s.io"],
+    negotiated: str | None,
+) -> None:
+    websocket = Mock(spec=transport._DeadlineWebSocket)
+    websocket.deadline = time.monotonic() + 3.0
+    websocket.getsubprotocol.return_value = negotiated
+    monkeypatch.setattr(transport, "_DeadlineWebSocket", Mock(return_value=websocket))
+    with transport._ExecApiClient(
+        client.Configuration(), websocket.deadline, protocol
+    ) as api_client:
+        if negotiated == protocol:
+            assert api_client.request("GET", "https://test.invalid/exec") is websocket
+        else:
+            with pytest.raises(SandboxExecError, match=protocol):
+                api_client.request("GET", "https://test.invalid/exec")
+
+    assert websocket.connect.call_args.kwargs["subprotocols"] == [protocol]
 
 
 @pytest.fixture
@@ -81,16 +116,52 @@ def _assert_slot_released(slot: threading.BoundedSemaphore) -> None:
 
 
 @pytest.mark.parametrize(
-    "stdin", [b"stdin-secret", FramedStdin(b"stdin-secret"), FramedStdin(None)]
+    ("stdin", "protocol", "payloads"),
+    [
+        (
+            b"stdin-secret",
+            "v5.channel.k8s.io",
+            [b"\x00stdin-secret", b"\xff\x00"],
+        ),
+        (
+            io.BytesIO(b"stdin-secret"),
+            "v5.channel.k8s.io",
+            [b"\x00stdin-secret", b"\xff\x00"],
+        ),
+        (b"", "v5.channel.k8s.io", [b"\xff\x00"]),
+        (io.BytesIO(), "v5.channel.k8s.io", [b"\xff\x00"]),
+        (
+            FramedStdin(b"stdin-secret"),
+            "v4.channel.k8s.io",
+            [b"\x00\x00\x00\x00\x0cstdin-secret", b"\x00\x00\x00\x00\x00"],
+        ),
+        (
+            FramedStdin(io.BytesIO(b"stdin-secret")),
+            "v4.channel.k8s.io",
+            [b"\x00\x00\x00\x00\x0cstdin-secret", b"\x00\x00\x00\x00\x00"],
+        ),
+        (FramedStdin(None), "v4.channel.k8s.io", [b"\x00\x00\x00\x00\x00"]),
+        (FramedStdin(b""), "v4.channel.k8s.io", [b"\x00\x00\x00\x00\x00"]),
+        (
+            FramedStdin(io.BytesIO()),
+            "v4.channel.k8s.io",
+            [b"\x00\x00\x00\x00\x00"],
+        ),
+    ],
 )
 def test_completion_preserves_wire_result_and_private_log_fields(
     peer: tuple[
         ExecClient, Mock, threading.BoundedSemaphore, threading.BoundedSemaphore
     ],
     caplog: pytest.LogCaptureFixture,
-    stdin: bytes | FramedStdin,
+    monkeypatch: pytest.MonkeyPatch,
+    stdin: bytes | BinaryIO | FramedStdin,
+    protocol: str,
+    payloads: list[bytes],
 ) -> None:
     exec_client, api_client, connection_slots, upload_slots = peer
+    api_client_factory = Mock(return_value=api_client)
+    monkeypatch.setattr(transport, "_ExecApiClient", api_client_factory)
     with caplog.at_level(logging.INFO):
         result = exec_client.run(
             "pod-secret",
@@ -102,17 +173,11 @@ def test_completion_preserves_wire_result_and_private_log_fields(
     assert result.stdout == b"stdout-secret"
     assert result.stderr == "stderr-secret"
     assert result.returncode == 0
-    payloads = [call.args[0] for call in api_client.websocket.send.call_args_list]
-    if isinstance(stdin, bytes):
-        assert payloads == [b"\x00stdin-secret", b"\xff\x00"]
-    elif stdin.source is None:
-        assert payloads == [b"\x00\x00\x00\x00\x00"]
-    else:
-        assert payloads == [
-            b"\x00\x00\x00\x00\x0cstdin-secret",
-            b"\x00\x00\x00\x00\x00",
-        ]
-    byte_count = 0 if isinstance(stdin, FramedStdin) and stdin.source is None else 12
+    assert api_client_factory.call_args.args[2] == protocol
+    assert [
+        call.args[0] for call in api_client.websocket.send.call_args_list
+    ] == payloads
+    byte_count = 12 if len(payloads) == 2 else 0
     assert sorted(caplog.messages) == sorted(
         [
             _PREFIX + "stage=connection outcome=complete",
@@ -127,6 +192,31 @@ def test_completion_preserves_wire_result_and_private_log_fields(
         record.exc_info is None and record.levelno == logging.INFO
         for record in caplog.records
     )
+    _assert_slot_released(connection_slots)
+    _assert_slot_released(upload_slots)
+
+
+def test_no_stdin_retains_v5_without_an_upload(
+    peer: tuple[
+        ExecClient, Mock, threading.BoundedSemaphore, threading.BoundedSemaphore
+    ],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exec_client, api_client, connection_slots, upload_slots = peer
+    api_client_factory = Mock(return_value=api_client)
+    monkeypatch.setattr(transport, "_ExecApiClient", api_client_factory)
+    api_client.websocket.recv_frame.side_effect = [
+        ABNF.create_frame(b"\x01stdout-secret", ABNF.OPCODE_BINARY),
+        ABNF.create_frame(b"\x03" + _STATUS, ABNF.OPCODE_BINARY),
+        ABNF.create_frame(b"", ABNF.OPCODE_CLOSE),
+    ]
+
+    result = exec_client.run("pod-secret", ["command-secret"], timeout=3.0)
+
+    assert result.stdout == b"stdout-secret"
+    assert result.returncode == 0
+    assert api_client_factory.call_args.args[2] == "v5.channel.k8s.io"
+    api_client.websocket.send.assert_not_called()
     _assert_slot_released(connection_slots)
     _assert_slot_released(upload_slots)
 

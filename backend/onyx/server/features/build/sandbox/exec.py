@@ -30,7 +30,6 @@ from onyx.utils.threadpool_concurrency import start_thread_future
 
 logger = setup_logger()
 
-_PROTOCOL = "v5.channel.k8s.io"
 _CHUNK_BYTES = MAX_FRAME_BYTES
 _DIAGNOSTIC_BYTES = 64 * 1024
 _CAPTURE_BYTES = 16 * 1024 * 1024
@@ -80,8 +79,14 @@ class _DeadlineWebSocket(WebSocket):
 class _ExecApiClient(client.ApiClient):
     """Keep generated Kubernetes authentication and URL encoding per connection."""
 
-    def __init__(self, configuration: client.Configuration, deadline: float) -> None:
+    def __init__(
+        self,
+        configuration: client.Configuration,
+        deadline: float,
+        protocol: Literal["v4.channel.k8s.io", "v5.channel.k8s.io"],
+    ) -> None:
         super().__init__(configuration=configuration)
+        self._protocol = protocol
         ssl_options: dict[str, Any] = {
             "cert_reqs": ssl.CERT_REQUIRED
             if configuration.verify_ssl
@@ -118,7 +123,7 @@ class _ExecApiClient(client.ApiClient):
         websocket_url = get_websocket_url(url, query_params)
         options: dict[str, Any] = {
             "header": headers or {},
-            "subprotocols": [_PROTOCOL],
+            "subprotocols": [self._protocol],
             "timeout": _remaining(self.websocket.deadline),
             "redirect_limit": 0,
         }
@@ -129,8 +134,10 @@ class _ExecApiClient(client.ApiClient):
         try:
             self.websocket.connect(websocket_url, **options)
             _remaining(self.websocket.deadline)
-            if self.websocket.getsubprotocol() != _PROTOCOL:
-                raise SandboxExecError("Kubernetes exec requires WebSocket v5")
+            if self.websocket.getsubprotocol() != self._protocol:
+                raise SandboxExecError(
+                    f"Kubernetes exec requires WebSocket {self._protocol}"
+                )
             return self.websocket
         finally:
             if self.cancelled.is_set():
@@ -333,7 +340,13 @@ class ExecClient:
         ):
             raise ValueError("Sandbox exec requires a nonempty argument list")
         deadline = time.monotonic() + timeout
-        api_client = _ExecApiClient(self.configuration, deadline)
+        api_client = _ExecApiClient(
+            self.configuration,
+            deadline,
+            "v4.channel.k8s.io"
+            if isinstance(stdin, FramedStdin)
+            else "v5.channel.k8s.io",
+        )
         websocket = api_client.websocket
         upload_result: Future[Literal["complete", "cancelled"]] | None = None
         upload_slot_reserved = False

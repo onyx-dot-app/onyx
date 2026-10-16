@@ -69,8 +69,10 @@ RuntimeClass for Craft without changing the runtime contract and tests.
 amd64 nodes and keeps RuntimeClass at `kata-fc`.
 
 The chart requires Kubernetes 1.30 or newer and the `kubernetes_firecracker` launcher.
-Sandbox exec uses WebSocket v5. Keep the API server's
-`TranslateStreamCloseWebsocketRequests` feature gate enabled, its
+Craft helpers use WebSocket v4. Their framed input does not need stdin half-close,
+so requests bypass the API server's WebSocket-to-SPDY translation.
+Raw stdin tests use v5 and require the API server's
+`TranslateStreamCloseWebsocketRequests` feature gate, enabled by
 [default since Kubernetes 1.30](https://github.com/kubernetes/kubernetes/blob/v1.30.0/pkg/features/kube_features.go).
 The version check cannot inspect feature-gate overrides. Run the live exec tests before deployment.
 
