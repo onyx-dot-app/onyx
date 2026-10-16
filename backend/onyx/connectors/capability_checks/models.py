@@ -215,8 +215,10 @@ _UNKNOWN_CAUSE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
 # results live in stored reports and in every draft snapshot write.
 MAX_RESPONSE_EXCERPT_CHARS: int = 500
 MAX_STACK_TRACE_CHARS: int = 4000
-# A URL's query string and fragment, which can hold secrets.
-_URL_QUERY_PATTERN = re.compile(r"(https?://[^\s?#'\"]+)[?#][^\s'\"]*")
+# A URL anywhere in a text, with any scheme. Each match is rebuilt by
+# ``_safe_location``, the parser the request line uses too.
+_URL_PATTERN = re.compile(r"\b[a-z][a-z0-9+.\-]*://[^\s'\"<>]+", re.IGNORECASE)
+_UNPARSABLE_URL = "[URL]"
 
 
 class CheckErrorDetail(BaseModel):
@@ -234,12 +236,22 @@ class CheckErrorDetail(BaseModel):
     stack_trace: str | None = None
 
 
+def _safe_location(url: str) -> str:
+    """A URL's host, port and path only: its user info, parameters, query
+    string and fragment can hold secrets. A URL that does not parse is
+    replaced whole."""
+    parsed = urlparse(url)
+    try:
+        port = parsed.port
+    except ValueError:
+        return _UNPARSABLE_URL
+    return f"{parsed.hostname or ''}{f':{port}' if port else ''}{parsed.path}"
+
+
 def _request_line(method: str | None, url: str | None) -> str | None:
     if url is None:
         return None
-    parsed = urlparse(url)
-    # Host and path only: the query string and user info can hold secrets.
-    location = f"{parsed.hostname or ''}{f':{parsed.port}' if parsed.port else ''}{parsed.path}"
+    location = _safe_location(url)
     return f"{method} {location}" if method else location
 
 
@@ -260,7 +272,8 @@ def credential_strings(credential_json: Any) -> list[str]:
 
 
 def _scrubbed(text: str, secrets: Iterable[str]) -> str:
-    return scrub_sensitive_values(_URL_QUERY_PATTERN.sub(r"\1", text), secrets)
+    without_urls = _URL_PATTERN.sub(lambda match: _safe_location(match[0]), text)
+    return scrub_sensitive_values(without_urls, secrets)
 
 
 def _http_detail(error: BaseException) -> CheckErrorDetail | None:

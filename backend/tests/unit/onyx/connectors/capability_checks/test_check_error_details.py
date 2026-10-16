@@ -105,3 +105,19 @@ def test_credential_values_and_url_queries_are_redacted() -> None:
     assert "sk-secret-value" not in detail.stack_trace
     assert "rt-secret-value" not in detail.stack_trace
     assert "?key=" not in detail.stack_trace
+
+
+def test_urls_keep_only_host_and_path_whatever_their_form() -> None:
+    try:
+        raise RuntimeError(
+            "Tried HTTPS://user:pw@api.example.com:8443/v1/items;p=1?k=v#f "
+            "and ftp://admin:pw@files.example.com/x and http://bad:port/y"
+        )
+    except RuntimeError as error:
+        detail = check_error_detail(error, CheckErrorKind.UNEXPECTED, [])
+
+    assert detail is not None and detail.stack_trace is not None
+    assert "api.example.com:8443/v1/items " in detail.stack_trace
+    assert "files.example.com/x" in detail.stack_trace
+    for leaked in ("user:pw", "admin:pw", "p=1", "k=v", "#f", "bad:port"):
+        assert leaked not in detail.stack_trace
