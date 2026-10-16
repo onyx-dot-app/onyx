@@ -244,7 +244,7 @@ def run_tabular_rechunk(
     tenant_id: str,
     after_doc_id: str | None,
     time_budget_s: float = TABULAR_RECHUNK_TIME_BUDGET_S,
-    on_batch: Callable[[], None] | None = None,
+    on_batch: Callable[[], None],
 ) -> TabularRechunkResult:
     """Re-chunks oversized tabular documents from the cursor until the scan
     reaches the end of the table or the time budget runs out.
@@ -297,8 +297,7 @@ def run_tabular_rechunk(
             indexed += batch_indexed
             failed.extend(batch_failed)
             batch_num += 1
-            if on_batch is not None:
-                on_batch()
+            on_batch()
 
         if targets:
             cursor = targets[-1].document.id
