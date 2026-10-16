@@ -18,6 +18,7 @@ from onyx.prompts.search_prompts import (
     SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT,
     SEMANTIC_QUERY_REPHRASE_USER_PROMPT,
 )
+from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -75,6 +76,7 @@ def semantic_query_rephrase(
     llm: LLM,
     user_info: str | None = None,
     memories: list[str] | None = None,
+    enforce_llm_input_budget: bool = False,
 ) -> str:
     """Rephrase a query into a standalone query using chat history context.
 
@@ -136,11 +138,20 @@ def semantic_query_rephrase(
     )
     messages.append(final_user_msg)
 
-    response = llm.invoke(
-        GenerationRequest(
-            messages=messages,
-            options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+    request = _prepare_rephrase_request(
+        messages,
+        llm,
+        SEMANTIC_QUERY_REPHRASE_USER_PROMPT.format(
+            additional_context="", user_query=user_query
         ),
+        enforce_llm_input_budget,
+    )
+    if request is None:
+        logger.warning("Search rephrase prompt exceeds its input budget; using query")
+        return user_query
+
+    response = llm.invoke(
+        request,
         context=GenerationContext(flow=LLMFlow.SEMANTIC_QUERY_REPHRASE),
     )
     final_query = response.text
@@ -158,6 +169,7 @@ def keyword_query_expansion(
     llm: LLM,
     user_info: str | None = None,
     memories: list[str] | None = None,
+    enforce_llm_input_budget: bool = False,
 ) -> list[str] | None:
     """Expand a query into multiple keyword-only queries using chat history context.
 
@@ -217,11 +229,20 @@ def keyword_query_expansion(
     )
     messages.append(final_user_msg)
 
-    response = llm.invoke(
-        GenerationRequest(
-            messages=messages,
-            options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+    request = _prepare_rephrase_request(
+        messages,
+        llm,
+        KEYWORD_REPHRASE_USER_PROMPT.format(
+            additional_context="", user_query=user_query
         ),
+        enforce_llm_input_budget,
+    )
+    if request is None:
+        logger.warning("Search keyword prompt exceeds its input budget; using query")
+        return []
+
+    response = llm.invoke(
+        request,
         context=GenerationContext(flow=LLMFlow.KEYWORD_QUERY_EXPANSION),
     )
     content = response.text
@@ -232,3 +253,24 @@ def keyword_query_expansion(
 
     queries = [line.strip() for line in content.strip().split("\n") if line.strip()]
     return queries
+
+
+def _prepare_rephrase_request(
+    messages: list[Message],
+    llm: LLM,
+    user_prompt_without_context: str,
+    enforce_llm_input_budget: bool,
+) -> GenerationRequest | None:
+    request = GenerationRequest(
+        messages=messages,
+        options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+    )
+    if not enforce_llm_input_budget:
+        return request
+    budget = SearchPromptBudget(llm)
+    request.options = budget.options()
+    while len(request.messages) > 2 and not budget.fits(request):
+        request.messages.pop(1)
+    if not budget.fits(request):
+        request.messages[-1] = UserMessage(content=user_prompt_without_context)
+    return request if budget.fits(request) else None

@@ -208,6 +208,7 @@ def _runs(
         page_num=0,
         page_size=10,
         since=None,
+        until=None,
         kinds=None,
         status_groups=status_groups,
         q=mark,

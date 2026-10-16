@@ -18,7 +18,7 @@ import {
   SvgCheckSquare,
   SvgFiles,
   SvgTextLines,
-  SvgUser,
+  SvgUserShield,
   SvgUsers,
   SvgXCircle,
   SvgXOctagon,
@@ -78,7 +78,7 @@ const GROUP_STYLE: Record<
 /** What each kind's failed items are: documents, users, groups or checks. */
 const WARNING_ICONS = {
   indexing: SvgFiles,
-  doc_permission_sync: SvgUser,
+  doc_permission_sync: SvgUserShield,
   group_sync: SvgUsers,
   pruning: SvgFiles,
   checks: SvgXOctagon,
@@ -90,7 +90,6 @@ type CardState =
   | "stopped"
   | "errors"
   | "resolved"
-  | "superseded"
   | "inProgress"
   | "canceled"
   | "succeeded";
@@ -107,7 +106,7 @@ function cardState(
   const closedBySystem = closed && run.resolved_at === null;
   switch (group) {
     case "failures":
-      return closedBySystem && isFailed(run) ? "superseded" : "failed";
+      return closedBySystem ? "resolved" : "failed";
     case "errors":
       if (closedBySystem) return "resolved";
       if (isActive(run)) return "running";
@@ -179,7 +178,8 @@ export default function ActivityCard({
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
-  if (state === "failed" || state === "superseded") {
+  // A failure a newer run superseded still explains itself.
+  if (isFailed(run)) {
     description =
       runErrorMessage(run) ??
       (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
@@ -235,7 +235,11 @@ export default function ActivityCard({
                 gap={1}
                 height="fit"
               >
-                <Text font="secondary-mono" color={mutedColor}>
+                <Text
+                  font="secondary-mono"
+                  color={mutedColor}
+                  wordWrap="whitespace-nowrap"
+                >
                   {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
                 </Text>
                 <Section
@@ -356,7 +360,7 @@ export default function ActivityCard({
               </Section>
               {closed ? (
                 <SelectButton
-                  variant="select-filter"
+                  variant="select-heavy"
                   state="selected"
                   rightIcon={SvgCheckSquare}
                   size="xs"

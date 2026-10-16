@@ -16,6 +16,7 @@ from onyx.connectors.gmail.connector import (
     _build_time_range_query,
     thread_to_document,
 )
+from onyx.connectors.google_utils.resources import GoogleService
 from onyx.connectors.models import Document, SlimDocument, TextSection
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
@@ -181,7 +182,10 @@ def test_gmail_checkpoint_progression() -> None:
         def users(self) -> MockUsersResource:
             return MockUsersResource(self._user_email)
 
-    def fake_get_gmail_service(_: object, user_email: str) -> MockGmailService:
+    def fake_get_google_service(
+        service: GoogleService, _: object, user_email: str
+    ) -> MockGmailService:
+        assert service is GoogleService.GMAIL
         return MockGmailService(user_email)
 
     def fake_thread_to_document(
@@ -206,8 +210,8 @@ def test_gmail_checkpoint_progression() -> None:
 
     with patch.object(GmailConnector, "_get_all_user_emails", return_value=user_emails):
         with patch(
-            "onyx.connectors.gmail.connector.get_gmail_service",
-            side_effect=fake_get_gmail_service,
+            "onyx.connectors.gmail.connector.get_google_service",
+            side_effect=fake_get_google_service,
         ):
             with patch(
                 "onyx.connectors.gmail.connector.thread_to_document",
@@ -258,7 +262,11 @@ def _list_slim_ids(
     """Runs the slim listing against a fake Gmail API that serves
     ``thread_list_responses[user][page_token]`` and records each list call."""
 
-    def fake_get_gmail_service(_: object, __: str) -> MagicMock:
+    def fake_get_google_service(
+        service: GoogleService, _: object, __: str
+    ) -> MagicMock:
+        assert service is GoogleService.GMAIL
+
         def list_threads(
             *,
             userId: str,
@@ -276,8 +284,8 @@ def _list_slim_ids(
 
     with patch.object(GmailConnector, "_get_all_user_emails", return_value=user_emails):
         with patch(
-            "onyx.connectors.gmail.connector.get_gmail_service",
-            side_effect=fake_get_gmail_service,
+            "onyx.connectors.gmail.connector.get_google_service",
+            side_effect=fake_get_google_service,
         ):
             return [
                 item.id

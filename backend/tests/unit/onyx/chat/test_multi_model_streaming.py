@@ -50,6 +50,15 @@ def _restore_ee_version() -> Generator[None, None, None]:
     global_version._is_ee = original
 
 
+@pytest.fixture(autouse=True)
+def _search_selection_model() -> Generator[MagicMock, None, None]:
+    with patch(
+        "onyx.chat.process_message.get_search_selection_llm",
+        side_effect=lambda *, fallback, **_kwargs: fallback,
+    ) as resolve:
+        yield resolve
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -317,6 +326,8 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     setup.user_message_id = None
     setup.custom_tool_additional_headers = None
     setup.mcp_headers = None
+    setup.litellm_additional_headers = None
+    setup.incognito_record_mode = None
     return setup
 
 
@@ -333,6 +344,38 @@ class TestRunModels:
     All external dependencies (LLM, DB, tools) are patched out.  Worker threads
     still run but return immediately since run_llm_loop is mocked.
     """
+
+    def test_selection_model_routes_tools_without_changing_answer_model(
+        self, _search_selection_model: MagicMock
+    ) -> None:
+        from onyx.db.enums import IncognitoRecordMode
+
+        setup = _make_setup(n_models=1)
+        setup.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+        setup.litellm_additional_headers = {"X-Request-ID": "fast-routing"}
+        fast_llm = MagicMock()
+        _search_selection_model.side_effect = None
+        _search_selection_model.return_value = fast_llm
+        with (
+            patch("onyx.chat.process_message.run_llm_loop") as answer,
+            patch(
+                "onyx.chat.process_message.construct_tools", return_value={}
+            ) as tools,
+            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            _run_models_collect(setup)
+
+        assert answer.call_args.kwargs["llm"] is setup.llms[0]
+        assert tools.call_args.kwargs["llm"] is setup.llms[0]
+        _search_selection_model.assert_not_called()
+        assert tools.call_args.kwargs["selection_llm_factory"]() is fast_llm
+        resolved = _search_selection_model.call_args.kwargs
+        assert resolved["additional_headers"] == {"X-Request-ID": "fast-routing"}
+        assert resolved["policy_fn"]("openai").model_kwargs == {"store": False}
 
     def test_n1_overall_stop_from_llm_loop_passes_through(self) -> None:
         """OverallStop emitted by run_llm_loop is passed through the drain loop unchanged."""

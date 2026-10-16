@@ -236,6 +236,12 @@ export const CREDENTIAL_SPECS = {
       }),
     },
   }),
+  youtrack: defineCredentialSpec({
+    brandName: "YouTrack",
+    fields: {
+      youtrack_token: secret("apiToken", { hint: { key: "youtrackToken" } }),
+    },
+  }),
   bitbucket: defineCredentialSpec({
     brandName: "Bitbucket",
     fields: {

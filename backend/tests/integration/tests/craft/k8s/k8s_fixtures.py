@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
     from tests.integration.common_utils.test_models import DATestUser
 
+from onyx.configs.constants import DocumentSource
+from onyx.db.document import get_documents_by_source
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -29,7 +31,7 @@ from onyx.db.models import (
     User__UserGroup,
 )
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE, SANDBOX_PROXY_PORT
-from onyx.server.features.build.db.user_library import delete_user_file, list_user_files
+from onyx.server.features.build.db.user_library import delete_user_file
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -374,7 +376,9 @@ class SandboxHandle:
 def cleanup_api_user_sandbox_rows(user_id: UUID) -> None:
     try:
         with get_session_with_current_tenant() as session:
-            for doc in list_user_files(session, user_id):
+            for doc in get_documents_by_source(
+                db_session=session, source=DocumentSource.CRAFT_FILE, creator_id=user_id
+            ):
                 delete_user_file(session, doc)
             for row in (
                 session.query(ConnectorCredentialPair)

@@ -19,8 +19,8 @@ from onyx.connectors.google_utils.google_utils import (
 )
 from onyx.connectors.google_utils.resources import (
     GmailService,
-    get_admin_service,
-    get_gmail_service,
+    GoogleService,
+    get_google_service,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -432,7 +432,9 @@ class GmailConnector(
         """
 
         try:
-            admin_service = get_admin_service(self.creds, self.primary_admin_email)
+            admin_service = get_google_service(
+                GoogleService.ADMIN, self.creds, self.primary_admin_email
+            )
             emails = [
                 email
                 for user in execute_paginated_retrieval(
@@ -478,7 +480,7 @@ class GmailConnector(
             "slim" if is_slim else "full",
             user_email,
         )
-        gmail_service = get_gmail_service(self.creds, user_email)
+        gmail_service = get_google_service(GoogleService.GMAIL, self.creds, user_email)
         try:
             for thread in execute_paginated_retrieval_with_max_pages(
                 max_num_pages=PAGES_PER_CHECKPOINT,

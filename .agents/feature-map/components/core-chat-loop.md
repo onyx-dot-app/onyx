@@ -162,6 +162,13 @@ Each worker gets:
 - its own `Emitter(model_idx=i, merged_queue, drain_done)`
 - its own `ChatStateContainer`
 
+Each worker passes a lazy SEARCH_SELECTION client factory into `construct_tools`.
+Search keeps the answer client for rewrites and filters, resolving the separate
+client only for section selection and relevance classification after retrieval.
+The factory captures the session's pinned incognito policy and request headers.
+An unset SEARCH_SELECTION returns that same answer client and never falls back
+to the independent CHAT_NAMING designation.
+
 All workers write `(model_idx, packet)` tuples to **one shared `merged_queue`**.
 A single writer thread, `_drain_to_completion`, drains it and publishes packets to the
 stream buffer and reader tee in arrival order. `_read_stream` is the generator that
