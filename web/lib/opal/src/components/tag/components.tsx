@@ -25,12 +25,10 @@ type TagSize = "sm" | "md";
  */
 type TagVariant = "default" | "status" | "count";
 
-interface TagProps extends Omit<
+interface TagBaseProps extends Omit<
   WithoutStyles<React.HTMLAttributes<HTMLElement>>,
-  "title" | "color" | "children"
+  "title" | "color" | "children" | "onClick"
 > {
-  /** Lands on the root, which is a `button` when `onClick` is set and a `div` otherwise. */
-  ref?: React.Ref<HTMLButtonElement & HTMLDivElement>;
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
@@ -83,12 +81,29 @@ interface TagProps extends Omit<
 
   /** Warning indicator after the title. */
   error?: boolean;
+}
 
-  /**
-   * Renders the tag as a button. As a popover or dropdown trigger it shows
-   * the inverted look while `data-state="open"` or `aria-expanded="true"`.
-   */
-  onClick?: React.MouseEventHandler<HTMLElement>;
+/** Passive or editable tag: the root is a `div`. */
+interface TagDivProps extends TagBaseProps {
+  ref?: React.Ref<HTMLDivElement>;
+  onClick?: never;
+}
+
+/**
+ * Clickable tag: the root is a `button`. As a popover or dropdown trigger it
+ * shows the inverted look while `data-state="open"` or `aria-expanded="true"`.
+ * A clickable tag cannot be editable.
+ */
+interface TagButtonProps extends TagBaseProps {
+  ref?: React.Ref<HTMLButtonElement>;
+  onClick: React.MouseEventHandler<HTMLButtonElement>;
+  onRemove?: never;
+}
+
+type TagProps = TagDivProps | TagButtonProps;
+
+function isClickableTag(props: TagProps): props is TagButtonProps {
+  return props.onClick !== undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,25 +114,26 @@ interface TagProps extends Omit<
 // fields) can target it for keyboard flows without a fragile string copy.
 const TAG_REMOVE_CLASS = "opal-auxiliary-tag-remove";
 
-function Tag({
-  ref,
-  icon: Icon,
-  title,
-  color = "gray",
-  variant = "default",
-  iconColor,
-  size = "sm",
-  font: fontOverride,
-  onRemove,
-  removeInTabOrder = true,
-  disabled = false,
-  value,
-  truncate = false,
-  tooltip,
-  error = false,
-  onClick,
-  ...rest
-}: TagProps) {
+function Tag(props: TagProps) {
+  const {
+    ref: _ref,
+    icon: Icon,
+    title,
+    color = "gray",
+    variant = "default",
+    iconColor,
+    size = "sm",
+    font: fontOverride,
+    onRemove,
+    removeInTabOrder = true,
+    disabled = false,
+    value,
+    truncate = false,
+    tooltip,
+    error = false,
+    onClick: _onClick,
+    ...rest
+  } = props;
   const strings = useOpalStrings();
   const config = TAG_COLORS[color];
   const editable = onRemove !== undefined;
@@ -207,25 +223,24 @@ function Tag({
     </>
   );
 
-  const tag =
-    onClick !== undefined && !editable ? (
-      // raw-ok: a tag-shaped trigger (Stack Trace, failed-entity pills) keeps the tag metrics, which no Button size matches
-      <button
-        ref={ref}
-        type="button"
-        {...rest}
-        className={className}
-        {...dataAttrs}
-        data-clickable="true"
-        onClick={onClick}
-      >
-        {content}
-      </button>
-    ) : (
-      <div ref={ref} {...rest} className={className} {...dataAttrs}>
-        {content}
-      </div>
-    );
+  const tag = isClickableTag(props) ? (
+    // raw-ok: a tag-shaped trigger (Stack Trace, failed-entity pills) keeps the tag metrics, which no Button size matches
+    <button
+      ref={props.ref}
+      type="button"
+      {...rest}
+      className={className}
+      {...dataAttrs}
+      data-clickable="true"
+      onClick={props.onClick}
+    >
+      {content}
+    </button>
+  ) : (
+    <div ref={props.ref} {...rest} className={className} {...dataAttrs}>
+      {content}
+    </div>
+  );
 
   const tooltipText =
     tooltip ?? (capped && typeof title === "string" ? title : undefined);

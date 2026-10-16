@@ -26,7 +26,7 @@ Status tags use `font="secondary-body"`; `sm` keeps `figure-small-value` by defa
 | `color`    | `TagColor`              | `"gray"`       | Color variant                                                                                  |
 | `variant`  | `"default" \| "status" \| "count"` | `"default"` | Passive look: colored label, `text-04` label on a tint, or `text-04` label with no background |
 | `iconColor` | `TagColor`             | `color`        | Icon color when it differs from `color` (a gray pill with an orange warning icon)              |
-| `onClick`  | `MouseEventHandler`     | —              | Renders the tag as a button; inverts while an attached popover or dropdown is open             |
+| `onClick`  | `MouseEventHandler<HTMLButtonElement>` | —   | Renders the tag as a button; inverts while an attached popover or dropdown is open. Not allowed with `onRemove`. `ref` is then a `Ref<HTMLButtonElement>`; otherwise a `Ref<HTMLDivElement>` |
 | `icon`     | `IconFunctionComponent` | —              | Optional icon before the title                                                                 |
 | `size`     | `"sm" \| "md"`          | `"sm"`         | Size variant (Figma Small / Regular)                                                           |
 | `font` | `TextFont` | Size/type default | Override label and value typography to match the surrounding surface |
