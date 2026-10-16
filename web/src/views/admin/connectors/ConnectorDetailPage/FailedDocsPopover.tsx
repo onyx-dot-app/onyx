@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import useSWRInfinite from "swr/infinite";
 import {
   Button,
@@ -15,14 +15,19 @@ import {
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
-import { SvgCheckAll, SvgCheckSquare, SvgExternalLink } from "@opal/icons";
+import { formatTimestamp } from "@opal/time";
+import {
+  SvgCheckAll,
+  SvgCheckSquare,
+  SvgExternalLink,
+  SvgFile,
+} from "@opal/icons";
 import type {
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
 } from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { RUN_TIME_FORMAT } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import {
   RUNS_POLL_MS,
   SEARCH_DELAY_MS,
@@ -47,11 +52,10 @@ function FailedDocRow({
   onResolve,
 }: FailedDocRowProps) {
   const t = useTranslations("admin.connector.activity.docs");
-  const format = useFormatter();
   const [expanded, setExpanded] = useState(false);
   const [message, setMessage] = useState<HTMLElement | null>(null);
   const clipped = useOverflow(message);
-  const label = error.document_id ?? error.entity_id ?? t("unknownDocument");
+  const id = error.document_id ?? error.entity_id;
   return (
     <Section
       flexDirection="row"
@@ -69,35 +73,54 @@ function FailedDocRow({
         className="shrink-0"
       >
         <Text font="secondary-mono" color="text-03">
-          {format.dateTime(new Date(error.time_created), RUN_TIME_FORMAT)}
+          {formatTimestamp(error.time_created)}
         </Text>
-        {/* The label truncates in its column, and the link rides on an icon beside it. */}
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          alignItems="center"
-          gap={0.5}
-          height="fit"
-        >
+        {error.document_name !== null && (
           <OverflowText
             font="secondary-body"
             color="text-03"
             wordWrap="wrap-anywhere"
           >
-            {label}
+            {error.document_name}
           </OverflowText>
-          {error.document_link !== null && (
-            <Button
-              icon={SvgExternalLink}
-              prominence="tertiary"
-              size="xs"
-              href={error.document_link}
-              target="_blank"
-              aria-label={t("open")}
-              tooltip={t("open")}
-            />
-          )}
-        </Section>
+        )}
+        {/* The id stays visible under a title so it can still be copied. */}
+        {id !== null ? (
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            gap={0.25}
+            height="fit"
+            className="min-w-0"
+          >
+            <SvgFile size={12} className="shrink-0 stroke-text-02" />
+            <OverflowText
+              font="secondary-mono"
+              color="text-02"
+              wordWrap="wrap-anywhere"
+            >
+              {id}
+            </OverflowText>
+            {error.document_link !== null && (
+              <Button
+                icon={SvgExternalLink}
+                prominence="tertiary"
+                size="2xs"
+                href={error.document_link}
+                target="_blank"
+                aria-label={t("open")}
+                tooltip={t("open")}
+              />
+            )}
+          </Section>
+        ) : (
+          error.document_name === null && (
+            <Text font="secondary-body" color="text-03">
+              {t("unknownDocument")}
+            </Text>
+          )
+        )}
       </Section>
       <Section
         alignItems="start"

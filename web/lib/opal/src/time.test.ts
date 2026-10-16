@@ -1,4 +1,5 @@
 import {
+  formatTimestamp,
   humanReadableFormat,
   humanReadableFormatShort,
   timeAgo,
@@ -51,5 +52,20 @@ describe("date formatters", () => {
 
   it("returns an empty string for a missing short date", () => {
     expect(humanReadableFormatShort(null, "en")).toBe("");
+  });
+});
+
+describe("formatTimestamp", () => {
+  it("prints a zero-padded 24-hour local stamp", () => {
+    expect(formatTimestamp(new Date(2026, 2, 3, 9, 2, 5))).toBe(
+      "2026/03/03 09:02:05"
+    );
+    expect(formatTimestamp("2026-03-23T23:02:45")).toBe("2026/03/23 23:02:45");
+  });
+
+  it("prints only the date with dateOnly", () => {
+    expect(formatTimestamp("2026-06-13T08:00:00", { dateOnly: true })).toBe(
+      "2026/06/13"
+    );
   });
 });

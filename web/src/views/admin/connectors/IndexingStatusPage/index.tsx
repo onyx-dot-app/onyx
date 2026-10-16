@@ -3,20 +3,21 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Section, SettingsLayouts, useToastFromQuery } from "@opal/layouts";
-import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
 import ActivitiesCard from "@/views/admin/connectors/IndexingStatusPage/ActivitiesCard";
 import ConnectorList from "@/views/admin/connectors/IndexingStatusPage/ConnectorList";
 import OverviewCard from "@/views/admin/connectors/IndexingStatusPage/OverviewCard";
+import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
 /** Every connector's indexing at a glance: the fleet's throughput and newest failures, then each connector with its latest run. */
 export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
-  const adminRouteTitle = useAdminRouteTitle();
   const [historyOpen, setHistoryOpen] = useState(false);
+  // A clicked chart slice narrows the history panel, which opens to show it.
+  const [range, setRange] = useState<SliceRange | null>(null);
 
   useToastFromQuery({
     "connector-created": {
@@ -28,11 +29,7 @@ export default function IndexingStatusPage() {
   // The history panel takes the Activities card's place and widens the page to fit beside the column.
   return (
     <SettingsLayouts.Root width={historyOpen ? "xl" : "md"}>
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title={adminRouteTitle(route)}
-        divider
-      />
+      <SettingsLayouts.Header icon={route.icon} title={t("title")} divider />
       <SettingsLayouts.Body>
         <Section
           flexDirection="row"
@@ -61,7 +58,15 @@ export default function IndexingStatusPage() {
                 height="auto"
                 className="min-w-80 grow-[8] basis-0"
               >
-                <OverviewCard />
+                <OverviewCard
+                  onSliceClick={(start, end) => {
+                    setRange({
+                      since: start.toISOString(),
+                      until: end.toISOString(),
+                    });
+                    setHistoryOpen(true);
+                  }}
+                />
               </Section>
               {!historyOpen && (
                 <Section
@@ -81,7 +86,12 @@ export default function IndexingStatusPage() {
             <ActivityPanel
               scope="fleet"
               title={t("activities.panel.title")}
-              onClose={() => setHistoryOpen(false)}
+              onClose={() => {
+                setHistoryOpen(false);
+                setRange(null);
+              }}
+              range={range}
+              onClearRange={() => setRange(null)}
               className="max-lg:order-first"
             />
           )}

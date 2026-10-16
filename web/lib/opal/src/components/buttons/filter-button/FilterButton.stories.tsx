@@ -36,6 +36,14 @@ export const Active: Story = {
   },
 };
 
+export const Filled: Story = {
+  args: {
+    icon: SvgUser,
+    filled: true,
+    children: "Last 12 hours",
+  },
+};
+
 export const Open: Story = {
   args: {
     icon: SvgActions,

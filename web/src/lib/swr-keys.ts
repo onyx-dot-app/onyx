@@ -7,6 +7,7 @@
  * For dynamic keys (e.g. per-ID endpoints), use the builder functions.
  */
 import type {
+  CCPairRunLevel,
   CCPairRunsQuery,
   CCPairThroughputWindow,
   IndexingConnectorsQuery,
@@ -19,12 +20,25 @@ function runsQueryParams(query: CCPairRunsQuery): string {
     page_size: String(query.pageSize),
   });
   if (query.since !== null) params.set("since", query.since);
+  if (query.until !== null) params.set("until", query.until);
   for (const kind of query.kinds ?? []) params.append("kinds", kind);
   for (const group of query.statusGroups ?? []) {
     params.append("status_groups", group);
   }
   if (query.q) params.set("q", query.q);
   if (query.errors !== null) params.set("errors", query.errors);
+  if (query.superseded !== null) {
+    params.set("superseded", String(query.superseded));
+  }
+  if (query.resolved !== null) {
+    params.set("resolved", String(query.resolved));
+  }
+  return params.toString();
+}
+
+function resolvableCountParams(level: CCPairRunLevel, q: string): string {
+  const params = new URLSearchParams({ level });
+  if (q) params.set("q", q);
   return params.toString();
 }
 
@@ -326,6 +340,14 @@ export const SWR_KEYS = {
     `/api/manage/admin/cc-pair/${ccPairId}/runs?`,
   ccPairRuns: (ccPairId: number, query: CCPairRunsQuery) =>
     `${SWR_KEYS.ccPairRunsPrefix(ccPairId)}${runsQueryParams(query)}`,
+  ccPairResolvableRunsCountPrefix: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/runs/resolvable-count?`,
+  ccPairResolvableRunsCount: (
+    ccPairId: number,
+    level: CCPairRunLevel,
+    q: string
+  ) =>
+    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q)}`,
   ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
     `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
 
@@ -347,6 +369,10 @@ export const SWR_KEYS = {
   },
   // Every fleet runs feed query starts with this, so `mutate` can match them all.
   indexMonitoringRunsPrefix: "/api/manage/admin/index-monitoring/runs?",
+  indexMonitoringResolvableRunsCountPrefix:
+    "/api/manage/admin/index-monitoring/runs/resolvable-count?",
+  indexMonitoringResolvableRunsCount: (level: CCPairRunLevel, q: string) =>
+    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q)}`,
   indexMonitoringRuns: (query: CCPairRunsQuery) =>
     `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query)}`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
