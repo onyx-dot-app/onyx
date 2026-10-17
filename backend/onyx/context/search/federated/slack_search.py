@@ -1007,7 +1007,6 @@ def slack_retrieval(
     # Pre-fetched data — when provided, avoids DB query (no session needed)
     search_settings: SearchSettings | None = None,
     llm: LLM | None = None,
-    enforce_llm_input_budget: bool = False,
 ) -> list[InferenceChunk]:
     """
     Main entry point for Slack federated search with entity filtering.
@@ -1076,9 +1075,7 @@ def slack_retrieval(
     # carries request policy (e.g. incognito retention headers) that a freshly
     # constructed default would drop.
     llm = llm or get_default_llm()
-    query_items = build_slack_queries(
-        query, llm, entities, available_channels, enforce_llm_input_budget
-    )
+    query_items = build_slack_queries(query, llm, entities, available_channels)
 
     # Partition into direct thread fetches and search query strings
     direct_fetches: list[DirectThreadFetch] = []
