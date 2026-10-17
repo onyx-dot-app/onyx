@@ -21,6 +21,7 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckStep,
     CountFinding,
     CredentialCapability,
     form_config,
@@ -90,7 +91,7 @@ _GROUPS_CHECK_ID = "onedrive_groups"
 # check_id to the checks it runs after, in run order.
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _USERS_CHECK_ID: (_SIGN_IN_CHECK_ID,),
-    "onedrive_drive_count": (_SIGN_IN_CHECK_ID,),
+    "onedrive_drive_count": (_USERS_CHECK_ID,),
     _CONFIGURED_USERS_CHECK_ID: (_USERS_CHECK_ID,),
     # The selected users too: with none found there is no OneDrive to open.
     _DRIVE_CHECK_ID: (_USERS_CHECK_ID, _CONFIGURED_USERS_CHECK_ID),
@@ -363,6 +364,7 @@ class _OneDriveCheck(CapabilityCheck[OneDriveConnectorConfig]):
         fails_when_unreachable: bool = False,
         discovery: bool = False,
         row_id: str | None = None,
+        step: CheckStep | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -377,6 +379,7 @@ class _OneDriveCheck(CapabilityCheck[OneDriveConnectorConfig]):
             fails_when_unreachable=fails_when_unreachable,
             discovery=discovery,
             row_id=row_id,
+            step=step,
         )
 
 
@@ -459,6 +462,11 @@ class _DriveCountCheck(_ConfigReadingCheck):
             remediation="Grant and admin-consent `User.Read.All`.",
             discovery=True,
             row_id=_USERS_CHECK_ID,
+            step=CheckStep(
+                step_of=_USERS_CHECK_ID,
+                running_summary="Users listed, counting OneDrives…",
+                unfinished_caveat="Could not count every OneDrive.",
+            ),
         )
 
     def applies(self, form_state: FormState[OneDriveConnectorConfig]) -> bool:

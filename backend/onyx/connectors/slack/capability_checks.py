@@ -47,6 +47,7 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckOutput,
     CheckRowText,
+    CheckStep,
     CredentialCapability,
     OptionsFinding,
 )
@@ -133,7 +134,7 @@ _PERM_SYNC_PRIVATE_LISTING_CHECK_ID = "slack_perm_sync_private_channel_listing"
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _GRID_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
     _PUBLIC_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
-    "slack_readable_channel_listing": (_AUTH_CHECK_ID,),
+    "slack_readable_channel_listing": (_PUBLIC_LISTING_CHECK_ID,),
     "slack_perm_sync_channel_listing": (_AUTH_CHECK_ID,),
     "slack_message_history_read": (_PUBLIC_LISTING_CHECK_ID,),
     "slack_channel_join_scope": (_AUTH_CHECK_ID,),
@@ -469,6 +470,7 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
         validates_binding: bool = False,
         discovery: bool = False,
         fails_when_unreachable: bool = False,
+        step: CheckStep | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -485,6 +487,7 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
             validates_binding=validates_binding,
             discovery=discovery,
             fails_when_unreachable=fails_when_unreachable,
+            step=step,
         )
 
 
@@ -1158,6 +1161,11 @@ class _ReadableChannelListingCheck(_SlackCheck):
             display_name="List public channels",
             remediation=_ADD_SCOPE_REMEDIATION.format(scope="channels:read"),
             discovery=True,
+            step=CheckStep(
+                step_of=_PUBLIC_LISTING_CHECK_ID,
+                running_summary="Channels visible, counting…",
+                unfinished_caveat="Could not count every channel.",
+            ),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:

@@ -155,6 +155,7 @@ def _build_result(
         required=check.required,
         status=outcome.status,
         row_id=check.row_id,
+        step=check.step,
         message=outcome.message,
         error_type=outcome.error_type,
         error_kind=outcome.error_kind,

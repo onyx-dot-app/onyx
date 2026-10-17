@@ -32,6 +32,7 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckOutput,
     CheckRowText,
+    CheckStep,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
@@ -270,6 +271,7 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
         validates_binding: bool = False,
         fails_when_unreachable: bool = False,
         row_id: str | None = None,
+        step: CheckStep | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -284,6 +286,7 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
             validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
             depends_on=_DEPENDS_ON.get(check_id, ()),
+            step=step,
         )
 
 
@@ -1539,6 +1542,11 @@ class _GroupListingCompleteCheck(_JiraCheck):
             row_id="jira_group_listing",
             display_name="List groups",
             required=False,
+            step=CheckStep(
+                step_of="jira_group_listing",
+                running_summary="Groups listed, checking total…",
+                unfinished_caveat="Could not count every group.",
+            ),
             remediation=(
                 "Group sync skips the groups after the limit, so their members "
                 "lose access in Onyx. A Jira administrator can raise the "
