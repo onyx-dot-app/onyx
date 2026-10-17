@@ -133,6 +133,18 @@ def source_supports_windowed_runs(source: DocumentSource) -> bool:
     return issubclass(connector_class, (CheckpointedConnector, PollConnector))
 
 
+def source_has_settings_probe(source: DocumentSource) -> bool:
+    """True if the source's connector overrides ``validate_connector_settings``.
+    The default is a no-op that reaches nothing, so it tests nothing."""
+    if source not in CONNECTOR_CLASS_MAP:
+        return False
+    connector_class = _load_connector_class(source)
+    return (
+        connector_class.validate_connector_settings
+        is not BaseConnector.validate_connector_settings
+    )
+
+
 def source_prune_honors_indexing_start(source: DocumentSource) -> bool:
     """True if a prune of the source removes documents older than the
     indexing start. A source without a connector class prunes nothing."""

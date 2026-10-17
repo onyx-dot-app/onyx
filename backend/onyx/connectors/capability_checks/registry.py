@@ -6,14 +6,21 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.applicability import (
     get_applicable_capabilities as get_applicable_capabilities,
 )
+from onyx.connectors.capability_checks.generic_row import (
+    GENERIC_CHECK_NAME,
+    GENERIC_PASS_LINE,
+    generic_row_error,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckOutput,
     CredentialCapability,
 )
 from onyx.connectors.confluence.capability_checks import (
     build_confluence_indexing_checks,
 )
+from onyx.connectors.factory import source_has_settings_probe
 from onyx.connectors.github.capability_checks import build_github_indexing_checks
 from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_indexing_checks,
@@ -54,26 +61,33 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
 
 
 class _ConnectorSettingsFallbackCheck(CapabilityCheck):
-    """Baseline INDEXING check where the source registers no named checks.
+    """The generic row, where the source registers no named INDEXING checks.
 
-    Wraps the legacy ``validate_connector_settings`` blob so every connector has
-    day-one coverage until a per-connector session registers named,
-    per-permission checks that shadow this.
+    Wraps the legacy ``validate_connector_settings`` probe until a
+    per-connector session registers named checks that shadow this. Like a
+    sign-in, it fails on a form run when the source does not answer.
     """
 
     def __init__(self, source: DocumentSource) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
             check_id=f"{source.value}_connector_settings",
-            display_name="Connector settings validation",
+            display_name=GENERIC_CHECK_NAME,
             is_fallback=True,
+            fails_when_unreachable=True,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
-        assert context.connector is not None, (
-            "The runner guarantees an instance of a connector."
-        )
-        context.connector.validate_connector_settings()
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        if context.connector is None:
+            raise TypeError("Bug: The runner guarantees an instance of a connector.")
+        try:
+            context.connector.validate_connector_settings()
+        except Exception as e:
+            typed = generic_row_error(e)
+            if typed is e:
+                raise
+            raise typed from e
+        return CheckOutput(summary=GENERIC_PASS_LINE)
 
 
 def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
@@ -85,6 +99,9 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
     implementation and are empty on OSS builds, where the perm-sync feature does
     not exist.
 
+    A source whose connector has no settings probe gets no INDEXING check:
+    a check that reaches nothing must not pass.
+
     Ratchet: named checks require a registered source-operations gateway --
     participation in the checks system is an anti-drift guarantee. Unmigrated
     sources keep the fallback path.
@@ -94,7 +111,7 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
         f"{source.value} registers named INDEXING checks but no "
         "source-operations gateway; migrate the connector first."
     )
-    if not checks:
+    if not checks and source_has_settings_probe(source):
         checks.append(_ConnectorSettingsFallbackCheck(source))
     get_perm_sync_checks = fetch_ee_implementation_or_noop(
         "onyx.connectors.capability_checks",
