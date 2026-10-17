@@ -19,6 +19,8 @@ export class MemberPluginConnectionError extends Error {
 
 export interface MemberPluginConnectOptions {
   signal?: AbortSignal;
+  agentId?: number;
+  surface?: "all" | "chat" | "craft";
 }
 
 const completionType = "onyx:member-plugin-oauth-complete";
@@ -54,7 +56,7 @@ export function notifyMemberPluginOAuthComplete(attempt: string): void {
 export function runMemberPluginOAuth(
   reference: PluginReference,
   start: (returnPath: string) => Promise<string | null>,
-  { signal }: MemberPluginConnectOptions = {}
+  { signal, agentId, surface }: MemberPluginConnectOptions = {}
 ): Promise<void> {
   if (signal?.aborted) {
     return Promise.reject(new MemberPluginConnectionError("cancelled"));
@@ -69,6 +71,8 @@ export function runMemberPluginOAuth(
     pluginId: String(reference.id),
     attempt,
   });
+  if (agentId !== undefined) query.set("agentId", String(agentId));
+  if (surface !== undefined) query.set("surface", surface);
   const returnPath = `/app/plugins/oauth/complete?${query.toString()}`;
 
   return new Promise((resolve, reject) => {

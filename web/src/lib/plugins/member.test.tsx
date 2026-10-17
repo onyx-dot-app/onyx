@@ -7,6 +7,7 @@ import {
   disconnectMemberPlugin,
   memberPluginReference,
   saveMemberOpenAPIPreferences,
+  verifyMemberPluginConnection,
   useMemberPlugins,
   type MemberPlugin,
 } from "@/lib/plugins/member";
@@ -18,6 +19,7 @@ import {
   type MCPServer,
 } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useSettings } from "@/lib/settings/hooks";
 import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 
@@ -381,6 +383,28 @@ test("keeps OAuth loading, failed status, missing tokens, and expired grants dis
   ).toEqual({ kind: "connected", ownership: "user" });
 });
 
+test.each([false, true])(
+  "expired OpenAPI grants require authentication unless refreshable=%s",
+  (canRefresh) => {
+    const plugin = buildMemberPlugins([], [tool({ oauth_config_id: 4 })], {
+      kind: "loaded",
+      tokens: [
+        {
+          oauth_config_id: 4,
+          is_expired: true,
+          expires_at: 1,
+          can_refresh: canRefresh,
+        },
+      ],
+    })[0];
+    if (!plugin) throw new Error("Missing OpenAPI fixture");
+    expect(plugin.connection).toEqual(
+      canRefresh ? { kind: "connected", ownership: "user" } : { kind: "oauth" }
+    );
+    expect(canUseMemberPlugin(plugin)).toBe(canRefresh);
+  }
+);
+
 test("preserves loaded sources while reporting an OAuth status failure", async () => {
   jest.spyOn(global, "fetch").mockImplementation(async (input) => {
     if (input === "/api/mcp/servers")
@@ -537,7 +561,7 @@ test("refreshes agent and member connections within the active SWR provider", as
     () => ({
       member: useMemberPlugins(),
       agent: useSWR<{ generation: number }>(
-        "/api/persona/2",
+        SWR_KEYS.agent(2),
         async (key: string) => {
           const response = await fetch(key);
           return response.json();
@@ -569,14 +593,14 @@ describe("personal OpenAPI preferences", () => {
   function renderPreferences(tools?: ToolSnapshot[]) {
     const otherTools = [tool({ id: 99 })];
     const cache = new Map([
-      ["/api/admin/tool", { data: otherTools }],
-      ...(tools ? [["/api/tool", { data: tools }] as const] : []),
+      [SWR_KEYS.openApiTools, { data: otherTools }],
+      ...(tools ? [[SWR_KEYS.tools, { data: tools }] as const] : []),
     ]);
     return renderHook(
       () => ({
         mutate: useSWRConfig().mutate,
-        tools: useSWR<ToolSnapshot[]>(tools ? "/api/tool" : null).data,
-        admin: useSWR<ToolSnapshot[]>("/api/admin/tool").data,
+        tools: useSWR<ToolSnapshot[]>(tools ? SWR_KEYS.tools : null).data,
+        admin: useSWR<ToolSnapshot[]>(SWR_KEYS.openApiTools).data,
       }),
       {
         wrapper: ({ children }) => (
@@ -729,6 +753,49 @@ test("saves actual per-user credentials and verifies member authentication", asy
     "/api/mcp/servers",
   ]);
 });
+
+test.each([
+  { agentId: 5, surface: "chat", endpoint: SWR_KEYS.agentMcpServers(5) },
+  { agentId: 0, surface: "chat", endpoint: SWR_KEYS.agentMcpServers(0) },
+  { agentId: undefined, surface: "craft", endpoint: SWR_KEYS.mcpServersCraft },
+] as const)(
+  "verifies personal MCP credentials through $endpoint",
+  async ({ agentId, surface, endpoint }) => {
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) => {
+        if (input === "/api/mcp/user-credentials") return new Response("{}");
+        if (input === endpoint)
+          return new Response(
+            JSON.stringify({
+              mcp_servers: [
+                server({
+                  auth_type: MCPAuthenticationType.API_TOKEN,
+                  connection_status: MCPConnectionStatus.CONNECTED,
+                }),
+              ],
+            })
+          );
+        if (input === SWR_KEYS.mcpServers)
+          return new Response(JSON.stringify({ mcp_servers: [] }));
+        throw new Error(`Unexpected endpoint ${input}`);
+      });
+    await connectMemberPlugin(
+      firstMCP({ auth_type: MCPAuthenticationType.API_TOKEN }),
+      { api_key: "personal-secret" },
+      { agentId, surface }
+    );
+    expect(fetchSpy.mock.calls.map(([input]) => input)).toEqual([
+      "/api/mcp/user-credentials",
+      endpoint,
+    ]);
+    await expect(
+      verifyMemberPluginConnection({ kind: "mcp", id: 7 })
+    ).rejects.toMatchObject({
+      reason: "not_connected",
+    });
+  }
+);
 
 test("rejects blank required fields before saving and refuses a false credential success", async () => {
   const fetchSpy = jest

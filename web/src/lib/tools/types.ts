@@ -103,6 +103,7 @@ export interface OAuthTokenStatus {
   oauth_config_id: number;
   expires_at: number | null;
   is_expired: boolean;
+  can_refresh?: boolean;
 }
 
 /**

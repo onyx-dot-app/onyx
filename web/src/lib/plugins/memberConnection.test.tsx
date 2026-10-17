@@ -8,6 +8,7 @@ import {
   MCPServerStatus,
 } from "@/lib/mcp/types";
 import { runMemberPluginOAuth } from "@/lib/plugins/memberConnection";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 const reference = { kind: "mcp", id: 7 } as const;
 const originalBroadcastChannel = window.BroadcastChannel;
@@ -252,9 +253,46 @@ test("a detached popup without a channel waits until the timeout", async () => {
   expect(jest.getTimerCount()).toBe(0);
 });
 
-test.each([true, false])(
-  "a broadcast still requires backend connection verification, usable=%s",
-  async (connected) => {
+test.each([
+  {
+    connected: true,
+    agentId: undefined,
+    surface: undefined,
+    endpoint: SWR_KEYS.mcpServers,
+  },
+  {
+    connected: false,
+    agentId: undefined,
+    surface: undefined,
+    endpoint: SWR_KEYS.mcpServers,
+  },
+  {
+    connected: true,
+    agentId: 5,
+    surface: "chat",
+    endpoint: SWR_KEYS.agentMcpServers(5),
+  },
+  {
+    connected: false,
+    agentId: 5,
+    surface: "chat",
+    endpoint: SWR_KEYS.agentMcpServers(5),
+  },
+  {
+    connected: true,
+    agentId: 0,
+    surface: "chat",
+    endpoint: SWR_KEYS.agentMcpServers(0),
+  },
+  {
+    connected: true,
+    agentId: undefined,
+    surface: "craft",
+    endpoint: SWR_KEYS.mcpServersCraft,
+  },
+] as const)(
+  "a broadcast requires backend verification through $endpoint, usable=$connected",
+  async ({ connected, agentId, surface, endpoint }) => {
     const { popup } = openPopup();
     const plugin: MemberPlugin = {
       kind: "mcp",
@@ -285,6 +323,12 @@ test.each([true, false])(
             body.return_path,
             window.location.origin
           ).searchParams.get("attempt");
+          const query = new URL(body.return_path, window.location.origin)
+            .searchParams;
+          expect(query.get("agentId")).toBe(
+            agentId === undefined ? null : String(agentId)
+          );
+          expect(query.get("surface")).toBe(surface ?? null);
           return new Response(
             JSON.stringify({
               status: "authorization_required",
@@ -294,7 +338,7 @@ test.each([true, false])(
             })
           );
         }
-        if (input === "/api/mcp/servers") {
+        if (input === endpoint) {
           return new Response(
             JSON.stringify({
               mcp_servers: [
@@ -310,7 +354,10 @@ test.each([true, false])(
         }
         return new Response("[]");
       });
-    const promise = connectMemberPlugin(plugin);
+    const promise = connectMemberPlugin(plugin, undefined, {
+      agentId,
+      surface,
+    });
     const outcome = connected
       ? expect(promise).resolves.toBeUndefined()
       : expect(promise).rejects.toMatchObject({ reason: "not_connected" });
@@ -326,7 +373,7 @@ test.each([true, false])(
     await outcome;
     expect(fetchSpy.mock.calls.map(([input]) => input)).toEqual([
       "/api/mcp/oauth/connect",
-      "/api/mcp/servers",
+      endpoint,
     ]);
     expect(popup.close).toHaveBeenCalledTimes(1);
   }

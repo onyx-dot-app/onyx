@@ -718,4 +718,7 @@ This queue does not coordinate separate browser clients.
 Plugin client helpers preserve native MCP, OpenAPI, and external-app identities.
 They expose personal preference writes and permission-stamped workspace availability.
 OAuth completion helpers correlate attempts and check the saved connection before success.
+MCP verification preserves the initiating agent or Craft roster through OAuth completion.
+OpenAPI expiry requires sign-in unless backend status confirms refresh capability.
+Missing refresh capability retains the expired-token sign-in requirement.
 These helpers do not grant access or attach new tools by themselves.

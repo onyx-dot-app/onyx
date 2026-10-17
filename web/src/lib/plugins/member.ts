@@ -121,7 +121,8 @@ function openAPIConnection(
     if (oauth.kind === "error") return { kind: "unavailable" };
     return oauth.tokens.some(
       (token) =>
-        token.oauth_config_id === tool.oauth_config_id && !token.is_expired
+        token.oauth_config_id === tool.oauth_config_id &&
+        (!token.is_expired || token.can_refresh === true)
     )
       ? { kind: "connected", ownership: "user" }
       : { kind: "oauth" };
@@ -271,7 +272,11 @@ export function canUseMemberPlugin(plugin: MemberPlugin): boolean {
 }
 
 export async function verifyMemberPluginConnection(
-  reference: PluginReference
+  reference: PluginReference,
+  {
+    agentId,
+    surface,
+  }: Pick<MemberPluginConnectOptions, "agentId" | "surface"> = {}
 ): Promise<void> {
   let plugins: MemberPlugin[];
   if (reference.kind === "external-app") {
@@ -285,7 +290,11 @@ export async function verifyMemberPluginConnection(
     );
   } else if (reference.kind === "mcp") {
     const servers = await errorHandlingFetcher<MCPServersResponse>(
-      SWR_KEYS.mcpServers
+      surface === "craft"
+        ? SWR_KEYS.mcpServersCraft
+        : agentId === undefined
+          ? SWR_KEYS.mcpServers
+          : SWR_KEYS.agentMcpServers(agentId)
     );
     plugins = buildMemberPlugins(servers.mcp_servers, [], {
       kind: "loaded",
@@ -481,7 +490,7 @@ export async function connectMemberPlugin(
     }
     if (options.signal?.aborted)
       throw new MemberPluginConnectionError("cancelled");
-    await verifyMemberPluginConnection(memberPluginReference(plugin));
+    await verifyMemberPluginConnection(memberPluginReference(plugin), options);
   } finally {
     await refreshMemberPluginCaches();
   }
