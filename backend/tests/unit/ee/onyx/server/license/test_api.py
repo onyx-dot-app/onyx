@@ -27,6 +27,14 @@ from ee.onyx.utils.license import (
 from onyx.error_handling.exceptions import OnyxError
 
 
+@pytest.fixture(autouse=True)
+def _isolate_claim_cooldown() -> Generator[None, None, None]:
+    with patch(
+        "ee.onyx.server.license.api.claim_cooldown_is_active", return_value=False
+    ):
+        yield
+
+
 class TestNormalizeLicenseFile:
     """Reduces a .lic file to the bare base64 blob."""
 

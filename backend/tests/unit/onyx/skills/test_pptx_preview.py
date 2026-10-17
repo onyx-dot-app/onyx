@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from importlib.machinery import ModuleSpec
 from pathlib import Path
@@ -342,6 +343,8 @@ def test_source_change_during_render_is_discarded(
         command: list[str], _deadline: float
     ) -> subprocess.CompletedProcess[str]:
         (Path(command[-1]).parent / "slide-1.jpg").write_bytes(b"rendered old source")
+        # Give coarse filesystem clocks a new ctime tick for the source edit.
+        time.sleep(0.02)
         if replace_inode:
             replacement: Path = tmp_path / "replacement.pdf"
             replacement.write_bytes(b"new source")
@@ -380,6 +383,7 @@ def test_change_during_publish_cannot_make_old_revision_current(
 
     def replace(rendered: str | Path, target: str | Path) -> None:
         if Path(target).suffix == ".jpg":
+            time.sleep(0.02)
             source.write_bytes(b"new source")
             os.utime(source, ns=(original.st_atime_ns, original.st_mtime_ns))
         real_replace(rendered, target)
