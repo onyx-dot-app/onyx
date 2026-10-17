@@ -114,10 +114,7 @@ export default function MCPServerDetailPage({
       const query = new URLSearchParams(searchParams.toString());
       query.set("tab", nextTab);
       query.delete("trigger_fetch");
-      if (
-        enableChatCompleted.current ||
-        searchParams.get("trigger_fetch") === "true"
-      ) {
+      if (enableChatCompleted.current) {
         query.delete("enable_chat");
         query.delete("enable_chat_intent");
       }
@@ -208,7 +205,6 @@ export default function MCPServerDetailPage({
     handledOAuthReturn.current = true;
     selectTab("tools");
     void fetchTools(server.id).catch((cause: unknown) => {
-      clearMcpChatEnableIntent(enableChatIntent);
       toast.error(
         t("mcpPage.toasts.fetchToolsFailed", {
           error:
@@ -223,7 +219,6 @@ export default function MCPServerDetailPage({
     searchParams,
     selectTab,
     fetchTools,
-    enableChatIntent,
     t,
     enableChatIntent,
     defaultChat.isLoading,

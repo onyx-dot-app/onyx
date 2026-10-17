@@ -362,6 +362,26 @@ test("consumes an explicit Enable proof once after same-tab OAuth return", async
   expect(mockUpdateTools).toHaveBeenCalledTimes(1);
 });
 
+test("keeps the enable request after OAuth-return discovery fails", async () => {
+  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
+  mockSearchParams = new URLSearchParams(
+    `trigger_fetch=true&enable_chat=true&enable_chat_intent=${token}`
+  );
+  jest
+    .mocked(refreshMCPServerTools)
+    .mockRejectedValueOnce(new Error("Unauthenticated"));
+  render(<MCPServerDetailPage serverId={7} />);
+  await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledTimes(1));
+  expect(mockUpdateTools).not.toHaveBeenCalled();
+  expect(mockReplace).toHaveBeenLastCalledWith(
+    `/admin/plugins/mcp/7?enable_chat=true&enable_chat_intent=${token}&tab=tools`,
+    { scroll: false }
+  );
+  expect(
+    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+  ).toBe(true);
+});
+
 test.each(["wrong user", "wrong server", "expired"])(
   "rejects %s proof on OAuth return",
   async (kind) => {
