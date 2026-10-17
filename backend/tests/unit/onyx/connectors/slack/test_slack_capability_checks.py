@@ -21,6 +21,7 @@ from onyx.connectors.capability_checks.models import (
     CheckFinding,
     CheckFindingKey,
     CheckNotApplicableError,
+    CheckNotRunReason,
     CheckOutput,
     CredentialCapability,
     FindingOption,
@@ -33,8 +34,10 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     CredentialInvalidError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
-    UnexpectedValidationError,
+    NothingToCheckError,
+    RateLimitedValidationError,
 )
 from onyx.connectors.slack.capability_checks import (
     _CHANNEL_SCAN_BOUND,
@@ -246,8 +249,10 @@ def test_public_channel_listing_empty_workspace_skips_info_probe() -> None:
 
     # Postcondition.
     gateway.fetch_channel_info.assert_not_called()
+    assert output is not None
+    assert output.summary == "No public channel in first 200 scanned"
     (message,) = _advisory_messages(output)
-    assert "conversations.info" in message
+    assert "details read" in message
 
 
 def test_private_channel_listing_missing_scope_mentions_silent_skip() -> None:
@@ -301,7 +306,8 @@ def test_private_channel_listing_without_channels_adds_advisory(
 def test_private_channel_listing_with_a_channel_has_no_advisory(
     check_id: str,
 ) -> None:
-    """Verifies a private listing that returns a channel passes silently."""
+    """Verifies a private listing that returns a channel passes without a
+    caveat and names the channel."""
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _pages(
@@ -312,7 +318,9 @@ def test_private_channel_listing_with_a_channel_has_no_advisory(
     output = _run(check_id, _context(gateway))
 
     # Postcondition.
-    assert output is None
+    assert output is not None
+    assert output.summary == "Found private channel #secret"
+    assert output.advisories == []
 
 
 @pytest.mark.parametrize(
@@ -341,7 +349,7 @@ def test_private_channel_listing_finds_a_channel_on_a_later_page(
     output = _run(check_id, _context(gateway))
 
     # Postcondition.
-    assert output is None
+    assert _advisory_messages(output) == []
     assert len(consumed) == 2
 
 
@@ -366,7 +374,7 @@ def test_private_channel_search_stops_at_the_bound() -> None:
     assert len(consumed) == _CHANNEL_SCAN_PAGE_LIMIT
     (message,) = _advisory_messages(output)
     assert "no private channel" in message
-    assert f"first {_CHANNEL_SCAN_BOUND} channels" in message
+    assert f"among the {_CHANNEL_SCAN_BOUND} scanned" in message
 
 
 def test_private_history_finds_a_private_channel_on_a_later_page() -> None:
@@ -389,7 +397,8 @@ def test_private_history_finds_a_private_channel_on_a_later_page() -> None:
     output = _run("slack_private_message_history_read", _context(gateway))
 
     # Postcondition.
-    assert output is None
+    assert output is not None
+    assert output.summary == "Read a thread in #secret"
     gateway.list_channels.assert_called_once_with(
         variant=SlackChannelVariant.PRIVATE,
         channel_types=["private_channel"],
@@ -437,8 +446,10 @@ def test_message_history_not_in_channel_counts_as_scope_proof() -> None:
     output = _run("slack_message_history_read", _context(gateway))
 
     # Postcondition.
+    assert output is not None
+    assert output.summary == "Scope accepted; bot not in #a"
     (message,) = _advisory_messages(output)
-    assert "not a member of the public channel" in message
+    assert "the bot is not in the channel" in message
     gateway.fetch_thread_replies.assert_not_called()
 
 
@@ -459,13 +470,13 @@ def test_message_history_missing_scope() -> None:
 
 
 def test_message_history_no_visible_channels_is_incomplete() -> None:
-    """Verifies an unprobeable workspace maps to a transient outcome."""
+    """Verifies an unprobeable workspace is inconclusive, not a failure."""
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
 
     # Under test and postcondition.
-    with pytest.raises(UnexpectedValidationError, match="[Nn]o public channels"):
+    with pytest.raises(InconclusiveValidationError, match="[Nn]o public channels"):
         _run("slack_message_history_read", _context(gateway))
 
 
@@ -507,7 +518,9 @@ def test_message_history_read_thread_has_no_advisory() -> None:
     output = _run("slack_message_history_read", _context(gateway))
 
     # Postcondition.
-    assert output is None
+    assert output is not None
+    assert output.summary == "Read a thread in #a"
+    assert output.advisories == []
 
 
 def test_message_history_empty_channel_skips_thread_probe() -> None:
@@ -524,24 +537,22 @@ def test_message_history_empty_channel_skips_thread_probe() -> None:
 
     # Postcondition.
     gateway.fetch_thread_replies.assert_not_called()
+    assert output is not None
+    assert output.summary == "Read #a; it has no messages"
     (message,) = _advisory_messages(output)
-    assert "no messages" in message
-    assert "did not read a thread" in message
+    assert "thread reads were not tested" in message
 
 
-def test_private_history_passes_when_no_private_channels_in_scope() -> None:
-    """Verifies a bot in no private channels has no private history to probe."""
+def test_private_history_skips_when_no_private_channels_in_scope() -> None:
+    """Verifies a bot in no private channels has nothing to probe."""
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
 
-    # Under test.
-    output = _run("slack_private_message_history_read", _context(gateway))
-
-    # Postcondition.
+    # Under test and postcondition.
+    with pytest.raises(NothingToCheckError, match="no private channel"):
+        _run("slack_private_message_history_read", _context(gateway))
     gateway.fetch_channel_history.assert_not_called()
-    (message,) = _advisory_messages(output)
-    assert "private-channel message reads" in message
 
 
 def test_private_history_leaves_listing_scope_failures_to_the_listing_check() -> None:
@@ -554,11 +565,18 @@ def test_private_history_leaves_listing_scope_failures_to_the_listing_check() ->
     gateway.list_channels.side_effect = _slack_error(
         "missing_scope", needed="groups:read"
     )
+    checks = [
+        _CHECKS_BY_ID["slack_private_channel_listing"],
+        _CHECKS_BY_ID["slack_private_message_history_read"],
+    ]
 
     # Under test.
-    _run("slack_private_message_history_read", _context(gateway))
+    listing, history = run_capability_checks(checks, _context(gateway))
 
     # Postcondition.
+    assert listing.status == CapabilityCheckStatus.FAILED
+    assert history.status == CapabilityCheckStatus.SKIPPED
+    assert history.blocked_by == "slack_private_channel_listing"
     gateway.fetch_channel_history.assert_not_called()
 
 
@@ -572,7 +590,7 @@ def test_private_history_rate_limited_listing_is_incomplete() -> None:
     gateway.list_channels.side_effect = _slack_error("ratelimited")
 
     # Under test and postcondition.
-    with pytest.raises(UnexpectedValidationError, match="rate limited"):
+    with pytest.raises(RateLimitedValidationError, match="rate limited"):
         _run("slack_private_message_history_read", _context(gateway))
 
 
@@ -618,7 +636,8 @@ def test_private_history_probes_a_private_thread() -> None:
     gateway.fetch_thread_replies.assert_called_once_with(
         variant=SlackChannelVariant.PRIVATE, channel_id="C_PRIV", thread_ts="333.444"
     )
-    assert output is None
+    assert output is not None
+    assert output.summary == "Read a thread in #secret"
 
 
 def test_channel_join_scope_present_passes() -> None:
@@ -653,7 +672,7 @@ def test_channel_join_scope_absent_header_is_incomplete() -> None:
     gateway.check_auth.return_value = _auth_response(granted_scopes=None)
 
     # Under test and postcondition.
-    with pytest.raises(UnexpectedValidationError, match="X-OAuth-Scopes"):
+    with pytest.raises(InconclusiveValidationError, match="X-OAuth-Scopes"):
         _run("slack_channel_join_scope", _context(gateway))
 
 
@@ -694,7 +713,7 @@ def test_user_profile_read_off_grid_omits_team_id() -> None:
     """Verifies the non-Grid ``users.list`` call shape."""
     # Precondition.
     gateway = _gateway()
-    gateway.list_users.side_effect = _pages(SlackUsersPage(members=[]))
+    gateway.list_users.side_effect = _pages(SlackUsersPage(members=[{"id": "U1"}]))
 
     # Under test.
     _run("slack_user_profile_read", _context(gateway))
@@ -709,7 +728,7 @@ def test_user_profile_read_on_grid_passes_team_id() -> None:
     gateway = _gateway()
     gateway.check_auth.return_value = _auth_response(enterprise_id="E123")
     gateway.list_teams.side_effect = _pages(SlackTeamsPage(teams=[{"id": "T1"}]))
-    gateway.list_users.side_effect = _pages(SlackUsersPage(members=[]))
+    gateway.list_users.side_effect = _pages(SlackUsersPage(members=[{"id": "U1"}]))
 
     # Under test.
     _run("slack_user_profile_read", _context(gateway))
@@ -718,19 +737,16 @@ def test_user_profile_read_on_grid_passes_team_id() -> None:
     gateway.list_users.assert_called_once_with(limit=1, team_id="T1")
 
 
-def test_user_profile_read_without_users_adds_advisory() -> None:
-    """Verifies an empty user page passes, but says no profile was read."""
+def test_user_profile_read_without_users_is_inconclusive() -> None:
+    """Verifies an empty user page cannot pass: no profile was read."""
     # Precondition.
     gateway = _gateway()
     gateway.list_users.side_effect = _pages(SlackUsersPage(members=[]))
 
-    # Under test.
-    output = _run("slack_user_profile_read", _context(gateway))
-
-    # Postcondition.
+    # Under test and postcondition.
+    with pytest.raises(InconclusiveValidationError, match="users.info"):
+        _run("slack_user_profile_read", _context(gateway))
     gateway.fetch_user_info.assert_not_called()
-    (message,) = _advisory_messages(output)
-    assert "users.info" in message
 
 
 def test_user_profile_read_missing_scope() -> None:
@@ -820,7 +836,7 @@ def test_email_visibility_incomplete_without_human_sample() -> None:
     )
 
     # Under test and postcondition.
-    with pytest.raises(UnexpectedValidationError, match="human members"):
+    with pytest.raises(InconclusiveValidationError, match="human members"):
         _run("slack_user_email_visibility", _context(gateway))
 
 
@@ -838,7 +854,8 @@ def test_perm_sync_channel_listing_missing_scope() -> None:
     gateway.list_channels.assert_called_once_with(
         variant=SlackChannelVariant.PUBLIC,
         channel_types=["public_channel"],
-        limit=1,
+        exclude_archived=None,
+        limit=_CHANNEL_SCAN_PAGE_SIZE,
     )
 
 
@@ -855,42 +872,46 @@ def test_perm_sync_private_listing_warning_names_stale_access_lists() -> None:
         _run("slack_perm_sync_private_channel_listing", _context(gateway))
 
 
-def test_private_member_listing_missing_listing_scope_passes() -> None:
+def test_private_member_listing_does_not_run_after_a_failed_listing() -> None:
     """
-    Verifies a listing scope failure is not reported here: doc sync silently
-    degrades to public-only, and the perm-sync private-listing warning check
-    owns that finding.
+    Verifies a listing scope failure is reported once, by the perm-sync
+    private listing: doc sync silently degrades to public-only, and the member
+    check does not run.
     """
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _slack_error(
         "missing_scope", needed="groups:read"
     )
+    checks = [
+        _CHECKS_BY_ID["slack_perm_sync_private_channel_listing"],
+        _CHECKS_BY_ID["slack_private_channel_member_listing"],
+    ]
 
     # Under test.
-    _run("slack_private_channel_member_listing", _context(gateway))
+    listing, members = run_capability_checks(checks, _context(gateway))
 
     # Postcondition.
+    assert listing.status == CapabilityCheckStatus.FAILED
+    assert members.status == CapabilityCheckStatus.SKIPPED
+    assert members.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
     gateway.list_channel_members.assert_not_called()
 
 
-def test_private_member_listing_vacuous_pass_without_private_channels() -> None:
+def test_private_member_listing_skips_without_private_channels() -> None:
     """Verifies a bot in no private channels has nothing to probe."""
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
 
-    # Under test.
-    output = _run("slack_private_channel_member_listing", _context(gateway))
-
-    # Postcondition.
+    # Under test and postcondition.
+    with pytest.raises(NothingToCheckError):
+        _run("slack_private_channel_member_listing", _context(gateway))
     gateway.list_channel_members.assert_not_called()
-    (message,) = _advisory_messages(output)
-    assert "private-channel member listing" in message
 
 
-def test_private_member_listing_without_members_adds_advisory() -> None:
-    """Verifies an empty member page passes, but says no profile was read."""
+def test_private_member_listing_without_members_is_inconclusive() -> None:
+    """Verifies an empty member page cannot pass: no profile was read."""
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _pages(
@@ -900,13 +921,10 @@ def test_private_member_listing_without_members_adds_advisory() -> None:
         SlackChannelMembersPage(members=[])
     )
 
-    # Under test.
-    output = _run("slack_private_channel_member_listing", _context(gateway))
-
-    # Postcondition.
+    # Under test and postcondition.
+    with pytest.raises(InconclusiveValidationError, match="users.info"):
+        _run("slack_private_channel_member_listing", _context(gateway))
     gateway.fetch_user_info.assert_not_called()
-    (message,) = _advisory_messages(output)
-    assert "users.info" in message
 
 
 def test_private_member_listing_missing_scope() -> None:
@@ -990,8 +1008,8 @@ def test_configured_channels_by_id_pass_after_a_rename() -> None:
     _run("slack_configured_channels_visible", context)
 
 
-def test_configured_channels_missing_channel_fails() -> None:
-    """Verifies invisible configured channels are named in the failure."""
+def test_configured_channels_some_missing_is_a_partial_find() -> None:
+    """Verifies invisible configured channels are named in a partial result."""
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _pages(
@@ -1001,30 +1019,51 @@ def test_configured_channels_missing_channel_fails() -> None:
         gateway, connector_specific_config={"channels": ["general", "not-a-channel"]}
     )
 
-    # Under test and postcondition.
-    with pytest.raises(ConnectorValidationError, match="not-a-channel"):
-        _run("slack_configured_channels_visible", context)
-
-
-def test_configured_channels_regex_mode_skips_probe() -> None:
-    """Verifies regex-mode configs are not existence-checked."""
-    # Precondition.
-    gateway = _gateway()
-    context = _context(
-        gateway,
-        connector_specific_config={
-            "channels": ["gen.*"],
-            "channel_regex_enabled": True,
-        },
-    )
-
     # Under test.
     output = _run("slack_configured_channels_visible", context)
 
     # Postcondition.
+    assert output is not None
+    assert output.partial
+    assert output.summary == "1 selected channel not visible"
+    assert output.description is not None
+    assert "not-a-channel" in output.description
+
+
+def test_configured_channels_none_visible_fails() -> None:
+    """Verifies the check fails when no configured channel is visible."""
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_channels.side_effect = _pages(
+        SlackChannelsPage(channels=[{"id": "C1", "name": "general"}])
+    )
+    context = _context(gateway, connector_specific_config={"channels": ["gone"]})
+
+    # Under test and postcondition.
+    with pytest.raises(ConnectorValidationError, match="gone"):
+        _run("slack_configured_channels_visible", context)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [{"channels": ["gen.*"], "channel_regex_enabled": True}, {"channels": []}],
+)
+def test_configured_channels_without_exact_names_does_not_apply(
+    config: dict[str, Any],
+) -> None:
+    """Verifies regex-mode and filter-less configs have no names to find."""
+    # Precondition.
+    gateway = _gateway()
+    context = _context(gateway, connector_specific_config=config)
+
+    # Under test.
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["slack_configured_channels_visible"]], context
+    )
+
+    # Postcondition.
+    assert result.applicable is False
     gateway.list_channels.assert_not_called()
-    (message,) = _advisory_messages(output)
-    assert "regular expressions" in message
 
 
 # slack_readable_channel_listing
@@ -1234,8 +1273,6 @@ def _coherent_gateway() -> MagicMock:
     )
 
     def list_channels(**kwargs: Any) -> Any:
-        # The bot is in no private channels; every public-inclusive listing
-        # sees one channel.
         if "public_channel" in kwargs["channel_types"]:
             return iter(
                 [
@@ -1244,10 +1281,13 @@ def _coherent_gateway() -> MagicMock:
                     )
                 ]
             )
-        return iter([SlackChannelsPage(channels=[])])
+        return iter([SlackChannelsPage(channels=[{"id": "G1", "name": "secret"}])])
 
     gateway.list_channels.side_effect = list_channels
     gateway.fetch_channel_history.side_effect = _pages(SlackHistoryPage(messages=[]))
+    gateway.list_channel_members.side_effect = _pages(
+        SlackChannelMembersPage(members=["U1"])
+    )
     gateway.list_users.side_effect = _pages(
         SlackUsersPage(
             members=[
@@ -1284,7 +1324,12 @@ def test_full_slack_check_run_happy_path() -> None:
     # Precondition.
     checks = build_slack_indexing_checks() + build_slack_doc_permission_sync_checks()
     context = _context(
-        _coherent_gateway(), connector_specific_config={"channels": ["#general"]}
+        _coherent_gateway(),
+        connector_specific_config={
+            "channels": ["#general"],
+            "exclude_channels": ["^tmp-"],
+            "exclude_channel_regex_enabled": True,
+        },
     )
 
     # Under test.
