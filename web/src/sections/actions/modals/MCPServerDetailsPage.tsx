@@ -45,7 +45,6 @@ interface MCPServerDetailsPageProps {
   active: boolean;
   variant?: "modal" | "page";
   readOnly?: boolean;
-  onBeforeUrlChange?: () => Promise<boolean>;
   footerTarget?: HTMLDivElement | null;
   server: MCPServer;
   onSaved: (server: MCPServer) => Promise<void>;
@@ -57,7 +56,6 @@ export default function MCPServerDetailsPage({
   active,
   variant = "modal",
   readOnly = false,
-  onBeforeUrlChange,
   footerTarget = null,
   server,
   onSaved,
@@ -89,9 +87,6 @@ export default function MCPServerDetailsPage({
   const validationSchema = Yup.object().shape({
     name: Yup.string().required(t("addMcpModal.name.required")),
     description: Yup.string(),
-    server_url: Yup.string()
-      .url(t("addMcpModal.serverUrl.invalid"))
-      .required(t("addMcpModal.serverUrl.required")),
   });
 
   const initialValues: MCPServerConfigurationValues = {
@@ -123,19 +118,13 @@ export default function MCPServerDetailsPage({
     const payload: MCPServerCreateRequest = {
       name: values.name,
       description: values.description,
-      server_url: values.server_url,
+      server_url: server.server_url,
       is_public: values.is_public,
       groups: values.is_public ? [] : values.groups,
       users: values.is_public ? [] : values.users,
     };
 
     try {
-      if (
-        values.server_url !== server.server_url &&
-        onBeforeUrlChange &&
-        !(await onBeforeUrlChange())
-      )
-        return;
       const unchanged =
         JSON.stringify(values) === JSON.stringify(initialValues);
       const savedServer = unchanged
@@ -207,27 +196,6 @@ export default function MCPServerDetailsPage({
                       }
                       placeholder={t("addMcpModal.name.placeholder")}
                       ref={focusOnMount}
-                    />
-                  </InputVertical>
-
-                  <InputVertical
-                    withLabel="server_url"
-                    title={t("addMcpModal.serverUrl.title")}
-                  >
-                    <InputTypeIn
-                      id="server_url"
-                      name="server_url"
-                      type="url"
-                      value={formikProps.values.server_url}
-                      onChange={formikProps.handleChange}
-                      onBlur={formikProps.handleBlur}
-                      variant={
-                        formikProps.touched.server_url &&
-                        formikProps.errors.server_url
-                          ? "error"
-                          : "primary"
-                      }
-                      placeholder={t("placeholders.mcpServerUrl")}
                     />
                   </InputVertical>
 

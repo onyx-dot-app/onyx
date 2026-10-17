@@ -78,10 +78,7 @@ export default function MCPServerDetailPage({
   const [toolsBusy, setToolsBusy] = useState(false);
   const [discoveringTools, setDiscoveringTools] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [authRevision, setAuthRevision] = useState(0);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
-  const [confirmUrlChange, setConfirmUrlChange] = useState(false);
-  const urlChangeDecision = useRef<((confirmed: boolean) => void) | null>(null);
   const handledOAuthReturn = useRef(false);
   const busy = detailsBusy || authBusy || toolsBusy || discoveringTools;
   const guard = useUnsavedChangesGuard({
@@ -202,47 +199,21 @@ export default function MCPServerDetailPage({
     enableChatIntent,
     defaultChat.isLoading,
   ]);
-  const beforeUrlChange = () => {
-    if (!authDirty) return Promise.resolve(true);
-    setConfirmUrlChange(true);
-    return new Promise<boolean>((resolve) => {
-      urlChangeDecision.current = resolve;
-    });
-  };
-  const resolveUrlChange = (confirmed: boolean) => {
-    setConfirmUrlChange(false);
-    urlChangeDecision.current?.(confirmed);
-    urlChangeDecision.current = null;
-  };
   const saveDetails = async (saved: MCPServer) => {
-    if (server?.server_url !== saved.server_url) {
-      setAuthDirty(false);
-      setAuthRevision((value) => value + 1);
-      await mutateServer(
-        {
-          ...saved,
-          admin_credentials: undefined,
-          user_credentials: undefined,
-          auth_template: null,
-        },
-        { revalidate: false }
-      );
-    } else {
-      await mutateServer(
-        (current) =>
-          current
-            ? {
-                ...current,
-                name: saved.name,
-                description: saved.description,
-                is_public: saved.is_public,
-                groups: saved.groups,
-                users: saved.users,
-              }
-            : saved,
-        { revalidate: false }
-      );
-    }
+    await mutateServer(
+      (current) =>
+        current
+          ? {
+              ...current,
+              name: saved.name,
+              description: saved.description,
+              is_public: saved.is_public,
+              groups: saved.groups,
+              users: saved.users,
+            }
+          : saved,
+      { revalidate: false }
+    );
     try {
       const fresh = await errorHandlingFetcher<MCPServer>(
         SWR_KEYS.adminMcpServer(saved.id)
@@ -314,7 +285,6 @@ export default function MCPServerDetailPage({
                   onSaved={saveDetails}
                   onBusyChange={setDetailsBusy}
                   onDirtyChange={setDetailsDirty}
-                  onBeforeUrlChange={beforeUrlChange}
                 />
               </fieldset>
             )}
@@ -330,7 +300,7 @@ export default function MCPServerDetailPage({
                 className="w-full min-w-0"
               >
                 <MCPAuthenticationPage
-                  key={`${server.id}:${server.server_url}:${revision}:${authRevision}`}
+                  key={`${server.id}:${server.server_url}:${revision}`}
                   variant="page"
                   readOnly={!canEdit}
                   active={tab === "authentication"}
@@ -375,18 +345,11 @@ export default function MCPServerDetailPage({
     </>
   );
   const dialogs = (
-    <>
-      <UnsavedChangesModal
-        open={guard.confirmationOpen}
-        onCancel={guard.cancelLeave}
-        onDiscard={guard.discardAndLeave}
-      />
-      <UnsavedChangesModal
-        open={confirmUrlChange}
-        onCancel={() => resolveUrlChange(false)}
-        onDiscard={() => resolveUrlChange(true)}
-      />
-    </>
+    <UnsavedChangesModal
+      open={guard.confirmationOpen}
+      onCancel={guard.cancelLeave}
+      onDiscard={guard.discardAndLeave}
+    />
   );
   const title = server?.name ?? t("mcpDetail.configuration");
   const icon = server
@@ -405,7 +368,7 @@ export default function MCPServerDetailPage({
           <Modal.Header
             icon={icon}
             title={title}
-            description={server?.description || undefined}
+            description={server?.server_url}
             onClose={close}
           />
           <Modal.Body twoTone={false} alignItems="stretch">

@@ -166,7 +166,9 @@ test("keeps lifecycle controls on the Plugins directory, not detail", async () =
   render(<MCPServerDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Server draft" });
   expect(
-    screen.queryByRole("button", { name: "Enable or disable for workspace" })
+    screen.queryByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Enable" })
@@ -175,6 +177,9 @@ test("keeps lifecycle controls on the Plugins directory, not detail", async () =
     screen.queryByRole("button", { name: "Delete" })
   ).not.toBeInTheDocument();
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+    server.server_url
+  );
 });
 
 test("offers read-only details when edit permission is absent", async () => {

@@ -278,7 +278,6 @@ describe("inline server configuration", () => {
       readOnly?: boolean;
       permissions?: Permission[];
       adminCapabilities?: Permission[];
-      onBeforeUrlChange?: () => Promise<boolean>;
       server?: MCPServer;
     } = {}
   ) {
@@ -393,24 +392,24 @@ describe("inline server configuration", () => {
     await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
   });
 
-  test("keeps URL edits when replacing another tab's draft is canceled", async () => {
-    const beforeChange = jest.fn().mockResolvedValue(false);
-    const { saved } = renderDetailsPage({ onBeforeUrlChange: beforeChange });
+  test("keeps the saved endpoint fixed while metadata remains editable", async () => {
+    const { saved } = renderDetailsPage();
     const user = setupUser();
-    const url = await screen.findByRole("textbox", { name: /^MCP Server URL/ });
-    await user.clear(url);
-    await user.type(url, "https://new.example.com/mcp");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(beforeChange).toHaveBeenCalledTimes(1));
-    expect(savedRequests).toHaveLength(0);
-    expect(saved).not.toHaveBeenCalled();
-    expect(url).toHaveValue("https://new.example.com/mcp");
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled()
+    await user.type(
+      await screen.findByRole("textbox", { name: "Server Name" }),
+      " updated"
     );
-    beforeChange.mockResolvedValue(true);
+    expect(
+      screen.queryByRole("textbox", { name: /^MCP Server URL/ })
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0]?.payload).toEqual(
+      expect.objectContaining({ server_url: configuredServer.server_url })
+    );
+    expect(saved).toHaveBeenCalledWith(
+      expect.objectContaining({ server_url: configuredServer.server_url })
+    );
   });
 
   test.each([
@@ -424,8 +423,8 @@ describe("inline server configuration", () => {
         await screen.findByRole("textbox", { name: "Server Name" })
       ).toBeDisabled();
       expect(
-        screen.getByRole("textbox", { name: /^MCP Server URL/ })
-      ).toBeDisabled();
+        screen.queryByRole("textbox", { name: /^MCP Server URL/ })
+      ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: "Save Changes" })
       ).not.toBeInTheDocument();
