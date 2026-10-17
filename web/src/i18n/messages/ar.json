@@ -2892,7 +2892,8 @@
           "docsUnit": "{count, plural, one {مستند} two {مستندان} few {مستندات} many {مستندًا} other {مستند}}"
         },
         "summary": "{realm} • {counts}",
-        "hostPrefix": "{host}: {realm}"
+        "hostPrefix": "{host}: {realm}",
+        "hostType": "نوع استضافة {source}"
       },
       "sharing": {
         "title": "إعدادات المشاركة",
@@ -4026,7 +4027,7 @@
           "description": "تهيئة موصل Confluence",
           "fields": {
             "is_cloud": {
-              "label": "نوع استضافة Confluence",
+              "label": "سحابي",
               "description": "اختر Confluence Cloud لموقع على atlassian.net، أو Confluence Data Center لموقع Confluence Server أو Data Center مستضاف ذاتيًا."
             },
             "wiki_base": {

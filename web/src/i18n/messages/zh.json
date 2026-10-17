@@ -2892,7 +2892,8 @@
           "docsUnit": "{count, plural, other {个文档}}"
         },
         "summary": "{realm} • {counts}",
-        "hostPrefix": "{host}：{realm}"
+        "hostPrefix": "{host}：{realm}",
+        "hostType": "{source} 托管类型"
       },
       "sharing": {
         "title": "共享设置",
@@ -4026,7 +4027,7 @@
           "description": "配置 Confluence 连接器",
           "fields": {
             "is_cloud": {
-              "label": "Confluence 托管类型",
+              "label": "是否为云端版",
               "description": "对于 atlassian.net 上的站点，请选择 Confluence Cloud；对于自托管的 Confluence Server 或 Data Center 站点，请选择 Confluence Data Center。"
             },
             "wiki_base": {

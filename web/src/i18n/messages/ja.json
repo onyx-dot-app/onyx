@@ -2892,7 +2892,8 @@
           "docsUnit": "{count, plural, other {件のドキュメント}}"
         },
         "summary": "{realm} • {counts}",
-        "hostPrefix": "{host}：{realm}"
+        "hostPrefix": "{host}：{realm}",
+        "hostType": "{source} のホストタイプ"
       },
       "sharing": {
         "title": "共有設定",
@@ -4026,7 +4027,7 @@
           "description": "Confluence コネクターを設定",
           "fields": {
             "is_cloud": {
-              "label": "Confluence のホストタイプ",
+              "label": "クラウド版",
               "description": "atlassian.net 上のサイトには Confluence Cloud を、セルフホストの Confluence Server または Data Center サイトには Confluence Data Center を選択してください。"
             },
             "wiki_base": {

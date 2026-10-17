@@ -33,6 +33,7 @@ Headers are only sticky when `actions` is non-empty.
 | `description`    | `string`                  | —       | Subtitle below the title                                                                                                                                  |
 | `descriptionTag` | `TagProps`                | —       | Tag inline after the description, e.g. a status                                                                                                           |
 | `editable`       | `boolean`                 | `false` | The title can be edited in place (see `Content`)                                                                                                          |
+| `editButton`     | `"hover" \| "rest"`       | `"hover"` | When the editable title shows its pencil: on hover, or at rest too (see `Content`)                                                                      |
 | `onTitleChange`  | `(title: string) => void` | —       | Called when the user commits a title edit                                                                                                                 |
 | `actions`        | `ReactNode[]`             | —       | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
 | `children`       | `ReactNode`               | —       | Content below the title row (e.g. search bar, filters)                                                                                                    |

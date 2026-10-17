@@ -26,6 +26,7 @@ statuses are a subset of `StatusVariants`:
 | Status    | Icon                | `heavy` background  |
 | --------- | ------------------- | ------------------- |
 | `default` | `text-03`           | — (never heavy)     |
+| `info`    | `status-info-05`    | `status-info-00`    |
 | `success` | `status-success-05` | `status-success-00` |
 | `warning` | `status-warning-05` | `status-warning-00` |
 | `error`   | `status-error-05`   | `status-error-00`   |

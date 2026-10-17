@@ -34,7 +34,7 @@ import HierarchyBreakdown, {
   breakdownGroups,
 } from "@/views/admin/connectors/ConnectorDetailPage/HierarchyBreakdown";
 import InlineFileManagement from "@/views/admin/connectors/ConnectorDetailPage/InlineFileManagement";
-import { formatTimestamp } from "@opal/time";
+import { formatDateLog } from "@/lib/dateUtils";
 
 /** Markdown-escapes a value so a URL with underscores stays literal. */
 function escapeMarkdown(value: string): string {
@@ -125,10 +125,12 @@ function LabeledConfigGroups({
   ...rest
 }: LabeledConfigGroupsProps) {
   const configuration = useConnectorConfiguration(source);
+  const t = useTranslations("admin.connector.configuration");
   const tTabs = useTranslations("admin.connectorsList.checkboxTabs");
   const { reportFor } = useCredentialCheckReports(source);
   const credentialId = ccPair.credential.id;
   const connectorId = ccPair.connector.id;
+  const sourceName = getSourceDisplayName(source) ?? "";
   const rows = useMemo(() => {
     const checks = storedCheckResults(reportFor, { credentialId, connectorId });
     // SAFETY: labelling replaces string list entries with string labels, so
@@ -138,15 +140,21 @@ function LabeledConfigGroups({
       config,
       checks
     ) as ConfigEntries;
-    // A label that depends on the credential reads as the generic form.
     const fields = configFields([
       ...configuration.values,
       ...configuration.advanced_values,
     ]);
+    // A label that depends on the credential reads as the generic form. A
+    // checkbox the form shows as tabs names the source's hosting type here,
+    // since the form's label only names its tab strip.
     const labels = new Map(
       fields.map((field) => [
         field.name,
-        typeof field.label === "function" ? field.label(null) : field.label,
+        field.type === "checkbox" && field.tabLabels !== undefined
+          ? t("hostType", { source: sourceName })
+          : typeof field.label === "function"
+            ? field.label(null)
+            : field.label,
       ])
     );
     // A checkbox the form shows as tabs reads by its tab labels.
@@ -180,6 +188,8 @@ function LabeledConfigGroups({
     connectorId,
     reportFor,
     source,
+    sourceName,
+    t,
     tTabs,
   ]);
   return <ConfigGroups rows={rows} ccPair={ccPair} {...rest} />;
@@ -287,7 +297,7 @@ export default function IndexConfigurationsSection({
       value:
         indexingStart === null
           ? tScheduled("indexingStart.placeholder")
-          : formatTimestamp(indexingStart, { dateOnly: true }),
+          : formatDateLog(indexingStart),
     },
   };
 

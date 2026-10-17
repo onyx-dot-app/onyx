@@ -2892,7 +2892,8 @@
           "docsUnit": "{count, plural, one {Dokument} other {Dokumente}}"
         },
         "summary": "{realm} • {counts}",
-        "hostPrefix": "{host}: {realm}"
+        "hostPrefix": "{host}: {realm}",
+        "hostType": "{source}-Hosttyp"
       },
       "sharing": {
         "title": "Freigabeeinstellungen",
@@ -4026,7 +4027,7 @@
           "description": "Confluence-Connector konfigurieren",
           "fields": {
             "is_cloud": {
-              "label": "Confluence-Hosttyp",
+              "label": "Ist Cloud",
               "description": "Wählen Sie Confluence Cloud für eine Site auf atlassian.net oder Confluence Data Center für eine selbst gehostete Confluence-Server- oder Data-Center-Site."
             },
             "wiki_base": {

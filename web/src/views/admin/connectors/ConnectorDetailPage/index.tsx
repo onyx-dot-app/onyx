@@ -365,6 +365,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         icon={getSourceMetadata(source).icon}
         title={ccPair.name}
         editable={canOperate}
+        editButton="rest"
         onTitleChange={(name) => void handleUpdateName(name)}
         divider
         actions={

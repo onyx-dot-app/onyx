@@ -2892,7 +2892,8 @@
           "docsUnit": "{count, plural, one {doc} other {docs}}"
         },
         "summary": "{realm} • {counts}",
-        "hostPrefix": "{host}: {realm}"
+        "hostPrefix": "{host}: {realm}",
+        "hostType": "{source} Host Type"
       },
       "sharing": {
         "title": "Sharing Settings",
@@ -4026,7 +4027,7 @@
           "description": "Configure Confluence connector",
           "fields": {
             "is_cloud": {
-              "label": "Confluence Host Type",
+              "label": "Is Cloud",
               "description": "Choose Confluence Cloud for a site on atlassian.net, or Confluence Data Center for a self-hosted Confluence Server or Data Center site."
             },
             "wiki_base": {

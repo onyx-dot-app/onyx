@@ -2892,7 +2892,8 @@
           "docsUnit": "{count, plural, other {개 문서}}"
         },
         "summary": "{realm} • {counts}",
-        "hostPrefix": "{host}: {realm}"
+        "hostPrefix": "{host}: {realm}",
+        "hostType": "{source} 호스트 유형"
       },
       "sharing": {
         "title": "공유 설정",
@@ -4026,7 +4027,7 @@
           "description": "Confluence 커넥터 구성",
           "fields": {
             "is_cloud": {
-              "label": "Confluence 호스트 유형",
+              "label": "Cloud 여부",
               "description": "atlassian.net 사이트이면 Confluence Cloud를, 자체 호스팅하는 Confluence Server 또는 Data Center 사이트이면 Confluence Data Center를 선택하세요."
             },
             "wiki_base": {

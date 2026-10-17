@@ -2892,7 +2892,8 @@
           "docsUnit": "{count, plural, one {documento} other {documentos}}"
         },
         "summary": "{realm} • {counts}",
-        "hostPrefix": "{host}: {realm}"
+        "hostPrefix": "{host}: {realm}",
+        "hostType": "Tipo de alojamiento de {source}"
       },
       "sharing": {
         "title": "Ajustes de uso compartido",
@@ -4026,7 +4027,7 @@
           "description": "Configurar conector de Confluence",
           "fields": {
             "is_cloud": {
-              "label": "Tipo de alojamiento de Confluence",
+              "label": "Es Cloud",
               "description": "Elige Confluence Cloud para un sitio en atlassian.net, o Confluence Data Center para un sitio autoalojado de Confluence Server o Data Center."
             },
             "wiki_base": {
