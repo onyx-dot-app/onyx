@@ -25,6 +25,7 @@ from tests.unit.onyx.connectors.notion.test_notion_capability_checks import (
     _gateway,
 )
 
+_ROOT_PAGE_ID = "17ab3186873d418fb899c3f6a43f68de"
 _ALL_CHECK_IDS = [check.check_id for check in build_notion_indexing_checks()]
 _BOT_USER = {
     "object": "user",
@@ -290,7 +291,7 @@ def test_root_page_names_the_page() -> None:
     gateway = _gateway()
     gateway.get_page.return_value = _page("Handbook")
 
-    result = _run("notion_root_page", gateway, {"root_page_id": "root"})
+    result = _run("notion_root_page", gateway, {"root_page_id": _ROOT_PAGE_ID})
 
     assert result.summary == "Read root page Handbook"
 
@@ -300,7 +301,7 @@ def test_root_page_names_a_wiki() -> None:
     gateway.get_page.side_effect = _api_error(404, "object_not_found")
     gateway.get_database.return_value = {"object": "database", **_data_source("Wiki")}
 
-    result = _run("notion_root_page", gateway, {"root_page_id": "root"})
+    result = _run("notion_root_page", gateway, {"root_page_id": _ROOT_PAGE_ID})
 
     assert result.summary == "Read root page Wiki"
 
@@ -320,7 +321,7 @@ def test_root_page_failures_have_the_design_lines(
     gateway.get_page.side_effect = _api_error(status)
     gateway.get_database.side_effect = _api_error(status)
 
-    result = _run("notion_root_page", gateway, {"root_page_id": "root"})
+    result = _run("notion_root_page", gateway, {"root_page_id": _ROOT_PAGE_ID})
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.error_kind == error_kind
@@ -343,7 +344,7 @@ def test_page_content_runs_after_the_root_page() -> None:
     gateway = _gateway()
     gateway.get_page.side_effect = _api_error(400, "validation_error")
 
-    results = _run_all(_ALL_CHECK_IDS, gateway, {"root_page_id": "root"})
+    results = _run_all(_ALL_CHECK_IDS, gateway, {"root_page_id": _ROOT_PAGE_ID})
 
     assert not results["notion_shared_content"].applicable
     content = results["notion_page_content"]
@@ -380,7 +381,7 @@ def test_page_content_is_incomplete_when_the_root_page_has_no_blocks() -> None:
     gateway = _gateway(pages=[])
     gateway.get_block_children.side_effect = _api_error(404, "object_not_found")
 
-    result = _run("notion_page_content", gateway, {"root_page_id": "root"})
+    result = _run("notion_page_content", gateway, {"root_page_id": _ROOT_PAGE_ID})
 
     assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert result.error_kind == CheckErrorKind.INCONCLUSIVE

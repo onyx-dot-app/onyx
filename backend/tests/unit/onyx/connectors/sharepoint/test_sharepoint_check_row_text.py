@@ -27,6 +27,7 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_group_sync_checks,
     build_sharepoint_indexing_checks,
 )
+from onyx.connectors.sharepoint.config import SITE_URL_FORMAT_ERROR
 from onyx.connectors.sharepoint.models import SitePagesPage
 from tests.unit.onyx.connectors.sharepoint.test_sharepoint_perm_sync_checks import (
     ITEM_JSON,
@@ -165,16 +166,19 @@ def test_the_group_listing_names_the_group() -> None:
 # --- Find selected sites ---
 
 
-def test_a_site_url_without_a_site_path_names_the_url() -> None:
+def test_a_site_url_without_a_site_path_fails_as_a_setting() -> None:
+    gateway = _healthy()
+
     result = _run(
         "sharepoint_configured_sites",
-        _healthy(),
+        gateway,
         _config(sites=["https://contoso.sharepoint.com/eng"]),
     )
 
     assert result.status == CapabilityCheckStatus.FAILED
-    assert result.summary is not None
-    assert result.summary.startswith("Not a site URL: ")
+    assert result.error_kind == CheckErrorKind.INVALID
+    assert f"sites: {SITE_URL_FORMAT_ERROR}" in result.message
+    gateway.get_site_id.assert_not_called()
 
 
 def test_a_site_on_another_tenant_says_so() -> None:

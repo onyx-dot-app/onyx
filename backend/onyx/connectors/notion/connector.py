@@ -1,9 +1,7 @@
-import re
 from collections.abc import Generator
 from datetime import datetime
 from itertools import islice
 from typing import Any, cast
-from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel
 from typing_extensions import override
@@ -37,6 +35,7 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
+from onyx.connectors.notion.config import page_id_from_url
 from onyx.connectors.notion.models import NotionSearchObjectType
 from onyx.connectors.notion.source_operations import (
     NotionApiError,
@@ -189,46 +188,9 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
     @override
     def normalize_url(cls, url: str) -> NormalizationResult:
         """Normalize a Notion URL to extract the page ID (UUID format)."""
-        parsed = urlparse(url)
-        netloc = parsed.netloc.lower()
-
-        if not (
-            "notion.so" in netloc
-            or "notion.site" in netloc
-            or "app.notion.com" in netloc
-        ):
-            return NormalizationResult(normalized_url=None, use_default=False)
-
-        # Extract page ID from path (format: "Title-PageID")
-        path_last = parsed.path.split("/")[-1]
-        candidate = path_last.split("-")[-1] if "-" in path_last else path_last
-
-        # Clean and format as UUID
-        candidate = re.sub(r"[^0-9a-fA-F-]", "", candidate)
-        cleaned = candidate.replace("-", "")
-
-        if len(cleaned) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", cleaned):
-            normalized_uuid = (
-                f"{cleaned[0:8]}-{cleaned[8:12]}-{cleaned[12:16]}-{cleaned[16:20]}-{cleaned[20:]}"
-            ).lower()
-            return NormalizationResult(
-                normalized_url=normalized_uuid, use_default=False
-            )
-
-        # Try query params
-        params = parse_qs(parsed.query)
-        for key in ("p", "page_id"):
-            if key in params and params[key]:
-                candidate = params[key][0].replace("-", "")
-                if len(candidate) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", candidate):
-                    normalized_uuid = (
-                        f"{candidate[0:8]}-{candidate[8:12]}-{candidate[12:16]}-{candidate[16:20]}-{candidate[20:]}"
-                    ).lower()
-                    return NormalizationResult(
-                        normalized_url=normalized_uuid, use_default=False
-                    )
-
-        return NormalizationResult(normalized_url=None, use_default=False)
+        return NormalizationResult(
+            normalized_url=page_id_from_url(url), use_default=False
+        )
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_child_blocks(

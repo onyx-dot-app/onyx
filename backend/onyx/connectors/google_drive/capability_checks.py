@@ -1128,15 +1128,6 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
         config: GoogleDriveConnectorConfig = self.config(context)
         ops: GoogleDriveSourceOperations = _gateway(context)
         requested: list[str] = extract_str_list_from_comma_str(config.my_drive_emails)
-        if not requested:
-            raise ConnectorValidationError(
-                "My Drive emails holds no email.",
-                summary="My Drive Emails has no email",
-                description=(
-                    "My Drive Emails holds only commas or spaces.\nEnter at least "
-                    "one email in My Drive Emails, or clear the field."
-                ),
-            )
         with _google_errors(
             context,
             api=_ADMIN_API,

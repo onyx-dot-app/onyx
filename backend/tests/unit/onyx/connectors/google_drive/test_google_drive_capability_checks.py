@@ -12,6 +12,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
     CheckFindingKey,
     CountFinding,
     FindingOption,
@@ -21,6 +22,7 @@ from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_indexing_checks,
 )
+from onyx.connectors.google_drive.config import MY_DRIVE_EMAILS_EMPTY_ERROR
 from onyx.connectors.google_drive.connector import (
     extract_ids_from_urls,
     extract_str_list_from_comma_str,
@@ -449,6 +451,17 @@ def test_my_drive_alias_is_reported_as_skipped() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert f"alias@{_DOMAIN}" in result.message
+
+
+def test_my_drive_emails_without_an_email_fail_as_a_setting() -> None:
+    ops = _ops()
+
+    result = _run("google_drive_configured_my_drives", ops, {"my_drive_emails": ","})
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_kind == CheckErrorKind.INVALID
+    assert f"my_drive_emails: {MY_DRIVE_EMAILS_EMPTY_ERROR}" in result.message
+    ops.list_user_emails.assert_not_called()
 
 
 def test_my_drive_of_a_listed_user_passes() -> None:

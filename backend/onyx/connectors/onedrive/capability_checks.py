@@ -168,36 +168,15 @@ def _raise_row(message: str, row: MicrosoftRowText) -> NoReturn:
     )
 
 
-def _is_invalid_entry(user: str) -> bool:
-    if not user.strip():
-        return False
-    try:
-        normalize_configured_users([user])
-    except ConnectorValidationError:
-        return True
-    return False
-
-
 def _configured_users(context: CapabilityCheckContext) -> list[str]:
-    """The Users entries, normalized as indexing reads them. An entry that is
-    not an email, or a list of blanks, fails with its row."""
+    """The Users entries, normalized as indexing reads them. A list of blanks
+    fails with its row; the config model rejects an entry that is not an
+    email."""
     users: list[str] = _config(context).users or []
     try:
         return normalize_configured_users(users)
     except ConnectorValidationError as error:
-        if not any(user.strip() for user in users):
-            _raise_row(error.message, _BLANK_USERS_ROW)
-        entry: str = next(
-            (user.strip() for user in users if _is_invalid_entry(user)), ""
-        )
-        _raise_row(
-            error.message,
-            _row(
-                _line("Not an email address: ", entry),
-                "Each entry in Users must be a user principal name or primary "
-                "email address.",
-            ),
-        )
+        _raise_row(error.message, _BLANK_USERS_ROW)
 
 
 def _candidate_users(

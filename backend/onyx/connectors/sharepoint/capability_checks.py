@@ -100,7 +100,6 @@ from onyx.connectors.sharepoint.connector import (
 )
 from onyx.connectors.sharepoint.connector_utils import (
     SiteUrlBlockedError,
-    SiteUrlFormatError,
     SiteUrlHostError,
     tenant_domain_from_site_urls,
     validate_content_types,
@@ -967,23 +966,14 @@ def _site_problem(error: MicrosoftGraphError, site_url: str) -> _SiteProblem:
 def _validate_site_urls(
     site_urls: list[str], environment: MicrosoftGraphEnvironment
 ) -> None:
-    """Each URL is a full site URL, safe to request, on the first URL's
-    tenant host: the rules indexing applies."""
+    """Each URL is safe to request and on the first URL's tenant host: the
+    rules indexing applies. The config model checks the URL format."""
     tenant_domain: str | None = tenant_domain_from_site_urls(site_urls)
     for site_url in site_urls:
         try:
             connector_utils.validate_site_url(
                 site_url, environment.sharepoint_domain_suffix, tenant_domain
             )
-        except SiteUrlFormatError as error:
-            raise ConnectorValidationError(
-                error.message,
-                summary=_line("Not a site URL: ", site_url or "(blank)"),
-                description=(
-                    "A site URL must start with https:// and contain /sites/, "
-                    "/teams/ or /personal/ followed by the site name."
-                ),
-            ) from error
         except SiteUrlBlockedError as error:
             raise ConnectorValidationError(
                 error.message,

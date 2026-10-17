@@ -15,6 +15,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import (
@@ -43,6 +44,7 @@ from onyx.connectors.sharepoint import connector_utils
 from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_indexing_checks,
 )
+from onyx.connectors.sharepoint.config import SITE_URL_FORMAT_ERROR
 from onyx.connectors.sharepoint.models import (
     SharepointDrive,
     SitePagesPage,
@@ -300,12 +302,14 @@ def test_configured_sites_check_is_skipped_without_sites() -> None:
 def test_a_blank_site_entry_fails_like_indexing() -> None:
     gateway: MagicMock = _gateway()
 
-    with pytest.raises(ConnectorValidationError, match="not a full"):
-        _run(
-            "sharepoint_configured_sites",
-            _context(gateway, _config(sites=["", SITE_URL])),
-        )
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["sharepoint_configured_sites"]],
+        _context(gateway, _config(sites=["", SITE_URL])),
+    )
 
+    assert result.status is CapabilityCheckStatus.FAILED
+    assert result.error_kind is CheckErrorKind.INVALID
+    assert f"sites: {SITE_URL_FORMAT_ERROR}" in result.message
     gateway.get_site_id.assert_not_called()
 
 
