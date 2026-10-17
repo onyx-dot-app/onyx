@@ -62,7 +62,7 @@
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.1",
     "eslint-config-prettier": "^10.1.8",
-    "jest-expo": "~57.0.4",
+    "jest-expo": "~57.0.5",
     "prettier": "3.9.6",
     "prettier-plugin-tailwindcss": "0.8.1",
     "react-test-renderer": "19.2.3",
