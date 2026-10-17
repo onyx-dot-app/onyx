@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -202,6 +203,7 @@ def _runs(
     mark: str,
     status_groups: list[CCPairRunStatusGroup] | None = None,
     errors: CCPairRunErrors | None = None,
+    superseded: bool | None = None,
 ) -> IndexingRunsResponse:
     return get_indexing_runs(
         page_num=0,
@@ -212,6 +214,8 @@ def _runs(
         status_groups=status_groups,
         q=mark,
         errors=errors,
+        superseded=superseded,
+        resolved=None,
         user=user,
         db_session=db_session,
     )
@@ -296,6 +300,54 @@ def test_a_shared_group_sync_logged_on_an_unreadable_pair_names_a_readable_one(
     assert named.source == DocumentSource.CONFLUENCE
     assert named.id != recorder.id
     assert named.id <= readable.id
+
+
+def test_a_shared_group_sync_on_a_sibling_pair_supersedes_a_failure(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "monitor_runs_admin", is_admin=True)
+    mark = _mark()
+    first = _create_cc_pair(
+        db_session, "Monitor Runs Confluence A", source=DocumentSource.CONFLUENCE
+    )
+    second = _create_cc_pair(
+        db_session, "Monitor Runs Confluence B", source=DocumentSource.CONFLUENCE
+    )
+    # After every group sync already in the database, an earlier run of this
+    # test included, so no other Confluence sync comes after these.
+    newest = db_session.scalar(
+        select(func.max(ExternalGroupPermissionSyncAttempt.time_created))
+    )
+    far = (
+        20_000_000 if newest is None else int((newest - _T0).total_seconds() // 60) + 60
+    )
+    old = _group_sync(db_session, first, far, PermissionSyncStatus.FAILED, mark)
+    new = _group_sync(db_session, second, far + 1, PermissionSyncStatus.FAILED, mark)
+    # A sibling's sync still in progress settles nothing yet.
+    running = _group_sync(
+        db_session, first, far + 2, PermissionSyncStatus.IN_PROGRESS, mark
+    )
+    failed = [CCPairRunStatusGroup.FAILED]
+
+    live = _runs(db_session, admin, mark, status_groups=failed, superseded=False)
+    closed = _runs(db_session, admin, mark, superseded=True)
+
+    assert [(item.run.kind, item.run.attempt.id) for item in live.items] == [
+        (CCPairRunKind.GROUP_SYNC, new.id)
+    ]
+    assert live.status_counts[CCPairRunStatusGroup.FAILED] == 1
+    assert [(item.run.kind, item.run.attempt.id) for item in closed.items] == [
+        (CCPairRunKind.GROUP_SYNC, old.id)
+    ]
+
+    running.status = PermissionSyncStatus.SUCCESS
+    db_session.commit()
+
+    live = _runs(db_session, admin, mark, status_groups=failed, superseded=False)
+    closed = _runs(db_session, admin, mark, superseded=True)
+
+    assert live.items == []
+    assert [item.run.attempt.id for item in closed.items] == [new.id, old.id]
 
 
 def test_a_creator_reads_their_private_pair_but_cannot_resolve_it(

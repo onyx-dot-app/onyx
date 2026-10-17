@@ -32,15 +32,23 @@ export interface ActivitiesCardProps {
 export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
   const t = useTranslations("admin.indexing.activities");
   const tActivity = useTranslations("admin.connector.activity");
-  const { resolving, resolve } = useResolveRunErrors();
+  const { resolving, resolve, resolveRun } = useResolveRunErrors();
   const failures = useActivityItems(
     "fleet",
     "failures",
+    false,
     "",
     true,
     RUNS_POLL_MS
   );
-  const errors = useActivityItems("fleet", "errors", "", true, RUNS_POLL_MS);
+  const errors = useActivityItems(
+    "fleet",
+    "errors",
+    false,
+    "",
+    true,
+    RUNS_POLL_MS
+  );
   const groups = [failures, errors];
   // Each feed is newest first, so one sort interleaves them.
   const items = useMemo(
@@ -136,10 +144,13 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
                   ccPairId={item.ccPairId}
                   run={item.run}
                   group={group}
+                  closed={false}
                   connector={item.connector}
                   canResolve={item.canResolve}
+                  canResolveRuns={item.canResolveRuns}
                   resolving={resolving}
                   onResolve={(errorIds) => void resolve(item, errorIds)}
+                  onResolveRun={() => void resolveRun(item)}
                 />
               ))}
             </Section>

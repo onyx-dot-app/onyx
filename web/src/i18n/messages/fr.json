@@ -2823,7 +2823,10 @@
         "targetedReindexFailed": "Échec de la réindexation ciblée : {message}",
         "targetedReindexSubmitted": "Réindexation ciblée envoyée pour {count, plural, one {# document} other {# documents}}. Les erreurs disparaîtront de la liste au fur et à mesure de la réindexation des documents.",
         "checkFrequencyUpdated": "Fréquence de vérification du connecteur mise à jour",
-        "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur"
+        "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur",
+        "runResolved": "Marqué comme résolu.",
+        "runResolveFailed": "Impossible de résoudre : {message}",
+        "runsResolved": "{count, plural, one {# exécution marquée comme résolue} other {# exécutions marquées comme résolues}}."
       },
       "backButton": {
         "label": "Tous les connecteurs"
@@ -3020,15 +3023,12 @@
           "all": "Tous les niveaux",
           "failures": "Échecs",
           "errors": "Erreurs",
-          "other": "Autres"
-        },
-        "resolved": {
-          "label": "Résolues"
+          "other": "Autres",
+          "resolved": "Résolu"
         },
         "groups": {
-          "failures": "{count, plural, one {# échec} other {# échecs}}",
-          "errors": "{count, plural, one {# erreur} other {# erreurs}}",
-          "resolved": "{count, plural, one {# résolue} other {# résolues}}",
+          "failures": "{count, plural, =0 {Échecs} one {# échec} other {# échecs}}",
+          "errors": "{count, plural, =0 {Erreurs} one {# erreur} other {# erreurs}}",
           "other": "Autres"
         },
         "title": {
@@ -3096,14 +3096,14 @@
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "doc_permission_sync": "{count, plural, one {# utilisateur non synchronisé} other {# utilisateurs non synchronisés}}",
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
-          "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
-          "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}"
+          "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
+          "resolved": "Résolu"
         },
         "more": "Afficher plus",
         "empty": {
           "title": "Aucun échec ni erreur",
-          "resolved": "Aucune erreur résolue",
+          "resolved": "Aucune exécution résolue",
           "filtered": "Rien ne correspond à cette recherche.",
           "failures": "Aucun échec",
           "errors": "Aucune erreur",
@@ -3132,6 +3132,13 @@
         },
         "actions": {
           "resolve": "Résoudre"
+        },
+        "resolveAll": {
+          "button": "Résoudre tout l’affichage",
+          "title": "Résoudre toutes les exécutions affichées ?",
+          "description": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel. Elles conservent leur statut et passent dans les éléments résolus.",
+          "fleetDescription": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel, sur les connecteurs que vous gérez. Elles conservent leur statut et passent dans les éléments résolus.",
+          "confirm": "Tout résoudre"
         }
       },
       "stageDetails": {
