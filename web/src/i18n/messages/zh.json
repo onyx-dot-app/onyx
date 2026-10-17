@@ -124,13 +124,7 @@
     },
     "addMcpModal": {
       "addHeader": {
-        "description": "连接 MCP（Model Context Protocol）服务器以添加自定义操作。",
         "title": "添加 MCP 服务器"
-      },
-      "authStatus": {
-        "apiTokenDescription": "已配置 API token",
-        "connectedDescription": "已连接",
-        "title": "已验证身份并连接"
       },
       "cancelButton": {
         "label": "取消"
@@ -140,16 +134,6 @@
         "suffix": "可选",
         "title": "描述"
       },
-      "disconnectButton": {
-        "tooltip": "断开服务器连接"
-      },
-      "editConfigsButton": {
-        "label": "连接设置"
-      },
-      "manageHeader": {
-        "description": "更新 MCP 服务器配置并管理身份验证。",
-        "title": "管理 MCP 服务器"
-      },
       "name": {
         "placeholder": "例如 Linear",
         "required": "必须填写服务器名称",
@@ -157,19 +141,13 @@
       },
       "serverUrl": {
         "invalid": "必须是有效的 URL",
-        "required": "必须填写服务器 URL",
         "title": "MCP 服务器 URL"
       },
       "submitButton": {
-        "addLabel": "添加服务器",
-        "addingLabel": "正在添加...",
         "saveLabel": "保存更改",
         "savingLabel": "正在保存..."
       },
       "toasts": {
-        "createFailed": "创建 MCP 服务器失败",
-        "serverCreated": "MCP 服务器创建成功",
-        "serverUpdated": "MCP 服务器更新成功",
         "updateFailed": "更新 MCP 服务器失败"
       },
       "access": {
@@ -192,27 +170,13 @@
         "planTag": "Business",
         "planNote": "用户组访问需要 Business 套餐。"
       },
-      "craft": {
-        "title": "在 Craft 中可用",
-        "description": "允许用户在 Craft 中访问此 MCP 服务器。"
-      },
       "defaultChat": {
-        "title": "在默认 Onyx 聊天中可用",
-        "description": "关闭后，用户需要将此服务器添加到自定义智能体才能在聊天中使用。"
+        "title": "在默认 Onyx 聊天中可用"
       }
     },
     "addOpenApiModal": {
       "addHeader": {
-        "description": "添加 OpenAPI 架构以添加自定义操作。",
         "title": "添加 OpenAPI 操作"
-      },
-      "authStatus": {
-        "configuredTitle": "已配置身份验证",
-        "enabledTitle": "已验证身份并启用",
-        "headersDescription": "已配置自定义身份验证请求头",
-        "oauthDescription": "已配置 OAuth 身份验证",
-        "oauthNamedDescription": "已通过 {name} 连接 OAuth",
-        "passthroughDescription": "已启用透传身份验证"
       },
       "cancelButton": {
         "label": "取消"
@@ -227,15 +191,10 @@
         "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此操作一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 操作]({docsUrl})。",
         "title": "OpenAPI 架构定义"
       },
-      "disableButton": {
-        "tooltip": "禁用操作"
-      },
       "editConfigsButton": {
-        "disabledTooltip": "只有该操作的创建者或管理员才能管理身份验证",
-        "label": "编辑配置"
+        "disabledTooltip": "只有该操作的创建者或管理员才能管理身份验证"
       },
       "editHeader": {
-        "description": "更新此操作的 OpenAPI 架构。",
         "title": "编辑 OpenAPI 操作"
       },
       "empty": {
@@ -247,9 +206,6 @@
       },
       "method": {
         "noSummary": "未提供摘要"
-      },
-      "serverUrl": {
-        "description": "从架构中找到的 URL。只连接您信任的服务器。"
       },
       "submitButton": {
         "addLabel": "添加操作",
@@ -456,9 +412,6 @@
       }
     },
     "mcpCard": {
-      "card": {
-        "ariaLabel": "{title} MCP 服务器卡片"
-      },
       "deleteModal": {
         "body": {
           "confirmation": "确定要删除此 MCP 服务器吗？",
@@ -468,27 +421,6 @@
           "label": "删除"
         },
         "title": "删除 MCP 服务器"
-      },
-      "lastRefreshed": {
-        "label": "工具上次刷新时间：{time}"
-      },
-      "refreshToolsButton": {
-        "ariaLabel": "刷新工具",
-        "tooltip": "刷新工具"
-      },
-      "setupIncomplete": {
-        "label": "设置未完成。",
-        "actionHint": "设置未完成。点击完成设置。"
-      },
-      "status": {
-        "ready": "就绪 · {count, plural, one {# 个工具} other {# 个工具}}",
-        "incomplete": "设置未完成",
-        "loading": "正在加载工具",
-        "disconnected": "已断开连接"
-      },
-      "authenticationButton": {
-        "tooltip": "配置身份验证",
-        "ariaLabel": "配置 {serverName} 的身份验证"
       }
     },
     "mcpOauthCallback": {
@@ -550,25 +482,10 @@
       },
       "toasts": {
         "deleteFailed": "删除 MCP 服务器失败",
-        "disableAllFailed": "禁用所有工具失败",
         "disconnectFailed": "断开 MCP 服务器连接失败",
-        "enableAllFailed": "启用所有工具失败",
         "fetchToolsFailed": "获取工具失败：{error}",
-        "noToolsToDisable": "没有可禁用的工具",
         "reconnectFailed": "重新连接 MCP 服务器失败",
-        "refreshToolsFailed": "刷新工具失败",
-        "renameFailed": "重命名 MCP 服务器失败",
-        "serverDeleted": "MCP 服务器删除成功",
-        "serverDisconnected": "MCP 服务器已成功断开连接",
-        "serverReconnected": "MCP 服务器重新连接成功",
-        "serverRenamed": "MCP 服务器重命名成功",
-        "toolDisabled": "工具已成功禁用",
-        "toolEnabled": "工具已成功启用",
-        "toolUpdateFailed": "更新工具失败",
-        "toolsDisabled": "{count, plural, one {已成功禁用 # 个工具} other {已成功禁用 # 个工具}}",
-        "toolsEnabled": "{count, plural, one {已成功启用 # 个工具} other {已成功启用 # 个工具}}",
-        "toolsFetched": "工具已加载",
-        "toolsRefreshed": "工具刷新成功"
+        "serverDeleted": "MCP 服务器删除成功"
       }
     },
     "openApiAuthModal": {
@@ -704,27 +621,15 @@
       "addButton": {
         "label": "添加 OpenAPI 操作"
       },
-      "authModal": {
-        "authenticateTitle": "验证 {name} 的身份",
-        "defaultTitle": "验证 OpenAPI 操作的身份",
-        "updateTitle": "更新 {name} 的身份验证"
-      },
       "empty": {
         "description": "通过 OpenAPI 架构添加自定义操作。"
       },
       "toasts": {
-        "actionRenamed": "OpenAPI 操作重命名成功",
-        "authHeadersSaved": "{name} 的身份验证请求头保存成功。",
-        "authPassthroughSaved": "{name} 的身份验证透传保存成功。",
         "authSaveFailed": "保存身份验证设置失败。",
         "authSaved": "{name} 的身份验证保存成功。",
-        "authUpdated": "{name} 的身份验证更新成功。",
         "deleteFailed": "删除工具失败。",
-        "deleteUnexpectedError": "删除工具时发生意外错误。",
         "disconnectFailed": "断开 OpenAPI 操作连接失败。",
-        "renameFailed": "重命名 OpenAPI 操作失败",
-        "toolDeleted": "{name} 删除成功。",
-        "toolDisconnected": "{name} 已断开连接。"
+        "toolDeleted": "{name} 删除成功。"
       }
     },
     "perUserAuth": {
@@ -1023,15 +928,11 @@
       },
       "detail": {
         "connection": "连接",
-        "serverUrl": "服务器URL",
         "tools": "工具",
         "toolCount": "{count, plural, other {#个工具}}",
-        "toolsDescription": "此工作区插件提供的工具。",
         "noTools": "此插件尚未保存可见的工具。",
         "connect": "连接账户",
         "useInChat": "在聊天中使用",
-        "chatDisabled": "此插件尚未在主聊天中启用。工作区管理员可以更改其可用性。",
-        "chatUnknown": "无法确认主聊天中的可用性。",
         "disconnect": "断开账户连接",
         "disconnectTitle": "断开{name}的连接？",
         "disconnectDescription": "此操作将移除您的账户连接。工作区可用性保持不变。",
@@ -1152,19 +1053,14 @@
           "viewTools": "查看工具",
           "saveToUpdate": "保存更改以更新工具。"
         },
-        "reviewTitle": "检查 {name}",
         "createTitle": "添加 OpenAPI 插件",
         "detailDescription": "管理此 API 和智能体可用的工具。",
         "detailsTitle": "插件详情",
         "schemaTitle": "OpenAPI 架构",
-        "editSchema": "编辑架构",
         "notFound": "未找到插件",
         "loadFailed": "无法加载此插件",
         "unavailable": "此插件可能已被删除，或你没有访问权限。",
         "readOnly": "你可以查看此插件，但你的账户无法更改其设置。",
-        "disableTitle": "停用 {name}？",
-        "disableDescription": "智能体将无法再使用此插件。你可以重新启用它。",
-        "deleteTitle": "删除 {name}？",
         "deleteDescription": "这会永久删除 OpenAPI 插件及其配置。"
       },
       "title": "插件",
@@ -1291,12 +1187,8 @@
     },
     "mcpTools": {
       "title": "工具",
-      "description": "选择可用工具并设置其权限。",
       "enabledTab": "可用工具",
       "policiesTab": "Craft 权限",
-      "enabledDescription": "选择用户可以在 Onyx 中使用的工具。",
-      "policiesDescription": "选择 Craft 在使用各项工具前何时请求批准。",
-      "back": "身份验证",
       "refresh": "刷新工具",
       "loadError": "无法加载工具",
       "saveError": "无法保存工具设置",
@@ -1305,17 +1197,11 @@
     },
     "mcpDetail": {
       "configuration": "服务器配置",
-      "editConfiguration": "编辑服务器配置",
       "authentication": "身份验证",
-      "editAuthentication": "编辑身份验证",
-      "availability": "可用范围",
-      "edit": "编辑",
       "loadError": "无法加载 MCP 服务器",
       "notFound": "未找到 MCP 服务器",
       "unavailable": "此服务器可能已被删除，或者您没有访问权限。",
       "retry": "重试",
-      "restrictedAccess": "{groups, plural, one {# 个群组} other {# 个群组}} · {users, plural, one {# 位用户} other {# 位用户}}",
-      "authenticationIncomplete": "尚未配置身份验证。",
       "availabilitySaved": "可用范围已更新"
     }
   },
@@ -5814,24 +5700,11 @@
           "description": "添加应用，让组织中的所有人都可以使用。",
           "title": "暂无应用"
         },
-        "panel": {
-          "blurb": "为整个组织统一配置一次。编辑应用可设置共享凭证、操作策略和关联技能。"
-        },
         "tab": {
-          "label": "应用",
-          "labelWithCount": "应用 · {count, number}"
+          "label": "应用"
         }
       },
       "card": {
-        "actionsButton": {
-          "ariaLabel": "{name} 操作"
-        },
-        "availableInCraft": {
-          "label": "可在 Craft 中使用"
-        },
-        "customTag": {
-          "label": "自定义"
-        },
         "deleteAction": {
           "label": "删除"
         },
@@ -5841,34 +5714,12 @@
           "submit": {
             "label": "删除应用"
           },
-          "submitting": {
-            "label": "正在删除…"
-          },
           "title": "删除“{name}”？"
-        },
-        "editAction": {
-          "label": "编辑"
         },
         "toasts": {
           "deleteFailed": "删除“{name}”失败",
-          "disableFailed": "禁用“{name}”失败",
           "enableFailed": "启用“{name}”失败"
-        },
-        "toggle": {
-          "disableAriaLabel": "禁用 {name}",
-          "enableAriaLabel": "启用 {name}"
         }
-      },
-      "facts": {
-        "actions": "{count, plural, one {# 个操作} other {# 个操作}}",
-        "customSkills": "{count, plural, one {# 个自定义技能} other {# 个自定义技能}}",
-        "noCredentials": "无凭证",
-        "noCustomSkills": "无自定义技能",
-        "orgCredentialsSet": "已设置组织凭证",
-        "perUserCredentials": "按用户凭证",
-        "providedByOnyx": "由 Onyx 提供",
-        "tools": "{count, plural, one {# 个工具} other {# 个工具}}",
-        "upstreamPatterns": "{count, plural, one {# 个上游模式} other {# 个上游模式}}"
       },
       "loading": {
         "label": "正在加载…"
@@ -5876,33 +5727,16 @@
       "mcpServers": {
         "empty": {
           "description": "先在“操作”中连接服务器，然后在此处为您的组织启用它。",
-          "openActionsButton": {
-            "label": "打开操作"
-          },
           "title": "暂无 MCP 服务器"
         },
-        "manageInActionsButton": {
-          "label": "在操作中管理"
-        },
-        "panel": {
-          "blurb": "启用服务器后，有权访问它的成员即可在 Craft 中使用它的工具。编辑服务器可设置每个工具的审批策略。服务器连接和访问权限在“操作”中管理。"
-        },
         "tab": {
-          "label": "MCP 服务器",
-          "labelWithCount": "MCP 服务器 · {count, number}"
+          "label": "MCP 服务器"
         }
       },
       "page": {
-        "addAppButton": {
-          "label": "添加应用"
-        },
-        "backToCraftButton": {
-          "label": "返回 Craft"
-        },
         "description": "设置组织的 Craft 智能体可以使用的应用。每位成员在 Craft 的“应用”页面连接自己的账户。"
       },
       "warnings": {
-        "invalidSkill": "无效技能",
         "providerUnavailable": "提供商不可用"
       }
     },
@@ -14286,45 +14120,18 @@
         "title": "正在连接您的应用"
       },
       "page": {
-        "connectButton": "连接",
-        "connectingButton": "正在重定向…",
-        "disconnectButton": "断开连接",
         "empty": {
           "description": "您的组织尚未配置任何应用或 MCP 服务器。",
           "title": "暂无可连接的内容"
         },
-        "errors": {
-          "disconnectFailed": "断开连接失败",
-          "startAuthFailed": "无法启动授权"
-        },
         "header": {
           "description": "连接 Onyx Craft 在工作时可用作上下文的工具。",
-          "manageButton": "管理应用",
-          "searchPlaceholder": "搜索应用...",
           "title": "应用"
-        },
-        "kinds": {
-          "app": {
-            "blurb": "Onyx 直接支持的集成。每个都附带教 Craft 如何使用它的技能，从这里开始。",
-            "empty": "您的组织尚未配置任何应用。",
-            "emptyTitle": "暂无应用",
-            "tabLabel": "应用 · {count}"
-          },
-          "mcp": {
-            "blurb": "管理员已向 Craft 开放的服务器。如果服务器需要个人凭据，请先连接自己的账号，再使用其工具。",
-            "empty": "尚未向 Craft 开放任何 MCP 服务器。",
-            "emptyTitle": "暂无 MCP 服务器",
-            "tabLabel": "MCP 服务器 · {count}"
-          }
         },
         "loading": {
           "label": "正在加载…"
         },
         "reviewSkillsButton": "查看技能",
-        "search": {
-          "noMatchesDescription": "这里没有与您的搜索匹配的内容。",
-          "noMatchesTitle": "无匹配项"
-        },
         "status": {
           "connected": "已连接",
           "connectedNeedsSkills": "已连接 · 并非所有关联技能都已启用",
