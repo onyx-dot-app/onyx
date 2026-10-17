@@ -137,12 +137,6 @@ def test_indexing_checks_pass_on_the_test_organization(
         ),
         (
             {},
-            {"repositories": f"{_OWNER}/{_REPOSITORY}"},
-            "github_configured_repositories",
-            "without the owner",
-        ),
-        (
-            {},
             {"branch": "no-such-branch-7f3a"},
             "github_branch",
             "`no-such-branch-7f3a` does not exist",
@@ -158,7 +152,6 @@ def test_indexing_checks_pass_on_the_test_organization(
         "bad-token",
         "unknown-owner",
         "unknown-repository",
-        "owner-in-repository-name",
         "unknown-branch",
         "nothing-selected",
     ],

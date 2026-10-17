@@ -615,11 +615,6 @@ def _repository_problem(
             f"`{full_name}`: access denied (HTTP 403: {_detail(error)})."
             f"{_accepted_access(error)}"
         )
-    if "/" in name:
-        return (
-            f"`{full_name}`: not found. Enter the repository name without the "
-            "owner (e.g. `onyx`, not `onyx-dot-app/onyx`)"
-        )
     cause: str = (
         "the classic token has no `repo` scope, which private repositories need"
         if _lacks_private_scope(token)
@@ -653,11 +648,6 @@ def _names(names: list[str]) -> str:
 def _not_found_line(names: list[str], token: GitHubTokenInfo | None) -> str:
     """The line after a not-found description: the names, and the likely
     cause."""
-    if any("/" in name for name in names):
-        return (
-            f"Not found: {_names(names)}. Enter each name without the owner "
-            "(onyx, not onyx-dot-app/onyx)."
-        )
     if _lacks_private_scope(token):
         return f"Not found: {_names(names)}. Select the repo scope."
     return f"Not found: {_names(names)}. Check each name and the token's access."

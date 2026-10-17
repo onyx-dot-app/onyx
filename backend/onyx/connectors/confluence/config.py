@@ -3,16 +3,20 @@ from enum import Enum
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
+from pydantic import field_validator
+
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
     CONFLUENCE_TIMEZONE_OFFSET,
     CONTINUE_ON_CONNECTOR_FAILURE,
     INDEX_BATCH_SIZE,
 )
+from onyx.connectors.atlassian_query import has_last_modified_filter, has_order_by
 from onyx.connectors.connector_config import (
     ConnectorConfig,
     CredentialBinding,
     HierarchyBreakdownSection,
+    field_format_error,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.field_policy import (
@@ -37,6 +41,12 @@ _INDEX_RECURSIVELY = "index_recursively"
 _CQL_QUERY = "cql_query"
 _LABELS_TO_SKIP = "labels_to_skip"
 _INDEXING_SCOPE_FIELDS = (_SPACE, _PAGE_ID, _INDEX_RECURSIVELY, _CQL_QUERY)
+
+PAGE_ID_FORMAT_ERROR = "Enter the number from the page URL, e.g. 131368."
+CQL_LAST_MODIFIED_ERROR = "Unsupported filter: lastModified. Each sync adds its own."
+CQL_ORDER_BY_ERROR = (
+    "Unsupported clause: ORDER BY. Each sync orders the results itself."
+)
 
 # Confluence document_id is the page URL. Reindex inputs come from
 # IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
@@ -148,6 +158,27 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
     include_attachments: Annotated[
         bool, FieldPolicy(FieldClass.SCOPE, scope=ScopeToggle(widens_when=True))
     ] = True
+
+    @field_validator(_PAGE_ID)
+    @classmethod
+    def _page_id_is_a_number(cls, value: str) -> str:
+        page_id = value.strip()
+        if page_id and not page_id.isdigit():
+            raise field_format_error(PAGE_ID_FORMAT_ERROR)
+        return value
+
+    # Each sync adds a lastModified filter and ORDER BY to the query, and a
+    # second copy conflicts with them.
+    @field_validator(_CQL_QUERY)
+    @classmethod
+    def _cql_has_no_sync_clauses(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if has_last_modified_filter(value):
+            raise field_format_error(CQL_LAST_MODIFIED_ERROR)
+        if has_order_by(value):
+            raise field_format_error(CQL_ORDER_BY_ERROR)
+        return value
 
     def indexing_mode(self) -> ConfluenceIndexingMode:
         return get_indexing_mode(

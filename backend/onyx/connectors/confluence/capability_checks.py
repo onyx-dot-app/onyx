@@ -22,7 +22,6 @@ API tokens and personal access tokens act as their user, so they need that
 user's Confluence permissions.
 """
 
-import re
 from collections.abc import Iterator
 from typing import Any, NoReturn, TypeVar
 from urllib.parse import urlparse
@@ -114,11 +113,6 @@ _CONFLUENCE_USERNAME_KEY = "confluence_username"
 # Results of the CQL query whose content types the CQL check inspects.
 _CQL_SAMPLE_RESULTS = 5
 _PAGE_TYPE = "page"
-
-_LAST_MODIFIED_PATTERN = re.compile(r"\blastmodified\b", re.IGNORECASE)
-_ORDER_BY_PATTERN = re.compile(r"\border\s+by\b", re.IGNORECASE)
-# A quoted CQL value; a backslash escapes the next character.
-_QUOTED_PATTERN = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'")
 
 
 def _gateway(context: CapabilityCheckContext) -> ConfluenceSourceOperations:
@@ -726,13 +720,6 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         page_id = config.page_id.strip()
-        if not page_id.isdigit():
-            raise ConnectorValidationError(
-                f"The page ID `{page_id}` is not a number. Use the number after "
-                "/pages/ in the page URL, e.g. `131368`.",
-                summary=f"No page with ID {page_id}",
-                description="Enter the number from the page URL, e.g. 131368.",
-            )
         try:
             page = next(
                 _gateway(context).search_pages(
@@ -779,32 +766,6 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
         return CheckOutput(summary=f"Found page {page.get('title') or page_id}")
 
 
-def _validate_cql_shape(cql: str) -> None:
-    """Rejects a lastModified filter and ORDER BY outside quoted values. Onyx
-    adds both to the query, and the two copies conflict."""
-    unquoted = _QUOTED_PATTERN.sub('""', cql)
-    if _LAST_MODIFIED_PATTERN.search(unquoted):
-        raise ConnectorValidationError(
-            "Remove the lastModified filter from the CQL query. Onyx adds its "
-            "own lastModified filter on each poll, and the two conflict.",
-            summary="Unsupported filter: lastModified",
-            description=(
-                "The connector adds its own lastModified filter on each poll, "
-                "and the two conflict."
-            ),
-        )
-    if _ORDER_BY_PATTERN.search(unquoted):
-        raise ConnectorValidationError(
-            "Remove ORDER BY from the CQL query. Onyx adds filters after the "
-            "query and orders the results itself.",
-            summary="Unsupported clause: ORDER BY",
-            description=(
-                "The connector adds filters after the query and sorts the "
-                "results itself."
-            ),
-        )
-
-
 class _CqlQueryCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
@@ -822,7 +783,6 @@ class _CqlQueryCheck(_ConfluenceCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
-        _validate_cql_shape((config.cql_query or "").strip())
         try:
             # The query the indexing run sends, with its label filter.
             results = _take(

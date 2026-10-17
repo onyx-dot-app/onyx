@@ -17,7 +17,6 @@ then everything. A blank mode field means "not this mode", so the mode checks
 use ``applies`` instead of ``requires_fields``.
 """
 
-import re
 import time
 from typing import Any, NoReturn
 from urllib.parse import urlparse
@@ -76,9 +75,6 @@ _SCOPE_MISMATCH_TEXT = "scope does not match"
 _TENANT_INFO_PATH = "/_edge/tenant_info"
 _RATE_LIMITED_STATUS = 429
 
-_ORDER_BY_PATTERN = re.compile(r"\border\s+by\b", re.IGNORECASE)
-# A quoted JQL value; a backslash escapes the next character.
-_QUOTED_PATTERN = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'")
 
 _INDEXING_SCOPE = "read:jira-work"
 _BROWSE_NEED = "Browse Projects on the projects to index"
@@ -609,23 +605,6 @@ class _ConfiguredProjectCheck(_JiraCheck):
         ) from error
 
 
-def _validate_jql_shape(jql: str) -> None:
-    """Rejects ORDER BY outside quoted values. The connector wraps the query in
-    parentheses and adds a time filter, so ORDER BY makes it invalid."""
-    unquoted: str = _QUOTED_PATTERN.sub('""', jql)
-    if _ORDER_BY_PATTERN.search(unquoted):
-        raise ConnectorValidationError(
-            "Remove ORDER BY from the JQL query. Onyx wraps the query in "
-            "parentheses and adds its own time filter, and Jira rejects ORDER BY "
-            "inside parentheses.",
-            summary="Unsupported clause: ORDER BY",
-            description=(
-                "The connector adds its own time filter around the query, and "
-                "Jira rejects ORDER BY there."
-            ),
-        )
-
-
 def _search_one_issue(gateway: JiraSourceOperations, jql: str) -> dict[str, Any] | None:
     """The first issue the query matches, with all fields, read through the
     API family the connector uses. Raises ``JiraApiError``."""
@@ -659,7 +638,6 @@ class _JqlQueryCheck(_JiraCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        _validate_jql_shape(_jql(config))
         try:
             issue: dict[str, Any] | None = _search_one_issue(
                 _gateway(context), _scope_jql(config)
