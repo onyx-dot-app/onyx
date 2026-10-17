@@ -26,12 +26,13 @@ def resolve_runs__no_commit(
     db_session: Session,
     runs: dict[tuple[CCPairRunKind, int], int],
     user_id: UUID | None,
-) -> None:
-    """Marks each (kind, id) resolved against the pair it maps to. A run
-    resolved before keeps its first resolution. ``user_id`` None is the system."""
+) -> int:
+    """Marks each (kind, id) resolved against the pair it maps to and returns
+    how many it marked. A run resolved before keeps its first resolution and is
+    not counted. ``user_id`` None is the system."""
     if not runs:
-        return
-    db_session.execute(
+        return 0
+    stmt = (
         insert(CCPairRunResolution)
         .values(
             [
@@ -45,7 +46,9 @@ def resolve_runs__no_commit(
             ]
         )
         .on_conflict_do_nothing(index_elements=["run_kind", "attempt_id"])
+        .returning(CCPairRunResolution.attempt_id)
     )
+    return len(db_session.scalars(stmt).all())
 
 
 def get_resolution_times(

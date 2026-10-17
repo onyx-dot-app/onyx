@@ -2347,8 +2347,8 @@
         "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind.",
         "checkFrequencyUpdated": "Prüfintervall des Connectors erfolgreich aktualisiert",
         "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
-        "runResolved": "Als gelöst markiert.",
-        "runResolveFailed": "Konnte nicht als gelöst markiert werden: {message}",
+        "runResolved": "Als behoben markiert.",
+        "runResolveFailed": "Konnte nicht als behoben markiert werden: {message}",
         "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert."
       },
       "backButton": {

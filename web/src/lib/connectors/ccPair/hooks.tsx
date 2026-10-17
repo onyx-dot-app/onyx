@@ -115,10 +115,8 @@ interface ActivityGroupQuery {
 
 const NOT_FAILED: CCPairRunStatusGroup[] = ["running", "succeeded", "canceled"];
 
-/** How each level narrows the runs feed, for its open runs and its closed ones. */
-// A closed failure was resolved or followed by a newer run of its kind. A
-// closed error run was resolved or had all its document errors resolved.
-// Nothing in "other" is open, so it has no closed runs.
+/** How each level narrows the runs feed, for its open runs and its closed ones: a closed failure was resolved or followed by a newer run of its kind, a closed
+ * error run was resolved or had all its document errors resolved, and nothing in "other" is open, so it has no closed runs. */
 const ACTIVITY_GROUP_QUERY = {
   failures: {
     open: {
@@ -429,7 +427,7 @@ export function useResolveRunErrors() {
     }
   }
 
-  // Marks the run resolved without re-fetching anything: it keeps its status.
+  // Marks the run resolved without a targeted reindex: it keeps its status.
   async function resolveRun(item: ActivityItem) {
     if (resolving) return;
     setResolving(true);

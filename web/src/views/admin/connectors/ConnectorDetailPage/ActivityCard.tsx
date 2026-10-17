@@ -39,7 +39,6 @@ import {
   RUN_KIND_ICONS,
   RUN_TIME_FORMAT,
   isActive,
-  isFailed,
   runErrorMessage,
   runMinutes,
   runMoved,
@@ -177,8 +176,7 @@ export default function ActivityCard({
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
-  // A failure a newer run superseded still explains itself.
-  if (isFailed(run)) {
+  if (group === "failures") {
     description =
       runErrorMessage(run) ??
       (listsChecks ? t("description.checksFailed", { count: warnings }) : null);

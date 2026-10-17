@@ -260,10 +260,10 @@ export default function ActivityPanel({
     (group) => group.loaded && group.runs.length === 0
   );
   // Resolves the open runs of the one level shown, as the search narrows them.
-  const resolvableLevel =
-    shown === "failures" ? failures : shown === "errors" ? errors : null;
   const resolveAllLevel: CCPairRunLevel | null =
     shown === "failures" || shown === "errors" ? shown : null;
+  const resolvableLevel =
+    resolveAllLevel === null ? null : { failures, errors }[resolveAllLevel];
   const resolvable = useResolvableRunsCount(
     scope,
     scope === "fleet" || scope.canResolveRuns ? resolveAllLevel : null,
