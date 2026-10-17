@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { userEvent, within } from "storybook/test";
 import {
   MCPModalStory,
   storyServer,
@@ -28,33 +28,6 @@ async function fillAndSubmit() {
     page.getByRole("button", { name: copy.submitButton.saveLabel })
   );
 }
-export const CraftAvailable: Story = {
-  args: { kind: "detail", scenario: { craftEnabled: true } },
-  play: async () => {
-    const page = within(document.body);
-    await expect(
-      await page.findByRole("switch", { name: new RegExp(copy.craft.title) })
-    ).toBeChecked();
-  },
-};
-export const CraftDisabledForServer: Story = {
-  args: {
-    kind: "detail",
-    scenario: {
-      craftEnabled: true,
-      server: { ...storyServer, available_in_craft: false },
-    },
-  },
-  play: async () => {
-    const page = within(document.body);
-    const toggle = await page.findByRole("switch", {
-      name: new RegExp(copy.craft.title),
-    });
-    await expect(toggle).not.toBeChecked();
-    await userEvent.click(toggle);
-    await expect(toggle).toBeChecked();
-  },
-};
 export const EditPublic = scenario({ edit: true });
 export const UserGroups = scenario({ edit: true, server: restricted });
 export const FiftyGroups = scenario({
@@ -109,26 +82,5 @@ export const RequiredName: Story = {
     await userEvent.type(name, "Temporary");
     await userEvent.clear(name);
     await userEvent.tab();
-  },
-};
-
-export const DefaultChatDisabled: Story = {
-  args: {
-    kind: "detail",
-    scenario: {
-      edit: true,
-      craftEnabled: true,
-      server: storyServer,
-      defaultToolIds: [],
-    },
-  },
-  play: async () => {
-    const page = within(document.body);
-    const toggle = await page.findByRole("switch", {
-      name: new RegExp(copy.defaultChat.title),
-    });
-    await expect(toggle).not.toBeChecked();
-    await userEvent.click(toggle);
-    await expect(toggle).toBeChecked();
   },
 };

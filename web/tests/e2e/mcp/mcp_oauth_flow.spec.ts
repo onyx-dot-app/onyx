@@ -216,7 +216,7 @@ test.describe("MCP OAuth flows", () => {
       adminClient,
       curatorCredentials.email
     );
-    curatorGroupName = `Playwright Curator Group ${Date.now()}`;
+    curatorGroupName = `Playwright Curator (QA+) ${Date.now()}`;
     curatorGroupId = await adminClient.createUserGroup(curatorGroupName, [
       curatorRecord.id,
     ]);

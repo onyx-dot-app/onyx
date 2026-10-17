@@ -75,8 +75,6 @@ A changed URL clears authentication for the previous destination. Explicit OAuth
 
 | State                  | Preview                                                                                               |
 | ---------------------- | ----------------------------------------------------------------------------------------------------- |
-| CraftAvailable         | [Open](http://localhost:6006/?path=/story/apps-actions-mcp-server-details--craft-available)           |
-| CraftDisabledForServer | [Open](http://localhost:6006/?path=/story/apps-actions-mcp-server-details--craft-disabled-for-server) |
 | EditPublic             | [Open](http://localhost:6006/?path=/story/apps-actions-mcp-server-details--edit-public)               |
 | UserGroups             | [Open](http://localhost:6006/?path=/story/apps-actions-mcp-server-details--user-groups)               |
 | FiftyGroups            | [Open](http://localhost:6006/?path=/story/apps-actions-mcp-server-details--fifty-groups)              |
@@ -126,7 +124,7 @@ A changed URL clears authentication for the previous destination. Explicit OAuth
 | UnsavedChanges | [Open](http://localhost:6006/?path=/story/apps-actions-mcp-tools--unsaved-changes) |
 
 The setup modal integration test checks successful completion and its saved server callback.
-The server-details **DefaultChatDisabled** story checks saving default-chat availability.
+The Plugins directory lifecycle menu owns workspace Chat and Craft availability controls.
 
 ## Server page
 

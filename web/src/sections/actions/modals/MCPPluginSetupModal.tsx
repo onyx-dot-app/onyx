@@ -484,10 +484,12 @@ function MCPSetupSession({
                                                     ? "mcpSetup.publicDetected"
                                                     : "mcpSetup.manualRequired"
                                               )
-                                            : checked.transport ===
-                                                MCPTransportType.SSE
-                                              ? "SSE"
-                                              : "Streamable HTTP"
+                                            : t(
+                                                checked.transport ===
+                                                  MCPTransportType.SSE
+                                                  ? "mcpAuthModal.transport.sseLabel"
+                                                  : "mcpAuthModal.transport.httpLabel"
+                                              )
                                           : t(
                                               state === "pending"
                                                 ? "mcpSetup.stagePending"
@@ -591,6 +593,7 @@ function MCPSetupSession({
                             canSubmit={
                               details.isValid &&
                               (details.values.is_public || canRestrict) &&
+                              !(defaultChat.canEdit && defaultChat.isLoading) &&
                               !(
                                 details.values.access_mode === "groups" &&
                                 (groupsLoading || !!groupsError)

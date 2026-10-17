@@ -52,7 +52,7 @@ function AuthorizedExternalAppDetail({ appId }: ExternalAppPluginDetailProps) {
     errorHandlingFetcher
   );
   function close() {
-    router.push(ADMIN_ROUTES.PLUGINS.path);
+    router.replace(ADMIN_ROUTES.PLUGINS.path, { scroll: false });
   }
   function saved() {
     void apps.mutate();

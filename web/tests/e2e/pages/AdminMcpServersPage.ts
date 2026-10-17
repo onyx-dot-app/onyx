@@ -102,7 +102,9 @@ export class AdminMcpServersPage {
     const search = this.page.getByPlaceholder("Add user groups");
     await search.fill(group);
     await this.page
-      .getByRole("option", { name: new RegExp(`^${group}`) })
+      .getByRole("option", {
+        name: new RegExp(`^${group.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+      })
       .click();
   }
 

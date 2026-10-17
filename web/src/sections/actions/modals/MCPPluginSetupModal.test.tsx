@@ -375,6 +375,47 @@ test("successful setup refreshes the current user's directory, Craft and compose
     expect(readCount(key)).toBe(2);
 });
 
+test("Connect waits for the editable default Chat configuration before creating a server", async () => {
+  const configuration = deferred<Response>();
+  const fetchSetup = jest.mocked(global.fetch).getMockImplementation();
+  jest.mocked(global.fetch).mockImplementation((input, init) => {
+    if (String(input) === "/api/admin/default-assistant/configuration")
+      return configuration.promise;
+    if (!fetchSetup) throw new Error("Missing setup network");
+    return fetchSetup(input, init);
+  });
+  toolsResponse = Promise.resolve(new Response(JSON.stringify([{ id: 81 }])));
+  render(<SetupModal />);
+  await openConnection();
+  const connect = screen.getByRole("button", { name: copy.connect });
+  expect(connect).toBeDisabled();
+  expect(writes).toEqual([]);
+  await act(async () => {
+    configuration.resolve(
+      new Response(JSON.stringify({ tool_ids: [], available_tools: [] }))
+    );
+  });
+  await waitFor(() => expect(connect).toBeEnabled());
+  await setupUser().click(connect);
+  await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
+});
+
+test.each([MCPTransportType.SSE, MCPTransportType.STREAMABLE_HTTP] as const)(
+  "shows the translated detected transport label for %s",
+  async (transport) => {
+    probeResponse = async () => ({ ...publicResult, transport });
+    render(<SetupModal />);
+    await enterUrl();
+    expect(
+      await screen.findByText(
+        transport === MCPTransportType.SSE
+          ? messages.actions.mcpAuthModal.transport.sseLabel
+          : messages.actions.mcpAuthModal.transport.httpLabel
+      )
+    ).toBeVisible();
+  }
+);
+
 test("missing Chat configuration cannot silently complete first setup", async () => {
   defaultChatFails = true;
   toolsResponse = Promise.resolve(new Response(JSON.stringify([{ id: 81 }])));

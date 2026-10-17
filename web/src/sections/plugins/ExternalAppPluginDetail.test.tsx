@@ -22,8 +22,9 @@ jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ onyx_craft_available: mockCraftAvailable }),
 }));
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   usePathname: () => "/admin/plugins/external-app/7",
 }));
 jest.mock("@/lib/permissions/hooks", () => ({
@@ -101,6 +102,7 @@ beforeEach(() => {
   mockFullAdmin = false;
   mockCraftAvailable = true;
   mockPush.mockClear();
+  mockReplace.mockClear();
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -176,7 +178,8 @@ test("closes the modal after app-list failure", async () => {
   expect(screen.getByRole("dialog", { name: "Craft Apps" })).toBeVisible();
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins");
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", { scroll: false });
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 test("keeps loading in a closable modal without requesting provider options before the app is known", async () => {
@@ -190,7 +193,7 @@ test("keeps loading in a closable modal without requesting provider options befo
   expect(network.mock.calls).toEqual([[SWR_KEYS.buildExternalAppsAdmin]]);
   const user = setupUser();
   await user.keyboard("{Escape}");
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins");
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", { scroll: false });
 });
 
 test("keeps a missing app in a closable modal without requesting provider options", async () => {
@@ -204,7 +207,7 @@ test("keeps a missing app in a closable modal without requesting provider option
   expect(network.mock.calls).toEqual([[SWR_KEYS.buildExternalAppsAdmin]]);
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins");
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", { scroll: false });
 });
 
 test("waits for built-in provider options inside the modal", async () => {
@@ -227,7 +230,7 @@ test("waits for built-in provider options inside the modal", async () => {
   expect(screen.getByRole("status", { name: "Loading" })).toBeVisible();
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins");
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", { scroll: false });
 });
 
 test("keeps an unavailable built-in provider in a closable modal", async () => {
@@ -247,7 +250,7 @@ test("keeps an unavailable built-in provider in a closable modal", async () => {
   expect(screen.getByRole("dialog", { name: "Craft Apps" })).toBeVisible();
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins");
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", { scroll: false });
 });
 
 test("retries both resources after built-in provider options fail", async () => {
@@ -301,7 +304,7 @@ test("reuses the custom editor for the selected ID and refreshes records after s
     ).toHaveLength(2)
   );
   await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins");
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", { scroll: false });
 });
 
 test.each([

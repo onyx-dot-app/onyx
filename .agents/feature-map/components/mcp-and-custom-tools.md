@@ -734,6 +734,8 @@ Craft deployment gates control Craft filters, editors, and creation choices.
 The directory preserves independent loading and retry states for each resource kind.
 
 MCP setup uses the credential-free probe before authentication and tool discovery.
+Setup waits for an editable default Chat configuration to finish loading before Connect.
+Failed configuration loads remain visible setup errors. Detected transports use translated labels.
 Saved MCP details separate configuration, authentication, permissions, and tools.
 OpenAPI creation validates a schema before the final create operation.
 Saved OpenAPI details reuse schema and authentication forms, retain drafts across tabs,
@@ -749,3 +751,4 @@ OpenAPI workspace controls follow global tool status, independently of default C
 The confirmation retains saved settings and credentials. Cancellation makes no changes; failed writes permit retry.
 MCP confirmations retain separate main Chat and Craft effects.
 External-app editors retain managed-credential restrictions and existing policy behavior.
+Closing an external-app editor replaces its history entry, matching MCP and OpenAPI details.

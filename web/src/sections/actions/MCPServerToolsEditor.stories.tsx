@@ -116,7 +116,7 @@ export const SaveChanges: Story = {
       ).toBeDisabled()
     );
     await expect(toggle).not.toBeChecked();
-    await expect(page.queryByRole("dialog")).not.toBeInTheDocument();
+    await expect(page.getByRole("dialog")).toBeVisible();
   },
 };
 export const SaveError: Story = {
