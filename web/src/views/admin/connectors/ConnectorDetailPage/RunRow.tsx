@@ -155,7 +155,12 @@ function syncRate(run: CCPairRun, now: number): number | null {
   if (started === null) return null;
   const minutes = (now - new Date(started).getTime()) / 60_000;
   if (minutes <= 0) return null;
-  return runMoved(run) / minutes;
+  // The rate counts memberships, the work done, while the card counts groups.
+  const moved =
+    run.kind === "group_sync"
+      ? run.attempt.total_group_memberships_synced
+      : runMoved(run);
+  return moved / minutes;
 }
 
 /** Rates print with two decimals, such as 24.23 docs/min. */

@@ -2309,7 +2309,7 @@
           "label": "已索引文档"
         },
         "indexingSpeed": "{speed} 文档/分钟",
-        "indexingSpeedTooltip": "此连接器所有索引运行的平均速率",
+        "indexingSpeedTooltip": "自创建连接器以来每分钟索引的文档数",
         "lastIndexed": {
           "value": "上次索引 {when}"
         },

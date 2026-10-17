@@ -2309,7 +2309,7 @@
           "label": "مستندات مفهرسة"
         },
         "indexingSpeed": "{speed} مستند/دقيقة",
-        "indexingSpeedTooltip": "متوسط المعدل عبر جميع عمليات الفهرسة لهذا الموصل",
+        "indexingSpeedTooltip": "المستندات المفهرسة في الدقيقة منذ إنشاء الموصل",
         "lastIndexed": {
           "value": "آخر فهرسة {when}"
         },

@@ -156,7 +156,7 @@ function FailedDocRow({
         <Section
           width="fit"
           height="fit"
-          className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100"
+          className="opacity-0 no-hover:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100"
         >
           <Button
             icon={SvgCheckSquare}

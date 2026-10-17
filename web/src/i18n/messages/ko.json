@@ -2309,7 +2309,7 @@
           "label": "인덱싱 완료 문서"
         },
         "indexingSpeed": "분당 {speed}개 문서",
-        "indexingSpeedTooltip": "이 커넥터의 모든 인덱싱 실행에 대한 평균 속도",
+        "indexingSpeedTooltip": "커넥터 생성 이후 분당 인덱싱된 문서 수",
         "lastIndexed": {
           "value": "마지막 인덱싱 {when}"
         },

@@ -244,7 +244,8 @@ export default function ActivityCard({
       height="fit"
       className={cn(
         "rounded-08 -outline-offset-1",
-        (hovered || selected) && `outline-1 outline-solid ${style.outline}`
+        (hovered || selected) && "outline-1 outline-solid",
+        (hovered || selected) && style.outline
       )}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}

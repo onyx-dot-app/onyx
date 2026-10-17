@@ -2309,7 +2309,7 @@
           "label": "インデックス済みドキュメント"
         },
         "indexingSpeed": "{speed} 件/分",
-        "indexingSpeedTooltip": "このコネクタのすべてのインデックス実行における平均速度",
+        "indexingSpeedTooltip": "コネクター作成以降の1分あたりのインデックス済みドキュメント数",
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },

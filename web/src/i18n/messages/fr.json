@@ -2309,7 +2309,7 @@
           "label": "Documents dans l'index"
         },
         "indexingSpeed": "{speed} docs/min",
-        "indexingSpeedTooltip": "Débit moyen sur l'ensemble des exécutions d'indexation de ce connecteur",
+        "indexingSpeedTooltip": "Documents indexés par minute depuis la création du connecteur",
         "lastIndexed": {
           "value": "Dernière indexation {when}"
         },
