@@ -175,6 +175,7 @@ export class McpOAuthFlow {
     value: string
   ): Promise<boolean> {
     for (const selector of selectors) {
+      if (!this.isOnIdpHost(this.page.url())) return false;
       const locator = this.page.locator(selector).first();
       if ((await locator.count()) === 0) continue;
       let visible = await locator.isVisible().catch(() => false);
@@ -340,7 +341,8 @@ export class McpOAuthFlow {
       const clickedSubmit = await this.clickFirstVisible(submitSelectors, {
         optional: true,
       });
-      if (!clickedSubmit) {
+      // A submit can land back on the app; a stray Enter there acts on app controls.
+      if (!clickedSubmit && this.isOnIdpHost(this.page.url())) {
         const passwordLocator = this.page
           .locator(passwordSelectorString)
           .first();
