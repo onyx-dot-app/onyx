@@ -268,7 +268,7 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
     <Dropdown>
       <Dropdown.Trigger asChild>
         {selection === null || onClearSelection === undefined ? (
-          <OpenButton icon={SvgClock} state="filled">
+          <OpenButton icon={SvgClock} state="empty">
             {tWindow(windowLabelKey(value))}
           </OpenButton>
         ) : (
