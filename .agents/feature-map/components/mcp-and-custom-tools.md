@@ -163,6 +163,14 @@ The block follows the configured SSRF protection level
 (`ssrf.py:validate_mcp_outbound_url`). At `DISABLED`, private and loopback
 targets are allowed.
 
+Custom OpenAPI tools get their policy from
+`custom_tool.py:custom_tool_ssrf_params`, used at save time and at call time.
+Multi-tenant blocks private, loopback, and cloud metadata targets. Self-hosted
+allows private (RFC1918) targets at every level and allows loopback only at
+`DISABLED`. Cloud metadata is blocked at every level. `CustomTool.run`
+sends through `onyx/utils/url.py:ssrf_safe_request`, which resolves and pins
+the IP, has a `(10, 120)` second timeout, and does not follow redirects.
+
 ---
 
 ## 3. Data model
@@ -387,7 +395,8 @@ choice at server-creation time is what decides this, and it is visible on the
    `validate_openapi_schema` (`openapi_parsing.py`), which requires `info`,
    `openapi` (3.x), `paths`, exactly one `servers[].url`, and (via
    `openapi_to_method_specs`) a non-empty, unique `operationId` and a
-   `summary`/`description` per operation. **One `Tool` row is created for the
+   `summary`/`description` per operation. It also checks the server URL
+   against the SSRF policy without DNS (§2); a blocked URL gets a 400. **One `Tool` row is created for the
    whole schema**; it is not expanded into per-operation rows in the
    database.
 2. At turn time, `tool_constructor.py` calls
@@ -464,7 +473,8 @@ returned as a `ToolResponse` (never a raised exception, per
   that one tool call fails.
 
 `CustomTool.run` (`custom_tool.py`) only classifies HTTP `401`/`403` as an
-auth error (`CustomToolErrorInfo(is_auth_error=True, ...)`); any other status
+auth error (`CustomToolErrorInfo(is_auth_error=True, ...)`). A blocked
+destination or a 3xx redirect raises `ToolCallException`. Any other status
 code or exception surfaces as the raw response body or propagates up to
 `_safe_run_single_tool`'s generic exception handling
 (`[[tools-framework]]` §4.5 step 6).
