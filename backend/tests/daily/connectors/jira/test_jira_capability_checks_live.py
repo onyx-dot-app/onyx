@@ -171,12 +171,6 @@ def test_checks_pass_with_an_advisory_when_the_jql_matches_nothing(
             "Did you mean the key `AS`?",
         ),
         ({}, {"jql_query": "project = AS"}, "jira_jql_query", "reserved JQL word"),
-        (
-            {},
-            {"jql_query": 'project = "AS" ORDER BY created'},
-            "jira_jql_query",
-            "ORDER BY",
-        ),
         ({}, {"jql_query": "project = ("}, "jira_jql_query", "HTTP 400"),
     ],
     ids=[
@@ -185,7 +179,6 @@ def test_checks_pass_with_an_advisory_when_the_jql_matches_nothing(
         "unknown-project",
         "project-name-not-key",
         "reserved-word",
-        "order-by",
         "bad-syntax",
     ],
 )

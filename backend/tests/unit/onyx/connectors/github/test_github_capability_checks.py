@@ -9,12 +9,13 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.capability_checks import build_github_indexing_checks
-from onyx.connectors.github.config import GithubConnectorConfig
+from onyx.connectors.github.config import REPOSITORY_OWNER_ERROR, GithubConnectorConfig
 from onyx.connectors.github.connector import GithubConnector
 from onyx.connectors.github.models import (
     GitHubBranch,
@@ -373,16 +374,17 @@ def test_configured_repositories_name_fine_grained_repository_access() -> None:
     assert "repository access does not include it" in result.message
 
 
-def test_configured_repositories_reject_an_owner_in_the_name() -> None:
+def test_configured_repositories_with_an_owner_fail_as_a_setting() -> None:
     gateway = _gateway()
-    gateway.get_repository.side_effect = _api_error(404, "Not Found")
 
     result = _run(
         "github_configured_repositories", gateway, _config(repositories="acme/docs")
     )
 
     assert result.status == CapabilityCheckStatus.FAILED
-    assert "without the owner" in result.message
+    assert result.error_kind == CheckErrorKind.INVALID
+    assert f"repositories: {REPOSITORY_OWNER_ERROR}" in result.message
+    gateway.get_repository.assert_not_called()
 
 
 def test_configured_repositories_tell_apart_a_denial() -> None:
