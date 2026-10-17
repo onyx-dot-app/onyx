@@ -183,13 +183,18 @@ session boundaries.
 `construct_message_history` (`llm_loop.py`) produces this order:
 
 ```
-[system] [history before last user] [custom agent prompt] [context/project files]
-[forgotten-files notice] [last user message] [tool calls and responses] [reminder]
+[system] [user information] [history before last user] [custom agent prompt]
+[context/project files] [forgotten-files notice] [last user message]
+[tool calls and responses] [reminder]
 ```
 
 The reasoning behind each position is in `backend/onyx/chat/README.md` and in
 [[context-assembly]]. Two rules worth internalising:
 
+- The per-user block (name, email, directory profile, language, preferences,
+  memories) is its own SYSTEM message after the system prompt, so the system
+  prompt itself is identical for users sharing a base prompt, tool set and
+  date, and its cache entry is shared among them.
 - The custom agent prompt is a **user message**, not part of the system prompt, and
   it **moves** to sit just above the newest user message each turn. If
   `persona.replace_base_system_prompt` is set, agent instructions form the system
