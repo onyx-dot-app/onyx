@@ -223,6 +223,9 @@ class GitHubFileContent(BaseModel):
     # 1 MB, or a Git LFS pointer).
     content: bytes | None = None
     encoding: str | None = None
+    # The repository path and web URL GitHub reports for the content.
+    path: str | None = None
+    html_url: str | None = None
 
 
 class GitHubBranch(BaseModel):

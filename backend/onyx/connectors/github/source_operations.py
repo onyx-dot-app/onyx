@@ -626,6 +626,8 @@ class GitHubSourceOperations(SourceOperations):
             raise ValueError(f"Expected a file at {path}, got a directory")
         encoding: Any = data.get("encoding")
         content: Any = data.get("content")
+        response_path: Any = data.get("path")
+        html_url: Any = data.get("html_url")
         return GitHubFileContent(
             content=(
                 base64.b64decode(bytearray(content, "utf-8"))
@@ -633,6 +635,8 @@ class GitHubSourceOperations(SourceOperations):
                 else None
             ),
             encoding=encoding if isinstance(encoding, str) else None,
+            path=response_path if isinstance(response_path, str) else None,
+            html_url=html_url if isinstance(html_url, str) else None,
         )
 
     @source_operation(
