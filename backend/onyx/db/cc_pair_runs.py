@@ -621,19 +621,32 @@ def _id_and_pair_columns(
             return CapabilityCheckRun.id, ConnectorCredentialPair.id
 
 
+_SETTLED_GROUPS = frozenset(
+    group for group in CCPairRunStatusGroup if group is not CCPairRunStatusGroup.RUNNING
+)
+
+
+def _settled(run_filter: CCPairRunFilter, **update: object) -> CCPairRunFilter:
+    """The filter narrowed to runs that finished. A run still going can gain
+    failures after it is resolved, so it has nothing to resolve yet."""
+    groups = run_filter.status_groups
+    settled = _SETTLED_GROUPS if groups is None else set(groups) & _SETTLED_GROUPS
+    return run_filter.model_copy(update={**update, "status_groups": set(settled)})
+
+
 def get_resolvable_runs(
     db_session: Session,
     kinds: list[CCPairRunKind],
     run_filter: CCPairRunFilter,
     runs: list[tuple[CCPairRunKind, int]],
 ) -> dict[tuple[CCPairRunKind, int], int]:
-    """The runs among ``runs`` in the feed of ``kinds`` that failed or hold
-    open errors, each with the pair it ran on. Only those have something to
-    resolve."""
+    """The finished runs among ``runs`` in the feed of ``kinds`` that failed or
+    hold open errors, each with the pair it ran on. Only those have something
+    to resolve."""
     found: dict[tuple[CCPairRunKind, int], int] = {}
     open_items = (
         run_filter.model_copy(update={"status_groups": {CCPairRunStatusGroup.FAILED}}),
-        run_filter.model_copy(update={"errors": CCPairRunErrors.UNRESOLVED}),
+        _settled(run_filter, errors=CCPairRunErrors.UNRESOLVED),
     )
     for kind in kinds:
         ids = [run_id for run_kind, run_id in runs if run_kind == kind]
@@ -657,8 +670,9 @@ def count_matching_runs(
     """How many runs of ``kinds`` the filter keeps, which is what
     ``resolve_matching_runs__no_commit`` marks for the same filter."""
     total = 0
+    settled = _settled(run_filter)
     for kind in kinds:
-        matching = _runs_of_kind(kind, run_filter, True).subquery()
+        matching = _runs_of_kind(kind, settled, True).subquery()
         total += db_session.scalar(select(func.count()).select_from(matching)) or 0
     return total
 
@@ -673,9 +687,10 @@ def resolve_matching_runs__no_commit(
     SELECT per kind, and returns how many it marked per pair. A run resolved
     before keeps its first resolution and is not counted."""
     resolved: Counter[int] = Counter()
+    settled = _settled(run_filter)
     for kind in kinds:
         run_id, pair_id = _id_and_pair_columns(kind)
-        matching = _runs_of_kind(kind, run_filter, True).with_only_columns(
+        matching = _runs_of_kind(kind, settled, True).with_only_columns(
             literal(kind.value),
             run_id,
             pair_id,
