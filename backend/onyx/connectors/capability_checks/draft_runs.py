@@ -33,12 +33,14 @@ from onyx.connectors.capability_checks.findings_setting import (
     hide_findings_if_disabled,
 )
 from onyx.connectors.capability_checks.models import (
+    TRANSIENT_ERROR_KINDS,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CapabilityVerdict,
     CheckAdvisory,
+    CheckErrorKind,
     CheckFinding,
     CheckNotApplicableError,
     CredentialCapability,
@@ -55,9 +57,9 @@ from onyx.connectors.source_operations import get_source_operations_class
 from onyx.db.enums import AccessType
 
 DRAFT_RUN_TTL_SECONDS = 30 * 60
-# Caps every hang guard of a draft run. A check that times out is
-# INDETERMINATE, which does not block the form. Stored runs keep their full
-# guards.
+# Caps every hang guard of a draft run. A check that times out is INCOMPLETE,
+# which does not block the form, unless it is a sign-in check
+# (``fails_when_unreachable``). Stored runs keep their full guards.
 DRAFT_CHECK_TIMEOUT_SECONDS = 5 * 60
 # The run outlives its lease by this much, so a reader sees the lease run out
 # before the run expires.
@@ -89,6 +91,8 @@ class DraftCheckStateKind(str, Enum):
     RUNNING = "running"
     PASSED = "passed"
     FAILED = "failed"
+    INCOMPLETE = "incomplete"
+    # Legacy: INCOMPLETE in runs started before it had its own value.
     INDETERMINATE = "indeterminate"
     SKIPPED = "skipped"
     # A required field is missing or invalid; the check runs once it is valid.
@@ -100,6 +104,7 @@ class DraftCheckStateKind(str, Enum):
 _STATE_BY_STATUS: dict[CapabilityCheckStatus, DraftCheckStateKind] = {
     CapabilityCheckStatus.PASSED: DraftCheckStateKind.PASSED,
     CapabilityCheckStatus.FAILED: DraftCheckStateKind.FAILED,
+    CapabilityCheckStatus.INCOMPLETE: DraftCheckStateKind.INCOMPLETE,
     CapabilityCheckStatus.INDETERMINATE: DraftCheckStateKind.INDETERMINATE,
     CapabilityCheckStatus.SKIPPED: DraftCheckStateKind.SKIPPED,
 }
@@ -107,7 +112,7 @@ _STATUS_BY_STATE = {state: status for status, state in _STATE_BY_STATUS.items()}
 _UNFINISHED_STATES = frozenset(
     {DraftCheckStateKind.PENDING, DraftCheckStateKind.RUNNING}
 )
-# Indeterminate results are transient, so they are not cached.
+# Incomplete results are transient, so they are not cached.
 _CACHEABLE_STATES = frozenset(
     {
         DraftCheckStateKind.PASSED,
@@ -155,6 +160,7 @@ class DraftCheckState(BaseModel):
     message: str = ""
     # Exception class name of a failure, for support diagnosis.
     error_type: str | None = None
+    error_kind: CheckErrorKind | None = None
     is_fallback: bool = False
     missing_fields: list[str] = []
     invalid_fields: list[str] = []
@@ -263,6 +269,7 @@ class CachedDraftResult(BaseModel):
     message: str
     duration_ms: int | None
     error_type: str | None = None
+    error_kind: CheckErrorKind | None = None
     findings: list[CheckFinding] = []
     advisories: list[CheckAdvisory] = []
 
@@ -373,11 +380,12 @@ def get_cached_draft_result(key: str) -> CachedDraftResult | None:
 
 
 def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
-    """Caches a terminal result; INDETERMINATE is not cached. Neither is a
-    SKIPPED discovery check: its skip (a failed required check, findings
-    turned off) says nothing about the listing once the cause is gone."""
+    """Caches a terminal result; INCOMPLETE is not cached, nor a sign-in check
+    FAILED by a timeout or an unreachable source. Neither is a SKIPPED
+    discovery check: its skip (a failed required check, findings turned off)
+    says nothing about the listing once the cause is gone."""
     state = _draft_state(result)
-    if state not in _CACHEABLE_STATES:
+    if state not in _CACHEABLE_STATES or result.error_kind in TRANSIENT_ERROR_KINDS:
         return
     if result.discovery and state == DraftCheckStateKind.SKIPPED:
         return
@@ -386,6 +394,7 @@ def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
         message=result.message,
         duration_ms=result.duration_ms,
         error_type=result.error_type,
+        error_kind=result.error_kind,
         findings=result.findings,
         advisories=result.advisories,
     )
@@ -444,7 +453,7 @@ def wait_for_draft_result(
 ) -> CachedDraftResult | None:
     """The result a draft run writes under ``result_key``, once it lands.
     ``None`` when it does not land within ``timeout_seconds``, or the run
-    stops without it (an INDETERMINATE result is not cached)."""
+    stops without it (an INCOMPLETE result is not cached)."""
     deadline = time.monotonic() + timeout_seconds
     while True:
         cached = get_cached_draft_result(result_key)
@@ -471,6 +480,7 @@ def cached_check_result(
         status=_result_status(cached.state),
         message=cached.message,
         error_type=cached.error_type,
+        error_kind=cached.error_kind,
         is_fallback=check.is_fallback,
         remediation=check.remediation,
         docs_link=check.docs_link,
@@ -490,6 +500,7 @@ def apply_check_result(
     check_state.state = _draft_state(result)
     check_state.message = result.message
     check_state.error_type = result.error_type
+    check_state.error_kind = result.error_kind
     check_state.duration_ms = result.duration_ms
     check_state.findings = result.findings
     check_state.advisories = result.advisories
@@ -501,6 +512,7 @@ def apply_cached_result(
     check_state.state = cached.state
     check_state.message = cached.message
     check_state.error_type = cached.error_type
+    check_state.error_kind = cached.error_kind
     check_state.duration_ms = cached.duration_ms
     check_state.findings = cached.findings if check_findings_enabled() else []
     check_state.advisories = cached.advisories

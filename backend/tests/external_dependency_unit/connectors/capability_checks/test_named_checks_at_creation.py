@@ -267,14 +267,14 @@ def test_failed_required_check_blocks_and_is_stored(
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_indeterminate_required_check_does_not_block(
+def test_incomplete_required_check_does_not_block(
     db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
 ) -> None:
     harness.errors[_TOKEN] = UnexpectedValidationError("rate limited")
 
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
 
-    assert _stored_statuses(db_session, slack_pair)[_TOKEN] == "indeterminate"
+    assert _stored_statuses(db_session, slack_pair)[_TOKEN] == "incomplete"
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -624,7 +624,7 @@ def test_fast_required_failure_blocks_while_another_check_is_slow(
     # The rejection stores the report; no background run starts.
     statuses = _stored_statuses(db_session, slack_pair)
     assert statuses[_CHANNELS] == "failed"
-    assert statuses[_TOKEN] == "indeterminate"
+    assert statuses[_TOKEN] == "incomplete"
     harness.send_task.assert_not_called()
 
 

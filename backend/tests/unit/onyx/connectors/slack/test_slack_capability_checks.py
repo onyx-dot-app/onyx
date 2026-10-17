@@ -458,7 +458,7 @@ def test_message_history_missing_scope() -> None:
         _run("slack_message_history_read", _context(gateway))
 
 
-def test_message_history_no_visible_channels_is_indeterminate() -> None:
+def test_message_history_no_visible_channels_is_incomplete() -> None:
     """Verifies an unprobeable workspace maps to a transient outcome."""
     # Precondition.
     gateway = _gateway()
@@ -562,7 +562,7 @@ def test_private_history_leaves_listing_scope_failures_to_the_listing_check() ->
     gateway.fetch_channel_history.assert_not_called()
 
 
-def test_private_history_rate_limited_listing_is_indeterminate() -> None:
+def test_private_history_rate_limited_listing_is_incomplete() -> None:
     """
     Verifies the listing gate passes only scope failures: a rate-limited listing
     must not turn into a false pass of a required check.
@@ -646,7 +646,7 @@ def test_channel_join_scope_missing_fails() -> None:
         _run("slack_channel_join_scope", _context(gateway))
 
 
-def test_channel_join_scope_absent_header_is_indeterminate() -> None:
+def test_channel_join_scope_absent_header_is_incomplete() -> None:
     """Verifies that a missing scopes header cannot fail the credential."""
     # Precondition.
     gateway = _gateway()
@@ -803,7 +803,7 @@ def test_email_visibility_fails_when_emails_absent() -> None:
         _run("slack_user_email_visibility", _context(gateway))
 
 
-def test_email_visibility_indeterminate_without_human_sample() -> None:
+def test_email_visibility_incomplete_without_human_sample() -> None:
     """
     Verifies bots, deleted users, and Slackbot are excluded from the sample.
     """

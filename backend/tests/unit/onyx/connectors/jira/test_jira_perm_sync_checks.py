@@ -177,7 +177,7 @@ def test_doc_perm_sync_checks_pass_with_an_advisory_when_the_jql_matches_nothing
     gateway.get_project_permission_scheme.assert_not_called()
 
 
-def test_permission_scheme_read_is_indeterminate_for_an_issue_without_project() -> None:
+def test_permission_scheme_read_is_incomplete_for_an_issue_without_project() -> None:
     gateway = _gateway()
     gateway.search_issue_ids.return_value = JiraIssueIdPage(
         issue_ids=["1"], next_page_token=None
@@ -190,7 +190,7 @@ def test_permission_scheme_read_is_indeterminate_for_an_issue_without_project() 
         {**_CONFIG, "project_key": "", "jql_query": 'project = "AS"'},
     )
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     gateway.get_project_permission_scheme.assert_not_called()
 
 
@@ -252,7 +252,7 @@ def test_dependent_checks_defer_to_the_scheme_check() -> None:
         "jira_project_roles_read",
         "jira_permission_user_emails",
     ):
-        assert _run(check_id, gateway).status == CapabilityCheckStatus.INDETERMINATE
+        assert _run(check_id, gateway).status == CapabilityCheckStatus.INCOMPLETE
 
 
 # --- jira_permission_user_emails ---
@@ -357,7 +357,7 @@ def test_permission_user_emails_fails_when_no_user_would_get_access(
     assert "no user would get access" in result.message
 
 
-def test_permission_user_emails_is_indeterminate_for_partial_app_sample() -> None:
+def test_permission_user_emails_is_incomplete_for_partial_app_sample() -> None:
     gateway = _gateway()
     gateway.get_project_role.return_value = {
         "actors": [{"actorUser": {"accountId": f"app-{i}"}} for i in range(6)]
@@ -366,7 +366,7 @@ def test_permission_user_emails_is_indeterminate_for_partial_app_sample() -> Non
 
     result = _run("jira_permission_user_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_permission_user_emails_looks_up_data_center_users_by_name() -> None:
@@ -395,7 +395,7 @@ def test_permission_user_emails_reads_direct_user_grants() -> None:
     gateway.get_user.assert_not_called()
 
 
-def test_permission_user_emails_is_indeterminate_for_a_partial_sample() -> None:
+def test_permission_user_emails_is_incomplete_for_a_partial_sample() -> None:
     """Sync reads every role user; hidden emails in a sample prove nothing."""
     gateway = _gateway()
     gateway.get_project_role.return_value = {
@@ -405,7 +405,7 @@ def test_permission_user_emails_is_indeterminate_for_a_partial_sample() -> None:
 
     result = _run("jira_permission_user_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_permission_user_emails_reads_every_role_up_to_the_sample() -> None:
@@ -421,7 +421,7 @@ def test_permission_user_emails_reads_every_role_up_to_the_sample() -> None:
     result = _run("jira_permission_user_emails", gateway)
 
     assert gateway.get_project_role.call_count == 3
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_project_roles_read_skips_public_projects() -> None:
@@ -541,7 +541,7 @@ def test_group_member_emails_fails_when_emails_are_hidden() -> None:
     [(["devs"], False), (["a", "b", "c", "d"], True)],
     ids=["more-pages", "more-groups"],
 )
-def test_group_member_emails_is_indeterminate_for_a_partial_sample(
+def test_group_member_emails_is_incomplete_for_a_partial_sample(
     group_names: list[str], is_last: bool
 ) -> None:
     gateway = _gateway(is_cloud=False)
@@ -555,4 +555,4 @@ def test_group_member_emails_is_indeterminate_for_a_partial_sample(
 
     result = _run("jira_group_member_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE

@@ -309,9 +309,15 @@ def test_waits_on_a_failed_required_check(
 
 
 @pytest.mark.parametrize(
-    "status", [CapabilityCheckStatus.INDETERMINATE, CapabilityCheckStatus.SKIPPED]
+    "status",
+    [
+        CapabilityCheckStatus.INCOMPLETE,
+        # A report stored before INCOMPLETE had its own value.
+        CapabilityCheckStatus.INDETERMINATE,
+        CapabilityCheckStatus.SKIPPED,
+    ],
 )
-def test_starts_on_indeterminate_or_skipped(
+def test_starts_on_incomplete_or_skipped(
     db_session: Session,
     slack_pair: ConnectorCredentialPair,
     beat: _Beat,

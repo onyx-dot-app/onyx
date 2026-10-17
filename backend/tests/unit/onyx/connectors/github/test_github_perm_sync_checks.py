@@ -143,14 +143,14 @@ def test_visibility_fails_for_an_internal_repository_without_an_organization() -
     assert "`octocat/x`" in result.message
 
 
-def test_visibility_is_indeterminate_without_a_readable_repository() -> None:
+def test_visibility_is_incomplete_without_a_readable_repository() -> None:
     result = _run("github_repository_visibility", _gateway([]))
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert "github_repositories_visible" in result.message
 
 
-def test_visibility_is_indeterminate_when_rate_limited() -> None:
+def test_visibility_is_incomplete_when_rate_limited() -> None:
     gateway = _gateway()
     gateway.list_organization_repositories.side_effect = GitHubRateLimitError(
         "403", status_code=403, secondary=False
@@ -158,7 +158,7 @@ def test_visibility_is_indeterminate_when_rate_limited() -> None:
 
     result = _run("github_repository_visibility", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 # --- github_repository_collaborators ---
@@ -266,14 +266,14 @@ def test_emails_warn_when_no_user_has_a_public_email() -> None:
     assert "public email" in result.message
 
 
-def test_emails_are_indeterminate_for_a_partial_sample() -> None:
+def test_emails_are_incomplete_for_a_partial_sample() -> None:
     gateway = _gateway()
     gateway.list_repository_collaborators.return_value = [f"u{i}" for i in range(9)]
     gateway.get_user.side_effect = lambda *, login: GitHubUser(login=login)
 
     result = _run("github_user_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert gateway.get_user.call_count == 5
 
 
@@ -284,13 +284,13 @@ def test_emails_read_organization_members_without_a_private_repository() -> None
     gateway.get_user.assert_called_once_with(login="octocat")
 
 
-def test_emails_are_indeterminate_when_the_group_cannot_be_read() -> None:
+def test_emails_are_incomplete_when_the_group_cannot_be_read() -> None:
     gateway = _gateway()
     gateway.list_repository_collaborators.side_effect = _api_error(403)
 
     result = _run("github_user_emails", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert "github_repository_collaborators" in result.message
 
 
@@ -308,13 +308,13 @@ def test_members_accept_scopes_that_include_read_org(scope: str) -> None:
     gateway.list_organization_members.assert_called_once()
 
 
-def test_collaborators_are_indeterminate_when_the_sample_is_cut() -> None:
+def test_collaborators_are_incomplete_when_the_sample_is_cut() -> None:
     """20 public repositories can hide a private one."""
     gateway = _gateway([_repo(f"site{i}", "public") for i in range(21)])
 
     result = _run("github_repository_collaborators", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert "first 20 repositories include no private" in result.message
 
 
@@ -352,7 +352,7 @@ def test_twenty_public_repositories_are_a_complete_sample() -> None:
     gateway.list_organization_members.assert_not_called()
 
 
-def test_an_unsampled_organization_without_read_org_is_indeterminate() -> None:
+def test_an_unsampled_organization_without_read_org_is_incomplete() -> None:
     """Members of the owner organization may be needed only when unread
     repositories are internal, so a missing scope is not a failure."""
     gateway = _gateway([_repo(f"site{i}", "public") for i in range(21)])
@@ -360,5 +360,5 @@ def test_an_unsampled_organization_without_read_org_is_indeterminate() -> None:
 
     result = _run("github_organization_members", gateway)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert "no `read:org` scope" in result.message
