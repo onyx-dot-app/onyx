@@ -297,7 +297,7 @@ export default function IndexConfigurationsSection({
       value:
         indexingStart === null
           ? tScheduled("indexingStart.placeholder")
-          : formatDateLog(indexingStart),
+          : formatDateLog(indexingStart.toISOString()),
     },
   };
 

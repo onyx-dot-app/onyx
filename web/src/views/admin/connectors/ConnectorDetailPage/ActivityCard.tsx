@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -179,11 +179,13 @@ export default function ActivityCard({
   popoverPlacement = "beside",
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
-  // A popover below the card hangs from the card, not from its pill.
-  const cardRef = useRef<HTMLDivElement>(null);
+  // A popover below the card hangs from the card, not from its pill: a span
+  // covering the card is the anchor. It sits after the trigger in each
+  // popover so its ref registers last and stays the anchor.
   const anchor = popoverPlacement === "below" && (
-    // SAFETY: Radix reads the ref in an effect, after the card has mounted.
-    <Popover.Anchor virtualRef={cardRef as React.RefObject<HTMLDivElement>} />
+    <Popover.Anchor asChild>
+      <span aria-hidden className="pointer-events-none absolute -inset-1" />
+    </Popover.Anchor>
   );
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -278,9 +280,8 @@ export default function ActivityCard({
         rounding={2}
         padding={1}
         shadow={selected ? "md" : "none"}
-        ref={cardRef}
       >
-        <Section alignItems="stretch" gap={0} height="fit">
+        <Section alignItems="stretch" gap={0} height="fit" className="relative">
           <Section
             flexDirection="row"
             alignItems="start"
@@ -386,7 +387,6 @@ export default function ActivityCard({
               >
                 {trace !== null && (
                   <Popover onOpenChange={togglePopover("trace")}>
-                    {anchor}
                     <Popover.Trigger asChild>
                       <Tag
                         icon={SvgTextLines}
@@ -395,6 +395,7 @@ export default function ActivityCard({
                         onClick={NOOP}
                       />
                     </Popover.Trigger>
+                    {anchor}
                     <StackTracePopoverContent
                       runId={run.attempt.id}
                       trace={trace}
@@ -405,7 +406,6 @@ export default function ActivityCard({
                 {listsDocs ? (
                   <>
                     <Popover onOpenChange={togglePopover("items")}>
-                      {anchor}
                       <Popover.Trigger asChild>
                         <Tag
                           icon={WARNING_ICONS.indexing}
@@ -415,6 +415,7 @@ export default function ActivityCard({
                           onClick={NOOP}
                         />
                       </Popover.Trigger>
+                      {anchor}
                       <FailedDocsPopoverContent
                         ccPairId={ccPairId}
                         indexAttemptId={run.attempt.id}
@@ -440,7 +441,6 @@ export default function ActivityCard({
                   </>
                 ) : run.kind === "checks" && listsChecks ? (
                   <Popover onOpenChange={togglePopover("items")}>
-                    {anchor}
                     <Popover.Trigger asChild>
                       <Tag
                         icon={WARNING_ICONS.checks}
@@ -450,6 +450,7 @@ export default function ActivityCard({
                         onClick={NOOP}
                       />
                     </Popover.Trigger>
+                    {anchor}
                     <CheckRunPopoverContent
                       run={run.attempt}
                       placement={popoverPlacement}
