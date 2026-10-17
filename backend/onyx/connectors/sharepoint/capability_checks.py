@@ -23,8 +23,10 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
     form_config,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -120,6 +122,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _DOCS_LINK: str = "https://docs.onyx.app/admins/connectors/official/sharepoint"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check did not finish within its time limit.\nRe-run the checks.",
+)
 _PROBE_SITES: int = 5
 # Listed sites the documents probe reads in turn for one file indexing would
 # read. Tenants often list empty or demo sites first, in no stable order.
@@ -876,6 +882,7 @@ class _SharepointCheck(CapabilityCheck[SharepointConnectorConfig]):
         requires_connector_config: bool = True,
         validates_binding: bool = False,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -888,6 +895,7 @@ class _SharepointCheck(CapabilityCheck[SharepointConnectorConfig]):
             validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
             depends_on=_DEPENDS_ON.get(check_id, ()),
+            timeout_text=timeout_text,
         )
 
 
@@ -901,6 +909,7 @@ class _TokenCheck(_SharepointCheck):
             display_name="Sign in to Microsoft",
             validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=sign_in_timeout_text("SharePoint"),
             remediation=(
                 "Check the client id, directory id and client secret or "
                 "certificate, and that the Graph API and authority hosts match "

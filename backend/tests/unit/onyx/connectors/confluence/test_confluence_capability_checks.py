@@ -48,6 +48,7 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InconclusiveValidationError,
     InsufficientPermissionsError,
+    TimedOutValidationError,
     UnexpectedValidationError,
 )
 
@@ -308,6 +309,16 @@ def test_auth_connection_error_is_incomplete() -> None:
 
     with pytest.raises(UnexpectedValidationError, match="cannot connect"):
         _run("confluence_auth", _context(gateway, _form()))
+
+
+def test_auth_timeout_is_a_sign_in_timeout() -> None:
+    gateway = _gateway()
+    gateway.probe_site.side_effect = requests.ConnectTimeout("slow")
+
+    with pytest.raises(TimedOutValidationError) as raised:
+        _run("confluence_auth", _context(gateway, _form()))
+
+    assert raised.value.summary == "Sign-in timed out"
 
 
 # confluence_spaces_visible
