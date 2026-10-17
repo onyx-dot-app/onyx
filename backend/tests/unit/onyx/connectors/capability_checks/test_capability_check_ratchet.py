@@ -11,6 +11,7 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapability,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
+from onyx.connectors.factory import source_has_settings_probe
 from onyx.connectors.source_operations import SourceOperations
 from tests.unit.onyx.connectors.source_operation_harnesses import (
     import_all_source_operation_gateways,
@@ -141,7 +142,14 @@ def test_every_source_resolves_checks_without_tripping_the_ratchet() -> None:
 
     # Under test and postcondition.
     for source in DocumentSource:
-        assert get_capability_checks(source)
+        checks = get_capability_checks(source)
+        has_indexing_check = any(
+            check.capability == CredentialCapability.INDEXING for check in checks
+        )
+        assert has_indexing_check == (
+            source in registry._INDEXING_CHECKS_BY_SOURCE
+            or source_has_settings_probe(source)
+        )
 
 
 @pytest.mark.usefixtures("enable_ee")
@@ -152,4 +160,11 @@ def test_every_source_resolves_checks_with_ee_enabled() -> None:
 
     # Under test and postcondition.
     for source in DocumentSource:
-        assert get_capability_checks(source)
+        checks = get_capability_checks(source)
+        has_indexing_check = any(
+            check.capability == CredentialCapability.INDEXING for check in checks
+        )
+        assert has_indexing_check == (
+            source in registry._INDEXING_CHECKS_BY_SOURCE
+            or source_has_settings_probe(source)
+        )
