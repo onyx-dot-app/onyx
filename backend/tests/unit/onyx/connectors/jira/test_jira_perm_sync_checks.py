@@ -131,7 +131,9 @@ def test_permission_scheme_read_probes_the_first_project_without_a_project() -> 
 
     _run("jira_permission_scheme_read", gateway, {**_CONFIG, "project_key": ""})
 
-    gateway.get_project_permission_scheme.assert_called_once_with(project_key="AS")
+    gateway.get_project_permission_scheme.assert_called_once_with(
+        project_key="AS", fast=True
+    )
 
 
 def test_permission_scheme_read_probes_the_project_of_a_jql_match() -> None:
@@ -150,7 +152,9 @@ def test_permission_scheme_read_probes_the_project_of_a_jql_match() -> None:
         {**_CONFIG, "project_key": "", "jql_query": 'project = "AS"'},
     )
 
-    gateway.get_project_permission_scheme.assert_called_once_with(project_key="AS")
+    gateway.get_project_permission_scheme.assert_called_once_with(
+        project_key="AS", fast=True
+    )
 
 
 @pytest.mark.parametrize(
@@ -382,7 +386,7 @@ def test_permission_user_emails_looks_up_data_center_users_by_name() -> None:
     result = _run("jira_permission_user_emails", gateway)
 
     assert result.status == CapabilityCheckStatus.PASSED
-    gateway.get_user.assert_called_once_with(user_id="jdoe")
+    gateway.get_user.assert_called_once_with(user_id="jdoe", fast=True)
 
 
 def test_permission_user_emails_reads_direct_user_grants() -> None:

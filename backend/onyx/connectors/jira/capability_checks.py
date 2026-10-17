@@ -3,7 +3,9 @@
 The indexing checks register in ``registry.py``; the permission-sync and
 group-sync checks register in the EE registry
 (``ee/onyx/connectors/capability_checks.py``). Each check makes small probes
-(one issue, one project) with the gateway operations that its sync calls.
+(one issue, one project) with the gateway operations that its sync calls,
+with ``fast=True``: a request that Jira does not answer in time raises
+``JiraTimeoutError``, and the check ends instead of waiting for its hang guard.
 
 The gateway reaches the site through the bound config fields
 (``jira_base_url``, ``scoped_token``), so every check requires
@@ -50,6 +52,7 @@ from onyx.connectors.jira.source_operations import (
     JiraCloudIdError,
     JiraGroupPage,
     JiraSourceOperations,
+    JiraTimeoutError,
     is_cloud_gateway,
 )
 from onyx.connectors.jira.utils import (
@@ -142,6 +145,17 @@ def _error_detail(error: JiraApiError) -> str:
     return (messages or error.body or str(error))[:_ERROR_DETAIL_CHARS]
 
 
+def _raise_for_timeout(error: JiraTimeoutError) -> NoReturn:
+    """INCOMPLETE: a slow Jira says nothing about the credential."""
+    raise UnreachableValidationError(
+        f"{error} Run the checks again, or check the status of Jira.",
+        summary="Timed out",
+        description=(
+            "The check stopped because Jira did not answer in time.\nRe-run the checks."
+        ),
+    ) from error
+
+
 def _raise_for_api_error(
     error: JiraApiError,
     *,
@@ -156,6 +170,8 @@ def _raise_for_api_error(
     """Maps a Jira API error onto the validation-exception family. ``denied``
     explains a 403 (or a scoped token without the scope) for this probe; each
     ``*_row`` is the row text of that outcome."""
+    if isinstance(error, JiraTimeoutError):
+        _raise_for_timeout(error)
     status: int | None = error.status_code
     detail: str = _error_detail(error)
     # Callers' texts can end in a full stop; the mapper adds its own.
@@ -327,9 +343,9 @@ class _SiteAuthCheck(_JiraCheck):
         gateway: JiraSourceOperations = _gateway(context)
         try:
             if self._scoped:
-                gateway.list_projects()
+                gateway.list_projects(fast=True)
                 return CheckOutput(summary="Signed in")
-            name: Any = gateway.get_myself().get("displayName")
+            name: Any = gateway.get_myself(fast=True).get("displayName")
             return CheckOutput(summary=f"Signed in as {name}" if name else "Signed in")
         except requests.HTTPError as e:
             # Only the scoped token's tenant_info call raises a raw HTTPError.
@@ -361,7 +377,18 @@ class _SiteAuthCheck(_JiraCheck):
                     "Re-run the checks."
                 ),
             ) from e
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except (JiraTimeoutError, requests.Timeout) as e:
+            # A raw Timeout comes from the scoped token's tenant_info call.
+            raise UnreachableValidationError(
+                f"{self.config(context).jira_base_url} did not answer the sign-in "
+                f"in time: {e}",
+                summary="Sign-in timed out",
+                description=(
+                    "Jira did not answer the sign-in in time.\n"
+                    "Re-run, or check that Jira is reachable from Onyx."
+                ),
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 f"Onyx cannot connect to {self.config(context).jira_base_url}. "
                 "Check the site URL.",
@@ -491,7 +518,7 @@ class _ProjectsVisibleCheck(_JiraCheck):
         config: JiraConnectorConfig = self.config(context)
         need: str = _need(config, scope=_INDEXING_SCOPE, user_permission=_BROWSE_NEED)
         try:
-            projects: list[dict[str, Any]] = _gateway(context).list_projects()
+            projects: list[dict[str, Any]] = _gateway(context).list_projects(fast=True)
         except JiraApiError as e:
             _raise_for_api_error(
                 e,
@@ -554,7 +581,9 @@ class _ConfiguredProjectCheck(_JiraCheck):
         project_key: str = _project_key(config)
         gateway: JiraSourceOperations = _gateway(context)
         try:
-            project: dict[str, Any] = gateway.get_project(project_key=project_key)
+            project: dict[str, Any] = gateway.get_project(
+                project_key=project_key, fast=True
+            )
         except JiraApiError as e:
             if e.status_code != 404:
                 _raise_for_api_error(
@@ -579,7 +608,7 @@ class _ConfiguredProjectCheck(_JiraCheck):
     ) -> NoReturn:
         try:
             matches: list[str] = _matching_project_keys(
-                gateway.list_projects(), project_key
+                gateway.list_projects(fast=True), project_key
             )
         except JiraApiError:
             matches = []
@@ -609,15 +638,17 @@ def _search_one_issue(gateway: JiraSourceOperations, jql: str) -> dict[str, Any]
     """The first issue the query matches, with all fields, read through the
     API family the connector uses. Raises ``JiraApiError``."""
     if is_cloud_gateway(gateway):
-        page: JiraIssueIdPage = gateway.search_issue_ids(jql=jql, max_results=1)
+        page: JiraIssueIdPage = gateway.search_issue_ids(
+            jql=jql, max_results=1, fast=True
+        )
         if not page.issue_ids:
             return None
         issues: list[dict[str, Any]] = gateway.bulk_fetch_issues(
-            issue_ids=page.issue_ids[:1]
+            issue_ids=page.issue_ids[:1], fast=True
         )
         return issues[0] if issues else {}
     issues: list[dict[str, Any]] = gateway.search_issues(
-        jql=jql, start_at=0, max_results=1
+        jql=jql, start_at=0, max_results=1, fast=True
     )
     return issues[0] if issues else None
 
@@ -855,6 +886,8 @@ def _probe_project_key(
     if _jql(config):
         try:
             issue = _search_one_issue(_gateway(context), _scope_jql(config))
+        except JiraTimeoutError as e:
+            _raise_for_timeout(e)
         except JiraApiError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot run the JQL query, so it cannot pick a project to "
@@ -882,7 +915,7 @@ def _probe_project_key(
             )
         return str(project["key"])
     try:
-        projects: list[dict[str, Any]] = _gateway(context).list_projects()
+        projects: list[dict[str, Any]] = _gateway(context).list_projects(fast=True)
     except JiraApiError as e:
         _raise_for_api_error(
             e,
@@ -922,7 +955,7 @@ def _read_permission_scheme(
 ) -> dict[str, Any]:
     try:
         scheme: dict[str, Any] = _gateway(context).get_project_permission_scheme(
-            project_key=project_key
+            project_key=project_key, fast=True
         )
     except JiraApiError as e:
         _raise_for_api_error(
@@ -1096,7 +1129,7 @@ def _read_role(
     """Reads one project role. Raises the validation family on a failed read."""
     try:
         return _gateway(context).get_project_role(
-            project_key=project_key, role_id=role_id
+            project_key=project_key, role_id=role_id, fast=True
         )
     except JiraApiError as e:
         _raise_for_api_error(
@@ -1275,7 +1308,7 @@ class _PermissionUserEmailsCheck(_JiraCheck):
             if not lookup_id:
                 continue
             try:
-                details: dict[str, Any] = gateway.get_user(user_id=lookup_id)
+                details: dict[str, Any] = gateway.get_user(user_id=lookup_id, fast=True)
             except JiraApiError as e:
                 _raise_for_api_error(
                     e,
@@ -1365,7 +1398,7 @@ def _list_groups(
     context: CapabilityCheckContext, config: JiraConnectorConfig
 ) -> JiraGroupPage:
     try:
-        return _gateway(context).list_groups()
+        return _gateway(context).list_groups(fast=True)
     except JiraApiError as e:
         _raise_for_api_error(
             e,
@@ -1419,6 +1452,7 @@ def _sample_group_members(
                 group_name=group_name,
                 start_at=0,
                 max_results=_GROUP_MEMBER_PAGE_SIZE,
+                fast=True,
             )
         except JiraApiError as e:
             if e.status_code == 404 and "does not exist" in (e.body or ""):
