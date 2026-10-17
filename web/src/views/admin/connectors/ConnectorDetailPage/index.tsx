@@ -56,6 +56,7 @@ import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
 import {
   pickWindow,
+  type PickerWindow,
   type PickedWindow,
   type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
@@ -96,6 +97,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   );
   // A clicked chart slice narrows the runs and activity inside the window.
   const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
+  // The slice belongs to the old chart, so a new window drops it.
+  const changeWindow = (picked: PickerWindow) => {
+    setTimeWindow(pickWindow(picked));
+    setSliceRange(null);
+  };
   const isSchedulingConnectorDeletionRef = useRef(false);
 
   const refresh = useCallback(() => {
@@ -387,11 +393,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               canOperate={canOperate}
               onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
               timeWindow={timeWindow.window}
-              onTimeWindowChange={(picked) => {
-                setTimeWindow(pickWindow(picked));
-                // The slice belongs to the old chart, so a new window drops it.
-                setSliceRange(null);
-              }}
+              onTimeWindowChange={changeWindow}
               onSliceClick={(start, end) =>
                 setSliceRange({
                   since: start.toISOString(),
@@ -420,9 +422,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               ccPairId={ccPair.id}
               canOperate={canOperate}
               sharedWindow={timeWindow}
-              onSharedWindowChange={(picked) =>
-                setTimeWindow(pickWindow(picked))
-              }
+              onSharedWindowChange={changeWindow}
               range={sliceRange}
             />
           </Section>

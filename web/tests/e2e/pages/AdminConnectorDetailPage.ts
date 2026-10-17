@@ -19,6 +19,8 @@ export class AdminConnectorDetailPage {
   readonly timeWindowPicker: Locator;
   /** The run list's time filter, shared with the status card's window. */
   readonly runsTimeFilter: Locator;
+  /** The "All time" choice of an open time window menu. */
+  readonly allTimeOption: Locator;
   /** The logs action of every run that has logs, newest first. */
   readonly runLogsButtons: Locator;
   /** The run list's empty state, shown once the feed has loaded with no runs. */
@@ -46,6 +48,7 @@ export class AdminConnectorDetailPage {
     this.runsTimeFilter = this.runsSection
       .getByRole("button", { name: /Last \d+ (hours|days)/ })
       .first();
+    this.allTimeOption = page.getByRole("option", { name: "All time" });
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
     this.noRunsMessage = page.getByText("No runs yet", { exact: true });
     this.activityPanel = page.getByTestId("connector-activity");

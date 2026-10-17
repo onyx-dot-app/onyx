@@ -249,6 +249,6 @@ test.describe("Connector runs", () => {
     await detail.pickTimeWindow(detail.timeWindowPicker, "Last 7 days");
     await expect(detail.runsTimeFilter).toContainText("Last 7 days");
     await expect.poll(() => chartWindows.at(-1)).toBe("7d");
-    await expect(page.getByRole("option", { name: "All time" })).toHaveCount(0);
+    await expect(detail.allTimeOption).toHaveCount(0);
   });
 });

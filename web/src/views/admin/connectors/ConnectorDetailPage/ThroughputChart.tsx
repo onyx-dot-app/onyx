@@ -52,16 +52,16 @@ export const WINDOW_LABEL_KEYS = {
   "7d": "d7",
 } as const satisfies Record<PickerWindow, string>;
 
+function windowLabelKey(window: PickerWindow) {
+  return WINDOW_LABEL_KEYS[window];
+}
+
 const WINDOW_HOURS = {
   "1h": 1,
   "12h": 12,
   "24h": 24,
   "7d": 24 * 7,
 } satisfies Record<PickerWindow, number>;
-
-function windowLabelKey(window: PickerWindow) {
-  return WINDOW_LABEL_KEYS[window];
-}
 
 export interface PickedWindow {
   window: PickerWindow;
@@ -107,9 +107,6 @@ const SLICE_TIME_FORMAT = {
   hourCycle: "h23",
 } as const;
 
-// Length of the "YYYY/MM/DD" prefix of a log timestamp.
-const DATE_LENGTH = 10;
-
 export interface SliceRangeFilterProps {
   range: SliceRange;
   onClear: () => void;
@@ -119,13 +116,12 @@ export interface SliceRangeFilterProps {
 export function SliceRangeFilter({ range, onClear }: SliceRangeFilterProps) {
   const t = useTranslations("admin.connector.statusCard.throughput");
   const since = formatDateTimeLog(range.since);
-  const until = formatDateTimeLog(range.until);
-  const today = formatDateTimeLog(new Date().toISOString()).slice(
-    0,
-    DATE_LENGTH
-  );
+  // The log format is "date time", so the time is what follows the space.
+  const timeOf = (stamp: string) => stamp.slice(stamp.indexOf(" ") + 1);
+  const today =
+    new Date(range.since).toDateString() === new Date().toDateString();
   // A slice from today drops its date so the chip leaves the search input room.
-  const from = since.startsWith(today) ? since.slice(DATE_LENGTH + 1) : since;
+  const from = today ? timeOf(since) : since;
   return (
     <FilterButton
       icon={SvgClock}
@@ -133,7 +129,7 @@ export function SliceRangeFilter({ range, onClear }: SliceRangeFilterProps) {
       tooltip={t("rangeFilter")}
       onClear={onClear}
     >
-      {`${from} – ${until.slice(DATE_LENGTH + 1)}`}
+      {`${from} – ${timeOf(formatDateTimeLog(range.until))}`}
     </FilterButton>
   );
 }
@@ -336,10 +332,9 @@ export function ThroughputBars({
               onSliceClick === undefined
                 ? undefined
                 : ({ activeTooltipIndex }) => {
+                    if (activeTooltipIndex == null) return;
                     const slice = slices[Number(activeTooltipIndex)];
-                    if (activeTooltipIndex == null || slice === undefined) {
-                      return;
-                    }
+                    if (slice === undefined) return;
                     onSliceClick(
                       new Date(slice.at - sliceMs / 2),
                       new Date(slice.at + sliceMs / 2)

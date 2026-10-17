@@ -213,7 +213,8 @@ export default function ActivityPanel({
           ? t("empty.title")
           : t(`empty.${shown}`);
 
-  // Full width once the page stacks its columns. Beside them it pins 1.5rem under the settings header and fits the visible height, so a long list scrolls inside the panel instead of lengthening the page. 6rem is that gap plus the body's 4.5rem bottom padding, so the panel still fits when the page ends.
+  // Beside the main column the panel pins under the settings header and
+  // scrolls inside its own height, so a long list never lengthens the page.
   return (
     <Section
       alignItems="stretch"

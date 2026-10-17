@@ -211,20 +211,20 @@ export default function ConnectorList() {
             width="fit"
             height="fit"
           >
-            {COUNT_TAGS.map(({ status: counted, icon, color }) => {
-              const count = data?.status_counts[counted] ?? 0;
-              return (
-                count > 0 && (
-                  <Tag
-                    key={counted}
-                    icon={icon}
-                    title={format.number(count)}
-                    tooltip={t(`counts.${counted}`, { count })}
-                    color={color}
-                  />
-                )
-              );
-            })}
+            {COUNT_TAGS.map((tag) => ({
+              ...tag,
+              count: data?.status_counts[tag.status] ?? 0,
+            }))
+              .filter(({ count }) => count > 0)
+              .map(({ status: counted, icon, color, count }) => (
+                <Tag
+                  key={counted}
+                  icon={icon}
+                  title={format.number(count)}
+                  tooltip={t(`counts.${counted}`, { count })}
+                  color={color}
+                />
+              ))}
           </Section>
         </Section>
       </Section>

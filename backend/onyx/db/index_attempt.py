@@ -1339,7 +1339,7 @@ def get_index_attempt_errors_with_document_names_for_cc_pair(
         .offset(page * page_size)
         .limit(page_size)
     )
-    return [(error, name) for error, name in db_session.execute(stmt).tuples()]
+    return list(db_session.execute(stmt).tuples())
 
 
 def get_index_attempt_errors_across_connectors(

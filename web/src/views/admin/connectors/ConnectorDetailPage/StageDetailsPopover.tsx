@@ -10,6 +10,7 @@ import {
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
+import type { ComponentProps } from "react";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
 import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
@@ -31,11 +32,8 @@ export const STAGE_BUCKETS = [
 
 export type StageBucket = (typeof STAGE_BUCKETS)[number];
 
-// The row each stage counts toward, by its place in the pipeline: the docfetching
-// loop up to the batch store is the fetch, the store through the image step before
-// chunking is pre-processing, the enrichment and lock steps that set up the vector
-// write belong to it, and everything from the post-index update on is bookkeeping.
-// Attempt-level stages and the BATCH_TOTAL and BATCH_UNACCOUNTED aggregates get no row.
+// The row each stage counts toward, by its place in the pipeline. Attempt-level
+// stages and the BATCH_TOTAL and BATCH_UNACCOUNTED aggregates get no row.
 const STAGE_BUCKET = {
   CONNECTOR_VALIDATION: null,
   PERMISSION_VALIDATION: null,
@@ -73,9 +71,14 @@ const INSIDE_EMBEDDING: ReadonlySet<IndexAttemptStage> = new Set([
 ]);
 
 // The uneven marker is a muted hint, one step darker than IconTooltip's default stroke.
-const UnevenIcon: IconFunctionComponent = ({ className, ...props }) => (
-  <SvgAlertTriangle {...props} className={cn(className, "stroke-text-02")} />
-);
+function UnevenIcon({
+  className,
+  ...props
+}: ComponentProps<IconFunctionComponent>) {
+  return (
+    <SvgAlertTriangle {...props} className={cn(className, "stroke-text-02")} />
+  );
+}
 
 const BUCKET_LABEL_KEYS = {
   fetchSource: "stageMetrics.buckets.fetchSource.label",
@@ -108,7 +111,12 @@ function sumOrNull(values: (number | null)[]): number | null {
     : present.reduce((total, value) => total + value, 0);
 }
 
-/** One summary per bucket, in pipeline order. Times are the sums of the stages' times; the spread is the root of the summed variances. */
+/**
+ * One summary per bucket, in pipeline order. The average is the sum of the
+ * stages' averages. The spread treats the stages as independent, and min and
+ * max sum the stages' extremes, so they bound the bucket's slowest and fastest
+ * batch rather than measure one.
+ */
 export function summarizeBuckets(
   metrics: IndexAttemptStageMetric[]
 ): BucketSummary[] {

@@ -157,7 +157,6 @@ export default function RunsCard({
           ? null
           : new Date(Date.now() - window.hours * 3_600_000).toISOString(),
     });
-    setPage(1);
   }
 
   function pickKind(next: CCPairRunKind | null) {
