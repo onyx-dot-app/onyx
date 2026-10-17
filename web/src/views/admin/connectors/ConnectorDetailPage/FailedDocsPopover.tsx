@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { formatDateTimeLog } from "@/lib/dateUtils";
 import useSWRInfinite from "swr/infinite";
 import {
   Button,
@@ -16,6 +15,7 @@ import {
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import {
   SvgCheckAll,
   SvgCheckSquare,

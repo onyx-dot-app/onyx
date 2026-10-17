@@ -26,7 +26,6 @@ export interface StatusTag {
   labelKey:
     | "deleting"
     | "paused"
-    | "error"
     | "scheduled"
     | "initialIndexing"
     | "invalid"
@@ -47,7 +46,6 @@ export interface StatusTag {
 const TAGS = {
   deleting: { icon: SvgAlertTriangle, color: "red", labelKey: "deleting" },
   paused: { icon: SvgPause, color: "amber", labelKey: "paused" },
-  error: { icon: SvgXOctagon, color: "red", labelKey: "error" },
   scheduled: { icon: SvgClock, color: "purple", labelKey: "scheduled" },
   initialIndexing: {
     icon: IconLoader,
@@ -70,7 +68,7 @@ const TAGS = {
   failedToRun: { icon: SvgXOctagon, color: "red", labelKey: "failedToRun" },
 } satisfies Record<StatusTag["labelKey"], StatusTag>;
 
-/** The tag for the pair's own state, else the latest attempt's. A live attempt outranks the sticky error. */
+/** The tag for the pair's own state, else the latest attempt's. A live attempt outranks repeated failures. */
 export function ccPairStatusTag(
   status: ConnectorCredentialPairStatus,
   inRepeatedErrorState: boolean,
@@ -78,8 +76,9 @@ export function ccPairStatusTag(
 ): StatusTag {
   if (status === ConnectorCredentialPairStatus.DELETING) return TAGS.deleting;
   if (status === ConnectorCredentialPairStatus.PAUSED) return TAGS.paused;
+  // Repeated failures read "Failed", the same tag as the pair's row on the status page.
   if (inRepeatedErrorState && lastAttemptStatus !== "in_progress") {
-    return TAGS.error;
+    return TAGS.failed;
   }
   if (status === ConnectorCredentialPairStatus.SCHEDULED) return TAGS.scheduled;
   if (status === ConnectorCredentialPairStatus.INITIAL_INDEXING) {

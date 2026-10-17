@@ -2309,6 +2309,7 @@
           "label": "인덱싱 완료 문서"
         },
         "indexingSpeed": "분당 {speed}개 문서",
+        "indexingSpeedTooltip": "이 커넥터의 모든 인덱싱 실행에 대한 평균 속도",
         "lastIndexed": {
           "value": "마지막 인덱싱 {when}"
         },
@@ -9075,7 +9076,6 @@
       "badges": {
         "canceled": "취소됨",
         "deleting": "삭제 중",
-        "error": "오류",
         "failed": "실패",
         "indexed": "인덱싱됨",
         "indexing": "인덱싱 중",

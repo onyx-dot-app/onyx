@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
-import { Button, Card, Popover, Tag, Text } from "@opal/components";
+import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
 import { SvgListCheck, SvgPlayCircle } from "@opal/icons";
 import { CardLoader } from "@opal/loaders";
@@ -131,6 +131,8 @@ export default function StatusCard({
   const lastIndexed = t("lastIndexed.value", {
     when: timeAgo(ccPair.last_indexed, locale) ?? "-",
   });
+  // The rate is the connector's average over every run, where a run row shows one run's live rate.
+  const showsSpeed = !paused && hold === null && speed !== null;
   // A paused pair names only its last run. Others lead with the card's title.
   const statusLine = paused
     ? lastIndexed
@@ -195,9 +197,16 @@ export default function StatusCard({
                     !paused && <StageDetailsTrigger />
                   )}
                 </Section>
-                <Text font="secondary-body" color="text-03">
-                  {statusLine}
-                </Text>
+                <Tooltip
+                  tooltip={showsSpeed ? t("indexingSpeedTooltip") : undefined}
+                  side="top"
+                >
+                  <Section width="fit" height="fit">
+                    <Text font="secondary-body" color="text-03">
+                      {statusLine}
+                    </Text>
+                  </Section>
+                </Tooltip>
                 {/* A run in flight ends on its own; the other holds wait for the admin. */}
                 {hold !== null &&
                   hold.reason !== "checks_running" &&

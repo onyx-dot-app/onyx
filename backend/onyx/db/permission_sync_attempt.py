@@ -730,7 +730,7 @@ def complete_external_group_sync_attempt(
         total_users_processed: Total users processed
         total_groups_processed: Total groups processed
         total_group_memberships_synced: Total group memberships synced
-        errors_encountered: Number of groups that failed to sync (determines if COMPLETED_WITH_ERRORS)
+        errors_encountered: Number of errors encountered (determines if COMPLETED_WITH_ERRORS)
 
     Returns:
         The completed attempt
@@ -751,7 +751,6 @@ def complete_external_group_sync_attempt(
         attempt.total_users_processed = total_users_processed
         attempt.total_groups_processed = total_groups_processed
         attempt.total_group_memberships_synced = total_group_memberships_synced
-        attempt.total_groups_failed = errors_encountered
 
         # Set final status based on whether there were errors
         if errors_encountered > 0:

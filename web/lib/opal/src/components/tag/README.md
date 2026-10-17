@@ -40,7 +40,7 @@ Status tags use `font="secondary-body"`; `sm` keeps `figure-small-value` by defa
 
 ### `TagColor`
 
-`"green" | "blue" | "purple" | "amber" | "orange" | "red" | "gray"`
+`"green" | "blue" | "purple" | "amber" | "orange" | "red" | "gray" | "white"`
 
 | Color    | Background           | Text                                       |
 | -------- | -------------------- | ------------------------------------------ |
@@ -51,6 +51,7 @@ Status tags use `font="secondary-body"`; `sm` keeps `figure-small-value` by defa
 | `orange` | `status-warning-01`  | `status-warning-05`                        |
 | `red`    | `status-error-01`    | `status-error-05`                          |
 | `gray`   | `background-tint-02` | `text-03` (passive) / `text-04` (editable) |
+| `white`  | `background-tint-00` | `text-04`, for a pill on a tinted row      |
 
 ## Usage Examples
 

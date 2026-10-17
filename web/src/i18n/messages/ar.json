@@ -2309,6 +2309,7 @@
           "label": "مستندات مفهرسة"
         },
         "indexingSpeed": "{speed} مستند/دقيقة",
+        "indexingSpeedTooltip": "متوسط المعدل عبر جميع عمليات الفهرسة لهذا الموصل",
         "lastIndexed": {
           "value": "آخر فهرسة {when}"
         },
@@ -9075,7 +9076,6 @@
       "badges": {
         "canceled": "ملغاة",
         "deleting": "جارٍ الحذف",
-        "error": "خطأ",
         "failed": "فشلت",
         "indexed": "مفهرس",
         "indexing": "جارٍ الفهرسة",

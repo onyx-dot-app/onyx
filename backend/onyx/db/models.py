@@ -6312,9 +6312,6 @@ class ExternalGroupPermissionSyncAttempt(Base):
     total_group_memberships_synced: Mapped[int | None] = mapped_column(
         Integer, default=0
     )
-    total_groups_failed: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0"
-    )
 
     # Error information if sync fails
     error_message: Mapped[str | None] = mapped_column(Text, default=None)

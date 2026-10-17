@@ -2309,6 +2309,7 @@
           "label": "インデックス済みドキュメント"
         },
         "indexingSpeed": "{speed} 件/分",
+        "indexingSpeedTooltip": "このコネクタのすべてのインデックス実行における平均速度",
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
@@ -9075,7 +9076,6 @@
       "badges": {
         "canceled": "キャンセル済み",
         "deleting": "削除中",
-        "error": "エラー",
         "failed": "失敗",
         "indexed": "インデックス済み",
         "indexing": "インデックス作成中",

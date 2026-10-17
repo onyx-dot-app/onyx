@@ -2309,6 +2309,7 @@
           "label": "已索引文档"
         },
         "indexingSpeed": "{speed} 文档/分钟",
+        "indexingSpeedTooltip": "此连接器所有索引运行的平均速率",
         "lastIndexed": {
           "value": "上次索引 {when}"
         },
@@ -9075,7 +9076,6 @@
       "badges": {
         "canceled": "已取消",
         "deleting": "正在删除",
-        "error": "错误",
         "failed": "失败",
         "indexed": "已索引",
         "indexing": "正在索引",

@@ -85,8 +85,9 @@ export function runWarnings(run: CCPairRun): number {
       return run.attempt.error_count;
     case "doc_permission_sync":
       return run.attempt.docs_with_permission_errors;
+    // A group sync has no per-group failure signal, so it either fails or succeeds.
     case "group_sync":
-      return run.attempt.total_groups_failed;
+      return 0;
     case "pruning":
       return run.attempt.docs_failed;
     case "checks":

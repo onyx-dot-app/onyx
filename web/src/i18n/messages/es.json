@@ -2309,6 +2309,7 @@
           "label": "Documentos en el índice"
         },
         "indexingSpeed": "{speed} documentos/min",
+        "indexingSpeedTooltip": "Tasa media de todas las ejecuciones de indexación de este conector",
         "lastIndexed": {
           "value": "Última indexación {when}"
         },
@@ -9075,7 +9076,6 @@
       "badges": {
         "canceled": "Cancelado",
         "deleting": "Eliminando",
-        "error": "Error",
         "failed": "Fallido",
         "indexed": "Indexado",
         "indexing": "Indexando",

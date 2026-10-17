@@ -280,10 +280,6 @@ def test_errors_filter_keeps_runs_with_open_or_resolved_doc_errors(
     unreadable = _doc_sync(db_session, cc_pair, 3, PermissionSyncStatus.SUCCESS)
     unreadable.docs_with_permission_errors = 2
     _group_sync(db_session, cc_pair, 4, PermissionSyncStatus.FAILED)
-    failed_groups = _group_sync(
-        db_session, cc_pair, 5, PermissionSyncStatus.COMPLETED_WITH_ERRORS
-    )
-    failed_groups.total_groups_failed = 3
     db_session.commit()
 
     unresolved = _runs(db_session, admin, cc_pair, errors=CCPairRunErrors.UNRESOLVED)
@@ -299,14 +295,11 @@ def test_errors_filter_keeps_runs_with_open_or_resolved_doc_errors(
     by_doc_error = _runs(db_session, admin, cc_pair, q="boom")
 
     assert _order(unresolved) == [
-        (CCPairRunKind.GROUP_SYNC, failed_groups.id),
         (CCPairRunKind.DOC_PERMISSION_SYNC, unreadable.id),
         (CCPairRunKind.INDEXING, open_errors.id),
     ]
-    assert unresolved.total_items == 3
-    assert unresolved.status_counts[CCPairRunStatusGroup.SUCCEEDED] == 3
-    group_run = next(run for run in unresolved.items if run.kind == "group_sync")
-    assert group_run.attempt.total_groups_failed == 3
+    assert unresolved.total_items == 2
+    assert unresolved.status_counts[CCPairRunStatusGroup.SUCCEEDED] == 2
     assert _order(resolved_only) == [(CCPairRunKind.INDEXING, resolved.id)]
     # The open count leaves out the resolved error, the total keeps it.
     open_run = next(run for run in unresolved.items if run.kind == "indexing")
@@ -315,7 +308,7 @@ def test_errors_filter_keeps_runs_with_open_or_resolved_doc_errors(
     resolved_run = next(run for run in resolved_only.items if run.kind == "indexing")
     assert resolved_run.attempt.open_doc_error_count == 0
     assert _order(not_failed) == _order(unresolved)
-    assert not_failed.total_items == 3
+    assert not_failed.total_items == 2
     assert _order(by_doc_error) == [
         (CCPairRunKind.INDEXING, resolved.id),
         (CCPairRunKind.INDEXING, open_errors.id),

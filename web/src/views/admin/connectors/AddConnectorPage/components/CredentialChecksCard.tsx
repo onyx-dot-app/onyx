@@ -192,16 +192,12 @@ function CheckLog({ check }: CheckLogProps) {
             />
           )}
           {check.required && (
-            <Card
-              color="background-tint-00"
-              border="none"
-              rounding={1}
-              padding={0.5}
-            >
-              <Text font="secondary-action" color="text-04">
-                {t("required.label")}
-              </Text>
-            </Card>
+            <Tag
+              title={t("required.label")}
+              color="white"
+              variant="status"
+              font="secondary-action"
+            />
           )}
         </Section>
       }

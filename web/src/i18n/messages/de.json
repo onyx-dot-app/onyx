@@ -2309,6 +2309,7 @@
           "label": "Indexierte Dokumente"
         },
         "indexingSpeed": "{speed} Dok./Min.",
+        "indexingSpeedTooltip": "Durchschnittliche Rate über alle Indexierungsläufe dieses Connectors",
         "lastIndexed": {
           "value": "Zuletzt indiziert {when}"
         },
@@ -9075,7 +9076,6 @@
       "badges": {
         "canceled": "Abgebrochen",
         "deleting": "Wird gelöscht",
-        "error": "Fehler",
         "failed": "Fehlgeschlagen",
         "indexed": "Indexiert",
         "indexing": "Indexierung",

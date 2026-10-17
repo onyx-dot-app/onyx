@@ -390,9 +390,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
                       {t("manageMenu.trigger.label")}
                     </Button>
                   </Dropdown.Trigger>
+                  {/* Every row shows at once; the menu never scrolls. */}
                   <Dropdown.Data
                     label={t("manageMenu.trigger.label")}
                     items={manageItems}
+                    maxHeight="none"
                   />
                 </Dropdown>,
               ]
@@ -438,28 +440,28 @@ function Main({ ccPairId }: { ccPairId: number }) {
               <PendingBackfills backfills={ccPair.pending_backfills} />
             )}
 
-            {/* While a run row's popover is open, the sections above the runs step back. */}
+            <StatusCard
+              ccPair={ccPair}
+              canOperate={canOperate}
+              onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
+              timeWindow={timeWindow.window}
+              onTimeWindowChange={changeWindow}
+              range={sliceRange}
+              onRangeChange={setSliceRange}
+            />
+            <PairChecksCard
+              source={source}
+              credentialId={ccPair.credential.id}
+              connectorId={ccPair.connector.id}
+              expandRequest={checksExpandRequest}
+            />
+            {/* While a run row's popover is open, the sections step back; the status card stays full. */}
             <Section
               alignItems="stretch"
               gap={6}
               height="fit"
               className={focusDimClass(runFocus)}
             >
-              <StatusCard
-                ccPair={ccPair}
-                canOperate={canOperate}
-                onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
-                timeWindow={timeWindow.window}
-                onTimeWindowChange={changeWindow}
-                range={sliceRange}
-                onRangeChange={setSliceRange}
-              />
-              <PairChecksCard
-                source={source}
-                credentialId={ccPair.credential.id}
-                connectorId={ccPair.connector.id}
-                expandRequest={checksExpandRequest}
-              />
               <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
               <IndexConfigurationsSection
                 ccPair={ccPair}
