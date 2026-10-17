@@ -10,3 +10,4 @@ from `OpalStrings` (`keyValue*`), overridable per instance via the title/label p
 This uses `InputPasswordTypeIn`, with its mask, reveal toggle, and session replay exclusion.
 Keys remain plain text. Reveal and hide do not change values or validation.
 Adding or removing rows hides password values so reveal state cannot move to another credential.
+Replacing or reordering credentials also hides them. Local typing preserves reveal state and focus.

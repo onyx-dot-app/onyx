@@ -142,4 +142,64 @@ describe("InputKeyValue", () => {
       "password"
     );
   });
+
+  it.each(["replacement", "reordering"])(
+    "hides a different credential after an equal-sized %s",
+    async (change) => {
+      const user = setupUser();
+      const items = [
+        { key: "api_key", value: "first-secret" },
+        { key: "client_secret", value: "second-secret" },
+      ];
+      const { rerender } = render(
+        <InputKeyValue
+          valueType="password"
+          items={items}
+          onChange={jest.fn()}
+        />
+      );
+      await user.click(
+        screen.getAllByRole("button", { name: "Show password" })[0]
+      );
+      expect(screen.getByLabelText("Value 1")).toHaveAttribute("type", "text");
+
+      rerender(
+        <InputKeyValue
+          valueType="password"
+          items={
+            change === "replacement"
+              ? [{ key: "api_key", value: "replacement-secret" }, items[1]]
+              : [items[1], items[0]]
+          }
+          onChange={jest.fn()}
+        />
+      );
+
+      expect(screen.getByLabelText("Value 1")).toHaveValue(
+        change === "replacement" ? "replacement-secret" : "second-secret"
+      );
+      expect(screen.getByLabelText("Value 1")).toHaveAttribute(
+        "type",
+        "password"
+      );
+    }
+  );
+
+  it("keeps a revealed credential focused and visible during local edits", async () => {
+    const user = setupUser();
+    function Harness() {
+      const [items, setItems] = useState([{ key: "api_key", value: "secret" }]);
+      return (
+        <InputKeyValue valueType="password" items={items} onChange={setItems} />
+      );
+    }
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    const input = screen.getByLabelText("Value 1");
+    await user.type(input, "-updated");
+    expect(screen.getByLabelText("Value 1")).toBe(input);
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue("secret-updated");
+    expect(input).toHaveAttribute("type", "text");
+  });
 });

@@ -68,7 +68,13 @@
  * ```
  */
 
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@opal/utils";
 import { InputPasswordTypeIn, InputTypeIn } from "@opal/components";
 import { Button, EmptyMessageCard } from "@opal/components";
@@ -121,6 +127,19 @@ function KeyValueInputItem({
   index,
 }: KeyValueInputItemProps) {
   const strings = useOpalStrings();
+  const [credential, setCredential] = useState({ ...item, revision: 0 });
+  if (
+    valueType === "password" &&
+    (credential.key !== item.key || credential.value !== item.value)
+  ) {
+    setCredential({ ...item, revision: credential.revision + 1 });
+  }
+  function updateItem(next: KeyValue) {
+    if (valueType === "password") {
+      setCredential({ ...next, revision: credential.revision });
+    }
+    onChange(next);
+  }
   const ValueInput =
     valueType === "password" ? InputPasswordTypeIn : InputTypeIn;
   return (
@@ -129,7 +148,7 @@ function KeyValueInputItem({
         <InputTypeIn
           placeholder={keyPlaceholder}
           value={item.key}
-          onChange={(e) => onChange({ ...item, key: e.target.value })}
+          onChange={(e) => updateItem({ ...item, key: e.target.value })}
           aria-label={strings.keyValueInput(
             keyPlaceholder || strings.keyValueKey,
             index + 1
@@ -140,9 +159,10 @@ function KeyValueInputItem({
       </div>
       <div className="flex flex-col gap-y-0.5">
         <ValueInput
+          key={credential.revision}
           placeholder={valuePlaceholder}
           value={item.value}
-          onChange={(e) => onChange({ ...item, value: e.target.value })}
+          onChange={(e) => updateItem({ ...item, value: e.target.value })}
           aria-label={strings.keyValueInput(
             valuePlaceholder || strings.keyValueValue,
             index + 1
