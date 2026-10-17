@@ -331,24 +331,17 @@ def get_oversized_tabular_documents(
     current chunker could produce for one, with the cc-pair to re-index under.
 
     Same cursor contract as `get_document_ids_for_cc_pair_batch`: ids
-    `> after_doc_id` ascending, capped at `limit`. Scanning by primary key keeps
-    every page an index scan, so the migration costs one pass of the table over
-    its whole life instead of a sort on every run.
-
-    A document counts as tabular when its name carries a tabular extension or
-    its stored file has a tabular MIME type. The second test matters for Drive:
-    a native Google Sheet keeps its original name, which usually has no
-    extension at all.
+    `> after_doc_id` ascending, capped at `limit`. Every page is an ordered
+    document_pkey scan, so the migration costs one pass of the table over its
+    whole life rather than a sort per run.
 
     Left out: documents whose raw file was never stored, because only a crawl
-    can rebuild their sections, and documents whose cc-pairs are all being
-    deleted.
+    can rebuild their sections, and documents whose cc-pairs are all DELETING.
     """
-    # One row per document: a document in several cc-pairs is re-indexed under
-    # the lowest, as any of them would upsert the same row. Resolved per
-    # document rather than by DISTINCT ON over the join, which would have to
-    # sort the join by (id, connector_id, credential_id) and so could not use
-    # the ordered document_pkey scan the cursor depends on.
+    # One row per document, the lowest cc-pair winning, as any of them would
+    # write the same chunks. A LATERAL rather than DISTINCT ON, which would
+    # order by (id, connector_id, credential_id) over the join and so could
+    # not use the ordered scan the cursor depends on.
     cc_pair = (
         select(
             DocumentByConnectorCredentialPair.connector_id,

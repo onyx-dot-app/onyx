@@ -677,19 +677,16 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def get_chunk_heads(
         self, document_ids: list[str]
     ) -> dict[str, DocumentChunkWithoutVectors]:
-        """Gets the lowest-indexed stored chunk of each of the given documents.
+        """Gets chunk 0 of each of the given documents, which carries the
+        fields Postgres does not keep - the title and the metadata tags.
 
-        That chunk carries the document fields Postgres does not keep - the
-        title and the metadata tags - so a caller that rebuilds a document
-        without re-fetching it from the source can restore them.
-
-        Only chunk 0 is looked up. A document that lost it is reported as
-        absent, which the caller treats as "not re-chunkable".
+        A document missing chunk 0 is reported as absent, which a caller
+        rebuilding from it treats as "not re-chunkable".
         """
         if not document_ids:
             return {}
-        # Fetched by deterministic id rather than scanned: an oversized
-        # document can hold hundreds of chunks, and the caller wants one.
+        # By deterministic id, not a scan: these documents hold hundreds of
+        # chunks and the caller wants one.
         chunk_id_to_document_id = {
             get_opensearch_doc_chunk_id(
                 tenant_state=self._tenant_state,
