@@ -320,15 +320,15 @@ class TabularRechunkTarget(NamedTuple):
     file_type: str | None
 
 
-def get_oversized_tabular_documents(
+def _tabular_rechunk_targets(
     db_session: Session,
     *,
-    chunk_count_above: int,
+    selector: ColumnElement[bool],
     after_doc_id: str | None,
     limit: int,
 ) -> list[TabularRechunkTarget]:
-    """An ordered page of tabular documents still holding more chunks than the
-    current chunker can produce for one, with the cc-pair to re-index under.
+    """An ordered page of tabular documents matching `selector`, with the
+    cc-pair to re-index each under.
 
     Same cursor contract as `get_document_ids_for_cc_pair_batch`: ids
     `> after_doc_id` ascending, capped at `limit`. Scanning by primary key keeps
@@ -387,7 +387,7 @@ def get_oversized_tabular_documents(
         # Inner: a document whose cc-pairs are all DELETING yields no row.
         .join(cc_pair, true())
         .where(
-            DbDocument.chunk_count > chunk_count_above,
+            selector,
             DbDocument.file_id.isnot(None),
             or_(
                 # A Drive-exported spreadsheet keeps its original name, which
@@ -416,6 +416,43 @@ def get_oversized_tabular_documents(
             stmt
         ).all()
     ]
+
+
+def get_oversized_tabular_documents(
+    db_session: Session,
+    *,
+    chunk_count_above: int,
+    after_doc_id: str | None,
+    limit: int,
+) -> list[TabularRechunkTarget]:
+    """Tabular documents still holding more chunks than the current chunker
+    could produce for one."""
+    return _tabular_rechunk_targets(
+        db_session,
+        selector=DbDocument.chunk_count > chunk_count_above,
+        after_doc_id=after_doc_id,
+        limit=limit,
+    )
+
+
+def get_tabular_rechunk_retry_targets(
+    db_session: Session,
+    *,
+    document_ids: Collection[str],
+    after_doc_id: str | None,
+    limit: int,
+) -> list[TabularRechunkTarget]:
+    """Named documents, whatever their chunk_count.
+
+    A re-chunk that fails after chunking still commits the new, smaller count,
+    so the oversized filter cannot find its own failures a second time.
+    """
+    return _tabular_rechunk_targets(
+        db_session,
+        selector=DbDocument.id.in_(document_ids),
+        after_doc_id=after_doc_id,
+        limit=limit,
+    )
 
 
 class PortedScope(NamedTuple):

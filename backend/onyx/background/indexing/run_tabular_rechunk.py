@@ -12,7 +12,7 @@ crawl writes.
 
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 
 from pydantic import BaseModel
 
@@ -34,7 +34,11 @@ from onyx.connectors.models import (
     IndexAttemptMetadata,
     convert_metadata_list_of_strings_to_dict,
 )
-from onyx.db.document import TabularRechunkTarget, get_oversized_tabular_documents
+from onyx.db.document import (
+    TabularRechunkTarget,
+    get_oversized_tabular_documents,
+    get_tabular_rechunk_retry_targets,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document as DbDocument
 from onyx.db.search_settings import get_current_search_settings
@@ -233,11 +237,15 @@ def run_tabular_rechunk(
     *,
     tenant_id: str,
     after_doc_id: str | None,
+    retry_document_ids: Collection[str] | None = None,
     time_budget_s: float = TABULAR_RECHUNK_TIME_BUDGET_S,
     on_batch: Callable[[], None],
 ) -> TabularRechunkResult:
     """Re-chunks oversized tabular documents from the cursor until the scan
     reaches the end of the table or the time budget runs out.
+
+    `retry_document_ids` re-chunks exactly those documents instead, whatever
+    their chunk_count, which is how a failed document is reached a second time.
 
     `on_batch` runs after every batch, so the caller can keep a lock lease
     alive: the budget is only checked between pages, and one batch can outlast
@@ -259,11 +267,20 @@ def run_tabular_rechunk(
 
     while time.monotonic() - start < time_budget_s:
         with get_session_with_current_tenant() as db_session:
-            targets = get_oversized_tabular_documents(
-                db_session,
-                chunk_count_above=TABULAR_CHUNK_CEILING,
-                after_doc_id=cursor,
-                limit=INDEX_BATCH_SIZE,
+            targets = (
+                get_tabular_rechunk_retry_targets(
+                    db_session,
+                    document_ids=retry_document_ids,
+                    after_doc_id=cursor,
+                    limit=INDEX_BATCH_SIZE,
+                )
+                if retry_document_ids is not None
+                else get_oversized_tabular_documents(
+                    db_session,
+                    chunk_count_above=TABULAR_CHUNK_CEILING,
+                    after_doc_id=cursor,
+                    limit=INDEX_BATCH_SIZE,
+                )
             )
         # A short page means no further matches before the end of the table.
         finished = len(targets) < INDEX_BATCH_SIZE
