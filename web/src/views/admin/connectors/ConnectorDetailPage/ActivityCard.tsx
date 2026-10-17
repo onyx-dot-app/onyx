@@ -370,7 +370,7 @@ export default function ActivityCard({
                   <Section
                     width="fit"
                     height="fit"
-                    className="opacity-0 transition-opacity group-hover/activity:opacity-100 group-focus-within/activity:opacity-100 group-has-[[data-state=open]]/activity:opacity-100"
+                    className="opacity-0 transition-opacity no-hover:opacity-100 group-hover/activity:opacity-100 group-focus-within/activity:opacity-100 group-has-[[data-state=open]]/activity:opacity-100"
                   >
                     <Button
                       rightIcon={SvgCheckAll}
