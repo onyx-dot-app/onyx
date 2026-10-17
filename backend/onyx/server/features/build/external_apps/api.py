@@ -145,10 +145,11 @@ def _to_user_response(
     for pattern in app.upstream_url_patterns:
         if app.app_type != ExternalAppType.CUSTOM:
             pattern = pattern.removeprefix("^")
-            pattern = pattern.replace(r"\.", ".")
         authority = pattern.partition("://")[2].split("/", 1)[0].rsplit("@", 1)[-1]
-        if app.app_type != ExternalAppType.CUSTOM and "?" in authority:
-            continue
+        if app.app_type != ExternalAppType.CUSTOM:
+            if "?" in authority or re.search(r"(?<!\\)\.", authority):
+                continue
+            pattern = pattern.replace(r"\.", ".").replace(r"\-", "-")
         host_port, separator, query = authority.partition("?")
         if separator and "=" not in query:
             continue

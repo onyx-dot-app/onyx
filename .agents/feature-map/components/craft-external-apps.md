@@ -70,7 +70,8 @@ sync (`server.py:_Readiness`).
 
 Member app responses include `service_urls`: unique literal HTTP(S) origins for display.
 The projection strips credentials, paths, queries, and default ports. Built-in
-escaped hostname dots are decoded. Ambiguous regex and wildcard hosts are omitted.
+escaped hostname dots and hyphens are decoded. Unescaped regex dots and ambiguous
+regex or wildcard hosts are omitted.
 Raw upstream patterns, authentication templates, and organization credentials remain admin-only.
 
 | Method | Path | Handler | Notes |

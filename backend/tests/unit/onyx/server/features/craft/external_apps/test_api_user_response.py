@@ -136,6 +136,16 @@ def test_user_response_uses_raw_presence_for_authentication() -> None:
             ["https://api.linear.app"],
         ),
         (
+            ExternalAppType.ZENDESK,
+            [r"https://acme\-support\.zendesk\.com/api/v2/.*"],
+            ["https://acme-support.zendesk.com"],
+        ),
+        (
+            ExternalAppType.LINEAR,
+            ["https://api.linear.app/.*", r"https://api\.linear.app/.*"],
+            [],
+        ),
+        (
             ExternalAppType.CUSTOM,
             ["https://user:secret@API.Example.com:443/private?token=secret#fragment"],
             ["https://api.example.com"],
