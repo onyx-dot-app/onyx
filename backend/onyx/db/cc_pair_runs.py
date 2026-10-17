@@ -453,9 +453,10 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         .where(ConnectorCredentialPair.id.in_(run_filter.cc_pair_ids))
     )
     newest = aliased(CapabilityCheckRun)
-    pair_keys = select(
-        ConnectorCredentialPair.credential_id, ConnectorCredentialPair.connector_id
-    ).where(ConnectorCredentialPair.id.in_(run_filter.cc_pair_ids))
+    pair = aliased(ConnectorCredentialPair)
+    pair_keys = select(pair.credential_id, pair.connector_id).where(
+        pair.id.in_(run_filter.cc_pair_ids)
+    )
     has_newer_run = ~CapabilityCheckRun.id.in_(
         _latest_finished(
             newest.id,

@@ -736,7 +736,7 @@ class CCPairRunKey(BaseModel):
 
 
 class CCPairRunsResolveRequest(BaseModel):
-    runs: list[CCPairRunKey] = Field(max_length=500)
+    runs: list[CCPairRunKey] = Field(min_length=1, max_length=500)
 
 
 class CCPairRunLevel(str, Enum):

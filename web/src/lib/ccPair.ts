@@ -1,4 +1,4 @@
-import type { ErrorResponseBody } from "@/lib/fetcher";
+import { parseErrorDetail, type ErrorResponseBody } from "@/lib/fetcher";
 import {
   ConnectorCredentialPairStatus,
   type CCPairRunKind,
@@ -76,8 +76,9 @@ export async function resolveCCPairRuns(
     }
   );
   if (!response.ok) {
-    const { detail }: ErrorResponseBody = await response.json();
-    throw new Error(detail);
+    throw new Error(
+      await parseErrorDetail(response, `HTTP ${response.status}`)
+    );
   }
 }
 
@@ -112,8 +113,9 @@ export async function resolveMatchingRuns(
     }
   );
   if (!response.ok) {
-    const { detail }: ErrorResponseBody = await response.json();
-    throw new Error(detail);
+    throw new Error(
+      await parseErrorDetail(response, `HTTP ${response.status}`)
+    );
   }
   return response.json();
 }

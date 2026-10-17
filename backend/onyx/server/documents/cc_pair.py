@@ -160,6 +160,20 @@ def _get_readable_cc_pair_or_raise(
     return cc_pair
 
 
+def _get_operated_cc_pair_or_raise(
+    cc_pair_id: int, db_session: Session, user: User
+) -> ConnectorCredentialPair:
+    """Same as _get_readable_cc_pair_or_raise, but 403s unless the caller also operates the pair."""
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this connector",
+        )
+    return _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}/index-attempts", tags=PUBLIC_API_TAGS)
 def get_cc_pair_index_attempts(
     cc_pair_id: int,
@@ -348,23 +362,7 @@ def resolve_cc_pair_runs(
     """Marks failed runs, or runs with open document errors, of the pair's feed
     resolved. They keep their status; the feed moves them out of the open
     failures and errors. Takes the targeted reindex's permissions."""
-    if not request.runs:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "No runs to resolve.")
-    if not verify_user_has_access_to_cc_pair(
-        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You do not have access to this connector",
-        )
-    cc_pair = get_readable_connector_credential_pair_for_user(
-        cc_pair_id, db_session, user
-    )
-    if cc_pair is None:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "CC Pair not found for current user permissions",
-        )
+    cc_pair = _get_operated_cc_pair_or_raise(cc_pair_id, db_session, user)
     wanted = list(dict.fromkeys((run.kind, run.attempt_id) for run in request.runs))
     run_filter = CCPairRunFilter(
         cc_pair_ids=[cc_pair_id],
@@ -376,6 +374,7 @@ def resolve_cc_pair_runs(
         status_groups=None,
         errors=None,
         superseded=None,
+        resolved=None,
     )
     resolvable = get_resolvable_runs(
         db_session, _cc_pair_run_kinds(db_session, cc_pair), run_filter, wanted
@@ -385,7 +384,7 @@ def resolve_cc_pair_runs(
             OnyxErrorCode.INVALID_INPUT,
             "Only this connector's failed runs or runs with open errors resolve.",
         )
-    resolve_runs__no_commit(db_session, resolvable, user.id)
+    resolved_count = resolve_runs__no_commit(db_session, resolvable, user.id)
     db_session.commit()
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,
@@ -399,7 +398,7 @@ def resolve_cc_pair_runs(
             ]
         },
     )
-    return CCPairRunsResolveResponse(resolved_count=len(wanted))
+    return CCPairRunsResolveResponse(resolved_count=resolved_count)
 
 
 def _pair_open_level(
@@ -410,21 +409,7 @@ def _pair_open_level(
 ) -> tuple[list[CCPairRunKind], CCPairRunFilter]:
     """The run kinds and filter of a level's open runs on a pair the caller
     operates."""
-    if not verify_user_has_access_to_cc_pair(
-        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You do not have access to this connector",
-        )
-    cc_pair = get_readable_connector_credential_pair_for_user(
-        cc_pair_id, db_session, user
-    )
-    if cc_pair is None:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "CC Pair not found for current user permissions",
-        )
+    cc_pair = _get_operated_cc_pair_or_raise(cc_pair_id, db_session, user)
     kinds = [
         kind
         for kind in _cc_pair_run_kinds(db_session, cc_pair)

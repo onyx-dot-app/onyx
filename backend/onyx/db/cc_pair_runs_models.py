@@ -33,7 +33,7 @@ class CCPairRunFilter(BaseModel):
     status_groups: set[CCPairRunStatusGroup] | None
     errors: CCPairRunErrors | None
     superseded: bool | None
-    resolved: bool | None = None
+    resolved: bool | None
 
 
 class CCPairRunPage(BaseModel):

@@ -258,12 +258,12 @@ export interface CCPairHierarchyBreakdown {
 /** Mirrors `CCPairRunErrors`: runs with open document errors, with all of them resolved, or with none. */
 export type CCPairRunErrors = "unresolved" | "resolved" | "none";
 
-/** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
 /** When an admin resolved the run, on every run. A resolved run keeps its status. */
 interface CCPairRunResolution {
   resolved_at: string | null;
 }
 
+/** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
 export type CCPairRun = CCPairRunResolution &
   (
     | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
