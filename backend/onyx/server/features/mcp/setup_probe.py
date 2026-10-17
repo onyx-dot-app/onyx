@@ -40,8 +40,12 @@ async def stream_mcp_probe(server_url: str) -> AsyncGenerator[str, None]:
     queue: asyncio.Queue[MCPProbeProgress | MCPProbeCompletion] = asyncio.Queue()
 
     async def run() -> None:
-        result = await probe_mcp_server(server_url, queue.put)
-        await queue.put({"type": "result", "result": result.model_dump(mode="json")})
+        try:
+            result = await probe_mcp_server(server_url, queue.put)
+            result_data = result.model_dump(mode="json")
+        except Exception:
+            result_data = MCPUnreachableProbeResult().model_dump(mode="json")
+        await queue.put({"type": "result", "result": result_data})
 
     task = asyncio.create_task(run())
     try:

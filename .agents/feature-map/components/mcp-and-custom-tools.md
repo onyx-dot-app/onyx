@@ -704,5 +704,5 @@ Changing a server URL invalidates existing user and administrator credentials,
 resets setup status, and reloads affected Craft sessions.
 
 Preferences use `MCPServerUserPreference` and `ToolUserPreference`.
-Apply revisions `b71e3a9d2c04`, `c82f4a0e3d15`, and their merge `ab2e134babfa`
-before deploying code that reads the preference tables.
+Apply revisions `b71e3a9d2c04` and `c82f4a0e3d15` before deploying code that
+reads the preference tables.

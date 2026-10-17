@@ -1419,7 +1419,10 @@ def update_mcp_user_preferences(
 ) -> MCPUserPreferencesResponse:
     if not user_can_access_mcp_server(user, server_id, db):
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "MCP server is not accessible")
-    server = get_mcp_server_by_id(server_id, db)
+    try:
+        server = get_mcp_server_by_id(server_id, db)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
     if (
         request.enabled_in_chat is True
         and server_id not in get_default_chat_mcp_server_ids([server_id], db)

@@ -13,6 +13,7 @@ from onyx.db.mcp import (
     upsert_mcp_server_user_preferences__no_commit,
 )
 from onyx.db.models import MCPServer, MCPServerUserPreference, User
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api
 from onyx.server.features.mcp.models import (
@@ -65,6 +66,30 @@ def test_partial_updates_preserve_other_surface_and_user(
 def test_update_requires_boolean_preference(payload: dict[str, None]) -> None:
     with pytest.raises(ValidationError):
         MCPUserPreferencesUpdateRequest.model_validate(payload)
+
+
+def test_deleted_server_returns_not_found_without_saving_preferences(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = MagicMock(spec=Session)
+    missing = ValueError("Server no longer exists")
+    monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_: True)
+    monkeypatch.setattr(api, "get_mcp_server_by_id", MagicMock(side_effect=missing))
+    write = MagicMock()
+    monkeypatch.setattr(api, "upsert_mcp_server_user_preferences__no_commit", write)
+
+    with pytest.raises(OnyxError) as error:
+        api.update_mcp_user_preferences(
+            42,
+            MCPUserPreferencesUpdateRequest(enabled_in_chat=False),
+            db,
+            User(id=uuid4()),
+        )
+
+    assert error.value.error_code is OnyxErrorCode.NOT_FOUND
+    assert error.value.__cause__ is missing
+    write.assert_not_called()
+    db.commit.assert_not_called()
 
 
 @pytest.mark.parametrize(

@@ -101,6 +101,56 @@ def test_stream_close_cancels_inflight_probe(monkeypatch: pytest.MonkeyPatch) ->
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("failure", [None, "probe", "serialization"])
+def test_stream_delivers_one_terminal_result_after_producer_failure(
+    monkeypatch: pytest.MonkeyPatch, failure: str | None
+) -> None:
+    async def probe(
+        _url: str, _progress: setup_probe.Progress
+    ) -> setup_probe.MCPSetupProbeResult:
+        if failure == "probe":
+            raise RuntimeError("Probe failed")
+        return setup_probe.MCPPublicProbeResult(
+            transport=MCPTransport.STREAMABLE_HTTP,
+            tool_count=1,
+            server_name="Support tools",
+        )
+
+    def fail_serialization(*_: object, **__: object) -> None:
+        raise ValueError("Serialization failed")
+
+    monkeypatch.setattr(setup_probe, "probe_mcp_server", probe)
+    if failure == "serialization":
+        monkeypatch.setattr(
+            setup_probe.MCPPublicProbeResult, "model_dump", fail_serialization
+        )
+
+    async def collect() -> list[dict]:
+        return [
+            json.loads(event)
+            async for event in setup_probe.stream_mcp_probe("https://mcp.example/mcp")
+        ]
+
+    async def run() -> list[dict]:
+        return await asyncio.wait_for(collect(), timeout=1)
+
+    events = asyncio.run(run())
+    assert len(events) == 1
+    assert events[0]["type"] == "result"
+    if failure is None:
+        assert events[0]["result"] == {
+            "kind": "public",
+            "transport": "STREAMABLE_HTTP",
+            "tool_count": 1,
+            "server_name": "Support tools",
+        }
+    else:
+        assert events[0]["result"] == {
+            "kind": "unreachable",
+            "reason": "connection_failed",
+        }
+
+
 @pytest.mark.parametrize("registration", [True, False])
 def test_oauth_uses_post_challenge_and_only_reads_metadata(
     monkeypatch: pytest.MonkeyPatch, registration: bool
