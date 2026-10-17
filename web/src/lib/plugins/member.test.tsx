@@ -357,6 +357,17 @@ test("does not confuse global MCP status or default Chat policy with personal au
   expect(canUseMemberPlugin(plugin)).toBe(true);
 });
 
+test("accepts unauthenticated OpenAPI tools with null custom headers", () => {
+  const plugins = buildMemberPlugins([], [tool({ custom_headers: null })], {
+    kind: "loaded",
+    tokens: [],
+  });
+  expect(plugins[0]?.connection).toEqual({
+    kind: "connected",
+    ownership: "none",
+  });
+});
+
 test("keeps OAuth loading, failed status, missing tokens, and expired grants distinct", () => {
   const oauthTool = tool({ oauth_config_id: 4 });
   expect(

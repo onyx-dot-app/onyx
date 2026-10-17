@@ -130,7 +130,7 @@ function openAPIConnection(
   if (tool.passthrough_auth) return { kind: "connected", ownership: "session" };
   return {
     kind: "connected",
-    ownership: tool.custom_headers.length > 0 ? "workspace" : "none",
+    ownership: (tool.custom_headers?.length ?? 0) > 0 ? "workspace" : "none",
   };
 }
 

@@ -23,7 +23,7 @@ export interface ToolSnapshot {
   definition: Record<string, any> | null;
 
   // only specified for Custom Tools. Custom headers to add to the tool's API requests.
-  custom_headers: { key: string; value: string }[];
+  custom_headers: { key: string; value: string }[] | null;
 
   // only specified for Custom Tools. ID of the tool in the codebase.
   in_code_tool_id: string | null;

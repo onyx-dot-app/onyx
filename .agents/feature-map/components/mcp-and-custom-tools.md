@@ -721,4 +721,5 @@ OAuth completion helpers correlate attempts and check the saved connection befor
 MCP verification preserves the initiating agent or Craft roster through OAuth completion.
 OpenAPI expiry requires sign-in unless backend status confirms refresh capability.
 Missing refresh capability retains the expired-token sign-in requirement.
+Null OpenAPI custom headers represent a connection without shared header credentials.
 These helpers do not grant access or attach new tools by themselves.
