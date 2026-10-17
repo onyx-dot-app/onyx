@@ -916,6 +916,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Mesa de servicio de Atlassian"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -3648,6 +3651,26 @@
             "comment_email_blacklist": {
               "label": "Lista negra de correos de comentarios",
               "description": "Suele ser útil para ignorar ciertos bots. Añade los correos de los usuarios cuyos comentarios NO deben indexarse."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar conector de Jira Service Management",
+          "subtext": "Configura qué contenido de Jira Service Management indexar. De forma predeterminada se indexan todos los proyectos de service desk; también puedes fijar un solo proyecto o indicar una consulta JQL personalizada. Si un conector de Jira ya indexa este sitio, primero excluye de él los proyectos de service desk (fija sus proyectos o, en Jira Cloud, usa la JQL projectType != service_desk) para que estos tickets se atribuyan a Jira Service Management.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Todos los service desks"
+                }
+              }
+            },
+            "everything": {
+              "label": "Todos los service desks",
+              "description": "Este conector indexará todos los proyectos de service desk a los que tengan acceso las credenciales proporcionadas."
+            },
+            "project_key": {
+              "description": "La clave de un proyecto de service desk específico a indexar (p. ej., 'SUP')."
             }
           }
         },

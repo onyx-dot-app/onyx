@@ -916,6 +916,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "مكتب خدمة Atlassian"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -3648,6 +3651,26 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تهيئة موصل Jira Service Management",
+          "subtext": "حدّد محتوى Jira Service Management المراد فهرسته. افتراضيًا تُفهرس جميع مشاريع مكتب الخدمة؛ ويمكنك أيضًا تثبيت مشروع واحد أو تقديم استعلام JQL مخصص. إذا كان موصل Jira يفهرس هذا الموقع بالفعل، فاستبعد منه مشاريع مكتب الخدمة أولًا (ثبّت مشاريعه، أو استخدم في Jira Cloud استعلام JQL projectType != service_desk) حتى تُنسب هذه التذاكر إلى Jira Service Management.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "جميع مكاتب الخدمة"
+                }
+              }
+            },
+            "everything": {
+              "label": "جميع مكاتب الخدمة",
+              "description": "سيفهرس هذا الموصل جميع مشاريع مكتب الخدمة التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "project_key": {
+              "description": "مفتاح مشروع مكتب خدمة محدد للفهرسة (مثل \"SUP\")."
             }
           }
         },

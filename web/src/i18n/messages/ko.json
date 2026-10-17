@@ -916,6 +916,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian 서비스 데스크"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -3648,6 +3651,26 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "인덱싱할 Jira Service Management 콘텐츠를 구성합니다. 기본적으로 모든 서비스 데스크 프로젝트를 인덱싱하며, 단일 프로젝트를 지정하거나 사용자 지정 JQL 쿼리를 입력할 수도 있습니다. 이 사이트를 이미 Jira 커넥터가 인덱싱하고 있다면, 먼저 해당 커넥터에서 서비스 데스크 프로젝트를 제외하세요(프로젝트를 지정하거나 Jira Cloud에서는 JQL projectType != service_desk 사용). 그래야 이 티켓들이 Jira Service Management로 분류됩니다.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "모든 서비스 데스크"
+                }
+              }
+            },
+            "everything": {
+              "label": "모든 서비스 데스크",
+              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 서비스 데스크 프로젝트를 인덱싱합니다!"
+            },
+            "project_key": {
+              "description": "인덱싱할 특정 서비스 데스크 프로젝트의 키입니다 (예: 'SUP')."
             }
           }
         },
