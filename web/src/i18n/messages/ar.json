@@ -124,13 +124,7 @@
     },
     "addMcpModal": {
       "addHeader": {
-        "description": "اربط خادم MCP (بروتوكول سياق النموذج) لإضافة إجراءات مخصصة.",
         "title": "إضافة خادم MCP"
-      },
-      "authStatus": {
-        "apiTokenDescription": "تم تهيئة رمز API",
-        "connectedDescription": "متصل",
-        "title": "تمت المصادقة والاتصال"
       },
       "cancelButton": {
         "label": "إلغاء"
@@ -140,16 +134,6 @@
         "suffix": "اختياري",
         "title": "الوصف"
       },
-      "disconnectButton": {
-        "tooltip": "قطع الاتصال بالخادم"
-      },
-      "editConfigsButton": {
-        "label": "إعدادات الاتصال"
-      },
-      "manageHeader": {
-        "description": "حدّث إعدادات خادم MCP وأدر المصادقة.",
-        "title": "إدارة خادم MCP"
-      },
       "name": {
         "placeholder": "مثل Linear",
         "required": "اسم الخادم مطلوب",
@@ -157,19 +141,13 @@
       },
       "serverUrl": {
         "invalid": "يجب أن يكون عنوان URL صالحًا",
-        "required": "عنوان URL للخادم مطلوب",
         "title": "عنوان URL لخادم MCP"
       },
       "submitButton": {
-        "addLabel": "إضافة خادم",
-        "addingLabel": "جارٍ الإضافة...",
         "saveLabel": "حفظ التغييرات",
         "savingLabel": "جارٍ الحفظ..."
       },
       "toasts": {
-        "createFailed": "فشل إنشاء خادم MCP",
-        "serverCreated": "تم إنشاء خادم MCP بنجاح",
-        "serverUpdated": "تم تحديث خادم MCP بنجاح",
         "updateFailed": "فشل تحديث خادم MCP"
       },
       "access": {
@@ -192,27 +170,13 @@
         "planTag": "Business",
         "planNote": "يتطلب الوصول عبر المجموعات خطة Business."
       },
-      "craft": {
-        "title": "متاح في Craft",
-        "description": "السماح للمستخدمين بالوصول إلى خادم MCP هذا في Craft."
-      },
       "defaultChat": {
-        "title": "متاح في دردشة Onyx الافتراضية",
-        "description": "عند إيقافه، يجب على المستخدمين إضافة هذا الخادم إلى وكيل مخصص لاستخدامه في الدردشة."
+        "title": "متاح في دردشة Onyx الافتراضية"
       }
     },
     "addOpenApiModal": {
       "addHeader": {
-        "description": "أضف مخطط OpenAPI لإضافة إجراءات مخصصة.",
         "title": "إضافة إجراء OpenAPI"
-      },
-      "authStatus": {
-        "configuredTitle": "تم تهيئة المصادقة",
-        "enabledTitle": "تمت المصادقة والتفعيل",
-        "headersDescription": "تم تهيئة ترويسات مصادقة مخصصة",
-        "oauthDescription": "تم تهيئة مصادقة OAuth",
-        "oauthNamedDescription": "OAuth متصل عبر {name}",
-        "passthroughDescription": "تم تفعيل مصادقة التمرير المباشر"
       },
       "cancelButton": {
         "label": "إلغاء"
@@ -227,15 +191,10 @@
         "subDescription": "حدد مخطط OpenAPI يعرّف واجهات API التي تريد إتاحتها ضمن هذا الإجراء. يمكنك استخدام العناصر النائبة `CHAT_SESSION_ID` و`MESSAGE_ID` و`USER_ID` و`USER_EMAIL` في أي مكان في المخطط (مثل عنوان الخادم أو المسارات أو القيم الافتراضية للمعاملات) وستُستبدل بقيم الطلب الحالي وقت الاستدعاء. اعرف المزيد عن [إجراءات OpenAPI]({docsUrl}).",
         "title": "تعريف مخطط OpenAPI"
       },
-      "disableButton": {
-        "tooltip": "تعطيل الإجراء"
-      },
       "editConfigsButton": {
-        "disabledTooltip": "يمكن لمنشئ الإجراء أو المسؤول فقط إدارة المصادقة",
-        "label": "تعديل الإعدادات"
+        "disabledTooltip": "يمكن لمنشئ الإجراء أو المسؤول فقط إدارة المصادقة"
       },
       "editHeader": {
-        "description": "حدّث مخطط OpenAPI لهذا الإجراء.",
         "title": "تعديل إجراء OpenAPI"
       },
       "empty": {
@@ -247,9 +206,6 @@
       },
       "method": {
         "noSummary": "لا يوجد ملخص"
-      },
-      "serverUrl": {
-        "description": "عنوان URL موجود في المخطط. لا تتصل إلا بالخوادم التي تثق بها."
       },
       "submitButton": {
         "addLabel": "إضافة إجراء",
@@ -456,9 +412,6 @@
       }
     },
     "mcpCard": {
-      "card": {
-        "ariaLabel": "بطاقة خادم MCP {title}"
-      },
       "deleteModal": {
         "body": {
           "confirmation": "هل أنت متأكد من رغبتك في حذف خادم MCP هذا؟",
@@ -468,27 +421,6 @@
           "label": "حذف"
         },
         "title": "حذف خادم MCP"
-      },
-      "lastRefreshed": {
-        "label": "آخر تحديث للأدوات {time}"
-      },
-      "refreshToolsButton": {
-        "ariaLabel": "تحديث الأدوات",
-        "tooltip": "تحديث الأدوات"
-      },
-      "setupIncomplete": {
-        "label": "الإعداد غير مكتمل.",
-        "actionHint": "الإعداد غير مكتمل. انقر لإكمال الإعداد."
-      },
-      "status": {
-        "ready": "جاهز · {count, plural, one {أداة واحدة} other {# أدوات}}",
-        "incomplete": "الإعداد غير مكتمل",
-        "loading": "جارٍ تحميل الأدوات",
-        "disconnected": "غير متصل"
-      },
-      "authenticationButton": {
-        "tooltip": "إعداد المصادقة",
-        "ariaLabel": "إعداد المصادقة لـ {serverName}"
       }
     },
     "mcpOauthCallback": {
@@ -550,25 +482,10 @@
       },
       "toasts": {
         "deleteFailed": "فشل حذف خادم MCP",
-        "disableAllFailed": "فشل تعطيل جميع الأدوات",
         "disconnectFailed": "فشل قطع الاتصال بخادم MCP",
-        "enableAllFailed": "فشل تفعيل جميع الأدوات",
         "fetchToolsFailed": "فشل جلب الأدوات: {error}",
-        "noToolsToDisable": "لا توجد أدوات لتعطيلها",
         "reconnectFailed": "فشلت إعادة الاتصال بخادم MCP",
-        "refreshToolsFailed": "فشل تحديث الأدوات",
-        "renameFailed": "فشلت إعادة تسمية خادم MCP",
-        "serverDeleted": "تم حذف خادم MCP بنجاح",
-        "serverDisconnected": "تم قطع الاتصال بخادم MCP بنجاح",
-        "serverReconnected": "تمت إعادة الاتصال بخادم MCP بنجاح",
-        "serverRenamed": "تمت إعادة تسمية خادم MCP بنجاح",
-        "toolDisabled": "تم تعطيل الأداة بنجاح",
-        "toolEnabled": "تم تفعيل الأداة بنجاح",
-        "toolUpdateFailed": "فشل تحديث الأداة",
-        "toolsDisabled": "{count, plural, one {تم تعطيل أداة واحدة بنجاح} other {تم تعطيل # أدوات بنجاح}}",
-        "toolsEnabled": "{count, plural, one {تم تفعيل أداة واحدة بنجاح} other {تم تفعيل # أدوات بنجاح}}",
-        "toolsFetched": "تم تحميل الأدوات",
-        "toolsRefreshed": "تم تحديث الأدوات بنجاح"
+        "serverDeleted": "تم حذف خادم MCP بنجاح"
       }
     },
     "openApiAuthModal": {
@@ -704,27 +621,15 @@
       "addButton": {
         "label": "إضافة إجراء OpenAPI"
       },
-      "authModal": {
-        "authenticateTitle": "مصادقة {name}",
-        "defaultTitle": "مصادقة إجراء OpenAPI",
-        "updateTitle": "تحديث المصادقة لـ {name}"
-      },
       "empty": {
         "description": "أضف إجراءات مخصصة من مخططات OpenAPI."
       },
       "toasts": {
-        "actionRenamed": "تمت إعادة تسمية إجراء OpenAPI بنجاح",
-        "authHeadersSaved": "تم حفظ ترويسات المصادقة لـ {name} بنجاح.",
-        "authPassthroughSaved": "تم حفظ التمرير المباشر للمصادقة لـ {name} بنجاح.",
         "authSaveFailed": "فشل حفظ إعدادات المصادقة.",
         "authSaved": "تم حفظ المصادقة لـ {name} بنجاح.",
-        "authUpdated": "تم تحديث المصادقة لـ {name} بنجاح.",
         "deleteFailed": "فشل حذف الأداة.",
-        "deleteUnexpectedError": "حدث خطأ غير متوقع أثناء حذف الأداة.",
         "disconnectFailed": "فشل قطع الاتصال بإجراء OpenAPI.",
-        "renameFailed": "فشلت إعادة تسمية إجراء OpenAPI",
-        "toolDeleted": "تم حذف {name} بنجاح.",
-        "toolDisconnected": "تم قطع الاتصال بـ {name}."
+        "toolDeleted": "تم حذف {name} بنجاح."
       }
     },
     "perUserAuth": {
@@ -1023,15 +928,11 @@
       },
       "detail": {
         "connection": "الاتصال",
-        "serverUrl": "عنوان URL للخادم",
         "tools": "الأدوات",
         "toolCount": "{count, plural, zero {لا توجد أدوات} one {أداة واحدة} two {أداتان} few {# أدوات} many {# أداة} other {# أداة}}",
-        "toolsDescription": "الأدوات المتاحة من إضافة مساحة العمل هذه.",
         "noTools": "لا توجد أدوات مرئية محفوظة لهذه الإضافة.",
         "connect": "ربط الحساب",
         "useInChat": "استخدام في المحادثة",
-        "chatDisabled": "هذه الإضافة غير مفعّلة للمحادثة الرئيسية. يمكن لمسؤول مساحة العمل تغيير إتاحتها.",
-        "chatUnknown": "تعذر التأكد من إتاحتها في المحادثة الرئيسية.",
         "disconnect": "قطع اتصال الحساب",
         "disconnectTitle": "قطع اتصال {name}؟",
         "disconnectDescription": "سيؤدي هذا إلى إزالة اتصال حسابك. لن تتغير الإتاحة في مساحة العمل.",
@@ -1152,19 +1053,14 @@
           "viewTools": "عرض الأدوات",
           "saveToUpdate": "احفظ التغييرات لتحديث الأدوات."
         },
-        "reviewTitle": "مراجعة {name}",
         "createTitle": "إضافة إضافة OpenAPI",
         "detailDescription": "إدارة واجهة API هذه والأدوات المتاحة لوكلائك.",
         "detailsTitle": "تفاصيل الإضافة",
         "schemaTitle": "مخطط OpenAPI",
-        "editSchema": "تعديل المخطط",
         "notFound": "لم يتم العثور على الإضافة",
         "loadFailed": "تعذر تحميل هذه الإضافة",
         "unavailable": "قد تكون هذه الإضافة قد حُذفت، أو قد لا تملك صلاحية الوصول.",
         "readOnly": "يمكنك عرض هذه الإضافة، لكن حسابك لا يستطيع تغيير إعداداتها.",
-        "disableTitle": "تعطيل {name}؟",
-        "disableDescription": "لن تتمكن الوكلاء من استخدام هذه الإضافة. يمكنك تفعيلها مجددًا.",
-        "deleteTitle": "حذف {name}؟",
         "deleteDescription": "سيؤدي ذلك إلى حذف إضافة OpenAPI وإعداداتها نهائيًا."
       },
       "title": "الإضافات",
@@ -1291,12 +1187,8 @@
     },
     "mcpTools": {
       "title": "الأدوات",
-      "description": "اختر الأدوات المتاحة وحدد أذوناتها.",
       "enabledTab": "الأدوات المتاحة",
       "policiesTab": "أذونات Craft",
-      "enabledDescription": "اختر الأدوات التي يمكن للمستخدمين استخدامها في Onyx.",
-      "policiesDescription": "اختر متى يطلب Craft الموافقة قبل استخدام كل أداة.",
-      "back": "المصادقة",
       "refresh": "تحديث الأدوات",
       "loadError": "تعذر تحميل الأدوات",
       "saveError": "تعذر حفظ إعدادات الأدوات",
@@ -1305,17 +1197,11 @@
     },
     "mcpDetail": {
       "configuration": "إعدادات الخادم",
-      "editConfiguration": "تعديل إعدادات الخادم",
       "authentication": "المصادقة",
-      "editAuthentication": "تعديل المصادقة",
-      "availability": "التوفر",
-      "edit": "تعديل",
       "loadError": "تعذر تحميل خادم MCP",
       "notFound": "لم يتم العثور على خادم MCP",
       "unavailable": "ربما تم حذف هذا الخادم، أو قد لا تملك صلاحية الوصول إليه.",
       "retry": "إعادة المحاولة",
-      "restrictedAccess": "{groups, plural, one {# مجموعة} other {# مجموعات}} · {users, plural, one {# مستخدم} other {# مستخدمين}}",
-      "authenticationIncomplete": "لم يتم إعداد المصادقة.",
       "availabilitySaved": "تم تحديث التوفر"
     }
   },
@@ -5814,24 +5700,11 @@
           "description": "أضف تطبيقًا لإتاحته للجميع في مؤسستك.",
           "title": "لا توجد تطبيقات بعد"
         },
-        "panel": {
-          "blurb": "يُهيأ مرة واحدة للمؤسسة بأكملها. عدّل تطبيقًا لتعيين بيانات الاعتماد المشتركة وسياسات الإجراءات والمهارات المرتبطة."
-        },
         "tab": {
-          "label": "التطبيقات",
-          "labelWithCount": "التطبيقات · {count, number}"
+          "label": "التطبيقات"
         }
       },
       "card": {
-        "actionsButton": {
-          "ariaLabel": "إجراءات {name}"
-        },
-        "availableInCraft": {
-          "label": "متاح في Craft"
-        },
-        "customTag": {
-          "label": "مخصص"
-        },
         "deleteAction": {
           "label": "حذف"
         },
@@ -5841,34 +5714,12 @@
           "submit": {
             "label": "حذف التطبيق"
           },
-          "submitting": {
-            "label": "جارٍ الحذف…"
-          },
           "title": "حذف “{name}”؟"
-        },
-        "editAction": {
-          "label": "تعديل"
         },
         "toasts": {
           "deleteFailed": "فشل حذف \"{name}\"",
-          "disableFailed": "فشل تعطيل \"{name}\"",
           "enableFailed": "فشل تفعيل \"{name}\""
-        },
-        "toggle": {
-          "disableAriaLabel": "تعطيل {name}",
-          "enableAriaLabel": "تفعيل {name}"
         }
-      },
-      "facts": {
-        "actions": "{count, plural, one {# إجراء} other {# إجراءات}}",
-        "customSkills": "{count, plural, one {# مهارة مخصصة} other {# مهارات مخصصة}}",
-        "noCredentials": "بدون بيانات اعتماد",
-        "noCustomSkills": "بدون مهارات مخصصة",
-        "orgCredentialsSet": "بيانات اعتماد المؤسسة معيّنة",
-        "perUserCredentials": "بيانات اعتماد لكل مستخدم",
-        "providedByOnyx": "مقدَّم من Onyx",
-        "tools": "{count, plural, one {# أداة} other {# أدوات}}",
-        "upstreamPatterns": "{count, plural, one {# نمط منبع} other {# أنماط منبع}}"
       },
       "loading": {
         "label": "جارٍ التحميل…"
@@ -5876,33 +5727,16 @@
       "mcpServers": {
         "empty": {
           "description": "اربط خادمًا في الإجراءات، ثم فعّله هنا لمؤسستك.",
-          "openActionsButton": {
-            "label": "فتح الإجراءات"
-          },
           "title": "لا توجد خوادم MCP بعد"
         },
-        "manageInActionsButton": {
-          "label": "الإدارة في الإجراءات"
-        },
-        "panel": {
-          "blurb": "فعّل خادمًا للسماح للأعضاء الذين يملكون صلاحية الوصول إليه باستخدام أدواته في Craft. عدّله لتعيين سياسة الموافقة لكل أداة. تُدار اتصالات الخوادم وصلاحيات الوصول في الإجراءات."
-        },
         "tab": {
-          "label": "خوادم MCP",
-          "labelWithCount": "خوادم MCP · {count, number}"
+          "label": "خوادم MCP"
         }
       },
       "page": {
-        "addAppButton": {
-          "label": "إضافة تطبيق"
-        },
-        "backToCraftButton": {
-          "label": "العودة إلى Craft"
-        },
         "description": "أعدّ التطبيقات التي يمكن لوكيل Craft في مؤسستك استخدامها. يربط كل عضو حسابه الخاص من صفحة تطبيقات Craft."
       },
       "warnings": {
-        "invalidSkill": "مهارة غير صالحة",
         "providerUnavailable": "الموفر غير متاح"
       }
     },
@@ -14286,45 +14120,18 @@
         "title": "جارٍ توصيل تطبيقك"
       },
       "page": {
-        "connectButton": "اتصال",
-        "connectingButton": "جارٍ إعادة التوجيه…",
-        "disconnectButton": "قطع الاتصال",
         "empty": {
           "description": "لم يتم إعداد أي تطبيقات أو خوادم MCP لمؤسستك بعد.",
           "title": "لا يوجد ما يمكن توصيله بعد"
         },
-        "errors": {
-          "disconnectFailed": "فشل قطع الاتصال",
-          "startAuthFailed": "فشل بدء التفويض"
-        },
         "header": {
           "description": "قم بتوصيل الأدوات التي يمكن لـ Onyx Craft استخدامها كسياق أثناء عمله.",
-          "manageButton": "إدارة التطبيقات",
-          "searchPlaceholder": "البحث في التطبيقات...",
           "title": "التطبيقات"
-        },
-        "kinds": {
-          "app": {
-            "blurb": "تكاملات تدعمها Onyx مباشرةً. يأتي كل منها بمهارات تعلّم Craft كيفية استخدامه، ابدأ من هنا.",
-            "empty": "لم يتم إعداد أي تطبيقات لمؤسستك بعد.",
-            "emptyTitle": "لا توجد تطبيقات بعد",
-            "tabLabel": "التطبيقات · {count}"
-          },
-          "mcp": {
-            "blurb": "خوادم أتاحها مسؤول لاستخدامها في Craft. إذا كان الخادم يتطلب بيانات اعتماد شخصية، فاربط حسابك الخاص قبل استخدام أدواته.",
-            "empty": "لم تتم إتاحة أي خوادم MCP لـ Craft.",
-            "emptyTitle": "لا توجد خوادم MCP بعد",
-            "tabLabel": "خوادم MCP · {count}"
-          }
         },
         "loading": {
           "label": "جارٍ التحميل…"
         },
         "reviewSkillsButton": "مراجعة المهارات",
-        "search": {
-          "noMatchesDescription": "لا شيء هنا يطابق بحثك.",
-          "noMatchesTitle": "لا توجد نتائج مطابقة"
-        },
         "status": {
           "connected": "متصل",
           "connectedNeedsSkills": "متصل · ليست كل المهارات المرتبطة مفعّلة",

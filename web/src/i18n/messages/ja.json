@@ -124,13 +124,7 @@
     },
     "addMcpModal": {
       "addHeader": {
-        "description": "MCP (Model Context Protocol) サーバーに接続して、カスタムアクションを追加します。",
         "title": "MCP サーバーを追加"
-      },
-      "authStatus": {
-        "apiTokenDescription": "API token を設定済み",
-        "connectedDescription": "接続済み",
-        "title": "認証済み・接続済み"
       },
       "cancelButton": {
         "label": "キャンセル"
@@ -140,16 +134,6 @@
         "suffix": "任意",
         "title": "説明"
       },
-      "disconnectButton": {
-        "tooltip": "サーバーを切断"
-      },
-      "editConfigsButton": {
-        "label": "接続設定"
-      },
-      "manageHeader": {
-        "description": "MCP サーバーの設定を更新し、認証を管理します。",
-        "title": "MCP サーバーを管理"
-      },
       "name": {
         "placeholder": "例：Linear",
         "required": "サーバー名は必須です",
@@ -157,19 +141,13 @@
       },
       "serverUrl": {
         "invalid": "有効な URL を入力してください",
-        "required": "サーバー URL は必須です",
         "title": "MCP サーバー URL"
       },
       "submitButton": {
-        "addLabel": "サーバーを追加",
-        "addingLabel": "追加中...",
         "saveLabel": "変更を保存",
         "savingLabel": "保存中..."
       },
       "toasts": {
-        "createFailed": "MCP サーバーの作成に失敗しました",
-        "serverCreated": "MCP サーバーを作成しました",
-        "serverUpdated": "MCP サーバーを更新しました",
         "updateFailed": "MCP サーバーの更新に失敗しました"
       },
       "access": {
@@ -192,27 +170,13 @@
         "planTag": "Business",
         "planNote": "グループアクセスにはBusinessプランが必要です。"
       },
-      "craft": {
-        "title": "Craft で利用可能",
-        "description": "ユーザーが Craft でこの MCP サーバーにアクセスできるようにします。"
-      },
       "defaultChat": {
-        "title": "Onyx のデフォルトチャットで利用可能",
-        "description": "オフの場合、チャットで使用するには、このサーバーをカスタムエージェントに追加する必要があります。"
+        "title": "Onyx のデフォルトチャットで利用可能"
       }
     },
     "addOpenApiModal": {
       "addHeader": {
-        "description": "OpenAPI スキーマを追加して、カスタムアクションを追加します。",
         "title": "OpenAPI アクションを追加"
-      },
-      "authStatus": {
-        "configuredTitle": "認証を設定済み",
-        "enabledTitle": "認証済み・有効",
-        "headersDescription": "カスタム認証ヘッダーを設定済み",
-        "oauthDescription": "OAuth 認証を設定済み",
-        "oauthNamedDescription": "{name} 経由で OAuth 接続済み",
-        "passthroughDescription": "パススルー認証が有効です"
       },
       "cancelButton": {
         "label": "キャンセル"
@@ -227,15 +191,10 @@
         "subDescription": "このアクションで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI アクション]({docsUrl}) を参照してください。",
         "title": "OpenAPI スキーマ定義"
       },
-      "disableButton": {
-        "tooltip": "アクションを無効化"
-      },
       "editConfigsButton": {
-        "disabledTooltip": "認証を管理できるのは、アクションの作成者または管理者のみです",
-        "label": "設定を編集"
+        "disabledTooltip": "認証を管理できるのは、アクションの作成者または管理者のみです"
       },
       "editHeader": {
-        "description": "このアクションの OpenAPI スキーマを更新します。",
         "title": "OpenAPI アクションを編集"
       },
       "empty": {
@@ -247,9 +206,6 @@
       },
       "method": {
         "noSummary": "概要はありません"
-      },
-      "serverUrl": {
-        "description": "スキーマ内で見つかった URL です。信頼できるサーバーにのみ接続してください。"
       },
       "submitButton": {
         "addLabel": "アクションを追加",
@@ -456,9 +412,6 @@
       }
     },
     "mcpCard": {
-      "card": {
-        "ariaLabel": "{title} MCP サーバーカード"
-      },
       "deleteModal": {
         "body": {
           "confirmation": "この MCP サーバーを削除してもよろしいですか？",
@@ -468,27 +421,6 @@
           "label": "削除"
         },
         "title": "MCP サーバーを削除"
-      },
-      "lastRefreshed": {
-        "label": "ツールの最終更新 {time}"
-      },
-      "refreshToolsButton": {
-        "ariaLabel": "ツールを更新",
-        "tooltip": "ツールを更新"
-      },
-      "setupIncomplete": {
-        "label": "設定が完了していません。",
-        "actionHint": "設定が完了していません。クリックして設定を完了してください。"
-      },
-      "status": {
-        "ready": "準備完了 · {count, plural, one {# 個のツール} other {# 個のツール}}",
-        "incomplete": "設定未完了",
-        "loading": "ツールを読み込み中",
-        "disconnected": "切断済み"
-      },
-      "authenticationButton": {
-        "tooltip": "認証を設定",
-        "ariaLabel": "{serverName} の認証を設定"
       }
     },
     "mcpOauthCallback": {
@@ -550,25 +482,10 @@
       },
       "toasts": {
         "deleteFailed": "MCP サーバーの削除に失敗しました",
-        "disableAllFailed": "すべてのツールの無効化に失敗しました",
         "disconnectFailed": "MCP サーバーの切断に失敗しました",
-        "enableAllFailed": "すべてのツールの有効化に失敗しました",
         "fetchToolsFailed": "ツールの取得に失敗しました: {error}",
-        "noToolsToDisable": "無効化するツールがありません",
         "reconnectFailed": "MCP サーバーの再接続に失敗しました",
-        "refreshToolsFailed": "ツールの更新に失敗しました",
-        "renameFailed": "MCP サーバーの名前の変更に失敗しました",
-        "serverDeleted": "MCP サーバーを削除しました",
-        "serverDisconnected": "MCP サーバーを切断しました",
-        "serverReconnected": "MCP サーバーに再接続しました",
-        "serverRenamed": "MCP サーバーの名前を変更しました",
-        "toolDisabled": "ツールを無効にしました",
-        "toolEnabled": "ツールを有効にしました",
-        "toolUpdateFailed": "ツールの更新に失敗しました",
-        "toolsDisabled": "{count, plural, one {# 個のツールを無効にしました} other {# 個のツールを無効にしました}}",
-        "toolsEnabled": "{count, plural, one {# 個のツールを有効にしました} other {# 個のツールを有効にしました}}",
-        "toolsFetched": "ツールを読み込みました",
-        "toolsRefreshed": "ツールを更新しました"
+        "serverDeleted": "MCP サーバーを削除しました"
       }
     },
     "openApiAuthModal": {
@@ -704,27 +621,15 @@
       "addButton": {
         "label": "OpenAPI アクションを追加"
       },
-      "authModal": {
-        "authenticateTitle": "{name} を認証",
-        "defaultTitle": "OpenAPI アクションを認証",
-        "updateTitle": "{name} の認証を更新"
-      },
       "empty": {
         "description": "OpenAPI スキーマからカスタムアクションを追加します。"
       },
       "toasts": {
-        "actionRenamed": "OpenAPI アクションの名前を変更しました",
-        "authHeadersSaved": "{name} の認証ヘッダーを保存しました。",
-        "authPassthroughSaved": "{name} の認証パススルーを保存しました。",
         "authSaveFailed": "認証設定の保存に失敗しました。",
         "authSaved": "{name} の認証を保存しました。",
-        "authUpdated": "{name} の認証を更新しました。",
         "deleteFailed": "ツールの削除に失敗しました。",
-        "deleteUnexpectedError": "ツールの削除中に予期しないエラーが発生しました。",
         "disconnectFailed": "OpenAPI アクションの切断に失敗しました。",
-        "renameFailed": "OpenAPI アクションの名前の変更に失敗しました",
-        "toolDeleted": "{name} を削除しました。",
-        "toolDisconnected": "{name} を切断しました。"
+        "toolDeleted": "{name} を削除しました。"
       }
     },
     "perUserAuth": {
@@ -1023,15 +928,11 @@
       },
       "detail": {
         "connection": "接続",
-        "serverUrl": "サーバーURL",
         "tools": "ツール",
         "toolCount": "{count, plural, other {#個のツール}}",
-        "toolsDescription": "このワークスペースプラグインで利用できるツール。",
         "noTools": "このプラグインには表示できるツールが保存されていません。",
         "connect": "アカウントを接続",
         "useInChat": "チャットで使用",
-        "chatDisabled": "このプラグインはメインチャットで有効になっていません。ワークスペース管理者が利用可否を変更できます。",
-        "chatUnknown": "メインチャットでの利用可否を確認できませんでした。",
         "disconnect": "アカウントの接続を解除",
         "disconnectTitle": "{name}の接続を解除しますか？",
         "disconnectDescription": "アカウントの接続を削除します。ワークスペースでの利用可否は変わりません。",
@@ -1152,19 +1053,14 @@
           "viewTools": "ツールを表示",
           "saveToUpdate": "変更を保存してツールを更新してください。"
         },
-        "reviewTitle": "{name} を確認",
         "createTitle": "OpenAPI プラグインを追加",
         "detailDescription": "この API とエージェントが使用できるツールを管理します。",
         "detailsTitle": "プラグインの詳細",
         "schemaTitle": "OpenAPI スキーマ",
-        "editSchema": "スキーマを編集",
         "notFound": "プラグインが見つかりません",
         "loadFailed": "このプラグインを読み込めませんでした",
         "unavailable": "このプラグインは削除されたか、アクセス権がない可能性があります。",
         "readOnly": "このプラグインは表示できますが、設定を変更する権限はありません。",
-        "disableTitle": "{name} を無効にしますか？",
-        "disableDescription": "エージェントはこのプラグインを使用できなくなります。後で再び有効にできます。",
-        "deleteTitle": "{name} を削除しますか？",
         "deleteDescription": "OpenAPI プラグインとその設定が完全に削除されます。"
       },
       "title": "プラグイン",
@@ -1291,12 +1187,8 @@
     },
     "mcpTools": {
       "title": "ツール",
-      "description": "利用可能なツールを選択し、権限を設定します。",
       "enabledTab": "利用可能なツール",
       "policiesTab": "Craft の権限",
-      "enabledDescription": "ユーザーが Onyx で使用できるツールを選択します。",
-      "policiesDescription": "各ツールの使用前に Craft が承認を求める条件を選択します。",
-      "back": "認証",
       "refresh": "ツールを更新",
       "loadError": "ツールを読み込めませんでした",
       "saveError": "ツールの設定を保存できませんでした",
@@ -1305,17 +1197,11 @@
     },
     "mcpDetail": {
       "configuration": "サーバー設定",
-      "editConfiguration": "サーバー設定を編集",
       "authentication": "認証",
-      "editAuthentication": "認証を編集",
-      "availability": "利用可能な場所",
-      "edit": "編集",
       "loadError": "MCPサーバーを読み込めませんでした",
       "notFound": "MCPサーバーが見つかりません",
       "unavailable": "このサーバーは削除されたか、アクセス権がない可能性があります。",
       "retry": "再試行",
-      "restrictedAccess": "{groups, plural, one {# グループ} other {# グループ}} · {users, plural, one {# ユーザー} other {# ユーザー}}",
-      "authenticationIncomplete": "認証が設定されていません。",
       "availabilitySaved": "利用設定を更新しました"
     }
   },
@@ -5814,24 +5700,11 @@
           "description": "アプリを追加すると、組織の全員が使用できるようになります。",
           "title": "アプリがまだありません"
         },
-        "panel": {
-          "blurb": "組織全体に対して一度だけ設定します。アプリを編集して、共有の認証情報、アクションポリシー、関連するスキルを設定してください。"
-        },
         "tab": {
-          "label": "アプリ",
-          "labelWithCount": "アプリ · {count, number}"
+          "label": "アプリ"
         }
       },
       "card": {
-        "actionsButton": {
-          "ariaLabel": "{name} のアクション"
-        },
-        "availableInCraft": {
-          "label": "Craft で使用可能"
-        },
-        "customTag": {
-          "label": "カスタム"
-        },
         "deleteAction": {
           "label": "削除"
         },
@@ -5841,34 +5714,12 @@
           "submit": {
             "label": "アプリを削除"
           },
-          "submitting": {
-            "label": "削除しています…"
-          },
           "title": "「{name}」を削除しますか？"
-        },
-        "editAction": {
-          "label": "編集"
         },
         "toasts": {
           "deleteFailed": "「{name}」を削除できませんでした",
-          "disableFailed": "「{name}」を無効にできませんでした",
           "enableFailed": "「{name}」を有効にできませんでした"
-        },
-        "toggle": {
-          "disableAriaLabel": "{name} を無効にする",
-          "enableAriaLabel": "{name} を有効にする"
         }
-      },
-      "facts": {
-        "actions": "{count, plural, one {アクション # 件} other {アクション # 件}}",
-        "customSkills": "{count, plural, one {カスタムスキル # 件} other {カスタムスキル # 件}}",
-        "noCredentials": "認証情報なし",
-        "noCustomSkills": "カスタムスキルなし",
-        "orgCredentialsSet": "組織の認証情報を設定済み",
-        "perUserCredentials": "ユーザーごとの認証情報",
-        "providedByOnyx": "Onyx が提供",
-        "tools": "{count, plural, one {ツール # 個} other {ツール # 個}}",
-        "upstreamPatterns": "{count, plural, one {アップストリームパターン # 件} other {アップストリームパターン # 件}}"
       },
       "loading": {
         "label": "読み込んでいます…"
@@ -5876,33 +5727,16 @@
       "mcpServers": {
         "empty": {
           "description": "アクションでサーバーを接続してから、ここで組織向けに有効にしてください。",
-          "openActionsButton": {
-            "label": "アクションを開く"
-          },
           "title": "MCP サーバーがまだありません"
         },
-        "manageInActionsButton": {
-          "label": "アクションで管理"
-        },
-        "panel": {
-          "blurb": "サーバーを有効にすると、アクセス権のあるメンバーが Craft でそのツールを使用できます。編集して各ツールの承認ポリシーを設定してください。サーバーの接続とアクセス権はアクションで管理します。"
-        },
         "tab": {
-          "label": "MCP サーバー",
-          "labelWithCount": "MCP サーバー · {count, number}"
+          "label": "MCP サーバー"
         }
       },
       "page": {
-        "addAppButton": {
-          "label": "アプリを追加"
-        },
-        "backToCraftButton": {
-          "label": "Craft に戻る"
-        },
         "description": "組織の Craft エージェントが使用できるアプリを設定します。各メンバーは Craft のアプリページで自分のアカウントを接続します。"
       },
       "warnings": {
-        "invalidSkill": "無効なスキル",
         "providerUnavailable": "プロバイダーを利用できません"
       }
     },
@@ -14286,45 +14120,18 @@
         "title": "アプリを接続しています"
       },
       "page": {
-        "connectButton": "接続",
-        "connectingButton": "リダイレクト中…",
-        "disconnectButton": "接続を解除",
         "empty": {
           "description": "組織向けに設定されたアプリや MCP サーバーはまだありません。",
           "title": "まだ接続できるものがありません"
         },
-        "errors": {
-          "disconnectFailed": "接続を解除できませんでした",
-          "startAuthFailed": "認可を開始できませんでした"
-        },
         "header": {
           "description": "Onyx Craft が作業中にコンテキストとして使えるツールを接続します。",
-          "manageButton": "アプリを管理",
-          "searchPlaceholder": "アプリを検索...",
           "title": "アプリ"
-        },
-        "kinds": {
-          "app": {
-            "blurb": "Onyx が直接サポートするインテグレーションです。それぞれに Craft へ使い方を教えるスキルが付属しています。まずはここから始めましょう。",
-            "empty": "組織向けに設定されたアプリはまだありません。",
-            "emptyTitle": "アプリはまだありません",
-            "tabLabel": "アプリ · {count}"
-          },
-          "mcp": {
-            "blurb": "管理者がCraftで利用できるようにしたサーバーです。個人の認証情報が必要なサーバーでは、ツールを使う前に自分のアカウントを接続してください。",
-            "empty": "Craft 向けに公開された MCP サーバーはありません。",
-            "emptyTitle": "MCP サーバーはまだありません",
-            "tabLabel": "MCP サーバー · {count}"
-          }
         },
         "loading": {
           "label": "読み込み中…"
         },
         "reviewSkillsButton": "スキルを確認",
-        "search": {
-          "noMatchesDescription": "検索に一致するものはありません。",
-          "noMatchesTitle": "一致なし"
-        },
         "status": {
           "connected": "接続済み",
           "connectedNeedsSkills": "接続済み · 一部の関連スキルが無効です",
