@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "Autenticar y conectar con {serverName}",
-        "label": "Autenticar"
+        "ariaLabel": "Configurar autenticación para {serverName}",
+        "label": "Configurar autenticación"
       },
       "deleteButton": {
         "ariaLabel": "Eliminar el servidor {serverName}",
@@ -130,14 +130,13 @@
       "authStatus": {
         "apiTokenDescription": "Token de API configurado",
         "connectedDescription": "Conectado",
-        "oauthDescription": "OAuth conectado a {owner}",
         "title": "Autenticado y conectado"
       },
       "cancelButton": {
         "label": "Cancelar"
       },
       "description": {
-        "placeholder": "Más detalles sobre el servidor MCP",
+        "placeholder": "¿Qué puede hacer tu equipo con este servidor?",
         "suffix": "opcional",
         "title": "Descripción"
       },
@@ -145,21 +144,20 @@
         "tooltip": "Desconectar el servidor"
       },
       "editConfigsButton": {
-        "label": "Editar la configuración"
+        "label": "Ajustes de conexión"
       },
       "manageHeader": {
         "description": "Actualiza la configuración de tu servidor MCP y gestiona la autenticación.",
         "title": "Gestionar el servidor MCP"
       },
       "name": {
-        "placeholder": "Ponle un nombre a tu servidor MCP",
+        "placeholder": "p. ej., Linear",
         "required": "El nombre del servidor es obligatorio",
         "title": "Nombre del servidor"
       },
       "serverUrl": {
         "invalid": "Debe ser una URL válida",
         "required": "La URL del servidor es obligatoria",
-        "subDescription": "Conéctate solo a servidores en los que confíes. Eres responsable de las acciones que se realicen con esta conexión y de mantener tus herramientas actualizadas.",
         "title": "URL del servidor MCP"
       },
       "submitButton": {
@@ -173,6 +171,34 @@
         "serverCreated": "El servidor MCP se creó correctamente",
         "serverUpdated": "El servidor MCP se actualizó correctamente",
         "updateFailed": "No se pudo actualizar el servidor MCP"
+      },
+      "access": {
+        "title": "Control de acceso",
+        "description": "Elige quién puede usar este MCP.",
+        "public": {
+          "label": "Público",
+          "description": "Cualquier persona de tu organización puede usar este MCP"
+        },
+        "groups": {
+          "label": "Grupos de usuarios",
+          "description": "Los grupos de usuarios seleccionados pueden usar este MCP.",
+          "placeholder": "Añadir grupos de usuarios",
+          "required": "Selecciona al menos un grupo de usuarios."
+        },
+        "scoped": {
+          "description": "Elige al menos un grupo que gestiones."
+        },
+        "retainedUsers": "{count, plural, one {También se comparte directamente con # usuario.} other {También se comparte directamente con # usuarios.}}",
+        "planTag": "Business",
+        "planNote": "El acceso por grupos requiere un plan Business."
+      },
+      "craft": {
+        "title": "Disponible en Craft",
+        "description": "Permite que los usuarios accedan a este servidor MCP en Craft."
+      },
+      "defaultChat": {
+        "title": "Disponible en el chat predeterminado de Onyx",
+        "description": "Si se desactiva, los usuarios deberán añadir este servidor a un agente personalizado para usarlo en el chat."
       }
     },
     "addOpenApiModal": {
@@ -279,54 +305,48 @@
       "additionalAuthParams": {
         "label": "Parámetros de autenticación adicionales (JSON)"
       },
-      "advanced": {
-        "description": "Configura un proveedor de OAuth conocido con endpoints de autorización y de token explícitos en lugar del descubrimiento automático.",
-        "title": "Avanzado"
-      },
       "apiKey": {
         "required": "El token de la API es obligatorio"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "Clave compartida (administrador)"
+          "label": "Token compartido"
         },
         "perUser": {
-          "label": "Clave individual (por usuario)"
+          "label": "Token personal"
         }
       },
       "authPerformer": {
-        "required": "Es obligatorio indicar quién realiza la autenticación"
+        "label": "Credenciales",
+        "required": "Elige credenciales personales o compartidas."
       },
       "authType": {
         "apiToken": {
-          "description": "Usa una clave de API individual por usuario o una clave de API compartida para toda la organización.",
           "label": "Clave de API"
         },
         "label": "Método de autenticación",
         "none": {
-          "description": "No recomendado",
-          "label": "Ninguno"
+          "label": "Sin autenticación"
         },
         "oauth": {
-          "description": "Cada usuario debe autenticarse con OAuth usando sus propias credenciales.",
           "label": "OAuth"
         },
         "placeholder": "Selecciona un método",
         "ptOauth": {
-          "description": "Reenvía el token de acceso de OAuth que el usuario usa para autenticarse en {appName}.",
           "label": "OAuth de paso directo"
         },
         "required": "El tipo de autenticación es obligatorio"
       },
       "authorizationEndpoint": {
         "label": "Endpoint de autorización",
-        "required": "El endpoint de autorización es obligatorio en el modo de proveedor conocido"
+        "required": "Introduce el endpoint de autorización de tu proveedor."
       },
       "cancelButton": {
         "label": "Cancelar"
       },
       "clientId": {
-        "label": "ID de cliente"
+        "label": "ID de cliente",
+        "required": "Introduce tu ID de cliente OAuth."
       },
       "clientSecret": {
         "label": "Secreto de cliente"
@@ -335,25 +355,30 @@
         "additionalParamsInvalid": "El JSON de los parámetros de autenticación adicionales no es válido",
         "additionalParamsInvalidWithReason": "El JSON de los parámetros de autenticación adicionales no es válido: {reason}",
         "additionalParamsNotObject": "Los parámetros de autenticación adicionales deben ser un objeto JSON",
-        "oauthInitFailed": "No se pudo iniciar OAuth: {detail}",
         "saveAuthFailed": "No se pudo guardar la configuración de autenticación",
-        "saveConfigFailed": "No se pudo guardar la configuración del servidor"
+        "saveConfigFailed": "No se pudo guardar la configuración del servidor",
+        "saveStage": "No se pudieron guardar los ajustes de conexión",
+        "oauthStage": "No se pudo iniciar el acceso",
+        "discoveryStage": "No se pudieron cargar las herramientas del servidor",
+        "loadStage": "No se pudieron cargar los ajustes de conexión",
+        "clientRegistrationFailed": "El registro automático del cliente falló. Usa tu propio cliente OAuth o revisa los requisitos de configuración del proveedor.",
+        "discoveryFailed": "No se encontraron los ajustes de inicio de sesión OAuth. Comprueba la URL del servidor o introduce los endpoints de tu proveedor.",
+        "connectionFailed": "No se pudo acceder al servidor OAuth. Comprueba la URL del servidor e inténtalo de nuevo.",
+        "oauthFailed": "No se pudo iniciar la sesión OAuth. Comprueba los ajustes de tu cliente e inténtalo de nuevo."
       },
       "header": {
-        "defaultTitle": "Autenticar el servidor MCP",
-        "description": "Autentica tu conexión para empezar a usar el servidor MCP.",
-        "title": "Autenticar *{name}*"
-      },
-      "knownProvider": {
-        "hint": "El modo de proveedor conocido requiere configurar los endpoints. Endpoints de referencia de Google: autorización {authorizationEndpoint} y token {tokenEndpoint}."
+        "defaultTitle": "Configurar autenticación",
+        "description": "Configurar la autenticación del servidor MCP",
+        "title": "Configurar *{name}*"
       },
       "noAuthNotice": {
-        "description": "Esta conexión no usará ninguna autenticación. Asegúrate de que confías en este servidor. Eres responsable de las acciones que se realicen con esta conexión.",
-        "title": "Sin autenticación para este servidor MCP"
+        "description": "Los usuarios pueden usar este servidor sin iniciar sesión. Los encabezados personalizados configurados se siguen enviando.",
+        "title": "No se requiere autenticación"
       },
       "oauthInfo": {
-        "discovery": "El ID de cliente y el secreto son opcionales. Durante el descubrimiento automático, {appName} usa un Client ID Metadata Document (CIMD) si el servidor lo admite y, si no, recurre al Dynamic Client Registration (DCR).",
-        "manualRegistration": "Si tu servidor no admite ninguno de los dos métodos, registra primero tu instancia de {appName} con el proveedor del servidor. Concede a {appName} los ámbitos necesarios para tus acciones."
+        "discovery": "Cada usuario inicia sesión con su propia cuenta.",
+        "manualRegistration": "Registra este URI de redirección con tu proveedor.",
+        "title": "Configuración de OAuth"
       },
       "passThroughNotice": {
         "description": "{appName} reenviará el token de acceso de OAuth del usuario directamente al servidor como cabecera Authorization. Asegúrate de que el servidor admite la autenticación con el mismo proveedor.",
@@ -361,14 +386,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "Usa el flujo de challenge/discovery del SDK de MCP (predeterminado).",
-          "label": "Descubrimiento automático"
+          "description": "Leer los ajustes de inicio de sesión publicados por el servidor.",
+          "label": "Buscar endpoints de inicio de sesión automáticamente"
         },
         "knownProvider": {
-          "description": "Usa los endpoints de autorización y token configurados.",
-          "label": "Proveedor conocido"
+          "description": "Introduce las URL de inicio de sesión y de token manualmente.",
+          "label": "Introducir endpoints manualmente"
         },
-        "label": "Modo de proveedor",
+        "label": "Endpoints de OAuth",
         "placeholder": "Selecciona un modo"
       },
       "redirectUri": {
@@ -379,20 +404,55 @@
         "label": "Ámbitos personalizados (separados por comas)"
       },
       "sharedApiKey": {
-        "description": "No uses tu clave de API personal. Asegúrate de que esta clave se puede compartir con todos los miembros de tu organización.",
+        "description": "Esta clave se usa para probar la configuración y conectar a todas las personas con acceso. Usa una clave del espacio de trabajo, no una personal.",
         "label": "Clave de API",
         "placeholder": "Clave de API compartida para tu organización"
       },
       "submitButton": {
-        "label": "Conectar",
-        "pendingLabel": "Conectando..."
+        "label": "Guardar los cambios",
+        "pendingLabel": "Guardando…"
       },
       "tokenEndpoint": {
         "label": "Endpoint de token",
-        "required": "El endpoint de token es obligatorio en el modo de proveedor conocido"
+        "required": "Introduce el endpoint de token de tu proveedor."
       },
       "transport": {
-        "required": "El transporte es obligatorio"
+        "required": "El transporte es obligatorio",
+        "label": "Transporte de conexión",
+        "description": "Usa Streamable HTTP, salvo que tu servidor requiera SSE heredado. Esta opción no se detecta en el servidor.",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE (heredado)"
+      },
+      "advancedSettings": {
+        "title": "Ajustes avanzados"
+      },
+      "apiTokenInfo": {
+        "title": "Configuración de clave de API",
+        "description": "Elige si cada usuario se conecta con un token personal o si todos usan un token compartido."
+      },
+      "oauthSetup": {
+        "label": "Configuración de OAuth",
+        "automatic": {
+          "label": "Configurar automáticamente",
+          "description": "Permite que {appName} registre un cliente OAuth con los ajustes publicados por el servidor."
+        },
+        "ownClient": {
+          "label": "Usar tu propio cliente OAuth",
+          "description": "Introduce un ID de cliente de tu proveedor. Añade un secreto solo si es necesario."
+        }
+      },
+      "discovery": {
+        "checking": "Comprobando la configuración automática…",
+        "supported": "La configuración automática está disponible",
+        "requiresClient": "Este servidor no anuncia el registro automático de clientes. Te recomendamos configurar tu propio cliente OAuth. Aun así, puedes intentar el registro automático.",
+        "missing": "Comprueba la URL del servidor o introduce los endpoints de inicio de sesión y de token de tu proveedor.",
+        "unreachable": "El servidor podría no estar disponible o estar bloqueando las solicitudes de detección.",
+        "retry": "Comprobar de nuevo",
+        "manual": "Introducir ajustes de OAuth manualmente",
+        "useOwnClient": "Usar tu propio cliente OAuth",
+        "unreachableTitle": "No se pudo determinar si la configuración automática está disponible",
+        "missingTitle": "No se encontraron los endpoints de OAuth",
+        "requiresClientTitle": "La configuración automática podría no estar disponible"
       }
     },
     "mcpCard": {
@@ -402,7 +462,7 @@
       "deleteModal": {
         "body": {
           "confirmation": "¿Seguro que quieres eliminar este servidor MCP?",
-          "description": "Se quitarán todas las herramientas conectadas a <emphasis>{title}</emphasis>. La eliminación es irreversible."
+          "description": "Esto elimina <emphasis>{title}</emphasis> y todas sus herramientas para todos los usuarios de tu organización. La eliminación es irreversible."
         },
         "submitButton": {
           "label": "Eliminar"
@@ -415,6 +475,20 @@
       "refreshToolsButton": {
         "ariaLabel": "Actualizar las herramientas",
         "tooltip": "Actualizar las herramientas"
+      },
+      "setupIncomplete": {
+        "label": "Configuración incompleta.",
+        "actionHint": "Configuración incompleta. Haz clic para completarla."
+      },
+      "status": {
+        "ready": "Listo · {count, plural, one {# herramienta} other {# herramientas}}",
+        "incomplete": "Configuración incompleta",
+        "loading": "Cargando herramientas",
+        "disconnected": "Desconectado"
+      },
+      "authenticationButton": {
+        "tooltip": "Configurar autenticación",
+        "ariaLabel": "Configurar autenticación para {serverName}"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +567,7 @@
         "toolUpdateFailed": "No se pudo actualizar la herramienta",
         "toolsDisabled": "{count, plural, one {# herramienta desactivada correctamente} other {# herramientas desactivadas correctamente}}",
         "toolsEnabled": "{count, plural, one {# herramienta activada correctamente} other {# herramientas activadas correctamente}}",
-        "toolsFetched": "Conexión realizada y herramientas obtenidas correctamente",
+        "toolsFetched": "Herramientas cargadas",
         "toolsRefreshed": "Las herramientas se actualizaron correctamente"
       }
     },
@@ -658,10 +732,8 @@
         "placeholder": "Introduce {field}"
       },
       "credentials": {
-        "perUserDescription": "Las siguientes credenciales no se compartirán con tu organización.",
-        "perUserTitle": "Solo para tu propia cuenta",
-        "sharedDescription": "Estos valores se usan para todos los usuarios de tu organización.",
-        "sharedTitle": "Valores compartidos de la organización"
+        "perUserDescription": "Usa tus credenciales para probar este MCP y cargar sus herramientas. Se guardan solo en tu cuenta.",
+        "sharedDescription": "Estos valores se usan para todos los usuarios de tu organización."
       },
       "headers": {
         "addButton": {
@@ -671,8 +743,8 @@
           "message": "Al menos un valor de cabecera debe incluir el marcador de posición {apiKey}."
         },
         "keyTitle": "Nombre de la cabecera",
-        "label": "Cabeceras de autenticación",
-        "perUserDescription": "Da formato a las cabeceras para que cada usuario introduzca sus credenciales individuales. Usa marcadores de posición como <mono>{apiKey}</mono> o <mono>{userEmail}</mono>. Se pedirá a los usuarios que indiquen valores para los marcadores de posición (excepto user_email).",
+        "label": "Encabezados personalizados",
+        "perUserDescription": "Usa <mono>{apiKey}</mono> para la clave de API de cada usuario. <mono>{userEmail}</mono> usa su correo automáticamente. Otros marcadores piden un valor al usuario.",
         "sharedDescription": "Da formato a las cabeceras que se envían con las credenciales compartidas de tu organización. Usa marcadores de posición como <mono>{apiKey}</mono> en al menos un valor de cabecera; se sustituye por la clave compartida de tu organización.",
         "valueTitle": "Valor de la cabecera"
       }
@@ -840,6 +912,411 @@
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
       "mcpServerUrl": "https://tu-servidor-mcp.com/mcp"
+    },
+    "memberPlugins": {
+      "chat": {
+        "trigger": {
+          "label": "Complementos"
+        },
+        "search": {
+          "placeholder": "Buscar complementos"
+        },
+        "empty": {
+          "text": "No hay complementos disponibles en este chat.",
+          "searchText": "Ningún complemento coincide con tu búsqueda."
+        },
+        "loading": {
+          "label": "Cargando complementos"
+        },
+        "loadError": {
+          "text": "No se pudieron cargar algunos complementos. Inténtalo de nuevo."
+        },
+        "retry": {
+          "label": "Intentar de nuevo"
+        },
+        "browse": {
+          "label": "Explorar complementos"
+        },
+        "toggle": {
+          "ariaLabel": "Usar {name} en este chat"
+        },
+        "connect": {
+          "label": "Conectar"
+        },
+        "connection": {
+          "connected": "Conectado",
+          "workspace": "Conexión del espacio de trabajo",
+          "session": "Conexión de la sesión",
+          "none": "No requiere conexión",
+          "oauth": "Conecta tu cuenta",
+          "credentials": "Añade tus credenciales",
+          "checking": "Comprobando conexión",
+          "unconfigured": "Requiere configurar el espacio de trabajo",
+          "unavailable": "Conexión no disponible"
+        },
+        "intent": {
+          "unavailable": "Este complemento no está disponible para el agente de este chat.",
+          "invalid": "El enlace de este complemento no es válido."
+        }
+      },
+      "oauthComplete": {
+        "success": {
+          "title": "Complemento conectado",
+          "description": "Vuelve a la pestaña anterior para continuar."
+        },
+        "error": {
+          "title": "Conexión no confirmada",
+          "description": "Vuelve a la pestaña anterior e intenta conectarte de nuevo."
+        },
+        "return": {
+          "label": "Volver a los plugins"
+        },
+        "close": {
+          "label": "Cerrar pestaña"
+        }
+      },
+      "title": "Complementos",
+      "description": "Conecta tus cuentas para usar los plugins del espacio de trabajo.",
+      "manageWorkspace": "Administrar plugins del espacio de trabajo",
+      "search": "Buscar complementos",
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Aplicaciones de Craft"
+      },
+      "row": {
+        "view": "Ver {name}",
+        "connect": "Conectar {name}"
+      },
+      "status": {
+        "connected": "Conectado",
+        "workspace": "Conexión del espacio de trabajo",
+        "session": "Usa tu sesión",
+        "none": "Listo para usar",
+        "oauth": "Conecta tu cuenta",
+        "credentials": "Añade tus credenciales",
+        "unconfigured": "Requiere configurar el espacio de trabajo",
+        "checking": "Comprobando conexión",
+        "unavailable": "Conexión no disponible"
+      },
+      "availability": {
+        "label": "Estado de conexión de {name}",
+        "chat": "Chat principal",
+        "craft": "Craft",
+        "on": "Activado",
+        "off": "Desactivado",
+        "unknown": "Desconocida"
+      },
+      "state": {
+        "loading": "Cargando complementos",
+        "serversError": "No se pudieron cargar los complementos MCP.",
+        "toolsError": "No se pudieron cargar las herramientas de los complementos.",
+        "oauthError": "No se pudieron cargar las conexiones de las cuentas.",
+        "retry": "Reintentar",
+        "noResultsTitle": "No hay complementos coincidentes",
+        "noResultsDescription": "Prueba con otro nombre o descripción.",
+        "clearSearch": "Ver todos los plugins",
+        "appsError": "No se pudieron cargar las apps de Craft.",
+        "appsLoading": "Cargando apps de Craft",
+        "emptyTitle": "No se encontraron plugins",
+        "emptyDescription": "Prueba otro filtro de conexión o pide al administrador de tu espacio de trabajo que añada un plugin."
+      },
+      "detail": {
+        "connection": "Conexión",
+        "serverUrl": "URL del servidor",
+        "tools": "Herramientas",
+        "toolCount": "{count, plural, one {# herramienta} other {# herramientas}}",
+        "toolsDescription": "Herramientas disponibles en este complemento del espacio de trabajo.",
+        "noTools": "No hay herramientas visibles guardadas para este complemento.",
+        "connect": "Conectar cuenta",
+        "useInChat": "Usar en Chat",
+        "chatDisabled": "Este complemento no está activado para el chat principal. Un administrador del espacio de trabajo puede cambiar su disponibilidad.",
+        "chatUnknown": "No se pudo confirmar la disponibilidad en el chat principal.",
+        "disconnect": "Desconectar cuenta",
+        "disconnectTitle": "¿Desconectar {name}?",
+        "disconnectDescription": "Esto elimina la conexión de tu cuenta. La disponibilidad en el espacio de trabajo no cambia.",
+        "oauthDisconnectWarning": "Todos los complementos y aplicaciones que usan la misma configuración OAuth comparten esta conexión de cuenta. Al desconectarla, se elimina tu conexión de todos ellos.",
+        "disconnecting": "Desconectando...",
+        "disconnectFailed": "No se pudo desconectar tu cuenta. Inténtalo de nuevo.",
+        "cancel": "Cancelar",
+        "close": "Listo",
+        "openInCraft": "Abrir en Craft"
+      },
+      "connection": {
+        "title": "Conectar {name}",
+        "description": "Tu espacio de trabajo ha configurado este complemento. Conecta tu cuenta para usarlo.",
+        "credentialsDescription": "Introduce tus credenciales para este complemento. La conexión de tu cuenta es independiente de la de otros miembros.",
+        "oauthDescription": "Continúa para iniciar sesión con tu cuenta. Tu proveedor mostrará el acceso solicitado.",
+        "continue": "Continuar a {name}",
+        "connect": "Conectar",
+        "connecting": "Conectando...",
+        "cancel": "Cancelar",
+        "done": "Listo",
+        "workspaceDescription": "Tu espacio de trabajo proporciona esta conexión. No necesitas conectar una cuenta.",
+        "sessionDescription": "Este complemento usa tu sesión actual.",
+        "noneDescription": "Este complemento no requiere una conexión de cuenta.",
+        "connectedDescription": "Tu cuenta está conectada.",
+        "unconfiguredDescription": "Un administrador del espacio de trabajo debe terminar de configurar este complemento antes de que puedas conectarlo.",
+        "checkingDescription": "El estado de tu conexión aún se está cargando. Inténtalo de nuevo cuando termine.",
+        "unavailableDescription": "No se pudo cargar el estado de tu conexión. Reinténtalo desde la página Complementos.",
+        "errors": {
+          "popup_blocked": "Tu navegador bloqueó la ventana de inicio de sesión. Permite las ventanas emergentes e inténtalo de nuevo.",
+          "cancelled": "Se canceló el inicio de sesión. Puedes intentarlo de nuevo.",
+          "timed_out": "El inicio de sesión tardó demasiado. Inténtalo de nuevo.",
+          "credentials_required": "Introduce todas las credenciales requeridas.",
+          "unconfigured": "Un administrador del espacio de trabajo debe terminar de configurar este complemento.",
+          "not_connected": "No se pudo confirmar la conexión de tu cuenta. Inténtalo de nuevo.",
+          "request_failed": "La conexión falló. Inténtalo de nuevo."
+        }
+      },
+      "filters": {
+        "label": "Estado de conexión",
+        "all": "Todos",
+        "connected": "Conectados",
+        "needsSignIn": "Requiere iniciar sesión",
+        "showAll": "Ver todos los plugins"
+      },
+      "defaults": {
+        "chat": "Activar en el chat principal de forma predeterminada",
+        "craft": "Activar en Craft de forma predeterminada",
+        "chatDescription": "Se aplica al chat predeterminado. Los agentes personalizados conservan su propia configuración de herramientas.",
+        "craftDescription": "Usar este MCP en tus sesiones de Craft.",
+        "unavailable": "Tu administrador ha desactivado este plugin para {surface}.",
+        "saveFailed": "No se pudieron guardar tus valores predeterminados de plugins. Inténtalo de nuevo."
+      },
+      "openapi": {
+        "chatOnly": "Solo Chat",
+        "chatOnlyDescription": "Este plugin está disponible en Chat, no en Craft."
+      },
+      "appSkills": {
+        "search": "Buscar habilidades",
+        "count": "{count, plural, one {# habilidad} other {# habilidades}}",
+        "empty": "No hay habilidades asociadas a esta aplicación.",
+        "noMatches": "Ninguna habilidad coincide con tu búsqueda.",
+        "error": "No se pudieron cargar las habilidades.",
+        "enabled": "Activada",
+        "disabled": "Desactivada",
+        "loading": "Cargando habilidades…"
+      },
+      "externalApp": {
+        "description": "Usa tu cuenta en Craft.",
+        "craftOnly": "Solo Craft",
+        "craftOnlyDescription": "Esta app está disponible en Craft. El chat principal no la admite."
+      }
+    },
+    "plugins": {
+      "availability": {
+        "mainChat": "Chat principal",
+        "craft": "Craft",
+        "on": "Activado",
+        "off": "Desactivado",
+        "unknown": "Desconocido",
+        "enabled": "Activado",
+        "disabled": "Desactivado",
+        "chatEnabled": "Chat activado",
+        "chatDisabled": "Chat desactivado",
+        "chatUnknown": "Estado de Chat desconocido",
+        "craftEnabled": "Craft activado",
+        "craftDisabled": "Craft desactivado"
+      },
+      "controls": {
+        "disconnect": "Activar o desactivar para el espacio de trabajo",
+        "enable": "Activar para el espacio de trabajo",
+        "disable": "Desactivar para el espacio de trabajo",
+        "manageAvailability": "Gestionar la disponibilidad del espacio de trabajo",
+        "more": "Más acciones",
+        "disableChat": "Desactivar en el chat principal",
+        "enableChat": "Activar en el chat principal",
+        "disableCraft": "Desactivar en Craft",
+        "enableCraft": "Activar en Craft"
+      },
+      "craftApp": {
+        "tabs": {
+          "configuration": "Configuración",
+          "permissions": "Permisos",
+          "skills": "Habilidades"
+        }
+      },
+      "disableConfirmation": {
+        "workspaceTitle": "¿Desactivar {name} para el espacio de trabajo?",
+        "workspaceDescription": "Esto desactiva {name} para todos en tu espacio de trabajo, incluidos los agentes personalizados. Se conservan los ajustes y las credenciales guardados. Puedes volver a activarlo.",
+        "scope": "Todos los usuarios de tu organización",
+        "chatTitle": "¿Desactivar {name} para el chat principal?",
+        "chatDescription": "Esto elimina {name} del chat predeterminado para todos los usuarios de tu organización. Los agentes personalizados no se ven afectados. Puedes volver a activarlo.",
+        "craftTitle": "¿Desactivar {name} para Craft?",
+        "craftDescription": "Esto hace que {name} deje de estar disponible en Craft para todos los usuarios de tu organización. El chat principal no se ve afectado. Puedes volver a activarlo."
+      },
+      "openapi": {
+        "schemaPreview": {
+          "detected": "{count, plural, one {# herramienta detectada} other {# herramientas detectadas}}",
+          "viewTools": "Ver herramientas",
+          "saveToUpdate": "Guarda los cambios para actualizar las herramientas."
+        },
+        "reviewTitle": "Revisar {name}",
+        "createTitle": "Añadir un plugin OpenAPI",
+        "detailDescription": "Gestiona esta API y las herramientas disponibles para tus agentes.",
+        "detailsTitle": "Detalles del plugin",
+        "schemaTitle": "Esquema OpenAPI",
+        "editSchema": "Editar esquema",
+        "notFound": "Plugin no encontrado",
+        "loadFailed": "No se pudo cargar este plugin",
+        "unavailable": "Este plugin puede haberse eliminado o puede que no tengas acceso.",
+        "readOnly": "Puedes ver este plugin. Tu cuenta no puede cambiar su configuración.",
+        "disableTitle": "¿Desactivar {name}?",
+        "disableDescription": "Los agentes ya no podrán usar este plugin. Puedes volver a activarlo.",
+        "deleteTitle": "¿Eliminar {name}?",
+        "deleteDescription": "Esto elimina permanentemente el plugin OpenAPI y su configuración."
+      },
+      "title": "Plugins",
+      "description": "Conecta herramientas y aplicaciones a tu espacio de trabajo.",
+      "search": {
+        "placeholder": "Buscar plugins"
+      },
+      "add": {
+        "label": "Añadir",
+        "mcp": "Añadir servidor MCP personalizado",
+        "openapi": "Añadir acción OpenAPI"
+      },
+      "catalog": {
+        "slack": {
+          "summary": "Busca conversaciones y envía mensajes",
+          "description": "Busca conversaciones y envía mensajes. Requiere una aplicación de Slack registrada."
+        },
+        "hubspot": {
+          "summary": "Trabaja con contactos y negocios",
+          "description": "Trabaja con contactos y negocios. Requiere un conector MCP de HubSpot."
+        },
+        "asana": {
+          "summary": "Gestiona tareas y proyectos",
+          "description": "Gestiona tareas y proyectos. Requiere un cliente OAuth registrado."
+        },
+        "linear": {
+          "summary": "Gestiona incidencias, proyectos y equipos",
+          "description": "Gestiona incidencias, proyectos y equipos."
+        },
+        "notion": {
+          "summary": "Busca y actualiza tu espacio de trabajo de Notion",
+          "description": "Busca y actualiza tu espacio de trabajo de Notion."
+        },
+        "sentry": {
+          "summary": "Investiga errores y problemas de rendimiento",
+          "description": "Investiga errores y problemas de rendimiento."
+        },
+        "atlassian": {
+          "summary": "Trabaja con Jira y Confluence",
+          "description": "Trabaja con Jira y Confluence.",
+          "approvalNote": "Tu organización de Atlassian puede requerir aprobación del administrador."
+        },
+        "setupGuide": "Guía de configuración",
+        "add": {
+          "label": "Añadir {name}"
+        }
+      },
+      "row": {
+        "manage": {
+          "label": "Gestionar {name}"
+        },
+        "view": {
+          "label": "Ver {name}"
+        }
+      },
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Aplicaciones de Craft"
+      },
+      "filters": {
+        "label": "Tipo de plugin",
+        "all": "Todos",
+        "apps": "Aplicaciones de Craft"
+      },
+      "state": {
+        "mcpError": "No se pudieron cargar los servidores MCP.",
+        "listErrorDescription": "No pudimos cargar esta lista de plugins. Inténtalo de nuevo en un momento.",
+        "openapiError": "No se pudieron cargar las acciones OpenAPI.",
+        "retry": {
+          "label": "Reintentar"
+        },
+        "loading": "Cargando plugins",
+        "empty": {
+          "title": "No hay plugins instalados",
+          "description": "Añade un plugin a tu espacio de trabajo.",
+          "explore": {
+            "label": "Explorar plugins"
+          }
+        },
+        "noResults": {
+          "title": "No se encontraron plugins",
+          "description": "Prueba otro nombre, descripción o URL del servidor.",
+          "clear": {
+            "label": "Ver todos los plugins"
+          }
+        },
+        "externalAppsError": "No se pudieron cargar las apps"
+      }
+    },
+    "mcpSetup": {
+      "connectTo": "Conectar con {name}",
+      "contactingServer": "Contactando con el servidor",
+      "detectingAuthentication": "Detectando la autenticación",
+      "stagePending": "En curso",
+      "stageSuccess": "Completado",
+      "stageError": "Error",
+      "stageWaiting": "En espera",
+      "progress": "Progreso de configuración",
+      "serverStep": "Servidor",
+      "connectionStep": "Conexión",
+      "permissionDenied": "No tienes permiso para añadir servidores MCP.",
+      "reviewSettings": "Revisa la configuración del servidor antes de conectar.",
+      "urlDescription": "Introduce la URL del servidor para detectar la conexión y la autenticación.",
+      "detectedTransport": "Transporte: {transport}",
+      "retry": "Comprobar de nuevo",
+      "authenticationUndetected": "Elige el método de autenticación en la siguiente página.",
+      "configureManually": "Configurar manualmente",
+      "details": "Detalles",
+      "checking": "Comprobando servidor…",
+      "unreachable": "No se pudo conectar con este servidor MCP",
+      "retryCheck": "Comprueba la URL y la disponibilidad del servidor e inténtalo de nuevo.",
+      "blocked": "Esta URL está bloqueada por la configuración de seguridad de salida.",
+      "publicDetected": "No se requiere autenticación",
+      "oauthDetected": "OAuth detectado",
+      "manualRequired": "Elige la autenticación manualmente",
+      "chooseAuthentication": "No pudimos determinar cómo se autentica este servidor. Elige un método a continuación.",
+      "connect": "Conectar",
+      "publicDetails": "Herramientas disponibles: {count}",
+      "serverDetails": "Detalles del servidor",
+      "authentication": "Autenticación",
+      "continue": "Continuar",
+      "back": "Atrás"
+    },
+    "mcpTools": {
+      "title": "Herramientas",
+      "description": "Elige las herramientas disponibles y establece sus permisos.",
+      "enabledTab": "Herramientas disponibles",
+      "policiesTab": "Permisos de Craft",
+      "enabledDescription": "Elige qué herramientas pueden usar los usuarios en Onyx.",
+      "policiesDescription": "Elige cuándo Craft solicita aprobación antes de usar cada herramienta.",
+      "back": "Autenticación",
+      "refresh": "Actualizar herramientas",
+      "loadError": "No se pudieron cargar las herramientas",
+      "saveError": "No se pudo guardar la configuración de las herramientas",
+      "refreshError": "No se pudieron actualizar las herramientas",
+      "search": "Buscar herramientas"
+    },
+    "mcpDetail": {
+      "configuration": "Configuración del servidor",
+      "editConfiguration": "Editar configuración del servidor",
+      "authentication": "Autenticación",
+      "editAuthentication": "Editar autenticación",
+      "availability": "Disponibilidad",
+      "edit": "Editar",
+      "loadError": "No se pudo cargar el servidor MCP",
+      "notFound": "Servidor MCP no encontrado",
+      "unavailable": "Es posible que este servidor se haya eliminado o que no tengas acceso.",
+      "retry": "Reintentar",
+      "restrictedAccess": "{groups, plural, one {# grupo} other {# grupos}} · {users, plural, one {# usuario} other {# usuarios}}",
+      "authenticationIncomplete": "La autenticación no está configurada.",
+      "availabilitySaved": "Disponibilidad actualizada"
     }
   },
   "admin": {
@@ -13727,7 +14204,7 @@
           }
         },
         "managedDescription": "Proporcionado por Onyx: configura qué puede hacer el agente.",
-        "managedNote": "Esta app la proporciona Onyx: las credenciales se gestionan por ti. Elige abajo qué puede hacer el agente. Los usuarios la conectan desde la página de Apps.",
+        "managedNote": "Onyx administra las credenciales. Configura las políticas de acciones en Permisos. Los miembros se conectan desde Plugins.",
         "saveButton": "Guardar"
       },
       "customApp": {
@@ -13828,7 +14305,7 @@
             "tabLabel": "Apps · {count}"
           },
           "mcp": {
-            "blurb": "Servidores que un administrador puso a disposición de Craft. Úsalos cuando la app que necesitas no aparece en Apps, o cuando quieras específicamente las herramientas MCP propias de un servidor.",
+            "blurb": "Servidores que un administrador habilitó para Craft. Si un servidor requiere credenciales personales, conecta tu propia cuenta antes de usar sus herramientas.",
             "empty": "No se ha puesto ningún servidor MCP a disposición de Craft.",
             "emptyTitle": "Aún no hay servidores MCP",
             "tabLabel": "Servidores MCP · {count}"
@@ -13851,10 +14328,6 @@
         }
       },
       "policyEditor": {
-        "advanced": {
-          "description": "Define una política para cada acción de forma individual.",
-          "title": "Avanzado"
-        },
         "cancelButton": "Cancelar",
         "loading": {
           "label": "Cargando…"
@@ -13864,7 +14337,7 @@
           "autoApproveOption": "Aprobar automáticamente",
           "customOption": "Personalizado",
           "defaultOption": "Predeterminado",
-          "description": "Elige qué puede hacer el agente. «Preguntar» te consulta en el chat antes de ejecutar cada acción; «Aprobar automáticamente» la ejecuta sin preguntar. Usa Avanzado para definir una política por acción.",
+          "description": "Elige qué puede hacer el agente. «Preguntar» solicita aprobación antes de cada acción; «Aprobar automáticamente» la ejecuta sin preguntar.",
           "title": "Permisos"
         },
         "savingButton": "Guardando…"
@@ -14473,6 +14946,9 @@
       "toast": {
         "deleteFailed": "No se pudo eliminar la sesión",
         "deleted": "Se eliminó \"{title}\"."
+      },
+      "plugins": {
+        "label": "Plugins"
       }
     },
     "skillsStale": {
@@ -15952,6 +16428,9 @@
         "llmGateway": {
           "label": "LLM Gateway"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "mcpActions": {
           "label": "Acciones MCP"
         },
@@ -16077,6 +16556,9 @@
       },
       "searchChats": {
         "label": "Buscar chats"
+      },
+      "plugins": {
+        "label": "Complementos"
       }
     },
     "chatButton": {

@@ -1,4 +1,29 @@
 import { ApiResponse, MethodSpec, ToolSnapshot } from "@/lib/tools/types";
+import { parseErrorDetail } from "@/lib/fetcher";
+import * as yup from "yup";
+import type {
+  ToolUserPreferencesRequest,
+  ToolUserPreferencesResponse,
+} from "@/lib/tools/types";
+
+export async function updateToolUserPreferences(
+  toolId: number,
+  preferences: ToolUserPreferencesRequest
+): Promise<ToolUserPreferencesResponse> {
+  const response = await fetch(`/api/tool/${toolId}/preferences`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(preferences),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseErrorDetail(response, "Failed to save plugin preferences")
+    );
+  }
+  return yup
+    .object({ enabled_in_chat: yup.boolean().defined() })
+    .validateSync(await response.json(), { strict: true });
+}
 
 export interface ToolStatusUpdateRequest {
   tool_ids: number[];
@@ -29,8 +54,9 @@ export async function updateToolsStatus(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to update tool status");
+    throw new Error(
+      await parseErrorDetail(response, "Failed to update tool status")
+    );
   }
 
   return await response.json();

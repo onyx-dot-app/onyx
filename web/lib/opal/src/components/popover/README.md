@@ -35,6 +35,7 @@ Forwarded to `@radix-ui/react-popover` `Root`. Most common:
 | -------------------- | --------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
 | `children`           | `ReactNode[]`               | —       | Menu items. `null` renders a separator; `undefined`/`false` is filtered. Leading/trailing separators are removed. |
 | `footer`             | `ReactNode`                 | —       | Footer area below the scroll region, separated by a divider                                                       |
+| `gap`                | `Spacing`                   | `4`     | Spacing steps around the footer divider                                                                           |
 | `scrollContainerRef` | `RefObject<HTMLDivElement>` | —       | Ref for programmatic scrolling                                                                                    |
 
 ## Usage

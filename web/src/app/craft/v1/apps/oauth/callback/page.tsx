@@ -45,11 +45,21 @@ export default function ExternalAppsOAuthCallbackPage() {
 
     async function exchange() {
       try {
-        const { external_app_id } = await completeExternalAppOAuthCallback(
-          code!,
-          state!
-        );
+        const { external_app_id, return_path } =
+          await completeExternalAppOAuthCallback(code!, state!);
         setStatus("success");
+        if (return_path) {
+          const target = new URL(return_path, window.location.origin);
+          if (
+            target.origin !== window.location.origin ||
+            target.pathname !== "/app/plugins/oauth/complete"
+          ) {
+            throw new Error(t("errors.missingParams"));
+          }
+          target.searchParams.set("message", "oauth_connected");
+          router.replace(`${target.pathname}?${target.searchParams}`);
+          return;
+        }
         // Launched from the in-chat SetupCard popup: signal the opener and close
         // immediately — before any await — so the opener's close-poll can't race
         // ahead of the message and treat the close as a cancellation.

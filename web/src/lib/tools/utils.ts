@@ -1,5 +1,6 @@
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import { SOURCE_METADATA_MAP } from "@/lib/connectors/constants";
+import { pluginDetailHref } from "@/lib/plugins/routes";
 import {
   ADMIN_CONFIG_LINKS,
   OPENAPI_ADMIN_CONFIG,
@@ -52,18 +53,18 @@ export function getActionIcon(
   return SvgServer;
 }
 
-function isPlainRecord(value: unknown): value is Record<string, any> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function extractMethodSpecsFromDefinition(
-  definition?: Record<string, any> | null
+  definition?: Record<string, unknown> | null
 ): MethodSpec[] {
   if (!isPlainRecord(definition) || !isPlainRecord(definition.paths)) {
     return [];
   }
 
-  const pathEntries = Object.entries(definition.paths as Record<string, any>);
+  const pathEntries = Object.entries(definition.paths);
   const methods: MethodSpec[] = [];
 
   for (const [path, operations] of pathEntries) {
@@ -83,7 +84,12 @@ export function extractMethodSpecsFromDefinition(
       const name = spec.operationId ?? spec.operationID;
       const summary = spec.summary ?? spec.description;
 
-      if (!name || !summary) {
+      if (
+        typeof name !== "string" ||
+        !name ||
+        typeof summary !== "string" ||
+        !summary
+      ) {
         continue;
       }
 
@@ -158,7 +164,7 @@ export function getAdminConfigureInfo(
   }
   if (!tool.in_code_tool_id && !tool.mcp_server_id) {
     return {
-      href: OPENAPI_ADMIN_CONFIG.href,
+      href: pluginDetailHref({ kind: "openapi", id: tool.id }),
       tooltip: configureTooltips.openapi ?? OPENAPI_ADMIN_CONFIG.tooltip,
     };
   }

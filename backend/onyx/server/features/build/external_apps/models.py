@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.external_apps.models import ActionPolicyView
@@ -120,6 +120,7 @@ class ExternalAppUserResponse(BaseModel):
     credential_values: dict[str, Any]
     authenticated: bool
     supports_oauth: bool
+    service_urls: list[str] = Field(default_factory=list)
 
 
 class OAuthStartResponse(BaseModel):
@@ -134,6 +135,7 @@ class OAuthCallbackRequest(BaseModel):
 class OAuthCallbackResponse(BaseModel):
     success: bool
     external_app_id: int
+    return_path: str | None = None
 
 
 class ConnectAppDecisionRequest(BaseModel):

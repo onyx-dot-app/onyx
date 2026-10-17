@@ -68,6 +68,12 @@ sync (`server.py:_Readiness`).
 
 ### User-facing HTTP endpoints (outside the proxy)
 
+Member app responses include `service_urls`: unique literal HTTP(S) origins for display.
+The projection strips credentials, paths, queries, and default ports. Built-in
+escaped hostname dots and hyphens are decoded. Unescaped regex dots and ambiguous
+regex or wildcard hosts are omitted.
+Raw upstream patterns, authentication templates, and organization credentials remain admin-only.
+
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/api/build/apps/{id}/oauth/start` | `start_external_app_oauth` (`server/features/build/external_apps/oauth.py`) | Begins a user's per-user OAuth connect flow for a built-in app. |
@@ -427,6 +433,22 @@ Either grant source still writes an `ActionApproval` row (pre-decided
 identical in shape whether a human or a grant decided.
 
 ### 4.6 OAuth connect and token refresh
+
+Members manage external-app accounts at `/app/plugins` and
+`/craft/v1/plugins`. The Craft list excludes OpenAPI actions and uses
+`craft_connected` for MCP credentials. External apps remain Craft-only.
+The shared directory fills the remaining Craft pane and centers its content.
+Search sits beside connection filters below the heading. Craft and CraftEmpty
+stories cover the populated and empty layouts.
+The old `/craft/v1/apps` route preserves query parameters when redirecting.
+The nested OAuth callback still exchanges the code before returning.
+Connected app details retain a Review skills link when an associated skill
+is disabled. Craft MCP details omit the unfetched Chat tool catalog.
+
+OAuth start accepts an optional safe internal `return_path`. It persists
+that path in Redis state and returns it after exchange. Plugin popup flows
+then verify the app's authenticated state before notifying the opener.
+Without that path, the existing Craft SetupCard popup protocol stays unchanged.
 
 Connect: `GET /api/build/apps/{id}/oauth/start` builds the provider's
 authorize URL through the shared OAuth builder (`server/features/build/external_apps/oauth.py`).

@@ -64,6 +64,6 @@ export const ADMIN_CONFIG_LINKS: Record<
 
 /** Where an admin goes for a tool that is neither built-in nor from MCP. */
 export const OPENAPI_ADMIN_CONFIG = {
-  href: ADMIN_ROUTES.OPENAPI_ACTIONS.path,
+  href: ADMIN_ROUTES.PLUGINS.path,
   tooltip: "Manage OpenAPI Actions",
 };

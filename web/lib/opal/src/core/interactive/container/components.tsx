@@ -40,6 +40,8 @@ interface InteractiveContainerProps extends WithoutStyles<
    */
   type?: ButtonType;
 
+  form?: string;
+
   /**
    * When `true`, applies a 1px border using the theme's border color.
    *
@@ -85,6 +87,7 @@ interface InteractiveContainerProps extends WithoutStyles<
 function InteractiveContainer({
   ref,
   type,
+  form,
   border,
   rounding = 3,
   size = "lg",
@@ -142,6 +145,7 @@ function InteractiveContainer({
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         type={type}
+        form={form}
         disabled={nativeDisabled}
         {...(sharedProps as React.HTMLAttributes<HTMLButtonElement>)}
       />

@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "المصادقة والاتصال بـ {serverName}",
-        "label": "مصادقة"
+        "ariaLabel": "إعداد المصادقة لـ {serverName}",
+        "label": "إعداد المصادقة"
       },
       "deleteButton": {
         "ariaLabel": "حذف الخادم {serverName}",
@@ -130,14 +130,13 @@
       "authStatus": {
         "apiTokenDescription": "تم تهيئة رمز API",
         "connectedDescription": "متصل",
-        "oauthDescription": "OAuth متصل بـ {owner}",
         "title": "تمت المصادقة والاتصال"
       },
       "cancelButton": {
         "label": "إلغاء"
       },
       "description": {
-        "placeholder": "مزيد من التفاصيل عن خادم MCP",
+        "placeholder": "ما الذي يمكن لفريقك فعله باستخدام هذا الخادم؟",
         "suffix": "اختياري",
         "title": "الوصف"
       },
@@ -145,21 +144,20 @@
         "tooltip": "قطع الاتصال بالخادم"
       },
       "editConfigsButton": {
-        "label": "تعديل الإعدادات"
+        "label": "إعدادات الاتصال"
       },
       "manageHeader": {
         "description": "حدّث إعدادات خادم MCP وأدر المصادقة.",
         "title": "إدارة خادم MCP"
       },
       "name": {
-        "placeholder": "سمِّ خادم MCP الخاص بك",
+        "placeholder": "مثل Linear",
         "required": "اسم الخادم مطلوب",
         "title": "اسم الخادم"
       },
       "serverUrl": {
         "invalid": "يجب أن يكون عنوان URL صالحًا",
         "required": "عنوان URL للخادم مطلوب",
-        "subDescription": "لا تتصل إلا بالخوادم التي تثق بها. أنت مسؤول عن الإجراءات المنفذة عبر هذا الاتصال وعن تحديث أدواتك.",
         "title": "عنوان URL لخادم MCP"
       },
       "submitButton": {
@@ -173,6 +171,34 @@
         "serverCreated": "تم إنشاء خادم MCP بنجاح",
         "serverUpdated": "تم تحديث خادم MCP بنجاح",
         "updateFailed": "فشل تحديث خادم MCP"
+      },
+      "access": {
+        "title": "التحكم في الوصول",
+        "description": "اختر من يمكنه استخدام MCP هذا.",
+        "public": {
+          "label": "عام",
+          "description": "يمكن لأي شخص في مؤسستك استخدام MCP هذا"
+        },
+        "groups": {
+          "label": "مجموعات المستخدمين",
+          "description": "يمكن لمجموعات المستخدمين المحددة استخدام MCP هذا.",
+          "placeholder": "إضافة مجموعات مستخدمين",
+          "required": "حدد مجموعة مستخدمين واحدة على الأقل."
+        },
+        "scoped": {
+          "description": "اختر مجموعة واحدة على الأقل تديرها."
+        },
+        "retainedUsers": "{count, plural, one {تمت مشاركته مباشرةً أيضًا مع مستخدم واحد.} other {تمت مشاركته مباشرةً أيضًا مع # من المستخدمين.}}",
+        "planTag": "Business",
+        "planNote": "يتطلب الوصول عبر المجموعات خطة Business."
+      },
+      "craft": {
+        "title": "متاح في Craft",
+        "description": "السماح للمستخدمين بالوصول إلى خادم MCP هذا في Craft."
+      },
+      "defaultChat": {
+        "title": "متاح في دردشة Onyx الافتراضية",
+        "description": "عند إيقافه، يجب على المستخدمين إضافة هذا الخادم إلى وكيل مخصص لاستخدامه في الدردشة."
       }
     },
     "addOpenApiModal": {
@@ -279,54 +305,48 @@
       "additionalAuthParams": {
         "label": "معاملات مصادقة إضافية (JSON)"
       },
-      "advanced": {
-        "description": "هيّئ موفر OAuth معروفًا بنقاط نهاية تفويض ورموز صريحة بدلًا من الاكتشاف التلقائي.",
-        "title": "متقدم"
-      },
       "apiKey": {
         "required": "رمز API مطلوب"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "مفتاح مشترك (مسؤول)"
+          "label": "رمز مشترك"
         },
         "perUser": {
-          "label": "مفتاح فردي (لكل مستخدم)"
+          "label": "رمز شخصي"
         }
       },
       "authPerformer": {
-        "required": "منفّذ المصادقة مطلوب"
+        "label": "بيانات الاعتماد",
+        "required": "اختر بيانات اعتماد شخصية أو مشتركة."
       },
       "authType": {
         "apiToken": {
-          "description": "استخدم مفتاح API فرديًا لكل مستخدم أو مفتاح API مشتركًا على مستوى المؤسسة.",
           "label": "مفتاح API"
         },
         "label": "طريقة المصادقة",
         "none": {
-          "description": "غير موصى به",
-          "label": "بدون"
+          "label": "بلا مصادقة"
         },
         "oauth": {
-          "description": "يحتاج كل مستخدم إلى المصادقة عبر OAuth ببيانات اعتماده الخاصة.",
           "label": "OAuth"
         },
         "placeholder": "اختر طريقة",
         "ptOauth": {
-          "description": "تمرير رمز وصول OAuth الخاص بالمستخدم المستخدم لمصادقة {appName}.",
           "label": "تمرير OAuth المباشر"
         },
         "required": "نوع المصادقة مطلوب"
       },
       "authorizationEndpoint": {
         "label": "نقطة نهاية التفويض",
-        "required": "نقطة نهاية التفويض مطلوبة في وضع الموفر المعروف"
+        "required": "أدخل نقطة نهاية التفويض من المزوّد."
       },
       "cancelButton": {
         "label": "إلغاء"
       },
       "clientId": {
-        "label": "معرّف العميل"
+        "label": "معرّف العميل",
+        "required": "أدخل معرّف عميل OAuth الخاص بك."
       },
       "clientSecret": {
         "label": "سر العميل"
@@ -335,25 +355,30 @@
         "additionalParamsInvalid": "JSON معاملات المصادقة الإضافية غير صالح",
         "additionalParamsInvalidWithReason": "JSON معاملات المصادقة الإضافية غير صالح: {reason}",
         "additionalParamsNotObject": "يجب أن تكون معاملات المصادقة الإضافية كائن JSON",
-        "oauthInitFailed": "فشل بدء OAuth: {detail}",
         "saveAuthFailed": "فشل حفظ إعدادات المصادقة",
-        "saveConfigFailed": "فشل حفظ إعدادات الخادم"
+        "saveConfigFailed": "فشل حفظ إعدادات الخادم",
+        "saveStage": "تعذّر حفظ إعدادات الاتصال",
+        "oauthStage": "تعذّر بدء تسجيل الدخول",
+        "discoveryStage": "تعذّر تحميل أدوات الخادم",
+        "loadStage": "تعذّر تحميل إعدادات الاتصال",
+        "clientRegistrationFailed": "فشل تسجيل العميل تلقائيًا. استخدم عميل OAuth خاصًا بك أو تحقق من متطلبات الإعداد لدى المزوّد.",
+        "discoveryFailed": "لم نعثر على إعدادات تسجيل الدخول باستخدام OAuth. تحقق من عنوان URL للخادم أو أدخل نقاط النهاية من المزوّد.",
+        "connectionFailed": "تعذّر الوصول إلى خادم OAuth. تحقق من عنوان URL للخادم وحاول مجددًا.",
+        "oauthFailed": "تعذّر بدء تسجيل الدخول باستخدام OAuth. تحقق من إعدادات العميل وحاول مجددًا."
       },
       "header": {
-        "defaultTitle": "مصادقة خادم MCP",
-        "description": "صادق على اتصالك لبدء استخدام خادم MCP.",
-        "title": "مصادقة *{name}*"
-      },
-      "knownProvider": {
-        "hint": "يتطلب وضع الموفر المعروف تهيئة نقاط النهاية. نقاط نهاية Google المرجعية: التفويض {authorizationEndpoint} والرمز {tokenEndpoint}."
+        "defaultTitle": "إعداد المصادقة",
+        "description": "إعداد مصادقة خادم MCP",
+        "title": "إعداد *{name}*"
       },
       "noAuthNotice": {
-        "description": "لن تُستخدم أي مصادقة لهذا الاتصال. تأكد من ثقتك بهذا الخادم. أنت مسؤول عن الإجراءات المنفذة عبر هذا الاتصال.",
-        "title": "لا توجد مصادقة لخادم MCP هذا"
+        "description": "يمكن للمستخدمين استخدام هذا الخادم دون تسجيل الدخول. يستمر إرسال الترويسات المخصصة المعدّة.",
+        "title": "لا تلزم المصادقة"
       },
       "oauthInfo": {
-        "discovery": "معرّف العميل والسر اختياريان. أثناء الاكتشاف التلقائي، يستخدم {appName} مستند بيانات معرّف العميل (CIMD) عند دعمه ويعود إلى التسجيل الديناميكي للعميل (DCR).",
-        "manualRegistration": "إذا كان خادمك لا يدعم أيًا من الطريقتين، سجّل نسخة {appName} الخاصة بك لدى موفر الخادم أولًا. امنح {appName} النطاقات اللازمة لإجراءاتك."
+        "discovery": "يسجّل كل مستخدم الدخول بحسابه الخاص.",
+        "manualRegistration": "سجّل عنوان URI لإعادة التوجيه هذا لدى المزوّد.",
+        "title": "إعداد OAuth"
       },
       "passThroughNotice": {
         "description": "سيمرر {appName} رمز وصول OAuth الخاص بالمستخدم مباشرة إلى الخادم كترويسة Authorization. تأكد من أن الخادم يدعم المصادقة عبر نفس الموفر.",
@@ -361,14 +386,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "استخدم تدفق التحدي/الاكتشاف الخاص بـ MCP SDK (الافتراضي).",
-          "label": "اكتشاف تلقائي"
+          "description": "قراءة إعدادات تسجيل الدخول التي ينشرها الخادم.",
+          "label": "العثور على نقاط نهاية تسجيل الدخول تلقائيًا"
         },
         "knownProvider": {
-          "description": "استخدم نقاط نهاية التفويض/الرموز المهيأة.",
-          "label": "موفر معروف"
+          "description": "أدخل عناوين URL لتسجيل الدخول والرمز بنفسك.",
+          "label": "إدخال نقاط النهاية يدويًا"
         },
-        "label": "وضع الموفر",
+        "label": "نقاط نهاية OAuth",
         "placeholder": "اختر وضعًا"
       },
       "redirectUri": {
@@ -379,20 +404,55 @@
         "label": "تجاوز النطاقات (مفصولة بفواصل)"
       },
       "sharedApiKey": {
-        "description": "لا تستخدم مفتاح API الشخصي. تأكد من أن هذا المفتاح مناسب للمشاركة مع الجميع في مؤسستك.",
+        "description": "يُستخدم هذا المفتاح لاختبار الإعداد وربط جميع من لديهم حق الوصول. استخدم مفتاح مساحة العمل، وليس مفتاحًا شخصيًا.",
         "label": "مفتاح API",
         "placeholder": "مفتاح API مشترك لمؤسستك"
       },
       "submitButton": {
-        "label": "اتصال",
-        "pendingLabel": "جارٍ الاتصال..."
+        "label": "حفظ التغييرات",
+        "pendingLabel": "جارٍ الحفظ…"
       },
       "tokenEndpoint": {
         "label": "نقطة نهاية الرمز",
-        "required": "نقطة نهاية الرمز مطلوبة في وضع الموفر المعروف"
+        "required": "أدخل نقطة نهاية الرمز من المزوّد."
       },
       "transport": {
-        "required": "وسيلة النقل مطلوبة"
+        "required": "وسيلة النقل مطلوبة",
+        "label": "طريقة نقل الاتصال",
+        "description": "استخدم Streamable HTTP ما لم يتطلب الخادم SSE القديم. لا يُكتشف هذا الإعداد تلقائيًا من الخادم.",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE (قديم)"
+      },
+      "advancedSettings": {
+        "title": "إعدادات متقدمة"
+      },
+      "apiTokenInfo": {
+        "title": "إعداد مفتاح API",
+        "description": "اختر ما إذا كان كل مستخدم يتصل برمز شخصي أو يستخدم الجميع رمزًا مشتركًا."
+      },
+      "oauthSetup": {
+        "label": "إعداد OAuth",
+        "automatic": {
+          "label": "الإعداد تلقائيًا",
+          "description": "اسمح لـ {appName} بتسجيل عميل OAuth باستخدام الإعدادات التي ينشرها الخادم."
+        },
+        "ownClient": {
+          "label": "استخدام عميل OAuth خاص بك",
+          "description": "أدخل معرّف عميل من المزوّد. أضف سرًا فقط إذا كان مطلوبًا."
+        }
+      },
+      "discovery": {
+        "checking": "جارٍ التحقق من الإعداد التلقائي…",
+        "supported": "الإعداد التلقائي متاح",
+        "requiresClient": "لا يعلن هذا الخادم دعم تسجيل العملاء تلقائيًا. نوصي بإعداد عميل OAuth خاص بك. لا يزال بإمكانك محاولة التسجيل التلقائي.",
+        "missing": "تحقق من عنوان URL للخادم أو أدخل نقاط نهاية تسجيل الدخول والرمز من المزوّد.",
+        "unreachable": "قد يكون الخادم غير متاح أو يحظر طلبات الاكتشاف.",
+        "retry": "التحقق مجددًا",
+        "manual": "إدخال إعدادات OAuth يدويًا",
+        "useOwnClient": "استخدام عميل OAuth خاص بك",
+        "unreachableTitle": "تعذّر تحديد ما إذا كان الإعداد التلقائي متاحًا",
+        "missingTitle": "تعذّر العثور على نقاط نهاية OAuth",
+        "requiresClientTitle": "قد لا يكون الإعداد التلقائي متاحًا"
       }
     },
     "mcpCard": {
@@ -402,7 +462,7 @@
       "deleteModal": {
         "body": {
           "confirmation": "هل أنت متأكد من رغبتك في حذف خادم MCP هذا؟",
-          "description": "ستُزال جميع الأدوات المتصلة بـ <emphasis>{title}</emphasis>. الحذف لا رجعة فيه."
+          "description": "سيؤدي هذا إلى حذف <emphasis>{title}</emphasis> وجميع أدواته لجميع المستخدمين في مؤسستك. الحذف لا رجعة فيه."
         },
         "submitButton": {
           "label": "حذف"
@@ -415,6 +475,20 @@
       "refreshToolsButton": {
         "ariaLabel": "تحديث الأدوات",
         "tooltip": "تحديث الأدوات"
+      },
+      "setupIncomplete": {
+        "label": "الإعداد غير مكتمل.",
+        "actionHint": "الإعداد غير مكتمل. انقر لإكمال الإعداد."
+      },
+      "status": {
+        "ready": "جاهز · {count, plural, one {أداة واحدة} other {# أدوات}}",
+        "incomplete": "الإعداد غير مكتمل",
+        "loading": "جارٍ تحميل الأدوات",
+        "disconnected": "غير متصل"
+      },
+      "authenticationButton": {
+        "tooltip": "إعداد المصادقة",
+        "ariaLabel": "إعداد المصادقة لـ {serverName}"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +567,7 @@
         "toolUpdateFailed": "فشل تحديث الأداة",
         "toolsDisabled": "{count, plural, one {تم تعطيل أداة واحدة بنجاح} other {تم تعطيل # أدوات بنجاح}}",
         "toolsEnabled": "{count, plural, one {تم تفعيل أداة واحدة بنجاح} other {تم تفعيل # أدوات بنجاح}}",
-        "toolsFetched": "تم الاتصال وجلب الأدوات بنجاح",
+        "toolsFetched": "تم تحميل الأدوات",
         "toolsRefreshed": "تم تحديث الأدوات بنجاح"
       }
     },
@@ -658,10 +732,8 @@
         "placeholder": "أدخل {field}"
       },
       "credentials": {
-        "perUserDescription": "لن تتم مشاركة بيانات الاعتماد التالية مع مؤسستك.",
-        "perUserTitle": "لحسابك الخاص فقط",
-        "sharedDescription": "تُستخدم هذه القيم لكل مستخدم في مؤسستك.",
-        "sharedTitle": "قيم المؤسسة المشتركة"
+        "perUserDescription": "استخدم بيانات اعتمادك لاختبار MCP هذا وتحميل أدواته. تُحفظ في حسابك فقط.",
+        "sharedDescription": "تُستخدم هذه القيم لكل مستخدم في مؤسستك."
       },
       "headers": {
         "addButton": {
@@ -671,8 +743,8 @@
           "message": "يجب أن تتضمن قيمة ترويسة واحدة على الأقل العنصر النائب {apiKey}."
         },
         "keyTitle": "اسم الترويسة",
-        "label": "ترويسات المصادقة",
-        "perUserDescription": "نسّق الترويسات ليملأ كل مستخدم بيانات اعتماده الفردية. استخدم عناصر نائبة مثل <mono>{apiKey}</mono> أو <mono>{userEmail}</mono>. سيُطلب من المستخدمين تقديم قيم للعناصر النائبة (باستثناء user_email).",
+        "label": "ترويسات مخصصة",
+        "perUserDescription": "استخدم <mono>{apiKey}</mono> لمفتاح API لكل مستخدم. يستخدم <mono>{userEmail}</mono> بريده الإلكتروني تلقائيًا. تطلب العناصر النائبة الأخرى من المستخدمين إدخال قيمة.",
         "sharedDescription": "نسّق الترويسات المرسلة مع بيانات الاعتماد المشتركة لمؤسستك. استخدم عناصر نائبة مثل <mono>{apiKey}</mono> في قيمة ترويسة واحدة على الأقل، وستُستبدل بمفتاح مؤسستك المشترك.",
         "valueTitle": "قيمة الترويسة"
       }
@@ -840,6 +912,411 @@
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
       "mcpServerUrl": "https://khadim-mcp.com/mcp"
+    },
+    "memberPlugins": {
+      "chat": {
+        "trigger": {
+          "label": "الإضافات"
+        },
+        "search": {
+          "placeholder": "البحث عن إضافات"
+        },
+        "empty": {
+          "text": "لا توجد إضافات متاحة في هذه المحادثة.",
+          "searchText": "لا توجد إضافات تطابق بحثك."
+        },
+        "loading": {
+          "label": "جارٍ تحميل الإضافات"
+        },
+        "loadError": {
+          "text": "تعذر تحميل بعض الإضافات. حاول مرة أخرى."
+        },
+        "retry": {
+          "label": "حاول مرة أخرى"
+        },
+        "browse": {
+          "label": "تصفح الإضافات"
+        },
+        "toggle": {
+          "ariaLabel": "استخدام {name} في هذه المحادثة"
+        },
+        "connect": {
+          "label": "ربط"
+        },
+        "connection": {
+          "connected": "متصل",
+          "workspace": "اتصال مساحة العمل",
+          "session": "اتصال الجلسة",
+          "none": "لا يلزم الاتصال",
+          "oauth": "اربط حسابك",
+          "credentials": "أضف بيانات اعتمادك",
+          "checking": "جارٍ التحقق من الاتصال",
+          "unconfigured": "يلزم إعداد مساحة العمل",
+          "unavailable": "الاتصال غير متاح"
+        },
+        "intent": {
+          "unavailable": "هذه الإضافة غير متاحة لوكيل هذه المحادثة.",
+          "invalid": "رابط هذه الإضافة غير صالح."
+        }
+      },
+      "oauthComplete": {
+        "success": {
+          "title": "تم ربط الإضافة",
+          "description": "عُد إلى علامة التبويب السابقة للمتابعة."
+        },
+        "error": {
+          "title": "لم يتم تأكيد الاتصال",
+          "description": "عُد إلى علامة التبويب السابقة وحاول الربط مرة أخرى."
+        },
+        "return": {
+          "label": "العودة إلى الإضافات"
+        },
+        "close": {
+          "label": "إغلاق علامة التبويب"
+        }
+      },
+      "title": "الإضافات",
+      "description": "اربط حساباتك لاستخدام إضافات مساحة العمل.",
+      "manageWorkspace": "إدارة إضافات مساحة العمل",
+      "search": "البحث عن إضافات",
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "تطبيقات Craft"
+      },
+      "row": {
+        "view": "عرض {name}",
+        "connect": "ربط {name}"
+      },
+      "status": {
+        "connected": "متصل",
+        "workspace": "اتصال مساحة العمل",
+        "session": "يستخدم تسجيل دخولك",
+        "none": "جاهز للاستخدام",
+        "oauth": "اربط حسابك",
+        "credentials": "أضف بيانات اعتمادك",
+        "unconfigured": "يلزم إعداد مساحة العمل",
+        "checking": "جارٍ التحقق من الاتصال",
+        "unavailable": "الاتصال غير متاح"
+      },
+      "availability": {
+        "label": "حالة الاتصال لـ {name}",
+        "chat": "المحادثة الرئيسية",
+        "craft": "Craft",
+        "on": "مفعّل",
+        "off": "معطّل",
+        "unknown": "غير معروف"
+      },
+      "state": {
+        "loading": "جارٍ تحميل الإضافات",
+        "serversError": "تعذر تحميل إضافات MCP.",
+        "toolsError": "تعذر تحميل أدوات الإضافات.",
+        "oauthError": "تعذر تحميل اتصالات الحسابات.",
+        "retry": "إعادة المحاولة",
+        "noResultsTitle": "لا توجد إضافات مطابقة",
+        "noResultsDescription": "جرّب اسمًا أو وصفًا آخر.",
+        "clearSearch": "عرض جميع الإضافات",
+        "appsError": "تعذر تحميل تطبيقات Craft.",
+        "appsLoading": "جارٍ تحميل تطبيقات Craft",
+        "emptyTitle": "لم يتم العثور على إضافات",
+        "emptyDescription": "جرّب عامل تصفية اتصال آخر أو اطلب من مسؤول مساحة العمل إضافة إحدى الإضافات."
+      },
+      "detail": {
+        "connection": "الاتصال",
+        "serverUrl": "عنوان URL للخادم",
+        "tools": "الأدوات",
+        "toolCount": "{count, plural, zero {لا توجد أدوات} one {أداة واحدة} two {أداتان} few {# أدوات} many {# أداة} other {# أداة}}",
+        "toolsDescription": "الأدوات المتاحة من إضافة مساحة العمل هذه.",
+        "noTools": "لا توجد أدوات مرئية محفوظة لهذه الإضافة.",
+        "connect": "ربط الحساب",
+        "useInChat": "استخدام في المحادثة",
+        "chatDisabled": "هذه الإضافة غير مفعّلة للمحادثة الرئيسية. يمكن لمسؤول مساحة العمل تغيير إتاحتها.",
+        "chatUnknown": "تعذر التأكد من إتاحتها في المحادثة الرئيسية.",
+        "disconnect": "قطع اتصال الحساب",
+        "disconnectTitle": "قطع اتصال {name}؟",
+        "disconnectDescription": "سيؤدي هذا إلى إزالة اتصال حسابك. لن تتغير الإتاحة في مساحة العمل.",
+        "oauthDisconnectWarning": "تشترك جميع الإضافات والتطبيقات التي تستخدم إعداد OAuth نفسه في اتصال هذا الحساب. يؤدي قطع الاتصال إلى إزالة اتصالك منها جميعًا.",
+        "disconnecting": "جارٍ قطع الاتصال...",
+        "disconnectFailed": "تعذر قطع اتصال حسابك. حاول مرة أخرى.",
+        "cancel": "إلغاء",
+        "close": "تم",
+        "openInCraft": "فتح في Craft"
+      },
+      "connection": {
+        "title": "ربط {name}",
+        "description": "أعدّت مساحة عملك هذه الإضافة. اربط حسابك لاستخدامها.",
+        "credentialsDescription": "أدخل بيانات اعتمادك لهذه الإضافة. اتصال حسابك منفصل عن اتصالات الأعضاء الآخرين.",
+        "oauthDescription": "تابع لتسجيل الدخول بحسابك. سيعرض موفّر الخدمة صلاحيات الوصول المطلوبة.",
+        "continue": "المتابعة إلى {name}",
+        "connect": "ربط",
+        "connecting": "جارٍ الربط...",
+        "cancel": "إلغاء",
+        "done": "تم",
+        "workspaceDescription": "توفر مساحة العمل هذا الاتصال. لا تحتاج إلى ربط حساب.",
+        "sessionDescription": "تستخدم هذه الإضافة تسجيل دخولك الحالي.",
+        "noneDescription": "لا تتطلب هذه الإضافة اتصال حساب.",
+        "connectedDescription": "حسابك متصل.",
+        "unconfiguredDescription": "يجب أن يكمل مسؤول مساحة العمل إعداد هذه الإضافة قبل أن تتمكن من ربطها.",
+        "checkingDescription": "لا تزال حالة اتصالك قيد التحميل. حاول مرة أخرى بعد اكتمالها.",
+        "unavailableDescription": "تعذر تحميل حالة اتصالك. أعد المحاولة من صفحة الإضافات.",
+        "errors": {
+          "popup_blocked": "حظر متصفحك نافذة تسجيل الدخول. اسمح بالنوافذ المنبثقة وحاول مرة أخرى.",
+          "cancelled": "أُلغي تسجيل الدخول. يمكنك المحاولة مرة أخرى.",
+          "timed_out": "استغرق تسجيل الدخول وقتًا طويلًا. حاول مرة أخرى.",
+          "credentials_required": "أدخل جميع بيانات الاعتماد المطلوبة.",
+          "unconfigured": "يجب أن يكمل مسؤول مساحة العمل إعداد هذه الإضافة.",
+          "not_connected": "تعذر تأكيد اتصال حسابك. حاول مرة أخرى.",
+          "request_failed": "فشل الاتصال. حاول مرة أخرى."
+        }
+      },
+      "filters": {
+        "label": "حالة الاتصال",
+        "all": "الكل",
+        "connected": "متصل",
+        "needsSignIn": "يلزم تسجيل الدخول",
+        "showAll": "عرض جميع الإضافات"
+      },
+      "defaults": {
+        "chat": "التمكين افتراضيًا في الدردشة الرئيسية",
+        "craft": "التمكين افتراضيًا في Craft",
+        "chatDescription": "ينطبق على الدردشة الافتراضية. تحتفظ الوكلاء المخصصة بإعدادات أدواتها الخاصة.",
+        "craftDescription": "استخدام هذا MCP في جلسات Craft الخاصة بك.",
+        "unavailable": "عطّل المسؤول هذه الإضافة في {surface}.",
+        "saveFailed": "تعذر حفظ إعدادات الإضافات الافتراضية. حاول مجددًا."
+      },
+      "openapi": {
+        "chatOnly": "الدردشة فقط",
+        "chatOnlyDescription": "هذه الإضافة متاحة في الدردشة، وليس في Craft."
+      },
+      "appSkills": {
+        "search": "البحث في المهارات",
+        "count": "{count, plural, one {# مهارة} other {# مهارات}}",
+        "empty": "لا توجد مهارات مرتبطة بهذا التطبيق.",
+        "noMatches": "لا توجد مهارات تطابق بحثك.",
+        "error": "تعذر تحميل المهارات.",
+        "enabled": "مفعّل",
+        "disabled": "معطّل",
+        "loading": "جارٍ تحميل المهارات…"
+      },
+      "externalApp": {
+        "description": "استخدم حسابك في Craft.",
+        "craftOnly": "Craft فقط",
+        "craftOnlyDescription": "هذا التطبيق متاح في Craft. لا تدعمه المحادثة الرئيسية."
+      }
+    },
+    "plugins": {
+      "availability": {
+        "mainChat": "الدردشة الرئيسية",
+        "craft": "Craft",
+        "on": "مفعّل",
+        "off": "معطّل",
+        "unknown": "غير معروف",
+        "enabled": "مفعّل",
+        "disabled": "معطّل",
+        "chatEnabled": "الدردشة مفعّلة",
+        "chatDisabled": "الدردشة معطّلة",
+        "chatUnknown": "حالة الدردشة غير معروفة",
+        "craftEnabled": "Craft مفعّل",
+        "craftDisabled": "Craft معطّل"
+      },
+      "controls": {
+        "disconnect": "تفعيل أو تعطيل في مساحة العمل",
+        "enable": "تفعيل في مساحة العمل",
+        "disable": "تعطيل في مساحة العمل",
+        "manageAvailability": "إدارة الإتاحة في مساحة العمل",
+        "more": "المزيد من الإجراءات",
+        "disableChat": "تعطيل في الدردشة الرئيسية",
+        "enableChat": "تفعيل في الدردشة الرئيسية",
+        "disableCraft": "تعطيل في Craft",
+        "enableCraft": "تفعيل في Craft"
+      },
+      "craftApp": {
+        "tabs": {
+          "configuration": "الإعدادات",
+          "permissions": "الأذونات",
+          "skills": "المهارات"
+        }
+      },
+      "disableConfirmation": {
+        "workspaceTitle": "هل تريد تعطيل {name} في مساحة العمل؟",
+        "workspaceDescription": "سيؤدي هذا إلى تعطيل {name} للجميع في مساحة العمل، بما في ذلك الوكلاء المخصصة. ستُحفظ الإعدادات وبيانات الاعتماد. يمكنك تفعيله مجددًا.",
+        "scope": "جميع المستخدمين في مؤسستك",
+        "chatTitle": "هل تريد تعطيل {name} في الدردشة الرئيسية؟",
+        "chatDescription": "سيؤدي هذا إلى إزالة {name} من الدردشة الافتراضية لجميع المستخدمين في مؤسستك. لن تتأثر الوكلاء المخصصة. يمكنك تمكينه مجددًا.",
+        "craftTitle": "هل تريد تعطيل {name} في Craft؟",
+        "craftDescription": "سيؤدي هذا إلى جعل {name} غير متاح في Craft لجميع المستخدمين في مؤسستك. لن تتأثر الدردشة الرئيسية. يمكنك تمكينه مجددًا."
+      },
+      "openapi": {
+        "schemaPreview": {
+          "detected": "{count, plural, one {تم اكتشاف # أداة} other {تم اكتشاف # أدوات}}",
+          "viewTools": "عرض الأدوات",
+          "saveToUpdate": "احفظ التغييرات لتحديث الأدوات."
+        },
+        "reviewTitle": "مراجعة {name}",
+        "createTitle": "إضافة إضافة OpenAPI",
+        "detailDescription": "إدارة واجهة API هذه والأدوات المتاحة لوكلائك.",
+        "detailsTitle": "تفاصيل الإضافة",
+        "schemaTitle": "مخطط OpenAPI",
+        "editSchema": "تعديل المخطط",
+        "notFound": "لم يتم العثور على الإضافة",
+        "loadFailed": "تعذر تحميل هذه الإضافة",
+        "unavailable": "قد تكون هذه الإضافة قد حُذفت، أو قد لا تملك صلاحية الوصول.",
+        "readOnly": "يمكنك عرض هذه الإضافة، لكن حسابك لا يستطيع تغيير إعداداتها.",
+        "disableTitle": "تعطيل {name}؟",
+        "disableDescription": "لن تتمكن الوكلاء من استخدام هذه الإضافة. يمكنك تفعيلها مجددًا.",
+        "deleteTitle": "حذف {name}؟",
+        "deleteDescription": "سيؤدي ذلك إلى حذف إضافة OpenAPI وإعداداتها نهائيًا."
+      },
+      "title": "الإضافات",
+      "description": "اربط الأدوات والتطبيقات بمساحة عملك.",
+      "search": {
+        "placeholder": "البحث عن إضافات"
+      },
+      "add": {
+        "label": "إضافة",
+        "mcp": "إضافة خادم MCP مخصص",
+        "openapi": "إضافة إجراء OpenAPI"
+      },
+      "catalog": {
+        "slack": {
+          "summary": "ابحث في المحادثات وأرسل الرسائل",
+          "description": "ابحث في المحادثات وأرسل الرسائل. يتطلب تطبيق Slack مسجلاً."
+        },
+        "hubspot": {
+          "summary": "تعامل مع جهات الاتصال والصفقات",
+          "description": "تعامل مع جهات الاتصال والصفقات. يتطلب موصل HubSpot MCP."
+        },
+        "asana": {
+          "summary": "أدر المهام والمشاريع",
+          "description": "أدر المهام والمشاريع. يتطلب عميل OAuth مسجلاً."
+        },
+        "linear": {
+          "summary": "إدارة المشكلات والمشاريع والفرق",
+          "description": "إدارة المشكلات والمشاريع والفرق."
+        },
+        "notion": {
+          "summary": "البحث في مساحة عمل Notion وتحديثها",
+          "description": "البحث في مساحة عمل Notion وتحديثها."
+        },
+        "sentry": {
+          "summary": "التحقيق في الأخطاء ومشكلات الأداء",
+          "description": "التحقيق في الأخطاء ومشكلات الأداء."
+        },
+        "atlassian": {
+          "summary": "العمل مع Jira وConfluence",
+          "description": "العمل مع Jira وConfluence.",
+          "approvalNote": "قد تتطلب مؤسستك في Atlassian موافقة المسؤول."
+        },
+        "setupGuide": "دليل الإعداد",
+        "add": {
+          "label": "إضافة {name}"
+        }
+      },
+      "row": {
+        "manage": {
+          "label": "إدارة {name}"
+        },
+        "view": {
+          "label": "عرض {name}"
+        }
+      },
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "تطبيقات Craft"
+      },
+      "filters": {
+        "label": "نوع الإضافة",
+        "all": "الكل",
+        "apps": "تطبيقات Craft"
+      },
+      "state": {
+        "mcpError": "تعذر تحميل خوادم MCP.",
+        "listErrorDescription": "تعذر تحميل قائمة المكونات الإضافية. حاول مجددًا بعد قليل.",
+        "openapiError": "تعذر تحميل إجراءات OpenAPI.",
+        "retry": {
+          "label": "إعادة المحاولة"
+        },
+        "loading": "جارٍ تحميل الإضافات",
+        "empty": {
+          "title": "لا توجد إضافات مثبتة",
+          "description": "أضف إحدى الإضافات إلى مساحة عملك.",
+          "explore": {
+            "label": "استكشاف الإضافات"
+          }
+        },
+        "noResults": {
+          "title": "لم يتم العثور على إضافات",
+          "description": "جرّب اسمًا أو وصفًا أو عنوان URL آخر للخادم.",
+          "clear": {
+            "label": "عرض جميع الإضافات"
+          }
+        },
+        "externalAppsError": "تعذر تحميل التطبيقات"
+      }
+    },
+    "mcpSetup": {
+      "connectTo": "الاتصال بـ {name}",
+      "contactingServer": "جارٍ الاتصال بالخادم",
+      "detectingAuthentication": "جارٍ اكتشاف المصادقة",
+      "stagePending": "قيد التنفيذ",
+      "stageSuccess": "اكتمل",
+      "stageError": "فشل",
+      "stageWaiting": "في الانتظار",
+      "progress": "تقدم الإعداد",
+      "serverStep": "الخادم",
+      "connectionStep": "الاتصال",
+      "permissionDenied": "ليس لديك إذن لإضافة خوادم MCP.",
+      "reviewSettings": "راجع إعدادات الخادم قبل الاتصال.",
+      "urlDescription": "أدخل عنوان URL للخادم لاكتشاف إعدادات الاتصال والمصادقة.",
+      "detectedTransport": "النقل: {transport}",
+      "retry": "تحقق مجددًا",
+      "authenticationUndetected": "اختر طريقة المصادقة في الصفحة التالية.",
+      "configureManually": "الإعداد يدويًا",
+      "details": "التفاصيل",
+      "checking": "جارٍ التحقق من الخادم…",
+      "unreachable": "تعذر الاتصال بخادم MCP هذا",
+      "retryCheck": "تحقق من عنوان URL وتوفر الخادم، ثم حاول مرة أخرى.",
+      "blocked": "عنوان URL هذا محظور بواسطة إعدادات أمان الاتصالات الصادرة.",
+      "publicDetected": "لا تلزم المصادقة",
+      "oauthDetected": "تم اكتشاف OAuth",
+      "manualRequired": "اختر المصادقة يدويًا",
+      "chooseAuthentication": "تعذر تحديد طريقة مصادقة هذا الخادم. اختر طريقة أدناه.",
+      "connect": "اتصال",
+      "publicDetails": "الأدوات المتاحة: {count}",
+      "serverDetails": "تفاصيل الخادم",
+      "authentication": "المصادقة",
+      "continue": "متابعة",
+      "back": "رجوع"
+    },
+    "mcpTools": {
+      "title": "الأدوات",
+      "description": "اختر الأدوات المتاحة وحدد أذوناتها.",
+      "enabledTab": "الأدوات المتاحة",
+      "policiesTab": "أذونات Craft",
+      "enabledDescription": "اختر الأدوات التي يمكن للمستخدمين استخدامها في Onyx.",
+      "policiesDescription": "اختر متى يطلب Craft الموافقة قبل استخدام كل أداة.",
+      "back": "المصادقة",
+      "refresh": "تحديث الأدوات",
+      "loadError": "تعذر تحميل الأدوات",
+      "saveError": "تعذر حفظ إعدادات الأدوات",
+      "refreshError": "تعذر تحديث الأدوات",
+      "search": "البحث عن أدوات"
+    },
+    "mcpDetail": {
+      "configuration": "إعدادات الخادم",
+      "editConfiguration": "تعديل إعدادات الخادم",
+      "authentication": "المصادقة",
+      "editAuthentication": "تعديل المصادقة",
+      "availability": "التوفر",
+      "edit": "تعديل",
+      "loadError": "تعذر تحميل خادم MCP",
+      "notFound": "لم يتم العثور على خادم MCP",
+      "unavailable": "ربما تم حذف هذا الخادم، أو قد لا تملك صلاحية الوصول إليه.",
+      "retry": "إعادة المحاولة",
+      "restrictedAccess": "{groups, plural, one {# مجموعة} other {# مجموعات}} · {users, plural, one {# مستخدم} other {# مستخدمين}}",
+      "authenticationIncomplete": "لم يتم إعداد المصادقة.",
+      "availabilitySaved": "تم تحديث التوفر"
     }
   },
   "admin": {
@@ -13727,7 +14204,7 @@
           }
         },
         "managedDescription": "مقدَّم من Onyx: قم بإعداد ما يمكن للوكيل فعله.",
-        "managedNote": "هذا التطبيق مقدَّم من Onyx، وتُدار بيانات الاعتماد نيابةً عنك. اختر أدناه ما يمكن للوكيل فعله. يقوم المستخدمون بتوصيله من صفحة التطبيقات.",
+        "managedNote": "يدير Onyx بيانات الاعتماد. اضبط سياسات الإجراءات ضمن الأذونات. يتصل الأعضاء من الإضافات.",
         "saveButton": "حفظ"
       },
       "customApp": {
@@ -13828,7 +14305,7 @@
             "tabLabel": "التطبيقات · {count}"
           },
           "mcp": {
-            "blurb": "خوادم أتاحها مسؤول لـ Craft. استخدمها عندما لا يكون التطبيق الذي تحتاجه مدرجًا ضمن التطبيقات، أو عندما تريد تحديدًا أدوات MCP الخاصة بخادم ما.",
+            "blurb": "خوادم أتاحها مسؤول لاستخدامها في Craft. إذا كان الخادم يتطلب بيانات اعتماد شخصية، فاربط حسابك الخاص قبل استخدام أدواته.",
             "empty": "لم تتم إتاحة أي خوادم MCP لـ Craft.",
             "emptyTitle": "لا توجد خوادم MCP بعد",
             "tabLabel": "خوادم MCP · {count}"
@@ -13851,10 +14328,6 @@
         }
       },
       "policyEditor": {
-        "advanced": {
-          "description": "عيّن سياسة لكل إجراء على حدة.",
-          "title": "متقدم"
-        },
         "cancelButton": "إلغاء",
         "loading": {
           "label": "جارٍ التحميل…"
@@ -13864,7 +14337,7 @@
           "autoApproveOption": "موافقة تلقائية",
           "customOption": "مخصص",
           "defaultOption": "الافتراضي",
-          "description": "اختر ما يمكن للوكيل فعله. «اسأل» يطلب موافقتك في الدردشة قبل تشغيل كل إجراء؛ و«الموافقة التلقائية» يشغّله دون سؤال. استخدم «متقدم» لتعيين سياسة لكل إجراء.",
+          "description": "اختر ما يمكن للوكيل فعله. «اسأل» يطلب الموافقة قبل كل إجراء؛ و«الموافقة التلقائية» يشغّله دون سؤال.",
           "title": "الأذونات"
         },
         "savingButton": "جارٍ الحفظ…"
@@ -14473,6 +14946,9 @@
       "toast": {
         "deleteFailed": "فشل حذف الجلسة",
         "deleted": "تم حذف \"{title}\"."
+      },
+      "plugins": {
+        "label": "الإضافات"
       }
     },
     "skillsStale": {
@@ -15952,6 +16428,9 @@
         "llmGateway": {
           "label": "بوابة LLM"
         },
+        "plugins": {
+          "label": "الإضافات"
+        },
         "mcpActions": {
           "label": "إجراءات MCP"
         },
@@ -16077,6 +16556,9 @@
       },
       "searchChats": {
         "label": "البحث في المحادثات"
+      },
+      "plugins": {
+        "label": "الإضافات"
       }
     },
     "chatButton": {

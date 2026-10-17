@@ -39,6 +39,22 @@ it("shows nothing on hover while suppressed", async () => {
   });
 });
 
+it("uses the current theme for neutral tooltips", async () => {
+  const user = userEvent.setup();
+  render(
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <Tooltip tooltip="Status" tone="neutral">
+        <button>Trigger</button>
+      </Tooltip>
+    </TooltipPrimitive.Provider>
+  );
+  await user.hover(screen.getByRole("button", { name: "Trigger" }));
+  const tooltip = await screen.findByRole("tooltip");
+  const surface = tooltip.closest(".opal-tooltip");
+  expect(surface).toHaveAttribute("data-tone", "neutral");
+  expect(surface).not.toHaveClass("dark");
+});
+
 it("does not reveal a hover the pointer already left when suppression lifts", async () => {
   const user = userEvent.setup();
 

@@ -60,7 +60,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
 // ---------------------------------------------------------------------------
 
 export interface SettingsHeaderProps {
-  icon: IconFunctionComponent;
+  icon?: IconFunctionComponent;
   /** Extra icons after `icon` in the title's icon row; see `Content`. */
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
@@ -79,6 +79,7 @@ export interface SettingsHeaderProps {
    * `key`, as in any list.
    */
   actions?: React.ReactNode[];
+  stackActionsOnMobile?: boolean;
   /**
    * Renders a secondary Cancel as the first action. `true` goes back in
    * history; a function overrides the destination.
@@ -103,6 +104,7 @@ function SettingsHeader({
   onTitleChange,
   children,
   actions,
+  stackActionsOnMobile = false,
   cancel,
   divider,
 }: SettingsHeaderProps) {
@@ -180,7 +182,12 @@ function SettingsHeader({
       <Spacer rem={3.25} />
 
       <div className="flex flex-col gap-6 px-4">
-        <div className="flex w-full items-start justify-between gap-4">
+        <div
+          className={cn(
+            "flex w-full items-start justify-between gap-4",
+            stackActionsOnMobile && "flex-col sm:flex-row"
+          )}
+        >
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
@@ -196,7 +203,12 @@ function SettingsHeader({
             />
           </div>
           {hasActions && (
-            <div className="flex shrink-0 items-start justify-end gap-2">
+            <div
+              className={cn(
+                "flex shrink-0 items-start justify-end gap-2",
+                stackActionsOnMobile && "w-full sm:w-auto"
+              )}
+            >
               {onCancel && (
                 <Button prominence="secondary" onClick={onCancel}>
                   {strings.settingsHeaderCancel}
