@@ -21,7 +21,7 @@ import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 
 // A required text input the app needs before it can be saved
 // (name, credentials, …).
@@ -47,9 +47,9 @@ interface ActionPolicyEditorModalProps {
   title: string;
   displayUrl?: string;
   icon?: IconFunctionComponent;
-  authenticationInstructions?: string;
+  authenticationInstructions?: string | RichStr;
   /** Shown in place of field inputs when there is nothing to type in. */
-  note?: string;
+  note?: string | RichStr;
   fields: EditorField[];
   initialFieldValues: Record<string, string>;
   /** Undefined while the capability list is still loading. */

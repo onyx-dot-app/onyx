@@ -15,6 +15,7 @@ import { InputVertical, Section } from "@opal/layouts";
 import { SvgCheck, SvgX } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
+import type { RichStr } from "@opal/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
@@ -83,7 +84,11 @@ interface MCPPluginSetupModalProps {
   onCompleted: (server: MCPServer) => void;
   initialUrl?: string;
   initialName?: string;
-  setupGuide?: { url: string; description: string; note?: string };
+  setupGuide?: {
+    url: string;
+    description: string | RichStr;
+    note?: string | RichStr;
+  };
 }
 
 export default function MCPPluginSetupModal({
