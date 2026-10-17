@@ -31,7 +31,7 @@ import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import { useUser } from "@/providers/UserProvider";
 import {
   clearMcpChatEnableIntent,
-  consumeMcpChatEnableIntent,
+  verifyMcpChatEnableIntent,
 } from "@/sections/actions/mcpChatEnableIntent";
 
 interface MCPServerDetailPageProps {
@@ -158,7 +158,7 @@ export default function MCPServerDetailPage({
           if (!defaultChat.data || defaultChat.error)
             throw new Error(t("addMcpModal.toasts.updateFailed"));
           if (
-            consumeMcpChatEnableIntent(token, {
+            verifyMcpChatEnableIntent(token, {
               userId: actor.current,
               serverId: id,
             })
@@ -168,7 +168,10 @@ export default function MCPServerDetailPage({
               true
             );
             enableChatCompleted.current = true;
+            clearMcpChatEnableIntent(token);
             selectTab("tools");
+          } else {
+            clearMcpChatEnableIntent(token);
           }
         }
         await refreshMemberPluginCaches(mutate);

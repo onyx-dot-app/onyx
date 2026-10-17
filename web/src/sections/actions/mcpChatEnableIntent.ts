@@ -50,9 +50,10 @@ export function mintMcpChatEnableIntent({
   }
 }
 
-export function consumeMcpChatEnableIntent(
+function checkIntent(
   token: string | null | undefined,
-  { userId, serverId }: EnableScope
+  { userId, serverId }: EnableScope,
+  consume: boolean
 ): boolean {
   if (!token) return false;
   try {
@@ -61,7 +62,7 @@ export function consumeMcpChatEnableIntent(
     if (!raw) return false;
     const intent = intentSchema.validateSync(JSON.parse(raw), { strict: true });
     if (intent.token !== token) return false;
-    storage.removeItem(storageKey);
+    if (consume) storage.removeItem(storageKey);
     return (
       intent.userId === userId &&
       intent.serverId === serverId &&
@@ -72,6 +73,20 @@ export function consumeMcpChatEnableIntent(
   } catch {
     return false;
   }
+}
+
+export function consumeMcpChatEnableIntent(
+  token: string | null | undefined,
+  scope: EnableScope
+): boolean {
+  return checkIntent(token, scope, true);
+}
+
+export function verifyMcpChatEnableIntent(
+  token: string | null | undefined,
+  scope: EnableScope
+): boolean {
+  return checkIntent(token, scope, false);
 }
 
 export function clearMcpChatEnableIntent(

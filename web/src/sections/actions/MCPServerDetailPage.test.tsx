@@ -434,6 +434,28 @@ test("enables discovered tools after in-place authentication succeeds", async ()
   );
 });
 
+test("keeps the enable request for a retry after the Chat update fails", async () => {
+  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
+  mockSearchParams = new URLSearchParams(
+    `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
+  );
+  jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
+  mockUpdateTools.mockRejectedValueOnce(new Error("Update failed"));
+  const user = setupUser();
+  render(<MCPServerDetailPage serverId={7} />);
+  const authenticate = await screen.findByRole("button", {
+    name: "Authenticate server",
+  });
+  await user.click(authenticate);
+  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(authenticate).toBeEnabled());
+  await user.click(authenticate);
+  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledTimes(2));
+  expect(
+    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+  ).toBe(false);
+});
+
 test("does not enable tools when opening authentication is cancelled", async () => {
   const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
   mockSearchParams = new URLSearchParams(
