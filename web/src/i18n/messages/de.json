@@ -2824,8 +2824,8 @@
         "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind.",
         "checkFrequencyUpdated": "Prüfintervall des Connectors erfolgreich aktualisiert",
         "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
-        "runResolved": "Marked resolved.",
-        "runResolveFailed": "Could not resolve: {message}",
+        "runResolved": "Als gelöst markiert.",
+        "runResolveFailed": "Konnte nicht als gelöst markiert werden: {message}",
         "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert."
       },
       "backButton": {
@@ -3027,8 +3027,8 @@
           "resolved": "Behoben"
         },
         "groups": {
-          "failures": "{count, plural, one {# Fehlschlag} other {# Fehlschläge}}",
-          "errors": "{count, plural, one {# Fehler} other {# Fehler}}",
+          "failures": "{count, plural, =0 {Fehlschläge} one {# Fehlschlag} other {# Fehlschläge}}",
+          "errors": "{count, plural, =0 {Fehler} one {# Fehler} other {# Fehler}}",
           "other": "Sonstige"
         },
         "title": {
@@ -3096,7 +3096,6 @@
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "doc_permission_sync": "{count, plural, one {# Benutzer nicht synchronisiert} other {# Benutzer nicht synchronisiert}}",
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
-          "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
           "resolved": "Behoben"

@@ -2824,8 +2824,8 @@
         "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات.",
         "checkFrequencyUpdated": "تم تحديث معدل فحص الموصّل بنجاح",
         "checkFrequencyUpdateFailed": "فشل تحديث معدل فحص الموصّل",
-        "runResolved": "Marked resolved.",
-        "runResolveFailed": "Could not resolve: {message}",
+        "runResolved": "تم وضع علامة «تم الحل».",
+        "runResolveFailed": "تعذّر الحل: {message}",
         "runsResolved": "تم وضع علامة «تم الحل» على {count, plural, zero {# عملية تشغيل} one {عملية تشغيل واحدة} two {عمليتي تشغيل} few {# عمليات تشغيل} many {# عملية تشغيل} other {# عملية تشغيل}}."
       },
       "backButton": {
@@ -3027,8 +3027,8 @@
           "resolved": "تم الحل"
         },
         "groups": {
-          "failures": "{count, plural, zero {لا إخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",
-          "errors": "{count, plural, zero {لا أخطاء} one {خطأ واحد} two {خطآن} few {# أخطاء} many {# خطأً} other {# خطأ}}",
+          "failures": "{count, plural, =0 {الإخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",
+          "errors": "{count, plural, =0 {الأخطاء} one {خطأ واحد} two {خطآن} few {# أخطاء} many {# خطأً} other {# خطأ}}",
           "other": "أخرى"
         },
         "title": {
@@ -3096,7 +3096,6 @@
           "indexing": "{count, plural, zero {لم يفشل أي مستند} one {فشل مستند واحد} two {فشل مستندان} few {فشلت # مستندات} many {فشل # مستندًا} other {فشل # مستند}}",
           "doc_permission_sync": "{count, plural, zero {لم تفشل مزامنة أي مستخدم} one {فشلت مزامنة مستخدم واحد} two {فشلت مزامنة مستخدمَين} few {فشلت مزامنة # مستخدمين} many {فشلت مزامنة # مستخدمًا} other {فشلت مزامنة # مستخدم}}",
           "group_sync": "{count, plural, zero {لم تفشل مزامنة أي مجموعة} one {فشلت مزامنة مجموعة واحدة} two {فشلت مزامنة مجموعتين} few {فشلت مزامنة # مجموعات} many {فشلت مزامنة # مجموعة} other {فشلت مزامنة # مجموعة}}",
-          "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}",
           "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
           "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
           "resolved": "تم الحل"

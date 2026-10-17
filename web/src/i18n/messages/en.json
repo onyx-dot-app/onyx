@@ -3027,8 +3027,8 @@
           "resolved": "Resolved"
         },
         "groups": {
-          "failures": "{count, plural, one {# Failure} other {# Failures}}",
-          "errors": "{count, plural, one {# Error} other {# Errors}}",
+          "failures": "{count, plural, =0 {Failures} one {# Failure} other {# Failures}}",
+          "errors": "{count, plural, =0 {Errors} one {# Error} other {# Errors}}",
           "other": "Other"
         },
         "title": {
@@ -3096,7 +3096,6 @@
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
           "doc_permission_sync": "{count, plural, one {# user failed to sync} other {# users failed to sync}}",
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
-          "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}",
           "resolved": "Resolved"

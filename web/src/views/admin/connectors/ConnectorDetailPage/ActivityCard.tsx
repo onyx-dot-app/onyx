@@ -24,6 +24,7 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import type { CardColor, IconFunctionComponent } from "@opal/types";
+import { cn } from "@opal/utils";
 import type {
   CCPairRef,
   CCPairRun,
@@ -94,7 +95,7 @@ type CardState =
   | "canceled"
   | "succeeded";
 
-/** The title's state key: how the run stands in its group. A run an admin resolved reads as it did when open. */
+/** The title's state key: how the run stands in its group. A closed card reads as it did when open, except a run whose document errors were all resolved, which says so. */
 function cardState(
   run: CCPairRun,
   group: ActivityGroup,
@@ -102,13 +103,11 @@ function cardState(
 ): CardState {
   const stopped =
     run.attempt.status === "canceled" || run.attempt.status === "interrupted";
-  // Closed without a resolution: superseded, or every document error resolved.
-  const closedBySystem = closed && run.resolved_at === null;
   switch (group) {
     case "failures":
-      return closedBySystem ? "resolved" : "failed";
+      return "failed";
     case "errors":
-      if (closedBySystem) return "resolved";
+      if (closed && run.resolved_at === null) return "resolved";
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
@@ -189,10 +188,10 @@ export default function ActivityCard({
       minutes,
     });
   }
-  const docsLabel =
-    state === "resolved"
-      ? t("tags.resolvedDocs", { count: warnings })
-      : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
+  // A closed card keeps the pill it had when open, only faded.
+  const docsLabel = t(`tags.${run.kind}`, {
+    count: listsDocs ? openDocs : warnings,
+  });
 
   return (
     <Section height="fit" className="group/activity">
@@ -300,7 +299,7 @@ export default function ActivityCard({
                 alignItems="center"
                 gap={1}
                 height="fit"
-                className="min-w-0 flex-1"
+                className={cn("min-w-0 flex-1", closed && "opacity-60")}
                 wrap
               >
                 {trace !== null && (
@@ -369,11 +368,11 @@ export default function ActivityCard({
                 </SelectButton>
               ) : (
                 resolvesRun && (
-                  // Only on hover or focus, so an open list reads as its runs, not a column of actions.
+                  // Only on hover or focus, so an open list reads as its runs, not a column of actions. An open popover moves focus into its portal, so its trigger's open state keeps the link shown.
                   <Section
                     width="fit"
                     height="fit"
-                    className="opacity-0 transition-opacity group-hover/activity:opacity-100 group-focus-within/activity:opacity-100"
+                    className="opacity-0 transition-opacity group-hover/activity:opacity-100 group-focus-within/activity:opacity-100 group-has-[[data-state=open]]/activity:opacity-100"
                   >
                     <Button
                       rightIcon={SvgCheckAll}
