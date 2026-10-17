@@ -29,6 +29,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     CredentialInvalidError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
@@ -453,7 +454,7 @@ def test_mail_read_check_is_incomplete_when_no_user_has_a_mailbox() -> None:
     gateway = _gateway()
     gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
 
-    with pytest.raises(UnexpectedValidationError, match="List a mailbox"):
+    with pytest.raises(InconclusiveValidationError, match="No mailboxes found"):
         _run("outlook_mail_read", _context(gateway))
 
 
@@ -483,7 +484,7 @@ def test_mail_read_check_advises_when_the_sample_vanishes_before_its_attachments
     assert result.status is CapabilityCheckStatus.PASSED
     (advisory,) = result.advisories
     assert "not found" in advisory.message
-    assert "did not verify that the app can read attachments" in advisory.message
+    assert "attachment reads were not tested" in advisory.message
 
 
 def test_mail_read_check_advises_when_the_sample_has_no_attachments() -> None:
@@ -494,7 +495,7 @@ def test_mail_read_check_advises_when_the_sample_has_no_attachments() -> None:
     gateway.list_message_attachments.assert_not_called()
     (advisory,) = _advisories(output)
     assert "no attachments" in advisory
-    assert "did not verify that the app can read attachments" in advisory
+    assert "attachment reads were not tested" in advisory
 
 
 def test_mail_read_check_maps_a_denied_attachment_listing() -> None:
@@ -506,11 +507,8 @@ def test_mail_read_check_maps_a_denied_attachment_listing() -> None:
         _run("outlook_mail_read", _context(gateway))
 
 
-def test_mail_read_check_passes_with_an_advisory_for_a_mailbox_without_messages() -> (
-    None
-):
-    """An empty mailbox proves the folder reads but not body access, so the
-    check passes and says what it did not verify."""
+def test_mail_read_check_is_incomplete_for_a_mailbox_without_messages() -> None:
+    """An empty mailbox proves the folder reads but not body access."""
     gateway = _gateway()
     gateway.read_any_message.return_value = None
 
@@ -519,10 +517,9 @@ def test_mail_read_check_passes_with_an_advisory_for_a_mailbox_without_messages(
         _context(gateway, {"mailboxes": [MAILBOX_ADDRESS]}),
     )
 
-    assert result.status is CapabilityCheckStatus.PASSED
-    (advisory,) = result.advisories
-    assert advisory.message.startswith(f"`{MAILBOX_ADDRESS}` holds no messages")
-    assert "message bodies" in advisory.message
+    assert result.status is CapabilityCheckStatus.INCOMPLETE
+    assert result.message.startswith(f"`{MAILBOX_ADDRESS}` holds no messages")
+    assert "message bodies" in result.message
     gateway.list_message_attachments.assert_not_called()
 
 
@@ -532,10 +529,13 @@ def test_mail_read_check_does_not_name_a_sampled_empty_mailbox() -> None:
     gateway = _gateway()
     gateway.read_any_message.return_value = None
 
-    (advisory,) = _advisories(_CHECKS_BY_ID["outlook_mail_read"].run(_context(gateway)))
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(gateway)
+    )
 
-    assert advisory.startswith("The sampled mailbox holds no messages")
-    assert MAILBOX_ADDRESS not in advisory
+    assert result.message.startswith("The sampled mailbox holds no messages")
+    assert result.summary == "No mail found in a sampled mailbox"
+    assert MAILBOX_ADDRESS not in result.message
 
 
 def test_mail_read_check_tells_read_basic_apart_from_read() -> None:
@@ -602,16 +602,17 @@ def test_groups_check_lists_every_group_that_does_not_resolve() -> None:
         [EntraGroup(id="g-3")],
     ]
 
-    with pytest.raises(ConnectorValidationError) as exc_info:
-        _run(
-            "outlook_configured_groups",
-            _context(gateway, {"mailbox_groups": ["Ghost", "Sales", "Onyx Users"]}),
-        )
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_configured_groups"]],
+        _context(gateway, {"mailbox_groups": ["Ghost", "Sales", "Onyx Users"]}),
+    )
 
-    message = str(exc_info.value)
-    assert "No group matches Ghost" in message
-    assert "More than one group is named Sales" in message
-    assert "Onyx Users" not in message
+    assert result.status is CapabilityCheckStatus.INCOMPLETE
+    assert result.partial
+    assert result.summary == "2 of 3 groups not found"
+    assert result.description is not None
+    assert "Ghost, Sales" in result.description
+    assert "Onyx Users" not in result.description
 
 
 def test_groups_check_maps_a_denied_listing_to_the_group_permission() -> None:
@@ -647,25 +648,25 @@ def test_configured_check_lists_every_problem_address() -> None:
     ]
     gateway.probe_mailbox.side_effect = [graph_error(403), folder()]
 
-    with pytest.raises(ConnectorValidationError) as exc_info:
-        _run(
-            "outlook_configured_mailboxes",
-            _context(
-                gateway,
-                {
-                    "mailboxes": [
-                        "ghost@contoso.com",
-                        "denied@contoso.com",
-                        "ok@contoso.com",
-                    ]
-                },
-            ),
-        )
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_configured_mailboxes"]],
+        _context(
+            gateway,
+            {
+                "mailboxes": [
+                    "ghost@contoso.com",
+                    "denied@contoso.com",
+                    "ok@contoso.com",
+                ]
+            },
+        ),
+    )
 
-    message = str(exc_info.value)
-    assert "ghost@contoso.com" in message
-    assert "denied@contoso.com (ErrorAccessDenied)" in message
-    assert "ok@contoso.com" not in message
+    assert result.status is CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "2 of 3 mailboxes not reachable"
+    assert result.description is not None
+    assert "ghost@contoso.com, denied@contoso.com" in result.description
+    assert "ok@contoso.com" not in result.description
 
 
 def test_configured_check_probes_every_address_however_long_the_list() -> None:
@@ -673,11 +674,12 @@ def test_configured_check_probes_every_address_however_long_the_list() -> None:
     addresses = [f"user{i}@contoso.com" for i in range(40)]
     gateway.resolve_mailbox.side_effect = [mailbox()] * 39 + [None]
 
-    with pytest.raises(ConnectorValidationError, match="user39@contoso.com"):
-        _run(
-            "outlook_configured_mailboxes", _context(gateway, {"mailboxes": addresses})
-        )
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_configured_mailboxes"]],
+        _context(gateway, {"mailboxes": addresses}),
+    )
 
+    assert result.summary == "Mailbox not found: user39@contoso.com"
     assert gateway.resolve_mailbox.call_count == 40
 
 
@@ -744,10 +746,16 @@ def test_healthy_tenant_passes_indexing() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_calendar_check_passes_without_a_call_when_calendars_are_off() -> None:
+def test_calendar_check_does_not_apply_when_calendars_are_off() -> None:
     gateway = _gateway()
 
-    _run("outlook_calendar_read", _context(gateway, {"include_calendar": False}))
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_calendar_read"]],
+        _context(gateway, {"include_calendar": False}),
+    )
+
+    assert result.status is CapabilityCheckStatus.SKIPPED
+    assert not result.applicable
 
     gateway.fetch_calendar_delta_page.assert_not_called()
     gateway.probe_mailbox.assert_not_called()
@@ -841,13 +849,11 @@ def test_calendar_check_moves_past_an_empty_calendar_and_needs_one_with_events()
     gateway.list_mailbox_users.side_effect = None
     gateway.read_any_event.side_effect = None
     gateway.read_any_event.return_value = None
-    with pytest.raises(UnexpectedValidationError, match="holds an event"):
+    with pytest.raises(InconclusiveValidationError, match="No events found"):
         _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
 
 
-def test_calendar_check_passes_with_an_advisory_for_a_configured_empty_calendar() -> (
-    None
-):
+def test_calendar_check_is_incomplete_for_a_configured_empty_calendar() -> None:
     gateway = _gateway()
     gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
     gateway.read_any_event.return_value = None
@@ -857,10 +863,9 @@ def test_calendar_check_passes_with_an_advisory_for_a_configured_empty_calendar(
         _context(gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}),
     )
 
-    assert result.status is CapabilityCheckStatus.PASSED
-    (advisory,) = result.advisories
-    assert advisory.message.startswith(f"`{MAILBOX_ADDRESS}` holds no events")
-    assert "event bodies" in advisory.message
+    assert result.status is CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "No events found to test"
+    assert result.message.startswith(f"`{MAILBOX_ADDRESS}` holds no event")
 
 
 def test_calendar_check_names_the_missing_grant_on_403() -> None:
