@@ -2757,89 +2757,24 @@
         "perBatch": {
           "empty": "배치별 단계 데이터가 기록되지 않았습니다."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "배치 로드"
+        "buckets": {
+          "fetchSource": {
+            "label": "소스 가져오기"
           },
-          "batchTotal": {
-            "label": "배치 전체"
-          },
-          "batchUnaccounted": {
-            "label": "미분류"
-          },
-          "checkpointLoad": {
-            "label": "체크포인트 로드"
+          "batchPreProcessing": {
+            "label": "배치 전처리"
           },
           "chunking": {
             "label": "청킹"
           },
-          "connectorFetch": {
-            "label": "커넥터 가져오기"
-          },
-          "connectorValidation": {
-            "label": "커넥터 검증"
-          },
-          "contextualRag": {
-            "label": "컨텍스트 기반 RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "조정 잠금 대기"
-          },
-          "coordinationUpdate": {
-            "label": "조정 업데이트"
-          },
-          "docBatchEnqueue": {
-            "label": "문서 배치 큐 등록"
-          },
-          "docBatchStore": {
-            "label": "문서 배치 저장"
-          },
-          "docDbPrepare": {
-            "label": "문서 DB 준비"
-          },
-          "docLockAcquireWait": {
-            "label": "문서 잠금 획득 대기"
-          },
-          "docprocessingSetup": {
-            "label": "문서 처리 설정"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "보강 준비"
-          },
-          "finalization": {
-            "label": "마무리"
-          },
-          "gcCollect": {
-            "label": "가비지 컬렉션"
-          },
-          "hierarchyUpsert": {
-            "label": "계층 업서트"
-          },
-          "imageProcessing": {
-            "label": "이미지 처리"
-          },
-          "permissionValidation": {
-            "label": "권한 검증"
-          },
-          "postIndexDbUpdate": {
-            "label": "인덱싱 후 DB 업데이트"
-          },
-          "queueWait": {
-            "label": "큐 대기"
+            "label": "임베딩"
           },
           "vectorDbWrite": {
             "label": "벡터 DB 쓰기"
           },
-          "embeddingRateLimitWait": {
-            "label": "임베딩 요청 한도 대기",
-            "description": "인덱스 설정에서 지정한 임베딩 요청 한도 때문에 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "제공자 제한 대기",
-            "description": "임베딩 제공자가 요청을 제한한 후 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
+          "postProcessing": {
+            "label": "후처리"
           }
         }
       },
@@ -2859,7 +2794,8 @@
         "throughput": {
           "ariaLabel": "시간별 인덱싱된 문서",
           "tooltip": "{count, plural, one {문서 #개} other {문서 #개}}",
-          "loadError": "차트를 불러올 수 없습니다."
+          "loadError": "차트를 불러올 수 없습니다.",
+          "rangeFilter": "차트의 이 구간에 생성된 실행"
         },
         "hold": {
           "checks_running": "인덱싱 전 검사 실행 중",
@@ -3020,6 +2956,7 @@
           "running": "{count, plural, other {실행 #개 진행 중}}",
           "succeeded": "{count, plural, other {실행 #개 성공}}",
           "failed": "{count, plural, other {실행 #개 실패}}",
+          "canceled": "{count, plural, other {실행 #개 취소됨}}",
           "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
           "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
@@ -3157,7 +3094,7 @@
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
-          "doc_permission_sync": "{count, plural, other {문서 #개 동기화 실패}}",
+          "doc_permission_sync": "{count, plural, other {사용자 #명 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
@@ -3199,6 +3136,10 @@
       },
       "stageDetails": {
         "title": "단계 세부 정보",
+        "heading": {
+          "top": "단계",
+          "bottom": "세부 정보"
+        },
         "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
@@ -7363,7 +7304,7 @@
       "activities": {
         "title": "활동",
         "history": "전체 활동 기록",
-        "viewLogs": "활동 기록 보기",
+        "viewLogs": "로그 보기",
         "panel": {
           "title": "활동 기록",
           "close": "활동 기록 숨기기"
@@ -10830,8 +10771,25 @@
         },
         "validation": {
           "title": "유효성 검사",
-          "blocks": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요.",
-          "warns": "일부 선택 검사에 실패했습니다. 그래도 적용할 수 있습니다.",
+          "unchanged": "검증이 필요한 설정은 변경되지 않았습니다.",
+          "outcome": {
+            "failed": {
+              "title": "검증 실패",
+              "description": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요."
+            },
+            "warnings": {
+              "title": "경고와 함께 검증 통과",
+              "description": "일부 선택 검사가 실패했거나 확인할 수 없었습니다. 그래도 적용할 수 있습니다."
+            },
+            "incomplete": {
+              "title": "검증이 완료되지 않음",
+              "description": "완료된 검사는 통과했습니다. 그래도 적용할 수 있습니다."
+            },
+            "passed": {
+              "title": "검증 통과",
+              "description": "새 설정이 모든 검사를 통과했습니다."
+            }
+          },
           "error": {
             "title": "설정이 유효하지 않습니다"
           }

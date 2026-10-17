@@ -1,7 +1,7 @@
 """Coverage for a pair's run feed and the single-attempt cancel route: kinds
 merge newest first across pages, another pair's runs stay out unless its source
 shares one group sync history, counts ignore the
-status filter, `since` and `q` narrow the feed, `q` also reads an attempt's
+status filter, `since`, `until` and `q` narrow the feed, `q` also reads an attempt's
 document errors, `errors` keeps runs with open or resolved document errors, a
 non-synced pair shows only indexing, cancel acts only on active attempts of a
 pair the caller operates,
@@ -167,6 +167,7 @@ def _runs(
     page_num: int = 0,
     page_size: int = 10,
     since: datetime | None = None,
+    until: datetime | None = None,
     kinds: list[CCPairRunKind] | None = None,
     status_groups: list[CCPairRunStatusGroup] | None = None,
     q: str | None = None,
@@ -177,6 +178,7 @@ def _runs(
         page_num=page_num,
         page_size=page_size,
         since=since,
+        until=until,
         kinds=kinds,
         status_groups=status_groups,
         q=q,
@@ -459,6 +461,44 @@ def test_window_and_error_search(db_session: Session) -> None:
     )
 
     assert _order(response) == [(CCPairRunKind.INDEXING, recent_timeout.id)]
+    assert response.total_items == 1
+
+
+def test_a_running_run_from_before_the_window_is_listed_and_counted(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
+    _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    running = _index_attempt(db_session, cc_pair, 10, IndexingStatus.IN_PROGRESS)
+    recent = _index_attempt(db_session, cc_pair, 20, IndexingStatus.FAILED)
+
+    response = _runs(db_session, admin, cc_pair, since=_T0 + timedelta(minutes=15))
+
+    assert _order(response) == [
+        (CCPairRunKind.INDEXING, recent.id),
+        (CCPairRunKind.INDEXING, running.id),
+    ]
+    assert response.status_counts[CCPairRunStatusGroup.RUNNING] == 1
+    assert response.status_counts[CCPairRunStatusGroup.SUCCEEDED] == 0
+
+
+def test_until_leaves_out_runs_created_at_or_after_it(db_session: Session) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
+    _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    inside = _index_attempt(db_session, cc_pair, 10, IndexingStatus.FAILED)
+    _index_attempt(db_session, cc_pair, 20, IndexingStatus.SUCCESS)
+
+    response = _runs(
+        db_session,
+        admin,
+        cc_pair,
+        since=_T0 + timedelta(minutes=5),
+        until=_T0 + timedelta(minutes=20),
+    )
+
+    assert _order(response) == [(CCPairRunKind.INDEXING, inside.id)]
     assert response.total_items == 1
 
 

@@ -15,6 +15,12 @@ export class AdminConnectorDetailPage {
   readonly runsSection: Locator;
   /** The run-type filter, shown only when the pair runs more than indexing. */
   readonly runKindFilter: Locator;
+  /** The status card's time window, shared with the run list's time filter. */
+  readonly timeWindowPicker: Locator;
+  /** The run list's time filter, shared with the status card's window. */
+  readonly runsTimeFilter: Locator;
+  /** The "All time" choice of an open time window menu. */
+  readonly allTimeOption: Locator;
   /** The logs action of every run that has logs, newest first. */
   readonly runLogsButtons: Locator;
   /** The run list's empty state, shown once the feed has loaded with no runs. */
@@ -36,6 +42,13 @@ export class AdminConnectorDetailPage {
     this.indexingSection = page.getByTestId("connector-indexing-status");
     this.runsSection = page.getByTestId("connector-runs");
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
+    this.timeWindowPicker = this.indexingSection.getByRole("button", {
+      name: /^Last \d+ (hours|days)$/,
+    });
+    this.runsTimeFilter = this.runsSection
+      .getByRole("button", { name: /Last \d+ (hours|days)/ })
+      .first();
+    this.allTimeOption = page.getByRole("option", { name: "All time" });
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
     this.noRunsMessage = page.getByText("No runs yet", { exact: true });
     this.activityPanel = page.getByTestId("connector-activity");
@@ -82,6 +95,12 @@ export class AdminConnectorDetailPage {
 
   async expectRunsVisible(): Promise<void> {
     await expect(this.runsSection).toBeVisible({ timeout: 30000 });
+  }
+
+  /** Picks a time window by its label, such as "Last 24 hours", from either card's control. */
+  async pickTimeWindow(control: Locator, label: string): Promise<void> {
+    await control.click();
+    await this.page.getByRole("option", { name: label }).click();
   }
 
   /** Waits for the feed to load and show no runs. */

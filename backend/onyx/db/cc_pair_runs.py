@@ -91,8 +91,14 @@ def _narrowed(
     statuses: type[_StatusT],
     with_status_filter: bool,
 ) -> Select:
+    # A run still going belongs to any window or slice, whenever it began.
+    active = status.in_(
+        [s for s in statuses if _STATUS_GROUPS[s.value] is CCPairRunStatusGroup.RUNNING]
+    )
     if run_filter.since is not None:
-        stmt = stmt.where(time_created >= run_filter.since)
+        stmt = stmt.where(or_(time_created >= run_filter.since, active))
+    if run_filter.until is not None:
+        stmt = stmt.where(or_(time_created < run_filter.until, active))
     if run_filter.error_query:
         stmt = stmt.where(matches_error(run_filter.error_query))
     groups = run_filter.status_groups

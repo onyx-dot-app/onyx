@@ -288,6 +288,8 @@ export interface CCPairRunsQuery {
   pageSize: number;
   /** ISO time. Runs created before it are left out. */
   since: string | null;
+  /** ISO time. Runs created at or after it are left out. */
+  until: string | null;
   kinds: CCPairRunKind[] | null;
   statusGroups: CCPairRunStatusGroup[] | null;
   /** Matched against error messages. */
@@ -302,6 +304,8 @@ export interface IndexAttemptError {
 
   document_id: string | null;
   document_link: string | null;
+  /** The indexed document's title, `null` until the document lands. */
+  document_name: string | null;
 
   entity_id: string | null;
   failed_time_range_start: string | null;

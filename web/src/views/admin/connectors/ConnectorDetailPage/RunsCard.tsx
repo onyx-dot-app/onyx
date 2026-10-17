@@ -21,6 +21,7 @@ import {
   SvgCheckCircle,
   SvgClock,
   SvgSlowMotion,
+  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -34,6 +35,16 @@ import type {
   CCPairRunStatusGroup,
 } from "@/lib/connectors/types";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
+import {
+  PAIR_WINDOWS,
+  ThroughputWindowPicker,
+  pickedWindowStart,
+  rangeWithin,
+  windowStart,
+  type PickedWindow as SharedWindow,
+  type PickerWindow,
+  type SliceRange,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import RunRow, {
   RUN_KIND_ICONS,
   runErrorText,
@@ -56,12 +67,7 @@ const WINDOWS = [
 ] as const;
 type TimeWindow = (typeof WINDOWS)[number];
 
-interface PickedWindow {
-  window: TimeWindow;
-  /** Fixed when the window is picked, so polling keeps one cache key. */
-  since: string | null;
-}
-const ALL_TIME: PickedWindow = { window: WINDOWS[0], since: null };
+const ALL_TIME: TimeWindow = WINDOWS[0];
 const LOADER_ROWS = 3;
 
 const STATUS_GROUPS: CCPairRunStatusGroup[] = [
@@ -71,11 +77,12 @@ const STATUS_GROUPS: CCPairRunStatusGroup[] = [
   "canceled",
 ];
 
-// The header counts. Canceled runs get none.
+// The header counts. A group with no runs shows no tag.
 const COUNT_TAGS = [
   { group: "succeeded", icon: SvgCheckCircle, color: "green" },
   { group: "running", icon: IconLoader, color: "blue" },
   { group: "failed", icon: SvgXOctagon, color: "red" },
+  { group: "canceled", icon: SvgXCircle, color: "gray" },
 ] as const;
 
 const ALL = "all";
@@ -86,6 +93,12 @@ export interface RunsCardProps {
   canOperate: boolean;
   /** Renders the list without its own card, for a card that already frames it. */
   embedded?: boolean;
+  /** The page's window, shared with the status card. Without it the list keeps its own. */
+  sharedWindow?: SharedWindow;
+  onSharedWindowChange?: (window: PickerWindow) => void;
+  /** A chart span that narrows the list inside the shared window. The shared picker shows it, and its X calls `onClearRange`. */
+  range?: SliceRange | null;
+  onClearRange?: () => void;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
@@ -93,11 +106,34 @@ export default function RunsCard({
   ccPairId,
   canOperate,
   embedded = false,
+  sharedWindow,
+  onSharedWindowChange,
+  range = null,
+  onClearRange,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const [page, setPage] = useState(1);
-  const [picked, setPicked] = useState<PickedWindow>(ALL_TIME);
+  const [picked, setPicked] = useState<TimeWindow>(ALL_TIME);
+  const windowSince =
+    sharedWindow !== undefined
+      ? pickedWindowStart(sharedWindow)
+      : picked.hours === null
+        ? null
+        : windowStart(picked.hours);
+  const { since, until } = rangeWithin(windowSince, range);
+  // A new window or slice starts the list over at its first page. The key is
+  // the selection, not the moving start, so a passing minute keeps the page.
+  const selection = [
+    sharedWindow !== undefined ? sharedWindow.window : picked.id,
+    range?.since ?? "",
+    range?.until ?? "",
+  ].join("|");
+  const [pagedSelection, setPagedSelection] = useState(selection);
+  if (pagedSelection !== selection) {
+    setPagedSelection(selection);
+    setPage(1);
+  }
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
   const [statusGroup, setStatusGroup] = useState<CCPairRunStatusGroup | null>(
     null
@@ -109,7 +145,8 @@ export default function RunsCard({
   const key = SWR_KEYS.ccPairRuns(ccPairId, {
     pageNum: page - 1,
     pageSize: PAGE_SIZE,
-    since: picked.since,
+    since,
+    until,
     kinds: kind === null ? null : [kind],
     statusGroups: statusGroup === null ? null : [statusGroup],
     q: search,
@@ -122,14 +159,7 @@ export default function RunsCard({
   );
 
   function pickWindow(window: TimeWindow) {
-    setPicked({
-      window,
-      since:
-        window.hours === null
-          ? null
-          : new Date(Date.now() - window.hours * 3_600_000).toISOString(),
-    });
-    setPage(1);
+    setPicked(window);
   }
 
   function pickKind(next: CCPairRunKind | null) {
@@ -171,10 +201,12 @@ export default function RunsCard({
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
+  // The shared window is always set, so only a local narrowing counts as a filter.
   const filtered =
     kind !== null ||
     statusGroup !== null ||
-    picked.since !== null ||
+    (sharedWindow === undefined && picked.hours !== null) ||
+    range !== null ||
     search !== "";
 
   const body = (
@@ -212,7 +244,9 @@ export default function RunsCard({
             width="fit"
             height="fit"
           >
-            {COUNT_TAGS.map(({ group, icon, color }) => (
+            {COUNT_TAGS.filter(
+              ({ group }) => (data?.status_counts[group] ?? 0) > 0
+            ).map(({ group, icon, color }) => (
               <Tag
                 key={group}
                 icon={icon}
@@ -233,30 +267,41 @@ export default function RunsCard({
           height="fit"
           wrap
         >
-          <Dropdown>
-            <Dropdown.Trigger asChild>
-              <FilterButton
-                icon={SvgClock}
-                active={picked.since !== null}
-                onClear={() => pickWindow(ALL_TIME.window)}
-              >
-                {t(`window.${picked.window.id}`)}
-              </FilterButton>
-            </Dropdown.Trigger>
-            <Dropdown.Data
-              label={t("window.label")}
-              value={picked.window.id}
-              onSelect={(option) => {
-                const window = WINDOWS.find((w) => w.id === option.value);
-                if (window !== undefined) pickWindow(window);
-              }}
-              items={WINDOWS.map((option) => ({
-                kind: "option" as const,
-                value: option.id,
-                title: t(`window.${option.id}`),
-              }))}
+          {sharedWindow !== undefined && onSharedWindowChange !== undefined ? (
+            // The shared window is always set, so it is the status card's picker, not a clearable filter.
+            <ThroughputWindowPicker
+              windows={PAIR_WINDOWS}
+              value={sharedWindow.window}
+              onChange={onSharedWindowChange}
+              selection={range}
+              onClearSelection={onClearRange}
             />
-          </Dropdown>
+          ) : (
+            <Dropdown>
+              <Dropdown.Trigger asChild>
+                <FilterButton
+                  icon={SvgClock}
+                  active={picked.hours !== null}
+                  onClear={() => pickWindow(ALL_TIME)}
+                >
+                  {t(`window.${picked.id}`)}
+                </FilterButton>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("window.label")}
+                value={picked.id}
+                onSelect={(option) => {
+                  const window = WINDOWS.find((w) => w.id === option.value);
+                  if (window !== undefined) pickWindow(window);
+                }}
+                items={WINDOWS.map((option) => ({
+                  kind: "option" as const,
+                  value: option.id,
+                  title: t(`window.${option.id}`),
+                }))}
+              />
+            </Dropdown>
+          )}
           {kinds.length > 1 && (
             <Dropdown>
               <Dropdown.Trigger asChild>

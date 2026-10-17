@@ -2757,89 +2757,24 @@
         "perBatch": {
           "empty": "Keine Phasendaten pro Batch aufgezeichnet."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Batch laden"
+        "buckets": {
+          "fetchSource": {
+            "label": "Quellabruf"
           },
-          "batchTotal": {
-            "label": "Batch gesamt"
-          },
-          "batchUnaccounted": {
-            "label": "Nicht zugeordnet"
-          },
-          "checkpointLoad": {
-            "label": "Checkpoint laden"
+          "batchPreProcessing": {
+            "label": "Batch-Vorverarbeitung"
           },
           "chunking": {
             "label": "Chunking"
           },
-          "connectorFetch": {
-            "label": "Konnektor-Abruf"
-          },
-          "connectorValidation": {
-            "label": "Konnektor-Prüfung"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "Wartezeit auf Koordinationssperre"
-          },
-          "coordinationUpdate": {
-            "label": "Koordinationsaktualisierung"
-          },
-          "docBatchEnqueue": {
-            "label": "Dokument-Batch einreihen"
-          },
-          "docBatchStore": {
-            "label": "Dokument-Batch speichern"
-          },
-          "docDbPrepare": {
-            "label": "Dokument-DB vorbereiten"
-          },
-          "docLockAcquireWait": {
-            "label": "Wartezeit auf Dokumentsperre"
-          },
-          "docprocessingSetup": {
-            "label": "Docprocessing-Einrichtung"
-          },
           "embedding": {
             "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "Anreicherung vorbereiten"
-          },
-          "finalization": {
-            "label": "Abschluss"
-          },
-          "gcCollect": {
-            "label": "Garbage Collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Hierarchie-Upsert"
-          },
-          "imageProcessing": {
-            "label": "Bildverarbeitung"
-          },
-          "permissionValidation": {
-            "label": "Berechtigungsprüfung"
-          },
-          "postIndexDbUpdate": {
-            "label": "DB-Aktualisierung nach Indizierung"
-          },
-          "queueWait": {
-            "label": "Warteschlangenzeit"
           },
           "vectorDbWrite": {
             "label": "Schreiben in Vektor-DB"
           },
-          "embeddingRateLimitWait": {
-            "label": "Wartezeit Embedding-Ratenlimit",
-            "description": "Zeit, die Embedding-Anfragen auf das in den Index-Einstellungen festgelegte Ratenlimit gewartet haben. Teil von Embedding, summiert über Embedding-Threads."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Wartezeit Anbieter-Drosselung",
-            "description": "Zeit, die Embedding-Anfragen gewartet haben, nachdem der Embedding-Anbieter sie gedrosselt hat. Teil von Embedding, summiert über Embedding-Threads."
+          "postProcessing": {
+            "label": "Nachverarbeitung"
           }
         }
       },
@@ -2859,7 +2794,8 @@
         "throughput": {
           "ariaLabel": "Indizierte Dokumente im Zeitverlauf",
           "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
-          "loadError": "Das Diagramm konnte nicht geladen werden."
+          "loadError": "Das Diagramm konnte nicht geladen werden.",
+          "rangeFilter": "In diesem Abschnitt des Diagramms erstellte Läufe"
         },
         "hold": {
           "checks_running": "Vorab-Prüfungen laufen",
@@ -3020,6 +2956,7 @@
           "running": "{count, plural, one {# Lauf aktiv} other {# Läufe aktiv}}",
           "succeeded": "{count, plural, one {# Lauf erfolgreich} other {# Läufe erfolgreich}}",
           "failed": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}",
+          "canceled": "{count, plural, one {# Lauf abgebrochen} other {# Läufe abgebrochen}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
@@ -3157,7 +3094,7 @@
         "tags": {
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
-          "doc_permission_sync": "{count, plural, one {# Dokument nicht synchronisiert} other {# Dokumente nicht synchronisiert}}",
+          "doc_permission_sync": "{count, plural, one {# Benutzer nicht synchronisiert} other {# Benutzer nicht synchronisiert}}",
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
@@ -3199,6 +3136,10 @@
       },
       "stageDetails": {
         "title": "Phasendetails",
+        "heading": {
+          "top": "Phasen",
+          "bottom": "Details"
+        },
         "calls": "Batches",
         "averageTime": "Durchschnittszeit",
         "maxTime": "Maximalzeit",
@@ -7363,7 +7304,7 @@
       "activities": {
         "title": "Aktivitäten",
         "history": "Vollständiger Aktivitätsverlauf",
-        "viewLogs": "Aktivitätsverlauf anzeigen",
+        "viewLogs": "Logs anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
           "close": "Aktivitätsverlauf ausblenden"
@@ -10830,8 +10771,25 @@
         },
         "validation": {
           "title": "Validierung",
-          "blocks": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden.",
-          "warns": "Einige optionale Prüfungen sind fehlgeschlagen. Sie können trotzdem anwenden.",
+          "unchanged": "Einstellungen, die eine Validierung erfordern, wurden nicht geändert.",
+          "outcome": {
+            "failed": {
+              "title": "Validierung fehlgeschlagen",
+              "description": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden."
+            },
+            "warnings": {
+              "title": "Validierung mit Warnungen bestanden",
+              "description": "Einige optionale Prüfungen sind fehlgeschlagen oder konnten nicht verifiziert werden. Sie können trotzdem anwenden."
+            },
+            "incomplete": {
+              "title": "Validierung nicht abgeschlossen",
+              "description": "Die abgeschlossenen Prüfungen waren erfolgreich. Sie können trotzdem anwenden."
+            },
+            "passed": {
+              "title": "Validierung bestanden",
+              "description": "Die neuen Einstellungen haben alle Prüfungen bestanden."
+            }
+          },
           "error": {
             "title": "Die Einstellungen sind ungültig"
           }

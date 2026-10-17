@@ -2757,89 +2757,24 @@
         "perBatch": {
           "empty": "Aucune donnée d'étape par lot enregistrée."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Chargement du lot"
+        "buckets": {
+          "fetchSource": {
+            "label": "Récupération de la source"
           },
-          "batchTotal": {
-            "label": "Total du lot"
-          },
-          "batchUnaccounted": {
-            "label": "Non attribué"
-          },
-          "checkpointLoad": {
-            "label": "Chargement du point de reprise"
+          "batchPreProcessing": {
+            "label": "Prétraitement des lots"
           },
           "chunking": {
             "label": "Segmentation"
           },
-          "connectorFetch": {
-            "label": "Récupération par le connecteur"
-          },
-          "connectorValidation": {
-            "label": "Validation du connecteur"
-          },
-          "contextualRag": {
-            "label": "RAG contextuel"
-          },
-          "coordLockAcquireWait": {
-            "label": "Attente du verrou de coordination"
-          },
-          "coordinationUpdate": {
-            "label": "Mise à jour de la coordination"
-          },
-          "docBatchEnqueue": {
-            "label": "Mise en file du lot de documents"
-          },
-          "docBatchStore": {
-            "label": "Enregistrement du lot de documents"
-          },
-          "docDbPrepare": {
-            "label": "Préparation DB des documents"
-          },
-          "docLockAcquireWait": {
-            "label": "Attente du verrou de document"
-          },
-          "docprocessingSetup": {
-            "label": "Configuration du docprocessing"
-          },
           "embedding": {
             "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "Préparation de l'enrichissement"
-          },
-          "finalization": {
-            "label": "Finalisation"
-          },
-          "gcCollect": {
-            "label": "Garbage collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Upsert de la hiérarchie"
-          },
-          "imageProcessing": {
-            "label": "Traitement des images"
-          },
-          "permissionValidation": {
-            "label": "Validation des autorisations"
-          },
-          "postIndexDbUpdate": {
-            "label": "Mise à jour DB après indexation"
-          },
-          "queueWait": {
-            "label": "Attente en file"
           },
           "vectorDbWrite": {
             "label": "Écriture DB vectorielle"
           },
-          "embeddingRateLimitWait": {
-            "label": "Attente de la limite d'embedding",
-            "description": "Temps d'attente des requêtes d'embedding pour la limite définie dans les paramètres d'index. Fait partie d'Embedding, additionné sur les threads d'embedding."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Attente de limitation du fournisseur",
-            "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          "postProcessing": {
+            "label": "Post-traitement"
           }
         }
       },
@@ -2859,7 +2794,8 @@
         "throughput": {
           "ariaLabel": "Documents indexés au fil du temps",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
-          "loadError": "Le graphique n'a pas pu être chargé."
+          "loadError": "Le graphique n'a pas pu être chargé.",
+          "rangeFilter": "Exécutions créées dans cette tranche du graphique"
         },
         "hold": {
           "checks_running": "Vérifications préalables en cours",
@@ -3020,6 +2956,7 @@
           "running": "{count, plural, one {# exécution en cours} other {# exécutions en cours}}",
           "succeeded": "{count, plural, one {# exécution réussie} other {# exécutions réussies}}",
           "failed": "{count, plural, one {# exécution en échec} other {# exécutions en échec}}",
+          "canceled": "{count, plural, one {# exécution annulée} other {# exécutions annulées}}",
           "passedChecks": "{count, plural, one {# vérification réussie} other {# vérifications réussies}}",
           "failedChecks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
           "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}"
@@ -3157,7 +3094,7 @@
         "tags": {
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
-          "doc_permission_sync": "{count, plural, one {# document non synchronisé} other {# documents non synchronisés}}",
+          "doc_permission_sync": "{count, plural, one {# utilisateur non synchronisé} other {# utilisateurs non synchronisés}}",
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
@@ -3199,6 +3136,10 @@
       },
       "stageDetails": {
         "title": "Détails des étapes",
+        "heading": {
+          "top": "Détails",
+          "bottom": "des étapes"
+        },
         "calls": "Lots",
         "averageTime": "Temps moyen",
         "maxTime": "Temps max",
@@ -7363,7 +7304,7 @@
       "activities": {
         "title": "Activités",
         "history": "Historique complet de l'activité",
-        "viewLogs": "Voir l'historique de l'activité",
+        "viewLogs": "Afficher les journaux",
         "panel": {
           "title": "Historique de l'activité",
           "close": "Masquer l'historique de l'activité"
@@ -10830,8 +10771,25 @@
         },
         "validation": {
           "title": "Validation",
-          "blocks": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer.",
-          "warns": "Certaines vérifications facultatives ont échoué. Vous pouvez quand même appliquer.",
+          "unchanged": "Les paramètres qui nécessitent une validation n'ont pas changé.",
+          "outcome": {
+            "failed": {
+              "title": "Échec de la validation",
+              "description": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer."
+            },
+            "warnings": {
+              "title": "Validation réussie avec des avertissements",
+              "description": "Certaines vérifications facultatives ont échoué ou n'ont pas pu être vérifiées. Vous pouvez quand même appliquer."
+            },
+            "incomplete": {
+              "title": "La validation n'est pas terminée",
+              "description": "Les vérifications terminées ont réussi. Vous pouvez quand même appliquer."
+            },
+            "passed": {
+              "title": "Validation réussie",
+              "description": "Les nouveaux paramètres ont réussi toutes les vérifications."
+            }
+          },
           "error": {
             "title": "Les paramètres ne sont pas valides"
           }
