@@ -1210,7 +1210,13 @@ class LitellmLLM(LLM):
             optional_kwargs["allowed_openai_params"] = ["tool_choice"]
             # drop_params removes reasoning_effort for any model LiteLLM does
             # not list as a reasoning model, e.g. Gemini behind a gateway.
-            if is_openai_compatible_proxy and "reasoning_effort" in optional_kwargs:
+            # It also drops the explicit "none" the chat-completions tool-turn
+            # path forces (e.g. a new model the release catalog does not know
+            # yet). OpenAI then applies its default effort and rejects the
+            # tool call, so a required reasoning_effort must stay allowed.
+            if "reasoning_effort" in optional_kwargs and (
+                is_openai_compatible_proxy or "reasoning_effort" in required_kwarg_keys
+            ):
                 optional_kwargs["allowed_openai_params"].append("reasoning_effort")
 
         # Passthrough kwargs
