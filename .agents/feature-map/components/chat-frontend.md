@@ -56,6 +56,10 @@ Craft-enabled users also see external apps, marked Craft-only. Those apps
 cannot enter Chat tool selection. `/craft/v1/plugins` uses the shared member
 directory with only MCP and external apps.
 
+The forced-tool pill uses the same member catalog and availability rule as the send path.
+Default Chat hides unavailable plugins while retaining the stored selection.
+Custom agents retain their own forced-tool settings without member catalog data.
+
 ### Query params (`services/searchParams.ts:SEARCH_PARAM_NAMES`)
 
 `chatId`, `searchId`, `agentId`, `projectId`, `allMyDocuments`, plus per-send overrides
