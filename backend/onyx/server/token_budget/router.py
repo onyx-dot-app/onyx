@@ -14,7 +14,6 @@ from onyx.db.token_limit import (
 )
 from onyx.db.user_usage import (
     TokenUsageBucket,
-    get_group_token_buckets_since,
     get_token_window_start,
     get_total_token_buckets_since,
     get_user_token_buckets_since,
@@ -35,87 +34,75 @@ def _sum_buckets(buckets: list[TokenUsageBucket], cutoff: datetime) -> int:
     return int(sum(b.tokens for b in buckets if b.window_start >= cutoff))
 
 
+def _with_token_budget(limits: list[TokenRateLimit]) -> list[TokenRateLimit]:
+    return [
+        limit
+        for limit in limits
+        if limit.token_budget is not None and limit.token_budget > 0
+    ]
+
+
 @router.get("")
 def get_token_budget_status(
     db_session: Session = Depends(get_session),
     user: User = Depends(current_user),
 ) -> TokenBudgetResponse:
     now = datetime.now(timezone.utc)
-
-    # --- collect enabled token limits per scope ---
-
-    user_limits = [
-        lim
-        for lim in fetch_all_user_token_rate_limits(db_session, enabled_only=True)
-        if lim.token_budget is not None and lim.token_budget > 0
-    ]
+    user_id = str(user.id)
 
     group_limits_by_group = fetch_user_group_token_rate_limits(
-        db_session=db_session,
-        user_id=user.id,
-        enabled_only=True,
+        db_session=db_session, user_id=user.id, enabled_only=True
     )
-    group_limits = [
-        lim
-        for limits in group_limits_by_group.values()
-        for lim in limits
-        if lim.token_budget is not None and lim.token_budget > 0
+
+    scopes = [
+        (
+            _with_token_budget(
+                fetch_all_user_token_rate_limits(db_session, enabled_only=True)
+            ),
+            min,
+            user_id,
+        ),
+        (
+            _with_token_budget(
+                [limit for limits in group_limits_by_group.values() for limit in limits]
+            ),
+            max,
+            user_id,
+        ),
+        (
+            _with_token_budget(
+                fetch_all_global_token_rate_limits(db_session, enabled_only=True)
+            ),
+            min,
+            None,
+        ),
     ]
 
-    global_limits = [
-        lim
-        for lim in fetch_all_global_token_rate_limits(db_session, enabled_only=True)
-        if lim.token_budget is not None and lim.token_budget > 0
-    ]
+    for limits, pick, scope_user_id in scopes:
+        if not limits:
+            continue
 
-    # --- resolve scope: user > group > global ---
-
-    if user_limits:
-        active_limit: TokenRateLimit = min(
-            user_limits, key=lambda l: l.token_budget * TOKEN_BUDGET_UNIT
-        )
+        active_limit = pick(limits, key=lambda limit: limit.token_budget)
         cutoff = get_token_window_start(now, active_limit.period_hours)
-        buckets = get_user_token_buckets_since(
-            db_session=db_session,
-            user_id=str(user.id),
-            cutoff=cutoff,
-        )
+        if scope_user_id:
+            buckets = get_user_token_buckets_since(
+                db_session=db_session, user_id=scope_user_id, cutoff=cutoff
+            )
+        else:
+            buckets = get_total_token_buckets_since(
+                db_session=db_session, cutoff=cutoff
+            )
 
-    elif group_limits:
-        active_limit = min(
-            group_limits, key=lambda l: l.token_budget * TOKEN_BUDGET_UNIT
-        )
-        cutoff = get_token_window_start(now, active_limit.period_hours)
-        buckets = get_user_token_buckets_since(
-            db_session=db_session,
-            user_id=str(user.id),
-            cutoff=cutoff,
-        )
-
-    elif global_limits:
-        active_limit = min(
-            global_limits, key=lambda l: l.token_budget * TOKEN_BUDGET_UNIT
-        )
-        cutoff = get_token_window_start(now, active_limit.period_hours)
-        buckets = get_total_token_buckets_since(
-            db_session=db_session,
-            cutoff=cutoff,
-        )
-
-    else:
         return TokenBudgetResponse(
-            tokens_used=0,
-            token_budget=None,
-            period_hours=168,
-            enabled=False,
+            tokens_used=_sum_buckets(buckets, cutoff),
+            token_budget=active_limit.token_budget * TOKEN_BUDGET_UNIT,
+            period_hours=active_limit.period_hours,
+            enabled=True,
         )
-
-    tokens_used = _sum_buckets(buckets, cutoff)
-    token_budget = active_limit.token_budget * TOKEN_BUDGET_UNIT
 
     return TokenBudgetResponse(
-        tokens_used=tokens_used,
-        token_budget=token_budget,
-        period_hours=active_limit.period_hours,
-        enabled=True,
+        tokens_used=0,
+        token_budget=None,
+        period_hours=168,
+        enabled=False,
     )

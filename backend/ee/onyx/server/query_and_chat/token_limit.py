@@ -111,9 +111,8 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
         all_rate_limits = [
             limit for limits in group_rate_limits.values() for limit in limits
         ]
-        user_group_ids = list(group_rate_limits)
 
-        group_token_usage: dict[int, list[TokenUsageBucket]] = {}
+        user_token_usage: list[TokenUsageBucket] = []
         if _has_token_budget(all_rate_limits):
             token_limits = [
                 limit
@@ -121,28 +120,22 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
                 if limit.token_budget is not None and limit.token_budget > 0
             ]
             token_cutoff = _get_cutoff_time(token_limits)
-            group_token_usage = _fetch_user_group_usage(
-                user_group_ids, token_cutoff, db_session
-            )
+            user_token_usage = _fetch_user_usage(user_id, token_cutoff, db_session)
 
-        group_cost_usage: dict[int, list[tuple[datetime, float]]] = {}
+        user_cost_usage: list[tuple[datetime, float]] = []
         cost_limits = cost_budget_limits(all_rate_limits)
         if cost_limits:
             cost_cutoff = cost_budget_fetch_cutoff(
                 datetime.now(timezone.utc), cost_limits
             )
-            group_cost_usage = get_group_cost_cents_buckets_since(
-                db_session, user_group_ids, cost_cutoff
+            user_cost_usage = get_user_cost_cents_buckets_since(
+                db_session, str(user_id), cost_cutoff
             )
 
         group_resets: list[datetime] = []
-        for user_group_id, rate_limits in group_rate_limits.items():
-            token_reset = _token_budget_reset(
-                rate_limits, group_token_usage.get(user_group_id, [])
-            )
-            cost_reset = _cost_budget_reset(
-                rate_limits, group_cost_usage.get(user_group_id, [])
-            )
+        for rate_limits in group_rate_limits.values():
+            token_reset = _token_budget_reset(rate_limits, user_token_usage)
+            cost_reset = _cost_budget_reset(rate_limits, user_cost_usage)
             # A group the user is under (no exceeded budget) unblocks them entirely.
             if token_reset is None and cost_reset is None:
                 return

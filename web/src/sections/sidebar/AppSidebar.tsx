@@ -89,6 +89,7 @@ import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
+import { TokenBudgetBar } from "@/components/TokenBudgetBar";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -713,6 +714,7 @@ export default function AppSidebar() {
                 {t("appSidebar.adminPanel.label")}
               </SidebarTab>
             )}
+            {!folded && <TokenBudgetBar />}
             <AccountPopover
               onShowBuildIntro={
                 isOnyxCraftEnabled ? handleShowBuildIntro : undefined
