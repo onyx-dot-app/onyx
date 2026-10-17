@@ -4,7 +4,7 @@ Port `DockerSandboxManager` from the per-message `opencode acp` exec to the long
 
 ## Issues to Address
 
-`DockerSandboxManager.send_message` (`backend/onyx/server/features/build/sandbox/docker/docker_sandbox_manager.py:1039-1103`) spawns a `DockerACPExecClient` per user message — same per-process startup cost, same session-lifetime-tied-to-one-turn, same opencode-1.15.7-drops-the-terminator bug enumerated in [`opencode-serve-migration.md`](./opencode-serve-migration.md) §Issues. The Kubernetes backend already migrated; self-hosted docker-compose deployments are stuck on the buggy path.
+`DockerSandboxManager.send_message` (`backend/onyx/server/features/build/sandbox/docker/docker_sandbox_manager.py:1039-1103`) spawns a `DockerACPExecClient` per user message — same per-process startup cost, same session-lifetime-tied-to-one-turn, same opencode-1.15.7-drops-the-terminator bug enumerated in [`opencode-serve-migration.md`) §Issues. The Kubernetes backend already migrated; self-hosted docker-compose deployments are stuck on the buggy path.
 
 The blockers, all docker-specific:
 
