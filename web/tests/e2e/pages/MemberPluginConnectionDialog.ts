@@ -16,7 +16,9 @@ export class MemberPluginConnectionDialog {
 
   async expectOpen(pluginName: string): Promise<void> {
     await expect(this.dialog).toBeVisible();
-    await expect(this.dialog).toHaveAccessibleName(`Connect ${pluginName}`);
+    await expect(
+      this.dialog.getByText(`Connect ${pluginName}`, { exact: true })
+    ).toBeVisible();
   }
 
   field(name: string): Locator {
