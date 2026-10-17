@@ -245,7 +245,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const onEdit = canOpenEditForm ? openEditForm : null;
   const canManageInlineFiles = source === "file" && can(ccPair, "edit");
 
-  const isPaused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
+  // Unlike `paused`, this excludes INVALID, whose menu still offers the re-index rows disabled with a reason.
+  const strictlyPaused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
   const held = ccPair.indexing_hold;
   // While held, the menu offers Start Indexing in place of the re-index rows; a check run in flight releases the hold itself.
   const canStartIndexing = held !== null && held.reason !== "checks_running";
@@ -269,7 +270,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       ]
     : [];
   const reIndexItems: DropdownMenuItem[] =
-    isPaused || held !== null
+    strictlyPaused || held !== null
       ? []
       : [
           {
@@ -341,7 +342,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           },
         ]
       : [];
-  const manageItems: DropdownMenuItem[] = isPaused
+  const manageItems: DropdownMenuItem[] = strictlyPaused
     ? [...toggleItems, ...dangerItems]
     : [...startItems, ...reIndexItems, ...toggleItems, ...dangerItems];
 
@@ -390,7 +391,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                       {t("manageMenu.trigger.label")}
                     </Button>
                   </Dropdown.Trigger>
-                  {/* Every row shows at once; the menu never scrolls. */}
+                  {/* The mock sizes the menu to its rows. */}
                   <Dropdown.Data
                     label={t("manageMenu.trigger.label")}
                     items={manageItems}
@@ -442,7 +443,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
             <StatusCard
               ccPair={ccPair}
-              canOperate={canOperate}
+              onStartIndexing={canOperate ? () => void startIndexing() : null}
+              startingIndexing={busy}
               onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
               timeWindow={timeWindow.window}
               onTimeWindowChange={changeWindow}

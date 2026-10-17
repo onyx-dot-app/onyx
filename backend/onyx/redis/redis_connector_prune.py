@@ -264,6 +264,7 @@ class RedisConnectorPrune:
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
         self.redis.delete(self.generator_failed_key)
+        self.redis.delete(self.failed_docs_key)
         self.redis.delete(self.taskset_key)
         self.redis.delete(self.fence_key)
 
@@ -295,4 +296,7 @@ class RedisConnectorPrune:
             r.delete(key)
 
         for key in r.scan_iter(RedisConnectorPrune.GENERATOR_FAILED_PREFIX + "*"):
+            r.delete(key)
+
+        for key in r.scan_iter(RedisConnectorPrune.FAILED_DOCS_PREFIX + "*"):
             r.delete(key)

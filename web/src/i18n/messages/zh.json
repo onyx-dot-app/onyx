@@ -2243,11 +2243,11 @@
         "toggleStatus": {
           "pause": {
             "label": "暂停索引与同步",
-            "description": "取消进行中和未来的索引运行与权限同步。已索引的文档将不再同步，但仍可搜索。"
+            "description": "取消进行中和未来的索引运行与权限同步。已索引的文档将不再保持同步，但仍可搜索。"
           },
           "resume": {
             "label": "恢复索引与同步",
-            "description": "重新启动索引运行与权限同步。"
+            "description": "重新开始索引运行与权限同步。"
           },
           "tooltip": {
             "updating": "状态更新进行中"
@@ -2531,7 +2531,7 @@
           "title": "无法加载运行记录。"
         },
         "empty": {
-          "title": "近期没有索引运行",
+          "title": "暂无近期索引运行",
           "filteredTitle": "没有符合这些筛选条件的运行。",
           "pastRuns": "{count, plural, other {# 次过去的运行}}",
           "view": "查看",

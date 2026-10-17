@@ -2243,11 +2243,11 @@
         "toggleStatus": {
           "pause": {
             "label": "Suspendre l'indexation et les synchronisations",
-            "description": "Annuler les indexations et synchronisations des autorisations en cours et à venir. Les documents indexés ne seront plus synchronisés, mais resteront trouvables par la recherche."
+            "description": "Annuler les indexations et synchronisations des autorisations en cours et à venir. Les documents indexés ne seront plus à jour mais resteront consultables."
           },
           "resume": {
             "label": "Reprendre l'indexation et les synchronisations",
-            "description": "Relancer les indexations et les synchronisations des autorisations."
+            "description": "Relancer les indexations et synchronisations des autorisations."
           },
           "tooltip": {
             "updating": "Mise à jour du statut en cours"
@@ -2531,7 +2531,7 @@
           "title": "Impossible de charger les exécutions."
         },
         "empty": {
-          "title": "Aucune exécution d’indexation récente",
+          "title": "Aucune exécution d'indexation récente",
           "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
           "pastRuns": "{count, plural, one {# exécution passée} other {# exécutions passées}}",
           "view": "Afficher",

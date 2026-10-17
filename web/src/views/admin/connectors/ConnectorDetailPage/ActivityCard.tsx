@@ -46,6 +46,9 @@ import {
   runWarnings,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
+// A Tag is clickable only with an onClick, and the popover trigger around it handles the click.
+const NOOP = () => {};
+
 const GROUP_STYLE: Record<
   ActivityGroup,
   {
@@ -376,7 +379,7 @@ export default function ActivityCard({
                         icon={SvgTextLines}
                         title={t("tags.stackTrace")}
                         size="md"
-                        onClick={() => {}}
+                        onClick={NOOP}
                       />
                     </Popover.Trigger>
                     <StackTracePopoverContent
@@ -393,7 +396,7 @@ export default function ActivityCard({
                         iconColor={pillIconColor}
                         title={docsLabel}
                         size="md"
-                        onClick={() => {}}
+                        onClick={NOOP}
                       />
                     </Popover.Trigger>
                     <FailedDocsPopoverContent
@@ -412,7 +415,7 @@ export default function ActivityCard({
                         iconColor={pillIconColor}
                         title={docsLabel}
                         size="md"
-                        onClick={() => {}}
+                        onClick={NOOP}
                       />
                     </Popover.Trigger>
                     <CheckRunPopoverContent run={run.attempt} beside />

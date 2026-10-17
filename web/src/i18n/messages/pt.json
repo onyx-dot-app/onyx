@@ -2243,11 +2243,11 @@
         "toggleStatus": {
           "pause": {
             "label": "Pausar indexação e sincronizações",
-            "description": "Cancelar as indexações e sincronizações de permissões em andamento e futuras. Os documentos indexados ficarão dessincronizados, mas continuarão pesquisáveis."
+            "description": "Cancelar as indexações e sincronizações de permissões em andamento e futuras. Os documentos indexados ficarão desatualizados, mas continuarão pesquisáveis."
           },
           "resume": {
             "label": "Retomar indexação e sincronizações",
-            "description": "Reiniciar as indexações e as sincronizações de permissões."
+            "description": "Reiniciar as indexações e sincronizações de permissões."
           },
           "tooltip": {
             "updating": "Atualização de status em andamento"

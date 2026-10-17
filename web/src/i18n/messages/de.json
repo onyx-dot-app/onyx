@@ -2243,11 +2243,11 @@
         "toggleStatus": {
           "pause": {
             "label": "Indizierung & Synchronisation pausieren",
-            "description": "Laufende und künftige Indexläufe und Berechtigungssynchronisationen abbrechen. Indizierte Dokumente sind dann nicht mehr synchron, bleiben aber durchsuchbar."
+            "description": "Laufende und künftige Indexläufe und Berechtigungssynchronisierungen abbrechen. Indexierte Dokumente sind dann nicht mehr aktuell, bleiben aber durchsuchbar."
           },
           "resume": {
             "label": "Indizierung & Synchronisation fortsetzen",
-            "description": "Indexläufe und Berechtigungssynchronisationen wieder starten."
+            "description": "Indexläufe und Berechtigungssynchronisierungen wieder starten."
           },
           "tooltip": {
             "updating": "Statusaktualisierung läuft"
@@ -2531,7 +2531,7 @@
           "title": "Die Läufe konnten nicht geladen werden."
         },
         "empty": {
-          "title": "Keine aktuellen Indexierungsläufe",
+          "title": "Keine aktuellen Indexläufe",
           "filteredTitle": "Keine Läufe entsprechen diesen Filtern.",
           "pastRuns": "{count, plural, one {# vergangener Lauf} other {# vergangene Läufe}}",
           "view": "Anzeigen",

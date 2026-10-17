@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import useSWR, { mutate } from "swr";
+import useSWR from "swr";
 import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
-import { Section, toast } from "@opal/layouts";
+import { Section } from "@opal/layouts";
 import { SvgListCheck, SvgPlayCircle } from "@opal/icons";
 import { CardLoader } from "@opal/loaders";
 import { timeAgo } from "@opal/time";
@@ -13,8 +12,6 @@ import {
   type CCPairFullInfo,
   type PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
-import { releaseIndexingHold } from "@/lib/connectors/svc";
-import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ccPairStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
@@ -60,8 +57,9 @@ const POLL_MS = 5000;
 
 export interface StatusCardProps {
   ccPair: CCPairFullInfo;
-  /** Shows Start Indexing while the pair's failed checks hold its first run. */
-  canOperate: boolean;
+  /** Backs the Start Indexing button shown while failed checks hold the pair's first run; null hides it. */
+  onStartIndexing: (() => void) | null;
+  startingIndexing: boolean;
   /** Opens the checks card, from the checks icon a held pair shows in place of its stages. */
   onViewChecks: () => void;
   /** The page's time window, shared with the runs card. */
@@ -75,7 +73,8 @@ export interface StatusCardProps {
 /** The pair at a glance: status, latest and total documents, its last run, and documents indexed over time. */
 export default function StatusCard({
   ccPair,
-  canOperate,
+  onStartIndexing,
+  startingIndexing,
   onViewChecks,
   timeWindow,
   onTimeWindowChange,
@@ -85,23 +84,7 @@ export default function StatusCard({
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
   const locale = useLocale();
-  const [releasing, setReleasing] = useState(false);
   const hold = ccPair.indexing_hold;
-
-  async function release() {
-    setReleasing(true);
-    const failure = await releaseIndexingHold(
-      ccPair.id,
-      t("hold.releaseFailed")
-    );
-    setReleasing(false);
-    if (failure !== null) {
-      toast.error(failure);
-      return;
-    }
-    toast.success(t("hold.released"));
-    await mutate(buildCCPairInfoUrl(ccPair.id));
-  }
   const { data: latestIndexAttempts, error } = useSWR<PaginatedIndexAttempts>(
     SWR_KEYS.ccPairLatestIndexAttempt(ccPair.id),
     errorHandlingFetcher,
@@ -210,13 +193,13 @@ export default function StatusCard({
                 {/* A run in flight ends on its own; the other holds wait for the admin. */}
                 {hold !== null &&
                   hold.reason !== "checks_running" &&
-                  canOperate && (
+                  onStartIndexing !== null && (
                     <Button
                       icon={SvgPlayCircle}
                       prominence="secondary"
                       size="sm"
-                      disabled={releasing}
-                      onClick={() => void release()}
+                      disabled={startingIndexing}
+                      onClick={onStartIndexing}
                     >
                       {t("hold.start")}
                     </Button>

@@ -197,7 +197,6 @@ function minorTicks(
       if (tick >= start && tick <= end) ticks.add(tick);
     }
   }
-  for (const label of labels) ticks.delete(label);
   return Array.from(ticks);
 }
 

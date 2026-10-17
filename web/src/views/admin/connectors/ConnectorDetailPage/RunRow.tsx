@@ -147,7 +147,7 @@ export function runMinutes(run: CCPairRun): number | null {
 }
 
 /** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
-export function syncRate(run: CCPairRun, now: number): number | null {
+function syncRate(run: CCPairRun, now: number): number | null {
   if (run.kind !== "doc_permission_sync" && run.kind !== "group_sync") {
     return null;
   }

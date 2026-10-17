@@ -18,8 +18,7 @@ import {
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
-import SvgLongWait from "@opal/illustrations/long-wait";
-import SvgNoResult from "@opal/illustrations/no-result";
+import { SvgLongWait, SvgNoResult } from "@opal/illustrations";
 import { CardLoader, IconLoader } from "@opal/loaders";
 import {
   SvgActivity,
@@ -156,8 +155,8 @@ export default function RunsCard({
   const [openRun, setOpenRun] = useState<string | null>(null);
   useEffect(() => {
     onFocusChange?.(openRun !== null);
+    return () => onFocusChange?.(false);
   }, [openRun, onFocusChange]);
-  useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
   const [statusGroup, setStatusGroup] = useState<CCPairRunStatusGroup | null>(
     null

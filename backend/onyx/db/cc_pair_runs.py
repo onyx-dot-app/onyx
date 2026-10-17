@@ -383,10 +383,10 @@ def _doc_permission_sync_runs(
     )
 
 
-def _failed_count_errors(
-    run_filter: CCPairRunFilter, failed: InstrumentedAttribute[int]
-) -> ColumnElement[bool] | None:
-    """The ``errors`` filter for a prune, which counts the documents it could not remove. Nothing resolves these."""
+def _prune_errors(run_filter: CCPairRunFilter) -> ColumnElement[bool] | None:
+    """The ``errors`` filter for a prune, which counts the documents it could not
+    remove. Nothing resolves these."""
+    failed = SyncRecord.num_docs_failed
     match run_filter.errors:
         case CCPairRunErrors.UNRESOLVED:
             return failed > 0
@@ -446,7 +446,7 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.sync_status,
         SyncStatus,
         with_status_filter,
-        _failed_count_errors(run_filter, SyncRecord.num_docs_failed),
+        _prune_errors(run_filter),
         has_newer_run,
         run_is_resolved(CCPairRunKind.PRUNING, SyncRecord.id),
     )

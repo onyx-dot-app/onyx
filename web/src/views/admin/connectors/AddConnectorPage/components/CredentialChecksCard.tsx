@@ -68,9 +68,7 @@ export type CheckLine = Pick<
   | "docs_link"
 > & { state: CheckLineState };
 
-// Outcomes that need reading (passed, failed, unverified) show their details
-// in a heavier font and their status colour; the rest stay muted.
-const OUTCOME_FONT: TextFont = "main-ui-action";
+// Passed and failed read plainly, an unverified check is heavy and orange so it gets read, and the rest stay muted.
 const MUTED = { font: "secondary-body", color: "text-03" } as const;
 
 const CHECK_LOGS = {
@@ -93,7 +91,7 @@ const CHECK_LOGS = {
     variant: "warning-light",
     icon: SvgAlertCircle,
     detail: "status.indeterminate",
-    font: OUTCOME_FONT,
+    font: "main-ui-action",
     color: "status-warning-05",
   },
   skipped: {
