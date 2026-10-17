@@ -313,6 +313,18 @@ class SharepointSourceOperations(SourceOperations):
         return self._auth().method
 
     @source_operation(
+        capabilities={
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_certificate_not_after(self) -> datetime | None:
+        """The end date of the account's certificate, read from the .pfx with
+        no call. None for a client secret."""
+        return self._auth().certificate_not_after
+
+    @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         untested=(
