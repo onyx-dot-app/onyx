@@ -4,9 +4,9 @@ and searched the same way, and one union pages every kind newest first, so no
 page loads the runs before it."""
 
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
-from typing import TypeVar
+from typing import Any, TypeVar
 from uuid import UUID
 
 from sqlalchemy import (
@@ -14,6 +14,7 @@ from sqlalchemy import (
     Select,
     Text,
     and_,
+    case,
     cast,
     exists,
     false,
@@ -21,12 +22,14 @@ from sqlalchemy import (
     literal,
     or_,
     select,
+    tuple_,
     union_all,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 
+from onyx.configs.constants import DocumentSource
 from onyx.db.cc_pair_run_resolution import run_is_resolved
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import (
@@ -89,15 +92,29 @@ _RunT = TypeVar(
 )
 
 
-def _later(
-    newer_time: InstrumentedAttribute[datetime],
-    newer_id: InstrumentedAttribute[int],
-    time_created: InstrumentedAttribute[datetime],
+def _latest_finished(
     run_id: InstrumentedAttribute[int],
-) -> ColumnElement[bool]:
-    """Whether a run comes after another in the feed's newest-first order."""
-    return or_(
-        newer_time > time_created, and_(newer_time == time_created, newer_id > run_id)
+    time_created: InstrumentedAttribute[datetime],
+    status: InstrumentedAttribute[_StatusT],
+    statuses: type[_StatusT],
+    history: Sequence[InstrumentedAttribute[Any]],
+    *scope: ColumnElement[bool],
+) -> Select:
+    """The newest finished run on each ``history`` within ``scope``, in the
+    feed's newest-first order. A failed run outside this set has a finished run
+    after it, while a run still in progress settles nothing. One set for every
+    row, hashed once, since a shared source's history has no index a lookup
+    per row could use."""
+    finished = [
+        s
+        for s in statuses
+        if _STATUS_GROUPS[s.value] is not CCPairRunStatusGroup.RUNNING
+    ]
+    return (
+        select(run_id)
+        .distinct(*history)
+        .where(*scope, status.in_(finished))
+        .order_by(*history, time_created.desc(), run_id.desc())
     )
 
 
@@ -121,7 +138,7 @@ def _narrowed(
     is_resolved: ColumnElement[bool],
 ) -> Select:
     """Applies the filter's shared axes. ``matches_errors`` is the kind's
-    ``errors`` filter, ``has_newer_run`` says a newer run of the kind
+    ``errors`` filter, ``has_newer_run`` says a finished newer run of the kind
     follows the run on the same history, and ``is_resolved`` says an admin
     resolved the run."""
     failed = [
@@ -188,20 +205,26 @@ def _group_sync_scope(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
     own = ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(ids)
     if not run_filter.shared_sources:
         return own
-    siblings = (
-        select(ConnectorCredentialPair.id)
-        .join(ConnectorCredentialPair.connector)
-        .where(Connector.source.in_(run_filter.shared_sources))
-    )
     return or_(
         own,
-        ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(siblings),
+        ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(
+            _pairs_of_sources(run_filter.shared_sources)
+        ),
+    )
+
+
+def _pairs_of_sources(sources: set[DocumentSource]) -> Select:
+    return (
+        select(ConnectorCredentialPair.id)
+        .join(ConnectorCredentialPair.connector)
+        .where(Connector.source.in_(sources))
     )
 
 
 def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
-    """A newer group sync on the run's history: its pair's, or its source's when
-    the source logs one sync for all its pairs, as ``_group_sync_scope`` reads."""
+    """A finished newer group sync on the run's history: its pair's, or its
+    source's when the source logs one sync for all its pairs, as
+    ``_group_sync_scope`` reads."""
     ids = run_filter.cc_pair_ids
     if len(ids) == 1 and run_filter.source is not None:
         shared = (
@@ -212,29 +235,33 @@ def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool
     else:
         shared = run_filter.shared_sources
     run = ExternalGroupPermissionSyncAttempt
-    newer = aliased(ExternalGroupPermissionSyncAttempt)
-    later = _later(newer.time_created, newer.id, run.time_created, run.id)
-    same_pair = newer.connector_credential_pair_id == run.connector_credential_pair_id
+    newest = aliased(ExternalGroupPermissionSyncAttempt)
+    latest_of_pair = _latest_finished(
+        newest.id,
+        newest.time_created,
+        newest.status,
+        PermissionSyncStatus,
+        [newest.connector_credential_pair_id],
+        newest.connector_credential_pair_id.in_(ids),
+    )
     if not shared:
-        return exists().where(same_pair, later)
-    # Flat joins, since a nested subquery would not correlate to the run.
-    run_pair = aliased(ConnectorCredentialPair)
-    run_connector = aliased(Connector)
-    newer_pair = aliased(ConnectorCredentialPair)
-    newer_connector = aliased(Connector)
-    return exists().where(
-        run_pair.id == run.connector_credential_pair_id,
-        run_connector.id == run_pair.connector_id,
-        newer_pair.id == newer.connector_credential_pair_id,
-        newer_connector.id == newer_pair.connector_id,
-        later,
-        or_(
-            same_pair,
-            and_(
-                run_connector.source.in_(shared),
-                newer_connector.source == run_connector.source,
-            ),
+        return ~run.id.in_(latest_of_pair)
+    latest_of_source = _latest_finished(
+        newest.id,
+        newest.time_created,
+        newest.status,
+        PermissionSyncStatus,
+        [Connector.source],
+        ConnectorCredentialPair.id == newest.connector_credential_pair_id,
+        Connector.id == ConnectorCredentialPair.connector_id,
+        Connector.source.in_(shared),
+    )
+    return case(
+        (
+            run.connector_credential_pair_id.in_(_pairs_of_sources(shared)),
+            ~run.id.in_(latest_of_source),
         ),
+        else_=~run.id.in_(latest_of_pair),
     )
 
 
@@ -261,14 +288,17 @@ def _index_attempt_runs(
             matches_errors = None
     # A run under another model or a targeted reindex leaves this model's
     # failure open.
-    newer = aliased(IndexAttempt)
-    has_newer_run = exists().where(
-        newer.connector_credential_pair_id == IndexAttempt.connector_credential_pair_id,
-        newer.search_settings_id == IndexAttempt.search_settings_id,
-        newer.targeted_reindex_job_id.is_(None),
-        _later(
-            newer.time_created, newer.id, IndexAttempt.time_created, IndexAttempt.id
-        ),
+    newest = aliased(IndexAttempt)
+    has_newer_run = ~IndexAttempt.id.in_(
+        _latest_finished(
+            newest.id,
+            newest.time_created,
+            newest.status,
+            IndexingStatus,
+            [newest.connector_credential_pair_id, newest.search_settings_id],
+            newest.connector_credential_pair_id.in_(run_filter.cc_pair_ids),
+            newest.targeted_reindex_job_id.is_(None),
+        )
     )
 
     # A search also reads the attempt's document errors, which carry the
@@ -315,16 +345,16 @@ def _doc_permission_sync_runs(
             matches_errors = unreadable == 0
         case None:
             matches_errors = None
-    newer = aliased(DocPermissionSyncAttempt)
-    has_newer_run = exists().where(
-        newer.connector_credential_pair_id
-        == DocPermissionSyncAttempt.connector_credential_pair_id,
-        _later(
-            newer.time_created,
-            newer.id,
-            DocPermissionSyncAttempt.time_created,
-            DocPermissionSyncAttempt.id,
-        ),
+    newest = aliased(DocPermissionSyncAttempt)
+    has_newer_run = ~DocPermissionSyncAttempt.id.in_(
+        _latest_finished(
+            newest.id,
+            newest.time_created,
+            newest.status,
+            PermissionSyncStatus,
+            [newest.connector_credential_pair_id],
+            newest.connector_credential_pair_id.in_(run_filter.cc_pair_ids),
+        )
     )
     return _narrowed(
         stmt,
@@ -370,13 +400,17 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.entity_id.in_(run_filter.cc_pair_ids),
         SyncRecord.sync_type == SyncType.PRUNING,
     )
-    newer = aliased(SyncRecord)
-    has_newer_run = exists().where(
-        newer.entity_id == SyncRecord.entity_id,
-        newer.sync_type == SyncType.PRUNING,
-        _later(
-            newer.sync_start_time, newer.id, SyncRecord.sync_start_time, SyncRecord.id
-        ),
+    newest = aliased(SyncRecord)
+    has_newer_run = ~SyncRecord.id.in_(
+        _latest_finished(
+            newest.id,
+            newest.sync_start_time,
+            newest.sync_status,
+            SyncStatus,
+            [newest.entity_id],
+            newest.entity_id.in_(run_filter.cc_pair_ids),
+            newest.sync_type == SyncType.PRUNING,
+        )
     )
     # A prune records no per-document errors, so it either fails or succeeds.
     return _narrowed(
@@ -414,16 +448,19 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         )
         .where(ConnectorCredentialPair.id.in_(run_filter.cc_pair_ids))
     )
-    newer = aliased(CapabilityCheckRun)
-    has_newer_run = exists().where(
-        newer.credential_id == CapabilityCheckRun.credential_id,
-        newer.connector_id == CapabilityCheckRun.connector_id,
-        _later(
-            newer.time_created,
-            newer.id,
-            CapabilityCheckRun.time_created,
-            CapabilityCheckRun.id,
-        ),
+    newest = aliased(CapabilityCheckRun)
+    pair_keys = select(
+        ConnectorCredentialPair.credential_id, ConnectorCredentialPair.connector_id
+    ).where(ConnectorCredentialPair.id.in_(run_filter.cc_pair_ids))
+    has_newer_run = ~CapabilityCheckRun.id.in_(
+        _latest_finished(
+            newest.id,
+            newest.time_created,
+            newest.status,
+            CapabilityCheckRunStatus,
+            [newest.credential_id, newest.connector_id],
+            tuple_(newest.credential_id, newest.connector_id).in_(pair_keys),
+        )
     )
     return _narrowed(
         stmt,

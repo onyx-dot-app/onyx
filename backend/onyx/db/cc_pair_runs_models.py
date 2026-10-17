@@ -18,7 +18,7 @@ class CCPairRunFilter(BaseModel):
     a single pair's group syncs to the history its source shares across pairs,
     and ``shared_sources`` widens many pairs' group syncs to every pair of those
     sources, since such a source logs its one sync against whichever pair ran it.
-    A failed run is superseded once a newer run of its kind follows it on the
+    A failed run is superseded once a newer run of its kind finishes on the
     same history. ``superseded`` False leaves those runs out, True keeps only
     them, or adds them to what ``errors`` keeps, as both are closed items.
     ``resolved`` reads the runs an admin resolved the same way."""
