@@ -2636,7 +2636,7 @@
         "tags": {
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
-          "doc_permission_sync": "{count, plural, one {# user failed to sync} other {# users failed to sync}}",
+          "doc_permission_sync": "{count, plural, one {# doc failed to sync permissions} other {# docs failed to sync permissions}}",
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}",

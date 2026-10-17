@@ -2636,7 +2636,7 @@
         "tags": {
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
-          "doc_permission_sync": "{count, plural, one {# utilisateur non synchronisé} other {# utilisateurs non synchronisés}}",
+          "doc_permission_sync": "{count, plural, one {Permissions de # document non synchronisées} other {Permissions de # documents non synchronisées}}",
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",

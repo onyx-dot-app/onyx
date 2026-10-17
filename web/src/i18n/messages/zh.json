@@ -2636,7 +2636,7 @@
         "tags": {
           "stackTrace": "堆栈跟踪",
           "indexing": "{count, plural, other {# 个文档失败}}",
-          "doc_permission_sync": "{count, plural, other {# 个用户同步失败}}",
+          "doc_permission_sync": "{count, plural, other {# 个文档的权限同步失败}}",
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
