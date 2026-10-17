@@ -6,13 +6,14 @@ document's own stored chunk, as the reindex port does. Writes go through the
 normal indexing pipeline, which replaces a document's chunks in one call.
 
 Holding more chunks than the current chunker could produce is what marks a
-document as stale, so the scan skips its own output and anything an in-flight
-crawl writes.
+document as stale, so the scan skips its own output, skips anything an
+in-flight crawl writes, and - because a failed write no longer commits its
+chunk count - finds its own failures again on a later pass.
 """
 
 import time
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
 from pydantic import BaseModel
 
@@ -34,11 +35,7 @@ from onyx.connectors.models import (
     IndexAttemptMetadata,
     convert_metadata_list_of_strings_to_dict,
 )
-from onyx.db.document import (
-    TabularRechunkTarget,
-    get_oversized_tabular_documents,
-    get_tabular_rechunk_retry_targets,
-)
+from onyx.db.document import TabularRechunkTarget, get_oversized_tabular_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document as DbDocument
 from onyx.db.search_settings import get_current_search_settings
@@ -75,23 +72,14 @@ TABULAR_CHUNK_CEILING = TABULAR_MAX_CHUNKS_PER_WORKBOOK + (
 
 
 class TabularRechunkResult(BaseModel):
-    """Outcome of one scan run. Documents in `failed_document_ids` stay
-    oversized, so a finished scan containing them is not a finished
-    migration."""
+    """Outcome of one run. Documents in `failed_document_ids` keep their old
+    chunk count, so a finished scan containing them is not a finished
+    migration - the next pass starts from the top and finds them again."""
 
     last_document_id: str | None
     documents_indexed: int
     failed_document_ids: list[str]
     finished: bool
-
-
-class TabularRechunkRetryResult(BaseModel):
-    """Outcome of one retry run. `remaining_document_ids` is the untouched
-    tail of the queue, empty when the pass is over."""
-
-    remaining_document_ids: list[str]
-    documents_indexed: int
-    failed_document_ids: list[str]
 
 
 def _tabular_file_name(semantic_id: str, file_type: str | None) -> str:
@@ -114,16 +102,14 @@ def _rebuild_document(
     stage: RawFileCallback,
     file_type: str | None,
 ) -> Document:
-    """Rebuilds the connector Document for one tabular file.
-
-    Only what chunking and chunk enrichment read. The run skips the document
+    """Rebuilds the connector Document for one tabular file: only what chunking,
+    chunk enrichment and the chunk writer read. The run skips the document
     upsert, so no other row value has to be reproduced faithfully.
     """
     if db_doc.file_id is None:
         raise ValueError(f"{db_doc.id} has no stored file")
 
-    file_store = get_default_file_store()
-    with file_store.read_file(db_doc.file_id, use_tempfile=True) as raw:
+    with get_default_file_store().read_file(db_doc.file_id, use_tempfile=True) as raw:
         sections = tabular_file_to_sections(
             file=raw,
             file_name=_tabular_file_name(db_doc.semantic_id, file_type),
@@ -149,8 +135,7 @@ def _rebuild_document(
         doc_created_at=db_doc.doc_created_at,
         # Chunk enrichment resolves the document's ancestors from this.
         parent_hierarchy_node_id=db_doc.parent_hierarchy_node_id,
-        # The chunk writer reads owners off the document, not off the row, so
-        # leaving these unset would drop them from the index.
+        # The chunk writer reads owners off the document, not off the row.
         primary_owners=experts_from_stores_representations(db_doc.primary_owners),
         secondary_owners=experts_from_stores_representations(db_doc.secondary_owners),
     )
@@ -165,7 +150,7 @@ def _rechunk_batch(
     document_index: OpenSearchDocumentIndex,
     batch_num: int,
 ) -> tuple[int, list[str]]:
-    """Re-chunks one batch of tabular documents. Returns (indexed, failed ids)."""
+    """Re-chunks one cc-pair's worth of documents. Returns (indexed, failed)."""
     heads = document_index.get_chunk_heads([t.document.id for t in targets])
 
     # No index attempt here for the standard staging reapers to key on.
@@ -188,12 +173,7 @@ def _rechunk_batch(
                 continue
             try:
                 documents.append(
-                    _rebuild_document(
-                        db_doc,
-                        head,
-                        stage,
-                        file_type=target.file_type,
-                    )
+                    _rebuild_document(db_doc, head, stage, file_type=target.file_type)
                 )
             except Exception:
                 logger.exception("tabular re-chunk: could not rebuild %s", db_doc.id)
@@ -243,41 +223,6 @@ def _rechunk_batch(
     return len(documents) - len(pipeline_failed), failed + sorted(pipeline_failed)
 
 
-def _rechunk_page(
-    targets: list[TabularRechunkTarget],
-    *,
-    tenant_id: str,
-    embedder: IndexingEmbedder,
-    document_index: OpenSearchDocumentIndex,
-    batch_num: int,
-    on_batch: Callable[[], None],
-) -> tuple[int, list[str], int]:
-    """Re-chunks one page. The pipeline adapter is per connector + credential,
-    so a batch cannot mix cc-pairs. Returns (indexed, failed ids, next batch_num).
-    """
-    grouped: dict[tuple[int, int], list[TabularRechunkTarget]] = defaultdict(list)
-    for target in targets:
-        grouped[(target.connector_id, target.credential_id)].append(target)
-
-    indexed = 0
-    failed: list[str] = []
-    for (connector_id, credential_id), batch in grouped.items():
-        batch_indexed, batch_failed = _rechunk_batch(
-            targets=batch,
-            connector_id=connector_id,
-            credential_id=credential_id,
-            tenant_id=tenant_id,
-            embedder=embedder,
-            document_index=document_index,
-            batch_num=batch_num,
-        )
-        indexed += batch_indexed
-        failed.extend(batch_failed)
-        batch_num += 1
-        on_batch()
-    return indexed, failed, batch_num
-
-
 def run_tabular_rechunk(
     *,
     tenant_id: str,
@@ -317,100 +262,42 @@ def run_tabular_rechunk(
         # A short page means no further matches before the end of the table.
         finished = len(targets) < INDEX_BATCH_SIZE
 
-        page_indexed, page_failed, batch_num = _rechunk_page(
-            targets,
-            tenant_id=tenant_id,
-            embedder=embedder,
-            document_index=document_index,
-            batch_num=batch_num,
-            on_batch=on_batch,
-        )
-        indexed += page_indexed
-        failed.extend(page_failed)
+        # The pipeline adapter is per connector + credential, so a batch cannot
+        # mix cc-pairs.
+        grouped: dict[tuple[int, int], list[TabularRechunkTarget]] = defaultdict(list)
+        for target in targets:
+            grouped[(target.connector_id, target.credential_id)].append(target)
+
+        for (connector_id, credential_id), batch in grouped.items():
+            batch_indexed, batch_failed = _rechunk_batch(
+                targets=batch,
+                connector_id=connector_id,
+                credential_id=credential_id,
+                tenant_id=tenant_id,
+                embedder=embedder,
+                document_index=document_index,
+                batch_num=batch_num,
+            )
+            indexed += batch_indexed
+            failed.extend(batch_failed)
+            batch_num += 1
+            on_batch()
 
         if targets:
             cursor = targets[-1].document.id
-            logger.info(
-                "tabular re-chunk: indexed=%s failed=%s cursor=%s",
-                indexed,
-                len(failed),
-                cursor,
-            )
         if finished:
             break
 
     logger.info(
-        "tabular re-chunk: %s, indexed=%s failed=%s",
+        "tabular re-chunk: %s, indexed=%s failed=%s cursor=%s",
         "scan complete" if finished else "budget spent",
         indexed,
         len(failed),
+        cursor,
     )
     return TabularRechunkResult(
         last_document_id=cursor,
         documents_indexed=indexed,
         failed_document_ids=failed,
         finished=finished,
-    )
-
-
-def retry_tabular_rechunk(
-    *,
-    tenant_id: str,
-    document_ids: Sequence[str],
-    time_budget_s: float = TABULAR_RECHUNK_TIME_BUDGET_S,
-    on_batch: Callable[[], None],
-) -> TabularRechunkRetryResult:
-    """Re-chunks named documents, whatever their chunk_count, until the queue
-    empties or the time budget runs out.
-
-    The queue is already in hand, so it is walked a page at a time rather than
-    re-selected: the oversized scan cannot find these documents anyway, and
-    sending the whole queue to Postgres on every page costs more the longer it
-    is. Ids the query no longer returns - the file or the cc-pair has since
-    gone - drop out, because no later pass could rebuild them either.
-    """
-    start = time.monotonic()
-    indexed = 0
-    failed: list[str] = []
-    batch_num = 0
-    remaining = list(document_ids)
-
-    with get_session_with_current_tenant() as db_session:
-        search_settings = get_current_search_settings(db_session)
-        embedder = DefaultIndexingEmbedder.from_db_search_settings(
-            search_settings=search_settings, callback=None
-        )
-        document_index = build_opensearch_document_index(search_settings)
-
-    while remaining and time.monotonic() - start < time_budget_s:
-        page, remaining = remaining[:INDEX_BATCH_SIZE], remaining[INDEX_BATCH_SIZE:]
-        with get_session_with_current_tenant() as db_session:
-            targets = get_tabular_rechunk_retry_targets(
-                db_session,
-                document_ids=page,
-                after_doc_id=None,
-                limit=INDEX_BATCH_SIZE,
-            )
-
-        page_indexed, page_failed, batch_num = _rechunk_page(
-            targets,
-            tenant_id=tenant_id,
-            embedder=embedder,
-            document_index=document_index,
-            batch_num=batch_num,
-            on_batch=on_batch,
-        )
-        indexed += page_indexed
-        failed.extend(page_failed)
-
-    logger.info(
-        "tabular re-chunk retry: indexed=%s failed=%s remaining=%s",
-        indexed,
-        len(failed),
-        len(remaining),
-    )
-    return TabularRechunkRetryResult(
-        remaining_document_ids=remaining,
-        documents_indexed=indexed,
-        failed_document_ids=failed,
     )
