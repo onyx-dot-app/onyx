@@ -19,7 +19,10 @@ from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_indexing_checks,
 )
 from onyx.connectors.hubspot.capability_checks import build_hubspot_indexing_checks
-from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
+from onyx.connectors.jira.capability_checks import (
+    build_jira_indexing_checks,
+    build_jsm_attachment_checks,
+)
 from onyx.connectors.linear.capability_checks import build_linear_indexing_checks
 from onyx.connectors.notion.capability_checks import build_notion_indexing_checks
 from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
@@ -96,6 +99,11 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
     )
     if not checks:
         checks.append(_ConnectorSettingsFallbackCheck(source))
+        if source == DocumentSource.JIRA_SERVICE_MANAGEMENT:
+            # Keep required project-type validation while running the optional
+            # attachment probe only for JSM configurations that enable it.
+            # A JSM gateway migration can register named checks later.
+            checks.extend(build_jsm_attachment_checks())
     get_perm_sync_checks = fetch_ee_implementation_or_noop(
         "onyx.connectors.capability_checks",
         "get_perm_sync_capability_checks",

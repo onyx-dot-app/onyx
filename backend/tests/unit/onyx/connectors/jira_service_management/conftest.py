@@ -134,7 +134,8 @@ def make_mock_jsm_issue(
                     "author": (
                         {
                             "displayName": comment.author.displayName,
-                            "emailAddress": getattr(
+                            # Older SDK fixtures omit the email property.
+                            "emailAddress": getattr(  # ods: ignore[getattr] - optional SDK test field
                                 comment.author, "emailAddress", None
                             ),
                         }
@@ -239,12 +240,17 @@ def make_jsm_connector(
                 ) from error
             if isinstance(project, dict):
                 return project
-            raw = getattr(project, "raw", None)
+            # SDK project fixtures may omit the optional raw payload.
+            raw = getattr(
+                project, "raw", None
+            )  # ods: ignore[getattr] - optional SDK field
             if isinstance(raw, dict) and "projectTypeKey" in raw:
                 return {"key": project_key, **raw}
             return {
                 "key": project_key,
-                "projectTypeKey": getattr(project, "projectTypeKey", None),
+                "projectTypeKey": getattr(  # ods: ignore[getattr] - optional SDK field
+                    project, "projectTypeKey", None
+                ),
             }
 
         gateway.search_issues.side_effect = search_issues

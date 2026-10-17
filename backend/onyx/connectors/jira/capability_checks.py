@@ -554,13 +554,26 @@ class _OptionalAttachmentApiCheck(_JiraCheck):
                 "to issue attachments and custom Jira fields."
             ),
         )
+        # JSM uses the connector-instantiation fallback until it has its own
+        # source-operations gateway. The optional probe must use that instance.
+        self.requires_connector_instance = True
+
+    def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
+        # Only JSM has this setting. Plain Jira never gets this check.
+        return form_state.values.get("include_attachments") is True
 
     def run(self, context: CapabilityCheckContext) -> None:
-        gateway = _gateway(context)
-        config = self.config(context)
+        from onyx.connectors.jira_service_management.connector import (
+            JiraServiceManagementConnector,
+        )
+
+        connector = context.connector
+        if not isinstance(connector, JiraServiceManagementConnector):
+            raise TypeError("JSM attachment probe requires a JSM connector")
+        gateway = connector.source_operations
         try:
             gateway.list_fields()
-            issue = _search_one_issue(gateway, _scope_jql(config))
+            issue = _search_one_issue(gateway, connector._get_jql_query(0, time.time()))
             if not issue:
                 raise UnexpectedValidationError(
                     "No issue is available to verify optional attachment access."
@@ -592,8 +605,12 @@ def build_jira_indexing_checks() -> list[CapabilityCheck]:
         _ConfiguredProjectCheck(),
         _JqlQueryCheck(),
         _IssueReadCheck(),
-        _OptionalAttachmentApiCheck(),
     ]
+
+
+def build_jsm_attachment_checks() -> list[CapabilityCheck]:
+    """Optional JSM-only probe; ordinary Jira never reads JSM attachments."""
+    return [_OptionalAttachmentApiCheck()]
 
 
 # Permission sync. The EE registry registers these checks. Doc sync reads the

@@ -8,7 +8,7 @@ is unavailable. Nothing here is instance-specific.
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from onyx.connectors.jira.source_operations import JiraSourceOperations
 from onyx.connectors.jira.utils import extract_text_from_adf
@@ -28,6 +28,15 @@ ORGANIZATIONS_FIELD_NAME = "Organizations"
 # Regardless of the instance-specific field ID or the admin-defined SLA name,
 # SLA field values always carry one of these keys.
 _SLA_KEYS = ("ongoingCycle", "completedCycles")
+
+
+class _LegacyJiraIssue(Protocol):
+    """SDK shape used by historical JSM fixtures."""
+
+    raw: dict[str, Any]
+
+
+JsmIssue = dict[str, Any] | _LegacyJiraIssue
 
 
 @dataclass
@@ -78,7 +87,7 @@ def discover_jsm_fields(jira_client: JiraSourceOperations | Any) -> JsmFieldMap:
     return field_map
 
 
-def _issue_raw_fields(issue: Any) -> dict[str, Any]:
+def _issue_raw_fields(issue: JsmIssue) -> dict[str, Any]:
     """JSM accepts the current Jira raw-JSON gateway and legacy SDK fixtures."""
     if isinstance(issue, dict):
         raw: Any = issue
@@ -93,11 +102,11 @@ def _issue_raw_fields(issue: Any) -> dict[str, Any]:
     return fields if isinstance(fields, dict) else {}
 
 
-def _get_raw_field(issue: Any, field_id: str) -> Any:
+def _get_raw_field(issue: JsmIssue, field_id: str) -> Any:
     return _issue_raw_fields(issue).get(field_id)
 
 
-def _raw_field_values(issue: Any) -> list[Any]:
+def _raw_field_values(issue: JsmIssue) -> list[Any]:
     return list(_issue_raw_fields(issue).values())
 
 
