@@ -2669,9 +2669,6 @@
         "uneven": {
           "tooltip": "Les temps par lot varient fortement pour cette étape"
         },
-        "clipped": {
-          "label": "Barre tronquée : le maximum dépasse l’échelle"
-        },
         "close": "Fermer les détails des étapes"
       }
     },

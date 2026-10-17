@@ -11,7 +11,6 @@ import { timeAgo } from "@opal/time";
 import {
   ConnectorCredentialPairStatus,
   type CCPairFullInfo,
-  type CCPairThroughputWindow,
   type PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
 import { releaseIndexingHold } from "@/lib/connectors/svc";
@@ -27,9 +26,6 @@ import ThroughputChart, {
   PAIR_WINDOWS,
   type PickerWindow,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
-
-// The pair chart offers no last-hour window. A pair's runs are too sparse for it.
-// All time narrows only the runs list. The chart shows its widest window.
 
 // The chart waits for the pair's first successful run.
 const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
@@ -130,7 +126,6 @@ export default function StatusCard({
   const recent = latestIndexAttempt?.total_docs_indexed ?? 0;
 
   const chart = !FIRST_RUN_STATUSES.has(ccPair.status);
-  const range = timeWindow;
 
   // The stage details popover spans the card, so the card is its anchor.
   return (
@@ -255,7 +250,7 @@ export default function StatusCard({
               >
                 <ThroughputChart
                   ccPairId={ccPair.id}
-                  range={range}
+                  range={timeWindow}
                   onSliceClick={onSliceClick}
                 />
               </Section>

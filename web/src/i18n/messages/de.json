@@ -2669,9 +2669,6 @@
         "uneven": {
           "tooltip": "Die Batch-Zeiten dieser Phase schwanken stark"
         },
-        "clipped": {
-          "label": "Balken gekürzt: Das Maximum liegt außerhalb der Skala"
-        },
         "close": "Phasendetails schließen"
       }
     },

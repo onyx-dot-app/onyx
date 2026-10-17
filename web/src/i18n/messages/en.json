@@ -2669,9 +2669,6 @@
         "uneven": {
           "tooltip": "Batch times vary widely for this stage"
         },
-        "clipped": {
-          "label": "Bar clipped: the max runs past the scale"
-        },
         "close": "Close stage details"
       }
     },

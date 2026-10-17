@@ -138,7 +138,11 @@ export function SliceRangeFilter({ range, onClear }: SliceRangeFilterProps) {
   );
 }
 
-// The status strip's cell color for a slice a run of that status covered.
+// The status strip draws this many hairline ticks under each bar, so a run reads as
+// thin ticks with gaps between them rather than a solid block.
+const STRIP_TICKS_PER_SLICE = 2;
+
+// The status strip's tick color for a span a run of that status covered.
 const RUN_CELL_CLASS: Record<ValidStatuses, string> = {
   success: "bg-action-selection-02",
   in_progress: "bg-theme-blue-05",
@@ -191,7 +195,7 @@ const STATUS_SEVERITY: Record<ValidStatuses, number> = {
   interrupted: 1,
 };
 
-/** The status of the run that covered the slice, the most severe when several did. */
+/** The status of the run that covered the span, the most severe when several did. */
 function sliceStatus(
   runs: Run[],
   sliceStart: number,
@@ -298,6 +302,7 @@ export function ThroughputBars({
   const start = Date.parse(data.window_start);
   const end = Date.parse(data.window_end);
   const sliceMs = (end - start) / data.docs_indexed.length;
+  const tickMs = sliceMs / STRIP_TICKS_PER_SLICE;
   const slices: Slice[] = data.docs_indexed.map((docs, index) => ({
     at: start + sliceMs * (index + 0.5),
     docs,
@@ -386,24 +391,28 @@ export function ThroughputBars({
           </BarChart>
         </ResponsiveContainer>
       </div>
-      {/* raw-ok: the cells need a 1.5px gap, below Section's smallest spacing step */}
-      <div className="flex h-2.5 w-full gap-[1.5px] px-[0.75px]" aria-hidden>
-        {slices.map((slice) => {
-          const status = sliceStatus(
-            runs,
-            slice.at - sliceMs / 2,
-            slice.at + sliceMs / 2
-          );
-          return (
-            <div
-              key={slice.at}
-              className={cn(
-                "h-full min-w-px flex-1 rounded-[2px]",
-                status === null ? undefined : RUN_CELL_CLASS[status]
-              )}
-            />
-          );
-        })}
+      {/* raw-ok: a 10px strip of over a hundred 1px hairlines, below Section's smallest height and gap steps */}
+      <div className="flex h-2.5 w-full" aria-hidden>
+        {Array.from(
+          { length: slices.length * STRIP_TICKS_PER_SLICE },
+          (_, index) => {
+            const tickStart = start + index * tickMs;
+            const status = sliceStatus(runs, tickStart, tickStart + tickMs);
+            return (
+              // raw-ok: one slot per hairline, centered so the gaps hold at any width
+              <div key={tickStart} className="flex flex-1 justify-center">
+                {status !== null && (
+                  <div
+                    className={cn(
+                      "h-full w-px rounded-full",
+                      RUN_CELL_CLASS[status]
+                    )}
+                  />
+                )}
+              </div>
+            );
+          }
+        )}
       </div>
     </Section>
   );

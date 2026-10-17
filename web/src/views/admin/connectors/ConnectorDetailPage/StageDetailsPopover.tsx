@@ -31,8 +31,11 @@ export const STAGE_BUCKETS = [
 
 export type StageBucket = (typeof STAGE_BUCKETS)[number];
 
-// The row each stage counts toward. Attempt-level stages and the BATCH_TOTAL
-// and BATCH_UNACCOUNTED aggregates get no row.
+// The row each stage counts toward, by its place in the pipeline: the docfetching
+// loop up to the batch store is the fetch, the store through the image step before
+// chunking is pre-processing, the enrichment and lock steps that set up the vector
+// write belong to it, and everything from the post-index update on is bookkeeping.
+// Attempt-level stages and the BATCH_TOTAL and BATCH_UNACCOUNTED aggregates get no row.
 const STAGE_BUCKET = {
   CONNECTOR_VALIDATION: null,
   PERMISSION_VALIDATION: null,
@@ -154,24 +157,12 @@ export function formatSeconds(ms: number | null | undefined): string {
 }
 
 function percent(ms: number, scale: number): string {
-  return `${scale > 0 ? (Math.min(ms, scale) / scale) * 100 : 0}%`;
+  return `${scale > 0 ? (ms / scale) * 100 : 0}%`;
 }
 
-/**
- * The longest average plus one spread across the rows. One very long max
- * would otherwise squash every other bar to a dot, so longer bars get clipped.
- */
+/** The longest max across the rows, so the longest bar fills the track. */
 export function barScale(buckets: BucketSummary[]): number {
-  const timings = buckets.flatMap(({ timing }) => (timing ? [timing] : []));
-  const scale = Math.max(
-    0,
-    ...timings.map(({ avgMs, stdDevMs }) =>
-      avgMs === null ? 0 : avgMs + (stdDevMs ?? 0)
-    )
-  );
-  return scale > 0
-    ? scale
-    : Math.max(0, ...timings.map(({ maxMs }) => maxMs ?? 0));
+  return Math.max(0, ...buckets.map(({ timing }) => timing?.maxMs ?? 0));
 }
 
 /** Opens the stage details of one attempt. Place it inside the Popover that holds the content. */
@@ -273,7 +264,7 @@ function ColumnTitle({ children }: ColumnTitleProps) {
 
 interface BucketRowProps {
   summary: BucketSummary;
-  /** From `barScale`; bars running past it are clipped. */
+  /** From `barScale`. */
   scale: number;
 }
 /** One row: batch count, average, a min-to-max bar with the average marked, and max. */
@@ -282,7 +273,6 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
   const format = useFormatter();
   const min = timing?.minMs ?? 0;
   const max = timing?.maxMs ?? 0;
-  const clipped = max > scale;
 
   return (
     <Section
@@ -327,14 +317,6 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
                 width: `calc(${percent(max, scale)} - ${percent(min, scale)})`,
               }}
             />
-            {clipped && (
-              <div
-                role="img"
-                aria-label={t("stageDetails.clipped.label")}
-                title={t("stageDetails.clipped.label")}
-                className="absolute -top-1 end-0 h-3 w-0.5 rounded-sm bg-theme-blue-05"
-              />
-            )}
             {timing.avgMs !== null && (
               <div
                 className="absolute top-0 h-1 w-1 -ms-0.5 rounded-sm bg-theme-blue-05"

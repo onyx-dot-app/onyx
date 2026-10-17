@@ -25,12 +25,6 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import {
-  PAIR_WINDOWS,
-  WINDOW_LABEL_KEYS,
-  type PickedWindow as SharedWindow,
-  type PickerWindow,
-} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { cancelIndexAttempt } from "@/lib/connectors/svc";
@@ -42,7 +36,11 @@ import type {
 } from "@/lib/connectors/types";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import {
+  PAIR_WINDOWS,
+  ThroughputWindowPicker,
   rangeWithin,
+  type PickedWindow as SharedWindow,
+  type PickerWindow,
   type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import RunRow, {
@@ -268,27 +266,12 @@ export default function RunsCard({
           wrap
         >
           {sharedWindow !== undefined && onSharedWindowChange !== undefined ? (
-            <Dropdown>
-              <Dropdown.Trigger asChild>
-                {/* The shared window is always set, so it shows filled with no clear button. */}
-                <FilterButton icon={SvgClock} filled onClear={() => undefined}>
-                  {t(`window.${WINDOW_LABEL_KEYS[sharedWindow.window]}`)}
-                </FilterButton>
-              </Dropdown.Trigger>
-              <Dropdown.Data
-                label={t("window.label")}
-                value={sharedWindow.window}
-                onSelect={(option) => {
-                  const window = PAIR_WINDOWS.find((w) => w === option.value);
-                  if (window !== undefined) onSharedWindowChange(window);
-                }}
-                items={PAIR_WINDOWS.map((window) => ({
-                  kind: "option" as const,
-                  value: window,
-                  title: t(`window.${WINDOW_LABEL_KEYS[window]}`),
-                }))}
-              />
-            </Dropdown>
+            // The shared window is always set, so it is the status card's picker, not a clearable filter.
+            <ThroughputWindowPicker
+              windows={PAIR_WINDOWS}
+              value={sharedWindow.window}
+              onChange={onSharedWindowChange}
+            />
           ) : (
             <Dropdown>
               <Dropdown.Trigger asChild>

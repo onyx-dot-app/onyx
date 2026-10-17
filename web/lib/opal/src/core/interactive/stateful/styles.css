@@ -429,7 +429,7 @@
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   Select-Filter — Empty & Filled (filled reads darker at rest)
+   Select-Filter — Empty & Filled (identical colors)
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-filter"]:is(
   [data-interactive-state="empty"],
@@ -438,10 +438,6 @@
   @apply bg-background-tint-01;
   --interactive-foreground: var(--text-02);
   --interactive-foreground-icon: var(--text-02);
-}
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="filled"] {
-  --interactive-foreground: var(--text-05);
-  --interactive-foreground-icon: var(--text-05);
 }
 .interactive[data-interactive-variant="select-filter"]:is(
   [data-interactive-state="empty"],

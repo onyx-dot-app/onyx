@@ -134,29 +134,18 @@ describe("summarizeBuckets", () => {
 });
 
 describe("barScale", () => {
-  it("scales to the largest average plus one spread, ignoring long maxes", () => {
+  it("scales to the largest max across the rows", () => {
     const buckets = summarizeBuckets([
-      metric("CONNECTOR_FETCH", {
-        avg_duration_ms: 100,
-        std_dev_duration_ms: 50,
-        max_duration_ms: 3_600_000,
-      }),
-      metric("EMBEDDING", {
-        avg_duration_ms: 120,
-        std_dev_duration_ms: null,
-        max_duration_ms: 130,
-      }),
+      metric("CONNECTOR_FETCH", { max_duration_ms: 3_600_000 }),
+      metric("EMBEDDING", { max_duration_ms: 130 }),
     ]);
-    expect(barScale(buckets)).toBe(150);
+    expect(barScale(buckets)).toBe(3_600_000);
   });
 
-  it("falls back to the largest max when no row has an average", () => {
+  it("ignores a row with no max", () => {
     const buckets = summarizeBuckets([
-      metric("CHUNKING", {
-        avg_duration_ms: null,
-        std_dev_duration_ms: null,
-        max_duration_ms: 40,
-      }),
+      metric("CHUNKING", { max_duration_ms: null }),
+      metric("EMBEDDING", { max_duration_ms: 40 }),
     ]);
     expect(barScale(buckets)).toBe(40);
   });

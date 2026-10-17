@@ -26,9 +26,6 @@ interface FilterButtonProps extends Omit<
   /** Whether the filter has an active selection. @default false */
   active?: boolean;
 
-  /** Whether the filter shows a value that is always set, such as a time window. @default false */
-  filled?: boolean;
-
   /** Called when the clear (X) button is clicked in active state. */
   onClear: () => void;
 
@@ -50,7 +47,6 @@ function FilterButton({
   tooltip,
   tooltipSide = "top",
   active = false,
-  filled = false,
   interaction,
   ...statefulProps
 }: FilterButtonProps) {
@@ -66,7 +62,7 @@ function FilterButton({
         {...statefulProps}
         variant="select-filter"
         interaction={resolvedInteraction}
-        state={active ? "selected" : filled ? "filled" : "empty"}
+        state={active ? "selected" : "empty"}
       >
         <Interactive.Container type="button">
           <div className="flex flex-row items-center gap-1">
