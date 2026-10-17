@@ -1,6 +1,7 @@
 import { MCPConnectionStatus } from "@/lib/mcp/types";
 import {
   render,
+  deferred,
   screen,
   setupUser,
   waitFor,
@@ -402,6 +403,62 @@ test.each([true, false])(
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(writes).toEqual([]);
+  }
+);
+
+test.each([
+  { load: "loading", enabled: true },
+  { load: "error", enabled: true },
+  { load: "loading", enabled: false },
+  { load: "error", enabled: false },
+])(
+  "OpenAPI workspace action handles Chat configuration $load, enabled=$enabled",
+  async ({ load, enabled }) => {
+    const configuration = deferred<Response>();
+    const fetchSetup = jest.mocked(global.fetch).getMockImplementation();
+    jest.mocked(global.fetch).mockImplementation((input, init) => {
+      if (String(input) === "/api/admin/default-assistant/configuration")
+        return load === "loading"
+          ? configuration.promise
+          : Promise.resolve(new Response("{}", { status: 503 }));
+      if (!fetchSetup) throw new Error("Missing setup network");
+      return fetchSetup(input, init);
+    });
+    const user = setupUser();
+    render(
+      <PluginLifecycleMenu
+        plugin={{ kind: "openapi", tool: { ...tool, enabled } }}
+      />
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: enabled ? "Disable for workspace" : "Enable for workspace",
+      })
+    );
+    const action = await screen.findByRole("menuitem", {
+      name: enabled ? /Disable for workspace/ : /Enable for workspace/,
+    });
+    if (!enabled) {
+      expect(action).toHaveAttribute("aria-disabled", "true");
+      expect(writes).toEqual([]);
+      return;
+    }
+    expect(action).not.toHaveAttribute("aria-disabled", "true");
+    await user.click(action);
+    const dialog = await screen.findByRole("dialog");
+    expect(writes).toEqual([]);
+    await user.click(
+      within(dialog).getByRole("button", { name: "Disable for workspace" })
+    );
+    await waitFor(() =>
+      expect(writes).toEqual([
+        {
+          path: "/api/admin/tool/status",
+          method: "PATCH",
+          body: { tool_ids: [42], enabled: false },
+        },
+      ])
+    );
   }
 );
 

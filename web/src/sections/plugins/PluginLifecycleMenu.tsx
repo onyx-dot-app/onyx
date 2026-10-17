@@ -226,7 +226,9 @@ function ActivePluginLifecycleMenu({
       description: t("plugins.disableConfirmation.scope"),
       disabled:
         busy ||
-        (defaultChat.canEdit && (!defaultChat.data || !!defaultChat.error)),
+        (!enabled &&
+          defaultChat.canEdit &&
+          (!defaultChat.data || !!defaultChat.error)),
       onSelect: () => {
         if (enabled) {
           setOpen(false);

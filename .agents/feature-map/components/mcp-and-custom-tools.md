@@ -751,6 +751,7 @@ They say Disable when all available surfaces are on, Enable when off, and Manage
 MCP labels ignore Craft when the deployment does not offer it. OpenAPI and Craft apps use global status.
 OpenAPI disable requires confirmation before changing status for everyone, including custom agents.
 OpenAPI workspace controls follow global tool status, independently of default Chat attachments.
+Disabling OpenAPI does not depend on default Chat configuration; enabling retains its attachment checks.
 The confirmation retains saved settings and credentials. Cancellation makes no changes; failed writes permit retry.
 MCP confirmations retain separate main Chat and Craft effects.
 External-app editors retain managed-credential restrictions and existing policy behavior.
