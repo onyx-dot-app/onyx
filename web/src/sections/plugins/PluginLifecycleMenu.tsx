@@ -205,7 +205,7 @@ function ActivePluginLifecycleMenu({
   const items: DropdownMenuItem[] = [];
   if (plugin.kind === "openapi" && can(plugin.tool, "toggle")) {
     const { tool } = plugin;
-    const enabled = tool.enabled && (!defaultChat.canEdit || selected);
+    const enabled = tool.enabled;
     items.push({
       kind: "action",
       id: "availability",

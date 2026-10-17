@@ -745,6 +745,7 @@ MCP default Chat availability comes from tool attachments, independently of cred
 Custom-agent attachments survive changes to default Chat availability.
 Availability controls say enable or disable for the workspace, independently of account connections.
 OpenAPI disable requires confirmation before changing status for everyone, including custom agents.
+OpenAPI workspace controls follow global tool status, independently of default Chat attachments.
 The confirmation retains saved settings and credentials. Cancellation makes no changes; failed writes permit retry.
 MCP confirmations retain separate main Chat and Craft effects.
 External-app editors retain managed-credential restrictions and existing policy behavior.

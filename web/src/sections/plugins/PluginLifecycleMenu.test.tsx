@@ -290,34 +290,54 @@ test("failed OpenAPI workspace disable stays open for retry", async () => {
   ]);
 });
 
-test.each([true, false])(
-  "enables an unattached OpenAPI action in default Chat, enabled=%s",
-  async (enabled) => {
-    defaultToolIds = [99];
-    const user = setupUser();
-    render(
-      <PluginLifecycleMenu
-        plugin={{ kind: "openapi", tool: { ...tool, enabled } }}
-      />
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Enable or disable for workspace" })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /Enable for workspace/ })
-    );
-    await waitFor(() =>
-      expect(writes).toContainEqual({
-        path: "/api/admin/default-assistant",
-        method: "PATCH",
-        body: { tool_ids: [99, 42] },
-      })
-    );
-    expect(
-      writes.filter((write) => write.path === "/api/admin/tool/status")
-    ).toHaveLength(enabled ? 0 : 1);
-  }
-);
+test("enables a disabled OpenAPI action and attaches it to default Chat", async () => {
+  defaultToolIds = [99];
+  const user = setupUser();
+  render(
+    <PluginLifecycleMenu
+      plugin={{ kind: "openapi", tool: { ...tool, enabled: false } }}
+    />
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
+  await user.click(
+    await screen.findByRole("menuitem", { name: /Enable for workspace/ })
+  );
+  await waitFor(() =>
+    expect(writes).toContainEqual({
+      path: "/api/admin/default-assistant",
+      method: "PATCH",
+      body: { tool_ids: [99, 42] },
+    })
+  );
+  expect(
+    writes.filter((write) => write.path === "/api/admin/tool/status")
+  ).toHaveLength(1);
+});
+
+test("an enabled OpenAPI action absent from default Chat still confirms workspace disable", async () => {
+  defaultToolIds = [99];
+  const user = setupUser();
+  render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
+  const disable = await screen.findByRole("menuitem", {
+    name: /Disable for workspace/,
+  });
+  expect(
+    screen.queryByRole("menuitem", { name: /Enable for workspace/ })
+  ).not.toBeInTheDocument();
+  await user.click(disable);
+  const dialog = await screen.findByRole("dialog", {
+    name: "Disable Reports for the workspace?",
+  });
+  expect(writes).toEqual([]);
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(writes).toEqual([]);
+});
 
 test("scoped OpenAPI managers toggle status without changing default Chat", async () => {
   mockFullAdmin = false;
