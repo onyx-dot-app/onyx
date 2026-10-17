@@ -68,6 +68,11 @@ sync (`server.py:_Readiness`).
 
 ### User-facing HTTP endpoints (outside the proxy)
 
+Member app responses include `service_urls`: unique literal HTTP(S) origins for display.
+The projection strips credentials, paths, queries, and default ports. Built-in
+escaped hostname dots are decoded. Ambiguous regex and wildcard hosts are omitted.
+Raw upstream patterns, authentication templates, and organization credentials remain admin-only.
+
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/api/build/apps/{id}/oauth/start` | `start_external_app_oauth` (`server/features/build/external_apps/oauth.py`) | Begins a user's per-user OAuth connect flow for a built-in app. |
