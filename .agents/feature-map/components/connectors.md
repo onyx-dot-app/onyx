@@ -479,7 +479,11 @@ as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
 `run_order` runs dependencies first. A dependency that `FAILED`, is
 `INCOMPLETE` or did not run stops the check: it is `SKIPPED` with a
 `not_run_reason` and `blocked_by`. After a rate limit, the rest of the run is
-`SKIPPED` too. Creation runs its checks side by side, then applies the same rule
+`SKIPPED` too. A probe whose sample cannot decide raises
+`InconclusiveValidationError` (`INCOMPLETE`, kind `inconclusive`); one that
+proves the scope has nothing to test raises `NothingToCheckError` (`SKIPPED`,
+`not_run_reason: nothing_in_scope`, still a row). An empty scope fails the
+first check that reads it. Creation runs its checks side by side, then applies the same rule
 (`stop_blocked_results`). In a draft run, a check waits while a dependency
 waits (`draft_runs.py:wait_for_dependencies`). `CapabilityCheckTrigger`
 (`backend/onyx/db/enums.py`): `MANUAL`, `CREDENTIAL_CREATED`,
