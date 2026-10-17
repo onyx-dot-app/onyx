@@ -147,7 +147,8 @@ export default function ChatPluginsPopover({
         </Popover.Trigger>
         <Popover.Content
           side="right"
-          align="start"
+          align="end"
+          alignOffset={-5}
           width="lg"
           aria-label={t("chat.trigger.label")}
           onPointerEnter={cancelHover}

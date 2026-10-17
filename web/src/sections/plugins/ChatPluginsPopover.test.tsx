@@ -244,6 +244,10 @@ test("the Plugins flyout stays horizontal while toggling and searches its own ro
   expect(
     screen.getByRole("dialog", { name: "Plugins" }).getAttribute("data-side")
   ).toMatch(/^(right|left)$/);
+  expect(screen.getByRole("dialog", { name: "Plugins" })).toHaveAttribute(
+    "data-align",
+    "end"
+  );
   const toggle = await screen.findByRole("switch", {
     name: "Use Linear in this chat",
   });
