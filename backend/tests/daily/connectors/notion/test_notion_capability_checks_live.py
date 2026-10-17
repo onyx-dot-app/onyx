@@ -11,6 +11,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckNotRunReason,
     CredentialCapability,
     compute_capability_verdicts,
 )
@@ -97,6 +98,7 @@ def test_indexing_checks_pass_for_every_shared_page(
     by_id: dict[str, CapabilityCheckResult] = _results(_credential(test_secrets), {})
 
     _assert_indexing_passes(by_id)
+    assert (by_id["notion_auth"].summary or "").startswith("Signed in as ")
     assert by_id["notion_shared_content"].status == CapabilityCheckStatus.PASSED
     assert not by_id["notion_root_page"].applicable
 
@@ -112,6 +114,7 @@ def test_indexing_checks_pass_for_a_root_page(
 
     _assert_indexing_passes(by_id)
     assert by_id["notion_root_page"].status == CapabilityCheckStatus.PASSED
+    assert by_id["notion_root_page"].summary == f"Read root page {_ROOT_PAGE_TITLE}"
     assert not by_id["notion_shared_content"].applicable
 
 
@@ -125,6 +128,10 @@ def test_root_page_fails_for_a_page_that_is_not_shared(
     result: CapabilityCheckResult = by_id["notion_root_page"]
     assert result.status == CapabilityCheckStatus.FAILED, result.message
     assert result.error_type == "ConnectorValidationError"
+    assert result.summary == "Root page not found or not shared"
+    assert by_id["notion_page_content"].not_run_reason == (
+        CheckNotRunReason.DEPENDENCY_FAILED
+    )
 
 
 def test_auth_fails_for_a_wrong_token() -> None:
@@ -135,3 +142,4 @@ def test_auth_fails_for_a_wrong_token() -> None:
     result: CapabilityCheckResult = by_id["notion_auth"]
     assert result.status == CapabilityCheckStatus.FAILED, result.message
     assert result.error_type == "CredentialExpiredError"
+    assert by_id["notion_shared_content"].blocked_by == "notion_auth"
