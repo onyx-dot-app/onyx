@@ -7,7 +7,8 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { MCPAuthenticationType } from "@/lib/mcp/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { UserProvider } from "@/providers/UserProvider";
-import ChatPluginsPopover from "@/sections/plugins/ChatPluginsPopover";
+import { ProjectsProvider } from "@/lib/projects/providers";
+import ToolsPopover from "@/lib/tools/components/ToolsPopover";
 import {
   jsonResponse,
   memberServer,
@@ -61,7 +62,7 @@ function StoryComposer({ scenario }: ChatPluginsStoryProps) {
   }, [ready, setToolState, scenario]);
   return (
     <div className="flex min-h-96 w-full items-start justify-center bg-background-neutral-01 p-8">
-      <ChatPluginsPopover
+      <ToolsPopover
         agent={scenario === "empty" ? { ...agent, tools: [] } : agent}
         toolConfiguration={configuration}
       />
@@ -159,7 +160,9 @@ function ChatPluginsStory({ scenario }: ChatPluginsStoryProps) {
       }}
     >
       <UserProvider>
-        <StoryComposer scenario={scenario} />
+        <ProjectsProvider>
+          <StoryComposer scenario={scenario} />
+        </ProjectsProvider>
       </UserProvider>
     </SWRConfig>
   ) : null;
@@ -172,6 +175,9 @@ const meta = {
   args: { scenario: "ready" },
   play: async () => {
     const page = within(document.body);
+    await userEvent.click(
+      await page.findByRole("button", { name: "Manage Actions" })
+    );
     await userEvent.click(await page.findByRole("button", { name: "Plugins" }));
   },
 } satisfies Meta<typeof ChatPluginsStory>;
@@ -183,6 +189,9 @@ export const DisabledGroup: Story = {
   args: { scenario: "disabled" },
   play: async () => {
     const page = within(document.body);
+    await userEvent.click(
+      await page.findByRole("button", { name: "Manage Actions" })
+    );
     await userEvent.click(await page.findByRole("button", { name: "Plugins" }));
     await expect(
       await page.findByRole("switch", { name: "Use Linear in this chat" })
@@ -196,6 +205,9 @@ export const PartialFailure: Story = { args: { scenario: "error" } };
 export const ConnectCredentials: Story = {
   play: async () => {
     const page = within(document.body);
+    await userEvent.click(
+      await page.findByRole("button", { name: "Manage Actions" })
+    );
     await userEvent.click(await page.findByRole("button", { name: "Plugins" }));
     await userEvent.click(await page.findByRole("button", { name: "Connect" }));
     await expect(await page.findByRole("dialog")).toBeVisible();

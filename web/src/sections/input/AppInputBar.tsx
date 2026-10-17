@@ -39,7 +39,6 @@ import { isFilePending } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
 import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
-import ChatPluginsPopover from "@/sections/plugins/ChatPluginsPopover";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -640,14 +639,6 @@ const AppInputBar = React.memo(
               // the previous agent's open panel and search term across.
               <ToolsPopover
                 key={activeAgent.id}
-                agent={activeAgent}
-                toolConfiguration={toolConfiguration}
-                disabled={disabled}
-              />
-            )}
-            {activeAgent && (
-              <ChatPluginsPopover
-                key={`plugins:${activeAgent.id}`}
                 agent={activeAgent}
                 toolConfiguration={toolConfiguration}
                 disabled={disabled}

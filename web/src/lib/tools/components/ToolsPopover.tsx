@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
@@ -20,6 +20,14 @@ import SourcesView from "@/lib/tools/components/SourcesView";
 import ToolLineItem from "@/lib/tools/components/ToolLineItem";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
+import ChatPluginsPopover from "@/sections/plugins/ChatPluginsPopover";
+import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
+import {
+  useMemberPlugins,
+  memberPluginReference,
+  type MemberPlugin,
+} from "@/lib/plugins/member";
+import { chatPluginsForAgent, setChatPluginEnabled } from "@/lib/plugins/chat";
 
 export interface ToolsPopoverProps {
   agent: MinimalAgent;
@@ -37,6 +45,11 @@ export default function ToolsPopover({
   const [open, setOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const catalog = useMemberPlugins({ surface: "chat", agentId: agent.id });
+  const [connection, setConnection] = useState<{
+    agentId: number;
+    plugin: MemberPlugin;
+  } | null>(null);
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
@@ -45,6 +58,13 @@ export default function ToolsPopover({
   const hasNoConnectors = ccPairs.length === 0;
   const close = useCallback(() => setOpen(false), []);
   const openSources = useCallback(() => setShowSources(true), []);
+
+  useEffect(() => {
+    setOpen(false);
+    setShowSources(false);
+    setSearchTerm("");
+    setConnection(null);
+  }, [agent.id]);
 
   const displayTools = agent.tools.filter((tool) => {
     if (!tool.in_code_tool_id || tool.mcp_server_id) return false;
@@ -85,8 +105,6 @@ export default function ToolsPopover({
     );
   });
 
-  if (displayTools.length === 0) return null;
-
   return (
     <ToolsPopoverProvider
       agent={agent}
@@ -112,6 +130,7 @@ export default function ToolsPopover({
               interaction={open ? "hover" : "rest"}
               prominence="tertiary"
               tooltip={t("toolsPopover.manageActions.tooltip")}
+              aria-label={t("toolsPopover.manageActions.tooltip")}
             />
           </div>
         </Popover.Trigger>
@@ -134,12 +153,48 @@ export default function ToolsPopover({
                   ...filteredTools.map((tool) => (
                     <ToolLineItem key={tool.id} tool={tool} />
                   )),
+                  <ChatPluginsPopover
+                    key="plugins"
+                    agent={agent}
+                    toolConfiguration={toolConfiguration}
+                    catalog={catalog}
+                    disabled={disabled}
+                    onConnect={(plugin) => {
+                      setConnection({ agentId: agent.id, plugin });
+                      close();
+                    }}
+                    onBrowse={close}
+                  />,
                 ]}
               </PopoverMenu>
             )}
           </div>
         </Popover.Content>
       </Popover>
+      {connection && connection.agentId === agent.id && (
+        <MemberPluginConnectionDialog
+          plugin={connection.plugin}
+          agentId={agent.id}
+          surface="chat"
+          open
+          onClose={() => setConnection(null)}
+          onConnected={() => {
+            const reference = memberPluginReference(connection.plugin);
+            const group = chatPluginsForAgent(catalog.plugins, agent).find(
+              ({ plugin }) => {
+                const candidate = memberPluginReference(plugin);
+                return (
+                  candidate.kind === reference.kind &&
+                  candidate.id === reference.id
+                );
+              }
+            );
+            if (group) setChatPluginEnabled(group, true, toolConfiguration);
+            setConnection(null);
+            void catalog.refresh();
+          }}
+        />
+      )}
     </ToolsPopoverProvider>
   );
 }

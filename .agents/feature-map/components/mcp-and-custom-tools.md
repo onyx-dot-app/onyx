@@ -77,7 +77,7 @@ The correlated callback still closes the sign-in tab and refreshes the original 
 Its completion screen uses a bounded, centered card with return and close-tab
 actions. OAuth callback URLs use backend WEB_DOMAIN, which must match the web origin.
 
-Members open `/app/plugins` from the main sidebar or the composer Plugins picker.
+Members open `/app/plugins` from the main sidebar or the Actions menu's Plugins flyout.
 The member directory uses `/mcp/servers`, `/tool`, and the caller's OAuth token
 status. Craft-enabled members also see external apps from `/build/apps`.
 It does not use admin listing endpoints. All, Connected, and Needs sign-in
@@ -128,7 +128,10 @@ page verifies the saved connection against the originating roster before notifyi
 the opener or BroadcastChannel. The connection caller then verifies the saved
 state again before the dialog reports success.
 
-The composer Plugins picker reads the active agent's MCP server roster and groups
+The composer Actions menu contains a Plugins row with a right-side flyout.
+It retains plugin search, connection actions, toggles, and Browse plugins.
+The Actions owner keeps connection dialogs mounted after either menu closes.
+The flyout reads the active agent's MCP server roster and groups
 only Chat-capable kinds. External apps remain Craft-only. `/craft/v1/plugins`
 uses the same member page with MCP and external apps, excluding OpenAPI.
 The composer groups
@@ -264,7 +267,7 @@ Servers with required user header values can prompt with `NONE` or `PT_OAUTH`.
 
 The credentials prompt reads persona-scoped SWR data and handles connections
 through `useMcpAuthentication` in `web/src/lib/mcp/hooks.ts`.
-The Plugins picker uses member catalogs. Both flows use
+The Plugins flyout uses member catalogs. Both flows use
 `getMcpAuthenticationFlow` and the authoritative `connection_status` field.
 The hook exposes credential requests and submit/cancel actions; each UI owns its modal props. Shared authentication types live in
 `web/src/lib/mcp/types.ts`.

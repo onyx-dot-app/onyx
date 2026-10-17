@@ -58,6 +58,7 @@ jest.mock("@/refresh-components/popovers/FilePickerPopover", () => ({
   __esModule: true,
   default: () => null,
 }));
+jest.mock("@/lib/tools/components", () => ({ ToolsPopover: () => null }));
 
 const agent: MinimalAgent = {
   id: 0,

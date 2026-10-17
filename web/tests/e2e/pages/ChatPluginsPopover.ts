@@ -1,14 +1,17 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 import { MemberPluginConnectionDialog } from "@tests/e2e/pages/MemberPluginConnectionDialog";
+import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
 
 export class ChatPluginsPopover {
   readonly page: Page;
   readonly toggle: Locator;
   readonly popover: Locator;
   readonly connectionDialog: MemberPluginConnectionDialog;
+  readonly actions: ToolsPopover;
 
   constructor(page: Page) {
     this.page = page;
+    this.actions = new ToolsPopover(page);
     this.toggle = page.getByRole("button", { name: "Plugins", exact: true });
     this.popover = page.getByRole("dialog").filter({
       has: page.getByRole("textbox", { name: "Search plugins", exact: true }),
@@ -17,7 +20,10 @@ export class ChatPluginsPopover {
   }
 
   async open(): Promise<void> {
-    if (!(await this.popover.isVisible())) await this.toggle.click();
+    if (!(await this.popover.isVisible())) {
+      await this.actions.open();
+      await this.toggle.click();
+    }
     await expect(this.popover).toBeVisible();
   }
 
@@ -25,6 +31,7 @@ export class ChatPluginsPopover {
     if (await this.popover.isVisible())
       await this.page.keyboard.press("Escape");
     await expect(this.popover).toBeHidden();
+    await this.actions.close();
   }
 
   pluginSwitch(name: string): Locator {

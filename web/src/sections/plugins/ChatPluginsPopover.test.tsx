@@ -3,6 +3,9 @@ import { ReadableStream } from "node:stream/web";
 import { Button } from "@opal/components";
 import {
   render,
+  act,
+  deferred,
+  fireEvent,
   screen,
   setupUser,
   waitFor,
@@ -15,7 +18,6 @@ import { useToolConfiguration } from "@/lib/tools/hooks";
 import ToolsPopover from "@/lib/tools/components/ToolsPopover";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { MCPAuthenticationType } from "@/lib/mcp/types";
-import ChatPluginsPopover from "@/sections/plugins/ChatPluginsPopover";
 import {
   jsonResponse,
   memberServer,
@@ -95,21 +97,13 @@ const agent: MinimalAgent = {
 
 function PickerHarness({
   selectedAgent = agent,
-  builtIns = false,
 }: {
   selectedAgent?: MinimalAgent;
-  builtIns?: boolean;
 }) {
   const configuration = useToolConfiguration();
   return (
     <>
-      <ChatPluginsPopover
-        agent={selectedAgent}
-        toolConfiguration={configuration}
-      />
-      {builtIns && (
-        <ToolsPopover agent={selectedAgent} toolConfiguration={configuration} />
-      )}
+      <ToolsPopover agent={selectedAgent} toolConfiguration={configuration} />
       <Button
         onClick={() =>
           void sendMessage({
@@ -218,10 +212,155 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+async function openPlugins(user = setupUser()) {
+  await user.click(
+    within(screen.getByTestId("action-management-toggle")).getByRole("button")
+  );
+  await user.click(screen.getByRole("button", { name: "Plugins" }));
+}
+
+test("plugin-only agents reach a dedicated Plugins row through Actions", async () => {
+  network();
+  render(
+    <PickerHarness selectedAgent={{ ...agent, tools: [storedMcpTool] }} />
+  );
+  expect(
+    screen.queryByRole("button", { name: "Plugins" })
+  ).not.toBeInTheDocument();
+  await setupUser().click(
+    within(screen.getByTestId("action-management-toggle")).getByRole("button")
+  );
+  expect(screen.getByRole("button", { name: "Plugins" })).toHaveAttribute(
+    "aria-haspopup",
+    "dialog"
+  );
+});
+
+test("the Plugins flyout stays horizontal while toggling and searches its own roster", async () => {
+  network();
+  render(<PickerHarness />);
+  const user = setupUser();
+  await openPlugins(user);
+  expect(
+    screen.getByRole("dialog", { name: "Plugins" }).getAttribute("data-side")
+  ).toMatch(/^(right|left)$/);
+  const toggle = await screen.findByRole("switch", {
+    name: "Use Linear in this chat",
+  });
+  await user.click(toggle);
+  expect(toggle).not.toBeChecked();
+  expect(screen.getByTestId("tool-options")).toBeVisible();
+  await user.type(
+    screen.getByRole("textbox", { name: "Search plugins" }),
+    "Reports"
+  );
+  expect(
+    screen.queryByRole("switch", { name: "Use Linear in this chat" })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("switch", { name: "Use Reports API in this chat" })
+  ).toBeVisible();
+});
+
+test("keyboard navigation returns from the flyout before dismissing Actions", async () => {
+  network();
+  render(<PickerHarness />);
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: "Manage Actions" }));
+  const row = screen.getByRole("button", { name: "Plugins" });
+  act(() => row.focus());
+  await user.keyboard("{ArrowRight}");
+  expect(screen.getByRole("textbox", { name: "Search plugins" })).toHaveFocus();
+  await user.keyboard("{ArrowLeft}");
+  expect(row).toHaveFocus();
+  expect(
+    screen.queryByRole("dialog", { name: "Plugins" })
+  ).not.toBeInTheDocument();
+  await user.keyboard("{ArrowRight}");
+  await user.keyboard("{Escape}");
+  expect(row).toHaveFocus();
+  expect(screen.getByTestId("tool-options")).toBeVisible();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByTestId("tool-options")).not.toBeInTheDocument();
+});
+
+test("delayed hover preserves the corridor from the Plugins row to its flyout", async () => {
+  network();
+  render(<PickerHarness />);
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: "Manage Actions" }));
+  const row = screen.getByRole("button", { name: "Plugins" });
+  await user.hover(row);
+  const flyout = await screen.findByRole("dialog", { name: "Plugins" });
+  await user.unhover(row);
+  await user.hover(flyout);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+  expect(flyout).toBeVisible();
+  await user.unhover(flyout);
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "Plugins" })
+    ).not.toBeInTheDocument()
+  );
+  expect(screen.getByTestId("tool-options")).toBeVisible();
+});
+
+test("touch opens Plugins and browsing closes both menus", async () => {
+  network();
+  render(<PickerHarness />);
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: "Manage Actions" }));
+  const row = screen.getByRole("button", { name: "Plugins" });
+  await user.pointer([
+    { keys: "[TouchA>]", target: row },
+    { keys: "[/TouchA]", target: row },
+  ]);
+  expect(screen.getByRole("dialog", { name: "Plugins" })).toBeVisible();
+  fireEvent.click(screen.getByRole("link", { name: "Browse plugins" }));
+  expect(
+    screen.queryByRole("dialog", { name: "Plugins" })
+  ).not.toBeInTheDocument();
+  expect(screen.queryByTestId("tool-options")).not.toBeInTheDocument();
+});
+
+test("switching agents closes a pending connection without applying it to the next agent", async () => {
+  const { fetchSpy } = network({ credentials: true });
+  const fetchFixture = fetchSpy.getMockImplementation();
+  if (!fetchFixture) throw new Error("Missing network fixture");
+  const save = deferred<Response>();
+  fetchSpy.mockImplementation((input, init) => {
+    if (String(input) === "/api/mcp/user-credentials") return save.promise;
+    if (String(input) === "/api/mcp/servers/persona/8")
+      return Promise.resolve(jsonResponse({ mcp_servers: [] }));
+    return fetchFixture(input, init);
+  });
+  sessionStorage.setItem(
+    "onyx:tools:chat:chat-a",
+    JSON.stringify({ 71: "disabled", 72: "disabled" })
+  );
+  const { rerender } = render(<PickerHarness />);
+  const user = setupUser();
+  await openPlugins(user);
+  await user.click(await screen.findByRole("button", { name: "Connect" }));
+  await user.type(screen.getByLabelText("api_key"), "personal-key");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(screen.getByRole("button", { name: "Connecting..." })).toBeDisabled();
+  rerender(<PickerHarness selectedAgent={{ ...agent, id: 8, tools: [] }} />);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await act(async () => save.resolve(jsonResponse({})));
+  expect(
+    JSON.parse(sessionStorage.getItem("onyx:tools:chat:chat-a") ?? "{}")
+  ).toMatchObject({ tools: { 71: "disabled", 72: "disabled" } });
+  await openPlugins(user);
+  expect(
+    await screen.findByText("No plugins are available in this chat.")
+  ).toBeVisible();
+});
+
 test("an expired OpenAPI grant offers sign-in instead of a plugin toggle", async () => {
   network({ oauthExpired: true });
   render(<PickerHarness />);
-  await setupUser().click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins();
   expect(await screen.findByRole("button", { name: "Connect" })).toBeVisible();
   expect(
     screen.queryByRole("switch", { name: "Use Reports API in this chat" })
@@ -232,7 +371,7 @@ test("an MCP group toggle serializes every attached ID through the send service"
   const { requests } = network();
   render(<PickerHarness />);
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins(user);
   const linear = await screen.findByRole("switch", {
     name: "Use Linear in this chat",
   });
@@ -258,7 +397,7 @@ test("an attached private MCP server stays visible and can be excluded from the 
   const { requests } = network({ privateAttachedServer: true });
   render(<PickerHarness />);
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins(user);
   const linear = await screen.findByRole("switch", {
     name: "Use Linear in this chat",
   });
@@ -280,7 +419,7 @@ test("an OAuth status failure allows disabling a selected plugin but blocks enab
   const { requests } = network({ oauthFailure: true });
   render(<PickerHarness />);
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins(user);
   await screen.findByRole("alert");
   const reports = screen.getByRole("switch", {
     name: "Use Reports API in this chat",
@@ -311,7 +450,7 @@ test("the shared connection dialog reconnects without replacing the chat page", 
   );
   render(<PickerHarness />);
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins(user);
   await screen.findByRole("button", { name: "Connect" });
   expect(screen.queryByText("Add your credentials")).not.toBeInTheDocument();
   expect(screen.queryByText("Connect your account")).not.toBeInTheDocument();
@@ -319,12 +458,14 @@ test("the shared connection dialog reconnects without replacing the chat page", 
     screen.queryByRole("switch", { name: "Use Linear in this chat" })
   ).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(screen.queryByTestId("tool-options")).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toBeVisible();
   await user.type(screen.getByLabelText("api_key"), "member-test-key");
   await user.click(screen.getByRole("button", { name: "Connect" }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   );
-  await user.click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins(user);
   expect(
     await screen.findByRole("switch", { name: "Use Linear in this chat" })
   ).toBeChecked();
@@ -350,7 +491,7 @@ test("connection failure stays in the dialog and preserves disabled selection", 
   );
   render(<PickerHarness />);
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins(user);
   await screen.findByRole("button", { name: "Connect" });
   await user.click(screen.getByRole("button", { name: "Connect" }));
   await user.type(screen.getByLabelText("api_key"), "invalid-member-key");
@@ -367,7 +508,7 @@ test("connection failure stays in the dialog and preserves disabled selection", 
 test("browse retains the current chat and a partial roster failure offers retry", async () => {
   network({ listFailure: true });
   render(<PickerHarness />);
-  await setupUser().click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins();
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Some plugins could not load. Try again."
   );
@@ -384,7 +525,7 @@ test("browse retains the current chat and a partial roster failure offers retry"
 test("the empty agent shows a useful empty state and no workspace plugin toggles", async () => {
   network();
   render(<PickerHarness selectedAgent={{ ...agent, tools: [] }} />);
-  await setupUser().click(screen.getByRole("button", { name: "Plugins" }));
+  await openPlugins();
   expect(
     await screen.findByText("No plugins are available in this chat.")
   ).toBeVisible();
@@ -396,7 +537,6 @@ test("Actions keeps built-in search and Sources while custom plugins appear only
   network();
   render(
     <PickerHarness
-      builtIns
       selectedAgent={{
         ...agent,
         knowledge_sources: [ValidSources.Slack, ValidSources.Notion],

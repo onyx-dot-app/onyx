@@ -56,6 +56,11 @@ Craft-enabled users also see external apps, marked Craft-only. Those apps
 cannot enter Chat tool selection. `/craft/v1/plugins` uses the shared member
 directory with only MCP and external apps.
 
+The input bar's Actions menu contains a Plugins row with a right-side flyout.
+Hover, click, touch, and ArrowRight open its search and plugin controls.
+ArrowLeft or Escape returns focus to the row before Actions closes.
+The connection dialog stays mounted after the menus close. Agent changes cancel the old connection.
+
 The forced-tool pill uses the same member catalog and availability rule as the send path.
 Default Chat hides unavailable plugins while retaining the stored selection.
 Custom agents retain their own forced-tool settings without member catalog data.

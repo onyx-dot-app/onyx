@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -11,7 +11,7 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { SvgFileBraces, SvgPlug } from "@opal/icons";
+import { SvgChevronRight, SvgFileBraces, SvgPlug } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { useFocusOnMount } from "@opal/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -30,30 +30,33 @@ import {
 import { useAppPosition } from "@/lib/position/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
-import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
 
 export interface ChatPluginsPopoverProps {
   agent: MinimalAgent;
   toolConfiguration: ToolConfigurationHandle;
   disabled?: boolean;
+  catalog: ReturnType<typeof useMemberPlugins>;
+  onConnect: (plugin: MemberPlugin) => void;
+  onBrowse: () => void;
 }
 
 export default function ChatPluginsPopover({
   agent,
   toolConfiguration,
   disabled = false,
+  catalog,
+  onConnect,
+  onBrowse,
 }: ChatPluginsPopoverProps) {
   const t = useTranslations("actions.memberPlugins");
-  const { plugins, isLoading, errors, refresh } = useMemberPlugins({
-    surface: "chat",
-    agentId: agent.id,
-  });
+  const { plugins, isLoading, errors, refresh } = catalog;
   const appPosition = useAppPosition();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [connecting, setConnecting] = useState<MemberPlugin | null>(null);
+  const trigger = useRef<HTMLElement | null>(null);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const attached = useMemo(
     () => chatPluginsForAgent(plugins, agent),
@@ -75,33 +78,102 @@ export default function ChatPluginsPopover({
       toolConfiguration.handOffToNewChatWith(agent.id, appPosition.project());
     }
     setOpen(false);
+    onBrowse();
   }
 
   function connect(plugin: MemberPlugin) {
     setOpen(false);
-    setConnecting(plugin);
+    onConnect(plugin);
   }
+
+  function cancelHover() {
+    if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+  }
+
+  function hover(next: boolean) {
+    cancelHover();
+    if (disabled && next) return;
+    hoverTimer.current = setTimeout(() => changeOpen(next), next ? 100 : 250);
+  }
+
+  function changeOpen(next: boolean) {
+    cancelHover();
+    if (disabled && next) return;
+    setOpen(next);
+    if (next && !open) setSearch("");
+  }
+
+  useEffect(
+    () => () => {
+      if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
+    },
+    []
+  );
 
   return (
     <>
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (next) setSearch("");
-        }}
-      >
+      <Popover open={open} onOpenChange={changeOpen}>
         <Popover.Trigger asChild>
-          <Button
+          <LineItemButton
+            ref={trigger}
             disabled={disabled}
             icon={SvgPlug}
-            prominence="tertiary"
+            title={t("chat.trigger.label")}
+            sizePreset="main-ui"
+            padding={0}
+            rounding={2}
             interaction={open ? "hover" : "rest"}
-            tooltip={t("chat.trigger.label")}
             aria-label={t("chat.trigger.label")}
+            rightChildren={<SvgChevronRight size={16} />}
+            onPointerEnter={(event) => {
+              if (event.pointerType === "mouse") hover(true);
+            }}
+            onPointerLeave={(event) => {
+              if (event.pointerType === "mouse") hover(false);
+            }}
+            onFocus={cancelHover}
+            onClick={(event) => {
+              event.preventDefault();
+              changeOpen(true);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowRight") return;
+              event.preventDefault();
+              event.stopPropagation();
+              changeOpen(true);
+            }}
           />
         </Popover.Trigger>
-        <Popover.Content side="bottom" align="start" width="lg">
+        <Popover.Content
+          side="right"
+          align="start"
+          width="lg"
+          aria-label={t("chat.trigger.label")}
+          onPointerEnter={cancelHover}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "mouse") hover(false);
+          }}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(false);
+            trigger.current?.focus();
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft") return;
+            if (
+              event.target instanceof HTMLInputElement &&
+              event.target.selectionStart !== 0
+            )
+              return;
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(false);
+            trigger.current?.focus();
+          }}
+        >
           <Popover.Menu
             gap={1}
             footer={
@@ -235,28 +307,6 @@ export default function ChatPluginsPopover({
           </Popover.Menu>
         </Popover.Content>
       </Popover>
-      {connecting && (
-        <MemberPluginConnectionDialog
-          plugin={connecting}
-          agentId={agent.id}
-          surface="chat"
-          open
-          onClose={() => setConnecting(null)}
-          onConnected={() => {
-            const reference = memberPluginReference(connecting);
-            const group = attached.find(({ plugin }) => {
-              const candidate = memberPluginReference(plugin);
-              return (
-                candidate.kind === reference.kind &&
-                candidate.id === reference.id
-              );
-            });
-            if (group) setChatPluginEnabled(group, true, toolConfiguration);
-            setConnecting(null);
-            void refresh();
-          }}
-        />
-      )}
     </>
   );
 }
