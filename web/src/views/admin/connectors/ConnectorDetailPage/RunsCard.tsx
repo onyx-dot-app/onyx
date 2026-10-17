@@ -151,6 +151,8 @@ export default function RunsCard({
     statusGroups: statusGroup === null ? null : [statusGroup],
     q: search,
     errors: null,
+    superseded: null,
+    resolved: null,
   });
   const { data, error, isLoading } = useSWR<CCPairRunsResponse>(
     key,
