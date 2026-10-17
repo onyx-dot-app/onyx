@@ -54,6 +54,7 @@ export default function SharingSettingsSection({
   onEdit,
 }: SharingSettingsSectionProps) {
   const t = useTranslations("admin.connector.sharing");
+  const tConnector = useTranslations("admin.connector");
   const [open, setOpen] = useState(false);
   const tSettings = useTranslations("admin.connectorsList.settings");
   const tGroups = useTranslations("admin.connector.groupRestriction");
@@ -137,7 +138,7 @@ export default function SharingSettingsSection({
         (managedSummary === null
           ? [access.summary]
           : [access.summary, managedSummary]
-        ).join("; ")
+        ).join(tConnector("summarySeparator"))
       )}
       open={open}
       onOpenChange={setOpen}

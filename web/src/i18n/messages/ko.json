@@ -2433,6 +2433,7 @@
         },
         "groupsUnavailable": "그룹을 불러오지 못했습니다."
       },
+      "summarySeparator": "; ",
       "schedule": {
         "refresh": "**{every}**마다 새로 고침",
         "prune": "**{every}**마다 정리",
@@ -2614,7 +2615,7 @@
         },
         "description": {
           "indexing": "{count, plural, other {문서 #개 인덱싱됨}}. 실행 시간 {minutes, plural, other {#분}}.",
-          "doc_permission_sync": "{count, plural, other {사용자 권한 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
+          "doc_permission_sync": "{count, plural, other {문서 권한 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
           "group_sync": "{count, plural, other {그룹 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
           "pruning": "{count, plural, one {문서 #개 제거됨} other {문서 #개 제거됨}}. 정리 실행 시간 {minutes, plural, one {#분} other {#분}}.",
           "checks": "{count, plural, one {검사 #개 실행됨} other {검사 #개 실행됨}}. 검사 실행 시간 {minutes, plural, one {#분} other {#분}}.",

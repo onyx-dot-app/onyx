@@ -2433,6 +2433,7 @@
         },
         "groupsUnavailable": "تعذر تحميل المجموعات."
       },
+      "summarySeparator": "; ",
       "schedule": {
         "refresh": "تحديث كل **{every}**",
         "prune": "تنقية كل **{every}**",
@@ -2614,7 +2615,7 @@
         },
         "description": {
           "indexing": "{count, plural, zero {لم تتم فهرسة أي مستند} one {تمت فهرسة مستند واحد} two {تمت فهرسة مستندين} few {تمت فهرسة # مستندات} many {تمت فهرسة # مستندًا} other {تمت فهرسة # مستند}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
-          "doc_permission_sync": "{count, plural, zero {لم تتم مزامنة أي إذن مستخدم} one {تمت مزامنة إذن مستخدم واحد} two {تمت مزامنة إذنَي مستخدم} few {تمت مزامنة # أذونات مستخدمين} many {تمت مزامنة # إذنًا للمستخدمين} other {تمت مزامنة # إذن مستخدم}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
+          "doc_permission_sync": "{count, plural, zero {لم تتم مزامنة أي إذن مستند} one {تمت مزامنة إذن مستند واحد} two {تمت مزامنة إذنَي مستند} few {تمت مزامنة # أذونات مستندات} many {تمت مزامنة # إذنًا للمستندات} other {تمت مزامنة # إذن مستند}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
           "group_sync": "{count, plural, zero {لم تتم مزامنة أي مجموعة} one {تمت مزامنة مجموعة واحدة} two {تمت مزامنة مجموعتين} few {تمت مزامنة # مجموعات} many {تمت مزامنة # مجموعة} other {تمت مزامنة # مجموعة}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
           "pruning": "{count, plural, one {تمت إزالة مستند واحد} other {تمت إزالة # مستندات}}. مدة التقليم {minutes, plural, one {دقيقة واحدة} other {# دقائق}}.",
           "checks": "{count, plural, one {تم تشغيل فحص واحد} other {تم تشغيل # فحوصات}}. مدة الفحص {minutes, plural, one {دقيقة واحدة} other {# دقائق}}.",

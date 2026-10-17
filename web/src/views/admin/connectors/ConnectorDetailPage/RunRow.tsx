@@ -99,7 +99,7 @@ export function runMoved(run: CCPairRun): number {
     case "doc_permission_sync":
       return run.attempt.total_docs_synced;
     case "group_sync":
-      return run.attempt.total_group_memberships_synced;
+      return run.attempt.total_groups_processed;
     case "pruning":
       return run.attempt.docs_removed;
     case "checks":

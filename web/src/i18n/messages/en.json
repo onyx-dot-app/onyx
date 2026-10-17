@@ -2433,6 +2433,7 @@
         },
         "groupsUnavailable": "Couldn't load the groups."
       },
+      "summarySeparator": "; ",
       "schedule": {
         "refresh": "Refresh every **{every}**",
         "prune": "Prune every **{every}**",
@@ -2614,7 +2615,7 @@
         },
         "description": {
           "indexing": "{count, plural, one {# doc indexed} other {# docs indexed}}. Index run time {minutes, plural, one {# minute} other {# minutes}}.",
-          "doc_permission_sync": "{count, plural, one {# user permission synced} other {# user permissions synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "doc_permission_sync": "{count, plural, one {# document permission synced} other {# document permissions synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
           "group_sync": "{count, plural, one {# group synced} other {# groups synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
           "pruning": "{count, plural, one {# doc removed} other {# docs removed}}. Pruning run time {minutes, plural, one {# minute} other {# minutes}}.",
           "checks": "{count, plural, one {# check run} other {# checks run}}. Check run time {minutes, plural, one {# minute} other {# minutes}}.",

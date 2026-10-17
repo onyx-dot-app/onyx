@@ -25,10 +25,10 @@ type TagSize = "sm" | "md";
  */
 type TagVariant = "default" | "status" | "count";
 
-interface TagBaseProps extends Omit<
+type TagBaseProps = Omit<
   WithoutStyles<React.HTMLAttributes<HTMLElement>>,
   "title" | "color" | "children" | "onClick"
-> {
+> & {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
@@ -81,7 +81,7 @@ interface TagBaseProps extends Omit<
 
   /** Warning indicator after the title. */
   error?: boolean;
-}
+};
 
 /** Passive or editable tag: the root is a `div`. */
 interface TagDivProps extends TagBaseProps {

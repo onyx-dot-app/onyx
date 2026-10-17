@@ -114,6 +114,7 @@ export default function ScheduleSection({
   editable,
 }: ScheduleSectionProps) {
   const t = useTranslations("admin.connector.schedule");
+  const tConnector = useTranslations("admin.connector");
   const tFields = useTranslations("admin.connectorsList.scheduled");
   const tToasts = useTranslations("admin.connector.toasts");
   const tDuration = useTranslations("admin.connector.advancedConfig.duration");
@@ -181,7 +182,7 @@ export default function ScheduleSection({
     checkHours === null ? null : t("checks", { every: hoursLabel(checkHours) }),
   ]
     .filter((part) => part !== null)
-    .join("; ");
+    .join(tConnector("summarySeparator"));
 
   return (
     <Collapsible

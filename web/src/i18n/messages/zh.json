@@ -2433,6 +2433,7 @@
         },
         "groupsUnavailable": "无法加载群组。"
       },
+      "summarySeparator": "; ",
       "schedule": {
         "refresh": "每 **{every}** 刷新一次",
         "prune": "每 **{every}** 清理一次",
@@ -2614,7 +2615,7 @@
         },
         "description": {
           "indexing": "{count, plural, other {已索引 # 个文档}}。运行时间 {minutes, plural, other {# 分钟}}。",
-          "doc_permission_sync": "{count, plural, other {已同步 # 个用户权限}}。运行时间 {minutes, plural, other {# 分钟}}。",
+          "doc_permission_sync": "{count, plural, other {已同步 # 个文档权限}}。运行时间 {minutes, plural, other {# 分钟}}。",
           "group_sync": "{count, plural, other {已同步 # 个群组}}。运行时间 {minutes, plural, other {# 分钟}}。",
           "pruning": "{count, plural, one {已移除 # 个文档} other {已移除 # 个文档}}。清理运行时间 {minutes, plural, one {# 分钟} other {# 分钟}}。",
           "checks": "{count, plural, one {已运行 # 项检查} other {已运行 # 项检查}}。检查运行时间 {minutes, plural, one {# 分钟} other {# 分钟}}。",

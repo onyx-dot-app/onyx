@@ -2433,6 +2433,7 @@
         },
         "groupsUnavailable": "グループを読み込めませんでした。"
       },
+      "summarySeparator": "; ",
       "schedule": {
         "refresh": "**{every}**ごとに更新",
         "prune": "**{every}**ごとに整理",
@@ -2614,7 +2615,7 @@
         },
         "description": {
           "indexing": "{count, plural, other {# 件のドキュメントをインデックス化}}。実行時間 {minutes, plural, other {# 分}}。",
-          "doc_permission_sync": "{count, plural, other {# 件のユーザー権限を同期}}。実行時間 {minutes, plural, other {# 分}}。",
+          "doc_permission_sync": "{count, plural, other {# 件のドキュメント権限を同期}}。実行時間 {minutes, plural, other {# 分}}。",
           "group_sync": "{count, plural, other {# 件のグループを同期}}。実行時間 {minutes, plural, other {# 分}}。",
           "pruning": "{count, plural, one {# 件のドキュメントを削除} other {# 件のドキュメントを削除}}。プルーニングの実行時間 {minutes, plural, one {# 分} other {# 分}}。",
           "checks": "{count, plural, one {# 件のチェックを実行} other {# 件のチェックを実行}}。チェックの実行時間 {minutes, plural, one {# 分} other {# 分}}。",

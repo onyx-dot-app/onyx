@@ -2433,6 +2433,7 @@
         },
         "groupsUnavailable": "Die Gruppen konnten nicht geladen werden."
       },
+      "summarySeparator": "; ",
       "schedule": {
         "refresh": "Aktualisierung alle **{every}**",
         "prune": "Bereinigung alle **{every}**",
@@ -2614,7 +2615,7 @@
         },
         "description": {
           "indexing": "{count, plural, one {# Dokument indexiert} other {# Dokumente indexiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
-          "doc_permission_sync": "{count, plural, one {# Benutzerberechtigung synchronisiert} other {# Benutzerberechtigungen synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
+          "doc_permission_sync": "{count, plural, one {# Dokumentberechtigung synchronisiert} other {# Dokumentberechtigungen synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
           "group_sync": "{count, plural, one {# Gruppe synchronisiert} other {# Gruppen synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
           "pruning": "{count, plural, one {# Dokument entfernt} other {# Dokumente entfernt}}. Laufzeit der Bereinigung {minutes, plural, one {# Minute} other {# Minuten}}.",
           "checks": "{count, plural, one {# Prüfung ausgeführt} other {# Prüfungen ausgeführt}}. Laufzeit der Prüfung {minutes, plural, one {# Minute} other {# Minuten}}.",
