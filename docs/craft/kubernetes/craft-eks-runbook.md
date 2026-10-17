@@ -4,8 +4,12 @@ How to stand up Onyx + Craft on a brand-new EKS cluster, and how to migrate exis
 manual Craft/EKS setups onto the codified Terraform + Helm path. This assumes a
 single-tenant model with managed RDS, ElastiCache, OpenSearch, and S3.
 
-Validated end-to-end on `roshan-craft-test` (us-west-2): `terraform apply` + `helm install` →
-Craft provisions a sandbox + snapshot/restore, with no manual kubectl/RBAC/node steps.
+Before deploying Craft, satisfy the mandatory
+[Firecracker node prerequisites](../infra/firecracker.md#node-prerequisites)
+on each sandbox node. Neither Terraform nor Helm installs or verifies KVM,
+Kata, devmapper, or the paired Firecracker and jailer `v1.17.0` binaries.
+Complete per-node smoke verification and separate Craft integration and browser
+qualification before production promotion.
 
 ---
 
@@ -183,8 +187,7 @@ helm upgrade --install onyx . -n onyx -f <values> \
   --set auth.postgresql.values.password=<rds pw> \
   --set auth.userauth.values.user_auth_secret="$(openssl rand -hex 32)" \
   --set configMap.OPENSEARCH_ADMIN_PASSWORD=<opensearch pw> \
-  --set configMap.S3_FILE_STORE_BUCKET_NAME="$(terraform -chdir=<root> output -raw file_store_bucket_name)" \
-  --set auth.sandboxPushSecret.values.private_key="$(<gen ed25519, see values.yaml comment>)"
+  --set configMap.S3_FILE_STORE_BUCKET_NAME="$(terraform -chdir=<root> output -raw file_store_bucket_name)"
 
 # 4. Runtime app config (UI): register first user (becomes admin), add an LLM provider.
 # 5. kubectl port-forward -n onyx svc/onyx-nginx-controller 8080:80  → http://localhost:8080
@@ -209,7 +212,7 @@ sandboxProxy:
 - ElastiCache: `REDIS_HOST`, `REDIS_SSL=true`, `REDIS_SSL_CERT_REQS=none`, `auth.redis.enabled=false` (no auth token).
 - OpenSearch (v4.0 search backend): `USING_AWS_MANAGED_OPENSEARCH=true`, `OPENSEARCH_REST_API_PORT=443`, `OPENSEARCH_USE_SSL=true`, `OPENSEARCH_ADMIN_USERNAME=admin`.
 - S3: `S3_FILE_STORE_BUCKET_NAME`, `S3_ENDPOINT_URL=""`, `AWS_REGION_NAME`.
-- Craft: `ENABLE_CRAFT=true`, `ONYX_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080`, `auth.sandboxPushSecret.enabled=true`. (`SANDBOX_SERVICE_ACCOUNT_NAME`/`SANDBOX_CONTAINER_IMAGE` default correctly.)
+- Craft: `ENABLE_CRAFT=true`, `ONYX_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080`. (`SANDBOX_SERVICE_ACCOUNT_NAME`/`SANDBOX_CONTAINER_IMAGE` default correctly.)
 
 ### Images
 Use an immutable release tag for Kubernetes customer Craft deployments, e.g.
@@ -268,6 +271,8 @@ If the existing node group already has:
 - label `onyx.app/workload=sandbox`;
 - taint `workload=sandbox:NoSchedule`;
 - acceptable IMDS hardening;
+- the [Firecracker node prerequisites](../infra/firecracker.md#node-prerequisites),
+  including per-node binary and live smoke verification;
 - the same security-group shape as regular managed node groups: the shared node
   SG, without also attaching another `kubernetes.io/cluster/<name>`-tagged SG;
 
@@ -442,14 +447,17 @@ The original lead infra TODO list is accounted for as:
 
 ---
 
-## 8. Test harness (this validation — not for the PR)
+## 8. Historical validation of the old sandbox runtime
+
+These results predate the Firecracker migration. They do not establish
+Firecracker, `kata-fc`, binary-pin, or current Craft qualification.
 
 `deployment/terraform/craft-test/` (root module + `secrets.auto.tfvars`, gitignored) and
 `deployment/helm/values-craft-test.yaml` are the throwaway test instance used to validate the above.
 Lean sizing: `cache.t4g.micro` Redis, `db.t4g.small` Postgres, `m7i.xlarge` main (desired 3),
 single-node `t3.medium.search` OpenSearch, `m5.large` sandbox node, single NAT gateway.
 
-**Validated:** snapshot create → main Onyx FileStore S3 bucket (`sandbox-snapshots/{tenant}/{sandbox}/{id}.tar.gz`,
+**Historical old-runtime result:** snapshot create → main Onyx FileStore S3 bucket (`sandbox-snapshots/{tenant}/{sandbox}/{id}.tar.gz`,
 source only — node_modules regenerated on revive) and restore-on-revive, both via API server/Celery
 FileStore access; cross-replica opencode-serve session reuse (3 api replicas); chart-rendered RBAC +
 terraform sandbox node group replacing all manual steps (Validation A); full from-scratch apply+install

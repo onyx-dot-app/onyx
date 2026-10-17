@@ -39,6 +39,8 @@ Each sandbox node must provide:
 - Linux with KVM exposed at `/dev/kvm`.
 - A Kata Containers install that registers a Firecracker RuntimeClass named
   exactly `kata-fc`.
+- Paired Firecracker and jailer `v1.17.0` binaries, installed and verified with
+  `deployment/firecracker/install-pinned-firecracker.sh`.
 - containerd configured for the Kata Firecracker runtime.
 - containerd with the devmapper snapshotter built in and storage sized for Craft workspaces.
 - A Linux guest kernel 6.9 or later for safe preview process-group cleanup.
@@ -47,8 +49,49 @@ Each sandbox node must provide:
 Firecracker itself requires KVM access. Kata's Kubernetes installation guide
 documents the supported RuntimeClass flow. Kubernetes only selects a runtime
 handler from `runtimeClassName`; it does not prove that Firecracker booted.
-Use a supported Firecracker release and check its host and guest kernel policy.
-The CI bundle is a test pin, not a production version policy.
+The production node contract requires Firecracker and jailer `v1.17.0`.
+Check the applicable host and guest kernel policy before deployment.
+
+### Install and verify the production binary pin
+
+Install Kata first. Prefer installing the pin during the production node-image
+build. Snapshot live Craft sessions with the current release before draining
+an existing node. Drain Craft traffic and stop all Kata VMs before
+installation. Do not replace binaries while VMs are running.
+
+Keep this release's helper available on each node. From the release checkout,
+run these commands during the image build or on the drained node:
+
+```bash
+sudo bash deployment/firecracker/install-pinned-firecracker.sh install
+sudo bash deployment/firecracker/install-pinned-firecracker.sh verify
+```
+
+The helper defaults to `/opt/kata/bin`. Confirm that the `kata-fc` handler's
+Kata configuration uses `/opt/kata/bin/firecracker` and `/opt/kata/bin/jailer`.
+The helper verifies architecture-specific archive checksums, both binary
+versions, and installed bytes against the verified archive.
+
+Before admitting Craft traffic, run `verify` on each deployed node. Start a real
+`kata-fc` smoke pod on that node and keep the VM running during this check:
+
+```bash
+sudo bash deployment/firecracker/install-pinned-firecracker.sh verify-live-process
+```
+
+Require a successful live executable checksum check on each node. Compare the
+guest's `/proc/sys/kernel/random/boot_id` with the node's
+`.status.nodeInfo.bootID`. Require both IDs to be present and distinct.
+Repeat `verify` and the live smoke checks after node replacement or Kata updates.
+
+Terraform and Helm do not install or verify KVM, Kata, devmapper, or this binary
+pin. The RuntimeClass name alone proves none of these prerequisites. The
+disposable `deployment/helm/dev/firecracker-ci.sh` setup is not a production
+node installer.
+
+These checks establish binary identity and a separate VM boot. They are
+necessary but do not qualify Craft. Run the Craft integration and browser
+acceptance checks before production promotion.
 
 ## Helm contract
 

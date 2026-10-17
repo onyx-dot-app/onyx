@@ -237,6 +237,10 @@ old provisioners with a new template or relabel an old pod into compatibility.
 
 - **RuntimeClass is exact.** `kata-fc` is the only supported value. Do not allow
    alternate classes or silently run Craft on `runc`.
+- **Production binary pin is mandatory.** Nodes require paired Firecracker and
+   jailer `v1.17.0`, verified with `deployment/firecracker/install-pinned-firecracker.sh`.
+   Require per-node live executable checks and distinct guest and node boot IDs.
+   See `docs/craft/infra/firecracker.md` for the full node prerequisites.
 - **RuntimeClass is not proof.** Verify the pod boots and serves real Craft
    traffic before claiming Firecracker coverage.
 - **Helm launcher and exec prerequisites are checked.** Enabled Craft requires
