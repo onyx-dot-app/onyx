@@ -143,7 +143,7 @@ beforeEach(() => {
       return json([{ id: 1, name: "Engineering", users: [] }]);
     if (path === "/api/auth/type")
       return json({ auth_type: "basic", oauth_enabled: false });
-    if (path === "/api/admin/mcp/probe/stream") {
+    if (path === "/api/admin/mcp/probe") {
       const payload: unknown = JSON.parse(String(init?.body));
       if (
         !payload ||

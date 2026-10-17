@@ -137,6 +137,31 @@ function MockEnvironment({
             ...tool,
             permissions: scenario.tools === "read-only" ? {} : tool.permissions,
           }));
+    const probeResult = (): MCPSetupProbeResult => {
+      if (scenario.probe === "unreachable")
+        return { kind: "unreachable", reason: "connection_failed" };
+      if (scenario.probe === "blocked")
+        return { kind: "unreachable", reason: "blocked" };
+      if (scenario.probe === "auth_unknown")
+        return { kind: "auth_unknown", transport: null };
+      if (scenario.probe === "public")
+        return {
+          kind: "public",
+          transport: MCPTransportType.STREAMABLE_HTTP,
+          server_name: "Analytics MCP",
+          tool_count: 3,
+        };
+      return {
+        kind: "oauth",
+        transport: null,
+        discovery: {
+          status: "metadata_found",
+          supports_automatic_registration: scenario.discovery !== "unsupported",
+          authorization_endpoint: "https://identity.example.com/authorize",
+          token_endpoint: "https://identity.example.com/token",
+        },
+      };
+    };
     const mockFetch: typeof fetch = async (input, init) => {
       const path = new URL(
         input instanceof Request ? input.url : String(input),
@@ -223,7 +248,7 @@ function MockEnvironment({
           return json({ detail: "Saved settings could not be loaded." }, 503);
         return json(savedServer);
       }
-      if (path === "/api/admin/mcp/probe/stream") {
+      if (path === "/api/admin/mcp/probe") {
         return new Response(
           new ReadableStream({
             async start(controller) {
@@ -241,8 +266,7 @@ function MockEnvironment({
                 state: "pending",
               });
               if (scenario.probe === "checking") return;
-              const response = await mockFetch("/api/admin/mcp/probe", init);
-              const result: MCPSetupProbeResult = await response.json();
+              const result = probeResult();
               if (result.kind === "unreachable") {
                 send({
                   type: "progress",
@@ -274,33 +298,6 @@ function MockEnvironment({
             },
           })
         );
-      }
-      if (path === "/api/admin/mcp/probe") {
-        if (scenario.probe === "checking") return pendingResponse();
-        if (scenario.probe === "unreachable")
-          return json({ kind: "unreachable", reason: "connection_failed" });
-        if (scenario.probe === "blocked")
-          return json({ kind: "unreachable", reason: "blocked" });
-        if (scenario.probe === "auth_unknown")
-          return json({ kind: "auth_unknown", transport: null });
-        if (scenario.probe === "public")
-          return json({
-            kind: "public",
-            transport: MCPTransportType.STREAMABLE_HTTP,
-            server_name: "Analytics MCP",
-            tool_count: 3,
-          });
-        return json({
-          kind: "oauth",
-          transport: null,
-          discovery: {
-            status: "metadata_found",
-            supports_automatic_registration:
-              scenario.discovery !== "unsupported",
-            authorization_endpoint: "https://identity.example.com/authorize",
-            token_endpoint: "https://identity.example.com/token",
-          },
-        });
       }
       if (path === "/api/admin/mcp/oauth/discover") {
         probes += 1;

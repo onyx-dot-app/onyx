@@ -8,7 +8,7 @@ export async function mockPublicMcpProbe(page: Page): Promise<void> {
     tool_count: 0,
     server_name: "Test MCP server",
   };
-  await page.route("**/api/admin/mcp/probe/stream", async (route) => {
+  await page.route("**/api/admin/mcp/probe", async (route) => {
     await route.fulfill({
       contentType: "application/x-ndjson",
       body: `${JSON.stringify({ type: "result", result })}\n`,

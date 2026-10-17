@@ -190,7 +190,7 @@ function PluginsStory({ scenario }: PluginsStoryProps) {
               )
         );
       }
-      if (url.pathname === "/api/admin/mcp/probe/stream")
+      if (url.pathname === "/api/admin/mcp/probe")
         return new Response(
           JSON.stringify({
             type: "result",
