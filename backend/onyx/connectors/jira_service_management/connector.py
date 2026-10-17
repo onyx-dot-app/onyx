@@ -2,6 +2,8 @@ import io
 import json
 from typing import Any, ClassVar, Protocol
 
+from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     JIRA_CONNECTOR_LABELS_TO_SKIP,
@@ -154,6 +156,27 @@ class JiraServiceManagementConnector(JiraConnector):
         # eligibility is deterministic across workers and the permission upsert
         # must not create missing attachment rows.
         self._failed_attachment_doc_ids: dict[str, set[str]] = {}
+
+    def _get_project_permissions(
+        self, project_key: str, add_prefix: bool = False
+    ) -> ExternalAccess | None:
+        """Use the JSM namespace for groups in full-index ACLs.
+
+        The Jira permission resolver returns unprefixed source group names.
+        The later permission-sync upsert also prefixes names with the current
+        DocumentSource, so full indexing must do exactly the same for JSM.
+        """
+        access = super()._get_project_permissions(project_key, add_prefix=False)
+        if access is None or not add_prefix:
+            return access
+        return ExternalAccess(
+            external_user_emails=set(access.external_user_emails),
+            external_user_group_ids={
+                build_ext_group_name_for_onyx(group_id, self.document_source)
+                for group_id in access.external_user_group_ids
+            },
+            is_public=access.is_public,
+        )
 
     @property
     def jsm_field_map(self) -> JsmFieldMap:
