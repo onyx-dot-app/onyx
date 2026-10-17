@@ -361,6 +361,7 @@ export default function ActivityPanel({
               gap={1}
               height="fit"
             >
+              {/* The chart's span sits with the other filters, inside the row that wraps instead of overflowing. */}
               <Section
                 flexDirection="row"
                 justifyContent="start"

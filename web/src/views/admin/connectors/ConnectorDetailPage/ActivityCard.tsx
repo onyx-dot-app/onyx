@@ -390,24 +390,39 @@ export default function ActivityCard({
                   </Popover>
                 )}
                 {listsDocs ? (
-                  <Popover onOpenChange={togglePopover("items")}>
-                    <Popover.Trigger asChild>
-                      <Tag
-                        icon={WARNING_ICONS.indexing}
-                        iconColor={pillIconColor}
-                        title={docsLabel}
-                        size="md"
-                        onClick={NOOP}
+                  <>
+                    <Popover onOpenChange={togglePopover("items")}>
+                      <Popover.Trigger asChild>
+                        <Tag
+                          icon={WARNING_ICONS.indexing}
+                          iconColor={pillIconColor}
+                          title={docsLabel}
+                          size="md"
+                          onClick={NOOP}
+                        />
+                      </Popover.Trigger>
+                      <FailedDocsPopoverContent
+                        ccPairId={ccPairId}
+                        indexAttemptId={run.attempt.id}
+                        canResolve={resolvable}
+                        onResolve={onResolve}
+                        resolving={resolving}
                       />
-                    </Popover.Trigger>
-                    <FailedDocsPopoverContent
-                      ccPairId={ccPairId}
-                      indexAttemptId={run.attempt.id}
-                      canResolve={resolvable}
-                      onResolve={onResolve}
-                      resolving={resolving}
-                    />
-                  </Popover>
+                    </Popover>
+                    {/* One click re-indexes every open failed document, without opening the list. */}
+                    {resolvable && !closed && (
+                      <Button
+                        rightIcon={SvgCheckAll}
+                        prominence="tertiary"
+                        size="xs"
+                        disabled={resolving}
+                        tooltip={t("docs.resolveAllTooltip")}
+                        onClick={() => onResolve(null)}
+                      >
+                        {t("docs.resolveAll")}
+                      </Button>
+                    )}
+                  </>
                 ) : run.kind === "checks" && listsChecks ? (
                   <Popover onOpenChange={togglePopover("items")}>
                     <Popover.Trigger asChild>

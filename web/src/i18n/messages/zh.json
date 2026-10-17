@@ -2470,6 +2470,7 @@
           "running": "运行中",
           "rate": "{rate} 文档/分钟",
           "finished": "{time}（{minutes, number} 分钟）",
+          "rateFinished": "{rate} 文档/分钟（{minutes, number} 分钟）",
           "membershipRate": "{rate} 成员关系/分钟"
         },
         "actions": {
@@ -2669,6 +2670,7 @@
             "placeholder": "搜索文档…"
           },
           "resolveAll": "全部解决",
+          "resolveAllTooltip": "重新索引此运行中所有失败的文档",
           "resolveOne": "解决此文档",
           "more": "更多",
           "less": "收起",

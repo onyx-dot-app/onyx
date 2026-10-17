@@ -2470,6 +2470,7 @@
           "running": "Läuft",
           "rate": "{rate} Dok./Min.",
           "finished": "{time} ({minutes, number} Min.)",
+          "rateFinished": "{rate} Dok./Min. ({minutes, number} Min.)",
           "membershipRate": "{rate} Mitgliedschaften/Min."
         },
         "actions": {
@@ -2669,6 +2670,7 @@
             "placeholder": "Dokumente durchsuchen…"
           },
           "resolveAll": "Alle beheben",
+          "resolveAllTooltip": "Alle fehlgeschlagenen Dokumente dieses Laufs neu indexieren",
           "resolveOne": "Dieses Dokument beheben",
           "more": "Mehr",
           "less": "Weniger",

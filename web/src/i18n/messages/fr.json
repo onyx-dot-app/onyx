@@ -2470,6 +2470,7 @@
           "running": "En cours",
           "rate": "{rate} docs/min",
           "finished": "{time} ({minutes, number} min)",
+          "rateFinished": "{rate} docs/min ({minutes, number} min)",
           "membershipRate": "{rate} adhésions/min"
         },
         "actions": {
@@ -2669,6 +2670,7 @@
             "placeholder": "Rechercher des documents…"
           },
           "resolveAll": "Tout résoudre",
+          "resolveAllTooltip": "Réindexer tous les documents en échec de cette exécution",
           "resolveOne": "Résoudre ce document",
           "more": "Plus",
           "less": "Moins",

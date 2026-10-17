@@ -2470,6 +2470,7 @@
           "running": "実行中",
           "rate": "{rate} 件/分",
           "finished": "{time}（{minutes, number} 分）",
+          "rateFinished": "{rate} 件/分（{minutes, number} 分）",
           "membershipRate": "{rate} メンバーシップ/分"
         },
         "actions": {
@@ -2669,6 +2670,7 @@
             "placeholder": "ドキュメントを検索…"
           },
           "resolveAll": "すべて解決",
+          "resolveAllTooltip": "この実行で失敗したすべてのドキュメントを再インデックス",
           "resolveOne": "このドキュメントを解決",
           "more": "さらに表示",
           "less": "折りたたむ",

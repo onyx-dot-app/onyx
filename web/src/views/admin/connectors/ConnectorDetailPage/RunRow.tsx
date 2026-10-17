@@ -133,17 +133,28 @@ export function finishedAt(run: CCPairRun): string | null {
   return run.attempt.time_finished;
 }
 
-/** Whole minutes from the run's start to its end, or `null` before either. */
-export function runMinutes(run: CCPairRun): number | null {
+/** Minutes from the run's start to its end, fractional, or `null` before either. */
+function runDurationMinutes(run: CCPairRun): number | null {
   const finished = finishedAt(run);
   const started = run.attempt.time_started;
   if (finished === null || started === null) return null;
-  return Math.max(
-    0,
-    Math.round(
-      (new Date(finished).getTime() - new Date(started).getTime()) / 60_000
-    )
-  );
+  return (new Date(finished).getTime() - new Date(started).getTime()) / 60_000;
+}
+
+/** Whole minutes from the run's start to its end, or `null` before either. */
+export function runMinutes(run: CCPairRun): number | null {
+  const minutes = runDurationMinutes(run);
+  return minutes === null ? null : Math.max(0, Math.round(minutes));
+}
+
+/** Documents a finished index run indexed per minute of its run, or `null` while it goes on or when it indexed none. */
+function finishedIndexRate(run: CCPairRun): number | null {
+  if (run.kind !== "indexing" || run.attempt.total_docs_indexed === 0) {
+    return null;
+  }
+  const minutes = runDurationMinutes(run);
+  if (minutes === null || minutes <= 0) return null;
+  return run.attempt.total_docs_indexed / minutes;
 }
 
 /** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
@@ -299,24 +310,10 @@ interface RunFiguresProps {
 function RunFigures({ run }: RunFiguresProps) {
   const t = useTranslations("admin.connector.runs");
   switch (run.kind) {
+    // The figure already says how many were removed, and the warning pill carries the failures.
     case "pruning":
       return (
-        <>
-          <Figure
-            value={run.attempt.docs_removed}
-            label={t("figures.removed")}
-          />
-          <CountsRow>
-            <Count
-              icon={SvgFileMinus}
-              look="plain"
-              value={run.attempt.docs_removed}
-              tooltip={t("counts.removedDocs", {
-                count: run.attempt.docs_removed,
-              })}
-            />
-          </CountsRow>
-        </>
+        <Figure value={run.attempt.docs_removed} label={t("figures.removed")} />
       );
     case "checks": {
       const attempt = run.attempt;
@@ -450,7 +447,15 @@ export default function RunRow({
   const failed = run.attempt.status === "failed";
   const canceled = run.attempt.status === "canceled";
 
-  // Queued, then the live rate, then when it finished and how long it took.
+  const finished = finishedAt(run);
+  // A finished index run shows its rate and keeps its finish time in the tooltip.
+  const finishedRate = finishedIndexRate(run);
+  const finishedTime =
+    finishedRate === null || finished === null
+      ? undefined
+      : formatDateTimeLog(finished);
+
+  // Queued, then the live rate, then the rate or the time it finished at, and how long it took.
   function detail(): string {
     if (run.attempt.status === "not_started") return t("detail.queued");
     if (run.kind === "indexing" && active) {
@@ -468,10 +473,15 @@ export default function RunRow({
         );
       }
     }
-    const finished = finishedAt(run);
     if (finished === null) return t("detail.running");
     const minutes = runMinutes(run);
     if (minutes === null) return formatDateTimeLog(finished);
+    if (finishedRate !== null) {
+      return t("detail.rateFinished", {
+        rate: format.number(finishedRate, RATE_FORMAT),
+        minutes,
+      });
+    }
     return t("detail.finished", {
       time: formatDateTimeLog(finished),
       minutes,
@@ -584,9 +594,11 @@ export default function RunRow({
                     />
                   )}
                 </Section>
-                <Text font="secondary-body" color="text-03">
-                  {detail()}
-                </Text>
+                <Tooltip tooltip={finishedTime} side="top">
+                  <Text font="secondary-body" color="text-03">
+                    {detail()}
+                  </Text>
+                </Tooltip>
               </Section>
 
               <Section

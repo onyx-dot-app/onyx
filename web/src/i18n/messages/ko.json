@@ -2470,6 +2470,7 @@
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
           "finished": "{time} ({minutes, number}분)",
+          "rateFinished": "분당 {rate}개 문서 ({minutes, number}분)",
           "membershipRate": "{rate} 멤버십/분"
         },
         "actions": {
@@ -2669,6 +2670,7 @@
             "placeholder": "문서 검색…"
           },
           "resolveAll": "모두 해결",
+          "resolveAllTooltip": "이 실행에서 실패한 모든 문서를 다시 색인",
           "resolveOne": "이 문서 해결",
           "more": "더 보기",
           "less": "접기",

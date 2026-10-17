@@ -2470,6 +2470,7 @@
           "running": "قيد التشغيل",
           "rate": "{rate} مستند/دقيقة",
           "finished": "{time} ({minutes, number} دقيقة)",
+          "rateFinished": "{rate} مستند/دقيقة ({minutes, number} دقيقة)",
           "membershipRate": "{rate} عضوية/دقيقة"
         },
         "actions": {
@@ -2669,6 +2670,7 @@
             "placeholder": "ابحث في المستندات…"
           },
           "resolveAll": "حل الكل",
+          "resolveAllTooltip": "إعادة فهرسة كل المستندات الفاشلة في هذا التشغيل",
           "resolveOne": "حل هذا المستند",
           "more": "المزيد",
           "less": "أقل",
