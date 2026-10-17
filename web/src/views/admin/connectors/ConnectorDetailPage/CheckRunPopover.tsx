@@ -18,6 +18,10 @@ import {
 } from "@/lib/connectors/checks/hooks";
 import { CheckLineGroups } from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 import { checkCount } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
+import {
+  PLACEMENT_PROPS,
+  type PopoverPlacement,
+} from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 
 /** Opens the results of one check run. Place it inside the Popover that holds the content. */
 export interface CheckRunTriggerProps {
@@ -42,14 +46,14 @@ export function CheckRunTrigger({ open = false }: CheckRunTriggerProps) {
 
 export interface CheckRunPopoverContentProps {
   run: CheckRunSnapshot;
-  /** Opens beside a small trigger, such as an activity card's tag, instead of under a row-wide anchor. */
-  beside?: boolean;
+  /** Opens beside or below a card from a small trigger, such as an activity card's tag; unset, under a row-wide anchor. */
+  placement?: PopoverPlacement;
 }
 
 /** The checks of one run grouped by outcome. Under a row it is as wide as the caller's Popover.Anchor. */
 export default function CheckRunPopoverContent({
   run,
-  beside = false,
+  placement,
 }: CheckRunPopoverContentProps) {
   const t = useTranslations("admin.connector.runs.checkResults");
   const tChecks = useTranslations("admin.connectorChecks");
@@ -77,10 +81,10 @@ export default function CheckRunPopoverContent({
 
   return (
     <Popover.Content
-      width={beside ? "3xl" : "trigger"}
-      side={beside ? "left" : undefined}
-      align="start"
-      sideOffset={beside ? undefined : -8}
+      width={placement === undefined ? "trigger" : "3xl"}
+      {...(placement === undefined
+        ? { align: "start", sideOffset: -8 }
+        : PLACEMENT_PROPS[placement])}
       aria-label={t("title")}
     >
       <Section

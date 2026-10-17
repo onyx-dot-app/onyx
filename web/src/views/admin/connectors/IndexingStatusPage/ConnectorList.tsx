@@ -98,9 +98,14 @@ function FederatedRow({ connector }: FederatedRowProps) {
 export interface ConnectorListProps {
   /** Opens the activity history on one connector's runs. */
   onViewLogs: (row: IndexingConnectorRow) => void;
+  /** Called when a connector's popover opens or closes, so the page can step back around the list. */
+  onFocusChange?: (focused: boolean) => void;
 }
 
-export default function ConnectorList({ onViewLogs }: ConnectorListProps) {
+export default function ConnectorList({
+  onViewLogs,
+  onFocusChange,
+}: ConnectorListProps) {
   const t = useTranslations("admin.indexing.list");
   const tBadges = useTranslations("admin.status.badges");
   const format = useFormatter();
@@ -109,7 +114,7 @@ export default function ConnectorList({ onViewLogs }: ConnectorListProps) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   // A connector's open popover steps the other connectors back.
-  const focus = useFocusedRow<number>();
+  const focus = useFocusedRow<number>(onFocusChange);
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<number>>(
     () => new Set()
   );

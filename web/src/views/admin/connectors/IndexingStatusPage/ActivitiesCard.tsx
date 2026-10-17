@@ -152,6 +152,7 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
                   resolving={resolving}
                   onResolve={(errorIds) => void resolve(item, errorIds)}
                   onResolveRun={() => void resolveRun(item)}
+                  popoverPlacement="below"
                 />
               ))}
             </Section>
@@ -162,6 +163,7 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
           title={t("history")}
           foldable
           chevronPosition="start"
+          foldedChevron="down"
           open={false}
           onOpenChange={onOpenHistory}
         />

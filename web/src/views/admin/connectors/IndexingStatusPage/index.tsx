@@ -16,6 +16,7 @@ import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/Activity
 import ActivitiesCard from "@/views/admin/connectors/IndexingStatusPage/ActivitiesCard";
 import ConnectorList from "@/views/admin/connectors/IndexingStatusPage/ConnectorList";
 import OverviewCard from "@/views/admin/connectors/IndexingStatusPage/OverviewCard";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const route = ADMIN_ROUTES.INDEXING_STATUS;
@@ -60,6 +61,8 @@ export default function IndexingStatusPage() {
   const historyOpen = history !== null;
   // A picked span of the chart narrows the fleet's history, which opens to show it.
   const [range, setRange] = useState<SliceRange | null>(null);
+  // A connector's open popover steps the overview and the Activities card back with the other connectors.
+  const [listFocused, setListFocused] = useState(false);
 
   useToastFromQuery({
     "connector-created": {
@@ -93,6 +96,7 @@ export default function IndexingStatusPage() {
               gap={2}
               height="fit"
               wrap
+              className={focusDimClass(listFocused)}
             >
               <Section
                 alignItems="stretch"
@@ -124,6 +128,7 @@ export default function IndexingStatusPage() {
                 setHistory(row);
                 setRange(null);
               }}
+              onFocusChange={setListFocused}
             />
           </Section>
           {/* Stacked on a narrow screen, the history keeps the Activities card's place above the list. */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -36,6 +36,7 @@ import { formatDateTimeLog } from "@/lib/dateUtils";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
+import type { PopoverPlacement } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 import {
   RUN_KIND_ICONS,
   isActive,
@@ -159,6 +160,8 @@ export interface ActivityCardProps {
   onResolveRun: () => void;
   /** A resolve is in flight, so the resolve actions wait for it. */
   resolving: boolean;
+  /** Where a pill's popover opens: beside the card, or below it with its end at the card's end. Default: beside. */
+  popoverPlacement?: PopoverPlacement;
 }
 
 /** One run in an activity list: when, which kind, how it stands in its group, its trace and failed documents. */
@@ -173,8 +176,15 @@ export default function ActivityCard({
   onResolve,
   onResolveRun,
   resolving,
+  popoverPlacement = "beside",
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
+  // A popover below the card hangs from the card, not from its pill.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const anchor = popoverPlacement === "below" && (
+    // SAFETY: Radix reads the ref in an effect, after the card has mounted.
+    <Popover.Anchor virtualRef={cardRef as React.RefObject<HTMLDivElement>} />
+  );
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [openPopover, setOpenPopover] = useState<"trace" | "items" | null>(
@@ -268,6 +278,7 @@ export default function ActivityCard({
         rounding={2}
         padding={1}
         shadow={selected ? "md" : "none"}
+        ref={cardRef}
       >
         <Section alignItems="stretch" gap={0} height="fit">
           <Section
@@ -375,6 +386,7 @@ export default function ActivityCard({
               >
                 {trace !== null && (
                   <Popover onOpenChange={togglePopover("trace")}>
+                    {anchor}
                     <Popover.Trigger asChild>
                       <Tag
                         icon={SvgTextLines}
@@ -386,12 +398,14 @@ export default function ActivityCard({
                     <StackTracePopoverContent
                       runId={run.attempt.id}
                       trace={trace}
+                      placement={popoverPlacement}
                     />
                   </Popover>
                 )}
                 {listsDocs ? (
                   <>
                     <Popover onOpenChange={togglePopover("items")}>
+                      {anchor}
                       <Popover.Trigger asChild>
                         <Tag
                           icon={WARNING_ICONS.indexing}
@@ -407,6 +421,7 @@ export default function ActivityCard({
                         canResolve={resolvable}
                         onResolve={onResolve}
                         resolving={resolving}
+                        placement={popoverPlacement}
                       />
                     </Popover>
                     {/* One click re-indexes every open failed document, without opening the list. */}
@@ -425,6 +440,7 @@ export default function ActivityCard({
                   </>
                 ) : run.kind === "checks" && listsChecks ? (
                   <Popover onOpenChange={togglePopover("items")}>
+                    {anchor}
                     <Popover.Trigger asChild>
                       <Tag
                         icon={WARNING_ICONS.checks}
@@ -434,7 +450,10 @@ export default function ActivityCard({
                         onClick={NOOP}
                       />
                     </Popover.Trigger>
-                    <CheckRunPopoverContent run={run.attempt} beside />
+                    <CheckRunPopoverContent
+                      run={run.attempt}
+                      placement={popoverPlacement}
+                    />
                   </Popover>
                 ) : (
                   warnings > 0 && (
