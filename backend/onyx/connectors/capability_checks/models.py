@@ -180,10 +180,17 @@ class CapabilityCheckStatus(str, Enum):
     # The check needs state (connector instance or config) that was not
     # supplied.
     SKIPPED = "skipped"
+    # A required check the admin skipped on a form: it did not run, and it
+    # holds Create. Only draft runs and pair dry runs hold it.
+    STOPPED = "stopped"
 
 
 INCOMPLETE_STATUSES: frozenset[CapabilityCheckStatus] = frozenset(
     {CapabilityCheckStatus.INCOMPLETE, CapabilityCheckStatus.INDETERMINATE}
+)
+# Statuses of a check that did not run. Neither is a pass.
+NOT_RUN_STATUSES: frozenset[CapabilityCheckStatus] = frozenset(
+    {CapabilityCheckStatus.SKIPPED, CapabilityCheckStatus.STOPPED}
 )
 
 
@@ -379,7 +386,8 @@ class CheckRowText(BaseModel):
 
 
 class CheckNotRunReason(str, Enum):
-    """Why a SKIPPED check did not run, when a gate of the run stopped it."""
+    """Why a SKIPPED or STOPPED check did not run: a gate of the run, or the
+    admin."""
 
     # A check it depends on FAILED.
     DEPENDENCY_FAILED = "dependency_failed"
@@ -392,6 +400,15 @@ class CheckNotRunReason(str, Enum):
     RATE_LIMITED = "rate_limited"
     # The check found nothing in scope to test (``NothingToCheckError``).
     NOTHING_IN_SCOPE = "nothing_in_scope"
+    # The admin skipped the check on a form: an optional check is SKIPPED, a
+    # required one STOPPED.
+    SKIPPED_BY_USER = "skipped_by_user"
+    STOPPED_BY_USER = "stopped_by_user"
+
+
+USER_NOT_RUN_REASONS: frozenset[CheckNotRunReason] = frozenset(
+    {CheckNotRunReason.SKIPPED_BY_USER, CheckNotRunReason.STOPPED_BY_USER}
+)
 
 
 # Kinds that leave the check INCOMPLETE: they prove nothing about the
@@ -777,10 +794,10 @@ def aggregate_capability_verdict(
 
     Pure function, evaluated in strict precedence order. Required checks gate
     the verdict: a required FAILED is FAILED, and a required INCOMPLETE or
-    SKIPPED leaves the capability's core unverified, so no pass-ish claim may be
-    made. Non-required failures and incomplete checks only downgrade to
-    PASSED_WITH_WARNINGS (partial capability); non-required skips do not
-    downgrade at all. Checks that do not apply are left out. An empty result
+    SKIPPED (or STOPPED) leaves the capability's core unverified, so no
+    pass-ish claim may be made. Non-required failures and incomplete checks
+    only downgrade to PASSED_WITH_WARNINGS (partial capability); non-required
+    skips do not downgrade at all. Checks that do not apply are left out. An empty result
     list aggregates to SKIPPED: a capability is never PASSED on the basis of
     having checked nothing.
     """
@@ -798,10 +815,7 @@ def aggregate_capability_verdict(
         result.status in INCOMPLETE_STATUSES and result.required for result in results
     ):
         return CapabilityVerdict.INDETERMINATE
-    if any(
-        result.status == CapabilityCheckStatus.SKIPPED and result.required
-        for result in results
-    ):
+    if any(result.status in NOT_RUN_STATUSES and result.required for result in results):
         return CapabilityVerdict.SKIPPED
     if any(
         result.status == CapabilityCheckStatus.FAILED
@@ -809,7 +823,7 @@ def aggregate_capability_verdict(
         for result in results
     ):
         return CapabilityVerdict.PASSED_WITH_WARNINGS
-    if all(result.status == CapabilityCheckStatus.SKIPPED for result in results):
+    if all(result.status in NOT_RUN_STATUSES for result in results):
         return CapabilityVerdict.SKIPPED
     return CapabilityVerdict.PASSED
 
