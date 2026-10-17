@@ -87,6 +87,8 @@ export const NAV_ITEM_IDS: Record<
   CRAFT_PREFERENCES: "craftPreferences",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
+  PLUGINS: null,
+  PLUGINS_EXTERNAL_APP: null,
   MCP_ACTIONS: "mcpActions",
   OPENAPI_ACTIONS: "openapiActions",
   INDEXING_STATUS: "indexingStatus",

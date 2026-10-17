@@ -222,7 +222,7 @@ export const ADMIN_ROUTES = {
     path: "/admin/plugins",
     icon: SvgPlug,
     title: "Plugins",
-    sidebarLabel: "Plugins",
+    sidebarLabel: "",
     requiredPermission: Permission.MANAGE_ACTIONS,
     section: "Agents & Actions",
     requiredTier: null,
