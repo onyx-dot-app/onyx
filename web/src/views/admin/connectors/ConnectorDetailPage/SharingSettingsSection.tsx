@@ -119,17 +119,12 @@ export default function SharingSettingsSection({
     errorHandlingFetcher
   );
   const manageKnown = !businessTier || manageRows !== undefined;
+  // The data-access tiles count from the groups list; the manage rows carry their own counts.
   const memberCountOf = (groupId: number): string | undefined => {
     const group = userGroups?.find((candidate) => candidate.id === groupId);
     return group === undefined
       ? undefined
       : tGroups("memberCount", { count: group.users.length });
-  };
-  const managerCountOf = (groupId: number): string | undefined => {
-    const group = userGroups?.find((candidate) => candidate.id === groupId);
-    return group === undefined
-      ? undefined
-      : tGroups("managerCount", { count: group.manager_ids.length });
   };
   const isDefaultGroup = (groupId: number): boolean =>
     userGroups?.find((candidate) => candidate.id === groupId)?.is_default ??
@@ -192,7 +187,7 @@ export default function SharingSettingsSection({
       : fixedRows.map((row) => ({
           id: `fixed-${row.group_id}`,
           name: row.group_name,
-          description: memberCountOf(row.group_id),
+          description: tGroups("memberCount", { count: row.member_count }),
           avatar: isDefaultGroup(row.group_id) ? null : SvgUserManage,
           role: row.role,
           fixed: true,
@@ -200,7 +195,7 @@ export default function SharingSettingsSection({
     ...storedRows.map((row) => ({
       id: `group-${row.group_id}`,
       name: row.group_name,
-      description: managerCountOf(row.group_id),
+      description: tGroups("managerCount", { count: row.manager_count }),
       avatar: SvgUsers,
       role: row.role,
       fixed: false,

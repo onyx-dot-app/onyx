@@ -110,6 +110,9 @@ export interface CCPairManageAccessRow {
   role: ConnectorManageRole;
   /** Granted by a global connector-management grant: not stored, cannot be removed. */
   is_fixed: boolean;
+  /** The group's size, for the row's description. */
+  member_count: number;
+  manager_count: number;
 }
 
 /** Mirrors `PendingBackfillSnapshot` in `backend/onyx/server/documents/models.py`. */
