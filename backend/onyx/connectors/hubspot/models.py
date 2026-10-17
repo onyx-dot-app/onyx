@@ -21,6 +21,8 @@ class HubSpotObjectSpec(BaseModel):
 class HubSpotPage(BaseModel, Generic[_ItemT]):
     items: list[_ItemT]
     next_after: str | None = None
+    # The match count a search reports. None for other listings.
+    total: int | None = None
 
 
 class HubSpotAssociationIds(BaseModel):
@@ -84,6 +86,8 @@ class ApiRecord(BaseModel):
 class ApiRecordPage(BaseModel):
     results: list[ApiRecord]
     paging: ApiPaging | None = None
+    # Sent by the Search API only.
+    total: int | None = None
 
 
 class ApiAssociation(BaseModel):
