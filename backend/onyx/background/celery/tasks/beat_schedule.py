@@ -9,6 +9,7 @@ from onyx.configs.app_configs import (
     DISABLE_TELEMETRY,
     DISABLE_VECTOR_DB,
     SCHEDULED_EVAL_DATASET_NAMES,
+    TABULAR_RECHUNK_ENABLED,
 )
 from onyx.configs.constants import (
     ONYX_CLOUD_CELERY_TASK_PREFIX,
@@ -31,6 +32,10 @@ from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, MULTI_TENAN
 # we set expires because it isn't necessary to queue up these tasks
 # it's only important that they run relatively regularly
 BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
+
+# Under the re-chunk interval: the tick resumes from a stored cursor, so one
+# that waited longer than that has no value.
+TABULAR_RECHUNK_EXPIRES = 4 * 60  # 4 minutes (in seconds)
 
 # hack to slow down task dispatch in the cloud until
 # we have a better implementation (backpressure, etc)
@@ -391,18 +396,23 @@ beat_task_templates.append(
     }
 )
 
-beat_task_templates.append(
-    {
-        "name": "tabular-rechunk",
-        "task": OnyxCeleryTask.TABULAR_RECHUNK_TASK,
-        "schedule": timedelta(minutes=5),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.DOCPROCESSING,
-        },
-    }
-)
+# Gated here as well as in the task body, which would still cost one message
+# per tenant every 5 minutes.
+if TABULAR_RECHUNK_ENABLED:
+    beat_task_templates.append(
+        {
+            "name": "tabular-rechunk",
+            "task": OnyxCeleryTask.TABULAR_RECHUNK_TASK,
+            "schedule": timedelta(minutes=5),
+            "options": {
+                # Level with a first-time index. The pool has no preemption, so
+                # a lower tier is starved while a crawl keeps the queue busy.
+                "priority": OnyxCeleryPriority.HIGH,
+                "expires": TABULAR_RECHUNK_EXPIRES,
+                "queue": OnyxCeleryQueues.DOCPROCESSING,
+            },
+        }
+    )
 # Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "tabular-rechunk",
