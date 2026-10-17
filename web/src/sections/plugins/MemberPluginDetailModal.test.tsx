@@ -155,6 +155,46 @@ test("MCP header reports needs sign-in when credentials are missing", () => {
   expect(screen.queryByText("Connected")).not.toBeInTheDocument();
 });
 
+test("Craft app details show the clean service origin once beside connection status without admin data", () => {
+  const requests = jest
+    .spyOn(global, "fetch")
+    .mockResolvedValue(jsonResponse({ builtins: [], customs: [] }));
+  show({
+    kind: "external-app",
+    app: memberApp({
+      name: "Linear",
+      app_type: "LINEAR",
+      service_urls: ["https://api.linear.app"],
+    }),
+    connection: { kind: "connected", ownership: "user" },
+  });
+  expect(screen.getAllByText("https://api.linear.app")).toHaveLength(1);
+  expect(screen.getByRole("status")).toHaveTextContent("Connected");
+  expect(screen.queryByText(/\\\.|\^https|\.\*/)).not.toBeInTheDocument();
+  expect(
+    requests.mock.calls.every(([input]) => !String(input).includes("/admin"))
+  ).toBe(true);
+});
+
+test.each([undefined, []])(
+  "Craft app details omit missing service URLs (%s)",
+  (service_urls) => {
+    const requests = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(jsonResponse({ builtins: [], customs: [] }));
+    show({
+      kind: "external-app",
+      app: memberApp({ name: "Linear", app_type: "LINEAR", service_urls }),
+      connection: { kind: "connected", ownership: "user" },
+    });
+    expect(screen.queryByText(/https?:\/\//)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Connected");
+    expect(
+      requests.mock.calls.every(([input]) => !String(input).includes("/admin"))
+    ).toBe(true);
+  }
+);
+
 test("Craft App details share the header status and searchable Skills tab without admin data", async () => {
   const skill = builtinFixture({
     name: "GitHub workflow",

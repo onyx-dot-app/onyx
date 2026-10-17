@@ -20,6 +20,7 @@ import {
   getActionIcon,
 } from "@/lib/tools/utils";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
+import { externalAppDisplayUrl } from "@/lib/plugins/externalAppDisplayUrl";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import useUserSkills from "@/hooks/useUserSkills";
 import { useSettings } from "@/lib/settings/hooks";
@@ -159,14 +160,16 @@ export default function MemberPluginDetailModal({
     ? schemaServers[0]
     : undefined;
   const serverUrl =
-    plugin.kind === "mcp"
-      ? plugin.server.server_url
-      : typeof schemaServer === "object" &&
-          schemaServer !== null &&
-          "url" in schemaServer &&
-          typeof schemaServer.url === "string"
-        ? schemaServer.url
-        : undefined;
+    plugin.kind === "external-app"
+      ? externalAppDisplayUrl(plugin.app.service_urls ?? [])
+      : plugin.kind === "mcp"
+        ? plugin.server.server_url
+        : typeof schemaServer === "object" &&
+            schemaServer !== null &&
+            "url" in schemaServer &&
+            typeof schemaServer.url === "string"
+          ? schemaServer.url
+          : undefined;
   const endpoints =
     plugin.kind === "openapi"
       ? extractMethodSpecsFromDefinition(plugin.tool.definition)

@@ -94,6 +94,8 @@ The Tools tab uses a searchable read-only list. Tool names and descriptions are
 searchable; compact rows match the admin list's main-ui typography, padding, and
 border treatment. Descriptions expand through the shared Fold without truncation.
 The server URL appears once in the modal header, not in a second metadata row.
+Craft App details use that row for safe service origins from the member `service_urls` response.
+Missing origins omit the URL. Member details never fetch admin app records or show URL patterns.
 MCP connection status appears beside that URL: green when connected, orange when
 sign-in is needed, and gray for unavailable states. The Connection tab has no
 duplicate status row; personal account disconnect remains a separate action.
