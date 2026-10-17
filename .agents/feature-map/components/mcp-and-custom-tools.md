@@ -68,6 +68,8 @@ absolute positioning or a placeholder spacer.
 Availability controls use workspace enable/disable wording. Disabling an OpenAPI
 plugin requires confirmation that it affects everyone, including custom agents,
 while preserving its settings and credentials.
+OpenAPI indicators and lifecycle actions follow global `Tool.enabled`,
+independently of default Chat attachments.
 Member OAuth opens a normal new tab, without popup sizing or window features.
 The correlated callback still closes the sign-in tab and refreshes the original page.
 Its completion screen uses a bounded, centered card with return and close-tab
