@@ -118,7 +118,6 @@ from onyx.server.features.mcp.models import (
     MCPServersResponse,
     MCPServerUpdateResponse,
     MCPSetupProbeRequest,
-    MCPSetupProbeResult,
     MCPToolCreateRequest,
     MCPToolListResponse,
     MCPToolUpdateRequest,
@@ -148,7 +147,7 @@ from onyx.server.features.mcp.oauth_flow import (
     start_known_provider_oauth_flow,
     validate_mcp_oauth_flow_configuration,
 )
-from onyx.server.features.mcp.setup_probe import probe_mcp_server, stream_mcp_probe
+from onyx.server.features.mcp.setup_probe import stream_mcp_probe
 from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.utils.encryption import (
@@ -640,16 +639,6 @@ def test_mcp_server_credentials(
 
 
 @admin_router.post("/probe")
-async def probe_admin_mcp_server(
-    request: MCPSetupProbeRequest,
-    _user: User = Depends(
-        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
-    ),
-) -> MCPSetupProbeResult:
-    return await probe_mcp_server(request.server_url)
-
-
-@admin_router.post("/probe/stream")
 async def stream_admin_mcp_probe(
     request: MCPSetupProbeRequest,
     _user: User = Depends(
@@ -674,7 +663,7 @@ async def discover_admin_oauth(
     ),
 ) -> MCPOAuthDiscoveryResponse:
     server_url = await run_in_threadpool(
-        _get_authorized_discovery_url, request.server_id, user
+        lambda: _get_authorized_discovery_url(request.server_id, user)
     )
     return await discover_oauth_capabilities(server_url)
 

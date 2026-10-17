@@ -358,9 +358,8 @@ def test_protected_sse_message_endpoint_uses_its_oauth_challenge(
 
 
 @pytest.mark.parametrize("authorized", [True, False])
-@pytest.mark.parametrize("path", ["/admin/mcp/probe", "/admin/mcp/probe/stream"])
 def test_probe_route_checks_permission_before_network(
-    monkeypatch: pytest.MonkeyPatch, authorized: bool, path: str
+    monkeypatch: pytest.MonkeyPatch, authorized: bool
 ) -> None:
     from unittest.mock import AsyncMock
 
@@ -381,7 +380,7 @@ def test_probe_route_checks_permission_before_network(
     route = next(
         route
         for route in api.admin_router.routes
-        if isinstance(route, APIRoute) and route.path == path
+        if isinstance(route, APIRoute) and route.path == "/admin/mcp/probe"
     )
     dependency = route.dependant.dependencies[0].call
     assert dependency is not None
@@ -392,11 +391,10 @@ def test_probe_route_checks_permission_before_network(
 
     app.dependency_overrides[dependency] = permission
     probe = AsyncMock(return_value=setup_probe.MCPUnknownAuthProbeResult())
-    monkeypatch.setattr(api, "probe_mcp_server", probe)
     monkeypatch.setattr(setup_probe, "probe_mcp_server", probe)
     with TestClient(app) as test_client:
         response = test_client.post(
-            path, json={"server_url": "https://mcp.example/mcp"}
+            "/admin/mcp/probe", json={"server_url": "https://mcp.example/mcp"}
         )
     assert response.status_code == (200 if authorized else 403)
     if authorized:
@@ -404,17 +402,14 @@ def test_probe_route_checks_permission_before_network(
         awaited = probe.await_args
         assert awaited is not None
         assert awaited.args[0] == "https://mcp.example/mcp"
-        if path.endswith("/stream"):
-            assert response.headers["X-Accel-Buffering"] == "no"
-            assert response.headers["Cache-Control"] == "no-cache, no-transform"
-            events = [json.loads(line) for line in response.text.splitlines()]
-            assert events == [
-                {
-                    "type": "result",
-                    "result": {"kind": "auth_unknown", "transport": None},
-                }
-            ]
-        else:
-            assert response.json() == {"kind": "auth_unknown", "transport": None}
+        assert response.headers["X-Accel-Buffering"] == "no"
+        assert response.headers["Cache-Control"] == "no-cache, no-transform"
+        events = [json.loads(line) for line in response.text.splitlines()]
+        assert events == [
+            {
+                "type": "result",
+                "result": {"kind": "auth_unknown", "transport": None},
+            }
+        ]
     else:
         probe.assert_not_called()
