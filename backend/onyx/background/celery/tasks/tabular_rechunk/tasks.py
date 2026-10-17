@@ -87,6 +87,10 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
         task_logger.info("tabular re-chunk: not running, %s", blocked)
         return None
 
+    # Before the lock, so a finished migration costs one cached read per tick.
+    if load_progress().completed:
+        return None
+
     lock = get_cache_backend().lock(
         OnyxRedisLocks.TABULAR_RECHUNK_LOCK, timeout=_LOCK_TIMEOUT_S
     )
