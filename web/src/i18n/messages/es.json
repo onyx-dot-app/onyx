@@ -1123,6 +1123,7 @@
         "disconnect": "Activar o desactivar para el espacio de trabajo",
         "enable": "Activar para el espacio de trabajo",
         "disable": "Desactivar para el espacio de trabajo",
+        "manageAvailability": "Gestionar la disponibilidad del espacio de trabajo",
         "more": "Más acciones",
         "disableChat": "Desactivar en el chat principal",
         "enableChat": "Activar en el chat principal",

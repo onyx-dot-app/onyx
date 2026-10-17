@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
-import { SvgPlug, SvgTrash, SvgUnplug } from "@opal/icons";
+import { SvgSlidersSmall, SvgTrash, SvgUnplug } from "@opal/icons";
 import { toast, ConfirmationModalLayout } from "@opal/layouts";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/app/craft/services/externalAppsService";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { PluginLifecycleMenuProps } from "@/sections/plugins/PluginLifecycleMenu";
+import { workspaceAvailabilityLabel } from "@/sections/plugins/workspaceAvailability";
 
 export default function ExternalAppLifecycleMenu({
   app,
@@ -23,6 +24,9 @@ export default function ExternalAppLifecycleMenu({
 }) {
   const t = useTranslations("admin.externalApps");
   const tp = useTranslations("actions.plugins");
+  const availabilityLabel = tp(
+    `controls.${workspaceAvailabilityLabel({ kind: "external-app", app }, false)}`
+  );
   const { mutate } = useSWRConfig();
   const [confirm, setConfirm] = useState(false);
   const [open, setOpen] = useState(false);
@@ -69,15 +73,15 @@ export default function ExternalAppLifecycleMenu({
         <Dropdown open={open} onOpenChange={setOpen} align="end">
           <Dropdown.Trigger asChild>
             <Button
-              icon={SvgPlug}
+              icon={SvgSlidersSmall}
               size="sm"
               prominence="tertiary"
               disabled={pending}
-              aria-label={tp("controls.disconnect")}
-              tooltip={tp("controls.disconnect")}
+              aria-label={availabilityLabel}
+              tooltip={availabilityLabel}
             />
           </Dropdown.Trigger>
-          <Dropdown.Data label={tp("controls.disconnect")} items={items} />
+          <Dropdown.Data label={availabilityLabel} items={items} />
         </Dropdown>
         {!app.is_onyx_managed ? (
           <Button

@@ -75,7 +75,9 @@ export const NoLifecycleControls: Story = {
     });
     await expect(
       page.queryByRole("button", {
-        name: messages.actions.plugins.controls.disconnect,
+        name: new RegExp(
+          `${messages.actions.plugins.controls.enable}|${messages.actions.plugins.controls.disable}|${messages.actions.plugins.controls.manageAvailability}`
+        ),
       })
     ).not.toBeInTheDocument();
     await expect(

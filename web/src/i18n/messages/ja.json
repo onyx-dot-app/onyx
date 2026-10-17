@@ -1123,6 +1123,7 @@
         "disconnect": "ワークスペースで有効化または無効化",
         "enable": "ワークスペースで有効化",
         "disable": "ワークスペースで無効化",
+        "manageAvailability": "ワークスペースでの利用可否を管理",
         "more": "その他の操作",
         "disableChat": "メインチャットで無効にする",
         "enableChat": "メインチャットで有効にする",

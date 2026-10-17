@@ -14,7 +14,7 @@ import {
   type DropdownMenuItem,
 } from "@opal/components";
 import { toast } from "@opal/layouts";
-import { SvgPlug, SvgTrash, SvgUnplug } from "@opal/icons";
+import { SvgSlidersSmall, SvgTrash, SvgUnplug } from "@opal/icons";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { deleteMCPServer, updateMCPServer } from "@/lib/mcp/svc";
@@ -25,14 +25,15 @@ import { can } from "@/lib/permissions/resource-actions";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import type { InstalledPlugin } from "@/lib/plugins/types";
-import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { deleteCustomTool, updateToolStatus } from "@/lib/tools/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import ExternalAppLifecycleMenu from "@/sections/plugins/ExternalAppLifecycleMenu";
+import { workspaceAvailabilityLabel } from "@/sections/plugins/workspaceAvailability";
 
 export interface PluginLifecycleMenuProps {
   plugin: InstalledPlugin;
+  craftAvailable?: boolean;
   renderStatus?: (controls: {
     onOpen?: () => void;
     disabled: boolean;
@@ -43,6 +44,7 @@ export interface PluginLifecycleMenuProps {
 export default function PluginLifecycleMenu({
   plugin,
   renderStatus,
+  craftAvailable = false,
 }: PluginLifecycleMenuProps) {
   const t = useTranslations("actions");
   const [activation, setActivation] = useState<
@@ -58,6 +60,9 @@ export default function PluginLifecycleMenu({
       renderStatus?.({ disabled: false, expanded: false })
     );
   const resource = plugin.kind === "mcp" ? plugin.server : plugin.tool;
+  const availabilityLabel = t(
+    `plugins.controls.${workspaceAvailabilityLabel(plugin, craftAvailable)}`
+  );
   const hasAvailability =
     plugin.kind === "openapi"
       ? can(plugin.tool, "toggle")
@@ -68,6 +73,7 @@ export default function PluginLifecycleMenu({
         plugin={plugin}
         initialAction={activation}
         renderStatus={renderStatus}
+        craftAvailable={craftAvailable}
       />
     );
   return (
@@ -83,9 +89,9 @@ export default function PluginLifecycleMenu({
         <Button
           size="sm"
           prominence="tertiary"
-          icon={SvgPlug}
-          aria-label={t("plugins.controls.disconnect")}
-          tooltip={t("plugins.controls.disconnect")}
+          icon={SvgSlidersSmall}
+          aria-label={availabilityLabel}
+          tooltip={availabilityLabel}
           aria-haspopup="menu"
           onClick={() => setActivation("availability")}
         />
@@ -112,15 +118,19 @@ function ActivePluginLifecycleMenu({
   plugin,
   initialAction,
   renderStatus,
+  craftAvailable,
 }: {
   plugin: Exclude<InstalledPlugin, { kind: "external-app" }>;
   initialAction: "availability" | "delete";
   renderStatus?: PluginLifecycleMenuProps["renderStatus"];
+  craftAvailable: boolean;
 }) {
   const t = useTranslations("actions");
   const router = useRouter();
   const { mutate } = useSWRConfig();
-  const settings = useSettings();
+  const availabilityLabel = t(
+    `plugins.controls.${workspaceAvailabilityLabel(plugin, craftAvailable)}`
+  );
   const defaultChat = useDefaultAssistantConfiguration();
   const [open, setOpen] = useState(initialAction === "availability");
   const [confirmation, setConfirmation] = useState<
@@ -298,7 +308,7 @@ function ActivePluginLifecycleMenu({
           );
         },
       });
-    if (settings.onyx_craft_available && can(server, "edit"))
+    if (craftAvailable && can(server, "edit"))
       items.push({
         kind: "action",
         id: "craft",
@@ -406,16 +416,13 @@ function ActivePluginLifecycleMenu({
               <Button
                 size="sm"
                 prominence="tertiary"
-                icon={SvgPlug}
-                aria-label={t("plugins.controls.disconnect")}
-                tooltip={t("plugins.controls.disconnect")}
+                icon={SvgSlidersSmall}
+                aria-label={availabilityLabel}
+                tooltip={availabilityLabel}
                 disabled={busy}
               />
             </Dropdown.Trigger>
-            <Dropdown.Data
-              label={t("plugins.controls.disconnect")}
-              items={items}
-            />
+            <Dropdown.Data label={availabilityLabel} items={items} />
           </Dropdown>
         ) : (
           <span className="size-6 shrink-0" />

@@ -1123,6 +1123,7 @@
         "disconnect": "워크스페이스에서 활성화 또는 비활성화",
         "enable": "워크스페이스에서 활성화",
         "disable": "워크스페이스에서 비활성화",
+        "manageAvailability": "워크스페이스 가용성 관리",
         "more": "추가 작업",
         "disableChat": "기본 채팅에서 비활성화",
         "enableChat": "기본 채팅에서 활성화",

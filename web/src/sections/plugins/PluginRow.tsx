@@ -26,15 +26,15 @@ function PluginAvailability({
   onOpen,
   disabled,
   expanded,
+  craftAvailable,
 }: PluginRowProps & {
   onOpen?: () => void;
   disabled: boolean;
   expanded: boolean;
+  craftAvailable: boolean;
 }) {
   const t = useTranslations("actions.plugins.availability");
   const craftDescriptionId = useId();
-  const settings = useSettings();
-  const craftAvailable = settings.onyx_craft_available === true;
   const enabled =
     plugin.kind === "external-app"
       ? plugin.app.enabled
@@ -158,6 +158,8 @@ function PluginAvailability({
 
 export function PluginRow({ plugin }: PluginRowProps) {
   const t = useTranslations("actions.plugins");
+  const settings = useSettings();
+  const craftAvailable = settings.onyx_craft_available === true;
   const resource =
     plugin.kind === "mcp"
       ? plugin.server
@@ -206,8 +208,13 @@ export function PluginRow({ plugin }: PluginRowProps) {
           </Link>
           <PluginLifecycleMenu
             plugin={plugin}
+            craftAvailable={craftAvailable}
             renderStatus={(controls) => (
-              <PluginAvailability plugin={plugin} {...controls} />
+              <PluginAvailability
+                plugin={plugin}
+                craftAvailable={craftAvailable}
+                {...controls}
+              />
             )}
           />
         </div>

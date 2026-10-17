@@ -745,7 +745,9 @@ Workspace lifecycle actions preserve unrelated default-assistant tool selections
 `useDefaultAssistantConfiguration`. Scoped managers retain status-only controls.
 MCP default Chat availability comes from tool attachments, independently of credentials.
 Custom-agent attachments survive changes to default Chat availability.
-Availability controls say enable or disable for the workspace, independently of account connections.
+Availability controls use a sliders icon and follow workspace state independently of account connections.
+They say Disable when all available surfaces are on, Enable when off, and Manage for mixed or unknown MCP states.
+MCP labels ignore Craft when the deployment does not offer it. OpenAPI and Craft apps use global status.
 OpenAPI disable requires confirmation before changing status for everyone, including custom agents.
 OpenAPI workspace controls follow global tool status, independently of default Chat attachments.
 The confirmation retains saved settings and credentials. Cancellation makes no changes; failed writes permit retry.

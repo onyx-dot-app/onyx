@@ -1123,6 +1123,7 @@
         "disconnect": "Enable or disable for workspace",
         "enable": "Enable for workspace",
         "disable": "Disable for workspace",
+        "manageAvailability": "Manage workspace availability",
         "more": "More actions",
         "disableChat": "Disable for main Chat",
         "enableChat": "Enable for main Chat",

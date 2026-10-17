@@ -119,19 +119,152 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+test.each([
+  {
+    chat: true,
+    craft: true,
+    craftAvailable: true,
+    label: "Disable for workspace",
+  },
+  {
+    chat: false,
+    craft: false,
+    craftAvailable: true,
+    label: "Enable for workspace",
+  },
+  {
+    chat: true,
+    craft: false,
+    craftAvailable: true,
+    label: "Manage workspace availability",
+  },
+  {
+    chat: false,
+    craft: true,
+    craftAvailable: true,
+    label: "Manage workspace availability",
+  },
+  {
+    chat: undefined,
+    craft: true,
+    craftAvailable: true,
+    label: "Manage workspace availability",
+  },
+  {
+    chat: true,
+    craft: undefined,
+    craftAvailable: true,
+    label: "Manage workspace availability",
+  },
+  {
+    chat: null,
+    craft: false,
+    craftAvailable: true,
+    label: "Manage workspace availability",
+  },
+  {
+    chat: false,
+    craft: undefined,
+    craftAvailable: true,
+    label: "Manage workspace availability",
+  },
+  {
+    chat: true,
+    craft: false,
+    craftAvailable: false,
+    label: "Disable for workspace",
+  },
+  {
+    chat: false,
+    craft: true,
+    craftAvailable: false,
+    label: "Enable for workspace",
+  },
+  {
+    chat: undefined,
+    craft: true,
+    craftAvailable: false,
+    label: "Manage workspace availability",
+  },
+])(
+  "MCP availability label follows chat=$chat, craft=$craft, Craft available=$craftAvailable",
+  async ({ chat, craft, craftAvailable, label }) => {
+    render(
+      <PluginLifecycleMenu
+        craftAvailable={craftAvailable}
+        plugin={{
+          kind: "mcp",
+          server: {
+            ...server,
+            default_chat_enabled: chat,
+            available_in_craft: craft,
+          },
+        }}
+      />
+    );
+    const trigger = screen.getByRole("button", { name: label });
+    expect(reads).toEqual([]);
+    await setupUser().click(trigger);
+    expect(await screen.findByRole("button", { name: label })).toBeVisible();
+    expect(writes).toEqual([]);
+  }
+);
+
+test.each([true, false])(
+  "OpenAPI availability label uses its global enabled=%s state",
+  async (enabled) => {
+    defaultToolIds = [99];
+    render(
+      <PluginLifecycleMenu
+        plugin={{ kind: "openapi", tool: { ...tool, enabled } }}
+      />
+    );
+    const label = enabled ? "Disable for workspace" : "Enable for workspace";
+    await setupUser().click(screen.getByRole("button", { name: label }));
+    expect(await screen.findByRole("button", { name: label })).toBeVisible();
+    expect(writes).toEqual([]);
+  }
+);
+
+test.each([true, false])(
+  "Craft app availability label uses its global enabled=%s state",
+  async (enabled) => {
+    render(
+      <PluginLifecycleMenu
+        plugin={{ kind: "external-app", app: { ...app, enabled } }}
+      />
+    );
+    const label = enabled ? "Disable for workspace" : "Enable for workspace";
+    await setupUser().click(screen.getByRole("button", { name: label }));
+    expect(screen.getByRole("button", { name: label })).toBeVisible();
+    expect(writes).toEqual([]);
+  }
+);
+
 test("does not fetch configuration or tools until the menu opens", () => {
-  render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "mcp", server }} />
+  );
   expect(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   ).toBeInTheDocument();
   expect(reads).toEqual([]);
 });
 
 test("external availability writes only Craft enabled and never loads main Chat configuration", async () => {
-  render(<PluginLifecycleMenu plugin={{ kind: "external-app", app }} />);
+  render(
+    <PluginLifecycleMenu
+      craftAvailable
+      plugin={{ kind: "external-app", app }}
+    />
+  );
   const user = setupUser();
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   await user.click(screen.getByRole("menuitem", { name: "Disable for Craft" }));
   await waitFor(() =>
@@ -147,11 +280,14 @@ test("external availability writes only Craft enabled and never loads main Chat 
 test("managed external apps expose availability but cannot be deleted", async () => {
   render(
     <PluginLifecycleMenu
+      craftAvailable
       plugin={{ kind: "external-app", app: { ...app, is_onyx_managed: true } }}
     />
   );
   await setupUser().click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   expect(
     screen.queryByRole("button", { name: "Delete" })
@@ -160,9 +296,16 @@ test("managed external apps expose availability but cannot be deleted", async ()
 
 test("non-full admins cannot open external app lifecycle controls", () => {
   mockFullAdmin = false;
-  render(<PluginLifecycleMenu plugin={{ kind: "external-app", app }} />);
+  render(
+    <PluginLifecycleMenu
+      craftAvailable
+      plugin={{ kind: "external-app", app }}
+    />
+  );
   expect(
-    screen.queryByRole("button", { name: "Enable or disable for workspace" })
+    screen.queryByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   ).not.toBeInTheDocument();
   expect(reads).toEqual([]);
 });
@@ -170,6 +313,7 @@ test("non-full admins cannot open external app lifecycle controls", () => {
 test("deletes an external app only after confirmation", async () => {
   render(
     <PluginLifecycleMenu
+      craftAvailable
       plugin={{
         kind: "external-app",
         app: {
@@ -206,9 +350,13 @@ test("deletes an external app only after confirmation", async () => {
 
 test("disables an OpenAPI action for the workspace only after confirmation", async () => {
   const user = setupUser();
-  render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
+  );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   await user.click(
     await screen.findByRole("menuitem", { name: /Disable for workspace/ })
@@ -236,9 +384,13 @@ test.each([true, false])(
   async (fullAdmin) => {
     mockFullAdmin = fullAdmin;
     const user = setupUser();
-    render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
+    render(
+      <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
+    );
     await user.click(
-      screen.getByRole("button", { name: "Enable or disable for workspace" })
+      screen.getByRole("button", {
+        name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+      })
     );
     await user.click(
       await screen.findByRole("menuitem", { name: /Disable for workspace/ })
@@ -256,9 +408,13 @@ test.each([true, false])(
 test("failed OpenAPI workspace disable stays open for retry", async () => {
   failDisable = true;
   const user = setupUser();
-  render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
+  );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   await user.click(
     await screen.findByRole("menuitem", { name: /Disable for workspace/ })
@@ -295,11 +451,14 @@ test("enables a disabled OpenAPI action and attaches it to default Chat", async 
   const user = setupUser();
   render(
     <PluginLifecycleMenu
+      craftAvailable
       plugin={{ kind: "openapi", tool: { ...tool, enabled: false } }}
     />
   );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   await user.click(
     await screen.findByRole("menuitem", { name: /Enable for workspace/ })
@@ -319,9 +478,13 @@ test("enables a disabled OpenAPI action and attaches it to default Chat", async 
 test("an enabled OpenAPI action absent from default Chat still confirms workspace disable", async () => {
   defaultToolIds = [99];
   const user = setupUser();
-  render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
+  );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   const disable = await screen.findByRole("menuitem", {
     name: /Disable for workspace/,
@@ -344,11 +507,14 @@ test("scoped OpenAPI managers toggle status without changing default Chat", asyn
   const user = setupUser();
   render(
     <PluginLifecycleMenu
+      craftAvailable
       plugin={{ kind: "openapi", tool: { ...tool, enabled: false } }}
     />
   );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   await user.click(
     await screen.findByRole("menuitem", { name: /Enable for workspace/ })
@@ -365,7 +531,9 @@ test("scoped OpenAPI managers toggle status without changing default Chat", asyn
 test("confirms deletion from the directory and reports failures inline", async () => {
   failDelete = true;
   const user = setupUser();
-  render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
+  );
   await user.click(await screen.findByRole("button", { name: "Delete" }));
   expect(writes).toHaveLength(0);
   const dialog = await screen.findByRole("dialog");
@@ -385,7 +553,9 @@ test("confirms deletion from the directory and reports failures inline", async (
 
 test("MCP deletion warns that the server and tools are deleted for the organization", async () => {
   const user = setupUser();
-  render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "mcp", server }} />
+  );
   await user.click(screen.getByRole("button", { name: "Delete" }));
   const dialog = await screen.findByRole("dialog");
   expect(
@@ -401,9 +571,13 @@ test("MCP deletion warns that the server and tools are deleted for the organizat
 
 test("removes only this server's tool IDs from main Chat", async () => {
   const user = setupUser();
-  render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "mcp", server }} />
+  );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   const action = await screen.findByRole("menuitem", {
     name: /Disable.*main Chat/,
@@ -436,9 +610,13 @@ test("removes only this server's tool IDs from main Chat", async () => {
 test("scoped editors can change Craft but not main Chat", async () => {
   mockFullAdmin = false;
   const user = setupUser();
-  render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "mcp", server }} />
+  );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   expect(
     screen.queryByRole("menuitem", { name: /main Chat/ })
@@ -468,9 +646,13 @@ test.each(["main Chat", "Craft"])(
   "cancelling organization-wide %s disable makes no changes",
   async (surface) => {
     const user = setupUser();
-    render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
+    render(
+      <PluginLifecycleMenu craftAvailable plugin={{ kind: "mcp", server }} />
+    );
     await user.click(
-      screen.getByRole("button", { name: "Enable or disable for workspace" })
+      screen.getByRole("button", {
+        name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+      })
     );
     const action = await screen.findByRole("menuitem", {
       name: new RegExp(`Disable for ${surface}`),
@@ -492,9 +674,13 @@ test.each(["main Chat", "Craft"])(
 test("failed Craft disable stays open for retry", async () => {
   failDisable = true;
   const user = setupUser();
-  render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "mcp", server }} />
+  );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   await user.click(
     await screen.findByRole("menuitem", { name: /Disable for Craft/ })
@@ -527,11 +713,14 @@ test("enabling Craft stays immediate", async () => {
   const user = setupUser();
   render(
     <PluginLifecycleMenu
+      craftAvailable
       plugin={{ kind: "mcp", server: { ...server, available_in_craft: false } }}
     />
   );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   await user.click(
     await screen.findByRole("menuitem", { name: "Enable for Craft" })
@@ -551,6 +740,7 @@ test("opens authentication instead of disabling Enable for a server awaiting sig
   const user = setupUser();
   render(
     <PluginLifecycleMenu
+      craftAvailable
       plugin={{
         kind: "mcp",
         server: {
@@ -564,7 +754,9 @@ test("opens authentication instead of disabling Enable for a server awaiting sig
     />
   );
   await user.click(
-    screen.getByRole("button", { name: "Enable or disable for workspace" })
+    screen.getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   );
   const enable = await screen.findByRole("menuitem", {
     name: "Enable for main Chat",
@@ -581,11 +773,14 @@ test("hides controls when the resource grants no lifecycle permission", () => {
   mockFullAdmin = false;
   render(
     <PluginLifecycleMenu
+      craftAvailable
       plugin={{ kind: "openapi", tool: { ...tool, permissions: {} } }}
     />
   );
   expect(
-    screen.queryByRole("button", { name: "Enable or disable for workspace" })
+    screen.queryByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
   ).not.toBeInTheDocument();
   expect(reads).toEqual([]);
 });

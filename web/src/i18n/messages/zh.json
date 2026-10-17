@@ -1123,6 +1123,7 @@
         "disconnect": "为工作区启用或禁用",
         "enable": "为工作区启用",
         "disable": "为工作区禁用",
+        "manageAvailability": "管理工作区可用性",
         "more": "更多操作",
         "disableChat": "在主聊天中禁用",
         "enableChat": "在主聊天中启用",
