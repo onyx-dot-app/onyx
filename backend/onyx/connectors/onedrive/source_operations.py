@@ -13,6 +13,8 @@ from onyx.connectors.microsoft_utils.config import (
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     DriveDeltaFetchResult,
+    DriveDeltaIdentitySet,
+    DriveDeltaItem,
     build_onedrive_delta_request_headers,
     fetch_drive_delta_checkpoint_page,
 )
@@ -54,6 +56,7 @@ from onyx.connectors.onedrive.models import (
     OneDriveDrive,
     OneDrivePermission,
     OneDrivePermissionPage,
+    OneDrivePersonalDrive,
     OneDriveTokenInfo,
     OneDriveUser,
     OneDriveUserPage,
@@ -213,6 +216,58 @@ class OneDriveSourceOperations(SourceOperations):
         return OneDriveDrive(
             id=raw["id"], name=raw.get("name") or "OneDrive", web_url=raw.get("webUrl")
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Only targeted reindex reads a personal site's drive, from a "
+            "recorded document link; credential checks have no link."
+        ),
+    )
+    def get_personal_site_drive(
+        self, *, hostname: str, site_path: str
+    ) -> OneDrivePersonalDrive | None:
+        """None when no personal site has this path."""
+        try:
+            raw = self._get(
+                f"{self._base()}/sites/{quote(hostname, safe='')}:/"
+                f"{quote(site_path, safe='/')}:/drive",
+                {"$select": "id,name,webUrl,owner"},
+            )
+        except OneDriveGraphError as error:
+            if error.status == 404:
+                return None
+            raise
+        owner = DriveDeltaIdentitySet.model_validate(raw.get("owner") or {})
+        return OneDrivePersonalDrive(
+            drive=OneDriveDrive(
+                id=raw["id"],
+                name=raw.get("name") or "OneDrive",
+                web_url=raw.get("webUrl"),
+            ),
+            owner_id=owner.user.id if owner.user else None,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Item reads need a concrete item id unavailable to credential checks."
+        ),
+    )
+    def get_drive_item(self, *, drive_id: str, item_id: str) -> DriveDeltaItem | None:
+        """None when the item is not in this drive."""
+        try:
+            raw = self._get(
+                f"{self._base()}/drives/{drive_id}/items/{quote(item_id, safe='')}",
+                {"$select": DRIVE_DELTA_SELECT_FIELDS},
+            )
+        except OneDriveGraphError as error:
+            if error.status == 404:
+                return None
+            raise
+        return DriveDeltaItem.model_validate(raw)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
