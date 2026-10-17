@@ -442,6 +442,8 @@ under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. It
 permission reads are shared with Teams through `microsoft_utils/sharepoint_rest.py`.
 The GitHub gateway calls the REST API through PyGithub's requester and parses the
 JSON into the models in `github/models.py`, so no PyGithub object leaves it.
+Its `GitHubApiError` is a `SourceApiError` that carries the request and the
+response body, so a check's Error Details show them.
 
 ### 4.8 Capabilities and capability checks
 

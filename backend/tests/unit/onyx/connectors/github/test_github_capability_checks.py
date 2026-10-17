@@ -233,11 +233,14 @@ def test_scopes_warn_for_a_classic_token_without_repo() -> None:
     assert "read:org" in result.message
 
 
-def test_scopes_pass_for_a_fine_grained_token() -> None:
+def test_scopes_skip_a_fine_grained_token() -> None:
     gateway = _gateway()
     gateway.get_token_info.return_value = _FINE_GRAINED
 
-    assert _run("github_token_scopes", gateway).status == CapabilityCheckStatus.PASSED
+    result = _run("github_token_scopes", gateway)
+
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "Token has no scopes to read"
 
 
 # --- github_document_types ---
@@ -350,10 +353,11 @@ def test_configured_repositories_name_the_missing_scope() -> None:
         "github_configured_repositories", gateway, _config(repositories="a,secret")
     )
 
-    assert result.status == CapabilityCheckStatus.FAILED
-    assert "1 of 2" in result.message
-    assert "`acme/secret`: not found, or private" in result.message
-    assert "no `repo` scope" in result.message
+    # One of two found: the checks after it run on the found one.
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "1 of 2 repositories not found"
+    assert result.description is not None
+    assert "Not found: secret. Select the repo scope." in result.description
 
 
 def test_configured_repositories_name_fine_grained_repository_access() -> None:
@@ -465,14 +469,14 @@ def test_pull_requests_pass_when_the_repository_has_them_turned_off() -> None:
     assert _run("github_pull_requests", gateway).status == CapabilityCheckStatus.PASSED
 
 
-def test_pull_requests_are_incomplete_without_a_readable_repository() -> None:
+def test_pull_requests_skip_without_a_readable_repository() -> None:
     gateway = _gateway()
     gateway.list_organization_repositories.return_value = []
 
     result = _run("github_pull_requests", gateway)
 
-    assert result.status == CapabilityCheckStatus.INCOMPLETE
-    assert "github_repositories_visible" in result.message
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No repositories to test"
 
 
 def test_issues_read_the_first_issue_that_is_not_a_pull_request() -> None:
@@ -505,11 +509,14 @@ def test_files_read_one_indexable_file() -> None:
     )
 
 
-def test_files_pass_for_an_empty_repository() -> None:
+def test_files_are_incomplete_for_an_empty_repository() -> None:
     gateway = _gateway()
     gateway.get_git_tree.side_effect = _api_error(409, "Git Repository is empty.")
 
-    assert _run("github_files", gateway).status == CapabilityCheckStatus.PASSED
+    result = _run("github_files", gateway)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "No files found in acme/docs"
 
 
 def test_files_name_the_missing_fine_grained_permission() -> None:

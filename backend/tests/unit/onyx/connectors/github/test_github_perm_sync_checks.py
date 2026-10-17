@@ -132,22 +132,37 @@ def test_checks_do_not_apply_without_permission_sync() -> None:
 # --- github_repository_visibility ---
 
 
-def test_visibility_fails_for_an_internal_repository_without_an_organization() -> None:
+def test_visibility_is_incomplete_for_an_internal_repository_without_an_organization() -> (
+    None
+):
+    """GitHub should never send it, so the row asks for support."""
     user_owned = raw_repository(name="x", owner="octocat", visibility="internal")
     user_owned["owner"] = {"login": "octocat", "id": 7, "type": "User"}
     gateway = _gateway([GitHubRepository.from_raw(user_owned)])
 
     result = _run("github_repository_visibility", gateway)
 
-    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "Internal repos have no organization"
     assert "`octocat/x`" in result.message
 
 
-def test_visibility_is_incomplete_without_a_readable_repository() -> None:
+def test_visibility_counts_each_kind() -> None:
+    gateway = _gateway(
+        [_repo("docs", "private"), _repo("site", "public"), _repo("wiki", "public")]
+    )
+
+    result = _run("github_repository_visibility", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "1 private, 2 public, 0 internal"
+
+
+def test_visibility_skips_without_a_readable_repository() -> None:
     result = _run("github_repository_visibility", _gateway([]))
 
-    assert result.status == CapabilityCheckStatus.INCOMPLETE
-    assert "github_repositories_visible" in result.message
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No repositories to test"
 
 
 def test_visibility_is_incomplete_when_rate_limited() -> None:
@@ -167,23 +182,23 @@ def test_visibility_is_incomplete_when_rate_limited() -> None:
 def test_collaborators_are_read_for_the_first_private_repository() -> None:
     gateway = _gateway()
 
-    assert (
-        _run("github_repository_collaborators", gateway).status
-        == CapabilityCheckStatus.PASSED
-    )
-    # A probe reads at most six logins, not the whole group.
+    result = _run("github_repository_collaborators", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "1 collaborator in acme/docs"
+    # A probe reads one page of logins, not the whole group.
     gateway.list_repository_collaborators.assert_called_once_with(
-        repo_full_name="acme/docs", limit=6
+        repo_full_name="acme/docs", limit=100
     )
 
 
 def test_collaborators_are_not_read_without_a_private_repository() -> None:
     gateway = _gateway([_repo("site", "public"), _repo("handbook", "internal")])
 
-    assert (
-        _run("github_repository_collaborators", gateway).status
-        == CapabilityCheckStatus.PASSED
-    )
+    result = _run("github_repository_collaborators", gateway)
+
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No private repositories to test"
     gateway.list_repository_collaborators.assert_not_called()
 
 
@@ -212,16 +227,18 @@ def test_members_are_read_for_an_internal_repository() -> None:
         _run("github_organization_members", gateway).status
         == CapabilityCheckStatus.PASSED
     )
-    gateway.list_organization_members.assert_called_once_with(org_login="acme", limit=6)
+    gateway.list_organization_members.assert_called_once_with(
+        org_login="acme", limit=100
+    )
 
 
 def test_members_are_not_read_without_an_internal_repository() -> None:
     gateway = _gateway([_repo("docs", "private")])
 
-    assert (
-        _run("github_organization_members", gateway).status
-        == CapabilityCheckStatus.PASSED
-    )
+    result = _run("github_organization_members", gateway)
+
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No internal repositories to test"
     gateway.list_organization_members.assert_not_called()
 
 
@@ -327,10 +344,11 @@ def test_a_cut_sample_probes_the_owner_organization(check_id: str) -> None:
     gateway = _gateway([_repo(f"site{i}", "public") for i in range(21)])
 
     assert _run(check_id, gateway).status == CapabilityCheckStatus.PASSED
-    gateway.list_organization_members.assert_called_once_with(org_login="acme", limit=6)
+    gateway.list_organization_members.assert_called_once()
+    assert gateway.list_organization_members.call_args.kwargs["org_login"] == "acme"
 
 
-def test_group_checks_pass_when_every_repository_is_public() -> None:
+def test_group_checks_skip_when_every_repository_is_public() -> None:
     gateway = _gateway([_repo("site", "public")])
 
     for check_id in (
@@ -338,7 +356,7 @@ def test_group_checks_pass_when_every_repository_is_public() -> None:
         "github_organization_members",
         "github_user_emails",
     ):
-        assert _run(check_id, gateway).status == CapabilityCheckStatus.PASSED
+        assert _run(check_id, gateway).status == CapabilityCheckStatus.SKIPPED
 
 
 def test_twenty_public_repositories_are_a_complete_sample() -> None:
@@ -348,7 +366,7 @@ def test_twenty_public_repositories_are_a_complete_sample() -> None:
     gateway.get_token_info.return_value = _CLASSIC_WITHOUT_ORG
 
     for check_id in ("github_repository_collaborators", "github_organization_members"):
-        assert _run(check_id, gateway).status == CapabilityCheckStatus.PASSED
+        assert _run(check_id, gateway).status == CapabilityCheckStatus.SKIPPED
     gateway.list_organization_members.assert_not_called()
 
 
