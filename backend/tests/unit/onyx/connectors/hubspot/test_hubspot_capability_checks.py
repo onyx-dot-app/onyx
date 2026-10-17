@@ -25,7 +25,9 @@ from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import (
     CredentialInvalidError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
     UnexpectedValidationError,
 )
 from onyx.connectors.hubspot.capability_checks import (
@@ -36,6 +38,7 @@ from onyx.connectors.hubspot.config import HubSpotObjectType
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.hubspot.models import HubSpotPage, HubSpotRecord, HubSpotUser
 from onyx.connectors.hubspot.source_operations import (
+    USERS_PAGE_SIZE,
     HubSpotApiError,
     HubSpotSourceOperations,
 )
@@ -166,13 +169,35 @@ def test_a_read_check_applies_only_to_configured_types(
     assert applying == applies
 
 
-def test_an_optional_check_reports_a_refused_listing_as_incomplete() -> None:
-    """The read check already fails for the refused type, so the associations
-    check adds no second failed row."""
+def _deny_tickets(
+    variant: HubSpotObjectType, **_: object
+) -> HubSpotPage[HubSpotRecord]:
+    if variant == HubSpotObjectType.TICKETS:
+        raise _refusal("tickets listing", 403)
+    return HubSpotPage(items=[_record("1")])
+
+
+def test_an_optional_check_samples_past_a_denied_type() -> None:
+    """The read check already fails for the denied type, so the associations
+    check samples the next type instead of adding a second failed row."""
+    gateway: MagicMock = _gateway()
+    gateway.list_records.side_effect = _deny_tickets
+
+    _run("hubspot_associations", _context(gateway))
+
+    gateway.list_associations.assert_called_once_with(
+        object_type=HubSpotObjectType.COMPANIES,
+        object_id="1",
+        to_object_type="contacts",
+        limit=1,
+    )
+
+
+def test_an_optional_check_with_every_type_denied_is_inconclusive() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_records.side_effect = _refusal("tickets listing", 403)
 
-    with pytest.raises(UnexpectedValidationError, match="No record to probe"):
+    with pytest.raises(InconclusiveValidationError):
         _run("hubspot_associations", _context(gateway))
 
 
@@ -212,18 +237,20 @@ def test_an_empty_portal_has_nothing_to_probe(check_id: str) -> None:
     gateway: MagicMock = _gateway()
     gateway.list_records.return_value = HubSpotPage(items=[])
 
-    _run(check_id, _context(gateway))
+    with pytest.raises(NothingToCheckError):
+        _run(check_id, _context(gateway))
 
     assert gateway.list_records.call_count == len(HubSpotObjectType)
     gateway.list_associations.assert_not_called()
     gateway.get_record_viewers.assert_not_called()
 
 
-def test_a_record_without_notes_reads_none() -> None:
+def test_a_record_without_notes_is_inconclusive() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_associations.return_value = HubSpotPage(items=[])
 
-    _run("hubspot_notes", _context(gateway))
+    with pytest.raises(InconclusiveValidationError):
+        _run("hubspot_notes", _context(gateway))
 
     gateway.list_associations.assert_called_once_with(
         object_type=HubSpotObjectType.TICKETS,
@@ -245,7 +272,7 @@ def test_perm_sync_validation_probes_viewers_on_the_configured_types() -> None:
 
     validate_perm_sync(_connector(gateway))
 
-    gateway.list_users.assert_called_once_with(limit=1)
+    gateway.list_users.assert_called_once_with(limit=USERS_PAGE_SIZE)
     gateway.get_record_viewers.assert_called_once_with(
         portal_id="46399533",
         object_type=HubSpotObjectType.DEALS,
@@ -259,3 +286,12 @@ def test_perm_sync_validation_fails_on_a_missing_users_scope() -> None:
 
     with pytest.raises(InsufficientPermissionsError, match="settings.users.read"):
         validate_perm_sync(_connector(gateway))
+
+
+def test_perm_sync_validation_passes_on_an_empty_portal() -> None:
+    gateway: MagicMock = _gateway()
+    gateway.list_records.return_value = HubSpotPage(items=[])
+
+    validate_perm_sync(_connector(gateway))
+
+    gateway.get_record_viewers.assert_not_called()
