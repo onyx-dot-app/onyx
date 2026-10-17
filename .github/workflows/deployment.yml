@@ -594,7 +594,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -676,7 +676,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -744,7 +744,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -849,7 +849,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -941,7 +941,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -1019,7 +1019,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -1111,7 +1111,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -1207,7 +1207,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -1288,7 +1288,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -1405,7 +1405,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
         with:
           buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
@@ -1491,7 +1491,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
         with:
           buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
@@ -1562,7 +1562,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -1736,7 +1736,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -1809,7 +1809,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
@@ -1868,7 +1868,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
