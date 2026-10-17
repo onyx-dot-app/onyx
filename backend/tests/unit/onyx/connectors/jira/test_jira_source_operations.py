@@ -53,6 +53,34 @@ def _gateway(
     return gateway
 
 
+def test_service_desk_comments_use_public_filter_and_escape_issue_key() -> None:
+    client = _mock_jira_client()
+    page = {"values": [{"public": True, "body": "Customer reply"}], "isLastPage": True}
+    client._get_json.return_value = page
+
+    result = _gateway(client).get_request_comments(
+        issue_key="SUP-1/child", start=50, limit=50
+    )
+
+    assert result == page
+    client._get_json.assert_called_once_with(
+        path="request/SUP-1%2Fchild/comment",
+        params={"public": True, "start": 50, "limit": 50},
+        base="{server}/rest/servicedeskapi/{path}",
+    )
+
+
+def test_service_desk_comment_error_keeps_http_status_for_fallback() -> None:
+    client = _mock_jira_client()
+    client._get_json.side_effect = JIRAError(status_code=404, text="Not found")
+
+    with pytest.raises(JiraApiError) as raised:
+        _gateway(client).get_request_comments(issue_key="SUP-1", start=0, limit=50)
+
+    assert raised.value.status_code == 404
+    assert raised.value.text == "Not found"
+
+
 def test_bulk_fetch_success() -> None:
     """Happy path: all issues fetched in one request."""
     client = _mock_jira_client()

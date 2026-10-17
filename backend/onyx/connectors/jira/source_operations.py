@@ -13,6 +13,7 @@ import contextlib
 import threading
 from collections.abc import Iterator, Mapping
 from typing import Any
+from urllib.parse import quote
 
 import requests
 from jira import JIRA
@@ -223,6 +224,22 @@ class JiraSourceOperations(SourceOperations):
         exist or the credential cannot browse it."""
         with _translate_errors():
             return self._client().project(project_key).raw
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+        untested="The JSM comment endpoint requires a known service-desk request; connector tests cover this operation.",
+    )
+    def get_request_comments(
+        self, *, issue_key: str, start: int, limit: int
+    ) -> dict[str, Any]:
+        """Read one public-comment page through the shared Jira gateway."""
+        with _translate_errors():
+            return self._client()._get_json(
+                path=f"request/{quote(issue_key, safe='')}/comment",
+                params={"public": True, "start": start, "limit": limit},
+                base="{server}/rest/servicedeskapi/{path}",
+            )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

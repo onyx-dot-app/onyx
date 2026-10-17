@@ -39,6 +39,38 @@ def test_new_family_credential_is_stored_in_the_family_shape() -> None:
     )
 
 
+@pytest.mark.parametrize("email", ["user@example.com", ""])
+def test_jsm_credential_shares_jira_family_and_round_trips(email: str) -> None:
+    source_json = {"jira_user_email": email, "jira_api_token": "token"}
+    stored = to_stored_credential_json(
+        DocumentSource.JIRA_SERVICE_MANAGEMENT, source_json, None
+    )
+    expected = {"jira_api_token": "token"}
+    if email:
+        expected["jira_user_email"] = email
+
+    assert (
+        to_source_credential_json(DocumentSource.JIRA_SERVICE_MANAGEMENT, stored)
+        == expected
+    )
+    assert to_source_credential_json(DocumentSource.JIRA, stored) == expected
+    assert is_credential_usable_for_source(
+        DocumentSource.JIRA, stored, DocumentSource.JIRA_SERVICE_MANAGEMENT
+    )
+
+
+def test_jsm_refuses_confluence_oauth_credentials() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.CONFLUENCE, _CONFLUENCE_OAUTH_JSON, None
+    )
+
+    assert not is_credential_usable_for_source(
+        DocumentSource.CONFLUENCE, stored, DocumentSource.JIRA_SERVICE_MANAGEMENT
+    )
+    with pytest.raises(ValueError, match="cannot be used"):
+        to_source_credential_json(DocumentSource.JIRA_SERVICE_MANAGEMENT, stored)
+
+
 def test_existing_source_shaped_credential_keeps_its_shape() -> None:
     refreshed = {**_CONFLUENCE_JSON, "confluence_access_token": "new-token"}
 
