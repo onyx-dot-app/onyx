@@ -120,6 +120,8 @@ export default function useChatSessionController({
 
   // Fetch chat messages for the chat session
   useEffect(() => {
+    const sessionFetchController = new AbortController();
+    const { signal } = sessionFetchController;
     const priorChatSessionId = chatSessionIdRef.current;
     const loadedSessionId = loadedIdSessionRef.current;
     chatSessionIdRef.current = existingChatSessionId;
@@ -181,14 +183,13 @@ export default function useChatSessionController({
       // Set the current session first, then set fetching state to prevent intro flash
       setCurrentSession(existingChatSessionId);
       setIsFetchingChatMessages(existingChatSessionId, true);
+      const requestedSessionId = existingChatSessionId;
 
-      let response: Response;
-      try {
-        response = await fetch(
-          `/api/chat/get-chat-session/${existingChatSessionId}`
-        );
-      } catch (error) {
-        setIsFetchingChatMessages(existingChatSessionId, false);
+      function handleFetchError(error: unknown) {
+        if (signal.aborted) {
+          return;
+        }
+        setIsFetchingChatMessages(requestedSessionId, false);
         console.error("Failed to fetch chat session", {
           chatSessionId: existingChatSessionId,
           error,
@@ -197,6 +198,19 @@ export default function useChatSessionController({
           type: "unknown",
           detail: "Failed to load chat session. Please check your connection.",
         });
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(
+          `/api/chat/get-chat-session/${existingChatSessionId}`,
+          { signal }
+        );
+      } catch (error) {
+        handleFetchError(error);
+        return;
+      }
+      if (signal.aborted) {
         return;
       }
 
@@ -209,6 +223,9 @@ export default function useChatSessionController({
         } catch {
           // ignore parse errors
         }
+        if (signal.aborted) {
+          return;
+        }
         const type =
           response.status === 404
             ? "not_found"
@@ -219,7 +236,16 @@ export default function useChatSessionController({
         return;
       }
 
-      const session: BackendChatSession = await response.json();
+      let session: BackendChatSession;
+      try {
+        session = await response.json();
+      } catch (error) {
+        handleFetchError(error);
+        return;
+      }
+      if (signal.aborted) {
+        return;
+      }
       const chatSession = session;
       // Restore the incognito UI state on reload of a live incognito session.
       // The id must come back too, or a later upload would be sent with none
@@ -290,6 +316,7 @@ export default function useChatSessionController({
         // session; once the user navigates elsewhere, any further store write
         // from this tail would hijack their new session's sends.
         const stillCurrent = () =>
+          !signal.aborted &&
           useChatSessionStore.getState().currentSessionId === sessionId;
         const flush = () => {
           if (!stillCurrent()) {
@@ -303,6 +330,8 @@ export default function useChatSessionController({
         // handleSSEStream only releases the connection via this signal —
         // bailing out of the loop alone leaves the SSE response open.
         const abortController = new AbortController();
+        const abortResume = () => abortController.abort();
+        signal.addEventListener("abort", abortResume);
         try {
           for await (const rawPacket of resumeStream(
             sessionId,
@@ -315,6 +344,7 @@ export default function useChatSessionController({
             if (!Object.hasOwn(rawPacket, "obj")) {
               continue;
             }
+            // SAFETY: Only Packet members of PacketType contain an obj field.
             const packet = rawPacket as Packet;
             // Heartbeats are liveness ticks for the stillCurrent check above,
             // not run state — never render them.
@@ -340,6 +370,7 @@ export default function useChatSessionController({
           console.error("Failed to resume in-flight run", { runId, error });
         } finally {
           abortController.abort();
+          signal.removeEventListener("abort", abortResume);
           if (trailingFlush !== null) {
             clearTimeout(trailingFlush);
           }
@@ -350,15 +381,18 @@ export default function useChatSessionController({
             // the persisted session.
             try {
               const settledResponse = await fetch(
-                `/api/chat/get-chat-session/${sessionId}`
+                `/api/chat/get-chat-session/${sessionId}`,
+                { signal }
               );
               if (settledResponse.ok && stillCurrent()) {
                 const settled: BackendChatSession =
                   await settledResponse.json();
-                updateSessionAndMessageTree(
-                  sessionId,
-                  processRawChatHistory(settled.messages, settled.packets)
-                );
+                if (stillCurrent()) {
+                  updateSessionAndMessageTree(
+                    sessionId,
+                    processRawChatHistory(settled.messages, settled.packets)
+                  );
+                }
               }
             } catch (error) {
               console.error("Post-resume session refresh failed", { error });
@@ -385,11 +419,17 @@ export default function useChatSessionController({
           const files = await getProjectFilesForSession(
             chatSession.chat_session_id
           );
+          if (signal.aborted) {
+            return;
+          }
           setProjectFiles(files || []);
         } else {
           setProjectFiles([]);
         }
       } catch (e) {
+        if (signal.aborted) {
+          return;
+        }
         setProjectFiles([]);
       }
 
@@ -412,13 +452,22 @@ export default function useChatSessionController({
           currentMessageFiles: [],
           deepResearch: false,
         });
+        if (signal.aborted) {
+          return;
+        }
         // Force re-name if the chat session doesn't have one
         if (!chatSession.description) {
           await nameChatSession(existingChatSessionId);
+          if (signal.aborted) {
+            return;
+          }
           refreshChatSessions();
         }
       } else if (newMessageHistory.length >= 2 && !chatSession.description) {
         await nameChatSession(existingChatSessionId);
+        if (signal.aborted) {
+          return;
+        }
         refreshChatSessions();
       }
     }
@@ -459,6 +508,12 @@ export default function useChatSessionController({
         window.history.replaceState({}, "", newUrl);
       }
     }
+    return () => {
+      sessionFetchController.abort();
+      if (existingChatSessionId !== null) {
+        setIsFetchingChatMessages(existingChatSessionId, false);
+      }
+    };
   }, [
     existingChatSessionId,
     searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID),

@@ -264,6 +264,12 @@ and is either a seeded one-message chat or has at least two messages. An empty o
 single-message unseeded session is not auto-named.
 Both call `refreshChatSessions()` afterward. See §9 for the double-fire footgun.
 
+Session loading belongs to the current navigation (`useChatSessionController.ts`).
+Effect cleanup aborts its fetch and resumed stream. Each asynchronous continuation
+checks cancellation before changing active history, privacy, project files, or errors.
+A cancelled load cannot submit a seeded message or restore the previous chat after
+the user opens New chat. Returning to the same chat starts a separate load.
+
 Sharing: `ShareChatSessionModal.tsx` calls `PATCH /api/chat/chat-session/{id}` with
 `{ sharing_status: "public" | "private" }`. The shareable link is
 `${window.location.origin}/app/shared/{id}`.
