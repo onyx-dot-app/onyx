@@ -187,7 +187,7 @@ export const submitGoogleSite = async (
   base_url: string,
   refreshFreq: number,
   pruneFreq: number,
-  indexingStart: Date,
+  indexingStart: string | null,
   access_type: AccessType,
   groups: number[],
   name?: string,

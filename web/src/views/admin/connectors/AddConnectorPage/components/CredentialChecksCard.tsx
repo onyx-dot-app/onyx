@@ -382,7 +382,6 @@ export function CheckCardView({
       icon={notice ? FailedToRunIcon : progress.icon}
       title={t("title")}
       suffix={progress.suffix}
-      // A run that broke reads its notice; otherwise the counts, open or folded.
       description={summary}
       sizePreset="main-content"
       variant="section"

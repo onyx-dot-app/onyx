@@ -51,7 +51,6 @@ export function useStatusChange(
       // Call the backend to update the status
       await setCCPairStatus(ccPair.id, newStatus);
 
-      // Use mutate to revalidate the status on the backend
       // The status page lists the pair's state too.
       await Promise.all([
         mutate(buildCCPairInfoUrl(ccPair.id)),

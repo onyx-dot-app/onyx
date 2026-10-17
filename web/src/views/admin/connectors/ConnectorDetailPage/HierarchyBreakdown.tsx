@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Fold, OverflowText, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgChevronDown, SvgExternalLink } from "@opal/icons";
+import { SvgChevronDown, SvgChevronUp, SvgExternalLink } from "@opal/icons";
 import { LineLoader } from "@opal/loaders";
 import { useOpalStrings } from "@opal/strings";
 import type { RichStr } from "@opal/types";
@@ -152,7 +152,7 @@ function BreakdownGroup({ title, children }: BreakdownGroupProps) {
           {title}
         </Text>
         <Button
-          icon={SvgChevronDown}
+          icon={open ? SvgChevronUp : SvgChevronDown}
           prominence="internal"
           size="xs"
           aria-label={label}

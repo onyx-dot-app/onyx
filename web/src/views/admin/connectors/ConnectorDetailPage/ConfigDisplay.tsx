@@ -49,7 +49,7 @@ export interface ConfigRow {
 type ConfigItemProps = Omit<ConfigRow, "key">;
 
 /** An http(s) URL split for display, or null for any other value. */
-function splitUrl(
+export function splitUrl(
   value: string
 ): { scheme: string; host: string; path: string } | null {
   try {

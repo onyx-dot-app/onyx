@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { Card, Collapsible, InputNumber } from "@opal/components";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
@@ -118,7 +118,6 @@ export default function ScheduleSection({
   const tFields = useTranslations("admin.connectorsList.scheduled");
   const tToasts = useTranslations("admin.connector.toasts");
   const tDuration = useTranslations("admin.connector.advancedConfig.duration");
-  const format = useFormatter();
   const { refresh_freq, prune_freq, check_freq } = ccPair.connector;
   const refreshMinutes =
     refresh_freq === null ? null : Math.round(refresh_freq / 60);

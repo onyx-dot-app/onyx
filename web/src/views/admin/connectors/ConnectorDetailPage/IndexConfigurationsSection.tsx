@@ -27,6 +27,7 @@ import {
 import {
   buildConfigEntries,
   ConfigDisplay,
+  splitUrl,
   type ConfigRow,
 } from "@/views/admin/connectors/ConnectorDetailPage/ConfigDisplay";
 import { useHierarchyBreakdown } from "@/lib/connectors/hooks";
@@ -43,13 +44,9 @@ function escapeMarkdown(value: string): string {
 
 /** The account's realm in bold: a URL shows its host in bold and keeps its path. */
 function realmMarkdown(value: string): string {
-  try {
-    const url = new URL(value);
-    const path = url.pathname.replace(/\/$/, "");
-    return `**${escapeMarkdown(url.host)}**${escapeMarkdown(path)}`;
-  } catch {
-    return `**${escapeMarkdown(value)}**`;
-  }
+  const url = splitUrl(value);
+  if (url === null) return `**${escapeMarkdown(value)}**`;
+  return `**${escapeMarkdown(url.host)}**${escapeMarkdown(url.path)}`;
 }
 
 interface ConfigGroupsProps {
@@ -297,7 +294,7 @@ export default function IndexConfigurationsSection({
       value:
         indexingStart === null
           ? tScheduled("indexingStart.placeholder")
-          : formatDateLog(indexingStart.toISOString()),
+          : formatDateLog(indexingStart),
     },
   };
 
