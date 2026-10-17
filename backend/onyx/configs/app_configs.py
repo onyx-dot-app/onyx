@@ -1398,6 +1398,10 @@ DROPBOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("DROPBOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+HIGHSPOT_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("HIGHSPOT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
@@ -1713,6 +1717,16 @@ CODE_INTERPRETER_MAX_STAGED_FILES = int(
 
 CODE_INTERPRETER_MAX_STAGED_BYTES = int(
     os.environ.get("CODE_INTERPRETER_MAX_STAGED_BYTES") or 100 * 1024 * 1024
+)
+
+# Per-execution cap on generated files copied from the sandbox into the file
+# store. The download runs in the request worker, so bound count and bytes.
+CODE_INTERPRETER_MAX_OUTPUT_FILES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_FILES") or 25
+)
+
+CODE_INTERPRETER_MAX_OUTPUT_BYTES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_BYTES") or 100 * 1024 * 1024
 )
 
 # Bounds the fan-out of both staging phases — reading files from the object

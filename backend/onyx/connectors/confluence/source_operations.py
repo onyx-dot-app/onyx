@@ -32,6 +32,7 @@ from pydantic import BaseModel
 from requests import HTTPError
 
 from onyx.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
     CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE,
     OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
     OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
@@ -63,6 +64,7 @@ from onyx.connectors.source_operations import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.utils.bounded_http import read_bounded_body
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,6 +86,8 @@ _PROBE_KWARGS: dict[str, Any] = {"max_backoff_retries": 6, "max_backoff_seconds"
 _FINAL_KWARGS: dict[str, Any] = {"max_backoff_retries": 10, "max_backoff_seconds": 60}
 # Timeout of the client behind ``fast=True`` operations (validation).
 _FAST_TIMEOUT = 3
+_ATTACHMENT_REQUEST_TIMEOUT = (10, 60)
+_ATTACHMENT_BODY_DEADLINE_SECONDS = 300.0
 
 _FIND_PAGE_EXPAND = "body.storage.value"
 
@@ -1788,14 +1792,19 @@ class ConfluenceSourceOperations(SourceOperations):
         ),
     )
     def download_attachment(
-        self, *, attachment: dict[str, Any], parent_content_id: str | None
+        self,
+        *,
+        attachment: dict[str, Any],
+        parent_content_id: str | None,
+        max_bytes: int = CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
     ) -> bytes:
         """Returns the attachment file. Uses the retry and OAuth refresh wrapper,
         but does not retry a 403: on a download it is a permission refusal.
 
         Raises ``ValueError`` if no download link can be built (Cloud needs the
-        parent content id), ``HTTPError`` on a non-retryable error status, and
-        ``ConfluenceRetriesExhaustedError`` when every retry failed.
+        parent content id), ``HTTPError`` on a non-retryable error status,
+        ``ConfluenceRetriesExhaustedError`` when every retry failed, and a
+        ``BoundedBodyError`` when the body exceeds ``max_bytes`` or the deadline.
         """
         client = self._client()
         link = _attachment_download_link(
@@ -1806,9 +1815,15 @@ class ConfluenceSourceOperations(SourceOperations):
         )
 
         def download(confluence: Confluence) -> bytes:
-            response = confluence.session.get(link)
-            response.raise_for_status()
-            return response.content
+            with confluence.session.get(
+                link, stream=True, timeout=_ATTACHMENT_REQUEST_TIMEOUT
+            ) as response:
+                response.raise_for_status()
+                return read_bounded_body(
+                    response,
+                    max_bytes=max_bytes,
+                    deadline_seconds=_ATTACHMENT_BODY_DEADLINE_SECONDS,
+                )
 
         return client._call_with_retries(download, retry_forbidden=False)
 
