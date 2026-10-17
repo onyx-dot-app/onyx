@@ -80,14 +80,14 @@ def test_read_timeout_captures_once_before_teardown_and_preserves_request(
                 raise
         return httpx.Response(200, json={"id": "pre-existing-session"})
 
-    def capture(target: subject._OwnedTarget | None) -> str:
-        assert target is None
+    def capture(user: DATestUser, context: str) -> str:
+        assert user is ci_user
+        assert context == "kind-onyx-craft-ci"
         events.append("capture")
         return "summary helper_count=0"
 
     with (
         httpx.Client(transport=httpx.MockTransport(request)) as active_client,
-        patch.object(subject, "_owned_target", return_value=None),
         patch.object(subject, "_owned_guest_facts", side_effect=capture) as sample,
     ):
         set_test_client(active_client)
@@ -111,7 +111,7 @@ def test_read_timeout_captures_once_before_teardown_and_preserves_request(
         tracebacks.append(traceback)
         traceback = traceback.tb_next
     assert original_traceback is tracebacks[-1]
-    sample.assert_called_once_with(None)
+    sample.assert_called_once_with(ci_user, "kind-onyx-craft-ci")
     assert events == (
         ["POST", "DELETE", "POST", "capture", "teardown"]
         if boundary == "second_post"
@@ -235,7 +235,6 @@ def test_other_request_errors_propagate_without_capture(
 def test_capture_guard_prevents_db_and_cluster_access(
     setting: str, value: str, ci_user: DATestUser, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SANDBOX_TEST_SHIM_PPROF", "true")
     if setting == "CRAFT_SANDBOX_RUNTIME":
         monkeypatch.setattr(subject, setting, value)
     elif setting != "in_process_client":
@@ -311,9 +310,9 @@ def test_owned_current_pod_is_the_only_bounded_exec_target(
             ],
         ) as run,
     ):
-        assert subject._owned_guest_facts(
-            subject._owned_target(ci_user, "kind-onyx-craft-ci")
-        ) == (f"target_sandbox_id={_SANDBOX_ID} | summary helper_count=0")
+        assert subject._owned_guest_facts(ci_user, "kind-onyx-craft-ci") == (
+            f"target_sandbox_id={_SANDBOX_ID} | summary helper_count=0"
+        )
     lookup.assert_called_once_with(db.return_value.__enter__.return_value, _USER_ID)
     prefix = [
         "kubectl",
@@ -364,7 +363,7 @@ def test_invalid_owned_sandbox_id_never_reaches_the_capture(
         patch.object(subject.subprocess, "run") as run,
         pytest.raises(ValueError),
     ):
-        subject._owned_guest_facts(subject._owned_target(ci_user, "kind-onyx-craft-ci"))
+        subject._owned_guest_facts(ci_user, "kind-onyx-craft-ci")
     run.assert_not_called()
 
 
@@ -385,16 +384,12 @@ def test_missing_or_wrong_sandbox_owner_never_reads_a_pod(
     ):
         if missing:
             assert (
-                subject._owned_guest_facts(
-                    subject._owned_target(ci_user, "kind-onyx-craft-ci")
-                )
+                subject._owned_guest_facts(ci_user, "kind-onyx-craft-ci")
                 == "unavailable"
             )
         else:
             with pytest.raises(ValueError):
-                subject._owned_guest_facts(
-                    subject._owned_target(ci_user, "kind-onyx-craft-ci")
-                )
+                subject._owned_guest_facts(ci_user, "kind-onyx-craft-ci")
     run.assert_not_called()
 
 
@@ -439,7 +434,7 @@ def test_nonconforming_pod_never_executes(
         ) as run,
         pytest.raises(ValueError),
     ):
-        subject._owned_guest_facts(subject._owned_target(ci_user, "kind-onyx-craft-ci"))
+        subject._owned_guest_facts(ci_user, "kind-onyx-craft-ci")
     assert run.call_count == 1
 
 
@@ -480,7 +475,6 @@ def test_diagnostic_failure_prints_only_class_and_preserves_read_timeout(
     original_error = httpx.ReadTimeout("request-secret")
     with (
         httpx.Client() as active_client,
-        patch.object(subject, "_owned_target", return_value=None),
         patch.object(subject, "_owned_guest_facts", side_effect=sample_error) as sample,
     ):
         set_test_client(active_client)
@@ -501,7 +495,6 @@ def test_broken_diagnostic_output_preserves_read_timeout(ci_user: DATestUser) ->
     original_error = httpx.ReadTimeout("request-secret")
     with (
         httpx.Client() as active_client,
-        patch.object(subject, "_owned_target", return_value=None),
         patch.object(
             subject, "_owned_guest_facts", return_value="summary helper_count=0"
         ),
@@ -515,90 +508,6 @@ def test_broken_diagnostic_output_preserves_read_timeout(ci_user: DATestUser) ->
         finally:
             set_test_client(None)
     assert raised.value is original_error
-
-
-@pytest.mark.parametrize("failure", ["none", "capture", "print"])
-def test_shim_sample_runs_once_first_and_cannot_skip_guest(
-    failure: str,
-    ci_user: DATestUser,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setenv("SANDBOX_TEST_SHIM_PPROF", "true")
-    target = subject._OwnedTarget(_SANDBOX_ID, "owned-pod", "node", "container", ())
-    events: list[str] = []
-    original = httpx.ReadTimeout("request-secret")
-
-    def shim(_target: subject._OwnedTarget | None) -> str:
-        assert _target is target
-        events.append("shim")
-        if failure == "capture":
-            raise RuntimeError("private-shim-error")
-        return "availability=observed fifo_read=1 rpc_send=0 rpc_response_wait=0 rpc_other=0 forwarder_other=0"
-
-    def guest(_target: subject._OwnedTarget | None) -> str:
-        assert _target is target
-        events.append("guest")
-        return f"target_sandbox_id={_SANDBOX_ID} | summary helper_count=0"
-
-    with (
-        httpx.Client() as active_client,
-        patch.object(subject, "_owned_target", return_value=target) as resolve,
-        patch.object(subject, "_owned_shim_facts", side_effect=shim) as host,
-        patch.object(subject, "_owned_guest_facts", side_effect=guest) as probe,
-    ):
-        set_test_client(active_client)
-        try:
-            with pytest.raises(httpx.ReadTimeout) as raised:
-                if failure == "print":
-                    with patch(
-                        "builtins.print",
-                        side_effect=BrokenPipeError("private-print-error"),
-                    ):
-                        with subject.capture_guest_facts_on_read_timeout(ci_user):
-                            raise original
-                else:
-                    with subject.capture_guest_facts_on_read_timeout(ci_user):
-                        raise original
-        finally:
-            set_test_client(None)
-    assert raised.value is original
-    assert events == ["shim", "guest"]
-    resolve.assert_called_once_with(ci_user, "kind-onyx-craft-ci")
-    host.assert_called_once_with(target)
-    probe.assert_called_once_with(target)
-    output = capsys.readouterr()
-    assert output.err == ""
-    if failure == "none":
-        assert output.out == (
-            f"Craft shim timeout facts; target_sandbox_id={_SANDBOX_ID} "
-            "shim_forwarder_facts=availability=observed fifo_read=1 rpc_send=0 rpc_response_wait=0 rpc_other=0 forwarder_other=0\n"
-            f"Craft HTTP read timeout; managed_push_facts=target_sandbox_id={_SANDBOX_ID} | summary helper_count=0\n"
-        )
-    assert "private-" not in output.out
-
-
-def test_shim_capture_requires_explicit_opt_in(
-    ci_user: DATestUser, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("SANDBOX_TEST_SHIM_PPROF", raising=False)
-    with (
-        httpx.Client() as active_client,
-        patch.object(subject, "_owned_target", return_value=None),
-        patch.object(
-            subject, "_owned_guest_facts", return_value="unavailable"
-        ) as probe,
-        patch.object(subject, "_owned_shim_facts") as host,
-    ):
-        set_test_client(active_client)
-        try:
-            with pytest.raises(httpx.ReadTimeout):
-                with subject.capture_guest_facts_on_read_timeout(ci_user):
-                    raise httpx.ReadTimeout("secret")
-        finally:
-            set_test_client(None)
-    host.assert_not_called()
-    probe.assert_called_once_with(None)
 
 
 def test_host_projects_only_known_scalar_fields_and_categories() -> None:
