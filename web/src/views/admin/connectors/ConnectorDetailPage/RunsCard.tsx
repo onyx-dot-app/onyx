@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { richNodes } from "@opal/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -228,12 +228,14 @@ export default function RunsCard({
     errorHandlingFetcher,
     { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
   );
-  const runningRuns = runningData?.items ?? [];
-  const runningKeys = new Set(runningRuns.map(runKey));
-  const items = [
-    ...runningRuns,
-    ...(data?.items ?? []).filter((run) => !runningKeys.has(runKey(run))),
-  ];
+  const items = useMemo(() => {
+    const runningRuns = runningData?.items ?? [];
+    const runningKeys = new Set(runningRuns.map(runKey));
+    return [
+      ...runningRuns,
+      ...(data?.items ?? []).filter((run) => !runningKeys.has(runKey(run))),
+    ];
+  }, [runningData, data]);
   const { retain } = focus;
   useEffect(() => {
     if (data !== undefined) retain(items.map(runKey));
