@@ -171,6 +171,8 @@ class DraftCheckState(BaseModel):
     # Why a SKIPPED check did not run, and the dependency that stopped it.
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
+    # An INCOMPLETE check that confirmed part of its scope.
+    partial: bool = False
     # The row's short line and description.
     summary: str | None = None
     description: str | None = None
@@ -242,6 +244,7 @@ def settled_results(snapshot: DraftCheckRunSnapshot) -> list[CapabilityCheckResu
             error_kind=check.error_kind,
             not_run_reason=check.not_run_reason,
             blocked_by=check.blocked_by,
+            partial=check.partial,
             applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
             discovery=check.discovery,
         )
@@ -576,6 +579,7 @@ def apply_check_result(
     check_state.error_detail = result.error_detail
     check_state.not_run_reason = result.not_run_reason
     check_state.blocked_by = result.blocked_by
+    check_state.partial = result.partial
     check_state.summary = result.summary
     check_state.description = result.description
     check_state.duration_ms = result.duration_ms

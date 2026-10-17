@@ -16,6 +16,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CheckNotApplicableError,
     CheckNotRunReason,
+    CheckOutput,
     CredentialCapability,
 )
 from onyx.connectors.capability_checks.runner import (
@@ -50,10 +51,11 @@ class _Check(CapabilityCheck):
         self._error = error
         self.calls = 0
 
-    def run(self, context: CapabilityCheckContext) -> None:  # noqa: ARG002
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:  # noqa: ARG002
         self.calls += 1
         if self._error is not None:
             raise self._error
+        return None
 
 
 def _run(
@@ -247,3 +249,24 @@ def test_a_dependency_skipped_for_its_own_reason_stops_its_dependent() -> None:
 
     assert results["count"].not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
     assert results["count"].blocked_by == "find_space"
+
+
+class _PartialCheck(_Check):
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:  # noqa: ARG002
+        self.calls += 1
+        return CheckOutput(
+            summary="1 of 2 drives not found",
+            description="DRIVE-2 is not visible.",
+            partial=True,
+        )
+
+
+def test_a_partial_find_is_incomplete_and_its_dependents_run() -> None:
+    sample = _Check("sample", depends_on=("find",))
+    results = _run([_PartialCheck("find"), sample])
+
+    assert results["find"].status == CapabilityCheckStatus.INCOMPLETE
+    assert results["find"].partial
+    assert results["find"].summary == "1 of 2 drives not found"
+    assert sample.calls == 1
+    assert results["sample"].status == CapabilityCheckStatus.PASSED
