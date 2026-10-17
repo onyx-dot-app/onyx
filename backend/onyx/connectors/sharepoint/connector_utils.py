@@ -7,6 +7,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
+from onyx.connectors.sharepoint.config import is_site_url_well_formed
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.utils.variable_functionality import (
@@ -148,13 +149,6 @@ def validate_content_types(
             "At least one content type must be enabled. Turn on 'Index Documents' "
             "or 'Index ASPX Sites' (or both)."
         )
-
-
-def is_site_url_well_formed(site_url: str) -> bool:
-    """A full SharePoint or OneDrive site URL: https and a site path."""
-    return site_url.startswith("https://") and (
-        "/sites/" in site_url or "/teams/" in site_url or "/personal/" in site_url
-    )
 
 
 def validate_site_url(
