@@ -32,6 +32,7 @@ from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_group_sync_checks,
     build_onedrive_indexing_checks,
 )
+from onyx.connectors.onedrive.config import USER_EMAIL_FORMAT_ERROR
 from onyx.connectors.onedrive.models import (
     OneDriveDrive,
     OneDriveUser,
@@ -152,11 +153,15 @@ def test_all_selected_users_found() -> None:
     assert result.summary == "All 2 selected users found"
 
 
-def test_an_entry_that_is_not_an_email_names_it() -> None:
-    result = _run("onedrive_configured_users", _gateway(), {"users": ["not-an-email"]})
+def test_an_entry_that_is_not_an_email_fails_as_a_setting() -> None:
+    gateway = _gateway()
+
+    result = _run("onedrive_configured_users", gateway, {"users": ["not-an-email"]})
 
     assert result.status == CapabilityCheckStatus.FAILED
-    assert result.summary == "Not an email address: not-an-email"
+    assert result.error_kind == CheckErrorKind.INVALID
+    assert f"users: {USER_EMAIL_FORMAT_ERROR}" in result.message
+    gateway.get_user.assert_not_called()
 
 
 def test_blank_entries_say_so() -> None:

@@ -1,7 +1,13 @@
 from typing import Annotated, Any, ClassVar
 
+from pydantic import field_validator
+
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.connector_config import ConnectorConfig, CredentialBinding
+from onyx.connectors.connector_config import (
+    ConnectorConfig,
+    CredentialBinding,
+    field_format_error,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.field_policy import (
     FieldClass,
@@ -15,6 +21,8 @@ from onyx.connectors.google_utils.shared_constants import (
     google_credential_kind,
 )
 from onyx.connectors.planning_rule import ConnectorChangeOverride
+
+MY_DRIVE_EMAILS_EMPTY_ERROR = "Enter at least one email."
 
 _COSMETIC = FieldPolicy(FieldClass.COSMETIC)
 _SPECIFIC_REQUEST_FIELDS = (
@@ -84,6 +92,15 @@ class GoogleDriveConnectorConfig(GoogleDriveCredentialBinding, ConnectorConfig):
     follow_shortcuts: Annotated[bool | None, _COSMETIC] = None
     only_org_public: Annotated[bool | None, _COSMETIC] = None
     continue_on_failure: Annotated[bool | None, _COSMETIC] = None
+
+    # A value of only commas or spaces turns on the specific mode with no My
+    # Drive to index.
+    @field_validator("my_drive_emails")
+    @classmethod
+    def _my_drive_emails_name_an_email(cls, value: str | None) -> str | None:
+        if value and not value.replace(",", "").strip():
+            raise field_format_error(MY_DRIVE_EMAILS_EMPTY_ERROR)
+        return value
 
 
 def has_specific_requests(config: GoogleDriveConnectorConfig) -> bool:

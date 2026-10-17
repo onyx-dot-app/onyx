@@ -20,6 +20,7 @@ _BITBUCKET_WORKSPACE = {"workspace": "onyx"}
 _DRUPAL_SITE = {"base_url": "https://wiki.example.com"}
 _ASANA_WORKSPACE = {"asana_workspace_id": "w"}
 _JIRA_SITE = {"jira_base_url": "https://example.atlassian.net"}
+_NOTION_PAGE_ID = "17ab3186873d418fb899c3f6a43f68de"
 
 
 def _classify(
@@ -282,8 +283,8 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
         # Notion: a root page is always followed recursively.
         (
             DocumentSource.NOTION,
-            {"root_page_id": "r", "recursive_index_enabled": False},
-            {"root_page_id": "r", "recursive_index_enabled": True},
+            {"root_page_id": _NOTION_PAGE_ID, "recursive_index_enabled": False},
+            {"root_page_id": _NOTION_PAGE_ID, "recursive_index_enabled": True},
             {},
         ),
         (
