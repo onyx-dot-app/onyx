@@ -23,6 +23,7 @@ def process_with_prompt_cache(
     suffix: list[ChatCompletionMessage],
     continuation: bool = False,
     with_metadata: bool = True,
+    mark_tail: bool = True,
 ) -> tuple[list[ChatCompletionMessage], CacheMetadata | None]:
     """Process prompt with caching support.
 
@@ -39,6 +40,9 @@ def process_with_prompt_cache(
         with_metadata: When False, skip building CacheMetadata — which requires
             SHA256-hashing the entire cacheable prefix, real CPU on large agent
             prompts.
+        mark_tail: Whether the end of the prefix gets a cache breakpoint. False
+            for a one-shot prompt nothing will re-read, so it is not written at
+            the higher cache-write rate.
 
     Returns:
         Tuple of (processed_prompt, cache_metadata_to_store)
@@ -99,6 +103,7 @@ def process_with_prompt_cache(
             suffix=suffix,
             continuation=continuation,
             cache_metadata=cache_metadata,
+            mark_tail=mark_tail,
         )
 
         if not with_metadata:

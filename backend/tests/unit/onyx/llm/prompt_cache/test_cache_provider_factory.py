@@ -176,3 +176,43 @@ def test_anthropic_single_message_prefix_marks_one_breakpoint() -> None:
 
     assert processed[0].cache_control == {"type": "ephemeral"}
     assert processed[1].cache_control is None
+
+
+def test_anthropic_skips_tail_breakpoint_for_one_shot_prompt() -> None:
+    prefix: list[ChatCompletionMessage] = [
+        SystemMessage(content="system prompt"),
+        UserMessage(content="only question"),
+    ]
+
+    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
+        processed, _ = process_with_prompt_cache(
+            llm_config=_config("anthropic", "claude-sonnet-5"),
+            cacheable_prefix=prefix,
+            suffix=[UserMessage(content="reminder")],
+            continuation=False,
+            with_metadata=False,
+            mark_tail=False,
+        )
+
+    assert processed[0].cache_control == {"type": "ephemeral"}
+    assert processed[1].cache_control is None
+    assert processed[2].cache_control is None
+
+
+def test_non_anthropic_adapters_ignore_mark_tail() -> None:
+    prefix: list[ChatCompletionMessage] = [
+        SystemMessage(content="system prompt"),
+        UserMessage(content="question"),
+    ]
+
+    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
+        processed, _ = process_with_prompt_cache(
+            llm_config=_config("openai", "gpt-5"),
+            cacheable_prefix=prefix,
+            suffix=[],
+            continuation=False,
+            with_metadata=False,
+            mark_tail=False,
+        )
+
+    assert all(msg.cache_control is None for msg in processed)
