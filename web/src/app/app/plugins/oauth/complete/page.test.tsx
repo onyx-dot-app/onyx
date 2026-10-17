@@ -131,6 +131,9 @@ test("verifies the Craft roster for Craft authorization", async () => {
   const fetchSpy = savedConnection(true, "/api/mcp/servers/craft");
   render(<MemberPluginOAuthCompletePage />);
   expect(await screen.findByText("Plugin connected")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Return to plugins" })
+  ).toHaveAttribute("href", "/craft/v1/plugins");
   expect(fetchSpy).toHaveBeenCalledWith("/api/mcp/servers/craft");
   expect(postMessage).toHaveBeenCalledTimes(1);
 });

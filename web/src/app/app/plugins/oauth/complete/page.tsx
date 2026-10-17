@@ -9,6 +9,7 @@ import { SvgConnected, SvgPlugBroken } from "@opal/illustrations";
 import { verifyMemberPluginConnection } from "@/lib/plugins/member";
 import { notifyMemberPluginOAuthComplete } from "@/lib/plugins/memberConnection";
 import { parsePluginId } from "@/lib/plugins/routes";
+import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 
 export default function MemberPluginOAuthCompletePage() {
   const t = useTranslations("actions.memberPlugins.oauthComplete");
@@ -75,7 +76,14 @@ export default function MemberPluginOAuthCompletePage() {
                 description={t(`${status}.description`)}
               />
             )}
-            <Button href="/app/plugins" width="full">
+            <Button
+              href={
+                searchParams?.get("surface") === "craft"
+                  ? CRAFT_PLUGINS_PATH
+                  : "/app/plugins"
+              }
+              width="full"
+            >
               {t("return.label")}
             </Button>
             <Button prominence="tertiary" onClick={() => window.close()}>
