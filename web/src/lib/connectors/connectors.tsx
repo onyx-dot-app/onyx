@@ -1028,6 +1028,38 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira_service_management.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jira.fields.jira_base_url.label",
+        name: "jira_base_url",
+        optional: false,
+        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
+      {
+        type: "text",
+        label: "connectors.jira_service_management.fields.project_key.label",
+        name: "project_key",
+        optional: false,
+        description:
+          "connectors.jira_service_management.fields.project_key.description",
+      },
+      {
+        type: "list",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
+        name: "comment_email_blacklist",
+        description:
+          "connectors.jira.fields.comment_email_blacklist.description",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [

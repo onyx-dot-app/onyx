@@ -1551,6 +1551,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "jira_service_management": {
+          "description": "Atlassian サービスデスクのリクエスト"
         }
       }
     },
@@ -4799,6 +4802,16 @@
             "mailboxes": {
               "label": "メールボックス",
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクターを設定",
+          "subtext": "1 つの Jira Service Management サービスプロジェクトからすべてのリクエスト (チケット) をインデックスします。",
+          "fields": {
+            "project_key": {
+              "label": "サービスプロジェクトキー",
+              "description": "インデックスするサービスプロジェクトのキー (例: 'SD')。"
             }
           }
         }

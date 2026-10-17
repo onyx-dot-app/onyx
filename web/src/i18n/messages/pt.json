@@ -1551,6 +1551,9 @@
         },
         "federatedSlack": {
           "description": "Pesquisar no Slack na consulta"
+        },
+        "jira_service_management": {
+          "description": "Solicitações do service desk da Atlassian"
         }
       }
     },
@@ -4799,6 +4802,16 @@
             "mailboxes": {
               "label": "Caixas de correio",
               "description": "Especifique as caixas de correio a indexar (por exemplo, INBOX, Sent, Drafts). Deixe vazio para indexar todas as caixas de correio."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar conector do Jira Service Management",
+          "subtext": "Indexe todas as solicitações (tickets) de um projeto de serviço do Jira Service Management.",
+          "fields": {
+            "project_key": {
+              "label": "Chave do projeto de serviço",
+              "description": "A chave do projeto de serviço a indexar (por exemplo, 'SD')."
             }
           }
         }

@@ -1551,6 +1551,9 @@
         },
         "federatedSlack": {
           "description": "البحث في Slack عند الاستعلام"
+        },
+        "jira_service_management": {
+          "description": "طلبات مكتب خدمة Atlassian"
         }
       }
     },
@@ -4799,6 +4802,16 @@
             "mailboxes": {
               "label": "صناديق البريد",
               "description": "حدّد صناديق البريد المراد فهرستها (مثل INBOX وSent وDrafts). اتركه فارغًا لفهرسة جميع صناديق البريد."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تهيئة موصل Jira Service Management",
+          "subtext": "فهرسة جميع الطلبات (التذاكر) من مشروع خدمة واحد في Jira Service Management.",
+          "fields": {
+            "project_key": {
+              "label": "مفتاح مشروع الخدمة",
+              "description": "مفتاح مشروع الخدمة المراد فهرسته (مثل \"SD\")."
             }
           }
         }
