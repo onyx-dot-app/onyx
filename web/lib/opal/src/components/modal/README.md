@@ -51,7 +51,7 @@ flow opens. Single-screen modals can keep the default `Modal.Content` overlay.
 | `color`                          | `ColorTypes`            | Colour mode of the icon and title, as on `Content` (a status colours the icon only) |
 | `title`                          | `string \| RichStr`     | Required                                                             |
 | `description`                    | `string \| RichStr`     | Optional, also wired to `aria-describedby`                           |
-| `onClose`                        | `() => void`            | Renders the close button                                             |
+| `onClose`                        | `() => void`            | Renders the close button, with a "Close" tooltip on its start side on pointer hover (not on focus, so Escape still closes the modal) |
 
 `children` render below the title stack (e.g. a search input).
 

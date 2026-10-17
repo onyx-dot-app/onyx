@@ -80,6 +80,42 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Clickable ([data-clickable], `onClick` set): a tag-shaped trigger. Open, as
+   a popover or dropdown trigger, it inverts; an icon with its own color
+   (`iconColor`) keeps it.
+   --------------------------------------------------------------------------- */
+
+.opal-auxiliary-tag[data-clickable] {
+  @apply cursor-pointer;
+}
+
+.opal-auxiliary-tag[data-clickable]:focus-visible {
+  @apply outline-none ring-2 ring-background-tint-04;
+}
+
+.opal-auxiliary-tag[data-clickable]:is(
+  [data-color="gray"],
+  [data-variant="count"]
+):not([data-state="open"], [aria-expanded="true"]):hover {
+  @apply bg-background-tint-03;
+}
+
+.opal-auxiliary-tag[data-clickable]:is(
+  [data-state="open"],
+  [aria-expanded="true"]
+) {
+  @apply bg-background-tint-inverted-03 text-text-inverted-05;
+}
+
+.opal-auxiliary-tag[data-clickable]:is(
+    [data-state="open"],
+    [aria-expanded="true"]
+  )
+  .opal-auxiliary-tag-icon:not([data-fixed-color]) {
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------------------
    Editable
    --------------------------------------------------------------------------- */
 

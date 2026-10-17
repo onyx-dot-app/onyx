@@ -16,7 +16,7 @@
   @apply text-status-success-05;
 }
 .opal-log[data-opal-log-status="warning"] .opal-log-icon {
-  @apply text-theme-amber-05;
+  @apply text-status-warning-05;
 }
 .opal-log[data-opal-log-status="error"] .opal-log-icon {
   @apply text-status-error-05;

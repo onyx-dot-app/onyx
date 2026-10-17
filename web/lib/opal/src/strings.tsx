@@ -176,7 +176,7 @@ export const defaultOpalStrings: OpalStrings = {
   scrollTabsLeft: "Scroll tabs left",
   scrollTabsRight: "Scroll tabs right",
   collapsibleFold: "Fold",
-  collapsibleExpand: "Expand",
+  collapsibleExpand: "View All",
   collapsibleFoldSection: (title) => `Fold ${title}`,
   collapsibleExpandSection: (title) => `Expand ${title}`,
   contentOptional: "(Optional)",

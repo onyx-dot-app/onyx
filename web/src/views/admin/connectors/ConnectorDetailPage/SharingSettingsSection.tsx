@@ -135,12 +135,10 @@ export default function SharingSettingsSection({
     <Collapsible
       title={t("title")}
       description={markdown(
-        format.list(
-          managedSummary === null
-            ? [access.summary]
-            : [access.summary, managedSummary],
-          { type: "unit" }
-        )
+        (managedSummary === null
+          ? [access.summary]
+          : [access.summary, managedSummary]
+        ).join("; ")
       )}
       open={open}
       onOpenChange={setOpen}

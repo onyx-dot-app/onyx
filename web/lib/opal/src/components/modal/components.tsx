@@ -11,7 +11,7 @@ import type {
   SizeVariants,
   WithoutStyles,
 } from "@opal/types";
-import { Button } from "@opal/components";
+import { Button, Tooltip } from "@opal/components";
 import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
@@ -364,21 +364,34 @@ function ModalHeader({
     setHasDescription(!!description);
   }, [description, setHasDescription]);
 
+  const [pointerOverClose, setPointerOverClose] = React.useState(false);
+
   const closeButton = onClose && (
     <div
       tabIndex={-1}
       ref={closeButtonRef as React.RefObject<HTMLDivElement>}
       className="opal-modal-close-focus"
     >
-      <DialogPrimitive.Close asChild>
-        <Button
-          aria-label={strings.close}
-          icon={SvgX}
-          prominence="tertiary"
-          size="sm"
-          onClick={onClose}
-        />
-      </DialogPrimitive.Close>
+      {/* Pointer-only tooltip: an open tooltip takes the first Escape, so a
+          tooltip on the auto-focused close button would stop Escape from
+          closing the modal. */}
+      <Tooltip
+        tooltip={strings.close}
+        side="start"
+        suppressed={!pointerOverClose}
+      >
+        <DialogPrimitive.Close asChild>
+          <Button
+            aria-label={strings.close}
+            icon={SvgX}
+            prominence="tertiary"
+            size="sm"
+            onClick={onClose}
+            onPointerEnter={() => setPointerOverClose(true)}
+            onPointerLeave={() => setPointerOverClose(false)}
+          />
+        </DialogPrimitive.Close>
+      </Tooltip>
     </div>
   );
 

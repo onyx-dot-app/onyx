@@ -24,13 +24,15 @@ import { IconLoader, PageLoader } from "@opal/loaders";
 import { SvgPlugBroken } from "@opal/illustrations";
 import {
   SvgArrowLeft,
-  SvgEdit,
-  SvgPauseCircle,
+  SvgEditBig,
+  SvgPause,
   SvgPlayCircle,
   SvgRefreshCw,
   SvgSettings,
+  SvgSlowMotion,
   SvgTrash,
 } from "@opal/icons";
+import { markdown } from "@opal/utils";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -65,7 +67,6 @@ const CC_PAIR_POLL_MS = 5000;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
-  const editT = useTranslations("admin.connectorEdit");
   const router = useRouter();
 
   const {
@@ -247,9 +248,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
     {
       kind: "action",
       id: "full-reindex",
-      icon: SvgRefreshCw,
+      icon: SvgSlowMotion,
       title: t("manageMenu.fullReindex.label"),
-      description: t("manageMenu.fullReindex.description"),
+      description: markdown(t("manageMenu.fullReindex.description")),
       tooltip: reIndexBlocked,
       disabled: reIndexBlocked !== undefined,
       onSelect: () => void triggerReIndex(true),
@@ -259,7 +260,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           {
             kind: "action" as const,
             id: "toggle-status",
-            icon: paused ? SvgPlayCircle : SvgPauseCircle,
+            icon: paused ? SvgPlayCircle : SvgPause,
             title: paused
               ? t("manageMenu.toggleStatus.resume.label")
               : t("manageMenu.toggleStatus.pause.label"),
@@ -324,10 +325,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
                       <Button
                         key="edit"
                         prominence="secondary"
-                        icon={SvgEdit}
+                        icon={SvgEditBig}
                         onClick={openEditForm}
                       >
-                        {editT("editButton.label")}
+                        {t("configuration.editButton.label")}
                       </Button>,
                     ]
                   : []),

@@ -27,7 +27,7 @@ statuses are a subset of `StatusVariants`:
 | --------- | ------------------- | ------------------- |
 | `default` | `text-03`           | — (never heavy)     |
 | `success` | `status-success-05` | `status-success-00` |
-| `warning` | `theme-amber-05`    | `status-warning-00` |
+| `warning` | `status-warning-05` | `status-warning-00` |
 | `error`   | `status-error-05`   | `status-error-00`   |
 
 A `light` line has no background. Use `heavy` for the lines that need action,

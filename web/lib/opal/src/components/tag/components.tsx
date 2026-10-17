@@ -1,7 +1,11 @@
 "use client";
 
 import "@opal/components/tag/styles.css";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type {
+  IconFunctionComponent,
+  RichStr,
+  WithoutStyles,
+} from "@opal/types";
 import { Text, Tooltip, type TextFont } from "@opal/components";
 import { SvgAlertTriangle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
@@ -14,7 +18,17 @@ import { useOpalStrings } from "@opal/strings";
 
 type TagSize = "sm" | "md";
 
-interface TagProps {
+/**
+ * - `"default"`: tinted background, icon and label in the color's text.
+ * - `"status"`: tinted background, icon in the color's text, `text-04` label.
+ * - `"count"`: no background, icon in the color's text, `text-04` label.
+ */
+type TagVariant = "default" | "status" | "count";
+
+interface TagBaseProps extends Omit<
+  WithoutStyles<React.HTMLAttributes<HTMLElement>>,
+  "title" | "color" | "children" | "onClick"
+> {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
@@ -23,6 +37,12 @@ interface TagProps {
 
   /** Color variant. Default: `"gray"`. */
   color?: TagColor;
+
+  /** Look of the passive tag. Default: `"default"`. */
+  variant?: TagVariant;
+
+  /** Icon color, when it differs from `color` (a gray pill with an orange icon). */
+  iconColor?: TagColor;
 
   /** Size variant. Default: `"sm"`. */
   size?: TagSize;
@@ -63,6 +83,29 @@ interface TagProps {
   error?: boolean;
 }
 
+/** Passive or editable tag: the root is a `div`. */
+interface TagDivProps extends TagBaseProps {
+  ref?: React.Ref<HTMLDivElement>;
+  onClick?: never;
+}
+
+/**
+ * Clickable tag: the root is a `button`. As a popover or dropdown trigger it
+ * shows the inverted look while `data-state="open"` or `aria-expanded="true"`.
+ * A clickable tag cannot be editable.
+ */
+interface TagButtonProps extends TagBaseProps {
+  ref?: React.Ref<HTMLButtonElement>;
+  onClick: React.MouseEventHandler<HTMLButtonElement>;
+  onRemove?: never;
+}
+
+type TagProps = TagDivProps | TagButtonProps;
+
+function isClickableTag(props: TagProps): props is TagButtonProps {
+  return props.onClick !== undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Tag
 // ---------------------------------------------------------------------------
@@ -71,20 +114,26 @@ interface TagProps {
 // fields) can target it for keyboard flows without a fragile string copy.
 const TAG_REMOVE_CLASS = "opal-auxiliary-tag-remove";
 
-function Tag({
-  icon: Icon,
-  title,
-  color = "gray",
-  size = "sm",
-  font: fontOverride,
-  onRemove,
-  removeInTabOrder = true,
-  disabled = false,
-  value,
-  truncate = false,
-  tooltip,
-  error = false,
-}: TagProps) {
+function Tag(props: TagProps) {
+  const {
+    ref: _ref,
+    icon: Icon,
+    title,
+    color = "gray",
+    variant = "default",
+    iconColor,
+    size = "sm",
+    font: fontOverride,
+    onRemove,
+    removeInTabOrder = true,
+    disabled = false,
+    value,
+    truncate = false,
+    tooltip,
+    error = false,
+    onClick: _onClick,
+    ...rest
+  } = props;
   const strings = useOpalStrings();
   const config = TAG_COLORS[color];
   const editable = onRemove !== undefined;
@@ -98,21 +147,37 @@ function Tag({
         ? "main-ui-body"
         : "secondary-body");
 
+  const neutralLabel = variant !== "default" || (editable && color === "gray");
   // Editable gray reads in text-04 per the Figma spec. TAG_COLORS.gray
   // (text-03) stays for the passive metadata tag.
-  const textClass = editable && color === "gray" ? "text-text-04" : config.text;
+  const textClass = neutralLabel ? "text-text-04" : config.text;
+  const iconClass = iconColor
+    ? TAG_COLORS[iconColor].text
+    : variant === "default"
+      ? textClass
+      : config.text;
 
-  const tag = (
-    <div
-      className={cn("opal-auxiliary-tag", config.bg, textClass)}
-      data-size={size}
-      data-type={editable ? "editable" : undefined}
-      data-color={color}
-      data-disabled={(editable && disabled) || undefined}
-    >
+  const className = cn(
+    "opal-auxiliary-tag",
+    variant !== "count" && config.bg,
+    textClass
+  );
+  const dataAttrs = {
+    "data-size": size,
+    "data-type": editable ? "editable" : undefined,
+    "data-variant": variant,
+    "data-color": color,
+    "data-disabled": (editable && disabled) || undefined,
+  };
+
+  const content = (
+    <>
       {Icon && (
         <div className="opal-auxiliary-tag-icon-container">
-          <Icon className={cn("opal-auxiliary-tag-icon", textClass)} />
+          <Icon
+            className={cn("opal-auxiliary-tag-icon", iconClass)}
+            data-fixed-color={iconColor !== undefined || undefined}
+          />
         </div>
       )}
       <span className="opal-auxiliary-tag-text">
@@ -155,6 +220,25 @@ function Tag({
             <SvgX />
           </button>
         )}
+    </>
+  );
+
+  const tag = isClickableTag(props) ? (
+    // raw-ok: a tag-shaped trigger (Stack Trace, failed-entity pills) keeps the tag metrics, which no Button size matches
+    <button
+      ref={props.ref}
+      type="button"
+      {...rest}
+      className={className}
+      {...dataAttrs}
+      data-clickable="true"
+      onClick={props.onClick}
+    >
+      {content}
+    </button>
+  ) : (
+    <div ref={props.ref} {...rest} className={className} {...dataAttrs}>
+      {content}
     </div>
   );
 
@@ -168,5 +252,5 @@ function Tag({
   );
 }
 
-export { Tag, TAG_REMOVE_CLASS, type TagProps, type TagSize };
+export { Tag, TAG_REMOVE_CLASS, type TagProps, type TagSize, type TagVariant };
 export { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";

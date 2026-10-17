@@ -2243,12 +2243,12 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pausar indexación",
-            "description": "Cancelar todas las indexaciones y sincronizaciones en curso y futuras."
+            "label": "Pausar indexación y sincronizaciones",
+            "description": "Cancelar las indexaciones y sincronizaciones de permisos en curso y futuras. Los documentos indexados quedarán desactualizados, pero seguirán apareciendo en las búsquedas."
           },
           "resume": {
-            "label": "Reanudar indexación",
-            "description": "Permitir de nuevo las indexaciones y sincronizaciones programadas."
+            "label": "Reanudar indexación y sincronizaciones",
+            "description": "Reanudar las indexaciones y sincronizaciones de permisos."
           },
           "tooltip": {
             "updating": "Actualización de estado en curso"
@@ -2263,7 +2263,7 @@
         },
         "fullReindex": {
           "label": "Reindexar todo",
-          "description": "Reindexar todos los documentos de la fuente. Puede tardar horas o días según el tamaño."
+          "description": "Reindexar todos los documentos de la fuente. Puede tardar **horas o días** según el tamaño."
         }
       },
       "reEnableModal": {
@@ -2303,16 +2303,17 @@
       },
       "statusCard": {
         "documentsIndexed": {
-          "label": "Documentos indexados"
+          "label": "Documentos en el índice"
         },
         "indexingSpeed": "{speed} documentos/min",
         "lastIndexed": {
           "value": "Última indexación {when}"
         },
-        "title": "Estado de indexación",
+        "statusLine": "Estado de indexación - {detail}",
         "documents": {
           "label": "Recientes / Total",
-          "total": "/ {total}"
+          "total": "/ {total}",
+          "totalLabel": "Total"
         },
         "throughput": {
           "ariaLabel": "Documentos indexados a lo largo del tiempo",
@@ -2408,7 +2409,8 @@
           "displayName": "• {name}",
           "docsUnit": "{count, plural, one {documento} other {documentos}}"
         },
-        "summary": "{realm} • {counts}"
+        "summary": "{realm} • {counts}",
+        "hostPrefix": "{host}: {realm}"
       },
       "sharing": {
         "title": "Ajustes de uso compartido",
@@ -2469,9 +2471,8 @@
         "figures": {
           "indexed": "indexados",
           "synced": "sincronizados",
-          "memberships": "membresías",
           "removed": "eliminados",
-          "checks": "comprobaciones ejecutadas"
+          "checksRun": "{count, plural, one {# comprobación ejecutada} other {# comprobaciones ejecutadas}}"
         },
         "counts": {
           "newDocs": "{count, plural, one {# documento nuevo} other {# documentos nuevos}}",
@@ -2488,7 +2489,7 @@
           "skippedChecks": "{count, plural, one {# comprobación omitida} other {# comprobaciones omitidas}}"
         },
         "search": {
-          "placeholder": "Buscar ejecuciones de indexación..."
+          "placeholder": "Buscar ejecuciones de indexación…"
         },
         "window": {
           "label": "Intervalo",
@@ -2511,7 +2512,7 @@
           "title": "No se pudieron cargar las ejecuciones."
         },
         "empty": {
-          "title": "Aún no hay ejecuciones",
+          "title": "No hay ejecuciones de indexación recientes",
           "filteredTitle": "Ninguna ejecución coincide con estos filtros.",
           "description": "Las ejecuciones se programan en segundo plano y pueden tardar un momento en aparecer."
         },
@@ -2535,7 +2536,7 @@
       },
       "activity": {
         "search": {
-          "placeholder": "Buscar en el historial de actividad..."
+          "placeholder": "Buscar en el historial de actividad…"
         },
         "counts": {
           "failures": "{count, plural, one {# ejecución fallida} other {# ejecuciones fallidas}}",
@@ -2543,7 +2544,7 @@
         },
         "filter": {
           "label": "Mostrar",
-          "all": "Todos los niveles",
+          "all": "Cualquier nivel",
           "failures": "Fallos",
           "errors": "Errores",
           "other": "Otros",
@@ -2556,60 +2557,65 @@
         },
         "title": {
           "indexing": {
-            "failed": "La indexación falló",
-            "running": "Indexación en curso con errores",
-            "stopped": "Indexación detenida con errores",
-            "errors": "Indexación completada con errores",
-            "resolved": "Errores de indexación resueltos",
-            "succeeded": "Indexación completada correctamente",
-            "inProgress": "Indexación en curso",
-            "canceled": "Indexación detenida"
+            "failed": "La indexación falló.",
+            "failedWith": "La indexación falló: {reason}.",
+            "running": "Indexación en curso con errores.",
+            "stopped": "Indexación detenida con errores.",
+            "errors": "Indexación completada con errores.",
+            "resolved": "Errores de indexación resueltos.",
+            "succeeded": "Indexación completada correctamente.",
+            "inProgress": "Indexación en curso.",
+            "canceled": "Indexación detenida."
           },
           "doc_permission_sync": {
-            "failed": "La sincronización de permisos falló",
-            "running": "Sincronización de permisos en curso con errores",
-            "stopped": "Sincronización de permisos detenida con errores",
-            "errors": "Permisos sincronizados con errores",
-            "resolved": "Errores de sincronización de permisos resueltos",
-            "succeeded": "Permisos sincronizados correctamente",
-            "inProgress": "Sincronizando permisos",
-            "canceled": "Sincronización de permisos detenida"
+            "failed": "La sincronización de permisos falló.",
+            "failedWith": "La sincronización de permisos falló: {reason}.",
+            "running": "Sincronización de permisos en curso con errores.",
+            "stopped": "Sincronización de permisos detenida con errores.",
+            "errors": "Permisos sincronizados con errores.",
+            "resolved": "Errores de sincronización de permisos resueltos.",
+            "succeeded": "Permisos sincronizados correctamente.",
+            "inProgress": "Sincronizando permisos.",
+            "canceled": "Sincronización de permisos detenida."
           },
           "group_sync": {
-            "failed": "La sincronización de membresías de grupo falló",
-            "running": "Sincronización de membresías de grupo en curso con errores",
-            "stopped": "Sincronización de membresías de grupo detenida con errores",
-            "errors": "Membresías de grupo sincronizadas con errores",
-            "resolved": "Errores de sincronización de membresías de grupo resueltos",
-            "succeeded": "Membresías de grupo sincronizadas correctamente",
-            "inProgress": "Sincronizando membresías de grupo",
-            "canceled": "Sincronización de grupos detenida"
+            "failed": "La sincronización de membresías de grupo falló.",
+            "failedWith": "La sincronización de membresías de grupo falló: {reason}.",
+            "running": "Sincronización de membresías de grupo en curso con errores.",
+            "stopped": "Sincronización de membresías de grupo detenida con errores.",
+            "errors": "Membresías de grupo sincronizadas con errores.",
+            "resolved": "Errores de sincronización de membresías de grupo resueltos.",
+            "succeeded": "Membresías de grupo sincronizadas correctamente.",
+            "inProgress": "Sincronizando membresías de grupo.",
+            "canceled": "Sincronización de grupos detenida."
           },
           "pruning": {
-            "failed": "La depuración falló",
-            "running": "Depuración en curso con errores",
-            "stopped": "Depuración detenida con errores",
-            "errors": "Depuración completada con errores",
-            "resolved": "Errores de depuración resueltos",
-            "succeeded": "Depuración completada correctamente",
-            "inProgress": "Depuración en curso",
-            "canceled": "Depuración detenida"
+            "failed": "La depuración falló.",
+            "failedWith": "La depuración falló: {reason}.",
+            "running": "Depuración en curso con errores.",
+            "stopped": "Depuración detenida con errores.",
+            "errors": "Depuración completada con errores.",
+            "resolved": "Errores de depuración resueltos.",
+            "succeeded": "Depuración completada correctamente.",
+            "inProgress": "Depuración en curso.",
+            "canceled": "Depuración detenida."
           },
           "checks": {
-            "failed": "Las comprobaciones del conector fallaron",
-            "running": "Comprobaciones del conector en curso con errores",
-            "stopped": "Comprobaciones del conector detenidas con errores",
-            "errors": "Comprobaciones del conector completadas con errores",
-            "resolved": "Errores de las comprobaciones del conector resueltos",
-            "succeeded": "Comprobaciones del conector superadas",
-            "inProgress": "Comprobaciones del conector en curso",
-            "canceled": "Comprobaciones del conector detenidas"
+            "failed": "Las comprobaciones del conector fallaron.",
+            "failedWith": "Las comprobaciones del conector fallaron: {reason}.",
+            "running": "Comprobaciones del conector en curso con errores.",
+            "stopped": "Comprobaciones del conector detenidas con errores.",
+            "errors": "Comprobaciones del conector completadas con errores.",
+            "resolved": "Errores de las comprobaciones del conector resueltos.",
+            "succeeded": "Comprobaciones del conector superadas.",
+            "inProgress": "Comprobaciones del conector en curso.",
+            "canceled": "Comprobaciones del conector detenidas."
           }
         },
         "description": {
           "indexing": "{count, plural, one {# documento indexado} other {# documentos indexados}}. Duración {minutes, plural, one {# minuto} other {# minutos}}.",
-          "doc_permission_sync": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}. Duración {minutes, plural, one {# minuto} other {# minutos}}.",
-          "group_sync": "{count, plural, one {# membresía sincronizada} other {# membresías sincronizadas}}. Duración {minutes, plural, one {# minuto} other {# minutos}}.",
+          "doc_permission_sync": "{count, plural, one {# permiso de usuario sincronizado} other {# permisos de usuario sincronizados}}. Duración {minutes, plural, one {# minuto} other {# minutos}}.",
+          "group_sync": "{count, plural, one {# grupo sincronizado} other {# grupos sincronizados}}. Duración {minutes, plural, one {# minuto} other {# minutos}}.",
           "pruning": "{count, plural, one {# documento eliminado} other {# documentos eliminados}}. Duración de la depuración: {minutes, plural, one {# minuto} other {# minutos}}.",
           "checks": "{count, plural, one {# comprobación ejecutada} other {# comprobaciones ejecutadas}}. Duración de la comprobación: {minutes, plural, one {# minuto} other {# minutos}}.",
           "checksFailed": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}."
@@ -2625,7 +2631,7 @@
         },
         "more": "Mostrar más",
         "empty": {
-          "title": "Sin fallos ni errores",
+          "title": "No hay actividad reciente",
           "resolved": "Sin ejecuciones resueltas",
           "filtered": "Nada coincide con esta búsqueda.",
           "failures": "Sin fallos",
@@ -2638,7 +2644,7 @@
         "docs": {
           "title": "Documentos fallidos",
           "search": {
-            "placeholder": "Buscar archivos..."
+            "placeholder": "Buscar documentos…"
           },
           "resolveAll": "Resolver todo",
           "resolveOne": "Resolver este documento",
@@ -2650,7 +2656,7 @@
           "open": "Abrir el documento"
         },
         "trace": {
-          "runId": "ID de ejecución: {id}",
+          "header": "Seguimiento de pila • ID de ejecución: {id}",
           "copy": "Copiar el seguimiento de pila"
         },
         "actions": {
@@ -6837,12 +6843,12 @@
         "viewLogs": "Ver registros",
         "panel": {
           "title": "Historial de actividad",
-          "close": "Ocultar el historial de actividad"
+          "close": "Cerrar panel"
         }
       },
       "list": {
         "search": {
-          "placeholder": "Buscar conectores..."
+          "placeholder": "Buscar conectores…"
         },
         "statusFilter": {
           "label": "Estado",
@@ -6885,7 +6891,8 @@
         },
         "loadError": "No se pudieron cargar los conectores.",
         "units": "{count, plural, one {conector} other {conectores}}"
-      }
+      },
+      "title": "Estado de indexación de conectores"
     },
     "languageModels": {
       "availableProviders": {
@@ -9046,7 +9053,6 @@
     "status": {
       "badges": {
         "canceled": "Cancelado",
-        "completedWithErrors": "Completado con errores",
         "deleting": "Eliminando",
         "error": "Error",
         "failed": "Fallido",
@@ -9064,7 +9070,7 @@
         "pruning": "Depurando",
         "pruned": "Depurado",
         "checking": "Comprobando",
-        "passed": "Superado",
+        "passed": "Completado",
         "failedToRun": "No se ejecutó"
       }
     },
@@ -10177,7 +10183,7 @@
       "groups": {
         "failed": "{count} fallidas",
         "indeterminate": "{count} sin verificar",
-        "passed": "{count} completadas",
+        "passed": "{count} correctas",
         "skipped": "{count} omitidas",
         "running": "{count} en curso",
         "expected": "{count} pendientes"
@@ -10202,7 +10208,7 @@
       },
       "foldButton": {
         "fold": "Contraer",
-        "expand": "Expandir"
+        "expand": "Ver todo"
       },
       "titleCount": "({complete}/{total})",
       "summary": {
@@ -15253,7 +15259,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "Expandir",
+      "expand": "Ver todo",
       "expandSection": "Expandir {title}",
       "fold": "Contraer",
       "foldSection": "Contraer {title}"

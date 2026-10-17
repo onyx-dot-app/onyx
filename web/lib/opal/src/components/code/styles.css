@@ -17,6 +17,10 @@
   @apply font-secondary-mono text-text-03;
 }
 
+.opal-code[data-tint] {
+  @apply bg-background-tint-01 border-transparent text-text-05;
+}
+
 .opal-code-copy {
   @apply absolute top-2 end-2;
 }
