@@ -214,6 +214,31 @@ export default function RunsCard({
     { refreshInterval: RUNS_POLL_MS }
   );
   const pastRuns = allTime?.total_items ?? 0;
+  // The newest page can miss a long run that newer runs pushed off it, so the embedded list fetches the running runs on their own and shows them first.
+  const { data: runningData } = useSWR<CCPairRunsResponse>(
+    embedded
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: PAGE_SIZE,
+          since: null,
+          until: null,
+          kinds: null,
+          statusGroups: ["running"],
+          q: search,
+          errors: null,
+          superseded: null,
+          resolved: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
+  );
+  const runningRuns = runningData?.items ?? [];
+  const runningKeys = new Set(runningRuns.map(runKey));
+  const items = [
+    ...runningRuns,
+    ...(data?.items ?? []).filter((run) => !runningKeys.has(runKey(run))),
+  ];
 
   function pickWindow(window: TimeWindow) {
     setPicked(window);
@@ -319,14 +344,21 @@ export default function RunsCard({
           </Section>
         )}
       </Section>
-    ) : (data?.items.length ?? 0) === 0 ? (
-      <IllustrationContent
-        illustration={SvgNoResult}
-        title={filtered ? t("empty.filteredTitle") : t("empty.title")}
-      />
+    ) : items.length === 0 ? (
+      filtered ? (
+        <IllustrationContent
+          illustration={SvgNoResult}
+          title={t("empty.filteredTitle")}
+        />
+      ) : (
+        <IllustrationContent
+          illustration={SvgLongWait}
+          title={t("empty.title")}
+        />
+      )
     ) : (
       <Section alignItems="stretch" gap={1} height="fit">
-        {data?.items.map((run) => (
+        {items.map((run) => (
           <RunRow
             key={runKey(run)}
             run={run}
