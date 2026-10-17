@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -312,9 +313,14 @@ def test_a_shared_group_sync_on_a_sibling_pair_supersedes_a_failure(
     second = _create_cc_pair(
         db_session, "Monitor Runs Confluence B", source=DocumentSource.CONFLUENCE
     )
-    # Decades out, so no Confluence sync in the database, from a test or a
-    # live pair, comes after these.
-    far = 20_000_000
+    # After every group sync already in the database, an earlier run of this
+    # test included, so no other Confluence sync comes after these.
+    newest = db_session.scalar(
+        select(func.max(ExternalGroupPermissionSyncAttempt.time_created))
+    )
+    far = (
+        20_000_000 if newest is None else int((newest - _T0).total_seconds() // 60) + 60
+    )
     old = _group_sync(db_session, first, far, PermissionSyncStatus.FAILED, mark)
     new = _group_sync(db_session, second, far + 1, PermissionSyncStatus.FAILED, mark)
     # A sibling's sync still in progress settles nothing yet.
