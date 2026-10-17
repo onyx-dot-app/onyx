@@ -11,6 +11,7 @@ itself because Celery time limits do not fire in thread pools.
 
 from celery import Task, shared_task
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.indexing.run_tabular_rechunk import (
@@ -67,13 +68,27 @@ def load_progress() -> TabularRechunkProgress:
         return TabularRechunkProgress()
 
 
-def _blocked_reason() -> str | None:
+def _blocked_reason(db_session: Session) -> str | None:
     """Why an armed migration still must not run, or None when it may."""
     if DISABLE_VECTOR_DB:
         return "the vector DB is disabled"
     if SKIP_SPREADSHEET_CONTENT:
         # Tabular files index as a title plus a placeholder; nothing to chunk.
         return "SKIP_SPREADSHEET_CONTENT is set"
+
+    search_settings = get_active_search_settings(db_session)
+    if search_settings.secondary is not None:
+        # The pipeline writes to the secondary whenever a FUTURE exists,
+        # leaving the live index on the old chunks.
+        return "a reindex is in flight"
+    # Only while an INSTANT swap is still backfilling: the port copies chunks
+    # boundary for boundary over finished work. Without the source-id check
+    # this blocks for ever, because "pending work" means a cc_pair has no
+    # settled port attempt - the normal state.
+    if search_settings.primary.port_backfill_source_id is not None and (
+        port_backfill_has_pending_work(db_session, search_settings.primary.id)
+    ):
+        return "the reindex port has not finished"
     return None
 
 
@@ -108,11 +123,6 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
     indexed, or None when it did no work."""
     if not TABULAR_RECHUNK_ENABLED:
         return None
-    blocked = _blocked_reason()
-    if blocked is not None:
-        task_logger.info("tabular re-chunk: not running, %s", blocked)
-        return None
-
     # Before the lock, so a finished migration costs one cached read per tick.
     if load_progress().completed:
         return None
@@ -129,23 +139,10 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
             return None
 
         with get_session_with_current_tenant() as db_session:
-            active_search_settings = get_active_search_settings(db_session)
-            if active_search_settings.secondary is not None:
-                # The pipeline writes to the secondary whenever a FUTURE
-                # exists, leaving the live index on the old chunks.
-                task_logger.info("tabular re-chunk: a reindex is in flight, waiting")
-                return None
-            # Only while an INSTANT swap is still backfilling: the port copies
-            # chunks boundary for boundary over finished work. Without the
-            # source-id check this blocks for ever, because "pending work"
-            # means a cc_pair has no settled port attempt - the normal state.
-            if active_search_settings.primary.port_backfill_source_id is not None and (
-                port_backfill_has_pending_work(
-                    db_session, active_search_settings.primary.id
-                )
-            ):
-                task_logger.info("tabular re-chunk: waiting for the reindex port")
-                return None
+            blocked = _blocked_reason(db_session)
+        if blocked is not None:
+            task_logger.info("tabular re-chunk: waiting, %s", blocked)
+            return None
 
         def extend_lock() -> None:
             lock.extend(_LOCK_TIMEOUT_S)
