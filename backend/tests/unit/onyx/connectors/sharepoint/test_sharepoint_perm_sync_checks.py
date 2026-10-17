@@ -18,7 +18,9 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
     UnexpectedValidationError,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
@@ -294,7 +296,7 @@ def test_configured_sites_the_exclusions_remove_leave_nothing_to_probe() -> None
     gateway: MagicMock = _gateway()
     config: dict[str, Any] = _config(excluded_sites=["*/sites/eng"])
 
-    with pytest.raises(UnexpectedValidationError, match="No site"):
+    with pytest.raises(NothingToCheckError, match="No site"):
         _run("sharepoint_site_permissions_read", _context(gateway, config))
 
     gateway.list_site_urls.assert_not_called()
@@ -332,11 +334,12 @@ def test_site_group_members_are_read_for_the_first_granting_group() -> None:
     )
 
 
-def test_site_group_members_pass_when_no_site_names_a_group() -> None:
+def test_site_group_members_are_skipped_when_no_site_names_a_group() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_role_assignments.return_value = [ENTRA_GROUP]
 
-    _run("sharepoint_site_group_members_read", _context(gateway, _config()))
+    with pytest.raises(NothingToCheckError, match="no SharePoint group"):
+        _run("sharepoint_site_group_members_read", _context(gateway, _config()))
 
     gateway.list_site_group_users.assert_not_called()
 
@@ -405,7 +408,8 @@ def test_a_group_entra_no_longer_knows_by_name_is_skipped(
     ]
     gateway.find_entra_group_id.return_value = None
 
-    _run(check_id, _context(gateway, _config()))
+    with pytest.raises(NothingToCheckError):
+        _run(check_id, _context(gateway, _config()))
 
     expansion(gateway).assert_not_called()
 
@@ -420,7 +424,8 @@ def test_public_and_limited_entra_groups_are_not_expanded(
         _assignment(SharepointPrincipalType.ENTRA_GROUP, CLAIMS_LOGIN, "Guests", [1]),
     ]
 
-    _run(check_id, _context(gateway, _config()))
+    with pytest.raises(NothingToCheckError):
+        _run(check_id, _context(gateway, _config()))
 
     expansion(gateway).assert_not_called()
 
@@ -432,7 +437,8 @@ def test_an_entra_group_entra_no_longer_has_is_skipped(
     gateway: MagicMock = _gateway()
     expansion(gateway).side_effect = _refusal(404, "Request_ResourceNotFound")
 
-    _run(check_id, _context(gateway, _config()))
+    with pytest.raises(NothingToCheckError, match="Entra group"):
+        _run(check_id, _context(gateway, _config()))
 
 
 @pytest.mark.parametrize(("check_id", "expansion"), _EXPANSIONS)
@@ -473,12 +479,13 @@ def test_entra_group_inside_a_site_group_is_found(
     expansion(gateway).assert_called_once_with(**_EXPANSION_KWARGS[check_id])
 
 
-def test_no_entra_group_anywhere_passes_the_nested_check_without_a_read() -> None:
+def test_no_entra_group_anywhere_skips_the_nested_check_without_a_read() -> None:
     """Document sync expands only the groups its sites name."""
     gateway: MagicMock = _gateway()
     gateway.list_role_assignments.return_value = [SITE_GROUP]
 
-    _run("sharepoint_entra_nested_groups_read", _context(gateway, _config()))
+    with pytest.raises(NothingToCheckError):
+        _run("sharepoint_entra_nested_groups_read", _context(gateway, _config()))
 
     gateway.list_nested_entra_groups.assert_not_called()
     gateway.list_entra_groups.assert_not_called()
@@ -496,12 +503,13 @@ def test_group_members_fall_back_to_a_listed_group() -> None:
     gateway.list_entra_group_member_page.assert_called_once_with(group_id=GROUP_ID)
 
 
-def test_group_members_pass_when_the_tenant_lists_no_group() -> None:
+def test_group_members_are_skipped_when_the_tenant_lists_no_group() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_role_assignments.return_value = [SITE_GROUP]
     gateway.list_entra_groups.return_value = EntraPage(items=[])
 
-    _run("sharepoint_entra_group_members_read", _context(gateway, _config()))
+    with pytest.raises(NothingToCheckError):
+        _run("sharepoint_entra_group_members_read", _context(gateway, _config()))
 
     gateway.list_entra_group_member_page.assert_not_called()
 
@@ -607,28 +615,31 @@ def test_a_library_without_a_list_id_is_skipped_like_the_sync() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = [DRIVE.model_copy(update={"list_id": None})]
 
-    _run("sharepoint_document_permissions_read", _context(gateway, _config()))
+    with pytest.raises(NothingToCheckError, match="list id"):
+        _run("sharepoint_document_permissions_read", _context(gateway, _config()))
 
     gateway.list_role_assignments.assert_not_called()
 
 
-def test_an_empty_library_proves_the_library_read() -> None:
+def test_an_empty_library_proves_only_the_library_read() -> None:
     gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page()
 
-    _run("sharepoint_document_permissions_read", _context(gateway, _config()))
+    with pytest.raises(InconclusiveValidationError, match="only library"):
+        _run("sharepoint_document_permissions_read", _context(gateway, _config()))
 
     assert _securable_kinds(gateway) == [SharepointSecurableKind.LIBRARY]
 
 
 def test_document_permissions_stop_after_the_first_libraries() -> None:
-    """Ten empty libraries prove the library read and pass, since the sync
-    runs this check before every attempt."""
+    """Ten empty libraries prove the library read only: INCOMPLETE, which
+    does not hold indexing."""
     gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = [DRIVE] * 11
     gateway.get_delta_page.return_value = _delta_page()
 
-    _run("sharepoint_document_permissions_read", _context(gateway, _config()))
+    with pytest.raises(InconclusiveValidationError, match="first 10 libraries"):
+        _run("sharepoint_document_permissions_read", _context(gateway, _config()))
 
     assert gateway.get_delta_page.call_count == 10
     assert gateway.list_role_assignments.call_count == 10
@@ -705,11 +716,12 @@ def test_page_permissions_move_past_a_site_without_a_pages_listing() -> None:
     assert gateway.list_role_assignments.call_args.kwargs["site_url"] == OTHER_SITE_URL
 
 
-def test_a_sampled_page_that_went_away_is_skipped() -> None:
+def test_a_sampled_page_that_went_away_is_incomplete() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_role_assignments.side_effect = _refusal(404, "itemNotFound")
 
-    _run("sharepoint_page_permissions_read", _context(gateway, _config()))
+    with pytest.raises(InconclusiveValidationError, match="went away"):
+        _run("sharepoint_page_permissions_read", _context(gateway, _config()))
 
 
 def test_refused_page_permissions_name_the_rest_grant() -> None:

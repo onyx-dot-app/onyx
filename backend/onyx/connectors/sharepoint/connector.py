@@ -700,9 +700,13 @@ def select_site_drive(
     return site_drive_from_graph(drive)
 
 
+class DriveMetadataError(ValueError):
+    """Graph listed a library without the fields traversal needs."""
+
+
 def site_drive_from_graph(drive: SharepointDrive) -> SiteDrive:
     if not drive.id or not drive.name or not drive.web_url:
-        raise ValueError("Graph drive is missing required traversal metadata")
+        raise DriveMetadataError("Graph drive is missing required traversal metadata")
     return SiteDrive(
         drive_id=drive.id,
         list_id=drive.list_id,

@@ -71,6 +71,15 @@ TOKEN_REJECTED_ROW = MicrosoftRowText(
 )
 
 
+ENTRA_GROUPS_DENIED_ROW = MicrosoftRowText(
+    summary="No permission to read Entra groups",
+    description=(
+        "The app cannot list the tenant's Entra groups.\n"
+        + grant_line("GroupMember.Read.All")
+    ),
+)
+
+
 def unexpected_answer_row(request: str) -> MicrosoftRowText:
     """``request`` names the call, such as "the site listing"."""
     return MicrosoftRowText(
