@@ -4131,6 +4131,19 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクタを設定",
+          "subtext": "指定した Jira Service Management のサービスデスクプロジェクトからリクエストとチケットをインデックス化します。",
+          "fields": {
+            "internal_notes": {
+              "label": "内部メモを含める",
+              "description": "[Internal Note] と表示した担当者の内部メモをインデックス化します。既定では公開コメントのみを対象とします。"
+            },
+            "jql_query": {
+              "description": "このサービスデスクプロジェクトに適用する任意の JQL フィルターです。プロジェクトや時間の条件を追加しないでください。"
+            }
+          }
+        },
         "salesforce": {
           "description": "Salesforce コネクターを設定",
           "fields": {

@@ -4131,6 +4131,19 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "为指定的 Jira Service Management 服务台项目中的请求和工单建立索引。",
+          "fields": {
+            "internal_notes": {
+              "label": "包含内部备注",
+              "description": "为标记为 [Internal Note] 的客服内部备注建立索引。默认仅索引公开评论。"
+            },
+            "jql_query": {
+              "description": "此服务台项目的可选 JQL 筛选条件。请勿添加项目或时间筛选条件。"
+            }
+          }
+        },
         "salesforce": {
           "description": "配置 Salesforce 连接器",
           "fields": {

@@ -4131,6 +4131,19 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Jira Service Management-Connector konfigurieren",
+          "subtext": "Anfragen und Tickets aus einem bestimmten Jira Service Management-Projekt indexieren.",
+          "fields": {
+            "internal_notes": {
+              "label": "Interne Notizen einbeziehen",
+              "description": "Interne Agentennotizen mit [Internal Note] kennzeichnen und indexieren. Standardmäßig werden nur öffentliche Kommentare indexiert."
+            },
+            "jql_query": {
+              "description": "Optionaler JQL-Filter für dieses Service-Desk-Projekt. Keine Projekt- oder Zeitfilter hinzufügen."
+            }
+          }
+        },
         "salesforce": {
           "description": "Salesforce-Connector konfigurieren",
           "fields": {

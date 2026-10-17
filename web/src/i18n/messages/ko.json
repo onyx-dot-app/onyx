@@ -4131,6 +4131,19 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "지정된 Jira Service Management 서비스 데스크 프로젝트의 요청과 티켓을 색인화합니다.",
+          "fields": {
+            "internal_notes": {
+              "label": "내부 메모 포함",
+              "description": "[Internal Note]로 표시된 상담원의 내부 메모를 색인화합니다. 기본적으로 공개 댓글만 색인화합니다."
+            },
+            "jql_query": {
+              "description": "이 서비스 데스크 프로젝트에 대한 선택적 JQL 필터입니다. 프로젝트 또는 시간 조건을 추가하지 마세요."
+            }
+          }
+        },
         "salesforce": {
           "description": "Salesforce 커넥터 구성",
           "fields": {

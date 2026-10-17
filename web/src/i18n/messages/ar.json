@@ -4131,6 +4131,19 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "إعداد موصل Jira Service Management",
+          "subtext": "فهرسة الطلبات والتذاكر من مشروع مكتب خدمة محدد في Jira Service Management.",
+          "fields": {
+            "internal_notes": {
+              "label": "تضمين الملاحظات الداخلية",
+              "description": "فهرسة ملاحظات الوكلاء الداخلية مع تمييزها بالعلامة [Internal Note]. تتم فهرسة التعليقات العامة فقط بشكل افتراضي."
+            },
+            "jql_query": {
+              "description": "عامل تصفية JQL اختياري لمشروع مكتب الخدمة هذا. لا تضف عوامل تصفية للمشروع أو للوقت."
+            }
+          }
+        },
         "salesforce": {
           "description": "تهيئة موصل Salesforce",
           "fields": {

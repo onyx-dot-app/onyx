@@ -1029,69 +1029,49 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira_service_management: {
-    description: "Configure Jira Service Management connector",
-    subtext: `Configure which Jira Service Management project to index. All tickets (customer requests) in the specified service desk project will be ingested.`,
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira_service_management.subtext",
     values: [
       {
         type: "text",
-        query: "Enter the Jira base URL:",
-        label: "Jira Base URL",
+        label: "connectors.jira.fields.jira_base_url.label",
         name: "jira_base_url",
         optional: false,
-        description:
-          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
       },
       {
         type: "text",
-        query: "Enter the Service Management project key:",
-        label: "Project Key",
+        label: "connectors.jira.fields.project_key.label",
         name: "project_key",
         optional: false,
-        description:
-          "The project key of the Jira Service Management project to index (e.g., 'HELP').",
+        description: "connectors.jira.fields.project_key.description",
       },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
       {
         type: "checkbox",
-        query: "Using scoped token?",
-        label: "Using scoped token",
-        name: "scoped_token",
-        optional: true,
-        default: false,
-      },
-      {
-        type: "checkbox",
-        query: "Include internal agent notes?",
-        label: "Include internal notes",
+        label: "connectors.jira_service_management.fields.internal_notes.label",
         name: "include_internal_comments",
         optional: true,
         default: false,
-        description:
-          "Jira Service Management comments can be public (visible to customers) or internal agent notes. Enable this to also index internal notes; they will be tagged with '[Internal Note]'.",
+        description: "connectors.jira_service_management.fields.internal_notes.description",
       },
-      buildIncludeAttachmentsOption(
-        false,
-        "Also index ticket attachments (documents and files). New connectors default to off; attachments are indexed as separate documents linked to their ticket and are pruned when this setting is turned off.",
-      ),
+      buildIncludeAttachmentsOption(false),
       {
         type: "list",
-        query: "Enter email addresses to blacklist from comments:",
-        label: "Comment Email Blacklist",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
         name: "comment_email_blacklist",
-        description:
-          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+        description: "connectors.jira.fields.comment_email_blacklist.description",
         optional: true,
       },
     ],
     advanced_values: [
       {
         type: "text",
-        query: "Enter an additional JQL filter (optional):",
-        label: "Custom JQL Query",
+        label: "connectors.jira.fields.jql_query.label",
         name: "jql_query",
         optional: true,
-        description:
-          "Optional JQL to further filter which tickets are indexed (e.g., 'issuetype in (Incident, Service Request)')." +
-          "\n\nIMPORTANT: Do not include any time-based filters or project clauses in the JQL query as that will conflict with the connector's logic.",
+        description: "connectors.jira_service_management.fields.jql_query.description",
       },
     ],
   },

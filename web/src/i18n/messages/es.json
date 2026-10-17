@@ -4131,6 +4131,19 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configurar el conector de Jira Service Management",
+          "subtext": "Indexa solicitudes y tickets de un proyecto específico de Jira Service Management.",
+          "fields": {
+            "internal_notes": {
+              "label": "Incluir notas internas",
+              "description": "Indexa las notas internas de los agentes marcadas como [Internal Note]. De forma predeterminada, solo se indexan los comentarios públicos."
+            },
+            "jql_query": {
+              "description": "Filtro JQL opcional para este proyecto de servicio. No añadas filtros de proyecto ni de tiempo."
+            }
+          }
+        },
         "salesforce": {
           "description": "Configurar conector de Salesforce",
           "fields": {
