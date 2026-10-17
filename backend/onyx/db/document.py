@@ -344,18 +344,16 @@ def get_oversized_tabular_documents(
     can rebuild their sections, and documents whose cc-pairs are all being
     deleted.
     """
-    stmt = (
+    # One row per document: a document in several cc-pairs is re-indexed under
+    # the lowest, as any of them would upsert the same row. Resolved per
+    # document rather than by DISTINCT ON over the join, which would have to
+    # sort the join by (id, connector_id, credential_id) and so could not use
+    # the ordered document_pkey scan the cursor depends on.
+    cc_pair = (
         select(
-            DbDocument,
             DocumentByConnectorCredentialPair.connector_id,
             DocumentByConnectorCredentialPair.credential_id,
-            FileRecord.file_type,
         )
-        .join(
-            DocumentByConnectorCredentialPair,
-            DocumentByConnectorCredentialPair.id == DbDocument.id,
-        )
-        .outerjoin(FileRecord, FileRecord.file_id == DbDocument.file_id)
         .join(
             ConnectorCredentialPair,
             and_(
@@ -366,9 +364,31 @@ def get_oversized_tabular_documents(
             ),
         )
         .where(
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+        .order_by(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .limit(1)
+        .lateral("cc_pair")
+    )
+
+    stmt = (
+        select(
+            DbDocument,
+            cc_pair.c.connector_id,
+            cc_pair.c.credential_id,
+            FileRecord.file_type,
+        )
+        .select_from(DbDocument)
+        .outerjoin(FileRecord, FileRecord.file_id == DbDocument.file_id)
+        # Inner: a document whose cc-pairs are all DELETING yields no row.
+        .join(cc_pair, true())
+        .where(
             DbDocument.chunk_count > chunk_count_above,
             DbDocument.file_id.isnot(None),
-            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
             or_(
                 # A Drive-exported spreadsheet keeps its original name, which
                 # often has no extension, so the stored file's type decides.
@@ -379,14 +399,7 @@ def get_oversized_tabular_documents(
                 ],
             ),
         )
-        # One row per document: a document in several cc-pairs is re-indexed
-        # under the lowest, as any of them would upsert the same row.
-        .distinct(DbDocument.id)
-        .order_by(
-            DbDocument.id,
-            DocumentByConnectorCredentialPair.connector_id,
-            DocumentByConnectorCredentialPair.credential_id,
-        )
+        .order_by(DbDocument.id)
         .limit(limit)
     )
     if after_doc_id is not None:
