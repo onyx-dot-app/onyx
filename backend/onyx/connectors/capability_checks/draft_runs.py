@@ -45,6 +45,7 @@ from onyx.connectors.capability_checks.models import (
     CheckFinding,
     CheckNotApplicableError,
     CheckNotRunReason,
+    CheckStep,
     CredentialCapability,
     compute_capability_verdicts,
     parse_known_findings,
@@ -53,6 +54,11 @@ from onyx.connectors.capability_checks.runner import (
     CheckReadinessKind,
     decide_check_readiness,
     run_order,
+)
+from onyx.connectors.capability_checks.two_step import (
+    TwoStepEntry,
+    TwoStepRow,
+    two_step_rows,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
@@ -179,6 +185,8 @@ class DraftCheckState(BaseModel):
     # The row the check shows on (``CapabilityCheck.row_id``). None in runs
     # started before rows, which read it as the check_id.
     row_id: str | None = None
+    # Set on the second step of a two-step row; it names the parent.
+    step: CheckStep | None = None
     display_name: str
     capability: CredentialCapability
     required: bool
@@ -248,6 +256,32 @@ class DraftCheckRunSnapshot(BaseModel):
             for capability, verdict in verdicts.items()
             if capability not in unfinished
         }
+
+    @computed_field
+    @property
+    def two_step_rows(self) -> list[TwoStepRow]:
+        """How each two-step row shows, with "counting…" while its step
+        runs."""
+        return two_step_rows(
+            [
+                TwoStepEntry(
+                    check_id=check.check_id,
+                    row_id=check.row_id or check.check_id,
+                    step=check.step,
+                    status=(
+                        None
+                        if check.state in _UNFINISHED_STATES
+                        else _result_status(check.state)
+                    ),
+                    applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
+                    partial=check.partial,
+                    error_kind=check.error_kind,
+                    not_run_reason=check.not_run_reason,
+                    summary=check.summary,
+                )
+                for check in self.checks
+            ]
+        )
 
 
 def settled_results(snapshot: DraftCheckRunSnapshot) -> list[CapabilityCheckResult]:
@@ -347,6 +381,7 @@ def decide_draft_check_state(
     state = DraftCheckState(
         check_id=check.check_id,
         row_id=check.row_id,
+        step=check.step,
         display_name=check.display_name,
         capability=check.capability,
         required=check.required,
@@ -576,6 +611,7 @@ def cached_check_result(
         capability=check.capability,
         check_id=check.check_id,
         row_id=check.row_id,
+        step=check.step,
         display_name=check.display_name,
         required=check.required,
         status=_result_status(cached.state),

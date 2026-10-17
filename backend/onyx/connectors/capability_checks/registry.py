@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
 )
+from onyx.connectors.capability_checks.two_step import validate_step_links
 from onyx.connectors.confluence.capability_checks import (
     build_confluence_indexing_checks,
 )
@@ -101,6 +102,9 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
     Ratchet: named checks require a registered source-operations gateway --
     participation in the checks system is an anti-drift guarantee. Unmigrated
     sources keep the fallback path.
+
+    Raises:
+        ValueError: A two-step link is not sound (``validate_step_links``).
     """
     checks = list(_INDEXING_CHECKS_BY_SOURCE.get(source, []))
     assert not checks or get_source_operations_class(source) is not None, (
@@ -115,6 +119,7 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
         noop_return_value=[],
     )
     checks.extend(get_perm_sync_checks(source))
+    validate_step_links(checks)
     return checks
 
 

@@ -482,6 +482,11 @@ error, and to the "Not run: …" line for a stopped check. `message` stays the
 full text. A passing check gives its line in `CheckOutput.summary`. Checks that
 share a `row_id` are one row on the form: the variants of a probe (token types,
 deployments) and a probe's discovery step.
+A two-step row links its second check to the parent with `CheckStep`
+(`step_of`, the running line, the caveat when the step does not finish).
+`two_step.py:two_step_row` decides how the row shows, and draft snapshots,
+stored reports and run history return it as `two_step_rows`. The registry
+validates the links (`validate_step_links`).
 One exception: on a form run (a draft run or a pair dry run) a sign-in check
 that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
 source. Stored reports may still hold the legacy `INDETERMINATE`, which reads

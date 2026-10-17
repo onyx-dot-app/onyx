@@ -41,6 +41,7 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckStep,
     CountFinding,
     CredentialCapability,
 )
@@ -143,7 +144,7 @@ _SAMPLE_DEPENDS_ON: tuple[str, ...] = (_LISTING_CHECK_ID,)
 # check_id to the checks it runs after, in run order.
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _LISTING_CHECK_ID: (_SIGN_IN_CHECK_ID,),
-    "outlook_mailbox_count": (_SIGN_IN_CHECK_ID,),
+    "outlook_mailbox_count": (_LISTING_CHECK_ID,),
     _CONFIGURED_MAILBOXES_CHECK_ID: (_LISTING_CHECK_ID,),
     _CONFIGURED_GROUPS_CHECK_ID: (_LISTING_CHECK_ID,),
     "outlook_mail_read": _SAMPLE_DEPENDS_ON,
@@ -473,6 +474,7 @@ class _OutlookCheck(CapabilityCheck[OutlookConnectorConfig]):
         fails_when_unreachable: bool = False,
         discovery: bool = False,
         row_id: str | None = None,
+        step: CheckStep | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -487,6 +489,7 @@ class _OutlookCheck(CapabilityCheck[OutlookConnectorConfig]):
             fails_when_unreachable=fails_when_unreachable,
             discovery=discovery,
             row_id=row_id,
+            step=step,
         )
 
 
@@ -587,6 +590,11 @@ class _MailboxCountCheck(_ConfigReadingCheck):
             ),
             discovery=True,
             row_id=_LISTING_CHECK_ID,
+            step=CheckStep(
+                step_of=_LISTING_CHECK_ID,
+                running_summary="Users listed, counting mailboxes…",
+                unfinished_caveat="Could not count every mailbox.",
+            ),
         )
 
     def applies(self, form_state: FormState[OutlookConnectorConfig]) -> bool:
