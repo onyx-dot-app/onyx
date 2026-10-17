@@ -7,14 +7,18 @@ and "message" are unaffected.
 """
 
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
+from opensearchpy.exceptions import ConnectionError as OpenSearchConnectionError
+from opensearchpy.exceptions import ConnectionTimeout as OpenSearchConnectionTimeout
 from pydantic import BaseModel
 from sqlalchemy.exc import DataError
 
+from onyx import main
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.main import log_http_error, validation_exception_handler, value_error_handler
 
@@ -58,6 +62,19 @@ def client() -> TestClient:
     @app.get("/client-status-error")
     def _client_status_error() -> None:
         raise _ClientConflictError("Name already taken")
+
+    # opensearch-py sets status_code to a string on these: "TIMEOUT" and "N/A".
+    @app.get("/opensearch-timeout")
+    def _opensearch_timeout() -> None:
+        raise OpenSearchConnectionTimeout(
+            "TIMEOUT", "Read timed out", Exception("read timeout")
+        )
+
+    @app.get("/opensearch-unreachable")
+    def _opensearch_unreachable() -> None:
+        raise OpenSearchConnectionError(
+            "N/A", "Connection refused", Exception("connection refused")
+        )
 
     @app.post("/validated")
     def _validated(body: _Body) -> None:  # noqa: ARG001
@@ -139,6 +156,27 @@ class TestUnhandledExceptionContract:
             "error_code": "CONFLICT",
             "detail": "Name already taken",
         }
+
+    @pytest.mark.parametrize(
+        "path,exception_name",
+        [
+            ("/opensearch-timeout", "ConnectionTimeout"),
+            ("/opensearch-unreachable", "ConnectionError"),
+        ],
+    )
+    def test_a_non_integer_status_code_is_a_logged_500(
+        self, client: TestClient, path: str, exception_name: str
+    ) -> None:
+        with patch.object(main.logger, "error") as log_error:
+            response = client.get(path)
+
+        assert response.status_code == 500
+        assert response.json() == {
+            "error_code": "INTERNAL_ERROR",
+            "detail": "An internal server error occurred.",
+        }
+        log_error.assert_called_once()
+        assert exception_name in log_error.call_args.args[0]
 
 
 class TestValueErrorContract:
