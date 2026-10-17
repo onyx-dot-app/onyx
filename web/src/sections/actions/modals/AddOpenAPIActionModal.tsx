@@ -1,6 +1,7 @@
 "use client";
 
 import { cn, markdown } from "@opal/utils";
+import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
 import { Modal } from "@opal/components";
 import { Text } from "@opal/components";
@@ -45,7 +46,7 @@ interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
   onSuccess?: (tool: ToolSnapshot) => Promise<void> | void;
   onUpdate?: (tool: ToolSnapshot) => Promise<void> | void;
-  title?: string;
+  title?: string | RichStr;
   existingTool?: ToolSnapshot | null;
   onClose?: () => void;
 }
@@ -89,7 +90,7 @@ interface FormContentProps {
   configureAuthentication?: boolean;
   handleClose: () => void;
   existingTool: ToolSnapshot | null;
-  title?: string;
+  title?: string | RichStr;
 }
 
 function FormContent({

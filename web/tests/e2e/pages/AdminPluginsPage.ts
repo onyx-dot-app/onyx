@@ -29,15 +29,17 @@ export class AdminPluginsPage {
 
   async openAddMcp(): Promise<void> {
     await this.openAddMenu();
+    await this.page.getByRole("menuitem", { name: "MCP", exact: true }).click();
     await this.page
-      .getByRole("menuitem", { name: "Add custom MCP server", exact: true })
+      .getByRole("dialog", { name: "MCP", exact: true })
+      .getByRole("button", { name: "Add custom MCP server", exact: true })
       .click();
   }
 
   async openAddOpenApi(): Promise<void> {
     await this.openAddMenu();
     await this.page
-      .getByRole("menuitem", { name: "Add OpenAPI action", exact: true })
+      .getByRole("menuitem", { name: "OpenAPI", exact: true })
       .click();
   }
 

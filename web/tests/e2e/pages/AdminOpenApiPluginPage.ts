@@ -12,15 +12,12 @@ interface OAuthSettings {
 export class AdminOpenApiPluginPage {
   readonly page: Page;
   readonly plugins: AdminPluginsPage;
-  readonly authenticationDialog: Locator;
+  readonly detailDialog: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.plugins = new AdminPluginsPage(page);
-    this.authenticationDialog = page.getByRole("dialog", {
-      name: "Edit authentication",
-      exact: true,
-    });
+    this.detailDialog = page.getByRole("dialog");
   }
 
   async createFromSchema(schema: string, name: string): Promise<number> {
@@ -40,10 +37,6 @@ export class AdminOpenApiPluginPage {
       .getByRole("button", { name: "Add Action", exact: true })
       .click();
     await this.expectDetail(name);
-    await this.page
-      .getByRole("button", { name: "Edit authentication", exact: true })
-      .click();
-    await expect(this.authenticationDialog).toBeVisible();
     const match = new URL(this.page.url()).pathname.match(/\/openapi\/(\d+)$/);
     if (!match?.[1])
       throw new Error("OpenAPI plugin detail URL has no tool ID");
@@ -60,8 +53,13 @@ export class AdminOpenApiPluginPage {
   }
 
   async configureOAuth(settings: OAuthSettings): Promise<void> {
-    const dialog = this.authenticationDialog;
+    const dialog = this.detailDialog;
     await expect(dialog).toBeVisible();
+    await dialog
+      .getByRole("tab", { name: "Authentication", exact: true })
+      .click();
+    await dialog.getByRole("combobox").click();
+    await this.page.getByRole("option", { name: /^OAuth Each user/ }).click();
     await dialog
       .getByLabel("Authorization URL", { exact: true })
       .fill(settings.authorizationUrl);
@@ -75,17 +73,23 @@ export class AdminOpenApiPluginPage {
       .getByLabel("OAuth Client Secret", { exact: true })
       .fill(settings.clientSecret);
     await dialog.getByLabel(/^Scopes/).fill(settings.scopes);
-    await dialog.getByRole("button", { name: "Connect", exact: true }).click();
-    await expect(dialog).toBeHidden();
+    const save = dialog.getByRole("button", {
+      name: "Save Changes",
+      exact: true,
+    });
+    await save.click();
+    await expect(save).toBeDisabled();
+    await expect(dialog).toBeVisible();
   }
 
   async expectOAuthPersisted(
     settings: Pick<OAuthSettings, "authorizationUrl" | "tokenUrl" | "scopes">
   ): Promise<void> {
-    await this.page
-      .getByRole("button", { name: "Edit authentication", exact: true })
+    await this.page.reload();
+    const dialog = this.detailDialog;
+    await dialog
+      .getByRole("tab", { name: "Authentication", exact: true })
       .click();
-    const dialog = this.authenticationDialog;
     await expect(
       dialog.getByLabel("Authorization URL", { exact: true })
     ).toHaveValue(settings.authorizationUrl);
@@ -99,7 +103,7 @@ export class AdminOpenApiPluginPage {
     await expect(
       dialog.getByLabel("OAuth Client Secret", { exact: true })
     ).toHaveValue("********");
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(dialog).toBeHidden();
   }
 }

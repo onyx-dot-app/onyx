@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, Text } from "@opal/components";
+import type { RichStr } from "@opal/types";
 import {
   ContentAction,
   IllustrationContent,
@@ -40,7 +41,7 @@ function PluginListError({
   onRetry,
   compact,
 }: {
-  title: string;
+  title: string | RichStr;
   onRetry: () => void;
   compact: boolean;
 }) {
