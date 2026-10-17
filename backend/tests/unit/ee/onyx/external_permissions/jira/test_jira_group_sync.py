@@ -17,7 +17,7 @@ def test_get_group_member_emails_skips_deleted_group(
     gateway.get_group_members_page.side_effect = JiraApiError(
         "error",
         status_code=404,
-        text=(
+        body=(
             '{"errorMessages":["The group named \'stale group \' does not '
             'exist"],"errors":{}}'
         ),
@@ -35,7 +35,7 @@ def test_fetch_group_member_page_keeps_unrecognized_404_error() -> None:
     gateway.get_group_members_page.side_effect = JiraApiError(
         "error",
         status_code=404,
-        text="Not Found",
+        body="Not Found",
     )
 
     with pytest.raises(RuntimeError, match="requires Jira 6.0"):

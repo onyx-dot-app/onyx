@@ -1,3 +1,24 @@
+class SourceApiError(Exception):
+    """An error response from a source's API, with what support needs to read
+    it: the status, the request and the response body. A source gateway's API
+    error subclasses it."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None,
+        method: str | None = None,
+        url: str | None = None,
+        body: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.method = method
+        self.url = url
+        self.body = body
+
+
 class ValidationError(Exception):
     """General exception for validation errors."""
 
