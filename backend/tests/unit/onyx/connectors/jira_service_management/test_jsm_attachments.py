@@ -93,12 +93,16 @@ def _make_connector_with_attachments(
 ) -> JiraServiceManagementConnector:
     connector = make_jsm_connector(include_attachments=include_attachments)
     _wire_attachment_fetch(mock_jira_client, attachments)
-    if include_permissions:
-        # Short-circuit project-permission resolution: these tests cover
-        # slim-pass propagation, not the admin-gated permission lookup.
-        connector._project_permissions_cache = {
-            f"{TEST_PROJECT_KEY}:unprefixed": _TEST_PROJECT_ACCESS
-        }
+    # Full indexing now persists the attachment ACL regardless of the order
+    # of the separate permission-sync pass. Avoid live project-role requests.
+    connector._project_permissions_cache = {
+        f"{TEST_PROJECT_KEY}:prefixed": _TEST_PROJECT_ACCESS,
+        **(
+            {f"{TEST_PROJECT_KEY}:unprefixed": _TEST_PROJECT_ACCESS}
+            if include_permissions
+            else {}
+        ),
+    }
     # Parity tracking is per-run state; make every test start clean.
     connector._attachment_admission_failures.clear()
     connector._failed_attachment_doc_ids.clear()
@@ -482,6 +486,75 @@ class TestAttachmentFailureIsolation:
             ticket_document_id=ticket_doc_id,
         )
         assert [sd.id for sd in slim_docs] == [f"{ticket_doc_id}/attachment/6002"]
+
+
+class TestAttachmentFullIndexPermissions:
+    @pytest.mark.usefixtures("mock_extract")
+    def test_full_index_persists_access_independent_of_perm_sync_order(
+        self,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+        mock_jira_client: MagicMock,
+    ) -> None:
+        connector = _make_connector_with_attachments(
+            make_jsm_connector,
+            mock_jira_client,
+            [MockAttachment(id="acl-1", filename="restricted.txt")],
+        )
+        access = ExternalAccess(
+            external_user_emails={"agent@example.com"},
+            external_user_group_ids={"prefixed:team"},
+            is_public=False,
+        )
+        with patch.object(
+            connector, "_get_project_permissions", return_value=access
+        ) as permissions:
+            outputs = connector._process_issue_attachments(
+                make_mock_jsm_issue(), None, TICKET_DOC_ID
+            )
+
+        assert len(outputs) == 1
+        assert isinstance(outputs[0], Document)
+        assert outputs[0].external_access == access
+        permissions.assert_called_once_with(TEST_PROJECT_KEY, add_prefix=True)
+
+    @pytest.mark.usefixtures("mock_extract")
+    def test_failed_access_lookup_does_not_index_unprotected_attachment(
+        self,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+        mock_jira_client: MagicMock,
+    ) -> None:
+        connector = _make_connector_with_attachments(
+            make_jsm_connector,
+            mock_jira_client,
+            [
+                MockAttachment(id="acl-2", filename="restricted.txt"),
+                MockAttachment(id="acl-3", filename="healthy.txt"),
+            ],
+        )
+        access = ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids={"prefixed:team"},
+            is_public=False,
+        )
+        with patch.object(
+            connector,
+            "_get_project_permissions",
+            side_effect=[RuntimeError("ACL lookup failed"), access],
+        ):
+            outputs = connector._process_issue_attachments(
+                make_mock_jsm_issue(), None, TICKET_DOC_ID
+            )
+
+        assert len(outputs) == 2
+        assert isinstance(outputs[0], ConnectorFailure)
+        assert outputs[0].failed_document is not None
+        assert outputs[0].failed_document.document_id.endswith("/attachment/acl-2")
+        assert isinstance(outputs[1], Document)
+        assert outputs[1].external_access == access
+        slim = connector._process_issue_attachments_slim(
+            make_mock_jsm_issue(), None, TICKET_DOC_ID
+        )
+        assert [doc.id for doc in slim] == [f"{TICKET_DOC_ID}/attachment/acl-3"]
 
 
 class TestSlimPermissionPropagation:
