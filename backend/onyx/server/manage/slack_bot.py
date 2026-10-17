@@ -99,6 +99,10 @@ def _form_channel_config(
         slack_channel_config_creation_request.show_continue_in_web_ui
     )
 
+    channel_config["remove_feedback_buttons"] = (
+        slack_channel_config_creation_request.remove_feedback_buttons
+    )
+
     channel_config["respond_to_bots"] = (
         slack_channel_config_creation_request.respond_to_bots
     )
