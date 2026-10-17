@@ -70,6 +70,8 @@ plugin requires confirmation that it affects everyone, including custom agents,
 while preserving its settings and credentials.
 OpenAPI indicators and lifecycle actions follow global `Tool.enabled`,
 independently of default Chat attachments.
+The sliders action says Disable when all supported surfaces are enabled and Enable when all are disabled.
+Mixed or unknown MCP states say Manage workspace availability. Disabled Craft does not affect this label.
 Member OAuth opens a normal new tab, without popup sizing or window features.
 The correlated callback still closes the sign-in tab and refreshes the original page.
 Its completion screen uses a bounded, centered card with return and close-tab
@@ -312,9 +314,11 @@ Server configuration, Authentication, and Tools. All forms are inline. Tab chang
 retain drafts, and route navigation asks before discarding any unsaved edits.
 The `tab` query parameter links directly to each section. Saving server details
 stays on that tab. Authentication saves configuration, then runs the existing
-connection and tool-loading flow before opening Tools. Availability switches
-save immediately beneath server configuration. Delete has a separate confirmation.
-Changing the endpoint asks before discarding an authentication draft.
+connection and tool-loading flow before opening Tools. Workspace availability and
+deletion stay in the directory. Saved details show the URL beneath the name and
+do not offer an endpoint input; creation still accepts a URL.
+Metadata-only saves preserve existing access grants, including after a plan downgrade.
+Changing restricted access still requires the applicable plan and permissions.
 
 The Tools editor uses one divided list with aligned availability switches.
 Search, enabled-only filtering, bulk actions, and refresh share a toolbar.
@@ -373,7 +377,7 @@ when method-specific fields unmount.
 Completion and OAuth return open the
 server detail page.
 
-Saving a different server URL clears shared and personal credentials, including
+Backend updates to a server URL clear shared and personal credentials, including
 OAuth registration, and resets connection status. Authentication then starts from
 the new saved server response and repeats discovery. Old credentials and masked
 values are not carried to the new endpoint. Existing tool rows remain intact.
