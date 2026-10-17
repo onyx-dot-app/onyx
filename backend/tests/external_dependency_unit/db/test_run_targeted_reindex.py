@@ -84,8 +84,13 @@ def _doc(doc_id: str) -> Document:
 class _StubResolver(Resolver):
     """Minimal Resolver used in tests. Yields whatever the test setup hands it."""
 
-    def __init__(self, yields: list[Document | ConnectorFailure]) -> None:
+    def __init__(
+        self,
+        yields: list[Document | ConnectorFailure],
+        raises: Exception | None = None,
+    ) -> None:
         self._yields = yields
+        self._raises = raises
 
     def reindex(
         self,
@@ -94,6 +99,8 @@ class _StubResolver(Resolver):
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         del errors, include_permissions
         yield from self._yields
+        if self._raises is not None:
+            raise self._raises
 
     # Required by BaseConnector but not exercised by the processor.
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -159,6 +166,7 @@ def test_unsupported_connector_marks_all_targets_failed(
             attempts=attempts,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
+            connector_failures={},
         )
 
     assert result.unsupported is True
@@ -199,6 +207,7 @@ def test_resolver_yields_all_docs_lands_them_all(
             attempts=attempts,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
+            connector_failures={},
         )
 
     assert result.unsupported is False
@@ -240,16 +249,62 @@ def test_connector_failure_yields_route_to_failed_doc_ids(
             return_value=fake_pipeline_result,
         ),
     ):
+        connector_failures: dict[str, ConnectorFailure] = {}
         result = process_targets_for_cc_pair(
             cc_pair_id=cc_pair.id,
             targets=target_rows,
             attempts=attempts,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
+            connector_failures=connector_failures,
         )
 
     assert result.landed_doc_ids == {"d1"}
     assert result.failed_doc_ids == {"d2"}
+    assert connector_failures["d2"].failure_message == "still 403"
+    assert set(connector_failures) == {"d2"}
+
+
+def test_connector_failure_is_kept_when_connector_raises_after(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """A failure the connector yields before raising stays with the caller."""
+    target_rows, attempts = _job_with_targets(
+        db_session,
+        cc_pair,
+        [
+            TargetSpec(cc_pair_id=cc_pair.id, document_id="d1"),
+            TargetSpec(cc_pair_id=cc_pair.id, document_id="d2"),
+        ],
+    )
+    stub = _StubResolver(
+        yields=[
+            ConnectorFailure(
+                failed_document=DocumentFailure(document_id="d1"),
+                failure_message="malformed url",
+            ),
+        ],
+        raises=RuntimeError("listing failed"),
+    )
+
+    connector_failures: dict[str, ConnectorFailure] = {}
+    with (
+        patch(
+            "onyx.background.indexing.run_targeted_reindex.instantiate_connector",
+            return_value=stub,
+        ),
+        pytest.raises(RuntimeError, match="listing failed"),
+    ):
+        process_targets_for_cc_pair(
+            cc_pair_id=cc_pair.id,
+            targets=target_rows,
+            attempts=attempts,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            db_session=db_session,
+            connector_failures=connector_failures,
+        )
+
+    assert connector_failures["d1"].failure_message == "malformed url"
 
 
 def test_doc_never_yielded_is_marked_failed(
@@ -288,6 +343,7 @@ def test_doc_never_yielded_is_marked_failed(
             attempts=attempts,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
+            connector_failures={},
         )
 
     assert result.landed_doc_ids == {"d1"}
