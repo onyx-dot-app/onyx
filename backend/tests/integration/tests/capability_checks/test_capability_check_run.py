@@ -19,10 +19,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.capabilities import CredentialCapability
-from onyx.connectors.capability_checks.models import (
-    CapabilityCheckStatus,
-    CapabilityVerdict,
-)
+from onyx.connectors.capability_checks.models import CapabilityVerdict
 from onyx.connectors.models import InputType
 from onyx.db.credential_capability import mark_capability_report_running
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -103,13 +100,8 @@ def test_credential_scoped_run_completes_and_persists_a_report(
     report = completed["report"]
     assert report["connector_id"] is None
     assert report["trigger"] == CapabilityCheckTrigger.MANUAL.value
-    assert report["check_results"]
-    # Config-less: the mock connector cannot be constructed, so every
-    # instance-requiring check skips rather than probing anything.
-    assert all(
-        result["status"] == CapabilityCheckStatus.SKIPPED.value
-        for result in report["check_results"]
-    )
+    # The mock connector has no settings probe, so the run holds no check.
+    assert report["check_results"] == []
     indexing_verdict = report["verdicts"][CredentialCapability.INDEXING.value]
     assert indexing_verdict == CapabilityVerdict.SKIPPED.value
 
