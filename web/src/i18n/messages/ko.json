@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "{serverName}에 인증하고 연결",
-        "label": "인증"
+        "ariaLabel": "{serverName} 인증 설정",
+        "label": "인증 설정"
       },
       "deleteButton": {
         "ariaLabel": "{serverName} 서버 삭제",
@@ -130,14 +130,14 @@
       "authStatus": {
         "apiTokenDescription": "API token 설정됨",
         "connectedDescription": "연결됨",
-        "oauthDescription": "{owner}에 OAuth로 연결됨",
-        "title": "인증 및 연결됨"
+        "title": "인증 및 연결됨",
+        "oauthDescription": "{owner}에 OAuth로 연결됨"
       },
       "cancelButton": {
         "label": "취소"
       },
       "description": {
-        "placeholder": "MCP 서버에 대한 자세한 설명",
+        "placeholder": "이 서버로 팀에서 무엇을 할 수 있나요?",
         "suffix": "선택 사항",
         "title": "설명"
       },
@@ -145,22 +145,22 @@
         "tooltip": "서버 연결 해제"
       },
       "editConfigsButton": {
-        "label": "설정 편집"
+        "label": "연결 설정"
       },
       "manageHeader": {
         "description": "MCP 서버 구성을 업데이트하고 인증을 관리합니다.",
         "title": "MCP 서버 관리"
       },
       "name": {
-        "placeholder": "MCP 서버 이름을 입력하세요",
+        "placeholder": "예: Linear",
         "required": "서버 이름은 필수입니다",
         "title": "서버 이름"
       },
       "serverUrl": {
         "invalid": "유효한 URL이어야 합니다",
         "required": "서버 URL은 필수입니다",
-        "subDescription": "신뢰할 수 있는 서버에만 연결하세요. 이 연결로 수행되는 작업과 도구를 최신 상태로 유지하는 책임은 사용자에게 있습니다.",
-        "title": "MCP 서버 URL"
+        "title": "MCP 서버 URL",
+        "subDescription": "신뢰할 수 있는 서버에만 연결하세요. 이 연결로 수행되는 작업과 도구를 최신 상태로 유지하는 책임은 사용자에게 있습니다."
       },
       "submitButton": {
         "addLabel": "서버 추가",
@@ -173,6 +173,34 @@
         "serverCreated": "MCP 서버를 만들었습니다",
         "serverUpdated": "MCP 서버를 업데이트했습니다",
         "updateFailed": "MCP 서버를 업데이트하지 못했습니다"
+      },
+      "access": {
+        "title": "액세스 제어",
+        "description": "이 MCP를 사용할 수 있는 사용자를 선택하세요.",
+        "public": {
+          "label": "공개",
+          "description": "조직의 누구나 이 MCP를 사용할 수 있습니다"
+        },
+        "groups": {
+          "label": "사용자 그룹",
+          "description": "선택한 사용자 그룹은 이 MCP를 사용할 수 있습니다.",
+          "placeholder": "사용자 그룹 추가",
+          "required": "사용자 그룹을 하나 이상 선택하세요."
+        },
+        "scoped": {
+          "description": "관리하는 그룹을 하나 이상 선택하세요."
+        },
+        "retainedUsers": "{count, plural, other {사용자 #명과도 직접 공유됩니다.}}",
+        "planTag": "Business",
+        "planNote": "그룹 액세스에는 Business 요금제가 필요합니다."
+      },
+      "craft": {
+        "title": "Craft에서 사용 가능",
+        "description": "사용자가 Craft에서 이 MCP 서버에 접근할 수 있도록 허용합니다."
+      },
+      "defaultChat": {
+        "title": "기본 Onyx 채팅에서 사용 가능",
+        "description": "끄면 사용자가 채팅에서 사용하기 위해 이 서버를 사용자 지정 에이전트에 추가해야 합니다."
       }
     },
     "addOpenApiModal": {
@@ -279,54 +307,52 @@
       "additionalAuthParams": {
         "label": "추가 인증 파라미터(JSON)"
       },
-      "advanced": {
-        "description": "자동 검색 대신 권한 부여 엔드포인트와 token 엔드포인트를 직접 지정하여 알려진 OAuth 공급자를 구성합니다.",
-        "title": "고급"
-      },
       "apiKey": {
         "required": "API token은 필수입니다"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "공유 키(관리자)"
+          "label": "공유 토큰"
         },
         "perUser": {
-          "label": "개별 키(사용자별)"
+          "label": "개인 토큰"
         }
       },
       "authPerformer": {
-        "required": "인증 수행자는 필수입니다"
+        "label": "인증 정보",
+        "required": "개인 또는 공유 자격 증명을 선택하세요."
       },
       "authType": {
         "apiToken": {
-          "description": "사용자별 개별 API 키 또는 조직 전체 공유 API 키를 사용합니다.",
-          "label": "API 키"
+          "label": "API 키",
+          "description": "사용자별 개별 API 키 또는 조직 전체 공유 API 키를 사용합니다."
         },
         "label": "인증 방법",
         "none": {
-          "description": "권장하지 않음",
-          "label": "없음"
+          "label": "인증 없음",
+          "description": "권장하지 않음"
         },
         "oauth": {
-          "description": "각 사용자가 자신의 자격 증명으로 OAuth 인증을 해야 합니다.",
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "각 사용자가 자신의 자격 증명으로 OAuth 인증을 해야 합니다."
         },
         "placeholder": "방법 선택",
         "ptOauth": {
-          "description": "{appName} 인증에 사용된 사용자의 OAuth 액세스 token을 전달합니다.",
-          "label": "OAuth 패스스루"
+          "label": "OAuth 패스스루",
+          "description": "{appName} 인증에 사용된 사용자의 OAuth 액세스 token을 전달합니다."
         },
         "required": "인증 유형은 필수입니다"
       },
       "authorizationEndpoint": {
         "label": "권한 부여 엔드포인트",
-        "required": "알려진 공급자 모드에서는 권한 부여 엔드포인트가 필수입니다"
+        "required": "공급자의 권한 부여 엔드포인트를 입력하세요."
       },
       "cancelButton": {
         "label": "취소"
       },
       "clientId": {
-        "label": "클라이언트 ID"
+        "label": "클라이언트 ID",
+        "required": "OAuth 클라이언트 ID를 입력하세요."
       },
       "clientSecret": {
         "label": "클라이언트 시크릿"
@@ -335,25 +361,31 @@
         "additionalParamsInvalid": "추가 인증 파라미터 JSON이 잘못되었습니다",
         "additionalParamsInvalidWithReason": "추가 인증 파라미터 JSON이 잘못되었습니다: {reason}",
         "additionalParamsNotObject": "추가 인증 파라미터는 JSON 객체여야 합니다",
-        "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}",
         "saveAuthFailed": "인증 구성을 저장하지 못했습니다",
-        "saveConfigFailed": "서버 구성을 저장하지 못했습니다"
+        "saveConfigFailed": "서버 구성을 저장하지 못했습니다",
+        "saveStage": "연결 설정을 저장할 수 없습니다",
+        "oauthStage": "로그인을 시작할 수 없습니다",
+        "discoveryStage": "서버 도구를 불러올 수 없습니다",
+        "loadStage": "연결 설정을 불러올 수 없습니다",
+        "clientRegistrationFailed": "클라이언트 자동 등록에 실패했습니다. 자체 OAuth 클라이언트를 사용하거나 공급자의 설정 요구 사항을 확인하세요.",
+        "discoveryFailed": "OAuth 로그인 설정을 찾을 수 없습니다. 서버 URL을 확인하거나 공급자의 엔드포인트를 입력하세요.",
+        "connectionFailed": "OAuth 서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
+        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요.",
+        "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}"
       },
       "header": {
-        "defaultTitle": "MCP 서버 인증",
-        "description": "MCP 서버를 사용하려면 연결을 인증하세요.",
-        "title": "*{name}* 인증"
-      },
-      "knownProvider": {
-        "hint": "알려진 공급자 모드에서는 엔드포인트 구성이 필요합니다. Google 참조 엔드포인트: 권한 부여 {authorizationEndpoint}, token {tokenEndpoint}."
+        "defaultTitle": "인증 설정",
+        "description": "MCP 서버 인증 설정",
+        "title": "*{name}* 설정"
       },
       "noAuthNotice": {
-        "description": "이 연결에는 인증을 사용하지 않습니다. 이 서버를 신뢰할 수 있는지 확인하세요. 이 연결로 수행되는 작업에 대한 책임은 사용자에게 있습니다.",
-        "title": "이 MCP 서버에 인증 없음"
+        "description": "사용자는 로그인 없이 이 서버를 사용할 수 있습니다. 설정된 사용자 지정 헤더는 계속 전송됩니다.",
+        "title": "인증 필요 없음"
       },
       "oauthInfo": {
-        "discovery": "클라이언트 ID와 시크릿은 선택 사항입니다. 자동 검색 중에 {appName}는 지원되는 경우 Client ID Metadata Document(CIMD)를 사용하고, 지원되지 않으면 Dynamic Client Registration(DCR)으로 대체합니다.",
-        "manualRegistration": "서버가 두 방법을 모두 지원하지 않으면 먼저 서버 공급자에 {appName} 인스턴스를 등록하세요. 액션에 필요한 스코프를 {appName}에 부여하세요."
+        "discovery": "각 사용자는 자신의 계정으로 로그인합니다.",
+        "manualRegistration": "이 리디렉션 URI를 공급자에 등록하세요.",
+        "title": "OAuth 구성"
       },
       "passThroughNotice": {
         "description": "{appName}는 사용자의 OAuth 액세스 token을 Authorization 헤더로 서버에 직접 전달합니다. 서버가 동일한 공급자로 인증을 지원하는지 확인하세요.",
@@ -361,14 +393,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "MCP SDK 챌린지/검색 플로우를 사용합니다(기본값).",
-          "label": "자동 검색"
+          "description": "서버가 공개한 로그인 설정을 읽습니다.",
+          "label": "로그인 엔드포인트 자동 검색"
         },
         "knownProvider": {
-          "description": "구성된 권한 부여/token 엔드포인트를 사용합니다.",
-          "label": "알려진 공급자"
+          "description": "로그인 URL과 토큰 URL을 직접 입력합니다.",
+          "label": "엔드포인트 직접 입력"
         },
-        "label": "공급자 모드",
+        "label": "OAuth 엔드포인트",
         "placeholder": "모드 선택"
       },
       "redirectUri": {
@@ -379,20 +411,62 @@
         "label": "스코프 재정의(쉼표로 구분)"
       },
       "sharedApiKey": {
-        "description": "개인 API 키는 사용하지 마세요. 이 키를 조직의 모든 사용자와 공유해도 되는지 확인하세요.",
+        "description": "이 키는 설정을 테스트하고 액세스 권한이 있는 모든 사용자를 연결하는 데 사용됩니다. 개인 키가 아닌 작업 공간 키를 사용하세요.",
         "label": "API 키",
         "placeholder": "조직의 공유 API 키"
       },
       "submitButton": {
-        "label": "연결",
-        "pendingLabel": "연결하는 중..."
+        "label": "변경 사항 저장",
+        "pendingLabel": "저장 중…"
       },
       "tokenEndpoint": {
         "label": "Token 엔드포인트",
-        "required": "알려진 공급자 모드에서는 token 엔드포인트가 필수입니다"
+        "required": "공급자의 토큰 엔드포인트를 입력하세요."
       },
       "transport": {
-        "required": "전송 방식은 필수입니다"
+        "required": "전송 방식은 필수입니다",
+        "label": "연결 전송 방식",
+        "description": "서버에서 기존 SSE가 필요한 경우가 아니면 Streamable HTTP를 사용하세요. 이 설정은 서버에서 자동 감지되지 않습니다.",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE(기존 방식)"
+      },
+      "advancedSettings": {
+        "title": "고급 설정"
+      },
+      "apiTokenInfo": {
+        "title": "API 키 구성",
+        "description": "각 사용자가 개인 토큰으로 연결할지 모두 공유 토큰을 사용할지 선택하세요."
+      },
+      "oauthSetup": {
+        "label": "OAuth 설정",
+        "automatic": {
+          "label": "자동으로 설정",
+          "description": "서버가 공개한 설정을 사용하여 {appName}이 OAuth 클라이언트를 등록하도록 합니다."
+        },
+        "ownClient": {
+          "label": "자체 OAuth 클라이언트 사용",
+          "description": "공급자의 클라이언트 ID를 입력하세요. 필요한 경우에만 시크릿을 추가하세요."
+        }
+      },
+      "discovery": {
+        "checking": "자동 설정 확인 중…",
+        "supported": "자동 설정을 사용할 수 있습니다",
+        "requiresClient": "이 서버는 클라이언트 자동 등록 지원을 알리지 않습니다. 자체 OAuth 클라이언트를 설정하는 것을 권장합니다. 자동 등록을 시도할 수도 있습니다.",
+        "missing": "서버 URL을 확인하거나 공급자의 로그인 및 토큰 엔드포인트를 입력하세요.",
+        "unreachable": "서버를 사용할 수 없거나 검색 요청이 차단되었을 수 있습니다.",
+        "retry": "다시 확인",
+        "manual": "OAuth 설정 직접 입력",
+        "useOwnClient": "자체 OAuth 클라이언트 사용",
+        "unreachableTitle": "자동 설정을 사용할 수 있는지 확인할 수 없습니다",
+        "missingTitle": "OAuth 엔드포인트를 찾을 수 없습니다",
+        "requiresClientTitle": "자동 설정을 사용할 수 없을 수 있습니다"
+      },
+      "advanced": {
+        "description": "자동 검색 대신 권한 부여 엔드포인트와 token 엔드포인트를 직접 지정하여 알려진 OAuth 공급자를 구성합니다.",
+        "title": "고급"
+      },
+      "knownProvider": {
+        "hint": "알려진 공급자 모드에서는 엔드포인트 구성이 필요합니다. Google 참조 엔드포인트: 권한 부여 {authorizationEndpoint}, token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -402,7 +476,7 @@
       "deleteModal": {
         "body": {
           "confirmation": "이 MCP 서버를 삭제하시겠습니까?",
-          "description": "<emphasis>{title}</emphasis>에 연결된 모든 도구가 제거됩니다. 삭제는 되돌릴 수 없습니다."
+          "description": "조직의 모든 사용자에 대해 <emphasis>{title}</emphasis> 및 모든 관련 도구가 삭제됩니다. 삭제는 되돌릴 수 없습니다."
         },
         "submitButton": {
           "label": "삭제"
@@ -415,6 +489,20 @@
       "refreshToolsButton": {
         "ariaLabel": "도구 새로 고침",
         "tooltip": "도구 새로 고침"
+      },
+      "setupIncomplete": {
+        "label": "설정이 완료되지 않았습니다.",
+        "actionHint": "설정이 완료되지 않았습니다. 클릭하여 설정을 완료하세요."
+      },
+      "status": {
+        "ready": "준비됨 · {count, plural, one {도구 #개} other {도구 #개}}",
+        "incomplete": "설정 미완료",
+        "loading": "도구 불러오는 중",
+        "disconnected": "연결 끊김"
+      },
+      "authenticationButton": {
+        "tooltip": "인증 구성",
+        "ariaLabel": "{serverName} 인증 구성"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +581,7 @@
         "toolUpdateFailed": "도구를 업데이트하지 못했습니다",
         "toolsDisabled": "{count, plural, one {도구 #개를 비활성화했습니다} other {도구 #개를 비활성화했습니다}}",
         "toolsEnabled": "{count, plural, one {도구 #개를 활성화했습니다} other {도구 #개를 활성화했습니다}}",
-        "toolsFetched": "연결한 후 도구를 가져왔습니다",
+        "toolsFetched": "도구를 불러왔습니다",
         "toolsRefreshed": "도구를 새로 고쳤습니다"
       }
     },
@@ -658,9 +746,9 @@
         "placeholder": "{field} 입력"
       },
       "credentials": {
-        "perUserDescription": "다음 자격 증명은 조직과 공유되지 않습니다.",
-        "perUserTitle": "내 계정 전용",
+        "perUserDescription": "자신의 자격 증명으로 이 MCP를 테스트하고 도구를 불러오세요. 자격 증명은 자신의 계정에만 저장됩니다.",
         "sharedDescription": "이 값은 조직의 모든 사용자에게 사용됩니다.",
+        "perUserTitle": "내 계정 전용",
         "sharedTitle": "조직 공유 값"
       },
       "headers": {
@@ -671,8 +759,8 @@
           "message": "헤더 값 중 하나 이상에 {apiKey} 자리 표시자가 있어야 합니다."
         },
         "keyTitle": "헤더 이름",
-        "label": "인증 헤더",
-        "perUserDescription": "각 사용자가 개별 자격 증명을 입력할 수 있도록 헤더 형식을 지정하세요. <mono>{apiKey}</mono> 또는 <mono>{userEmail}</mono> 같은 자리 표시자를 사용하세요. 사용자에게 자리 표시자의 값을 입력하라는 메시지가 표시됩니다(user_email 제외).",
+        "label": "사용자 지정 헤더",
+        "perUserDescription": "각 사용자의 API 키에는 <mono>{apiKey}</mono>를 사용하세요. <mono>{userEmail}</mono>에는 이메일이 자동으로 입력됩니다. 다른 자리표시자는 사용자에게 값을 요청합니다.",
         "sharedDescription": "조직의 공유 자격 증명과 함께 보낼 헤더의 형식을 지정하세요. 헤더 값 중 하나 이상에 <mono>{apiKey}</mono> 같은 자리 표시자를 사용하세요. 이 자리 표시자는 조직의 공유 키로 대체됩니다.",
         "valueTitle": "헤더 값"
       }
@@ -840,6 +928,407 @@
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
       "mcpServerUrl": "https://mcp-seobeo.com/mcp"
+    },
+    "memberPlugins": {
+      "chat": {
+        "trigger": {
+          "label": "플러그인"
+        },
+        "search": {
+          "placeholder": "플러그인 검색"
+        },
+        "empty": {
+          "text": "이 채팅에서 사용할 수 있는 플러그인이 없습니다.",
+          "searchText": "검색어와 일치하는 플러그인이 없습니다."
+        },
+        "loading": {
+          "label": "플러그인 로딩 중"
+        },
+        "loadError": {
+          "text": "일부 플러그인을 불러오지 못했습니다. 다시 시도하세요."
+        },
+        "retry": {
+          "label": "다시 시도"
+        },
+        "browse": {
+          "label": "플러그인 둘러보기"
+        },
+        "toggle": {
+          "ariaLabel": "이 채팅에서 {name} 사용"
+        },
+        "connect": {
+          "label": "연결"
+        },
+        "connection": {
+          "connected": "연결됨",
+          "workspace": "워크스페이스 연결",
+          "session": "세션 연결",
+          "none": "연결 필요 없음",
+          "oauth": "계정 연결",
+          "credentials": "인증 정보 추가",
+          "checking": "연결 확인 중",
+          "unconfigured": "워크스페이스 설정 필요",
+          "unavailable": "연결을 사용할 수 없음"
+        },
+        "intent": {
+          "unavailable": "이 채팅의 에이전트에서 사용할 수 없는 플러그인입니다.",
+          "invalid": "유효하지 않은 플러그인 링크입니다."
+        }
+      },
+      "oauthComplete": {
+        "success": {
+          "title": "플러그인이 연결되었습니다",
+          "description": "이전 탭으로 돌아가서 계속하세요."
+        },
+        "error": {
+          "title": "연결을 확인하지 못했습니다",
+          "description": "이전 탭으로 돌아가서 다시 연결해 보세요."
+        },
+        "return": {
+          "label": "플러그인으로 돌아가기"
+        },
+        "close": {
+          "label": "탭 닫기"
+        }
+      },
+      "title": "플러그인",
+      "description": "계정을 연결하여 워크스페이스 플러그인을 사용하세요.",
+      "manageWorkspace": "워크스페이스 플러그인 관리",
+      "search": "플러그인 검색",
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Craft 앱"
+      },
+      "row": {
+        "view": "{name} 보기",
+        "connect": "{name} 연결"
+      },
+      "status": {
+        "connected": "연결됨",
+        "workspace": "워크스페이스 연결",
+        "session": "현재 로그인 사용",
+        "none": "사용 준비됨",
+        "oauth": "계정 연결",
+        "credentials": "인증 정보 추가",
+        "unconfigured": "워크스페이스 설정 필요",
+        "checking": "연결 확인 중",
+        "unavailable": "연결을 사용할 수 없음"
+      },
+      "availability": {
+        "label": "{name}의 연결 상태",
+        "chat": "기본 채팅",
+        "craft": "Craft",
+        "on": "켜짐",
+        "off": "꺼짐",
+        "unknown": "알 수 없음"
+      },
+      "state": {
+        "loading": "플러그인 로딩 중",
+        "serversError": "MCP 플러그인을 불러오지 못했습니다.",
+        "toolsError": "플러그인 도구를 불러오지 못했습니다.",
+        "oauthError": "계정 연결을 불러오지 못했습니다.",
+        "retry": "다시 시도",
+        "noResultsTitle": "일치하는 플러그인이 없습니다",
+        "noResultsDescription": "다른 이름이나 설명으로 검색하세요.",
+        "clearSearch": "모든 플러그인 보기",
+        "appsError": "Craft 앱을 불러오지 못했습니다.",
+        "appsLoading": "Craft 앱 불러오는 중",
+        "emptyTitle": "플러그인을 찾을 수 없습니다",
+        "emptyDescription": "다른 연결 필터를 사용하거나 워크스페이스 관리자에게 플러그인 추가를 요청하세요."
+      },
+      "detail": {
+        "connection": "연결",
+        "serverUrl": "서버 URL",
+        "tools": "도구",
+        "toolCount": "{count, plural, other {도구 #개}}",
+        "toolsDescription": "이 워크스페이스 플러그인에서 사용할 수 있는 도구입니다.",
+        "noTools": "이 플러그인에 표시할 수 있는 도구가 저장되어 있지 않습니다.",
+        "connect": "계정 연결",
+        "useInChat": "채팅에서 사용",
+        "chatDisabled": "이 플러그인은 기본 채팅에서 활성화되지 않았습니다. 워크스페이스 관리자가 사용 가능 여부를 변경할 수 있습니다.",
+        "chatUnknown": "기본 채팅에서 사용 가능한지 확인하지 못했습니다.",
+        "disconnect": "계정 연결 해제",
+        "disconnectTitle": "{name}의 연결을 해제할까요?",
+        "disconnectDescription": "계정 연결이 삭제됩니다. 워크스페이스 사용 가능 여부는 유지됩니다.",
+        "oauthDisconnectWarning": "동일한 OAuth 설정을 사용하는 모든 플러그인과 앱이 이 계정 연결을 공유합니다. 연결을 해제하면 모든 해당 플러그인과 앱에서 연결이 삭제됩니다.",
+        "disconnecting": "연결 해제 중...",
+        "disconnectFailed": "계정 연결을 해제하지 못했습니다. 다시 시도하세요.",
+        "cancel": "취소",
+        "close": "완료",
+        "openInCraft": "Craft에서 열기"
+      },
+      "connection": {
+        "title": "{name} 연결",
+        "description": "워크스페이스에서 이 플러그인을 설정했습니다. 계정을 연결하여 사용하세요.",
+        "credentialsDescription": "이 플러그인의 인증 정보를 입력하세요. 계정 연결은 다른 멤버와 별도로 관리됩니다.",
+        "oauthDescription": "계속 진행하여 계정으로 로그인하세요. 제공업체에서 요청된 접근 권한을 표시합니다.",
+        "continue": "{name}(으)로 계속",
+        "connect": "연결",
+        "connecting": "연결 중...",
+        "cancel": "취소",
+        "done": "완료",
+        "workspaceDescription": "워크스페이스에서 이 연결을 제공합니다. 계정을 연결할 필요가 없습니다.",
+        "sessionDescription": "이 플러그인은 현재 로그인을 사용합니다.",
+        "noneDescription": "이 플러그인은 계정 연결이 필요하지 않습니다.",
+        "connectedDescription": "계정이 연결되었습니다.",
+        "unconfiguredDescription": "연결하려면 워크스페이스 관리자가 이 플러그인의 설정을 완료해야 합니다.",
+        "checkingDescription": "연결 상태를 불러오는 중입니다. 완료된 후 다시 시도하세요.",
+        "unavailableDescription": "연결 상태를 불러오지 못했습니다. 플러그인 페이지에서 다시 시도하세요.",
+        "errors": {
+          "popup_blocked": "브라우저에서 로그인 창을 차단했습니다. 팝업을 허용하고 다시 시도하세요.",
+          "cancelled": "로그인이 취소되었습니다. 다시 시도할 수 있습니다.",
+          "timed_out": "로그인 시간이 초과되었습니다. 다시 시도하세요.",
+          "credentials_required": "필요한 인증 정보를 모두 입력하세요.",
+          "unconfigured": "워크스페이스 관리자가 이 플러그인의 설정을 완료해야 합니다.",
+          "not_connected": "계정 연결을 확인하지 못했습니다. 다시 시도하세요.",
+          "request_failed": "연결하지 못했습니다. 다시 시도하세요."
+        }
+      },
+      "filters": {
+        "label": "연결 상태",
+        "all": "전체",
+        "connected": "연결됨",
+        "needsSignIn": "로그인 필요",
+        "showAll": "모든 플러그인 보기"
+      },
+      "defaults": {
+        "chat": "메인 채팅에서 기본적으로 활성화",
+        "craft": "Craft에서 기본적으로 활성화",
+        "chatDescription": "기본 채팅에 적용됩니다. 사용자 지정 에이전트는 자체 도구 설정을 유지합니다.",
+        "craftDescription": "내 Craft 세션에서 이 MCP를 사용합니다.",
+        "unavailable": "관리자가 {surface}에서 이 플러그인을 비활성화했습니다.",
+        "saveFailed": "플러그인 기본 설정을 저장하지 못했습니다. 다시 시도하세요."
+      },
+      "openapi": {
+        "chatOnly": "Chat 전용",
+        "chatOnlyDescription": "이 플러그인은 Chat에서 사용할 수 있으며 Craft에서는 사용할 수 없습니다."
+      },
+      "appSkills": {
+        "search": "스킬 검색",
+        "count": "{count, plural, one {스킬 #개} other {스킬 #개}}",
+        "empty": "이 앱에 연결된 스킬이 없습니다.",
+        "noMatches": "검색과 일치하는 스킬이 없습니다.",
+        "error": "스킬을 불러올 수 없습니다.",
+        "enabled": "활성화됨",
+        "disabled": "비활성화됨",
+        "loading": "스킬 불러오는 중…"
+      },
+      "externalApp": {
+        "description": "Craft에서 계정을 사용하세요.",
+        "craftOnly": "Craft 전용",
+        "craftOnlyDescription": "이 앱은 Craft에서 사용할 수 있습니다. 메인 채팅에서는 지원하지 않습니다."
+      }
+    },
+    "plugins": {
+      "availability": {
+        "mainChat": "기본 Chat",
+        "craft": "Craft",
+        "on": "켜짐",
+        "off": "꺼짐",
+        "unknown": "알 수 없음",
+        "enabled": "활성화됨",
+        "disabled": "비활성화됨",
+        "chatEnabled": "Chat 켜짐",
+        "chatDisabled": "Chat 꺼짐",
+        "chatUnknown": "Chat 상태 알 수 없음",
+        "craftEnabled": "Craft 켜짐",
+        "craftDisabled": "Craft 꺼짐"
+      },
+      "controls": {
+        "disconnect": "연결 해제",
+        "enable": "활성화",
+        "more": "추가 작업",
+        "disableChat": "기본 채팅에서 비활성화",
+        "enableChat": "기본 채팅에서 활성화",
+        "disableCraft": "Craft에서 비활성화",
+        "enableCraft": "Craft에서 활성화"
+      },
+      "craftApp": {
+        "tabs": {
+          "configuration": "설정",
+          "permissions": "권한",
+          "skills": "스킬"
+        }
+      },
+      "disableConfirmation": {
+        "scope": "조직의 모든 사용자",
+        "chatTitle": "메인 채팅에서 {name}을(를) 비활성화할까요?",
+        "chatDescription": "조직의 모든 사용자의 기본 채팅에서 {name}이(가) 제거됩니다. 사용자 지정 에이전트에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다.",
+        "craftTitle": "Craft에서 {name}을(를) 비활성화할까요?",
+        "craftDescription": "조직의 모든 사용자가 Craft에서 {name}을(를) 사용할 수 없게 됩니다. 메인 채팅에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다."
+      },
+      "openapi": {
+        "schemaPreview": {
+          "detected": "{count, plural, one {도구 #개 감지됨} other {도구 #개 감지됨}}",
+          "viewTools": "도구 보기",
+          "saveToUpdate": "변경 사항을 저장하여 도구를 업데이트하세요."
+        },
+        "reviewTitle": "{name} 검토",
+        "createTitle": "OpenAPI 플러그인 추가",
+        "detailDescription": "이 API와 에이전트가 사용할 수 있는 도구를 관리합니다.",
+        "detailsTitle": "플러그인 세부 정보",
+        "schemaTitle": "OpenAPI 스키마",
+        "editSchema": "스키마 편집",
+        "notFound": "플러그인을 찾을 수 없음",
+        "loadFailed": "이 플러그인을 불러올 수 없습니다",
+        "unavailable": "이 플러그인이 삭제되었거나 접근 권한이 없을 수 있습니다.",
+        "readOnly": "이 플러그인을 볼 수 있지만 계정에 설정 변경 권한이 없습니다.",
+        "disableTitle": "{name}을(를) 비활성화할까요?",
+        "disableDescription": "에이전트가 이 플러그인을 사용할 수 없게 됩니다. 나중에 다시 활성화할 수 있습니다.",
+        "deleteTitle": "{name}을(를) 삭제할까요?",
+        "deleteDescription": "OpenAPI 플러그인과 해당 설정을 영구적으로 삭제합니다."
+      },
+      "title": "플러그인",
+      "description": "도구와 앱을 워크스페이스에 연결하세요.",
+      "search": {
+        "placeholder": "플러그인 검색"
+      },
+      "add": {
+        "label": "추가",
+        "mcp": "사용자 지정 MCP 서버 추가",
+        "openapi": "OpenAPI 작업 추가"
+      },
+      "catalog": {
+        "slack": {
+          "summary": "대화를 검색하고 메시지를 보냅니다",
+          "description": "대화를 검색하고 메시지를 보냅니다. 등록된 Slack 앱이 필요합니다."
+        },
+        "hubspot": {
+          "summary": "연락처와 거래를 관리합니다",
+          "description": "연락처와 거래를 관리합니다. HubSpot MCP 커넥터가 필요합니다."
+        },
+        "asana": {
+          "summary": "작업과 프로젝트를 관리합니다",
+          "description": "작업과 프로젝트를 관리합니다. 등록된 OAuth 클라이언트가 필요합니다."
+        },
+        "linear": {
+          "summary": "이슈, 프로젝트, 팀을 관리합니다",
+          "description": "이슈, 프로젝트, 팀을 관리합니다."
+        },
+        "notion": {
+          "summary": "Notion 워크스페이스를 검색하고 업데이트합니다",
+          "description": "Notion 워크스페이스를 검색하고 업데이트합니다."
+        },
+        "sentry": {
+          "summary": "오류와 성능 문제를 조사합니다",
+          "description": "오류와 성능 문제를 조사합니다."
+        },
+        "atlassian": {
+          "summary": "Jira와 Confluence를 사용합니다",
+          "description": "Jira와 Confluence를 사용합니다.",
+          "approvalNote": "Atlassian 조직에서 관리자 승인이 필요할 수 있습니다."
+        },
+        "setupGuide": "설정 가이드",
+        "add": {
+          "label": "{name} 추가"
+        }
+      },
+      "row": {
+        "manage": {
+          "label": "{name} 관리"
+        },
+        "view": {
+          "label": "{name} 보기"
+        }
+      },
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Craft 앱"
+      },
+      "filters": {
+        "label": "플러그인 유형",
+        "all": "전체",
+        "apps": "Craft 앱"
+      },
+      "state": {
+        "mcpError": "MCP 서버를 불러올 수 없습니다.",
+        "listErrorDescription": "플러그인 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
+        "openapiError": "OpenAPI 작업을 불러올 수 없습니다.",
+        "retry": {
+          "label": "다시 시도"
+        },
+        "loading": "플러그인 불러오는 중",
+        "empty": {
+          "title": "설치된 플러그인 없음",
+          "description": "워크스페이스에 플러그인을 추가하세요.",
+          "explore": {
+            "label": "플러그인 둘러보기"
+          }
+        },
+        "noResults": {
+          "title": "플러그인을 찾을 수 없음",
+          "description": "다른 이름, 설명 또는 서버 URL로 검색하세요.",
+          "clear": {
+            "label": "모든 플러그인 보기"
+          }
+        },
+        "externalAppsError": "앱을 불러오지 못했습니다"
+      }
+    },
+    "mcpSetup": {
+      "connectTo": "{name}에 연결",
+      "contactingServer": "서버에 연결 중",
+      "detectingAuthentication": "인증 방식 감지 중",
+      "stagePending": "진행 중",
+      "stageSuccess": "완료",
+      "stageError": "실패",
+      "stageWaiting": "대기 중",
+      "progress": "설정 진행 상황",
+      "serverStep": "서버",
+      "connectionStep": "연결",
+      "permissionDenied": "MCP 서버를 추가할 권한이 없습니다.",
+      "reviewSettings": "연결하기 전에 서버 설정을 확인하세요.",
+      "urlDescription": "서버 URL을 입력하여 연결 및 인증 설정을 감지하세요.",
+      "detectedTransport": "전송: {transport}",
+      "retry": "다시 확인",
+      "authenticationUndetected": "다음 페이지에서 인증 방법을 선택하세요.",
+      "configureManually": "직접 구성",
+      "details": "세부 정보",
+      "checking": "서버 확인 중…",
+      "unreachable": "이 MCP 서버에 연결할 수 없습니다",
+      "retryCheck": "URL과 서버 상태를 확인한 후 다시 시도하세요.",
+      "blocked": "아웃바운드 보안 설정에 의해 차단된 URL입니다.",
+      "publicDetected": "인증이 필요하지 않습니다",
+      "oauthDetected": "OAuth 감지됨",
+      "manualRequired": "인증 방법 직접 선택",
+      "chooseAuthentication": "이 서버의 인증 방법을 확인할 수 없습니다. 아래에서 방법을 선택하세요.",
+      "connect": "연결",
+      "publicDetails": "사용 가능한 도구: {count}개",
+      "serverDetails": "서버 세부 정보",
+      "authentication": "인증",
+      "continue": "계속",
+      "back": "뒤로"
+    },
+    "mcpTools": {
+      "title": "도구",
+      "description": "사용 가능한 도구를 선택하고 권한을 설정하세요.",
+      "enabledTab": "사용 가능한 도구",
+      "policiesTab": "Craft 권한",
+      "enabledDescription": "사용자가 Onyx에서 사용할 수 있는 도구를 선택하세요.",
+      "policiesDescription": "Craft가 각 도구를 사용하기 전에 승인을 요청할 시점을 선택하세요.",
+      "back": "인증",
+      "refresh": "도구 새로 고침",
+      "loadError": "도구를 불러올 수 없습니다",
+      "saveError": "도구 설정을 저장할 수 없습니다",
+      "refreshError": "도구를 새로 고칠 수 없습니다",
+      "search": "도구 검색"
+    },
+    "mcpDetail": {
+      "configuration": "서버 설정",
+      "editConfiguration": "서버 설정 편집",
+      "authentication": "인증",
+      "editAuthentication": "인증 편집",
+      "availability": "사용 가능 위치",
+      "edit": "편집",
+      "loadError": "MCP 서버를 불러올 수 없습니다",
+      "notFound": "MCP 서버를 찾을 수 없습니다",
+      "unavailable": "이 서버가 삭제되었거나 액세스 권한이 없을 수 있습니다.",
+      "retry": "다시 시도",
+      "restrictedAccess": "{groups, plural, one {#개 그룹} other {#개 그룹}} · {users, plural, one {#명 사용자} other {#명 사용자}}",
+      "authenticationIncomplete": "인증이 설정되지 않았습니다.",
+      "availabilitySaved": "사용 설정이 업데이트되었습니다"
     }
   },
   "admin": {
@@ -13733,7 +14222,7 @@
           }
         },
         "managedDescription": "Onyx에서 제공합니다. 에이전트가 할 수 있는 작업을 구성하세요.",
-        "managedNote": "이 앱은 Onyx에서 제공하며 자격 증명은 자동으로 관리됩니다. 아래에서 에이전트가 할 수 있는 작업을 선택하세요. 사용자는 앱 페이지에서 연결합니다.",
+        "managedNote": "Onyx가 자격 증명을 관리합니다. 권한에서 작업 정책을 설정하세요. 멤버는 플러그인에서 연결합니다.",
         "saveButton": "저장"
       },
       "customApp": {
@@ -13834,7 +14323,7 @@
             "tabLabel": "앱 · {count}"
           },
           "mcp": {
-            "blurb": "관리자가 Craft에 공개한 서버입니다. 필요한 앱이 앱 목록에 없거나 서버 자체의 MCP 도구가 특별히 필요할 때 사용하세요.",
+            "blurb": "관리자가 Craft에서 사용할 수 있도록 설정한 서버입니다. 서버에 개인 자격 증명이 필요한 경우 도구를 사용하기 전에 자신의 계정을 연결하세요.",
             "empty": "Craft에 공개된 MCP 서버가 없습니다.",
             "emptyTitle": "아직 MCP 서버가 없습니다",
             "tabLabel": "MCP 서버 · {count}"
@@ -13857,10 +14346,6 @@
         }
       },
       "policyEditor": {
-        "advanced": {
-          "description": "각 작업에 대해 개별적으로 정책을 설정합니다.",
-          "title": "고급"
-        },
         "cancelButton": "취소",
         "loading": {
           "label": "불러오는 중…"
@@ -13870,10 +14355,14 @@
           "autoApproveOption": "자동 승인",
           "customOption": "사용자 지정",
           "defaultOption": "기본값",
-          "description": "에이전트가 할 수 있는 작업을 선택하세요. \"묻기\"는 각 작업 실행 전에 채팅에서 확인을 요청하고, \"자동 승인\"은 확인 없이 실행합니다. 작업별 정책은 고급 설정에서 지정하세요.",
+          "description": "에이전트가 할 수 있는 작업을 선택하세요. \"묻기\"는 각 작업 전에 승인을 요청하고, \"자동 승인\"은 확인 없이 실행합니다.",
           "title": "권한"
         },
-        "savingButton": "저장 중…"
+        "savingButton": "저장 중…",
+        "advanced": {
+          "description": "각 작업에 대해 개별적으로 정책을 설정합니다.",
+          "title": "고급"
+        }
       },
       "skillsStep": {
         "description": "선택 사항. 기존 스킬을 연결하거나 이 앱을 위한 스킬을 만드세요.",
@@ -14479,6 +14968,9 @@
       "toast": {
         "deleteFailed": "세션을 삭제하지 못했습니다",
         "deleted": "\"{title}\"이(가) 삭제되었습니다."
+      },
+      "plugins": {
+        "label": "플러그인"
       }
     },
     "skillsStale": {
@@ -15955,6 +16447,9 @@
         "llmGateway": {
           "label": "LLM 게이트웨이"
         },
+        "plugins": {
+          "label": "플러그인"
+        },
         "mcpActions": {
           "label": "MCP 액션"
         },
@@ -16080,6 +16575,9 @@
       },
       "searchChats": {
         "label": "채팅 검색"
+      },
+      "plugins": {
+        "label": "플러그인"
       }
     },
     "chatButton": {

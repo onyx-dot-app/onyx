@@ -706,3 +706,20 @@ resets setup status, and reloads affected Craft sessions.
 Preferences use `MCPServerUserPreference` and `ToolUserPreference`.
 Apply revisions `b71e3a9d2c04` and `c82f4a0e3d15` before deploying code that
 reads the preference tables.
+
+
+### Shared plugin client contracts
+
+`web/src/lib/agents/hooks.ts` exposes `useDefaultAssistantConfiguration`.
+It uses the existing default-assistant API and SWR cache. Replacement writes are
+sequenced per cache across hook instances; a failed write rolls back before the next read.
+This queue does not coordinate separate browser clients.
+
+Plugin client helpers preserve native MCP, OpenAPI, and external-app identities.
+They expose personal preference writes and permission-stamped workspace availability.
+OAuth completion helpers correlate attempts and check the saved connection before success.
+MCP verification preserves the initiating agent or Craft roster through OAuth completion.
+OpenAPI expiry requires sign-in unless backend status confirms refresh capability.
+Missing refresh capability retains the expired-token sign-in requirement.
+Null OpenAPI custom headers represent a connection without shared header credentials.
+These helpers do not grant access or attach new tools by themselves.

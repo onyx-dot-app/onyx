@@ -473,7 +473,7 @@ export default function AddOpenAPIActionModal({
           name?: string;
           description?: string;
           definition: Record<string, any>;
-          custom_headers?: { key: string; value: string }[];
+          custom_headers?: ToolSnapshot["custom_headers"];
           passthrough_auth?: boolean;
           oauth_config_id?: number | null;
         } = {

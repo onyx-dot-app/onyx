@@ -1,9 +1,10 @@
 "use client";
 
 import useSWR, { useSWRConfig } from "swr";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  DefaultAssistantConfiguration,
   AgentLabel,
   FullAgent,
   MinimalAgent,
@@ -11,7 +12,7 @@ import {
   PaginatedAgentsResponse,
 } from "@/lib/agents/types";
 import { toast } from "@opal/layouts";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
 import type { ChatSession } from "@/app/app/interfaces";
@@ -21,6 +22,9 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
+
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
@@ -383,4 +387,92 @@ export function useAgentLabels() {
     updateLabel,
     deleteLabel,
   };
+}
+
+type DefaultAssistantCache = ReturnType<typeof useSWRConfig>["cache"];
+
+const defaultAssistantSaveTails = new WeakMap<
+  DefaultAssistantCache,
+  Promise<void>
+>();
+
+function enqueueDefaultAssistantSave(
+  cache: DefaultAssistantCache,
+  write: () => Promise<void>
+): Promise<void> {
+  const save = (defaultAssistantSaveTails.get(cache) ?? Promise.resolve()).then(
+    write
+  );
+  const tail = save.catch(() => undefined);
+  defaultAssistantSaveTails.set(cache, tail);
+  void tail.then(() => {
+    if (defaultAssistantSaveTails.get(cache) === tail)
+      defaultAssistantSaveTails.delete(cache);
+  });
+  return save;
+}
+
+export function useDefaultAssistantConfiguration() {
+  const { cache } = useSWRConfig();
+  const { isGlobalHolder } = usePermissionAuthority(
+    Permission.FULL_ADMIN_PANEL_ACCESS
+  );
+  const result = useSWR<DefaultAssistantConfiguration, Error>(
+    isGlobalHolder ? SWR_KEYS.defaultAssistantConfig : null,
+    errorHandlingFetcher
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const pendingSaves = useRef(0);
+  const isMounted = useRef(false);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+  const updateTools = async (toolIds: number[], enabled: boolean) => {
+    const loaded = result.data;
+    if (!isGlobalHolder || !loaded) return;
+    pendingSaves.current += 1;
+    setIsSaving(true);
+    const affected = new Set(toolIds);
+    const applySelection = (current: DefaultAssistantConfiguration) => {
+      const remaining = current.tool_ids.filter((id) => !affected.has(id));
+      return {
+        ...current,
+        tool_ids: enabled ? [...remaining, ...affected] : remaining,
+      };
+    };
+    const save = enqueueDefaultAssistantSave(cache, async () => {
+      await result.mutate(
+        async (current) => {
+          if (!current) return current;
+          const next = applySelection(current);
+          const response = await fetch("/api/admin/default-assistant", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tool_ids: next.tool_ids }),
+          });
+          if (!response.ok)
+            throw new Error(
+              await parseErrorDetail(response, response.statusText)
+            );
+          const saved: DefaultAssistantConfiguration = await response.json();
+          return saved;
+        },
+        {
+          revalidate: false,
+          optimisticData: (current) => applySelection(current ?? loaded),
+          rollbackOnError: true,
+        }
+      );
+    });
+    try {
+      await save;
+    } finally {
+      pendingSaves.current -= 1;
+      if (isMounted.current) setIsSaving(pendingSaves.current > 0);
+    }
+  };
+  return { ...result, isSaving, canEdit: isGlobalHolder, updateTools };
 }
