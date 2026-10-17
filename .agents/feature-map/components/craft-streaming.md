@@ -37,6 +37,12 @@ background and continues rendering it live; it does not lose the turn, but it
 also does not replay, byte-for-byte, whatever the client missed while
 disconnected (see §5, §9).
 
+Connected app setup cards link to **App permissions**. This opens the same
+personal action editor used by app cards, without delaying authentication.
+The editor covers external apps and MCP servers. Workspace-disabled actions
+remain visible and locked. Task editors use the same action rows with
+independent saved choices.
+
 The Working group shows the tool-call count without a failed-count badge.
 Its tool details start collapsed, including failures; users can expand each call
 to read its output.

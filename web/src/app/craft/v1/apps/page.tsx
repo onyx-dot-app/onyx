@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -11,6 +11,7 @@ import { cn } from "@opal/utils";
 import {
   Button,
   Card,
+  Dropdown,
   InputTypeIn,
   Tabs,
   Text,
@@ -24,7 +25,13 @@ import {
   toast,
 } from "@opal/layouts";
 import { SvgNoResult, SvgUnPlugged } from "@opal/illustrations";
-import { SvgAlertCircle, SvgPlug, SvgSettings } from "@opal/icons";
+import {
+  SvgAlertCircle,
+  SvgMoreHorizontal,
+  SvgPlug,
+  SvgSettings,
+  SvgUnplug,
+} from "@opal/icons";
 import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import {
   ConnectableApp,
@@ -35,6 +42,7 @@ import {
   parseConnectableTab,
   useConnectableTab,
 } from "@/app/craft/v1/apps/connectableApps";
+import PersonalActionPoliciesModal from "@/app/craft/v1/apps/action-policies/PersonalActionPoliciesModal";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -362,6 +370,16 @@ function ConnectableCard({
   const t = useTranslations("craft.apps.page");
   const [isStarting, setIsStarting] = useState(false);
   const [credModalOpen, setCredModalOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const actionPoliciesTarget = searchParams.get("actionPolicies");
+  const [actionPoliciesOpen, setActionPoliciesOpen] = useState(
+    actionPoliciesTarget === app.key
+  );
+  useEffect(() => {
+    setActionPoliciesOpen(actionPoliciesTarget === app.key);
+  }, [actionPoliciesTarget, app.key]);
+  const tActionPolicies = useTranslations("craft.actionPolicies");
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Deep-link landing: scroll the targeted card into view and focus its
@@ -448,15 +466,6 @@ function ConnectableCard({
                         {t("reviewSkillsButton")}
                       </Button>
                     )}
-                    {app.disconnect && (
-                      <Button
-                        prominence={needsSkillSetup ? "tertiary" : "secondary"}
-                        disabled={isStarting}
-                        onClick={disconnect}
-                      >
-                        {isStarting ? "…" : t("disconnectButton")}
-                      </Button>
-                    )}
                   </>
                 ) : (
                   app.connectMode !== null && (
@@ -465,16 +474,75 @@ function ConnectableCard({
                     </Button>
                   )
                 )}
+                {app.authenticated && (
+                  <Dropdown align="end">
+                    <Dropdown.Trigger asChild>
+                      <Button
+                        icon={SvgMoreHorizontal}
+                        prominence="tertiary"
+                        aria-label={t("actionsMenuLabel", { name: app.name })}
+                      />
+                    </Dropdown.Trigger>
+                    <Dropdown.Data
+                      label={t("actionsMenuLabel", { name: app.name })}
+                      items={[
+                        {
+                          kind: "action",
+                          id: "actionPolicies",
+                          icon: SvgSettings,
+                          title: tActionPolicies("title"),
+                          onSelect: () => setActionPoliciesOpen(true),
+                        },
+                        ...(app.disconnect
+                          ? [
+                              {
+                                kind: "action" as const,
+                                id: "disconnect",
+                                icon: SvgUnplug,
+                                title: t("disconnectButton"),
+                                disabled: isStarting,
+                                danger: true,
+                                onSelect: () => void disconnect(),
+                              },
+                            ]
+                          : []),
+                      ]}
+                    />
+                  </Dropdown>
+                )}
               </Section>
             }
           />
         </Card>
       </div>
 
+      {actionPoliciesOpen && (
+        <PersonalActionPoliciesModal
+          kind={app.kind === "app" ? "external_app" : "mcp_server"}
+          targetId={app.targetId}
+          onClose={() => {
+            setActionPoliciesOpen(false);
+            if (searchParams.has("actionPolicies")) {
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete("actionPolicies");
+              const query = params.toString();
+              router.replace(
+                query ? `/craft/v1/apps?${query}` : "/craft/v1/apps",
+                {
+                  scroll: false,
+                }
+              );
+            }
+          }}
+        />
+      )}
       <UserCredentialsModal
         open={credModalOpen}
         onClose={() => setCredModalOpen(false)}
-        onSaved={onChange}
+        onSaved={() => {
+          onChange();
+          setActionPoliciesOpen(true);
+        }}
         name={app.name}
         logo={app.logo}
         credentialKeys={app.credentialKeys}

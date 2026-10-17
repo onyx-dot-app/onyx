@@ -59,6 +59,7 @@ export function useConnectableTab(): [
 export interface ConnectableApp {
   key: string;
   kind: ConnectableKind;
+  targetId: number;
   name: string;
   description: string;
   /** External app identity; null for MCP servers. */
@@ -84,6 +85,7 @@ export function externalAppToConnectable(
   return {
     key: `app-${app.id}`,
     kind: "app",
+    targetId: app.id,
     name: app.name,
     description: app.supports_oauth
       ? "Connect with OAuth"
@@ -112,11 +114,15 @@ export function mcpServerToConnectable(server: MCPServer): ConnectableApp {
   const authenticated = server.craft_connected ?? false;
   const startOAuth = async () =>
     getMCPUserOAuthNavigationUrl(
-      await startMCPUserOAuth(server.id, CRAFT_APPS_PATH)
+      await startMCPUserOAuth(
+        server.id,
+        `${CRAFT_APPS_PATH}?tab=mcp&actionPolicies=mcp-${server.id}`
+      )
     );
   return {
     key: `mcp-${server.id}`,
     kind: "mcp",
+    targetId: server.id,
     name: server.name,
     description: server.description ?? "",
     externalAppId: null,

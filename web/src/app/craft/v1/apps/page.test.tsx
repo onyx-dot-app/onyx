@@ -6,6 +6,8 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import ExternalAppsPage from "@/app/craft/v1/apps/page";
+import type { AppActionPoliciesView } from "@/app/craft/v1/apps/action-policies/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { SkillsList } from "@/lib/skills/types";
 import {
   MCPAuthenticationPerformer,
@@ -15,6 +17,8 @@ import {
 import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
 
+const mockReplace = jest.fn();
+const mockSearchParams = new URLSearchParams();
 const mockUseSWR = jest.fn();
 const mockUseUserSkills = jest.fn();
 const mockUseCraftMcpServers = jest.fn();
@@ -26,13 +30,26 @@ const mockDisconnectUserFromApp = jest.fn();
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
   __esModule: true,
-  default: (...args: unknown[]) => mockUseSWR(...args),
+  default: (...args: unknown[]) => {
+    const result = mockUseSWR(
+      Array.isArray(args[0]) ? args[0][0] : args[0],
+      ...args.slice(1)
+    );
+    const React = jest.requireActual<typeof import("react")>("react");
+    React.useEffect(() => {
+      const options = args[2] as
+        | { onSuccess?: (data: unknown) => void }
+        | undefined;
+      options?.onSuccess?.(result.data);
+    }, [args[0]]);
+    return result;
+  },
 }));
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+  useRouter: () => ({ back: jest.fn(), push: jest.fn(), replace: mockReplace }),
   usePathname: () => "/craft/v1/apps",
-  useSearchParams: () => ({ get: () => null, has: () => false }),
+  useSearchParams: () => mockSearchParams,
 }));
 
 jest.mock("@/providers/UserProvider", () => ({
@@ -136,8 +153,19 @@ function mockEndpoints(
   apps: ExternalAppUserResponse[] = [ACME_CRM_APP],
   mcpServers: MCPServer[] = []
 ): void {
-  mockUseSWR.mockImplementation(() => ({
-    data: apps,
+  mockUseSWR.mockImplementation((key: string) => ({
+    data:
+      key === SWR_KEYS.appActionPolicies("external_app", 42)
+        ? ({
+            gated_app_id: 42,
+            kind: "external_app",
+            target_id: 42,
+            name: "Acme CRM",
+            users_can_manage_policies: true,
+            enabled: null,
+            actions: [],
+          } satisfies AppActionPoliciesView)
+        : apps,
     mutate: mockMutateApps,
   }));
   mockUseCraftMcpServers.mockReturnValue({
@@ -240,7 +268,10 @@ describe("Apps associated-skill setup notice", () => {
     });
 
     render(<ExternalAppsPage />);
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Acme CRM" })
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Disconnect" }));
 
     await waitFor(() =>
       expect(mockDisconnectUserFromApp).toHaveBeenCalledWith(42)
@@ -399,4 +430,45 @@ describe("Apps vs MCP servers", () => {
 
     expect(screen.getByLabelText("Skill setup required")).toBeInTheDocument();
   });
+});
+
+it("opens approval settings after navigation on the mounted Apps page", async () => {
+  mockEndpoints();
+  mockUseUserSkills.mockReturnValue({
+    data: skills(true),
+    refresh: mockRefreshSkills,
+  });
+  const { rerender } = render(<ExternalAppsPage />);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  mockSearchParams.set("actionPolicies", "app-42");
+  rerender(<ExternalAppsPage />);
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  mockSearchParams.delete("actionPolicies");
+  rerender(<ExternalAppsPage />);
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  );
+});
+
+it("removes the consumed permissions link on close and preserves other parameters", async () => {
+  const user = setupUser();
+  mockEndpoints();
+  mockUseUserSkills.mockReturnValue({
+    data: skills(true),
+    refresh: mockRefreshSkills,
+  });
+  mockSearchParams.set("actionPolicies", "app-42");
+  mockSearchParams.set("connect", "app-42");
+  try {
+    render(<ExternalAppsPage />);
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(mockReplace).toHaveBeenCalledWith("/craft/v1/apps?connect=app-42", {
+      scroll: false,
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  } finally {
+    mockSearchParams.delete("actionPolicies");
+    mockSearchParams.delete("connect");
+  }
 });

@@ -13873,7 +13873,7 @@
           "customOption": "Custom",
           "defaultOption": "Default",
           "description": "Choose what the agent may do. “Ask” prompts you in chat before each action runs; “Auto-approve” lets it run without prompting. Use Advanced to set a policy per action.",
-          "title": "Permissions"
+          "title": "Approval settings"
         },
         "savingButton": "Saving…"
       },
