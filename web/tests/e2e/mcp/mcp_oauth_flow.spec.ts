@@ -9,7 +9,7 @@ import {
 } from "@tests/e2e/utils/mcpServer";
 import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
-import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
+import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 import {
   McpOAuthFlow,
   getMcpOAuthConfig,
@@ -134,21 +134,13 @@ async function configureOauthServer(
 /** Confirm the server is present in chat, then prove the tool actually runs. */
 async function verifyToolUsableFromChat(
   page: Page,
-  artifacts: { serverName: string; toolName: string; toolId: number | null },
-  agentId: number
+  artifacts: { serverName: string; toolName: string; toolId: number | null }
 ): Promise<void> {
-  const actions = new ToolsPopover(page);
-  // Confirm the (now-authenticated) server is listed in the chat actions popover.
-  await actions.ensureServerVisible(artifacts.serverName, { agentId });
-  // Prove the tool is usable by forcing an invocation from chat. This is the
-  // real end-to-end check (browser → backend → per-user OAuth token → mock
-  // server → tool output) and the tool is attached to the agent via API, so it
-  // runs regardless of the popover toggle. We deliberately do NOT drill into
-  // the popover's tool list here: the OAuth server's row re-renders on
-  // background auth-status revalidation and collapses the drilled-in view,
-  // making in-popover tool assertions flaky. That drill-in UI is already
-  // covered by the (stable) API-key and per-user-key specs.
-  await expectMcpToolInvoked(page, artifacts.toolName, artifacts.toolId);
+  const plugins = new ChatPluginsPopover(page);
+  await plugins.expectConnected(artifacts.serverName);
+  await plugins.expectPluginEnabled(artifacts.serverName, true);
+  await plugins.close();
+  await expectMcpToolInvoked(page, artifacts.toolName);
 }
 
 test.describe("MCP OAuth flows", () => {
@@ -330,29 +322,14 @@ test.describe("MCP OAuth flows", () => {
       toolId: adminToolId,
     };
 
-    // Per-user OAuth servers require the user to authenticate from chat before
-    // their tools become usable: the admin-page "connect" only stores the
-    // server's client config, not a per-user token for this user (backend
-    // mcp/api.py resolves the server's `connection_status` from the user's
-    // stored credentials). So authenticate from chat first, then verify the tool runs.
-    const actions = new ToolsPopover(page);
-    await oauthFlow.reauthenticateFromChat(
-      actions,
-      serverName,
-      `/app?agentId=${agentId}`
-    );
-    await verifyToolUsableFromChat(page, artifacts, agentId);
+    const chatPlugins = new ChatPluginsPopover(page);
+    await oauthFlow.connectFromChat(chatPlugins, serverName);
+    await verifyToolUsableFromChat(page, artifacts);
 
-    // Exercise the distinct authenticated path: the server row now drills into
-    // its tool list, where the Re-Authenticate row starts a fresh OAuth attempt.
-    // A second successful invocation proves the callback restored usable state
-    // rather than leaving the popover or persisted credentials disconnected.
-    await oauthFlow.reauthenticateFromChat(
-      actions,
-      serverName,
-      `/app?agentId=${agentId}`
-    );
-    await verifyToolUsableFromChat(page, artifacts, agentId);
+    await chatPlugins.setPluginEnabled(serverName, false);
+    await chatPlugins.setPluginEnabled(serverName, true);
+    await chatPlugins.close();
+    await verifyToolUsableFromChat(page, artifacts);
 
     const plugins = new AdminMcpServersPage(page).plugins;
     await plugins.goto();
@@ -447,22 +424,8 @@ test.describe("MCP OAuth flows", () => {
       // and worker users are already onboarded via global-setup).
       await ensureOnboardingComplete(page);
 
-      // Per-user OAuth: the curator must authenticate from chat before the
-      // server is usable (their admin-page connect only stores the server
-      // client config, not a per-user token). Confirm the server is listed,
-      // then authenticate, then confirm it's still listed (authenticated).
-      // We don't drill into the popover tool list — that view re-renders on
-      // background auth-status revalidation and is flaky for OAuth servers
-      // (covered by the API-key / per-user-key specs instead).
-      const actions = new ToolsPopover(page);
-      await actions.ensureServerVisible(serverName, { agentId });
-
-      await oauthFlow.reauthenticateFromChat(
-        actions,
-        serverName,
-        `/app?agentId=${agentId}`
-      );
-      await actions.ensureServerVisible(serverName, { agentId });
+      const plugins = new ChatPluginsPopover(page);
+      await oauthFlow.connectFromChat(plugins, serverName);
 
       curatorArtifacts = {
         serverId,
@@ -513,21 +476,9 @@ test.describe("MCP OAuth flows", () => {
     await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
 
     const oauthFlow = new McpOAuthFlow(page, oauthConfig());
-    const actions = new ToolsPopover(page);
-    await actions.ensureServerVisible(serverName, { agentId });
+    const plugins = new ChatPluginsPopover(page);
+    await oauthFlow.connectFromChat(plugins, serverName);
 
-    // The end user has not authenticated yet, so re-authenticating from chat
-    // kicks off the OAuth handshake.
-    await oauthFlow.reauthenticateFromChat(
-      actions,
-      serverName,
-      `/app?agentId=${agentId}`
-    );
-
-    await verifyToolUsableFromChat(
-      page,
-      { serverName, toolName, toolId },
-      agentId
-    );
+    await verifyToolUsableFromChat(page, { serverName, toolName, toolId });
   });
 });

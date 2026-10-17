@@ -43,7 +43,7 @@ import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
 import {
   CRAFT_PATH,
   CRAFT_SKILLS_PATH,
-  CRAFT_APPS_PATH,
+  CRAFT_PLUGINS_PATH,
   CRAFT_TASKS_PATH,
 } from "@/app/craft/v1/constants";
 import { useUnsavedChangesNavigation } from "@/providers/UnsavedChangesNavigationProvider";
@@ -347,10 +347,10 @@ const MemoizedBuildSidebarInner = memo(() => {
           </SidebarTab>
           <SidebarTab
             icon={SvgPlug}
-            onClick={() => navigate(CRAFT_APPS_PATH)}
-            selected={pathname.startsWith(CRAFT_APPS_PATH)}
+            onClick={() => navigate(CRAFT_PLUGINS_PATH)}
+            selected={pathname.startsWith(CRAFT_PLUGINS_PATH)}
           >
-            {t("apps.label")}
+            {t("plugins.label")}
           </SidebarTab>
         </div>
       </SidebarLayouts.Header>
@@ -370,7 +370,7 @@ const MemoizedBuildSidebarInner = memo(() => {
                   isActive={
                     !pathname.startsWith(CRAFT_TASKS_PATH) &&
                     !pathname.startsWith(CRAFT_SKILLS_PATH) &&
-                    !pathname.startsWith(CRAFT_APPS_PATH) &&
+                    !pathname.startsWith(CRAFT_PLUGINS_PATH) &&
                     session?.id === historyItem.id
                   }
                   onLoad={() => handleLoadSession(historyItem.id)}
