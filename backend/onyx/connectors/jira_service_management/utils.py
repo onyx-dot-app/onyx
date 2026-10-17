@@ -80,7 +80,13 @@ def discover_jsm_fields(jira_client: JiraSourceOperations | Any) -> JsmFieldMap:
 
 def _issue_raw_fields(issue: Any) -> dict[str, Any]:
     """JSM accepts the current Jira raw-JSON gateway and legacy SDK fixtures."""
-    raw: Any = issue if isinstance(issue, dict) else getattr(issue, "raw", None)
+    if isinstance(issue, dict):
+        raw: Any = issue
+    else:
+        try:
+            raw = issue.raw
+        except AttributeError:
+            return {}
     if not isinstance(raw, dict):
         return {}
     fields = raw.get("fields")
@@ -264,17 +270,22 @@ def get_jsm_comment_strs(
                 continue
 
             author = raw_comment.get("author")
-            author_email = (
-                author.get("emailAddress")
-                if isinstance(author, dict)
-                else getattr(getattr(comment, "author", None), "emailAddress", None)
-            )
+            if isinstance(author, dict):
+                author_email = author.get("emailAddress")
+            else:
+                try:
+                    author_email = comment.author.emailAddress
+                except AttributeError:
+                    author_email = None
             if author_email in comment_email_blacklist:
                 continue
 
             body = raw_comment.get("body")
             if not isinstance(comment, dict):
-                body = getattr(comment, "body", body)
+                try:
+                    body = comment.body
+                except AttributeError:
+                    pass
             body_text = (
                 body
                 if isinstance(body, str)

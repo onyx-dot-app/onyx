@@ -1,10 +1,11 @@
 import io
 import json
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Protocol
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     JIRA_CONNECTOR_LABELS_TO_SKIP,
+    MAX_ALLOWED_UPLOAD_SIZE_MB,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
@@ -44,12 +45,54 @@ def _issue_key(issue: JiraIssue | Any) -> str:
     return str(issue["key"] if isinstance(issue, dict) else issue.key)
 
 
-def _attachment_field(attachment: Any, name: str, default: Any = "") -> Any:
-    """Attachment metadata may be a legacy SDK resource or a JSON mapping."""
+class _AttachmentResource(Protocol):
+    """Fields exposed by legacy Jira SDK attachment resources."""
+
+    id: str | int
+    filename: str
+    content: str
+    created: str
+    size: int
+
+
+def _attachment_field(
+    attachment: dict[str, Any] | _AttachmentResource,
+    name: str,
+    default: Any = "",
+) -> Any:
+    """Read a gateway mapping or legacy SDK resource without dynamic getattr."""
+    if isinstance(attachment, dict):
+        return attachment.get(name, default)
+    try:
+        if name == "id":
+            return attachment.id
+        if name == "filename":
+            return attachment.filename
+        if name == "content":
+            return attachment.content
+        if name == "created":
+            return attachment.created
+        if name == "size":
+            return attachment.size
+    except AttributeError:
+        return default
+    return default
+
+
+# Follow Onyx's administrator-configurable hard ceiling for uploaded files.
+_MAX_ATTACHMENT_BYTES = MAX_ALLOWED_UPLOAD_SIZE_MB * 1024 * 1024
+
+
+def _attachment_metadata_eligible(
+    attachment: dict[str, Any] | _AttachmentResource,
+) -> bool:
+    """Shared deterministic admission rule for full and slim passes."""
+    size = _attachment_field(attachment, "size", None)
     return (
-        attachment.get(name, default)
-        if isinstance(attachment, dict)
-        else getattr(attachment, name, default)
+        bool(_attachment_field(attachment, "id", ""))
+        and isinstance(size, int)
+        and not isinstance(size, bool)
+        and 0 < size <= _MAX_ATTACHMENT_BYTES
     )
 
 
@@ -250,6 +293,21 @@ class JiraServiceManagementConnector(JiraConnector):
         attachment_id = str(_attachment_field(attachment, "id", "") or "")
         doc_id = f"{ticket_document_id}/attachment/{attachment_id}"
 
+        # Reject invalid or oversized metadata before any network download.
+        # The slim pass uses the identical rule, even on a fresh instance.
+        if not _attachment_metadata_eligible(attachment):
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=doc_id,
+                    document_link=build_jira_url(self.jira_base, _issue_key(issue)),
+                ),
+                failure_message=(
+                    f"Attachment '{filename}' ({attachment_id}) of JSM issue "
+                    f"{_issue_key(issue)} has an empty, invalid, unknown or "
+                    f"oversized declared size (limit {_MAX_ATTACHMENT_BYTES} bytes)"
+                ),
+            )
+
         try:
             file_bytes = self.source_operations.download_attachment(
                 attachment_id=str(_attachment_field(attachment, "id"))
@@ -379,6 +437,8 @@ class JiraServiceManagementConnector(JiraConnector):
 
         slim_docs: list[SlimDocument] = []
         for attachment in attachments:
+            if not _attachment_metadata_eligible(attachment):
+                continue
             attachment_id = str(_attachment_field(attachment, "id", "") or "")
             doc_id = f"{ticket_document_id}/attachment/{attachment_id}"
             if doc_id in failed_ids:

@@ -150,6 +150,39 @@ class TestIncludeAttachmentsDefault:
         mock_jira_client.issue.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "declared_size",
+    [0, -1, None, "999", True, 10**12],
+    ids=["zero", "negative", "missing", "string", "boolean", "oversized"],
+)
+def test_invalid_attachment_metadata_is_rejected_without_downloading(
+    declared_size: Any,
+    make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    mock_jira_client: MagicMock,
+) -> None:
+    attachment = MockAttachment(id="oversized-1", filename="large.txt")
+    attachment.size = declared_size
+    connector = _make_connector_with_attachments(
+        make_jsm_connector, mock_jira_client, [attachment]
+    )
+    issue = make_mock_jsm_issue()
+
+    with patch.object(attachment, "get", wraps=attachment.get) as download:
+        outputs = connector._process_issue_attachments(issue, None, TICKET_DOC_ID)
+        assert len(outputs) == 1
+        assert isinstance(outputs[0], ConnectorFailure)
+        download.assert_not_called()
+
+    # The same eligibility rule must apply on a fresh slim-only instance.
+    fresh_connector = _make_connector_with_attachments(
+        make_jsm_connector, mock_jira_client, [attachment]
+    )
+    assert (
+        fresh_connector._process_issue_attachments_slim(issue, None, TICKET_DOC_ID)
+        == []
+    )
+
+
 class TestAttachmentIndexing:
     @pytest.mark.usefixtures("mock_extract")
     def test_attachments_indexed_in_main_and_slim_pass(
