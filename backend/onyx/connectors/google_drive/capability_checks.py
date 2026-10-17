@@ -37,6 +37,7 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckStep,
     CountFinding,
     CredentialCapability,
     OptionsFinding,
@@ -494,6 +495,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
         requires_connector_config: bool = False,
         credential_kind: GoogleCredentialKind | None = None,
         discovery: bool = False,
+        step: CheckStep | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -512,6 +514,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
             remediation=remediation,
             docs_link=_DOCS_LINK,
             discovery=discovery,
+            step=step,
         )
         self._credential_kind = credential_kind
 
@@ -1326,6 +1329,11 @@ class _SharedDriveListingCheck(_GoogleDriveCheck):
             check_id="google_drive_shared_drive_listing",
             display_name="List shared drives",
             discovery=True,
+            step=CheckStep(
+                step_of=_SHARED_DRIVES_CHECK_ID,
+                running_summary="Drives visible, counting…",
+                unfinished_caveat="Could not count every shared drive.",
+            ),
             requires_connector_config=True,
             remediation=(
                 "Service account: make the primary admin a Workspace admin who "
@@ -1375,6 +1383,11 @@ class _UserCountCheck(_GoogleDriveCheck):
             check_id="google_drive_user_count",
             display_name="List Workspace users",
             discovery=True,
+            step=CheckStep(
+                step_of=_WORKSPACE_USERS_CHECK_ID,
+                running_summary="Users listed, counting…",
+                unfinished_caveat="Could not count every user.",
+            ),
             credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
             remediation=(
                 "Make the primary admin a Google Workspace admin, give the service "

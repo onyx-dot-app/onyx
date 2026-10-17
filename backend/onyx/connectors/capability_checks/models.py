@@ -450,6 +450,19 @@ class CapabilityCheckContext(BaseModel):
         return validate_form_state(mapping.config_class, self.connector_specific_config)
 
 
+class CheckStep(BaseModel):
+    """Makes a check the second step of another check's row: a two-step row.
+    The parent probes one item; the step lists or counts all of them, and its
+    result fills the parent's row (``two_step.two_step_row``)."""
+
+    # The check_id of the parent. The step runs after it, on its row.
+    step_of: str
+    # The row's line while the step runs after the parent passed.
+    running_summary: str
+    # The caveat on the parent's line when the step does not finish.
+    unfinished_caveat: str
+
+
 _PERM_SYNC_CAPABILITIES = frozenset(
     {
         CredentialCapability.DOC_PERMISSION_SYNC,
@@ -511,6 +524,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         fails_when_unreachable: bool = False,
         depends_on: tuple[str, ...] = (),
         row_id: str | None = None,
+        step: CheckStep | None = None,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -559,8 +573,11 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.depends_on = depends_on
         # The row the check shows on. Checks that share one are one row: the
         # variants of a probe (token types, deployments) and a probe's
-        # discovery step. Defaults to the check_id.
-        self.row_id = row_id or check_id
+        # discovery step. Defaults to the parent's check_id for a step, else
+        # to the check_id.
+        self.row_id = row_id or (step.step_of if step is not None else check_id)
+        # Set on the second step of a two-step row.
+        self.step = step
 
     def outcome_status(
         self, error_kind: CheckErrorKind, form_run: bool
@@ -632,6 +649,8 @@ class CapabilityCheckResult(BaseModel):
     status: CapabilityCheckStatus
     # The row the check shows on; None in results stored before rows.
     row_id: str | None = None
+    # Set on the second step of a two-step row; it names the parent.
+    step: CheckStep | None = None
     # Exception text for failures, skip reason for skips, empty on success.
     message: str = ""
     # Exception class name, for support diagnosis.

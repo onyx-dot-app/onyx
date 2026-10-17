@@ -39,6 +39,7 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckStep,
     CredentialCapability,
     OptionsFinding,
 )
@@ -376,6 +377,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
         discovery: bool = False,
         fails_when_unreachable: bool = False,
         row_id: str | None = None,
+        step: CheckStep | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -391,6 +393,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
             discovery=discovery,
             fails_when_unreachable=fails_when_unreachable,
             depends_on=_DEPENDS_ON.get(check_id, ()),
+            step=step,
         )
 
 
@@ -624,6 +627,11 @@ class _SpaceListingCheck(_ConfluenceCheck):
             display_name="List spaces",
             remediation="Give the token's user view permission on the spaces to index.",
             discovery=True,
+            step=CheckStep(
+                step_of="confluence_spaces_visible",
+                running_summary="Spaces visible, counting…",
+                unfinished_caveat="Could not count every space.",
+            ),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
