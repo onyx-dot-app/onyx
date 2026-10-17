@@ -19,11 +19,18 @@ export function useFocusedRow<K extends string | number>(
   const setOpen = useCallback((key: K, open: boolean) => {
     setOpenKey((current) => (open ? key : current === key ? null : current));
   }, []);
+  // A list that loses its open row, to polling or paging, drops the focus with it.
+  const retain = useCallback((keys: readonly K[]) => {
+    setOpenKey((current) =>
+      current !== null && !keys.includes(current) ? null : current
+    );
+  }, []);
 
   return {
     focused: openKey !== null,
     isOpen: (key: K) => openKey === key,
     isDimmed: (key: K) => openKey !== null && openKey !== key,
     setOpen,
+    retain,
   };
 }

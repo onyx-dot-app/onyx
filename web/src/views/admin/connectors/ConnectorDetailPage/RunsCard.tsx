@@ -182,11 +182,6 @@ export default function RunsCard({
     errorHandlingFetcher,
     { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
   );
-  // Polling can drop the open row from the page; the focus goes with it.
-  useEffect(() => {
-    if (openRun === null || data === undefined) return;
-    if (!data.items.some((run) => runKey(run) === openRun)) setOpenRun(null);
-  }, [data, openRun]);
   // An empty window with no other filter counts the pair's runs before it.
   const emptyWindow =
     data !== undefined &&
@@ -239,6 +234,10 @@ export default function RunsCard({
     ...runningRuns,
     ...(data?.items ?? []).filter((run) => !runningKeys.has(runKey(run))),
   ];
+  const { retain } = focus;
+  useEffect(() => {
+    if (data !== undefined) retain(items.map(runKey));
+  }, [data, items, retain]);
 
   function pickWindow(window: TimeWindow) {
     setPicked(window);

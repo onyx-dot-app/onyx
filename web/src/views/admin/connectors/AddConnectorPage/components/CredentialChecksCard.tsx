@@ -29,6 +29,7 @@ import {
   SvgPlay,
   SvgXCircle,
   SvgXOctagon,
+  SvgRefreshCw,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
 import { escapeMarkdown, markdown } from "@opal/utils";
@@ -287,6 +288,8 @@ interface CheckCardViewProps {
   defaultCollapsed?: boolean;
   /** The run's checks, counted per state. */
   stateCounts: Record<DraftCheckStateKind, number>;
+  /** Starts the draft run again after it failed to run. A stored report has no rerun here. */
+  onRerun?: () => void;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
 }
@@ -297,10 +300,13 @@ export function CheckCardView({
   inProgressCount,
   expectedCount,
   stateCounts,
+  onRerun,
   defaultCollapsed = false,
   expandRequest = 0,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
+  // The same "Re-run Checks" label the saved account cards use.
+  const tAccount = useTranslations("admin.connectorsList.add.account");
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -388,6 +394,18 @@ export function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
+          {notice &&
+            onRerun !== undefined && (
+              // A run that broke needs a way to try again without editing settings.
+              <Button
+                rightIcon={SvgRefreshCw}
+                prominence="tertiary"
+                disabled={isRunning}
+                onClick={onRerun}
+              >
+                {tAccount("rerunButton.label")}
+              </Button>
+            )}
           {collapsed && requiredFailed > 0 && (
             <Tag
               icon={SvgXOctagon}
@@ -541,6 +559,7 @@ export default function CredentialChecksCard({
       inProgressCount={checks.inProgressCount}
       expectedCount={checks.expectedCount}
       stateCounts={checks.stateCounts}
+      onRerun={checks.rerun}
       expandRequest={expandRequest}
     />
   );
