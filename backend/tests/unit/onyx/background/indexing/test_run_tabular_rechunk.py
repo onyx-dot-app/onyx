@@ -84,6 +84,10 @@ def test_rebuild_keeps_the_fields_the_upsert_would_overwrite() -> None:
     assert doc.metadata == {"department": "finance", "year": "2026"}
     assert doc.source == DocumentSource.FILE
 
+    # The chunk writer reads these off the document, not off the row.
+    assert [o.display_name for o in doc.primary_owners or []] == ["Ada Lovelace"]
+    assert [o.display_name for o in doc.secondary_owners or []] == ["Grace Hopper"]
+
 
 def test_tabular_file_name_supplies_a_missing_extension() -> None:
     """A native Google Sheet keeps its own name, which usually has no
