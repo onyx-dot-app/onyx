@@ -310,7 +310,8 @@ def test_shared_drives_list_with_domain_admin_access_for_a_service_account() -> 
     )
 
 
-def test_configured_shared_drive_that_nobody_sees_fails() -> None:
+def test_configured_shared_drive_that_nobody_sees_is_a_partial_find() -> None:
+    """Some selected drives found: INCOMPLETE, and later checks run on them."""
     ops = _ops()
     ops.list_drives.side_effect = _listing("d1")
 
@@ -322,9 +323,26 @@ def test_configured_shared_drive_that_nobody_sees_fails() -> None:
         },
     )
 
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.partial
+    assert result.summary == "1 of 2 selected drives not found"
+    assert result.description is not None
+    assert "gone" in result.description
+    assert "d1" not in result.description
+
+
+def test_configured_shared_drives_that_nobody_sees_fail() -> None:
+    ops = _ops()
+    ops.list_drives.side_effect = _listing("d1")
+
+    result = _run(
+        "google_drive_configured_shared_drives",
+        ops,
+        {"shared_drive_urls": _FOLDER_URL.format("gone")},
+    )
+
     assert result.status == CapabilityCheckStatus.FAILED
-    assert "gone" in result.message
-    assert "d1" not in result.message
+    assert result.summary == "No selected drive found"
 
 
 def test_configured_shared_drive_id_that_is_a_visible_folder_passes() -> None:
@@ -360,7 +378,16 @@ def test_configured_shared_drive_id_that_is_a_file_fails() -> None:
     assert "file1" in result.message
 
 
-def test_configured_folders_report_each_problem() -> None:
+@pytest.mark.parametrize(
+    ("folder_id", "summary"),
+    [
+        ("drive1", "A selected folder is a shared drive"),
+        ("file1", "A selected folder URL is a file"),
+    ],
+)
+def test_a_configured_folder_that_is_no_folder_fails(
+    folder_id: str, summary: str
+) -> None:
     ops = _ops()
     ops.list_drives.side_effect = _listing("drive1")
 
@@ -370,14 +397,32 @@ def test_configured_folders_report_each_problem() -> None:
         return None
 
     ops.probe_target.side_effect = probe_target
-    urls = ",".join(_FOLDER_URL.format(i) for i in ("drive1", "file1", "gone"))
+
+    result = _run(
+        "google_drive_configured_folders",
+        ops,
+        {"shared_folder_urls": _FOLDER_URL.format(folder_id)},
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == summary
+
+
+def test_configured_folders_some_unseen_are_a_partial_find() -> None:
+    ops = _ops()
+
+    def probe_target(*, user_email: str, target_id: str) -> dict[str, Any] | None:  # noqa: ARG001
+        if target_id == "folder1":
+            return {"id": target_id, "mimeType": DRIVE_FOLDER_TYPE}
+        return None
+
+    ops.probe_target.side_effect = probe_target
+    urls = ",".join(_FOLDER_URL.format(i) for i in ("folder1", "gone"))
 
     result = _run("google_drive_configured_folders", ops, {"shared_folder_urls": urls})
 
-    assert result.status == CapabilityCheckStatus.FAILED
-    assert "drive1 is a shared drive" in result.message
-    assert "file1 is a file" in result.message
-    assert "gone is not visible" in result.message
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "1 of 2 selected folders not found"
 
 
 def test_configured_folder_is_listed_as_its_viewer() -> None:
@@ -506,7 +551,8 @@ def test_content_read_explains_a_download_blocked_by_the_owner() -> None:
 
     result = _run("google_drive_content_read", ops)
 
-    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "Sampled file blocks downloads"
     assert "blocked downloads" in result.message
 
 
@@ -532,11 +578,14 @@ def test_docs_api_names_the_drive_api_when_the_listing_fails() -> None:
     ops.fetch_google_doc.assert_not_called()
 
 
-def test_docs_api_passes_without_a_google_doc() -> None:
+def test_docs_api_is_incomplete_without_a_google_doc() -> None:
     ops = _ops()
     ops.list_files.side_effect = _listing()
 
-    assert _run("google_drive_docs_api", ops).status == CapabilityCheckStatus.PASSED
+    result = _run("google_drive_docs_api", ops)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "No Google Docs found to test"
     ops.fetch_google_doc.assert_not_called()
 
 
