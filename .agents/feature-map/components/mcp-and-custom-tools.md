@@ -65,6 +65,9 @@ Member defaults, Craft metadata, skills links, and Craft actions require the
 member's Craft entitlement. MCP setup and admin tools retain their deployment gates.
 Admin row actions sit beside the detail link in normal flex flow, without
 absolute positioning or a placeholder spacer.
+Availability controls use workspace enable/disable wording. Disabling an OpenAPI
+plugin requires confirmation that it affects everyone, including custom agents,
+while preserving its settings and credentials.
 Member OAuth opens a normal new tab, without popup sizing or window features.
 The correlated callback still closes the sign-in tab and refreshes the original page.
 Its completion screen uses a bounded, centered card with return and close-tab
