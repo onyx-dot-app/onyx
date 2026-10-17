@@ -159,9 +159,16 @@ const AVERAGE_WIDTH = 8.5;
 const MAX_WIDTH = 4;
 // Room after the max column for the uneven marker or the close button; the bar takes the rest.
 const TRAILING_WIDTH = 6;
-// Seconds with three decimals, as the mock prints every figure here.
-export function formatSeconds(ms: number | null | undefined): string {
-  return ms == null ? "-" : `${(ms / 1000).toFixed(3)}s`;
+// Seconds with three decimals in the viewer's locale, as the mock prints every figure here.
+const SECONDS_FORMAT = {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
+} as const;
+export function formatSeconds(
+  format: ReturnType<typeof useFormatter>,
+  ms: number | null | undefined
+): string {
+  return ms == null ? "-" : `${format.number(ms / 1000, SECONDS_FORMAT)}s`;
 }
 
 function percent(ms: number, scale: number): string {
@@ -217,6 +224,7 @@ interface AverageProps {
 }
 /** The average in emphasis with its spread muted beside it. */
 function Average({ avgMs, stdDevMs = null }: AverageProps) {
+  const format = useFormatter();
   if (avgMs == null) {
     return (
       <Text font="secondary-mono" color="text-03">
@@ -234,7 +242,7 @@ function Average({ avgMs, stdDevMs = null }: AverageProps) {
       height="fit"
     >
       <Text font="secondary-mono-label" color="text-04">
-        {formatSeconds(avgMs)}
+        {formatSeconds(format, avgMs)}
       </Text>
       {stdDevMs !== null && (
         <>
@@ -250,7 +258,7 @@ function Average({ avgMs, stdDevMs = null }: AverageProps) {
             className="min-w-0 flex-1"
           >
             <Text font="secondary-mono" color="text-03">
-              {formatSeconds(stdDevMs)}
+              {formatSeconds(format, stdDevMs)}
             </Text>
           </Section>
         </>
@@ -338,7 +346,7 @@ function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
       </Section>
       <Cell width={MAX_WIDTH} align="end">
         <Text font="secondary-mono" color="text-03">
-          {formatSeconds(timing?.maxMs)}
+          {formatSeconds(format, timing?.maxMs)}
         </Text>
       </Cell>
       <Section
@@ -461,7 +469,7 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
         >
           <ColumnTitle>{t("stageDetails.maxTime")}</ColumnTitle>
           <Text font="secondary-mono" color="text-03">
-            {formatSeconds(total?.max_duration_ms)}
+            {formatSeconds(format, total?.max_duration_ms)}
           </Text>
         </Section>
         <Section

@@ -1,3 +1,4 @@
+import { createFormatter } from "next-intl";
 import type {
   IndexAttemptStage,
   IndexAttemptStageMetric,
@@ -156,14 +157,22 @@ describe("barScale", () => {
 });
 
 describe("formatSeconds", () => {
+  const english = createFormatter({ locale: "en" });
+
   it("prints seconds with three decimals", () => {
-    expect(formatSeconds(9860)).toBe("9.860s");
-    expect(formatSeconds(849)).toBe("0.849s");
-    expect(formatSeconds(21400)).toBe("21.400s");
+    expect(formatSeconds(english, 9860)).toBe("9.860s");
+    expect(formatSeconds(english, 849)).toBe("0.849s");
+    expect(formatSeconds(english, 21400)).toBe("21.400s");
+  });
+
+  it("follows the viewer's locale", () => {
+    expect(formatSeconds(createFormatter({ locale: "de" }), 9860)).toBe(
+      "9,860s"
+    );
   });
 
   it("prints a dash when there is no figure", () => {
-    expect(formatSeconds(null)).toBe("-");
-    expect(formatSeconds(undefined)).toBe("-");
+    expect(formatSeconds(english, null)).toBe("-");
+    expect(formatSeconds(english, undefined)).toBe("-");
   });
 });
