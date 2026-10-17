@@ -30,6 +30,8 @@ import { deleteCustomTool, updateToolStatus } from "@/lib/tools/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import ExternalAppLifecycleMenu from "@/sections/plugins/ExternalAppLifecycleMenu";
 import { workspaceAvailabilityLabel } from "@/sections/plugins/workspaceAvailability";
+import { useUser } from "@/providers/UserProvider";
+import { mintMcpChatEnableIntent } from "@/sections/actions/mcpChatEnableIntent";
 
 export interface PluginLifecycleMenuProps {
   plugin: InstalledPlugin;
@@ -132,6 +134,7 @@ function ActivePluginLifecycleMenu({
     `plugins.controls.${workspaceAvailabilityLabel(plugin, craftAvailable)}`
   );
   const defaultChat = useDefaultAssistantConfiguration();
+  const { user } = useUser();
   const [open, setOpen] = useState(initialAction === "availability");
   const [confirmation, setConfirmation] = useState<
     "delete" | "disable-chat" | "disable-craft" | "disable-openapi" | null
@@ -277,11 +280,23 @@ function ActivePluginLifecycleMenu({
           if (busy || !defaultChat.canEdit) return;
           if (authenticateToEnable) {
             if (!can(server, "authenticate")) return;
+            const intent = mintMcpChatEnableIntent({
+              userId: user?.id,
+              serverId: server.id,
+            });
+            if (!intent) {
+              setError(t("addMcpModal.toasts.updateFailed"));
+              return;
+            }
             setOpen(false);
             router.push(
               withPluginSearchParams(
                 pluginDetailHref({ kind: "mcp", id: server.id }),
-                { tab: "authentication", enable_chat: "true" }
+                {
+                  tab: "authentication",
+                  enable_chat: "true",
+                  enable_chat_intent: intent,
+                }
               )
             );
             return;

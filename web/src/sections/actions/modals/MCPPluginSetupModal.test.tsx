@@ -12,7 +12,7 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import * as UserProvider from "@/providers/UserProvider";
-import { Permission } from "@/lib/types";
+import { AccountType, Permission, type User } from "@/lib/types";
 import { Tier } from "@/lib/tiers/types";
 import {
   MCPServerStatus,
@@ -62,6 +62,29 @@ const oauthResult: MCPSetupProbeResult = {
   },
 };
 const copy = messages.actions.mcpSetup;
+const adminUser: User = {
+  id: "admin-user",
+  email: "admin@example.com",
+  is_active: true,
+  is_superuser: true,
+  is_verified: true,
+  account_type: AccountType.STANDARD,
+  team_name: null,
+  preferences: {
+    chosen_assistants: null,
+    visible_assistants: [],
+    hidden_assistants: [],
+    default_model: null,
+    recent_assistants: [],
+    auto_scroll: true,
+    shortcut_enabled: true,
+    temperature_override_enabled: false,
+    theme_preference: null,
+    language: null,
+    chat_background: null,
+    default_app_mode: "CHAT",
+  },
+};
 let probeResponse: (url: string) => Promise<MCPSetupProbeResult>;
 let toolsFail: boolean;
 let toolsResponse: Promise<Response> | null;
@@ -80,6 +103,7 @@ function authority(scoped = false, denied = false) {
   );
   jest.mocked(UserProvider.useUser).mockReturnValue({
     ...base.result.current,
+    user: adminUser,
     userResolution: "resolved",
     permissions:
       scoped || denied
@@ -91,6 +115,7 @@ function authority(scoped = false, denied = false) {
 }
 
 beforeEach(() => {
+  sessionStorage.clear();
   mockClose.mockClear();
   mockCompleted.mockClear();
   authority();
@@ -265,7 +290,9 @@ test("first OAuth setup carries the Chat enable intent and enables after already
   ).toEqual(
     expect.objectContaining({
       server_id: 7,
-      return_path: "/admin/plugins/mcp/7?trigger_fetch=true&enable_chat=true",
+      return_path: expect.stringMatching(
+        /^\/admin\/plugins\/mcp\/7\?trigger_fetch=true&enable_chat=true&enable_chat_intent=[0-9a-f-]+$/
+      ),
     })
   );
   expect(

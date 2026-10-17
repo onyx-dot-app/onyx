@@ -18,6 +18,11 @@ import {
   validateMCPAuthCredentials,
 } from "@/sections/actions/modals/mcpAuthForm";
 import { mcpOAuthReturnHref } from "@/lib/plugins/routes";
+import { useUser } from "@/providers/UserProvider";
+import {
+  clearMcpChatEnableIntent,
+  mintMcpChatEnableIntent,
+} from "@/sections/actions/mcpChatEnableIntent";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { SvgArrowLeft } from "@opal/icons";
@@ -67,7 +72,10 @@ interface MCPAuthenticationPageBaseProps {
   beforeFields?: ReactNode;
   canSubmit?: boolean;
   recommendation?: MCPSetupRecommendation;
-  onTriggerFetchTools: (serverId: number) => Promise<void> | void;
+  onTriggerFetchTools: (
+    serverId: number,
+    chatEnableIntent?: string | null
+  ) => Promise<void> | void;
   onBusyChange: (busy: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onCancel?: () => void;
@@ -75,6 +83,7 @@ interface MCPAuthenticationPageBaseProps {
   onBack?: () => void;
   onComplete: () => Promise<void> | void;
   enableChatOnConnect?: boolean;
+  chatEnableIntent?: string | null;
 }
 
 type MCPAuthenticationPageProps = MCPAuthenticationPageBaseProps &
@@ -104,11 +113,13 @@ export default function MCPAuthenticationPage({
   onBack,
   onComplete,
   enableChatOnConnect = false,
+  chatEnableIntent = null,
 }: MCPAuthenticationPageProps) {
   const formId = useId();
   const t = useTranslations("actions");
   const recommendedCopy = useTranslations("craft.llmPopover.recommended");
   const { appName } = useSettings();
+  const { user } = useUser();
   const [initialValues] = useState(() => {
     const values = getMCPAuthInitialValues(mcpServer);
     if (!recommendation) return values;
@@ -278,11 +289,20 @@ export default function MCPAuthenticationPage({
     setIsSubmitting(true);
     setConnectionError(null);
     let stage: "saveStage" | "oauthStage" | "discoveryStage" = "saveStage";
+    let enableIntent = chatEnableIntent;
 
     try {
       const comparisonValues = persistedValues.current ?? initialValues;
       const authData = prepareMCPAuthPayload(values, comparisonValues, t);
       const savedServer = resolveServer ? await resolveServer() : mcpServer;
+      if (resolveServer && enableChatOnConnect) {
+        enableIntent = mintMcpChatEnableIntent({
+          userId: user?.id,
+          serverId: savedServer.id,
+        });
+        if (!enableIntent)
+          throw new Error(t("addMcpModal.toasts.updateFailed"));
+      }
       const serverData = {
         ...authData,
         name: savedServer.name,
@@ -318,7 +338,9 @@ export default function MCPAuthenticationPage({
         stage = "oauthStage";
         const oauthStart = await startMCPAdminOAuth(
           savedServer.id,
-          mcpOAuthReturnHref(savedServer.id, enableChatOnConnect),
+          enableIntent
+            ? `${mcpOAuthReturnHref(savedServer.id, true)}&enable_chat_intent=${encodeURIComponent(enableIntent)}`
+            : mcpOAuthReturnHref(savedServer.id),
           {
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
@@ -326,19 +348,17 @@ export default function MCPAuthenticationPage({
             oauth_client_secret_changed: serverData.oauth_client_secret_changed,
           }
         );
-        if (oauthStart.status === "already_authenticated") {
-          stage = "discoveryStage";
-          await onTriggerFetchTools(savedServer.id);
-          await onComplete();
-        } else {
+        if (oauthStart.status !== "already_authenticated") {
           window.location.href = getMCPUserOAuthNavigationUrl(oauthStart);
+          return;
         }
-      } else {
-        stage = "discoveryStage";
-        await onTriggerFetchTools(savedServer.id);
-        await onComplete();
       }
+      stage = "discoveryStage";
+      if (enableIntent) await onTriggerFetchTools(savedServer.id, enableIntent);
+      else await onTriggerFetchTools(savedServer.id);
+      await onComplete();
     } catch (error) {
+      clearMcpChatEnableIntent(enableIntent);
       if (error instanceof MCPAuthValidationError) {
         helpers.setFieldError("oauth_additional_auth_params", error.message);
       }

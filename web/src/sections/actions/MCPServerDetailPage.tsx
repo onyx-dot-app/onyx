@@ -28,6 +28,11 @@ import MCPAuthenticationPage from "@/sections/actions/modals/MCPAuthenticationPa
 import MCPServerToolsEditor from "@/sections/actions/MCPServerToolsEditor";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
+import { useUser } from "@/providers/UserProvider";
+import {
+  clearMcpChatEnableIntent,
+  consumeMcpChatEnableIntent,
+} from "@/sections/actions/mcpChatEnableIntent";
 
 interface MCPServerDetailPageProps {
   serverId: number;
@@ -47,7 +52,12 @@ export default function MCPServerDetailPage({
   const searchParams = useSearchParams();
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
-  const enableChatIntent = searchParams.get("enable_chat") === "true";
+  const { user, userResolution } = useUser();
+  const actor = useRef(user?.id);
+  useEffect(() => {
+    actor.current = user?.id;
+  }, [user?.id]);
+  const enableChatIntent = searchParams.get("enable_chat_intent");
   const enableChatCompleted = useRef(false);
   const validId = Number.isSafeInteger(serverId) && serverId > 0;
   const {
@@ -92,7 +102,10 @@ export default function MCPServerDetailPage({
   });
   const close = () => {
     if (busy) return;
-    guard.requestLeave(() => router.replace(ADMIN_ROUTES.PLUGINS.path));
+    guard.requestLeave(() => {
+      clearMcpChatEnableIntent(enableChatIntent);
+      router.replace(ADMIN_ROUTES.PLUGINS.path);
+    });
   };
   const selectTab = useCallback(
     (nextTab: DetailTab) => {
@@ -101,7 +114,13 @@ export default function MCPServerDetailPage({
       const query = new URLSearchParams(searchParams.toString());
       query.set("tab", nextTab);
       query.delete("trigger_fetch");
-      if (enableChatCompleted.current) query.delete("enable_chat");
+      if (
+        enableChatCompleted.current ||
+        searchParams.get("trigger_fetch") === "true"
+      ) {
+        query.delete("enable_chat");
+        query.delete("enable_chat_intent");
+      }
       router.replace(
         withPluginSearchParams(
           pluginDetailHref({ kind: "mcp", id: serverId }),
@@ -116,7 +135,7 @@ export default function MCPServerDetailPage({
     await Promise.all([mutateServer(), mutate(SWR_KEYS.adminMcpServers)]);
   }, [mutateServer, mutate]);
   const fetchTools = useCallback(
-    async (id: number) => {
+    async (id: number, token = enableChatIntent) => {
       setDiscoveringTools(true);
       try {
         await updateMCPServerStatus(id, MCPServerStatus.FETCHING_TOOLS);
@@ -132,7 +151,7 @@ export default function MCPServerDetailPage({
           revalidate: false,
         });
         if (
-          enableChatIntent &&
+          token &&
           !enableChatCompleted.current &&
           defaultChat.canEdit &&
           server &&
@@ -141,14 +160,24 @@ export default function MCPServerDetailPage({
         ) {
           if (!defaultChat.data || defaultChat.error)
             throw new Error(t("addMcpModal.toasts.updateFailed"));
-          await defaultChat.updateTools(
-            tools.map((tool) => tool.id),
-            true
-          );
-          enableChatCompleted.current = true;
-          selectTab("tools");
+          if (
+            consumeMcpChatEnableIntent(token, {
+              userId: actor.current,
+              serverId: id,
+            })
+          ) {
+            await defaultChat.updateTools(
+              tools.map((tool) => tool.id),
+              true
+            );
+            enableChatCompleted.current = true;
+            selectTab("tools");
+          }
         }
         await refreshMemberPluginCaches(mutate);
+      } catch (cause) {
+        clearMcpChatEnableIntent(token);
+        throw cause;
       } finally {
         await refresh().catch((cause: unknown) =>
           console.error(
@@ -175,6 +204,7 @@ export default function MCPServerDetailPage({
       !server ||
       searchParams.get("trigger_fetch") !== "true" ||
       (enableChatIntent && defaultChat.isLoading) ||
+      (enableChatIntent && userResolution !== "resolved") ||
       handledOAuthReturn.current
     )
       return;
@@ -198,6 +228,7 @@ export default function MCPServerDetailPage({
     t,
     enableChatIntent,
     defaultChat.isLoading,
+    userResolution,
   ]);
   const saveDetails = async (saved: MCPServer) => {
     await mutateServer(
@@ -306,7 +337,9 @@ export default function MCPServerDetailPage({
                   active={tab === "authentication"}
                   footerTarget={footerTarget}
                   mcpServer={server}
-                  enableChatOnConnect={enableChatIntent && defaultChat.canEdit}
+                  chatEnableIntent={
+                    defaultChat.canEdit ? enableChatIntent : null
+                  }
                   canSubmit={
                     !enableChatIntent ||
                     !defaultChat.canEdit ||

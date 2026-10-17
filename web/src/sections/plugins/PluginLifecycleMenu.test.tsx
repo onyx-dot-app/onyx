@@ -11,6 +11,17 @@ import PluginLifecycleMenu from "@/sections/plugins/PluginLifecycleMenu";
 import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
+import { consumeMcpChatEnableIntent } from "@/sections/actions/mcpChatEnableIntent";
+
+jest.mock("@/providers/UserProvider", () => {
+  const actual = jest.requireActual<typeof import("@/providers/UserProvider")>(
+    "@/providers/UserProvider"
+  );
+  return {
+    ...actual,
+    useUser: () => ({ ...actual.useUser(), user: { id: "admin-user" } }),
+  };
+});
 
 let mockFullAdmin = true;
 const mockPush = jest.fn();
@@ -820,9 +831,18 @@ test("opens authentication instead of disabling Enable for a server awaiting sig
   });
   expect(enable).not.toHaveAttribute("aria-disabled", "true");
   await user.click(enable);
-  expect(mockPush).toHaveBeenCalledWith(
-    "/admin/plugins/mcp/7?tab=authentication&enable_chat=true"
-  );
+  const destination: unknown = mockPush.mock.calls[0]?.[0];
+  if (typeof destination !== "string")
+    throw new Error("Expected authentication navigation");
+  const target = new URL(destination, window.location.origin);
+  expect(target.pathname).toBe("/admin/plugins/mcp/7");
+  expect(target.searchParams.get("tab")).toBe("authentication");
+  expect(
+    consumeMcpChatEnableIntent(target.searchParams.get("enable_chat_intent"), {
+      userId: "admin-user",
+      serverId: 7,
+    })
+  ).toBe(true);
   expect(writes).toEqual([]);
 });
 

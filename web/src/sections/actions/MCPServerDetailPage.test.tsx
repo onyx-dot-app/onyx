@@ -1,4 +1,11 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  act,
+  deferred,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import MCPServerDetailPage from "@/sections/actions/MCPServerDetailPage";
 import {
   MCPAuthenticationType,
@@ -8,6 +15,21 @@ import {
 import { refreshMCPServerTools, updateMCPServerStatus } from "@/lib/mcp/svc";
 import messages from "@/i18n/messages/en.json";
 import type { ToolSnapshot } from "@/lib/tools/types";
+import {
+  mintMcpChatEnableIntent,
+  consumeMcpChatEnableIntent,
+} from "@/sections/actions/mcpChatEnableIntent";
+
+let mockUserId = "admin-user";
+jest.mock("@/providers/UserProvider", () => {
+  const actual = jest.requireActual<typeof import("@/providers/UserProvider")>(
+    "@/providers/UserProvider"
+  );
+  return {
+    ...actual,
+    useUser: () => ({ ...actual.useUser(), user: { id: mockUserId } }),
+  };
+});
 
 function json(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), init);
@@ -152,6 +174,8 @@ const discoveredTool: ToolSnapshot = {
 };
 
 beforeEach(() => {
+  sessionStorage.clear();
+  mockUserId = "admin-user";
   jest.clearAllMocks();
   mockFullAdmin = true;
   mockSearchParams = new URLSearchParams();
@@ -309,22 +333,74 @@ test("loads tools once after OAuth return and preserves other query values", asy
   expect(mockUpdateTools).not.toHaveBeenCalled();
 });
 
-test("enables discovered tools after an explicit Enable OAuth return and consumes the intent", async () => {
+test("query flags alone cannot enable discovered tools for main Chat", async () => {
   mockSearchParams = new URLSearchParams("trigger_fetch=true&enable_chat=true");
   jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
   render(<MCPServerDetailPage serverId={7} />);
-  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledWith([81], true));
-  await waitFor(() =>
-    expect(mockReplace).toHaveBeenLastCalledWith(
-      "/admin/plugins/mcp/7?tab=tools",
-      { scroll: false }
-    )
+  await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledWith(7));
+  expect(mockUpdateTools).not.toHaveBeenCalled();
+});
+
+test("consumes an explicit Enable proof once after same-tab OAuth return", async () => {
+  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
+  mockSearchParams = new URLSearchParams(
+    `trigger_fetch=true&enable_chat=true&enable_chat_intent=${token}`
   );
+  jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
+  const view = render(<MCPServerDetailPage serverId={7} />);
+  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledWith([81], true));
+  expect(
+    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+  ).toBe(false);
+  expect(mockReplace).toHaveBeenLastCalledWith(
+    "/admin/plugins/mcp/7?tab=tools",
+    { scroll: false }
+  );
+  view.unmount();
+  render(<MCPServerDetailPage serverId={7} />);
+  await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledTimes(2));
   expect(mockUpdateTools).toHaveBeenCalledTimes(1);
 });
 
+test.each(["wrong user", "wrong server", "expired"])(
+  "rejects %s proof on OAuth return",
+  async (kind) => {
+    const token = mintMcpChatEnableIntent({
+      userId: kind === "wrong user" ? "another-user" : mockUserId,
+      serverId: kind === "wrong server" ? 8 : 7,
+    });
+    if (kind === "expired")
+      jest.spyOn(Date, "now").mockReturnValue(Date.now() + 300_000);
+    mockSearchParams = new URLSearchParams(
+      `trigger_fetch=true&enable_chat=true&enable_chat_intent=${token}`
+    );
+    jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
+    render(<MCPServerDetailPage serverId={7} />);
+    await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledWith(7));
+    expect(mockUpdateTools).not.toHaveBeenCalled();
+  }
+);
+
+test("does not apply a previous user's intent after an account change during discovery", async () => {
+  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
+  mockSearchParams = new URLSearchParams(
+    `trigger_fetch=true&enable_chat_intent=${token}`
+  );
+  const discovery = deferred<ToolSnapshot[]>();
+  jest.mocked(refreshMCPServerTools).mockReturnValue(discovery.promise);
+  const view = render(<MCPServerDetailPage serverId={7} />);
+  await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledWith(7));
+  mockUserId = "another-user";
+  view.rerender(<MCPServerDetailPage serverId={7} />);
+  await act(async () => discovery.resolve([discoveredTool]));
+  expect(mockUpdateTools).not.toHaveBeenCalled();
+});
+
 test("enables discovered tools after in-place authentication succeeds", async () => {
-  mockSearchParams = new URLSearchParams("tab=authentication&enable_chat=true");
+  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
+  mockSearchParams = new URLSearchParams(
+    `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
+  );
   jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
   const user = setupUser();
   render(<MCPServerDetailPage serverId={7} />);
@@ -339,7 +415,10 @@ test("enables discovered tools after in-place authentication succeeds", async ()
 });
 
 test("does not enable tools when opening authentication is cancelled", async () => {
-  mockSearchParams = new URLSearchParams("tab=authentication&enable_chat=true");
+  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
+  mockSearchParams = new URLSearchParams(
+    `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
+  );
   const user = setupUser();
   render(<MCPServerDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Authentication draft" });
@@ -347,6 +426,9 @@ test("does not enable tools when opening authentication is cancelled", async () 
   expect(mockReplace).toHaveBeenCalledWith("/admin/plugins");
   expect(refreshMCPServerTools).not.toHaveBeenCalled();
   expect(mockUpdateTools).not.toHaveBeenCalled();
+  expect(
+    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+  ).toBe(false);
 });
 
 test("ordinary authentication does not enable main Chat", async () => {
@@ -362,7 +444,10 @@ test("ordinary authentication does not enable main Chat", async () => {
 });
 
 test("does not enable tools when authentication discovery fails", async () => {
-  mockSearchParams = new URLSearchParams("tab=authentication&enable_chat=true");
+  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
+  mockSearchParams = new URLSearchParams(
+    `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
+  );
   jest
     .mocked(refreshMCPServerTools)
     .mockRejectedValue(new Error("Unauthenticated"));
@@ -373,6 +458,9 @@ test("does not enable tools when authentication discovery fails", async () => {
   );
   await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalled());
   expect(mockUpdateTools).not.toHaveBeenCalled();
+  expect(
+    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+  ).toBe(false);
 });
 
 test("ignores forged enable intent without full admin authority", async () => {

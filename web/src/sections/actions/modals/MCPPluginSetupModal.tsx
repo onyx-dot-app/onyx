@@ -19,6 +19,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import { useUser } from "@/providers/UserProvider";
+import { consumeMcpChatEnableIntent } from "@/sections/actions/mcpChatEnableIntent";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -102,7 +103,11 @@ function MCPSetupSession({
   const t = useTranslations("actions");
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
-  const { userResolution } = useUser();
+  const { user, userResolution } = useUser();
+  const actor = useRef(user?.id);
+  useEffect(() => {
+    actor.current = user?.id;
+  }, [user?.id]);
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
@@ -627,7 +632,7 @@ function MCPSetupSession({
                             onSaved={async () => {
                               await mutate(SWR_KEYS.adminMcpServers);
                             }}
-                            onTriggerFetchTools={async (id) => {
+                            onTriggerFetchTools={async (id, token) => {
                               await updateMCPServerStatus(
                                 id,
                                 MCPServerStatus.FETCHING_TOOLS
@@ -638,7 +643,14 @@ function MCPSetupSession({
                                 tools,
                                 { revalidate: false }
                               );
-                              if (defaultChat.canEdit && tools.length > 0) {
+                              if (
+                                defaultChat.canEdit &&
+                                tools.length > 0 &&
+                                consumeMcpChatEnableIntent(token, {
+                                  userId: actor.current,
+                                  serverId: id,
+                                })
+                              ) {
                                 if (!defaultChat.data || defaultChat.error)
                                   throw new Error(
                                     t("addMcpModal.toasts.updateFailed")
