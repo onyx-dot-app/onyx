@@ -794,6 +794,8 @@ def element_update_permissions(
                     doc_id=permissions.doc_id,
                     external_access=external_access,
                     source_type=DocumentSource(source_type_str),
+                    connector_id=connector_id,
+                    credential_id=credential_id,
                 )
 
                 if created_new_doc:
@@ -810,6 +812,8 @@ def element_update_permissions(
                     db_session=db_session,
                     raw_node_id=permissions.raw_node_id,
                     source=DocumentSource(permissions.source),
+                    connector_id=connector_id,
+                    credential_id=credential_id,
                     is_public=external_access.is_public,
                     external_user_emails=(
                         list(external_access.external_user_emails)

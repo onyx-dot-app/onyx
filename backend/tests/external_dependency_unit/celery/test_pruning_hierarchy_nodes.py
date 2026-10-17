@@ -46,6 +46,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    DocumentByConnectorCredentialPair,
     HierarchyNodeByConnectorCredentialPair,
 )
 from onyx.db.models import Document as DbDocument
@@ -197,6 +198,9 @@ def _create_cc_pair(
 
 def _cleanup_test_data(db_session: Session) -> None:
     """Remove all test hierarchy nodes and documents to isolate tests."""
+    db_session.query(DocumentByConnectorCredentialPair).filter(
+        DocumentByConnectorCredentialPair.id.in_(SLIM_DOC_IDS)
+    ).delete(synchronize_session="fetch")
     for doc_id in SLIM_DOC_IDS:
         db_session.query(DbDocument).filter(DbDocument.id == doc_id).delete()
 
@@ -236,8 +240,10 @@ def _cleanup_test_data(db_session: Session) -> None:
     db_session.commit()
 
 
-def _create_test_documents(db_session: Session) -> list[DbDocument]:
-    """Insert minimal Document rows for our test doc IDs."""
+def _create_test_documents(
+    db_session: Session, cc_pair: ConnectorCredentialPair | None = None
+) -> list[DbDocument]:
+    """Insert minimal Document rows for our test doc IDs, linked to cc_pair."""
     docs = []
     for doc_id in SLIM_DOC_IDS:
         doc = DbDocument(
@@ -247,6 +253,17 @@ def _create_test_documents(db_session: Session) -> list[DbDocument]:
         )
         db_session.add(doc)
         docs.append(doc)
+    db_session.flush()
+    if cc_pair is not None:
+        db_session.add_all(
+            DocumentByConnectorCredentialPair(
+                id=doc_id,
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+                has_been_indexed=True,
+            )
+            for doc_id in SLIM_DOC_IDS
+        )
     db_session.commit()
     return docs
 
@@ -531,9 +548,10 @@ def test_update_document_parent_hierarchy_nodes(db_session: Session) -> None:
         is_connector_public=False,
     )
     node_id_by_raw = {n.raw_node_id: n.id for n in upserted}
+    cc_pair = _create_cc_pair(db_session)
 
     # Create documents with no parent set
-    docs = _create_test_documents(db_session)
+    docs = _create_test_documents(db_session, cc_pair)
     for doc in docs:
         assert doc.parent_hierarchy_node_id is None
 
@@ -545,6 +563,8 @@ def test_update_document_parent_hierarchy_nodes(db_session: Session) -> None:
     updated = update_document_parent_hierarchy_nodes(
         db_session=db_session,
         doc_parent_map=resolved,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
         commit=True,
     )
     assert updated == len(SLIM_DOC_IDS)
@@ -575,7 +595,8 @@ def test_update_document_parent_is_idempotent(db_session: Session) -> None:
         is_connector_public=False,
     )
     node_id_by_raw = {n.raw_node_id: n.id for n in upserted}
-    _create_test_documents(db_session)
+    cc_pair = _create_cc_pair(db_session)
+    _create_test_documents(db_session, cc_pair)
 
     resolved: dict[str, int | None] = {
         doc_id: node_id_by_raw[raw_parent]
@@ -585,6 +606,8 @@ def test_update_document_parent_is_idempotent(db_session: Session) -> None:
     first_updated = update_document_parent_hierarchy_nodes(
         db_session=db_session,
         doc_parent_map=resolved,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
         commit=True,
     )
     assert first_updated == len(SLIM_DOC_IDS)
@@ -592,9 +615,47 @@ def test_update_document_parent_is_idempotent(db_session: Session) -> None:
     second_updated = update_document_parent_hierarchy_nodes(
         db_session=db_session,
         doc_parent_map=resolved,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
         commit=True,
     )
     assert second_updated == 0
+
+
+def test_update_document_parent_skips_docs_of_another_cc_pair(
+    db_session: Session,
+) -> None:
+    """A pruning cc_pair that reports another pair's doc ids must not
+    re-parent those docs."""
+    _cleanup_test_data(db_session)
+
+    ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=_make_hierarchy_nodes(),
+        source=TEST_SOURCE,
+        commit=True,
+        is_connector_public=False,
+    )
+    node_id_by_raw = {n.raw_node_id: n.id for n in upserted}
+    owner = _create_cc_pair(db_session)
+    other = _create_cc_pair(db_session)
+    _create_test_documents(db_session, owner)
+
+    updated = update_document_parent_hierarchy_nodes(
+        db_session=db_session,
+        doc_parent_map=dict.fromkeys(SLIM_DOC_IDS, node_id_by_raw[CHANNEL_C_ID]),
+        connector_id=other.connector_id,
+        credential_id=other.credential_id,
+        commit=True,
+    )
+
+    assert updated == 0
+    db_session.expire_all()
+    for doc_id in SLIM_DOC_IDS:
+        doc = db_session.get(DbDocument, doc_id)
+        assert doc is not None
+        assert doc.parent_hierarchy_node_id is None
 
 
 def test_link_hierarchy_nodes_to_documents_for_confluence(

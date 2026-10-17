@@ -226,6 +226,8 @@ content. `retrieve_all_slim_docs` is consumed only by the pruning diff in §4.4.
 `retrieve_all_slim_docs_perm_sync` is also consumed by EE permission-sync jobs
 (`ee/onyx/external_permissions/utils.py`). A slim connector
 does the same enumeration as the full connector without downloading bodies.
+Pruning writes the parent node and `doc_created_at` only to documents linked to
+the pruned cc_pair.
 
 ### 4.2 Registry and factory: source to running instance
 
