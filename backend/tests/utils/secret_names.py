@@ -100,6 +100,7 @@ class TestSecret(StrEnum):
     BOX_ENTERPRISE_ID = "box-enterprise-id"
     BOX_USER_EMAIL = "box-user-email"
     BOX_COLLABORATOR_EMAIL = "box-collaborator-email"
+    LINEAR_API_KEY = "linear-api-key"
 
     @classmethod
     def aws_prefix(cls) -> str:
