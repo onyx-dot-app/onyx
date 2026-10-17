@@ -16,6 +16,26 @@ test("an explicit intent authorizes one matching consumption only", () => {
   expect(consumeMcpChatEnableIntent(token, scope)).toBe(false);
 });
 
+test("mints a valid intent on insecure origins without randomUUID", () => {
+  const original = crypto.randomUUID;
+  Object.defineProperty(crypto, "randomUUID", {
+    value: undefined,
+    configurable: true,
+  });
+  try {
+    const token = mintMcpChatEnableIntent(scope);
+    expect(token).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
+    expect(consumeMcpChatEnableIntent(token, scope)).toBe(true);
+  } finally {
+    Object.defineProperty(crypto, "randomUUID", {
+      value: original,
+      configurable: true,
+    });
+  }
+});
+
 test.each([
   { userId: "another-user", serverId: 7 },
   { userId: "admin-user", serverId: 8 },
