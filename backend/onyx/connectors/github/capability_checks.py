@@ -18,19 +18,27 @@ every repository of the owner (an organization, else a user).
 
 from typing import NoReturn
 
+import requests
 from pydantic import BaseModel
 
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
+    CheckOutput,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
+    CredentialInvalidError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
+    RateLimitedValidationError,
     UnexpectedValidationError,
+    UnreachableValidationError,
 )
 from onyx.connectors.github.config import GithubConnectorConfig
 from onyx.connectors.github.connector import (
@@ -51,6 +59,7 @@ from onyx.connectors.github.source_operations import (
     GitHubSourceOperations,
 )
 from onyx.connectors.github.utils import parse_repository_names
+from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/github"
@@ -67,12 +76,49 @@ _EMPTY_REPOSITORY_STATUS = 409
 _PRIVATE_REPOSITORY_SCOPE = "repo"
 # Repositories a branch check reads in all-repositories mode.
 _SAMPLE_REPOSITORIES = 5
+# Items a check lists to count them: one page.
+_COUNT_LIMIT = 100
 
 _TOKEN_ACCESS_HINT = (
     "Classic token: the `repo` scope reads private repositories. Fine-grained "
     "token: its resource owner must be the repository owner, and its repository "
     "access must include the repositories."
 )
+
+_AUTH_CHECK_ID = "github_auth"
+_OWNER_CHECK_ID = "github_owner"
+_REPOSITORY_CHECK_IDS = (
+    "github_repositories_visible",
+    "github_configured_repositories",
+)
+_COLLABORATORS_CHECK_ID = "github_repository_collaborators"
+_MEMBERS_CHECK_ID = "github_organization_members"
+# check_id to the checks it runs after, in run order. The two repository
+# checks are alternatives: only one applies to a config.
+_DEPENDS_ON: dict[str, tuple[str, ...]] = {
+    "github_token_scopes": (_AUTH_CHECK_ID,),
+    _OWNER_CHECK_ID: (_AUTH_CHECK_ID,),
+    "github_repositories_visible": (_OWNER_CHECK_ID,),
+    "github_configured_repositories": (_OWNER_CHECK_ID,),
+    "github_branch": _REPOSITORY_CHECK_IDS,
+    "github_pull_requests": _REPOSITORY_CHECK_IDS,
+    "github_issues": _REPOSITORY_CHECK_IDS,
+    "github_files": ("github_branch", *_REPOSITORY_CHECK_IDS),
+    "github_repository_visibility": _REPOSITORY_CHECK_IDS,
+    _COLLABORATORS_CHECK_ID: _REPOSITORY_CHECK_IDS,
+    _MEMBERS_CHECK_ID: _REPOSITORY_CHECK_IDS,
+    # Not the collaborators and members checks: one of them finds nothing to
+    # test when the repositories are all private or all internal, and the
+    # emails check still reads the users of the other.
+    "github_user_emails": _REPOSITORY_CHECK_IDS,
+}
+
+
+class _RowText(BaseModel):
+    """The row text of one outcome of a probe."""
+
+    summary: str
+    description: str
 
 
 def _gateway(context: CapabilityCheckContext) -> GitHubSourceOperations:
@@ -108,47 +154,113 @@ def _is_saml_denial(error: GitHubApiError) -> bool:
     return error.sso_required or _SAML_TEXT in (error.github_message or "").lower()
 
 
+def _token_info(gateway: GitHubSourceOperations) -> GitHubTokenInfo | None:
+    """The token's kind and scopes, or None when GitHub does not answer.
+    github_auth reports why."""
+    try:
+        return gateway.get_token_info()
+    except GitHubApiError:
+        return None
+
+
+def _need(
+    context: CapabilityCheckContext, *, scope: str | None, permission: str
+) -> str:
+    """The line that says what the token needs, for its kind: a classic
+    token's scope, a fine-grained token's permission."""
+    token: GitHubTokenInfo | None = _token_info(_gateway(context))
+    kind: GitHubTokenKind | None = token.kind if token is not None else None
+    if kind == GitHubTokenKind.CLASSIC:
+        return (
+            f"Select the {scope} scope."
+            if scope is not None
+            else "Give the token's user access in GitHub."
+        )
+    if kind == GitHubTokenKind.FINE_GRAINED:
+        return f"Give the token read access to {permission}."
+    if scope is None:
+        return f"Fine-grained token: give it read access to {permission}."
+    return (
+        f"Classic token: select the {scope} scope. Fine-grained token: give it "
+        f"read access to {permission}."
+    )
+
+
 def _raise_for_api_error(
     error: GitHubApiError,
     *,
     denied: str,
+    denied_row: _RowText | None = None,
     not_found: str | None = None,
+    not_found_row: _RowText | None = None,
 ) -> NoReturn:
     """Maps a GitHub API error onto the validation-exception family.
-    ``denied`` explains a 403 for this probe, ``not_found`` a 404."""
+    ``denied`` explains a 403 for this probe, ``not_found`` a 404; the rows
+    are what the check's row shows for them."""
+    status: int | None = error.status_code
     if isinstance(error, GitHubRateLimitError):
         kind: str = "secondary rate limit" if error.secondary else "rate limit"
-        raise UnexpectedValidationError(
-            f"GitHub's {kind} stopped the check. Run the checks again later."
+        raise RateLimitedValidationError(
+            f"GitHub's {kind} stopped the check. Run the checks again later.",
+            summary="Rate limited by GitHub",
+            description=(
+                "GitHub's rate limit stopped the check before it could decide. "
+                f"(HTTP {status})\nWait for the limit to reset, then re-run."
+            ),
         ) from error
-    status: int | None = error.status_code
     if status == 401:
         raise CredentialExpiredError(
             "GitHub rejected the token (HTTP 401). The token is wrong, expired, "
-            "or revoked. Create a new token."
+            "or revoked. Create a new token.",
+            summary="Token is invalid, expired or revoked",
+            description=(
+                "GitHub rejected the token. (HTTP 401)\nCreate a new token under "
+                "GitHub Settings > Developer settings > Personal access tokens, "
+                "then paste it in the account's API Token."
+            ),
         ) from error
     if status == 403 and _is_saml_denial(error):
         raise InsufficientPermissionsError(
             f"{denied}: the organization uses SAML single sign-on, and the token "
             f"is not authorized for it (HTTP 403). Authorize the token: "
-            f"{_SSO_GUIDE_LINK}"
+            f"{_SSO_GUIDE_LINK}",
+            summary="Token not authorized for SAML SSO",
+            description=(
+                "The organization enforces SAML single sign-on and the token is "
+                "not authorized for it.\nIn GitHub, configure SSO for the token "
+                "and authorize the organization."
+            ),
         ) from error
     if status == 403:
         raise InsufficientPermissionsError(
-            f"{denied} (HTTP 403: {_detail(error)}).{_accepted_access(error)}"
+            f"{denied} (HTTP 403: {_detail(error)}).{_accepted_access(error)}",
+            summary=denied_row.summary if denied_row else None,
+            description=denied_row.description if denied_row else None,
         ) from error
     if status == 404 and not_found is not None:
         raise ConnectorValidationError(
-            f"{not_found} (HTTP 404).{_accepted_access(error)}"
+            f"{not_found} (HTTP 404).{_accepted_access(error)}",
+            summary=not_found_row.summary if not_found_row else None,
+            description=not_found_row.description if not_found_row else None,
         ) from error
     if status == 422:
         # GitHub rejected the request itself (e.g. a bad state filter); index
         # attempts send the same request.
         raise ConnectorValidationError(
-            f"GitHub rejected the request (HTTP 422): {_detail(error)}"
+            f"GitHub rejected the request (HTTP 422): {_detail(error)}",
+            summary="GitHub rejected the request",
+            description=(
+                "GitHub refused the request as sent. (HTTP 422)\nRe-run the "
+                "checks. If it repeats, share the error details with support."
+            ),
         ) from error
     raise UnexpectedValidationError(
-        f"Unexpected GitHub response (HTTP {status}): {_detail(error)}"
+        f"Unexpected GitHub response (HTTP {status}): {_detail(error)}",
+        summary="Unexpected response from GitHub",
+        description=(
+            "GitHub answered with an error this check does not expect.\nRe-run "
+            "the checks. If it repeats, share the error details with support."
+        ),
     ) from error
 
 
@@ -165,27 +277,21 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = _OWNER_FIELDS,
         requires_connector_config: bool = False,
+        fails_when_unreachable: bool = False,
     ) -> None:
         super().__init__(
             capability=capability,
             check_id=check_id,
             display_name=display_name,
+            depends_on=_DEPENDS_ON.get(check_id, ()),
             required=required,
             requires_connector_instance=False,
             requires_connector_config=requires_connector_config,
             requires_fields=requires_fields,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            fails_when_unreachable=fails_when_unreachable,
         )
-
-
-def _token_info(gateway: GitHubSourceOperations) -> GitHubTokenInfo | None:
-    """The token's kind and scopes, or None when GitHub does not answer.
-    github_auth reports why."""
-    try:
-        return gateway.get_token_info()
-    except GitHubApiError:
-        return None
 
 
 def _lacks_private_scope(token: GitHubTokenInfo | None) -> bool:
@@ -202,28 +308,65 @@ class _AuthCheck(_GitHubCheck):
 
     def __init__(self) -> None:
         super().__init__(
-            check_id="github_auth",
-            display_name="Token signs in",
+            check_id=_AUTH_CHECK_ID,
+            display_name="Sign in to GitHub",
             remediation=(
                 "Create a new personal access token (classic or fine-grained) and "
                 "check the Enterprise Server URL, if one is set."
             ),
             requires_fields=frozenset(),
+            fails_when_unreachable=True,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
-            _gateway(context).get_token_info()
+            token: GitHubTokenInfo = _gateway(context).get_token_info()
+        except ConnectorMissingCredentialError as e:
+            raise CredentialInvalidError(
+                "The credential has no GitHub access token.",
+                summary="No token saved in the account",
+                description=(
+                    "The account has no API Token.\nEdit the account and paste a "
+                    "token in API Token."
+                ),
+            ) from e
+        except (requests.ConnectionError, requests.Timeout) as e:
+            raise UnreachableValidationError(
+                "Onyx cannot connect to GitHub. Check the Enterprise Server URL, "
+                "if one is set.",
+                summary="Cannot reach GitHub",
+                description=(
+                    "The request failed before GitHub answered, after retries.\n"
+                    "Check GitHub Enterprise Server URL, if set."
+                ),
+            ) from e
         except GitHubApiError as e:
             _raise_for_api_error(
                 e,
                 denied="GitHub refused to identify the token's user",
+                denied_row=_RowText(
+                    summary="GitHub refused to identify the token",
+                    description=(
+                        "GitHub is blocking this token or its user. (HTTP 403)\n"
+                        "Create a new token and paste it in the account's API "
+                        "Token."
+                    ),
+                ),
                 not_found=(
                     "Onyx found no GitHub API at the configured URL. For GitHub "
                     "Enterprise Server, enter the server URL "
                     "(https://github.example.com)"
                 ),
+                not_found_row=_RowText(
+                    summary="No GitHub API at this URL",
+                    description=(
+                        "The GitHub Enterprise Server URL does not lead to a "
+                        "GitHub API. (HTTP 404)\nEnter the server URL, such as "
+                        "https://github.example.com."
+                    ),
+                ),
             )
+        return CheckOutput(summary=f"Signed in as @{token.login}")
 
 
 class _TokenScopesCheck(_GitHubCheck):
@@ -233,7 +376,7 @@ class _TokenScopesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_token_scopes",
-            display_name="Classic token can read private repositories",
+            display_name="Read token scopes",
             required=False,
             remediation=(
                 "Add the `repo` scope to the classic token, or use a fine-grained "
@@ -243,38 +386,70 @@ class _TokenScopesCheck(_GitHubCheck):
             requires_fields=frozenset(),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
             token: GitHubTokenInfo = _gateway(context).get_token_info()
         except GitHubApiError as e:
-            raise UnexpectedValidationError(
-                "Onyx cannot read the token's scopes. github_auth reports why."
-            ) from e
+            _raise_for_api_error(e, denied="GitHub refused to read the token")
+        if token.kind != GitHubTokenKind.CLASSIC or token.scopes is None:
+            raise NothingToCheckError(
+                "The token is not a classic token, so it has no scopes to read. "
+                "The other checks test its permissions.",
+                summary="Token has no scopes to read",
+                description=(
+                    "Only a classic token has scopes. The other checks test this "
+                    "token's permissions."
+                ),
+            )
         if _lacks_private_scope(token):
             raise InsufficientPermissionsError(
                 "The classic token has no `repo` scope "
-                f"(scopes: {', '.join(token.scopes or []) or 'none'}), so Onyx "
-                "can index only public repositories."
+                f"(scopes: {', '.join(token.scopes) or 'none'}), so Onyx "
+                "can index only public repositories.",
+                summary="Classic token lacks the repo scope",
+                description=(
+                    "Private repositories would be left out of the index.\n"
+                    "Edit the token in GitHub and select the repo scope."
+                ),
             )
+        return CheckOutput(summary="Classic token has the repo scope")
+
+
+_DOCUMENT_TYPE_NAMES = ("pull requests", "issues", "documents")
 
 
 class _DocumentTypesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_document_types",
-            display_name="Something is selected to index",
+            display_name="Check selected content",
             remediation="Select pull requests, issues or files.",
             requires_fields=frozenset(),
             requires_connector_config=True,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
-        if not (config.include_prs or config.include_issues or config.include_files):
+        selected: list[str] = [
+            name
+            for name, included in zip(
+                _DOCUMENT_TYPE_NAMES,
+                (config.include_prs, config.include_issues, config.include_files),
+                strict=True,
+            )
+            if included
+        ]
+        if not selected:
             raise ConnectorValidationError(
                 "Pull requests, issues and files are all turned off, so the "
-                "connector indexes nothing. Select at least one."
+                "connector indexes nothing. Select at least one.",
+                summary="Nothing selected to index",
+                description=(
+                    "None of pull requests, issues or documents is selected.\n"
+                    "Select at least one."
+                ),
             )
+        return CheckOutput(summary=f"Indexing {', '.join(selected)}")
 
 
 def _owner_is_organization(gateway: GitHubSourceOperations, owner: str) -> bool:
@@ -291,30 +466,49 @@ def _owner_is_organization(gateway: GitHubSourceOperations, owner: str) -> bool:
         return False
 
 
+def _no_owner_row(owner: str) -> _RowText:
+    return _RowText(
+        summary=f"No owner named {owner}",
+        description=(
+            "GitHub has no organization or user with this name that the token "
+            "can see. (HTTP 404)\nCheck Repository Owner."
+        ),
+    )
+
+
 class _OwnerCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
-            check_id="github_owner",
-            display_name="Repository owner exists",
+            check_id=_OWNER_CHECK_ID,
+            display_name="Find repository owner",
             remediation=(
                 "Enter the organization or user name from the repository URL "
                 "(github.com/<owner>/<repository>)."
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         owner: str = _owner(self.config(context))
         gateway: GitHubSourceOperations = _gateway(context)
         try:
             if _owner_is_organization(gateway, owner):
-                return
+                return CheckOutput(summary=f"Found organization {owner}")
             gateway.list_user_repositories(login=owner, limit=1)
         except GitHubApiError as e:
             _raise_for_api_error(
                 e,
                 denied=f"GitHub refused to read the owner `{owner}`",
+                denied_row=_RowText(
+                    summary=f"Token cannot read owner {owner}",
+                    description=(
+                        "GitHub refused to show this owner to the token. (HTTP "
+                        f"403)\n{_need(context, scope='repo', permission='Metadata')}"
+                    ),
+                ),
                 not_found=f"GitHub has no organization or user named `{owner}`",
+                not_found_row=_no_owner_row(owner),
             )
+        return CheckOutput(summary=f"Found user {owner}")
 
 
 def _list_owner_repositories(
@@ -329,6 +523,16 @@ def _list_owner_repositories(
     return False, gateway.list_user_repositories(login=owner, limit=limit)
 
 
+def _list_repositories_denied_row(context: CapabilityCheckContext) -> _RowText:
+    return _RowText(
+        summary="Token cannot list the repositories",
+        description=(
+            "GitHub refused to list this owner's repositories. (HTTP 403)\n"
+            f"{_need(context, scope='repo', permission='Metadata')}"
+        ),
+    )
+
+
 class _RepositoriesVisibleCheck(_GitHubCheck):
     """All-repositories mode: the owner has a repository that the token
     sees. This is what ``validate_connector_settings`` probes."""
@@ -336,7 +540,7 @@ class _RepositoriesVisibleCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_repositories_visible",
-            display_name="Repositories are visible",
+            display_name="List repositories",
             remediation=(
                 f"{_TOKEN_ACCESS_HINT} A user owner lists only public repositories; "
                 "enter the repository names to index private ones."
@@ -346,30 +550,49 @@ class _RepositoriesVisibleCheck(_GitHubCheck):
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return not parse_repository_names(form_state.config.repositories)
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         owner: str = _owner(self.config(context))
         gateway: GitHubSourceOperations = _gateway(context)
         try:
             is_organization, repositories = _list_owner_repositories(
-                gateway, owner, limit=1
+                gateway, owner, limit=_COUNT_LIMIT
             )
         except GitHubApiError as e:
             _raise_for_api_error(
                 e,
                 denied=f"The token cannot list the repositories of `{owner}`",
+                denied_row=_list_repositories_denied_row(context),
                 not_found=f"GitHub has no organization or user named `{owner}`",
+                not_found_row=_no_owner_row(owner),
             )
         if repositories:
-            return
+            count: str = (
+                f"{_COUNT_LIMIT}+"
+                if len(repositories) >= _COUNT_LIMIT
+                else str(len(repositories))
+            )
+            return CheckOutput(
+                summary=f"{_counted(count, 'repository', 'repositories')} visible"
+            )
         if is_organization:
             raise InsufficientPermissionsError(
                 f"No repository of the organization `{owner}` is visible to the "
-                f"token. {_TOKEN_ACCESS_HINT}"
+                f"token. {_TOKEN_ACCESS_HINT}",
+                summary="No repositories visible to the token",
+                description=(
+                    "The token sees no repository of this organization.\n"
+                    f"{_need(context, scope='repo', permission='Metadata')}"
+                ),
             )
         raise InsufficientPermissionsError(
             f"The user `{owner}` has no public repository. GitHub lists only the "
             "public repositories of a user; enter the repository names to index "
-            "private ones."
+            "private ones.",
+            summary="User has no public repositories",
+            description=(
+                "GitHub lists only a user's public repositories, and this user "
+                "has none.\nEnter the repository names to index private ones."
+            ),
         )
 
 
@@ -417,15 +640,39 @@ def _raise_unless_denied(error: GitHubApiError, *, denied: str) -> None:
         _raise_for_api_error(error, denied=denied)
 
 
+def _counted(count: int | str, noun: str, plural: str) -> str:
+    """``count`` with its noun: "1 repository", "3 repositories", "100+
+    repositories"."""
+    return f"{count} {noun if str(count) == '1' else plural}"
+
+
+def _names(names: list[str]) -> str:
+    return ", ".join(names)
+
+
+def _not_found_line(names: list[str], token: GitHubTokenInfo | None) -> str:
+    """The line after a not-found description: the names, and the likely
+    cause."""
+    if any("/" in name for name in names):
+        return (
+            f"Not found: {_names(names)}. Enter each name without the owner "
+            "(onyx, not onyx-dot-app/onyx)."
+        )
+    if _lacks_private_scope(token):
+        return f"Not found: {_names(names)}. Select the repo scope."
+    return f"Not found: {_names(names)}. Check each name and the token's access."
+
+
 class _ConfiguredRepositoriesCheck(_GitHubCheck):
     """Each listed repository is readable, with its root directory, as index
     attempts validate it. Indexing skips a repository it cannot read and logs
-    only a warning."""
+    only a warning. Some unreadable is INCOMPLETE, and the checks after it run
+    on the readable ones; none readable FAILS."""
 
     def __init__(self) -> None:
         super().__init__(
             check_id="github_configured_repositories",
-            display_name="Listed repositories are readable",
+            display_name="Find selected repos",
             remediation=(
                 "Check each repository name (without the owner) and the owner. "
                 f"{_TOKEN_ACCESS_HINT}"
@@ -435,13 +682,13 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return bool(parse_repository_names(form_state.config.repositories))
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         owner: str = _owner(config)
         gateway: GitHubSourceOperations = _gateway(context)
         names: list[str] = parse_repository_names(config.repositories)
         problems: list[tuple[str, GitHubApiError]] = []
-        content_problems: list[str] = []
+        content_problems: list[tuple[str, str]] = []
         for name in names:
             try:
                 repository: GitHubRepository = gateway.get_repository(
@@ -462,26 +709,99 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
                     e, denied=f"The token cannot read `{repository.full_name}`"
                 )
                 content_problems.append(
-                    f"`{repository.full_name}`: its files cannot be read (HTTP "
-                    f"{e.status_code}: {_detail(e)}).{_accepted_access(e)} An "
-                    "empty repository has no files, and index attempts reject it"
+                    (
+                        repository.full_name,
+                        f"`{repository.full_name}`: its files cannot be read (HTTP "
+                        f"{e.status_code}: {_detail(e)}).{_accepted_access(e)} An "
+                        "empty repository has no files, and index attempts reject "
+                        "it",
+                    )
                 )
         if not problems and not content_problems:
-            return
+            return CheckOutput(
+                summary=f"All {len(names)} selected repositories readable"
+            )
         token: GitHubTokenInfo | None = _token_info(gateway) if problems else None
         messages: list[str] = [
             _repository_problem(error, owner=owner, name=name, token=token)
             for name, error in problems
-        ] + content_problems
+        ] + [message for _name, message in content_problems]
         message: str = (
             f"{len(messages)} of {len(names)} listed repositories cannot be "
             f"read: {'; '.join(messages)}."
         )
-        if not content_problems and all(
-            error.status_code == 404 for _name, error in problems
-        ):
-            raise ConnectorValidationError(message)
-        raise InsufficientPermissionsError(message)
+        missing: list[str] = [
+            name for name, error in problems if error.status_code == 404
+        ]
+        denied: list[str] = [
+            name for name, error in problems if error.status_code == 403
+        ]
+        unreadable: list[str] = [name for name, _message in content_problems]
+        denied_line: str = (
+            f"Denied: {_names(denied)}. "
+            f"{_need(context, scope='repo', permission='Metadata')}"
+            if denied
+            else ""
+        )
+        if len(problems) + len(content_problems) == len(names):
+            if not missing:
+                raise InsufficientPermissionsError(
+                    message,
+                    summary=(
+                        f"Token denied all {len(names)} repositories"
+                        if denied
+                        else f"Cannot read files of {len(names)} repositories"
+                    ),
+                    description=(
+                        "GitHub refused the token access to these repositories.\n"
+                        f"{denied_line}"
+                        if denied
+                        else "Index attempts read each repository's root folder "
+                        "first and reject a repository they cannot read, "
+                        "including an empty one."
+                    ),
+                )
+            raise ConnectorValidationError(
+                message,
+                summary="No selected repo found",
+                description=(
+                    "None of the selected repos is visible to this account.\n"
+                    f"{_not_found_line(missing, token)}"
+                ),
+            )
+        if missing:
+            row: _RowText = _RowText(
+                summary=f"{len(missing)} of {len(names)} repositories not found",
+                description=(
+                    'GitHub answers "not found" for a misspelled name and for a '
+                    "private repository the token cannot see.\n"
+                    f"{_not_found_line(missing, token)}"
+                ),
+            )
+        elif denied:
+            row = _RowText(
+                summary=f"Token denied {len(denied)} of {len(names)} repositories",
+                description=(
+                    "GitHub refused the token access to these repositories.\n"
+                    f"{denied_line}"
+                ),
+            )
+        else:
+            row = _RowText(
+                summary=(
+                    f"Cannot read files of {unreadable[0]}"
+                    if len(unreadable) == 1
+                    else f"Cannot read files of {len(unreadable)} repositories"
+                ),
+                description=(
+                    "Index attempts read each repository's root folder first and "
+                    "reject a repository they cannot read, including an empty "
+                    f"one.\nUnreadable: {_names(unreadable)}."
+                ),
+            )
+        return CheckOutput(
+            summary=row.summary, description=row.description, partial=True
+        )
 
 
 def _target_repositories(
@@ -509,13 +829,24 @@ def _target_repositories(
                     e, denied=f"The token cannot read `{owner}/{name}`"
                 )
         return repositories
-    except GitHubRateLimitError as e:
-        _raise_for_api_error(e, denied=f"The token cannot read `{owner}`")
     except GitHubApiError as e:
-        raise UnexpectedValidationError(
-            f"Onyx cannot read the repositories of `{owner}`, so this check "
-            "cannot run. github_owner reports why."
-        ) from e
+        _raise_for_api_error(
+            e,
+            denied=f"The token cannot list the repositories of `{owner}`",
+            denied_row=_list_repositories_denied_row(context),
+            not_found=f"GitHub has no organization or user named `{owner}`",
+            not_found_row=_no_owner_row(owner),
+        )
+
+
+def _no_repositories_error() -> NothingToCheckError:
+    return NothingToCheckError(
+        "No repository to index is readable, so Onyx cannot run this probe. "
+        "github_repositories_visible or github_configured_repositories "
+        "reports why.",
+        summary="No repositories to test",
+        description="No repository could be read.",
+    )
 
 
 def _probe_repository(
@@ -523,11 +854,7 @@ def _probe_repository(
 ) -> GitHubRepository:
     repositories: list[GitHubRepository] = _target_repositories(context, config, 1)
     if not repositories:
-        raise UnexpectedValidationError(
-            "No repository to index is readable, so Onyx cannot run this probe. "
-            "github_repositories_visible or github_configured_repositories "
-            "reports why."
-        )
+        raise _no_repositories_error()
     return repositories[0]
 
 
@@ -542,7 +869,7 @@ class _BranchCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_branch",
-            display_name="Branch exists",
+            display_name="Find selected branch",
             remediation=(
                 "Check the branch name, or leave it blank to index each "
                 "repository's default branch."
@@ -558,7 +885,7 @@ class _BranchCheck(_GitHubCheck):
             or len(parse_repository_names(config.repositories)) == 1
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         branch: str = _branch(config) or ""
         gateway: GitHubSourceOperations = _gateway(context)
@@ -567,7 +894,12 @@ class _BranchCheck(_GitHubCheck):
         limit: int = (
             len(parse_repository_names(config.repositories)) or _SAMPLE_REPOSITORIES
         )
-        for repository in _target_repositories(context, config, limit):
+        repositories: list[GitHubRepository] = _target_repositories(
+            context, config, limit
+        )
+        if not repositories:
+            raise _no_repositories_error()
+        for repository in repositories:
             try:
                 gateway.get_branch(repo_full_name=repository.full_name, branch=branch)
             except GitHubApiError as e:
@@ -578,6 +910,14 @@ class _BranchCheck(_GitHubCheck):
                             f"The token cannot read the branches of "
                             f"`{repository.full_name}`"
                         ),
+                        denied_row=_RowText(
+                            summary="Token cannot read branches",
+                            description=(
+                                "GitHub refused to show this repository's "
+                                "branches. (HTTP 403)\n"
+                                + _need(context, scope="repo", permission="Contents")
+                            ),
+                        ),
                     )
                 missing.append(repository.full_name)
         if missing:
@@ -585,8 +925,29 @@ class _BranchCheck(_GitHubCheck):
                 f"The branch `{branch}` does not exist in "
                 f"{', '.join(f'`{name}`' for name in missing)}, and indexing stops "
                 "at the first repository without it. Leave the branch blank to "
-                "index each repository's default branch."
+                "index each repository's default branch.",
+                summary=(
+                    "Branch not found in "
+                    f"{_counted(len(missing), 'repository', 'repositories')}"
+                ),
+                description=(
+                    "Indexing would stop at the first repository without this "
+                    f"branch: {_names(missing)}.\nCheck Branch, or leave it blank "
+                    "to use each default branch."
+                ),
             )
+        return CheckOutput(
+            summary=(
+                f"Found {branch} in "
+                f"{_counted(len(repositories), 'repository', 'repositories')}"
+            )
+        )
+
+
+_LARGE_LISTING_CAVEAT = (
+    "GitHub refused an offset page for this large listing. Indexing switches "
+    "to cursor pages, which this check did not read."
+)
 
 
 class _PullRequestsCheck(_GitHubCheck):
@@ -596,7 +957,7 @@ class _PullRequestsCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_pull_requests",
-            display_name="Pull requests are readable",
+            display_name="Sample pull requests",
             remediation=(
                 "Fine-grained token: give it read access to Pull requests. Classic "
                 "token: the `repo` scope for private repositories."
@@ -606,13 +967,10 @@ class _PullRequestsCheck(_GitHubCheck):
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return form_state.config.include_prs
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         repository: GitHubRepository = _probe_repository(context, config)
         gateway: GitHubSourceOperations = _gateway(context)
-        denied: str = (
-            f"The token cannot read the pull requests of `{repository.full_name}`"
-        )
         try:
             pull_requests: list[GitHubPullRequest] = gateway.list_pull_requests(
                 repo_full_name=repository.full_name, state=config.state_filter, page=0
@@ -625,11 +983,48 @@ class _PullRequestsCheck(_GitHubCheck):
         except GitHubApiError as e:
             if e.status_code == 404 and not isinstance(e, GitHubRateLimitError):
                 # Pull requests are turned off (e.g. a mirror); indexing skips them.
-                return
+                return CheckOutput(
+                    summary=f"Pull requests are off in {repository.full_name}",
+                    advisories=[
+                        CheckAdvisory(
+                            message=(
+                                "GitHub has pull requests turned off for this "
+                                "repository, and indexing skips them."
+                            )
+                        )
+                    ],
+                )
             if is_cursor_pagination_required(e):
                 # A large listing needs cursor pagination; indexing switches to it.
-                return
-            _raise_for_api_error(e, denied=denied)
+                return CheckOutput(
+                    summary="Listing too large to sample",
+                    advisories=[CheckAdvisory(message=_LARGE_LISTING_CAVEAT)],
+                )
+            _raise_for_api_error(
+                e,
+                denied=(
+                    "The token cannot read the pull requests of "
+                    f"`{repository.full_name}`"
+                ),
+                denied_row=_RowText(
+                    summary="Token cannot read pull requests",
+                    description=(
+                        "GitHub refused the token access to pull requests. (HTTP "
+                        "403)\n"
+                        + _need(context, scope="repo", permission="Pull requests")
+                    ),
+                ),
+            )
+        if not pull_requests:
+            raise InconclusiveValidationError(
+                f"`{repository.full_name}` has no pull requests in the state "
+                f"`{config.state_filter}`, so Onyx could not read one.",
+                summary="No pull requests found to test",
+                description=(
+                    "The first repository has no pull requests in the selected state."
+                ),
+            )
+        return CheckOutput(summary=f"Read pull request #{pull_requests[0].number}")
 
 
 class _IssuesCheck(_GitHubCheck):
@@ -639,7 +1034,7 @@ class _IssuesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_issues",
-            display_name="Issues are readable",
+            display_name="Sample issues",
             remediation=(
                 "Fine-grained token: give it read access to Issues. Classic token: "
                 "the `repo` scope for private repositories."
@@ -649,7 +1044,7 @@ class _IssuesCheck(_GitHubCheck):
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return form_state.config.include_issues
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         repository: GitHubRepository = _probe_repository(context, config)
         gateway: GitHubSourceOperations = _gateway(context)
@@ -667,14 +1062,45 @@ class _IssuesCheck(_GitHubCheck):
         except GitHubApiError as e:
             if e.status_code == 404 and not isinstance(e, GitHubRateLimitError):
                 # Issues are turned off for the repository; indexing skips them.
-                return
+                return CheckOutput(
+                    summary=f"Issues are off in {repository.full_name}",
+                    advisories=[
+                        CheckAdvisory(
+                            message=(
+                                "GitHub has issues turned off for this "
+                                "repository, and indexing skips them."
+                            )
+                        )
+                    ],
+                )
             if is_cursor_pagination_required(e):
                 # A large listing needs cursor pagination; indexing switches to it.
-                return
+                return CheckOutput(
+                    summary="Listing too large to sample",
+                    advisories=[CheckAdvisory(message=_LARGE_LISTING_CAVEAT)],
+                )
             _raise_for_api_error(
                 e,
                 denied=f"The token cannot read the issues of `{repository.full_name}`",
+                denied_row=_RowText(
+                    summary="Token cannot read issues",
+                    description=(
+                        "GitHub refused the token access to issues. (HTTP 403)\n"
+                        + _need(context, scope="repo", permission="Issues")
+                    ),
+                ),
             )
+        if issue is None:
+            raise InconclusiveValidationError(
+                f"The first page of `{repository.full_name}` has no issues in the "
+                f"state `{config.state_filter}`, so Onyx could not read one.",
+                summary="No issues found to test",
+                description=(
+                    "The first page of the first repository has no issues in the "
+                    "selected state."
+                ),
+            )
+        return CheckOutput(summary=f"Read issue #{issue.number}")
 
 
 class _FilesCheck(_GitHubCheck):
@@ -684,7 +1110,7 @@ class _FilesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_files",
-            display_name="Files are readable",
+            display_name="Sample files",
             remediation=(
                 "Fine-grained token: give it read access to Contents. Classic "
                 "token: the `repo` scope for private repositories."
@@ -694,12 +1120,19 @@ class _FilesCheck(_GitHubCheck):
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return form_state.config.include_files
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         repository: GitHubRepository = _probe_repository(context, config)
         gateway: GitHubSourceOperations = _gateway(context)
         ref: str = _branch(config) or repository.default_branch or ""
         denied: str = f"The token cannot read the files of `{repository.full_name}`"
+        denied_row: _RowText = _RowText(
+            summary="Token cannot read files",
+            description=(
+                "GitHub refused the token access to file contents. (HTTP 403)\n"
+                + _need(context, scope="repo", permission="Contents")
+            ),
+        )
         try:
             tree: GitHubGitTree = gateway.get_git_tree(
                 repo_full_name=repository.full_name, ref=ref
@@ -707,36 +1140,55 @@ class _FilesCheck(_GitHubCheck):
         except GitHubApiError as e:
             if e.status_code == _EMPTY_REPOSITORY_STATUS:
                 # An empty repository has no tree; indexing skips it.
-                return
+                raise InconclusiveValidationError(
+                    f"`{repository.full_name}` is empty, so Onyx could not read a "
+                    "file.",
+                    summary=f"No files found in {repository.full_name}",
+                    description="The first repository is empty, and indexing skips it.",
+                ) from e
             if e.status_code == 404 and _branch(config) is not None:
                 raise UnexpectedValidationError(
                     f"`{repository.full_name}` has no branch `{ref}`, so Onyx "
-                    "cannot read its files. github_branch reports why."
+                    "cannot read its files. github_branch reports why.",
+                    summary=f"No branch {ref} in {repository.full_name}",
+                    description=(
+                        "The selected branch is missing from the first "
+                        "repository.\nCheck Branch."
+                    ),
                 ) from e
-            _raise_for_api_error(e, denied=denied)
-        path: str | None = next(
-            (
-                entry.path
-                for entry in tree.entries
-                if entry.type == "blob" and is_indexable_path(entry.path, entry.size)
-            ),
-            None,
-        )
-        if path is None:
-            return
+            _raise_for_api_error(e, denied=denied, denied_row=denied_row)
+        paths: list[str] = [
+            entry.path
+            for entry in tree.entries
+            if entry.type == "blob" and is_indexable_path(entry.path, entry.size)
+        ]
+        if not paths:
+            raise InconclusiveValidationError(
+                f"`{repository.full_name}` has no file that indexing reads.",
+                summary=f"No documents found in {repository.full_name}",
+                description=(
+                    "The first repository has no file type that indexing reads."
+                ),
+            )
         try:
             gateway.get_file_content(
-                repo_full_name=repository.full_name, path=path, ref=ref
+                repo_full_name=repository.full_name, path=paths[0], ref=ref
             )
         except GitHubApiError as e:
-            _raise_for_api_error(e, denied=denied)
+            _raise_for_api_error(e, denied=denied, denied_row=denied_row)
+        return CheckOutput(
+            summary=(
+                f"{_counted(len(paths), 'document', 'documents')} found in "
+                f"{repository.full_name}"
+            )
+        )
 
 
 def build_github_indexing_checks() -> list[CapabilityCheck]:
     return [
         _AuthCheck(),
-        _TokenScopesCheck(),
         _DocumentTypesCheck(),
+        _TokenScopesCheck(),
         _OwnerCheck(),
         _RepositoriesVisibleCheck(),
         _ConfiguredRepositoriesCheck(),
@@ -798,32 +1250,17 @@ def _permission_repositories(
     context: CapabilityCheckContext, config: GithubConnectorConfig
 ) -> _RepositorySample:
     """The repositories permission sync reads, sampled. None readable is
-    INDETERMINATE: the repository checks report why."""
+    nothing to test: the repository checks report why."""
     # One past the sample tells whether repositories remain unread.
     repositories: list[GitHubRepository] = _target_repositories(
         context, config, _PERMISSION_SAMPLE_REPOSITORIES + 1
     )
     if not repositories:
-        raise UnexpectedValidationError(
-            "No repository to sync is readable, so Onyx cannot run this probe. "
-            "github_repositories_visible or github_configured_repositories "
-            "reports why."
-        )
+        raise _no_repositories_error()
     return _RepositorySample(
         repositories=repositories[:_PERMISSION_SAMPLE_REPOSITORIES],
         cut=len(repositories) > _PERMISSION_SAMPLE_REPOSITORIES,
     )
-
-
-def _raise_if_sample_was_cut(sample: _RepositorySample, kind: str) -> None:
-    """No sampled repository is of the kind a probe needs. When the sample
-    leaves repositories out, the sync can still read one: INDETERMINATE."""
-    if sample.cut:
-        raise UnexpectedValidationError(
-            f"The first {len(sample.repositories)} repositories include no {kind} "
-            "repository, so Onyx cannot verify what group sync reads for the "
-            "others."
-        )
 
 
 class _RepositoryVisibilityCheck(_GitHubCheck):
@@ -834,14 +1271,14 @@ class _RepositoryVisibilityCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="github_repository_visibility",
-            display_name="Repository visibility is readable",
+            display_name="Read repo visibility",
             remediation=(
                 "Give the token read access to the repositories (see the indexing "
                 "checks)."
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         repositories: list[GitHubRepository] = _permission_repositories(
             context, config
@@ -853,11 +1290,26 @@ class _RepositoryVisibilityCheck(_GitHubCheck):
             and repository.organization is None
         ]
         if orphans:
-            raise ConnectorValidationError(
+            raise UnexpectedValidationError(
                 f"GitHub returned no organization for the internal repositories "
                 f"{', '.join(f'`{name}`' for name in orphans)}, so permission sync "
-                "cannot give them to the organization's members."
+                "cannot give them to the organization's members.",
+                summary="Internal repos have no organization",
+                description=(
+                    "GitHub sent internal repositories without their organization.\n"
+                    "Share the error details with support."
+                ),
             )
+        public: int = sum(
+            repository.visibility == _VISIBILITY_PUBLIC for repository in repositories
+        )
+        internal: int = sum(
+            repository.visibility == _VISIBILITY_INTERNAL for repository in repositories
+        )
+        private: int = len(repositories) - public - internal
+        return CheckOutput(
+            summary=f"{private} private, {public} public, {internal} internal"
+        )
 
 
 def _scope_hint(token: GitHubTokenInfo | None, *scopes: str) -> str:
@@ -878,17 +1330,29 @@ def _scope_hint(token: GitHubTokenInfo | None, *scopes: str) -> str:
     )
 
 
+def _count(logins: list[str], limit: int) -> str:
+    return f"{limit}+" if len(logins) >= limit else str(len(logins))
+
+
 def _read_collaborators(
-    context: CapabilityCheckContext, repository: GitHubRepository
+    context: CapabilityCheckContext, repository: GitHubRepository, limit: int
 ) -> list[str]:
     gateway: GitHubSourceOperations = _gateway(context)
     try:
         return gateway.list_repository_collaborators(
-            repo_full_name=repository.full_name, limit=_USER_LISTING_LIMIT
+            repo_full_name=repository.full_name, limit=limit
         )
     except GitHubApiError as e:
         hint: str = _scope_hint(
             _token_info(gateway), _PRIVATE_REPOSITORY_SCOPE, _ORG_READ_SCOPE
+        )
+        row: _RowText = _RowText(
+            summary="Token cannot list collaborators",
+            description=(
+                "GitHub lists collaborators only to users with write access. "
+                f"(HTTP {e.status_code})\nUse a token of a user with write access "
+                f"to {repository.full_name}.{hint}"
+            ),
         )
         _raise_for_api_error(
             e,
@@ -896,25 +1360,34 @@ def _read_collaborators(
                 f"The token cannot list the collaborators of "
                 f"`{repository.full_name}`.{hint} {_COLLABORATORS_HINT}"
             ),
+            denied_row=row,
             not_found=(
                 f"GitHub does not list the collaborators of "
                 f"`{repository.full_name}` to the token.{hint} {_COLLABORATORS_HINT}"
             ),
+            not_found_row=row,
         )
 
 
-def _read_members(context: CapabilityCheckContext, org_login: str) -> list[str]:
+def _read_members(
+    context: CapabilityCheckContext, org_login: str, limit: int
+) -> list[str]:
     gateway: GitHubSourceOperations = _gateway(context)
     try:
-        return gateway.list_organization_members(
-            org_login=org_login, limit=_USER_LISTING_LIMIT
-        )
+        return gateway.list_organization_members(org_login=org_login, limit=limit)
     except GitHubApiError as e:
         _raise_for_api_error(
             e,
             denied=(
                 f"The token cannot list the members of the organization "
                 f"`{org_login}`. {_MEMBERS_HINT}"
+            ),
+            denied_row=_RowText(
+                summary=f"Token cannot list members of {org_login}",
+                description=(
+                    "GitHub refused the member list. (HTTP 403)\n"
+                    + _need(context, scope="read:org", permission="Members")
+                ),
             ),
         )
 
@@ -926,15 +1399,15 @@ class _CollaboratorsCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="github_repository_collaborators",
-            display_name="Repository collaborators are readable",
+            check_id=_COLLABORATORS_CHECK_ID,
+            display_name="List collaborators",
             remediation=(
                 "Use a token of an account with write access to the private "
                 f"repositories. {_COLLABORATORS_HINT}"
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         sample: _RepositorySample = _permission_repositories(context, config)
         repository: GitHubRepository | None = next(
@@ -945,10 +1418,33 @@ class _CollaboratorsCheck(_GitHubCheck):
             ),
             None,
         )
+        if repository is None and sample.cut:
+            raise InconclusiveValidationError(
+                f"The first {len(sample.repositories)} repositories include no "
+                "private repository, so Onyx cannot verify what group sync reads "
+                "for the others.",
+                summary=f"No private repo in the first {len(sample.repositories)}",
+                description=(
+                    f"The first {len(sample.repositories)} repositories have no "
+                    "private one, and the rest were not tested."
+                ),
+            )
         if repository is None:
-            _raise_if_sample_was_cut(sample, "private")
-            return
-        _read_collaborators(context, repository)
+            raise NothingToCheckError(
+                "No repository is private, so group sync reads no collaborators.",
+                summary="No private repositories to test",
+                description=(
+                    "Group sync reads collaborators only for private repositories, "
+                    "and there are none."
+                ),
+            )
+        logins: list[str] = _read_collaborators(context, repository, _COUNT_LIMIT)
+        return CheckOutput(
+            summary=(
+                f"{_counted(_count(logins, _COUNT_LIMIT), 'collaborator', 'collaborators')} "
+                f"in {repository.full_name}"
+            )
+        )
 
 
 def _internal_organizations(sample: _RepositorySample) -> list[str]:
@@ -967,7 +1463,7 @@ def _internal_organizations(sample: _RepositorySample) -> list[str]:
 def _unsampled_organization(sample: _RepositorySample) -> str | None:
     """The owner organization, when the sample leaves out repositories that
     can be internal ones of it. Group sync may then read its members, but
-    no internal repository proves it, so a failed read is INDETERMINATE."""
+    no internal repository proves it, so a failed read is INCOMPLETE."""
     if not sample.cut:
         return None
     return next(
@@ -988,53 +1484,76 @@ class _OrganizationMembersCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="github_organization_members",
-            display_name="Organization members are readable",
+            check_id=_MEMBERS_CHECK_ID,
+            display_name="List org members",
             remediation=_MEMBERS_HINT,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         sample: _RepositorySample = _permission_repositories(context, config)
         organizations: list[str] = _internal_organizations(sample)
-        if not organizations:
-            unsampled: str | None = _unsampled_organization(sample)
-            if unsampled is None:
-                # No internal repository: group sync reads no members.
-                return
-            try:
-                self._probe(context, unsampled)
-            except ConnectorValidationError as e:
-                raise UnexpectedValidationError(
-                    f"The first {len(sample.repositories)} repositories include "
-                    f"no internal repository, so group sync may read no members "
-                    f"of `{unsampled}`. If it does, this fails: {e}"
-                ) from e
-            return
-        self._probe(context, organizations[0])
+        if organizations:
+            return self._probe(context, organizations[0])
+        unsampled: str | None = _unsampled_organization(sample)
+        if unsampled is None:
+            raise NothingToCheckError(
+                "No repository is internal, so group sync reads no organization "
+                "members.",
+                summary="No internal repositories to test",
+                description=(
+                    "Group sync reads organization members only for internal "
+                    "repositories, and there are none."
+                ),
+            )
+        try:
+            return self._probe(context, unsampled)
+        except ConnectorValidationError as e:
+            raise InconclusiveValidationError(
+                f"The first {len(sample.repositories)} repositories include "
+                f"no internal repository, so group sync may read no members "
+                f"of `{unsampled}`. If it does, this fails: {e}",
+                summary=f"Members of {unsampled} may be unreadable",
+                description=(
+                    f"No internal repository was in the first "
+                    f"{len(sample.repositories)}.\n"
+                    + _need(context, scope="read:org", permission="Members")
+                ),
+            ) from e
 
-    def _probe(self, context: CapabilityCheckContext, org_login: str) -> None:
+    def _probe(self, context: CapabilityCheckContext, org_login: str) -> CheckOutput:
         token: GitHubTokenInfo | None = _token_info(_gateway(context))
         if _scope_hint(token, _ORG_READ_SCOPE):
             raise InsufficientPermissionsError(
                 f"The classic token has no `{_ORG_READ_SCOPE}` scope, so GitHub "
                 f"lists only the public members of `{org_login}`, and the other "
-                "members lose access to its internal repositories in Onyx."
+                "members lose access to its internal repositories in Onyx.",
+                summary="Classic token lacks read:org",
+                description=(
+                    "Private organization members would lose access to internal "
+                    "repositories.\nEdit the token and select read:org."
+                ),
             )
-        _read_members(context, org_login)
+        logins: list[str] = _read_members(context, org_login, _COUNT_LIMIT)
+        return CheckOutput(
+            summary=(
+                f"{_counted(_count(logins, _COUNT_LIMIT), 'member', 'members')} in "
+                f"{org_login}"
+            )
+        )
 
 
 class _UserEmailsCheck(_GitHubCheck):
     """Some sampled users have a public email. Group sync maps GitHub users
     to Onyx users by the public email of the profile. Fails only when no
     sampled user has one and the sample covers every user of the first
-    group; a partial sample is INDETERMINATE."""
+    group; a partial sample is INCOMPLETE."""
 
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id="github_user_emails",
-            display_name="Users have public emails",
+            display_name="Read public emails",
             required=False,
             remediation=(
                 "Ask the users to set a public email on their GitHub profile. "
@@ -1042,7 +1561,7 @@ class _UserEmailsCheck(_GitHubCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
         sample: _RepositorySample = _permission_repositories(context, config)
         private: GitHubRepository | None = next(
@@ -1056,14 +1575,24 @@ class _UserEmailsCheck(_GitHubCheck):
         organizations: list[str] = _internal_organizations(sample) or [
             org for org in [_unsampled_organization(sample)] if org is not None
         ]
-        if private is None and not organizations:
-            _raise_if_sample_was_cut(sample, "private or internal")
-            return
+        if private is None and not organizations and sample.cut:
+            raise InconclusiveValidationError(
+                f"The first {len(sample.repositories)} repositories include no "
+                "private or internal repository, so Onyx cannot verify what "
+                "group sync reads for the others.",
+                summary=(
+                    f"No private or internal repo in first {len(sample.repositories)}"
+                ),
+                description=(
+                    f"The first {len(sample.repositories)} repositories are all "
+                    "public, and the rest were not tested."
+                ),
+            )
         try:
             logins: list[str] = (
-                _read_collaborators(context, private)
+                _read_collaborators(context, private, _USER_LISTING_LIMIT)
                 if private is not None
-                else _read_members(context, organizations[0])
+                else _read_members(context, organizations[0], _USER_LISTING_LIMIT)
                 if organizations
                 else []
             )
@@ -1071,29 +1600,61 @@ class _UserEmailsCheck(_GitHubCheck):
             raise UnexpectedValidationError(
                 "Onyx cannot read the users of a group, so this check cannot run. "
                 "github_repository_collaborators or github_organization_members "
-                "reports why."
+                "reports why.",
+                summary="Cannot read the group's users",
+                description=(
+                    "Onyx could not list the users to test.\nSee List "
+                    "collaborators or List org members."
+                ),
             ) from e
         if not logins:
-            return
+            raise NothingToCheckError(
+                "Group sync reads no users for these repositories.",
+                summary="No users to test",
+                description="Group sync reads no users for these repositories.",
+            )
         gateway: GitHubSourceOperations = _gateway(context)
+        sampled: list[str] = logins[:_SAMPLE_USERS]
         emails: list[str | None] = []
-        for login in logins[:_SAMPLE_USERS]:
+        for login in sampled:
             try:
                 emails.append(gateway.get_user(login=login).email)
             except GitHubApiError as e:
                 _raise_for_api_error(
-                    e, denied=f"The token cannot read the profile of `{login}`"
+                    e,
+                    denied=f"The token cannot read the profile of `{login}`",
+                    denied_row=_RowText(
+                        summary="Token cannot read user profiles",
+                        description=(
+                            "GitHub refused to show user profiles. (HTTP 403)\n"
+                            "Create a new token and paste it in the account's "
+                            "API Token."
+                        ),
+                    ),
                 )
-        if any(emails):
-            return
+        with_email: int = sum(1 for email in emails if email)
+        if with_email:
+            return CheckOutput(
+                summary=f"{with_email} of {len(sampled)} users have public emails"
+            )
         if len(logins) > _SAMPLE_USERS:
-            raise UnexpectedValidationError(
+            raise InconclusiveValidationError(
                 f"The {_SAMPLE_USERS} sampled users have no public email. Group sync "
-                f"reads more users, so Onyx cannot verify the rest. {_EMAIL_HINT}"
+                f"reads more users, so Onyx cannot verify the rest. {_EMAIL_HINT}",
+                summary=f"First {_SAMPLE_USERS} users have no public email",
+                description=(
+                    "The sampled users cannot map to users here, and the rest of "
+                    "the group was not read."
+                ),
             )
         raise InsufficientPermissionsError(
             f"No user of the sampled group has a public email, so their access "
-            f"cannot map to Onyx users. {_EMAIL_HINT}"
+            f"cannot map to Onyx users. {_EMAIL_HINT}",
+            summary="No sampled user has a public email",
+            description=(
+                "Users without a public email would get no access.\nAsk them to "
+                "set a public email in their GitHub settings."
+            ),
         )
 
 

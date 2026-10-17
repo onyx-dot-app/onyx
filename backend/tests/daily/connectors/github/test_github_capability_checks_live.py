@@ -97,7 +97,9 @@ def test_indexing_checks_pass_on_the_test_organization(
         for check_id, result in by_id.items()
         if result.applicable
         and result.required
-        and result.status != CapabilityCheckStatus.PASSED
+        # SKIPPED: the organization has nothing for the check to test.
+        and result.status
+        not in (CapabilityCheckStatus.PASSED, CapabilityCheckStatus.SKIPPED)
     }
     assert not failures, failures
     assert by_id[mode_check_id].status == CapabilityCheckStatus.PASSED
@@ -129,7 +131,7 @@ def test_indexing_checks_pass_on_the_test_organization(
         ),
         (
             {},
-            {"repositories": f"{_REPOSITORY}, no-such-repository-7f3a"},
+            {"repositories": "no-such-repository-7f3a"},
             "github_configured_repositories",
             "`onyx-dot-app/no-such-repository-7f3a`: not found",
         ),
@@ -195,7 +197,9 @@ def test_perm_sync_checks_pass_on_the_test_organization(
         for check_id, result in by_id.items()
         if result.applicable
         and result.required
-        and result.status != CapabilityCheckStatus.PASSED
+        # SKIPPED: the organization has nothing for the check to test.
+        and result.status
+        not in (CapabilityCheckStatus.PASSED, CapabilityCheckStatus.SKIPPED)
     }
     assert not failures, failures
     verdicts: dict[CredentialCapability, CapabilityVerdict] = (
