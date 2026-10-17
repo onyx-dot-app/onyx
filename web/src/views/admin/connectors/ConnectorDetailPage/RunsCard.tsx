@@ -38,7 +38,9 @@ import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceMo
 import {
   PAIR_WINDOWS,
   ThroughputWindowPicker,
+  pickedWindowStart,
   rangeWithin,
+  windowStart,
   type PickedWindow as SharedWindow,
   type PickerWindow,
   type SliceRange,
@@ -65,12 +67,7 @@ const WINDOWS = [
 ] as const;
 type TimeWindow = (typeof WINDOWS)[number];
 
-interface PickedWindow {
-  window: TimeWindow;
-  /** Fixed when the window is picked, so polling keeps one cache key. */
-  since: string | null;
-}
-const ALL_TIME: PickedWindow = { window: WINDOWS[0], since: null };
+const ALL_TIME: TimeWindow = WINDOWS[0];
 const LOADER_ROWS = 3;
 
 const STATUS_GROUPS: CCPairRunStatusGroup[] = [
@@ -115,9 +112,13 @@ export default function RunsCard({
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const [page, setPage] = useState(1);
-  const [picked, setPicked] = useState<PickedWindow>(ALL_TIME);
+  const [picked, setPicked] = useState<TimeWindow>(ALL_TIME);
   const windowSince =
-    sharedWindow !== undefined ? sharedWindow.since : picked.since;
+    sharedWindow !== undefined
+      ? pickedWindowStart(sharedWindow)
+      : picked.hours === null
+        ? null
+        : windowStart(picked.hours);
   const { since, until } = rangeWithin(windowSince, range);
   // A new window or slice starts the list over at its first page.
   const [pagedRange, setPagedRange] = useState({ since, until });
@@ -150,13 +151,7 @@ export default function RunsCard({
   );
 
   function pickWindow(window: TimeWindow) {
-    setPicked({
-      window,
-      since:
-        window.hours === null
-          ? null
-          : new Date(Date.now() - window.hours * 3_600_000).toISOString(),
-    });
+    setPicked(window);
   }
 
   function pickKind(next: CCPairRunKind | null) {
@@ -202,7 +197,7 @@ export default function RunsCard({
   const filtered =
     kind !== null ||
     statusGroup !== null ||
-    (sharedWindow === undefined && picked.since !== null) ||
+    (sharedWindow === undefined && picked.hours !== null) ||
     range !== null ||
     search !== "";
 
@@ -276,15 +271,15 @@ export default function RunsCard({
               <Dropdown.Trigger asChild>
                 <FilterButton
                   icon={SvgClock}
-                  active={picked.since !== null}
-                  onClear={() => pickWindow(ALL_TIME.window)}
+                  active={picked.hours !== null}
+                  onClear={() => pickWindow(ALL_TIME)}
                 >
-                  {t(`window.${picked.window.id}`)}
+                  {t(`window.${picked.id}`)}
                 </FilterButton>
               </Dropdown.Trigger>
               <Dropdown.Data
                 label={t("window.label")}
-                value={picked.window.id}
+                value={picked.id}
                 onSelect={(option) => {
                   const window = WINDOWS.find((w) => w.id === option.value);
                   if (window !== undefined) pickWindow(window);

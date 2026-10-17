@@ -65,17 +65,24 @@ const WINDOW_HOURS = {
 
 export interface PickedWindow {
   window: PickerWindow;
-  /** The window's start, fixed when it is picked so polling keeps one cache key. */
-  since: string;
 }
 
 export function pickWindow(window: PickerWindow): PickedWindow {
-  return {
-    window,
-    since: new Date(
-      Date.now() - WINDOW_HOURS[window] * 3_600_000
-    ).toISOString(),
-  };
+  return { window };
+}
+
+/**
+ * The start of a window that ends now, to the minute, so the run list keeps
+ * pace with the chart (whose window the backend moves on every poll) while
+ * its cache key changes only once a minute.
+ */
+export function windowStart(hours: number): string {
+  const minute = Math.floor(Date.now() / 60_000) * 60_000;
+  return new Date(minute - hours * 3_600_000).toISOString();
+}
+
+export function pickedWindowStart({ window }: PickedWindow): string {
+  return windowStart(WINDOW_HOURS[window]);
 }
 
 /** A chart slice picked to narrow a run list, as ISO times. `until` is exclusive. */
