@@ -35,52 +35,62 @@ const definition = {
 
 afterEach(() => jest.restoreAllMocks());
 
-test("a full admin's new action is attached to default Chat after creation", async () => {
-  mockFullAdmin = true;
-  const user = setupUser();
-  const onCreated = jest.fn();
-  const writes: { path: string; body: unknown }[] = [];
-  let created = false;
-  jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
-    const path = String(input);
-    if (init?.body) writes.push({ path, body: JSON.parse(String(init.body)) });
-    if (path === "/api/admin/default-assistant/configuration")
-      return new Response(JSON.stringify({ tool_ids: [99] }));
-    if (path === "/api/admin/default-assistant")
-      return new Response(JSON.stringify({ tool_ids: [99, 42] }));
-    if (path === "/api/tool/openapi")
-      return new Response(
-        JSON.stringify(
-          created ? [{ id: 42, name: "Release API", custom_headers: [] }] : []
-        )
-      );
-    if (path === "/api/admin/tool/custom/validate")
-      return new Response(JSON.stringify({ methods: [] }));
-    if (path === "/api/admin/tool/custom") {
-      created = true;
-      return new Response(JSON.stringify({ id: 42 }));
-    }
-    throw new Error(`Unexpected request ${path}`);
-  });
-  render(
-    <OpenAPIPluginCreateModal open onClose={jest.fn()} onCreated={onCreated} />
-  );
-  fireEvent.change(await screen.findByRole("textbox"), {
-    target: { value: JSON.stringify(definition) },
-  });
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  await user.click(await screen.findByRole("button", { name: "Add Action" }));
-  await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
-  expect(writes).toContainEqual({
-    path: "/api/admin/default-assistant",
-    body: { tool_ids: [99, 42] },
-  });
-  expect(
-    writes.findIndex((write) => write.path === "/api/admin/tool/custom")
-  ).toBeLessThan(
-    writes.findIndex((write) => write.path === "/api/admin/default-assistant")
-  );
-});
+test.each([{ customHeaders: [] }, { customHeaders: null }])(
+  "attaches a full admin's new action to default Chat with $customHeaders headers",
+  async ({ customHeaders }) => {
+    mockFullAdmin = true;
+    const user = setupUser();
+    const onCreated = jest.fn();
+    const writes: { path: string; body: unknown }[] = [];
+    let created = false;
+    jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const path = String(input);
+      if (init?.body)
+        writes.push({ path, body: JSON.parse(String(init.body)) });
+      if (path === "/api/admin/default-assistant/configuration")
+        return new Response(JSON.stringify({ tool_ids: [99] }));
+      if (path === "/api/admin/default-assistant")
+        return new Response(JSON.stringify({ tool_ids: [99, 42] }));
+      if (path === "/api/tool/openapi")
+        return new Response(
+          JSON.stringify(
+            created
+              ? [{ id: 42, name: "Release API", custom_headers: customHeaders }]
+              : []
+          )
+        );
+      if (path === "/api/admin/tool/custom/validate")
+        return new Response(JSON.stringify({ methods: [] }));
+      if (path === "/api/admin/tool/custom") {
+        created = true;
+        return new Response(JSON.stringify({ id: 42 }));
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    render(
+      <OpenAPIPluginCreateModal
+        open
+        onClose={jest.fn()}
+        onCreated={onCreated}
+      />
+    );
+    fireEvent.change(await screen.findByRole("textbox"), {
+      target: { value: JSON.stringify(definition) },
+    });
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(await screen.findByRole("button", { name: "Add Action" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
+    expect(writes).toContainEqual({
+      path: "/api/admin/default-assistant",
+      body: { tool_ids: [99, 42] },
+    });
+    expect(
+      writes.findIndex((write) => write.path === "/api/admin/tool/custom")
+    ).toBeLessThan(
+      writes.findIndex((write) => write.path === "/api/admin/default-assistant")
+    );
+  }
+);
 
 test.each(["mounted", "disposed"])(
   "creates a no-auth action for a scoped creator and reports completion only while %s",

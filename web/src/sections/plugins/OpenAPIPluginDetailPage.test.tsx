@@ -659,20 +659,26 @@ describe.each(["metadata", "schema", "authentication"] as const)(
 );
 
 describe("focused edit workflows", () => {
-  test("shows None for a valid saved plugin and opens the same method", async () => {
-    tool = { ...tool, oauth_config_id: null };
-    const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
-    await user.click(
-      await screen.findByRole("tab", { name: "Authentication" })
-    );
-    expect(await screen.findByRole("combobox")).toHaveValue(
-      "No authentication"
-    );
-    expect(
-      screen.queryByRole("textbox", { name: "Authorization URL" })
-    ).not.toBeInTheDocument();
-  });
+  test.each([{ customHeaders: [] }, { customHeaders: null }])(
+    "shows None for a saved plugin with $customHeaders headers and opens the same method",
+    async ({ customHeaders }) => {
+      tool = { ...tool, oauth_config_id: null };
+      listResponse = async () =>
+        json([{ ...tool, custom_headers: customHeaders }]);
+      const user = setupUser();
+      render(<OpenAPIPluginDetailPage toolId={42} />);
+      await user.click(
+        await screen.findByRole("tab", { name: "Authentication" })
+      );
+      expect(await screen.findByRole("combobox")).toHaveValue(
+        "No authentication"
+      );
+      expect(
+        screen.queryByRole("textbox", { name: "Authorization URL" })
+      ).not.toBeInTheDocument();
+      expect(writes).toEqual([]);
+    }
+  );
 
   test("can clear saved OAuth with None", async () => {
     const user = setupUser();

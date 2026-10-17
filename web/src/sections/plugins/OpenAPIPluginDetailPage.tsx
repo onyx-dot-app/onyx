@@ -306,7 +306,7 @@ export default function OpenAPIPluginDetailPage({
     ? "oauth"
     : tool?.passthrough_auth
       ? "pt-oauth"
-      : tool?.custom_headers.length
+      : tool?.custom_headers?.length
         ? "custom-header"
         : "none";
   const authDescription = {

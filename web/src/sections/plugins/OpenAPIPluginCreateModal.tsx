@@ -104,7 +104,7 @@ function OpenAPIPluginCreateSession({
       values.authMethod !== "none" ||
       tool.oauth_config_id ||
       tool.passthrough_auth ||
-      tool.custom_headers.length
+      tool.custom_headers?.length
     ) {
       if (!can(tool, "authenticate"))
         throw new Error(
