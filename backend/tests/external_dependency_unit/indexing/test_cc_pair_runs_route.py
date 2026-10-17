@@ -464,6 +464,25 @@ def test_window_and_error_search(db_session: Session) -> None:
     assert response.total_items == 1
 
 
+def test_a_running_run_from_before_the_window_is_listed_and_counted(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
+    _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    running = _index_attempt(db_session, cc_pair, 10, IndexingStatus.IN_PROGRESS)
+    recent = _index_attempt(db_session, cc_pair, 20, IndexingStatus.FAILED)
+
+    response = _runs(db_session, admin, cc_pair, since=_T0 + timedelta(minutes=15))
+
+    assert _order(response) == [
+        (CCPairRunKind.INDEXING, recent.id),
+        (CCPairRunKind.INDEXING, running.id),
+    ]
+    assert response.status_counts[CCPairRunStatusGroup.RUNNING] == 1
+    assert response.status_counts[CCPairRunStatusGroup.SUCCEEDED] == 0
+
+
 def test_until_leaves_out_runs_created_at_or_after_it(db_session: Session) -> None:
     admin = create_test_user(db_session, "runs_admin", is_admin=True)
     cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)

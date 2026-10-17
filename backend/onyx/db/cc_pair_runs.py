@@ -92,7 +92,13 @@ def _narrowed(
     with_status_filter: bool,
 ) -> Select:
     if run_filter.since is not None:
-        stmt = stmt.where(time_created >= run_filter.since)
+        # A run still going belongs to any window, however long ago it began.
+        active = [
+            s
+            for s in statuses
+            if _STATUS_GROUPS[s.value] is CCPairRunStatusGroup.RUNNING
+        ]
+        stmt = stmt.where(or_(time_created >= run_filter.since, status.in_(active)))
     if run_filter.until is not None:
         stmt = stmt.where(time_created < run_filter.until)
     if run_filter.error_query:

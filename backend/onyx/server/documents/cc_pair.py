@@ -283,9 +283,9 @@ def get_cc_pair_runs(
 ) -> CCPairRunsResponse:
     """The pair's index attempts and permission syncs as one feed, newest
     first. ``since`` and ``until`` window on creation time, ``until``
-    exclusive, ``q`` matches error messages, including an index attempt's
-    document errors, and ``errors`` keeps only runs with document errors, open
-    or resolved."""
+    exclusive, though a run still going is listed however old it is. ``q``
+    matches error messages, including an index attempt's document errors, and
+    ``errors`` keeps only runs with document errors, open or resolved."""
     # Called directly: the route contract reaches the scope gate three calls deep.
     cc_pair = get_readable_connector_credential_pair_for_user(
         cc_pair_id, db_session, user
