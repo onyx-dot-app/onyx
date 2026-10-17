@@ -4,6 +4,7 @@ import json
 import re
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, NoReturn
 
 import requests
@@ -14,9 +15,34 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     CredentialInvalidError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
+    SourceApiError,
     UnexpectedValidationError,
+    UnreachableValidationError,
+    ValidationError,
+)
+from onyx.connectors.microsoft_utils.check_text import (
+    APP_NOT_FOUND_ROW,
+    DEFAULT_ACCOUNT_LABELS,
+    DIRECTORY_NOT_FOUND_ROW,
+    RATE_LIMITED_ROW,
+    SIGN_IN_REFUSED_ROW,
+    SIGN_IN_UNAVAILABLE_ROW,
+    SIGN_IN_UNEXPECTED_ROW,
+    SIGN_IN_UNREACHABLE_ROW,
+    TOKEN_REJECTED_ROW,
+    UNKNOWN_SIGN_IN_METHOD_ROW,
+    UNREACHABLE_ROW,
+    MicrosoftAccountLabels,
+    MicrosoftRowText,
+    certificate_unreadable_row,
+    credential_rejected_row,
+    missing_field_row,
+    no_token_row,
+    unexpected_answer_row,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
+    TRANSIENT_TRANSPORT_EXCEPTIONS,
     is_permanent_refusal_status,
 )
 
@@ -38,11 +64,29 @@ class MicrosoftGraphErrorDetails(BaseModel):
     message: str
 
 
-class MicrosoftGraphError(Exception):
-    def __init__(self, status: int | None, code: str, message: str) -> None:
+class MicrosoftGraphError(SourceApiError):
+    """A Graph, SharePoint REST or token endpoint refusal. ``status`` is None
+    for a failure with no answer, such as a dropped connection."""
+
+    def __init__(
+        self,
+        status: int | None,
+        code: str,
+        message: str,
+        *,
+        method: str | None = None,
+        url: str | None = None,
+        body: str | None = None,
+    ) -> None:
+        super().__init__(
+            f"Graph {status} {code}: {message}",
+            status_code=status,
+            method=method,
+            url=url,
+            body=body,
+        )
         self.status = status
         self.code = code
-        super().__init__(f"Graph {status} {code}: {message}")
 
     @property
     def is_permanent_refusal(self) -> bool:
@@ -54,8 +98,21 @@ class MicrosoftGraphError(Exception):
 
 
 class MicrosoftAuthError(Exception):
-    def __init__(self, code: str, description: str) -> None:
+    """Entra refused to sign the app in. ``certificate`` marks a certificate
+    account; ``certificate_not_after`` is its certificate's end date, when
+    the certificate opened."""
+
+    def __init__(
+        self,
+        code: str,
+        description: str,
+        *,
+        certificate: bool = False,
+        certificate_not_after: datetime | None = None,
+    ) -> None:
         self.code = code
+        self.certificate = certificate
+        self.certificate_not_after = certificate_not_after
         super().__init__(f"{code}: {description}")
 
 
@@ -122,12 +179,25 @@ def parse_graph_error(error: Exception) -> MicrosoftGraphErrorDetails:
 
 
 def microsoft_error_from_exception(error: Exception) -> MicrosoftGraphError:
+    """The error with its status and code, and, when it carries an answer,
+    the request and response body for Error Details."""
     details = (
         parse_graph_error(error)
         if isinstance(error, requests.RequestException)
         else parse_msal_error(error)
     )
-    return MicrosoftGraphError(details.status, details.code, details.message)
+    response = error.response if isinstance(error, requests.RequestException) else None
+    if response is None:
+        return MicrosoftGraphError(details.status, details.code, details.message)
+    request = response.request
+    return MicrosoftGraphError(
+        details.status,
+        details.code,
+        details.message,
+        method=request.method if request is not None else None,
+        url=response.url or (request.url if request is not None else None),
+        body=response.text or None,
+    )
 
 
 @contextmanager
@@ -142,42 +212,144 @@ def raise_microsoft_errors() -> Iterator[None]:
         raise microsoft_error_from_exception(error) from error
 
 
-def raise_for_auth_error(error: MicrosoftAuthError) -> NoReturn:
+# Entra's code for an expired client secret.
+_EXPIRED_SECRET_CODE = "AADSTS7000222"
+
+
+def _raise_with_row(
+    error_class: type[ValidationError],
+    message: str,
+    row: MicrosoftRowText | None,
+    cause: Exception,
+) -> NoReturn:
+    raise error_class(
+        message,
+        summary=row.summary if row else None,
+        description=row.description if row else None,
+    ) from cause
+
+
+def raise_for_auth_error(
+    error: MicrosoftAuthError,
+    labels: MicrosoftAccountLabels = DEFAULT_ACCOUNT_LABELS,
+) -> NoReturn:
+    """Maps an Entra sign-in refusal onto the validation family, with the
+    sign-in row's text. ``labels`` name the account's fields."""
     if error.code in TRANSIENT_OAUTH_CODES:
-        raise UnexpectedValidationError(
-            "Microsoft's token endpoint is unavailable. Re-run the checks later."
-        ) from error
+        _raise_with_row(
+            UnexpectedValidationError,
+            "Microsoft's token endpoint is unavailable. Re-run the checks later.",
+            SIGN_IN_UNAVAILABLE_ROW,
+            error,
+        )
     if error.code == MISSING_CREDENTIAL_CODE:
-        raise CredentialInvalidError(
-            "Microsoft credentials are incomplete; check all required fields."
-        ) from error
+        _raise_with_row(
+            CredentialInvalidError,
+            "Microsoft credentials are incomplete; check all required fields.",
+            missing_field_row(labels, certificate=error.certificate),
+            error,
+        )
     if error.code == INVALID_AUTHORITY_CODE:
-        raise CredentialInvalidError(
+        _raise_with_row(
+            CredentialInvalidError,
             "Microsoft does not know this directory. Check the directory id and "
-            "authority host."
-        ) from error
+            "authority host.",
+            DIRECTORY_NOT_FOUND_ROW,
+            error,
+        )
     if error.code == INVALID_CERTIFICATE_CODE:
-        raise CredentialInvalidError(
+        _raise_with_row(
+            CredentialInvalidError,
             "The PFX bundle could not be opened. Check the file and certificate "
-            "password."
-        ) from error
+            "password.",
+            certificate_unreadable_row(labels),
+            error,
+        )
     if error.code == INVALID_AUTH_METHOD_CODE:
-        raise CredentialInvalidError(
-            "The Microsoft authentication method is invalid."
-        ) from error
+        _raise_with_row(
+            CredentialInvalidError,
+            "The Microsoft authentication method is invalid.",
+            UNKNOWN_SIGN_IN_METHOD_ROW,
+            error,
+        )
     if error.code == "invalid_client":
-        raise CredentialInvalidError(
+        _raise_with_row(
+            CredentialInvalidError,
             "Microsoft rejected the client secret or certificate. It is wrong, "
-            "expired, or belongs to a different app registration."
-        ) from error
+            "expired, or belongs to a different app registration.",
+            credential_rejected_row(
+                labels,
+                certificate=error.certificate,
+                certificate_not_after=error.certificate_not_after,
+                secret_expired=_EXPIRED_SECRET_CODE in str(error),
+            ),
+            error,
+        )
     if error.code in INVALID_REGISTRATION_CODES:
-        raise CredentialInvalidError(
+        _raise_with_row(
+            CredentialInvalidError,
             "Microsoft rejected the app registration. Check the client id and "
-            "directory id."
-        ) from error
-    raise CredentialInvalidError(
-        f"Microsoft did not issue a token ({error.code})."
-    ) from error
+            "directory id.",
+            APP_NOT_FOUND_ROW,
+            error,
+        )
+    _raise_with_row(
+        CredentialInvalidError,
+        f"Microsoft did not issue a token ({error.code}).",
+        no_token_row(error.code),
+        error,
+    )
+
+
+def _is_transport_failure(error: MicrosoftGraphError) -> bool:
+    """No answer came back: the connection failed or timed out, after
+    retries."""
+    return error.status is None and any(
+        isinstance(wrapped, TRANSIENT_TRANSPORT_EXCEPTIONS)
+        for wrapped in _exception_chain(error)
+    )
+
+
+def raise_for_sign_in_error(error: MicrosoftGraphError) -> NoReturn:
+    """Maps a failed token request that Entra did not answer with an OAuth
+    error: throttled, unreachable, down, or refused outright."""
+    if error.status == 429:
+        _raise_with_row(
+            RateLimitedValidationError,
+            f"Microsoft's token endpoint is throttling ({error.code}). Re-run the "
+            "checks later.",
+            RATE_LIMITED_ROW,
+            error,
+        )
+    if _is_transport_failure(error):
+        _raise_with_row(
+            UnreachableValidationError,
+            f"Onyx cannot reach Microsoft's token endpoint ({error.code}).",
+            SIGN_IN_UNREACHABLE_ROW,
+            error,
+        )
+    if error.status is not None and error.status >= 500:
+        _raise_with_row(
+            UnexpectedValidationError,
+            f"Microsoft's token endpoint is unavailable ({error.status} "
+            f"{error.code}). Re-run the checks later.",
+            SIGN_IN_UNAVAILABLE_ROW,
+            error,
+        )
+    if error.status is not None and error.status >= 400:
+        _raise_with_row(
+            CredentialInvalidError,
+            f"Microsoft refused the token request. Graph reported `{error.code}`.",
+            SIGN_IN_REFUSED_ROW,
+            error,
+        )
+    _raise_with_row(
+        UnexpectedValidationError,
+        f"Microsoft's token endpoint answered unexpectedly ({error.status} "
+        f"{error.code}).",
+        SIGN_IN_UNEXPECTED_ROW,
+        error,
+    )
 
 
 def raise_for_graph_error(
@@ -186,23 +358,58 @@ def raise_for_graph_error(
     *,
     remediation: str | None = None,
     permanent_refusal_message: str | None = None,
+    denied_row: MicrosoftRowText | None = None,
+    not_found_row: MicrosoftRowText | None = None,
+    request: str = "the request",
 ) -> NoReturn:
+    """Maps a Graph or SharePoint REST refusal onto the validation family.
+    ``denied_row`` is the row of a 403, ``not_found_row`` of a 404 or 423;
+    ``request`` names the call in the unexpected-answer row."""
     if error.status == 401:
-        raise CredentialExpiredError(
-            f"Graph rejected the access token ({error.code})."
-        ) from error
+        _raise_with_row(
+            CredentialExpiredError,
+            f"Graph rejected the access token ({error.code}).",
+            TOKEN_REJECTED_ROW,
+            error,
+        )
     if error.status == 403:
         detail = f"{denied_message} Graph reported `{error.code}`."
         if remediation:
             detail = f"{detail} {remediation}"
-        raise InsufficientPermissionsError(detail) from error
+        _raise_with_row(InsufficientPermissionsError, detail, denied_row, error)
     if error.is_permanent_refusal:
-        raise ConnectorValidationError(
-            permanent_refusal_message or denied_message
-        ) from error
+        _raise_with_row(
+            ConnectorValidationError,
+            permanent_refusal_message or denied_message,
+            not_found_row,
+            error,
+        )
+    if error.status == 429:
+        _raise_with_row(
+            RateLimitedValidationError,
+            f"Graph is throttling ({error.status} {error.code}). Re-run the checks "
+            "later.",
+            RATE_LIMITED_ROW,
+            error,
+        )
+    if _is_transport_failure(error):
+        _raise_with_row(
+            UnreachableValidationError,
+            f"Graph is unreachable ({error.code}). Re-run the checks later.",
+            UNREACHABLE_ROW,
+            error,
+        )
     if error.fails_the_attempt:
-        raise UnexpectedValidationError(
-            f"Graph is throttling or unreachable ({error.status} {error.code}). "
-            "Re-run the checks later."
-        ) from error
-    raise UnexpectedValidationError(f"Unexpected Graph error: {error}") from error
+        _raise_with_row(
+            UnexpectedValidationError,
+            f"Graph answered with an error ({error.status} {error.code}). Re-run "
+            "the checks later.",
+            unexpected_answer_row(request),
+            error,
+        )
+    _raise_with_row(
+        UnexpectedValidationError,
+        f"Unexpected Graph error: {error}",
+        unexpected_answer_row(request),
+        error,
+    )

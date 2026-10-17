@@ -42,14 +42,15 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
-from onyx.connectors.microsoft_utils.entra import EntraGroup
-from onyx.connectors.microsoft_utils.graph_errors import (
-    MicrosoftAuthError as OutlookAuthError,
+from onyx.connectors.microsoft_utils.check_text import (
+    MicrosoftAccountLabels,
+    MicrosoftSignIn,
 )
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OutlookGraphError,
 )
-from onyx.connectors.microsoft_utils.graph_errors import raise_for_auth_error
+from onyx.connectors.microsoft_utils.sign_in import sign_in
 from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
@@ -99,7 +100,10 @@ _CANDIDATE_PAGES = 20
 # the count reaches its cap long before this unless Graph sends empty pages.
 _COUNT_PAGES = 20
 
-_TOKEN_ENDPOINT_DENIED = "Microsoft's token endpoint refused the request."
+_ACCOUNT_LABELS = MicrosoftAccountLabels.with_prefix("Microsoft Outlook")
+_SIGN_IN_CHECK_ID = "outlook_token_auth"
+# Every probe signs in first, so a failed sign-in is one row.
+_AFTER_SIGN_IN: tuple[str, ...] = (_SIGN_IN_CHECK_ID,)
 
 # Mail.ReadBasic.All answers every metadata call but refuses bodies, so the
 # read probe must fetch one body to tell the two grants apart.
@@ -273,23 +277,27 @@ class _TokenAuthCheck(CapabilityCheck):
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
-            check_id="outlook_token_auth",
-            display_name="App registration can sign in",
+            check_id=_SIGN_IN_CHECK_ID,
+            display_name="Sign in to Microsoft",
             requires_connector_instance=False,
             remediation=(
                 "Enter the client id, directory (tenant) id and a current "
                 "client secret or certificate of the Entra app registration."
             ),
             docs_link=_OUTLOOK_DOCS_LINK,
+            validates_binding=True,
+            fails_when_unreachable=True,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
-        try:
-            _gateway(context).check_token()
-        except OutlookAuthError as e:
-            raise_for_auth_error(e)
-        except OutlookGraphError as e:
-            raise_for_graph_error(e, _TOKEN_ENDPOINT_DENIED)
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        signed_in: MicrosoftSignIn = sign_in(
+            _gateway(context).check_token, _ACCOUNT_LABELS
+        )
+        return CheckOutput(
+            summary=signed_in.summary,
+            description=signed_in.description,
+            advisories=[CheckAdvisory(message=caveat) for caveat in signed_in.caveats],
+        )
 
 
 class _MailboxListingCheck(CapabilityCheck):
@@ -308,6 +316,7 @@ class _MailboxListingCheck(CapabilityCheck):
                 "registration and admin-consent it."
             ),
             docs_link=_OUTLOOK_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -354,6 +363,7 @@ class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
                 "registration and admin-consent it."
             ),
             docs_link=_OUTLOOK_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
             discovery=True,
         )
 
@@ -404,6 +414,7 @@ class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
             requires_connector_instance=False,
             remediation=EXCHANGE_SCOPE_REMEDIATION,
             docs_link=_OUTLOOK_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -500,6 +511,7 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
             requires_connector_config=True,
             remediation=CALENDAR_READ_REMEDIATION,
             docs_link=_OUTLOOK_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
@@ -569,6 +581,7 @@ class _ConfiguredMailboxesCheck(CapabilityCheck[OutlookConnectorConfig]):
             requires_connector_config=True,
             remediation=f"{MAILBOX_UNAVAILABLE_REMEDIATION} {EXCHANGE_SCOPE_REMEDIATION}",
             docs_link=_OUTLOOK_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -594,6 +607,7 @@ class _ConfiguredGroupsCheck(CapabilityCheck):
             requires_connector_config=True,
             remediation=f"{GROUP_UNAVAILABLE_REMEDIATION} {GROUP_LISTING_REMEDIATION}",
             docs_link=_OUTLOOK_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
