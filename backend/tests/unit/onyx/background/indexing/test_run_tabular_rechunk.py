@@ -6,16 +6,22 @@ already correct. Anything the rebuild drops is destroyed, quietly, across the
 whole corpus. These tests pin the fields that must survive.
 """
 
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from io import BytesIO
-from typing import IO
+from types import SimpleNamespace
+from typing import IO, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.background.indexing import run_tabular_rechunk as rechunk_module
 from onyx.background.indexing.run_tabular_rechunk import (
     _rebuild_document,
     _tabular_file_name,
+    retry_tabular_rechunk,
 )
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import (
     Document,
@@ -127,3 +133,82 @@ def test_rebuild_sections_come_from_the_stored_workbook() -> None:
     assert isinstance(section, TabularSection)
     assert section.csv_file_id == "staged-csv-1"
     assert section.link == "https://example.com/quarterly.csv"
+
+
+_QUEUE = [f"doc-{i:03d}" for i in range(40)]
+
+
+class _FakeTarget:
+    def __init__(self, document_id: str) -> None:
+        self.document = SimpleNamespace(id=document_id)
+        self.connector_id = 1
+        self.credential_id = 1
+        self.file_type = "text/csv"
+
+
+@contextmanager
+def _retry_harness(
+    targets_for: Callable[[Sequence[str]], list[_FakeTarget]],
+) -> Iterator[list[str]]:
+    """Runs the retry loop against fakes, collecting the ids it processes."""
+    processed: list[str] = []
+
+    def fake_page(
+        targets: list[_FakeTarget], **kwargs: Any
+    ) -> tuple[int, list[str], int]:
+        processed.extend(target.document.id for target in targets)
+        return len(targets), [], kwargs["batch_num"] + 1
+
+    def fake_targets(
+        db_session: object,  # noqa: ARG001
+        *,
+        document_ids: Sequence[str],
+        **kwargs: Any,  # noqa: ARG001
+    ) -> list[_FakeTarget]:
+        # The queue is walked a page at a time, never sent whole.
+        assert len(document_ids) <= INDEX_BATCH_SIZE
+        return targets_for(document_ids)
+
+    with (
+        patch.object(rechunk_module, "get_tabular_rechunk_retry_targets", fake_targets),
+        patch.object(rechunk_module, "_rechunk_page", fake_page),
+        patch.object(rechunk_module, "get_session_with_current_tenant"),
+        patch.object(rechunk_module, "get_current_search_settings"),
+        patch.object(rechunk_module, "DefaultIndexingEmbedder"),
+        patch.object(rechunk_module, "build_opensearch_document_index"),
+    ):
+        yield processed
+
+
+def test_retry_walks_the_whole_queue_in_order() -> None:
+    with _retry_harness(lambda ids: [_FakeTarget(i) for i in ids]) as processed:
+        result = retry_tabular_rechunk(
+            tenant_id="t", document_ids=_QUEUE, on_batch=lambda: None
+        )
+    assert processed == _QUEUE
+    assert result.remaining_document_ids == []
+    assert result.documents_indexed == len(_QUEUE)
+
+
+def test_retry_keeps_its_tail_when_the_budget_runs_out() -> None:
+    """The next tick resumes from the queue, so nothing may be dropped."""
+    with _retry_harness(lambda ids: [_FakeTarget(i) for i in ids]) as processed:
+        result = retry_tabular_rechunk(
+            tenant_id="t",
+            document_ids=_QUEUE,
+            time_budget_s=-1,
+            on_batch=lambda: None,
+        )
+    assert processed == []
+    assert result.remaining_document_ids == _QUEUE
+
+
+def test_retry_drains_a_queue_whose_documents_are_gone() -> None:
+    """A document that lost its file or cc-pair stops matching. It has to drop
+    out of the queue, or the pass would never end."""
+    with _retry_harness(lambda _: []) as processed:
+        result = retry_tabular_rechunk(
+            tenant_id="t", document_ids=_QUEUE, on_batch=lambda: None
+        )
+    assert processed == []
+    assert result.remaining_document_ids == []
