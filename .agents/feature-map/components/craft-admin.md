@@ -12,7 +12,8 @@
 `web/src/app/admin/craft/access/page.tsx`, `web/src/app/admin/craft/apps/page.tsx`,
 `web/src/app/admin/craft/preferences/page.tsx`,
 `web/src/views/admin/CraftPage/`, `web/src/views/admin/CraftPreferencesPage/`,
-`web/src/views/admin/ExternalAppsPage/`,
+`web/src/sections/plugins/ExternalAppPluginDetail.tsx`,
+`web/src/sections/plugins/PluginAddCatalogModal.tsx`,
 `backend/onyx/server/features/build/api.py`, `build/utils.py`,
 `backend/onyx/server/features/build/external_apps/api.py`,
 `backend/onyx/db/external_app.py`, `backend/onyx/db/gated_app.py`,
@@ -26,14 +27,14 @@ page maps to code.
 
 ## 1. What the user experiences
 
-An admin sees a "Craft" section in the admin sidebar with three pages: Access,
-Apps, Preferences.
+An admin sees Access and Preferences in the Craft sidebar section. Plugins
+manages external apps and MCP servers alongside OpenAPI actions.
 
 On **Access**, the admin sets a workspace-wide default (Craft on or off for
 everyone) and can override that default for individual users, one at a time or
 in bulk, in a searchable table.
 
-On **Apps**, the admin sees every external service and MCP server the Craft
+On **Plugins**, the admin sees every external service and MCP server the Craft
 agent can reach: built-in apps (Slack, Gmail, Google Calendar, Google Drive, Linear,
 HubSpot, Notion, GitHub, Zendesk), any custom app the admin has registered, and connected MCP
 servers. For each, the admin can enable or disable it, edit its per-action
@@ -49,6 +50,25 @@ On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
 credentials, so the admin can only toggle them on and set policy. Custom apps
 on Cloud keep a normal credential form, as does a built-in whose OAuth client
 cannot be Onyx-owned because it is registered per customer account (Zendesk).
+External-app editors share the Plugins modal frame with MCP and OpenAPI.
+Built-in and custom editors share `web/src/sections/plugins/CraftAppEditorTabs.tsx`.
+Configuration includes identity, URL patterns where applicable, and credentials.
+Built-in action policies and existing skill associations have separate tabs.
+Per-action policy controls stay visible; there is no Advanced disclosure.
+New custom apps omit the single-tab bar. Panels keep a stable scroll height;
+parents own the drafts and selected tab, including across skill-upload cancellation.
+The header shows the app logo, name, and the same clean service origin as its
+directory card, using MCP's modal padding and tab spacing.
+`web/src/lib/plugins/externalAppDisplayUrl.ts` formats literal HTTP origins for
+display; it never rewrites stored proxy URL-matching patterns. Complex host
+regexes do not produce a fabricated service URL.
+One footer saves
+the existing payload; managed-app credentials remain hidden and unchanged.
+New drafts close without a discard confirmation. Existing saved edits keep
+their confirmation in the same frame, without a width or position change.
+Creation still advances to the existing optional skills step after persistence.
+`web/src/sections/plugins/CraftAppSetupModal.stories.tsx` covers built-in,
+managed, and custom configuration, permissions, and skills states.
 
 On **Preferences**, the admin sets a workspace default model for Craft
 sessions and a free-text "organization instructions" block that every Craft
@@ -64,7 +84,8 @@ those org instructions are appended to.
 | Route | Component | Gate |
 |---|---|---|
 | `/admin/craft/access` | `CraftPage` (`web/src/views/admin/CraftPage/index.tsx`) | `Permission.FULL_ADMIN_PANEL_ACCESS`; hidden in the sidebar unless `FeatureFlags.craftAvailable` |
-| `/admin/craft/apps` | `ExternalAppsPage` (`web/src/views/admin/ExternalAppsPage/index.tsx`) | same |
+| `/admin/craft/apps` | Redirect to `/admin/plugins`, preserving external-app edit links | same |
+| `/admin/plugins/external-app/[appId]` | `ExternalAppPluginDetail` | `Permission.FULL_ADMIN_PANEL_ACCESS` |
 | `/admin/craft/preferences` | `CraftPreferencesPage` (`web/src/views/admin/CraftPreferencesPage/index.tsx`) | same |
 
 All three carry `requiredTier: null` (`web/src/lib/admin-routes.ts:159-186`): visibility is not tied
@@ -163,7 +184,7 @@ storing a redundant explicit value
 
 ### 4.2 Apps: what an admin configures and how it is enforced
 
-An admin action on `/admin/craft/apps` is one of: enable/disable an app,
+An admin action on `/admin/plugins` is one of: enable/disable an app,
 edit its `auth_template` and `organization_credentials` (not available for
 Onyx-managed built-ins on Cloud),
 edit its per-action policy, or associate/detach a skill. External-app changes
@@ -439,11 +460,10 @@ there.
   `docker_sandbox_manager` comments, `BUILD_MODE_FEATURE_ID`). Do not expect
   `grep -r craft backend/` to find the router; search for `build` too. See
   `GLOSSARY.md`.
-- **The Apps page governs MCP servers too**, not only external apps.
-  `ExternalAppsPage` renders both external apps and MCP servers as one
-  normalized "governed integration" list (`ConfiguredIntegration` in
-  `interfaces.ts`) sharing the same `GatedApp` policy mechanism. A change
-  scoped to "external apps only" easily misses the MCP tab.
+- **Plugins has separate permission gates.** MCP and OpenAPI use
+  `MANAGE_ACTIONS`. External-app administration requires full admin access.
+  `useInstalledPlugins` must not fetch organization credentials for scoped
+  action managers. External apps keep their existing `GatedApp` policies.
 - **`craftAvailable` in settings is not the enforcement gate.** The frontend
   flag only decides what renders; the actual gate is
   `is_craft_enabled_for_user`, evaluated per request on the backend. Testing

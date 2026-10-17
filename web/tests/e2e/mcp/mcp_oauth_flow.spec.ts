@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsWorkerUser, apiLogin } from "@tests/e2e/utils/auth";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
@@ -104,38 +103,31 @@ async function configureOauthServer(
   const adminMcp = new AdminMcpServersPage(page);
   await adminMcp.goto();
   await adminMcp.openAddServerModal();
-  await adminMcp.fillServerDetails({
-    name: options.serverName,
-    description: options.serverDescription,
-    url: options.serverUrl,
-    group: options.group,
-  });
-  const serverId = await adminMcp.submitAddServer();
-
+  await adminMcp.enterServerUrlAndContinue(options.serverUrl);
   await adminMcp.selectAuthMethod("OAuth");
   await adminMcp.fillOAuthCredentials(
     oauthConfig().clientId,
     oauthConfig().clientSecret
   );
-  // Wait for the connect click to actually start the OAuth navigation before
-  // handing off to completeFlow. Otherwise the page is still on
-  // /admin/mcp-actions (which matches the return path) with the server name
-  // already visible, and completeFlow's "already returned" early-out fires
-  // before the IdP handshake even begins.
-  await oauthFlow.clickAndWaitForPossibleUrlChange(
-    () => adminMcp.clickConnect(),
-    "OAuth connect click"
-  );
+  await adminMcp.fillServerDetails({
+    name: options.serverName,
+    group: options.group,
+  });
+  let serverId: number | null = null;
+  await oauthFlow.clickAndWaitForPossibleUrlChange(async () => {
+    serverId = await adminMcp.connectAndWaitForCreation();
+  }, "OAuth connect click");
 
   await oauthFlow.completeFlow({
-    expectReturnPathContains: ADMIN_ROUTES.MCP_ACTIONS.path,
+    expectReturnPathContains: "/admin/plugins/mcp/",
     confirmConnected: async () => {
-      await adminMcp.expectServerCard(options.serverName);
+      await adminMcp.expectServerDetail(options.serverName);
     },
   });
 
-  await adminMcp.expectServerCard(options.serverName);
-  await adminMcp.setCardToolEnabled(options.toolName, true);
+  await adminMcp.expectServerDetail(options.serverName);
+  await adminMcp.setToolEnabled(options.toolName, true);
+  if (serverId === null) throw new Error("MCP server was not created");
   return serverId;
 }
 
@@ -224,7 +216,7 @@ test.describe("MCP OAuth flows", () => {
       adminClient,
       curatorCredentials.email
     );
-    curatorGroupName = `Playwright Curator Group ${Date.now()}`;
+    curatorGroupName = `Playwright Curator (QA+) ${Date.now()}`;
     curatorGroupId = await adminClient.createUserGroup(curatorGroupName, [
       curatorRecord.id,
     ]);
@@ -362,12 +354,9 @@ test.describe("MCP OAuth flows", () => {
     );
     await verifyToolUsableFromChat(page, artifacts, agentId);
 
-    // Server card is still present on the admin actions page.
-    await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
-    await page.waitForURL(`**${ADMIN_ROUTES.MCP_ACTIONS.path}**`);
-    await expect(
-      page.getByText(serverName, { exact: false }).first()
-    ).toBeVisible();
+    const plugins = new AdminMcpServersPage(page).plugins;
+    await plugins.goto();
+    await plugins.expectPluginVisible(serverName);
 
     // Publish the agent so the end-user flow can use it.
     await adminClient.updateAgentSharing(agentId, {
@@ -493,14 +482,9 @@ test.describe("MCP OAuth flows", () => {
         curatorTwoCredentials!.email,
         curatorTwoCredentials!.password
       );
-      await curatorTwoPage.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
-      // anchor on the page rendering, else the absence check races the load
-      await expect(
-        curatorTwoPage.getByRole("button", { name: /Add MCP Server/i })
-      ).toBeVisible({ timeout: 30_000 });
-      await expect(
-        curatorTwoPage.getByText(serverName, { exact: false })
-      ).toHaveCount(0);
+      const curatorPlugins = new AdminMcpServersPage(curatorTwoPage).plugins;
+      await curatorPlugins.goto();
+      await curatorPlugins.expectPluginAbsent(serverName);
 
       const editResponse = await curatorTwoPage.request.get(
         `${oauthConfig().appBaseUrl}/api/admin/mcp/servers/${serverId}`

@@ -140,24 +140,21 @@ test.describe("Default Agent MCP Integration", () => {
 
     const uiServerName = `${serverName} (UI)`;
     await adminMcp.openAddServerModal();
+    await adminMcp.enterServerUrlAndContinue(serverUrl);
+    await adminMcp.selectAuthMethod("API Key");
+    await adminMcp.selectApiKeyCredentials("admin");
+    await adminMcp.fillApiToken(API_KEY);
     await adminMcp.fillServerDetails({
       name: uiServerName,
-      description: "API key MCP server created via UI",
-      url: serverUrl,
     });
-    uiServerId = await adminMcp.submitAddServer();
+    uiServerId = await adminMcp.connectAndWaitForCreation();
 
-    await adminMcp.selectAuthMethod("API Key");
-    await adminMcp.selectApiKeyTab("admin");
-    await adminMcp.fillApiToken(API_KEY);
-    await adminMcp.clickConnect();
-
-    await adminMcp.expectServerCard(uiServerName);
+    await adminMcp.expectServerDetail(uiServerName);
     await adminMcp.refreshTools();
 
     // Exercise the card-level tool toggle: disable then re-enable a tool.
-    await adminMcp.setCardToolEnabled(MCP_ASSERTED_TOOL_NAME, false);
-    await adminMcp.setCardToolEnabled(MCP_ASSERTED_TOOL_NAME, true);
+    await adminMcp.setToolEnabled(MCP_ASSERTED_TOOL_NAME, false);
+    await adminMcp.setToolEnabled(MCP_ASSERTED_TOOL_NAME, true);
   });
 
   test("Admin adds MCP tools to the default agent via chat preferences", async ({

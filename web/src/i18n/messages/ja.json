@@ -130,8 +130,7 @@
       "authStatus": {
         "apiTokenDescription": "API token を設定済み",
         "connectedDescription": "接続済み",
-        "title": "認証済み・接続済み",
-        "oauthDescription": "{owner} に OAuth で接続済み"
+        "title": "認証済み・接続済み"
       },
       "cancelButton": {
         "label": "キャンセル"
@@ -159,8 +158,7 @@
       "serverUrl": {
         "invalid": "有効な URL を入力してください",
         "required": "サーバー URL は必須です",
-        "title": "MCP サーバー URL",
-        "subDescription": "信頼できるサーバーにのみ接続してください。この接続で実行される操作と、ツールを最新の状態に保つ責任はお客様にあります。"
+        "title": "MCP サーバー URL"
       },
       "submitButton": {
         "addLabel": "サーバーを追加",
@@ -324,22 +322,18 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API キー",
-          "description": "ユーザーごとの個別 API キー、または組織全体の共有 API キーを使用します。"
+          "label": "API キー"
         },
         "label": "認証方法",
         "none": {
-          "label": "認証なし",
-          "description": "推奨しません"
+          "label": "認証なし"
         },
         "oauth": {
-          "label": "OAuth",
-          "description": "各ユーザーが自分の資格情報で OAuth 認証を行う必要があります。"
+          "label": "OAuth"
         },
         "placeholder": "方法を選択",
         "ptOauth": {
-          "label": "OAuth パススルー",
-          "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。"
+          "label": "OAuth パススルー"
         },
         "required": "認証タイプは必須です"
       },
@@ -370,8 +364,7 @@
         "clientRegistrationFailed": "クライアントの自動登録に失敗しました。独自のOAuthクライアントを使用するか、プロバイダーの設定要件を確認してください。",
         "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
         "connectionFailed": "OAuthサーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
-        "oauthFailed": "OAuthサインインを開始できませんでした。クライアント設定を確認して再試行してください。",
-        "oauthInitFailed": "OAuth の開始に失敗しました: {detail}"
+        "oauthFailed": "OAuthサインインを開始できませんでした。クライアント設定を確認して再試行してください。"
       },
       "header": {
         "defaultTitle": "認証を設定",
@@ -460,13 +453,6 @@
         "unreachableTitle": "自動設定を利用できるか確認できませんでした",
         "missingTitle": "OAuthエンドポイントが見つかりませんでした",
         "requiresClientTitle": "自動設定を利用できない可能性があります"
-      },
-      "advanced": {
-        "description": "自動検出の代わりに、認可エンドポイントとトークンエンドポイントを明示的に指定して、既知の OAuth プロバイダーを設定します。",
-        "title": "詳細設定"
-      },
-      "knownProvider": {
-        "hint": "既知のプロバイダーモードでは、エンドポイントの設定が必要です。Google の参考エンドポイント: 認可 {authorizationEndpoint}、トークン {tokenEndpoint}。"
       }
     },
     "mcpCard": {
@@ -747,9 +733,7 @@
       },
       "credentials": {
         "perUserDescription": "自分の認証情報を使ってこのMCPをテストし、ツールを読み込みます。認証情報は自分のアカウントにのみ保存されます。",
-        "sharedDescription": "これらの値は組織内のすべてのユーザーに使用されます。",
-        "perUserTitle": "自分のアカウント専用",
-        "sharedTitle": "組織で共有する値"
+        "sharedDescription": "これらの値は組織内のすべてのユーザーに使用されます。"
       },
       "headers": {
         "addButton": {
@@ -1136,8 +1120,10 @@
         "craftDisabled": "Craft 無効"
       },
       "controls": {
-        "disconnect": "切断",
-        "enable": "有効にする",
+        "disconnect": "ワークスペースで有効化または無効化",
+        "enable": "ワークスペースで有効化",
+        "disable": "ワークスペースで無効化",
+        "manageAvailability": "ワークスペースでの利用可否を管理",
         "more": "その他の操作",
         "disableChat": "メインチャットで無効にする",
         "enableChat": "メインチャットで有効にする",
@@ -1152,6 +1138,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "ワークスペースで{name}を無効にしますか？",
+        "workspaceDescription": "カスタムエージェントを含め、ワークスペースの全員に対して{name}を無効にします。保存済みの設定と認証情報は保持されます。再び有効にできます。",
         "scope": "組織内のすべてのユーザー",
         "chatTitle": "メインチャットで {name} を無効にしますか？",
         "chatDescription": "組織内のすべてのユーザーのデフォルトチャットから {name} が削除されます。カスタムエージェントには影響しません。再度有効にできます。",
@@ -14358,11 +14346,7 @@
           "description": "エージェントに許可する操作を選択します。「確認する」は各アクションの前に承認を求め、「自動承認」は確認なしで実行します。",
           "title": "権限"
         },
-        "savingButton": "保存中…",
-        "advanced": {
-          "description": "アクションごとに個別のポリシーを設定します。",
-          "title": "詳細設定"
-        }
+        "savingButton": "保存中…"
       },
       "skillsStep": {
         "description": "任意。既存のスキルを関連付けるか、このアプリ用に新しく作成します。",

@@ -1,0 +1,90 @@
+.panel:not([hidden]) {
+  animation: enter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panel[data-direction="forward"] {
+  --enter-offset: 8px;
+}
+
+.panel[data-direction="back"] {
+  --enter-offset: -8px;
+}
+
+.detection {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-block: 0;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    margin-block 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 150ms ease-out;
+}
+
+.detection[data-open="false"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  margin-block: -0.75rem;
+}
+
+.detectionContent {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.statusIcon {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+}
+
+.statusIcon > span {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 150ms ease-out,
+    visibility 150ms;
+}
+
+.stage[data-state="pending"] [data-icon="pending"],
+.stage[data-state="success"] [data-icon="success"],
+.stage[data-state="error"] [data-icon="error"],
+.stage[data-state="waiting"] [data-icon="waiting"] {
+  opacity: 1;
+  visibility: visible;
+}
+
+@keyframes enter {
+  from {
+    opacity: 0.85;
+    transform: translateX(var(--enter-offset));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel[data-direction] {
+    --enter-offset: 0px;
+  }
+
+  .panel:not([hidden]) {
+    animation-duration: 80ms;
+  }
+
+  .detection {
+    transition: opacity 80ms ease-out;
+  }
+
+  .statusIcon > span {
+    transition-duration: 80ms;
+  }
+}

@@ -29,7 +29,7 @@ how an admin creates the `Tool` row and its associated `MCPServer` /
 ## 1. What the user experiences
 
 An admin who wants Onyx to call an outside system has two paths, both under
-Admin > Actions.
+Admin > Plugins.
 
 **MCP server.** The admin enters a server URL, picks a transport, and picks an
 auth mode (none, a shared API key, or OAuth). Onyx connects, lists the
@@ -106,8 +106,10 @@ inline, not a broken turn.
 
 | Route | Page | Content component |
 |---|---|---|
-| `/admin/mcp-actions` | `web/src/app/admin/mcp-actions/page.tsx` | `MCPPageContent` (`web/src/sections/actions/MCPPageContent.tsx`) |
-| `/admin/openapi-actions` | `web/src/app/admin/openapi-actions/page.tsx` | `OpenApiPageContent` (`web/src/sections/actions/OpenApiPageContent.tsx`) |
+| `/admin/plugins` | `web/src/app/admin/plugins/page.tsx` | `PluginsPage` (`web/src/sections/plugins/PluginsPage.tsx`) |
+| `/admin/plugins/mcp/[serverId]` | `web/src/app/admin/plugins/mcp/[serverId]/page.tsx` | `MCPServerDetailPage` |
+| `/admin/plugins/openapi/[toolId]` | `web/src/app/admin/plugins/openapi/[toolId]/page.tsx` | `OpenAPIPluginDetailPage` |
+| `/admin/mcp-actions`, `/admin/openapi-actions` | Existing route files | Query-preserving redirects to Plugins |
 
 ### HTTP endpoints, MCP (`backend/onyx/server/features/mcp/api.py`, prefixes `/mcp` and `/admin/mcp`)
 
@@ -723,3 +725,34 @@ OpenAPI expiry requires sign-in unless backend status confirms refresh capabilit
 Missing refresh capability retains the expired-token sign-in requirement.
 Null OpenAPI custom headers represent a connection without shared header credentials.
 These helpers do not grant access or attach new tools by themselves.
+
+### Unified workspace plugin administration
+
+Admin Plugins combines MCP servers, OpenAPI actions, and full-admin external apps.
+Scoped action managers do not fetch external-app records or provider options.
+Craft deployment gates control Craft filters, editors, and creation choices.
+The directory preserves independent loading and retry states for each resource kind.
+
+MCP setup uses the credential-free probe before authentication and tool discovery.
+Setup waits for an editable default Chat configuration to finish loading before Connect.
+Failed configuration loads remain visible setup errors. Detected transports use translated labels.
+Saved MCP details separate configuration, authentication, permissions, and tools.
+OpenAPI creation validates a schema before the final create operation.
+Saved OpenAPI details reuse schema and authentication forms, retain drafts across tabs,
+and confirm unsaved changes. Failed retries reuse created resource IDs.
+Schema and authentication controls stay disabled during saves so acknowledgment cannot discard later edits.
+
+Workspace lifecycle actions preserve unrelated default-assistant tool selections through
+`useDefaultAssistantConfiguration`. Scoped managers retain status-only controls.
+MCP default Chat availability comes from tool attachments, independently of credentials.
+Custom-agent attachments survive changes to default Chat availability.
+Availability controls use a sliders icon and follow workspace state independently of account connections.
+They say Disable when all available surfaces are on, Enable when off, and Manage for mixed or unknown MCP states.
+MCP labels ignore Craft when the deployment does not offer it. OpenAPI and Craft apps use global status.
+OpenAPI disable requires confirmation before changing status for everyone, including custom agents.
+OpenAPI workspace controls follow global tool status, independently of default Chat attachments.
+Disabling OpenAPI does not depend on default Chat configuration; enabling retains its attachment checks.
+The confirmation retains saved settings and credentials. Cancellation makes no changes; failed writes permit retry.
+MCP confirmations retain separate main Chat and Craft effects.
+External-app editors retain managed-credential restrictions and existing policy behavior.
+Closing an external-app editor replaces its history entry, matching MCP and OpenAPI details.

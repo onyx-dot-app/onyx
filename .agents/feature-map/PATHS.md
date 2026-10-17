@@ -192,7 +192,9 @@ so verify the callers rather than a single component.
 | `web/src/app/admin/language-models/` | llm-providers |
 | `web/src/views/admin/LanguageModelsPage.tsx` | llm-providers |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
-| `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
+| `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
+| `web/src/app/admin/plugins/external-app/` | craft-admin, craft-external-apps |
+| `web/src/sections/plugins/`, `web/src/sections/actions/` | mcp-and-custom-tools |
 | `web/src/app/admin/bots/`, `admin/discord-bot/` | slack-bot, discord-bot |
 | `web/src/app/admin/sso-providers/`, `admin/security/`, `admin/oauth-test/` | auth-and-identity |
 | `web/src/app/admin/token-rate-limits/` | rate-and-usage-limits |

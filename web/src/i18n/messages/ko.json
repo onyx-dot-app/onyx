@@ -130,8 +130,7 @@
       "authStatus": {
         "apiTokenDescription": "API token 설정됨",
         "connectedDescription": "연결됨",
-        "title": "인증 및 연결됨",
-        "oauthDescription": "{owner}에 OAuth로 연결됨"
+        "title": "인증 및 연결됨"
       },
       "cancelButton": {
         "label": "취소"
@@ -159,8 +158,7 @@
       "serverUrl": {
         "invalid": "유효한 URL이어야 합니다",
         "required": "서버 URL은 필수입니다",
-        "title": "MCP 서버 URL",
-        "subDescription": "신뢰할 수 있는 서버에만 연결하세요. 이 연결로 수행되는 작업과 도구를 최신 상태로 유지하는 책임은 사용자에게 있습니다."
+        "title": "MCP 서버 URL"
       },
       "submitButton": {
         "addLabel": "서버 추가",
@@ -324,22 +322,18 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API 키",
-          "description": "사용자별 개별 API 키 또는 조직 전체 공유 API 키를 사용합니다."
+          "label": "API 키"
         },
         "label": "인증 방법",
         "none": {
-          "label": "인증 없음",
-          "description": "권장하지 않음"
+          "label": "인증 없음"
         },
         "oauth": {
-          "label": "OAuth",
-          "description": "각 사용자가 자신의 자격 증명으로 OAuth 인증을 해야 합니다."
+          "label": "OAuth"
         },
         "placeholder": "방법 선택",
         "ptOauth": {
-          "label": "OAuth 패스스루",
-          "description": "{appName} 인증에 사용된 사용자의 OAuth 액세스 token을 전달합니다."
+          "label": "OAuth 패스스루"
         },
         "required": "인증 유형은 필수입니다"
       },
@@ -370,8 +364,7 @@
         "clientRegistrationFailed": "클라이언트 자동 등록에 실패했습니다. 자체 OAuth 클라이언트를 사용하거나 공급자의 설정 요구 사항을 확인하세요.",
         "discoveryFailed": "OAuth 로그인 설정을 찾을 수 없습니다. 서버 URL을 확인하거나 공급자의 엔드포인트를 입력하세요.",
         "connectionFailed": "OAuth 서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
-        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요.",
-        "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}"
+        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요."
       },
       "header": {
         "defaultTitle": "인증 설정",
@@ -460,13 +453,6 @@
         "unreachableTitle": "자동 설정을 사용할 수 있는지 확인할 수 없습니다",
         "missingTitle": "OAuth 엔드포인트를 찾을 수 없습니다",
         "requiresClientTitle": "자동 설정을 사용할 수 없을 수 있습니다"
-      },
-      "advanced": {
-        "description": "자동 검색 대신 권한 부여 엔드포인트와 token 엔드포인트를 직접 지정하여 알려진 OAuth 공급자를 구성합니다.",
-        "title": "고급"
-      },
-      "knownProvider": {
-        "hint": "알려진 공급자 모드에서는 엔드포인트 구성이 필요합니다. Google 참조 엔드포인트: 권한 부여 {authorizationEndpoint}, token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -747,9 +733,7 @@
       },
       "credentials": {
         "perUserDescription": "자신의 자격 증명으로 이 MCP를 테스트하고 도구를 불러오세요. 자격 증명은 자신의 계정에만 저장됩니다.",
-        "sharedDescription": "이 값은 조직의 모든 사용자에게 사용됩니다.",
-        "perUserTitle": "내 계정 전용",
-        "sharedTitle": "조직 공유 값"
+        "sharedDescription": "이 값은 조직의 모든 사용자에게 사용됩니다."
       },
       "headers": {
         "addButton": {
@@ -1136,8 +1120,10 @@
         "craftDisabled": "Craft 꺼짐"
       },
       "controls": {
-        "disconnect": "연결 해제",
-        "enable": "활성화",
+        "disconnect": "워크스페이스에서 활성화 또는 비활성화",
+        "enable": "워크스페이스에서 활성화",
+        "disable": "워크스페이스에서 비활성화",
+        "manageAvailability": "워크스페이스 가용성 관리",
         "more": "추가 작업",
         "disableChat": "기본 채팅에서 비활성화",
         "enableChat": "기본 채팅에서 활성화",
@@ -1152,6 +1138,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "워크스페이스에서 {name}을(를) 비활성화할까요?",
+        "workspaceDescription": "사용자 지정 에이전트를 포함하여 워크스페이스의 모든 사용자에게 {name}이(가) 비활성화됩니다. 저장된 설정과 자격 증명은 유지됩니다. 다시 활성화할 수 있습니다.",
         "scope": "조직의 모든 사용자",
         "chatTitle": "메인 채팅에서 {name}을(를) 비활성화할까요?",
         "chatDescription": "조직의 모든 사용자의 기본 채팅에서 {name}이(가) 제거됩니다. 사용자 지정 에이전트에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다.",
@@ -14358,11 +14346,7 @@
           "description": "에이전트가 할 수 있는 작업을 선택하세요. \"묻기\"는 각 작업 전에 승인을 요청하고, \"자동 승인\"은 확인 없이 실행합니다.",
           "title": "권한"
         },
-        "savingButton": "저장 중…",
-        "advanced": {
-          "description": "각 작업에 대해 개별적으로 정책을 설정합니다.",
-          "title": "고급"
-        }
+        "savingButton": "저장 중…"
       },
       "skillsStep": {
         "description": "선택 사항. 기존 스킬을 연결하거나 이 앱을 위한 스킬을 만드세요.",

@@ -130,8 +130,7 @@
       "authStatus": {
         "apiTokenDescription": "API token configured",
         "connectedDescription": "Connected",
-        "title": "Authenticated & Connected",
-        "oauthDescription": "OAuth connected to {owner}"
+        "title": "Authenticated & Connected"
       },
       "cancelButton": {
         "label": "Cancel"
@@ -159,8 +158,7 @@
       "serverUrl": {
         "invalid": "Must be a valid URL",
         "required": "Server URL is required",
-        "title": "MCP Server URL",
-        "subDescription": "Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
+        "title": "MCP Server URL"
       },
       "submitButton": {
         "addLabel": "Add Server",
@@ -324,22 +322,18 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API Key",
-          "description": "Use per-user individual API key or organization-wide shared API key."
+          "label": "API Key"
         },
         "label": "Authentication Method",
         "none": {
-          "label": "No authentication",
-          "description": "Not Recommended"
+          "label": "No authentication"
         },
         "oauth": {
-          "label": "OAuth",
-          "description": "Each user need to authenticate via OAuth with their own credentials."
+          "label": "OAuth"
         },
         "placeholder": "Select method",
         "ptOauth": {
-          "label": "OAuth Pass-through",
-          "description": "Forward the user's OAuth access token used to authenticate {appName}."
+          "label": "OAuth Pass-through"
         },
         "required": "Authentication type is required"
       },
@@ -370,8 +364,7 @@
         "clientRegistrationFailed": "Automatic client registration failed. Use your own OAuth client, or check the provider’s setup requirements.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
         "connectionFailed": "The OAuth server could not be reached. Check the server URL and try again.",
-        "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again.",
-        "oauthInitFailed": "Failed to initiate OAuth: {detail}"
+        "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again."
       },
       "header": {
         "defaultTitle": "Configure authentication",
@@ -460,13 +453,6 @@
         "unreachableTitle": "Could not determine if automatic setup is available",
         "missingTitle": "Could not find OAuth endpoints",
         "requiresClientTitle": "Automatic setup may be unavailable"
-      },
-      "advanced": {
-        "description": "Configure a known OAuth provider with explicit authorization and token endpoints instead of automatic discovery.",
-        "title": "Advanced"
-      },
-      "knownProvider": {
-        "hint": "Known-provider mode requires endpoint configuration. Google reference endpoints: authorization {authorizationEndpoint} and token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -747,9 +733,7 @@
       },
       "credentials": {
         "perUserDescription": "Use your credentials to test this MCP and load its tools. They are saved to your account only.",
-        "sharedDescription": "These values are used for every user in your organization.",
-        "perUserTitle": "Only for your own account",
-        "sharedTitle": "Shared organization values"
+        "sharedDescription": "These values are used for every user in your organization."
       },
       "headers": {
         "addButton": {
@@ -1136,8 +1120,10 @@
         "craftDisabled": "Craft off"
       },
       "controls": {
-        "disconnect": "Disconnect",
-        "enable": "Enable",
+        "disconnect": "Enable or disable for workspace",
+        "enable": "Enable for workspace",
+        "disable": "Disable for workspace",
+        "manageAvailability": "Manage workspace availability",
         "more": "More actions",
         "disableChat": "Disable for main Chat",
         "enableChat": "Enable for main Chat",
@@ -1152,6 +1138,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "Disable {name} for the workspace?",
+        "workspaceDescription": "This disables {name} for everyone in your workspace, including custom agents. Saved settings and credentials are kept. You can enable it again.",
         "scope": "All users in your organization",
         "chatTitle": "Disable {name} for main Chat?",
         "chatDescription": "This removes {name} from default Chat for everyone in your organization. Custom agents are not affected. You can enable it again.",
@@ -14358,11 +14346,7 @@
           "description": "Choose what the agent may do. “Ask” requests approval before each action; “Auto-approve” runs without prompting.",
           "title": "Permissions"
         },
-        "savingButton": "Saving…",
-        "advanced": {
-          "description": "Set a policy for each action individually.",
-          "title": "Advanced"
-        }
+        "savingButton": "Saving…"
       },
       "skillsStep": {
         "description": "Optional — associate existing skills or create one for this app.",

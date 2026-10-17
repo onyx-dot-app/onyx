@@ -130,8 +130,7 @@
       "authStatus": {
         "apiTokenDescription": "已配置 API token",
         "connectedDescription": "已连接",
-        "title": "已验证身份并连接",
-        "oauthDescription": "已通过 OAuth 连接到 {owner}"
+        "title": "已验证身份并连接"
       },
       "cancelButton": {
         "label": "取消"
@@ -159,8 +158,7 @@
       "serverUrl": {
         "invalid": "必须是有效的 URL",
         "required": "必须填写服务器 URL",
-        "title": "MCP 服务器 URL",
-        "subDescription": "只连接您信任的服务器。您需要对通过此连接执行的操作负责，并负责及时更新工具。"
+        "title": "MCP 服务器 URL"
       },
       "submitButton": {
         "addLabel": "添加服务器",
@@ -324,22 +322,18 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API 密钥",
-          "description": "使用每位用户的独立 API 密钥，或组织范围的共享 API 密钥。"
+          "label": "API 密钥"
         },
         "label": "身份验证方式",
         "none": {
-          "label": "无需身份验证",
-          "description": "不推荐"
+          "label": "无需身份验证"
         },
         "oauth": {
-          "label": "OAuth",
-          "description": "每位用户需要使用各自的凭据通过 OAuth 验证身份。"
+          "label": "OAuth"
         },
         "placeholder": "选择方式",
         "ptOauth": {
-          "label": "OAuth 透传",
-          "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。"
+          "label": "OAuth 透传"
         },
         "required": "必须选择身份验证类型"
       },
@@ -370,8 +364,7 @@
         "clientRegistrationFailed": "自动注册客户端失败。请使用自己的 OAuth 客户端，或检查提供商的设置要求。",
         "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
         "connectionFailed": "无法连接 OAuth 服务器。请检查服务器 URL 后重试。",
-        "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。",
-        "oauthInitFailed": "发起 OAuth 失败：{detail}"
+        "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。"
       },
       "header": {
         "defaultTitle": "配置身份验证",
@@ -460,13 +453,6 @@
         "unreachableTitle": "无法确定是否可以使用自动设置",
         "missingTitle": "未找到 OAuth 端点",
         "requiresClientTitle": "可能无法使用自动设置"
-      },
-      "advanced": {
-        "description": "配置已知的 OAuth 提供方，明确指定授权端点和 token 端点，不使用自动发现。",
-        "title": "高级"
-      },
-      "knownProvider": {
-        "hint": "已知提供方模式需要配置端点。Google 参考端点：授权端点 {authorizationEndpoint}，token 端点 {tokenEndpoint}。"
       }
     },
     "mcpCard": {
@@ -747,9 +733,7 @@
       },
       "credentials": {
         "perUserDescription": "使用您的凭据测试此 MCP 并加载其工具。凭据仅保存到您的账号。",
-        "sharedDescription": "这些值将用于您组织中的每位用户。",
-        "perUserTitle": "仅用于您自己的账户",
-        "sharedTitle": "组织共享的值"
+        "sharedDescription": "这些值将用于您组织中的每位用户。"
       },
       "headers": {
         "addButton": {
@@ -1136,8 +1120,10 @@
         "craftDisabled": "Craft 已关闭"
       },
       "controls": {
-        "disconnect": "断开连接",
-        "enable": "启用",
+        "disconnect": "为工作区启用或禁用",
+        "enable": "为工作区启用",
+        "disable": "为工作区禁用",
+        "manageAvailability": "管理工作区可用性",
         "more": "更多操作",
         "disableChat": "在主聊天中禁用",
         "enableChat": "在主聊天中启用",
@@ -1152,6 +1138,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "为工作区禁用 {name}？",
+        "workspaceDescription": "这将为工作区中的所有人禁用 {name}，包括自定义智能体。已保存的设置和凭据将被保留。您可以再次启用。",
         "scope": "组织内的所有用户",
         "chatTitle": "要为主聊天禁用 {name} 吗？",
         "chatDescription": "这会从组织内所有用户的默认聊天中移除 {name}。自定义智能体不受影响。你可以重新启用它。",
@@ -14358,11 +14346,7 @@
           "description": "选择智能体可以执行的操作。“询问”会在每个操作前请求批准；“自动批准”则无需提示即可运行。",
           "title": "权限"
         },
-        "savingButton": "正在保存…",
-        "advanced": {
-          "description": "为每个操作单独设置策略。",
-          "title": "高级"
-        }
+        "savingButton": "正在保存…"
       },
       "skillsStep": {
         "description": "可选。关联现有技能或为此应用创建一个技能。",
