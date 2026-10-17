@@ -465,6 +465,11 @@ or `requests.HTTPError` in the exception chain, and a stack trace for a
 timeout, an unreachable source or an unexpected error. URL query strings and
 the run's credential values are removed from the excerpt and the trace.
 A source gateway's API error subclasses `exceptions.py:SourceApiError`.
+A result's row text is `summary` (a short line) and `description` (up to three
+lines). A check's `ValidationError` can carry both, and the runner falls back to
+a default for a timeout, a rate limit, an unreachable source or an unexpected
+error, and to the "Not run: …" line for a stopped check. `message` stays the
+full text.
 One exception: on a form run (a draft run or a pair dry run) a sign-in check
 that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
 source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
