@@ -3103,6 +3103,7 @@
         "more": "显示更多",
         "empty": {
           "title": "没有失败或错误",
+          "resolved": "没有已解决的运行",
           "filtered": "没有与此搜索匹配的内容。",
           "failures": "没有失败",
           "errors": "没有错误",

@@ -3103,6 +3103,7 @@
         "more": "Mostrar más",
         "empty": {
           "title": "Sin fallos ni errores",
+          "resolved": "Sin ejecuciones resueltas",
           "filtered": "Nada coincide con esta búsqueda.",
           "failures": "Sin fallos",
           "errors": "Sin errores",

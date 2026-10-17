@@ -3103,6 +3103,7 @@
         "more": "Afficher plus",
         "empty": {
           "title": "Aucun échec ni erreur",
+          "resolved": "Aucune exécution résolue",
           "filtered": "Rien ne correspond à cette recherche.",
           "failures": "Aucun échec",
           "errors": "Aucune erreur",

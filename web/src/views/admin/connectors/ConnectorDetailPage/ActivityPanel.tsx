@@ -92,38 +92,25 @@ export function ActivityCountTags({
 
 interface GroupListProps {
   state: ActivityGroupState;
-  /** The level's resolved runs, listed after its open ones. */
-  closedState: ActivityGroupState | null;
+  /** The runs are the level's resolved ones. */
+  closed: boolean;
   resolving: boolean;
   onResolve: (item: ActivityItem, errorIds: number[] | null) => void;
   onResolveRun: (item: ActivityItem) => void;
 }
 function GroupList({
   state,
-  closedState,
+  closed,
   resolving,
   onResolve,
   onResolveRun,
 }: GroupListProps) {
   const t = useTranslations("admin.connector.activity");
-  const closedRuns = closedState?.runs ?? [];
-  if (state.runs.length === 0 && closedRuns.length === 0) return null;
-  // Open runs page in first, so a level's resolved runs stay at its end.
-  const more = state.hasMore
-    ? state.more
-    : closedState?.hasMore
-      ? closedState.more
-      : null;
-  const items = [
-    ...state.runs.map((item) => ({ item, closed: false })),
-    ...(state.hasMore
-      ? []
-      : closedRuns.map((item) => ({ item, closed: true }))),
-  ];
+  if (state.runs.length === 0) return null;
   return (
     <Section alignItems="stretch" gap={1} height="fit">
       <Divider title={t(`groups.${state.group}`, { count: state.total })} />
-      {items.map(({ item, closed }) => (
+      {state.runs.map((item) => (
         <ActivityCard
           key={`${item.run.kind}-${item.run.attempt.id}`}
           ccPairId={item.ccPairId}
@@ -138,9 +125,9 @@ function GroupList({
           onResolveRun={() => onResolveRun(item)}
         />
       ))}
-      {more !== null && (
+      {state.hasMore && (
         <Section alignItems="center" height="fit">
-          <Button prominence="tertiary" size="xs" onClick={more}>
+          <Button prominence="tertiary" size="xs" onClick={state.more}>
             {t("more")}
           </Button>
         </Section>
@@ -161,7 +148,7 @@ export interface ActivityPanelProps {
   className?: string;
 }
 
-/** The scope's failed runs and runs with document errors, newest first, with each level's resolved runs a toggle away, and every other run too for the fleet. */
+/** The scope's failed runs and runs with document errors, newest first, with each level's resolved runs a toggle away in their place, and every other run too for the fleet. */
 export default function ActivityPanel({
   scope,
   title,
@@ -174,12 +161,12 @@ export default function ActivityPanel({
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   const [shown, setShown] = useState<Shown>("all");
-  // Adds the resolved and superseded runs to the end of each level shown.
+  // Shows each level's resolved and superseded runs in place of its open ones.
   const [showResolved, setShowResolved] = useState(false);
   // The filter and count the confirm states, fixed when it opens so a search
   // typed meanwhile cannot widen what the click resolves.
   const [confirmingResolveAll, setConfirmingResolveAll] = useState<{
-    level: CCPairRunLevel;
+    level: CCPairRunLevel | null;
     q: string;
     timeRange: ActivityTimeRange;
     count: number;
@@ -240,49 +227,50 @@ export default function ActivityPanel({
     "other",
     false,
     search,
-    isShown("other"),
+    !showResolved && isShown("other"),
     RUNS_POLL_MS,
     timeRange
   );
-  const levels = [
-    { state: failures, closedState: showResolved ? closedFailures : null },
-    { state: errors, closedState: showResolved ? closedErrors : null },
-    { state: other, closedState: null },
-  ].filter((level) => isShown(level.state.group));
-  const groups = levels.flatMap((level) =>
-    level.closedState === null
-      ? [level.state]
-      : [level.state, level.closedState]
-  );
+  // The fleet's other runs are never resolved, so the resolved view has no level for them.
+  const groups = [
+    showResolved ? closedFailures : failures,
+    showResolved ? closedErrors : errors,
+    ...(showResolved ? [] : [other]),
+  ].filter((group) => isShown(group.group));
   const loading = groups.some((group) => group.isLoading && !group.loaded);
   const failed = groups.some((group) => group.failed);
   const empty = groups.every(
     (group) => group.loaded && group.runs.length === 0
   );
-  // Resolves the open runs of the one level shown, as the search narrows them.
+  // Resolves the open runs of the levels shown, as the search narrows them.
   const resolveAllLevel: CCPairRunLevel | null =
     shown === "failures" || shown === "errors" ? shown : null;
-  const resolvableLevel =
-    resolveAllLevel === null ? null : { failures, errors }[resolveAllLevel];
+  const canResolveAll =
+    !showResolved &&
+    shown !== "other" &&
+    (scope === "fleet" || scope.canResolveRuns);
+  const resolvableLevels =
+    resolveAllLevel === null
+      ? [failures, errors]
+      : [{ failures, errors }[resolveAllLevel]];
   const resolvable = useResolvableRunsCount(
     scope,
-    scope === "fleet" || scope.canResolveRuns ? resolveAllLevel : null,
+    canResolveAll,
+    resolveAllLevel,
     search,
     timeRange,
     RUNS_POLL_MS
   );
-  // Waits until the list and count match the search typed.
+  // Waits until the lists and count match the search typed.
   const resolveAllSettled =
     searchInput.trim() === search &&
     !resolvable.isLoading &&
-    resolvableLevel !== null &&
-    !resolvableLevel.isLoading;
-  const emptyTitle =
-    search !== "" || range !== null
-      ? t("empty.filtered")
-      : shown === "all"
-        ? t("empty.title")
-        : t(`empty.${shown}`);
+    resolvableLevels.every((level) => !level.isLoading);
+  function emptyTitle(): string {
+    if (search !== "" || range !== null) return t("empty.filtered");
+    if (showResolved) return t("empty.resolved");
+    return shown === "all" ? t("empty.title") : t(`empty.${shown}`);
+  }
 
   // Beside the main column the panel pins under the settings header and
   // scrolls inside its own height, so a long list never lengthens the page.
@@ -398,7 +386,7 @@ export default function ActivityPanel({
               >
                 {t("filter.resolved")}
               </SelectButton>
-              {resolveAllLevel !== null && resolvable.count > 0 && (
+              {canResolveAll && resolvable.count > 0 && (
                 <Button
                   rightIcon={SvgCheckAll}
                   prominence="tertiary"
@@ -435,13 +423,13 @@ export default function ActivityPanel({
                   ))}
                 </Section>
               ) : empty ? (
-                <IllustrationContent title={emptyTitle} />
+                <IllustrationContent title={emptyTitle()} />
               ) : (
-                levels.map((level) => (
+                groups.map((group) => (
                   <GroupList
-                    key={level.state.group}
-                    state={level.state}
-                    closedState={level.closedState}
+                    key={group.group}
+                    state={group}
+                    closed={showResolved}
                     resolving={resolving}
                     onResolve={(item, errorIds) => void resolve(item, errorIds)}
                     onResolveRun={(item) => void resolveRun(item)}

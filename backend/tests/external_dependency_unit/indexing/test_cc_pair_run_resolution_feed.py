@@ -334,9 +334,11 @@ def fleet_pairs(
     yield scoped, operated, read_only
     db_session.rollback()
     for pair in (operated, read_only):
-        db_session.query(IndexAttempt).filter(
-            IndexAttempt.connector_credential_pair_id == pair.id
-        ).delete(synchronize_session="fetch")
+        # IndexAttemptError has no FK cascade, so its rows go first.
+        for model in (IndexAttemptError, IndexAttempt):
+            db_session.query(model).filter(
+                model.connector_credential_pair_id == pair.id
+            ).delete(synchronize_session="fetch")
         db_session.commit()
         cleanup_cc_pair(db_session, pair)
     delete_test_user(db_session, scoped)
@@ -398,3 +400,65 @@ def test_fleet_batch_resolve_marks_only_the_operated_pairs_matching_runs(
 
     assert fleet(False) == [other.id]
     assert fleet(True) == [second.id, first.id]
+
+
+def test_fleet_batch_resolve_without_a_level_marks_failures_and_errors(
+    db_session: Session,
+    fleet_pairs: tuple[User, ConnectorCredentialPair, ConnectorCredentialPair],
+) -> None:
+    scoped, operated, _ = fleet_pairs
+    mark = f"resolution-all-levels-{uuid4().hex}"
+    failure = _index_attempt(db_session, operated, 0, IndexingStatus.FAILED, mark)
+    with_errors = _index_attempt(db_session, operated, 1, IndexingStatus.SUCCESS)
+    db_session.add(
+        IndexAttemptError(
+            index_attempt_id=with_errors.id,
+            connector_credential_pair_id=operated.id,
+            document_id=f"doc-{with_errors.id}",
+            failure_message=mark,
+            is_resolved=False,
+        )
+    )
+    db_session.commit()
+
+    def resolvable(level: CCPairRunLevel | None) -> int:
+        return get_resolvable_indexing_runs_count(
+            level=level,
+            q=mark,
+            since=None,
+            until=None,
+            kinds=None,
+            user=scoped,
+            db_session=db_session,
+        ).count
+
+    assert resolvable(CCPairRunLevel.FAILURES) == 1
+    assert resolvable(CCPairRunLevel.ERRORS) == 1
+    assert resolvable(None) == 2
+
+    response = resolve_indexing_runs(
+        request=CCPairRunsResolveMatchingRequest(q=mark),
+        user=scoped,
+        db_session=db_session,
+    )
+
+    assert response.resolved_count == 2
+    assert response.cc_pair_ids == [operated.id]
+    assert resolvable(None) == 0
+    assert {failure.id, with_errors.id} == {
+        item.run.attempt.id
+        for item in get_indexing_runs(
+            page_num=0,
+            page_size=10,
+            since=None,
+            until=None,
+            kinds=None,
+            status_groups=None,
+            q=mark,
+            errors=None,
+            superseded=None,
+            resolved=True,
+            user=scoped,
+            db_session=db_session,
+        ).items
+    }
