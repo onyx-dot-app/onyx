@@ -11,10 +11,11 @@ import {
   type FormikErrors,
 } from "formik";
 import * as Yup from "yup";
+import isEqual from "lodash/isEqual";
 import { InputHorizontal, InputVertical, toast } from "@opal/layouts";
 import { updateMCPServer } from "@/lib/mcp/svc";
 import {
-  MCPServerCreateRequest,
+  MCPServerUpdateRequest,
   MCPServer,
   type MCPServerConfigurationValues,
 } from "@/lib/mcp/types";
@@ -102,27 +103,40 @@ export default function MCPServerDetailsPage({
     users: server.users,
   };
 
+  function hasAccessChanges(values: MCPServerConfigurationValues) {
+    return (
+      values.is_public !== server.is_public ||
+      !isEqual(new Set(values.groups), new Set(server.groups)) ||
+      !isEqual(new Set(values.users), new Set(server.users))
+    );
+  }
+
   const handleSubmit = async (
     values: MCPServerConfigurationValues,
     helpers: FormikHelpers<MCPServerConfigurationValues>
   ) => {
+    const accessChanged = hasAccessChanges(values);
     if (
       readOnly ||
       !authorityReady ||
-      (!values.is_public && !canRestrict) ||
-      (values.access_mode === "groups" && (groupsLoading || groupsError))
+      (accessChanged && !values.is_public && !canRestrict) ||
+      (accessChanged &&
+        values.access_mode === "groups" &&
+        (groupsLoading || groupsError))
     )
       return;
     setIsSubmitting(true);
 
-    const payload: MCPServerCreateRequest = {
+    const payload: MCPServerUpdateRequest = {
       name: values.name,
       description: values.description,
       server_url: server.server_url,
-      is_public: values.is_public,
-      groups: values.is_public ? [] : values.groups,
-      users: values.is_public ? [] : values.users,
     };
+    if (accessChanged) {
+      payload.is_public = values.is_public;
+      payload.groups = values.is_public ? [] : values.groups;
+      payload.users = values.is_public ? [] : values.users;
+    }
 
     try {
       const unchanged =
@@ -155,11 +169,13 @@ export default function MCPServerDetailsPage({
           initialValues={initialValues}
           validationSchema={validationSchema}
           validate={(values) =>
-            validateMCPAccess(
-              values,
-              !readOnly && isScopedManager,
-              t("addMcpModal.access.groups.required")
-            )
+            hasAccessChanges(values)
+              ? validateMCPAccess(
+                  values,
+                  !readOnly && isScopedManager,
+                  t("addMcpModal.access.groups.required")
+                )
+              : {}
           }
           validateOnMount
           onSubmit={handleSubmit}

@@ -26,6 +26,7 @@ import {
 } from "@/lib/mcp/types";
 import messages from "@/i18n/messages/en.json";
 import { Tier } from "@/lib/tiers/types";
+import { useSWRConfig } from "swr";
 
 jest.mock("@/providers/UserProvider", () => {
   const actual = jest.requireActual<typeof UserProvider>(
@@ -84,6 +85,16 @@ let savedRequests: {
 let serverRecord: MCPServer;
 
 let availableGroups: { id: number; name: string; users: never[] }[];
+let workspaceTier: Tier;
+
+function RefreshSettings() {
+  const { mutate } = useSWRConfig();
+  return (
+    <Button onClick={() => void mutate("/api/settings")}>
+      Refresh settings
+    </Button>
+  );
+}
 
 beforeEach(() => {
   jest
@@ -93,6 +104,7 @@ beforeEach(() => {
         .useUser
     );
   savedRequests = [];
+  workspaceTier = Tier.BUSINESS;
   serverRecord = configuredServer;
   saveResponse = async () => new Response(JSON.stringify(serverRecord));
   availableGroups = [
@@ -121,7 +133,7 @@ beforeEach(() => {
     }
     if (url === "/api/settings")
       return new Response(
-        JSON.stringify({ tier: Tier.BUSINESS, ee_features_enabled: true })
+        JSON.stringify({ tier: workspaceTier, ee_features_enabled: true })
       );
     if (url === "/api/enterprise-settings") return new Response("{}");
     if (url === "/api/manage/admin/user-group")
@@ -296,15 +308,18 @@ describe("inline server configuration", () => {
     const saved = jest.fn().mockResolvedValue(undefined);
     const dirty = jest.fn();
     render(
-      <MCPServerDetailsPage
-        active
-        variant="page"
-        server={server}
-        onSaved={saved}
-        onBusyChange={() => {}}
-        onDirtyChange={dirty}
-        {...pageOptions}
-      />
+      <>
+        <MCPServerDetailsPage
+          active
+          variant="page"
+          server={server}
+          onSaved={saved}
+          onBusyChange={() => {}}
+          onDirtyChange={dirty}
+          {...pageOptions}
+        />
+        <RefreshSettings />
+      </>
     );
     return { saved, dirty };
   }
@@ -336,12 +351,81 @@ describe("inline server configuration", () => {
           name: "Updated MCP",
           description: "Tools for support",
           server_url: "https://example.com/mcp",
-          is_public: false,
-          groups: [1],
-          users: ["existing-user"],
         },
       },
     ]);
+  });
+
+  test.each([{ groups: [1] }, { groups: [] }])(
+    "allows metadata-only saves on Free with unchanged restricted grants %j",
+    async ({ groups }) => {
+      workspaceTier = Tier.COMMUNITY;
+      const restricted = {
+        ...configuredServer,
+        is_public: false,
+        groups,
+        users: [],
+      };
+      serverRecord = restricted;
+      const { saved } = renderDetailsPage({ server: restricted });
+      const user = setupUser();
+      await user.type(
+        await screen.findByRole("textbox", { name: "Server Name" }),
+        " renamed"
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Save Changes" })
+        ).toBeEnabled()
+      );
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+      await waitFor(() => expect(saved).toHaveBeenCalled());
+      expect(savedRequests).toEqual([
+        {
+          url: "/api/admin/mcp/server/7",
+          method: "PATCH",
+          payload: {
+            name: "Example MCP renamed",
+            description: "Tools for support",
+            server_url: configuredServer.server_url,
+          },
+        },
+      ]);
+      expect(saved).toHaveBeenCalledWith(
+        expect.objectContaining({ is_public: false, groups, users: [] })
+      );
+    }
+  );
+
+  test("does not save a changed restricted grant after the workspace loses Business access", async () => {
+    const restricted = {
+      ...configuredServer,
+      is_public: false,
+      groups: [1],
+      users: [],
+    };
+    renderDetailsPage({ server: restricted });
+    const user = setupUser();
+    await screen.findByRole("textbox", { name: "Server Name" });
+    const picker = screen.getByPlaceholderText("Add user groups");
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.type(picker, "Support");
+    await user.click(await screen.findByRole("option", { name: /^Support/ }));
+    workspaceTier = Tier.COMMUNITY;
+    await user.click(screen.getByRole("button", { name: "Refresh settings" }));
+    await user.click(screen.getByRole("combobox", { name: "Access control" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("option", { name: /^User groups/ })
+      ).toHaveAttribute("aria-disabled", "true")
+    );
+    await user.keyboard("{Escape}");
+    await user.type(
+      screen.getByRole("textbox", { name: "Server Name" }),
+      " renamed"
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(savedRequests).toEqual([]);
   });
 
   test("failed metadata saves retain edits and permit retry", async () => {
