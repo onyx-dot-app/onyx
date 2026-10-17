@@ -251,6 +251,7 @@ function FoldableDivider({
                     icon={SvgChevronDown}
                     size="sm"
                     prominence="internal"
+                    aria-expanded={isOpen}
                     tooltip={
                       isOpen ? strings.collapsibleFold : strings.dividerViewAll
                     }

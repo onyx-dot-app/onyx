@@ -2431,13 +2431,25 @@
         "editButton": {
           "label": "Modifier l'accès"
         },
-        "groupsUnavailable": "Impossible de charger les groupes."
+        "groupsUnavailable": "Impossible de charger les groupes.",
+        "summaryLine": {
+          "access": "{access}",
+          "accessAndManaged": "{access}; {managed}"
+        }
       },
-      "summarySeparator": "; ",
       "schedule": {
         "refresh": "Actualisation toutes les **{every}**",
         "prune": "Nettoyage toutes les **{every}**",
-        "checks": "Vérifier toutes les **{every}**"
+        "checks": "Vérifier toutes les **{every}**",
+        "summary": {
+          "refresh": "{refresh}",
+          "prune": "{prune}",
+          "checks": "{checks}",
+          "refreshAndPrune": "{refresh}; {prune}",
+          "refreshAndChecks": "{refresh}; {checks}",
+          "pruneAndChecks": "{prune}; {checks}",
+          "refreshAndPruneAndChecks": "{refresh}; {prune}; {checks}"
+        }
       },
       "runs": {
         "kinds": {

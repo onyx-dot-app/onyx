@@ -2431,13 +2431,25 @@
         "editButton": {
           "label": "编辑权限"
         },
-        "groupsUnavailable": "无法加载群组。"
+        "groupsUnavailable": "无法加载群组。",
+        "summaryLine": {
+          "access": "{access}",
+          "accessAndManaged": "{access}; {managed}"
+        }
       },
-      "summarySeparator": "; ",
       "schedule": {
         "refresh": "每 **{every}** 刷新一次",
         "prune": "每 **{every}** 清理一次",
-        "checks": "每 **{every}** 运行一次检查"
+        "checks": "每 **{every}** 运行一次检查",
+        "summary": {
+          "refresh": "{refresh}",
+          "prune": "{prune}",
+          "checks": "{checks}",
+          "refreshAndPrune": "{refresh}; {prune}",
+          "refreshAndChecks": "{refresh}; {checks}",
+          "pruneAndChecks": "{prune}; {checks}",
+          "refreshAndPruneAndChecks": "{refresh}; {prune}; {checks}"
+        }
       },
       "runs": {
         "kinds": {

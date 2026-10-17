@@ -54,7 +54,6 @@ export default function SharingSettingsSection({
   onEdit,
 }: SharingSettingsSectionProps) {
   const t = useTranslations("admin.connector.sharing");
-  const tConnector = useTranslations("admin.connector");
   const [open, setOpen] = useState(false);
   const tSettings = useTranslations("admin.connectorsList.settings");
   const tGroups = useTranslations("admin.connector.groupRestriction");
@@ -135,10 +134,12 @@ export default function SharingSettingsSection({
     <Collapsible
       title={t("title")}
       description={markdown(
-        (managedSummary === null
-          ? [access.summary]
-          : [access.summary, managedSummary]
-        ).join(tConnector("summarySeparator"))
+        managedSummary === null
+          ? t("summaryLine.access", { access: access.summary })
+          : t("summaryLine.accessAndManaged", {
+              access: access.summary,
+              managed: managedSummary,
+            })
       )}
       open={open}
       onOpenChange={setOpen}

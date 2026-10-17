@@ -2431,13 +2431,25 @@
         "editButton": {
           "label": "アクセスを編集"
         },
-        "groupsUnavailable": "グループを読み込めませんでした。"
+        "groupsUnavailable": "グループを読み込めませんでした。",
+        "summaryLine": {
+          "access": "{access}",
+          "accessAndManaged": "{access}; {managed}"
+        }
       },
-      "summarySeparator": "; ",
       "schedule": {
         "refresh": "**{every}**ごとに更新",
         "prune": "**{every}**ごとに整理",
-        "checks": "**{every}**ごとにチェックを実行"
+        "checks": "**{every}**ごとにチェックを実行",
+        "summary": {
+          "refresh": "{refresh}",
+          "prune": "{prune}",
+          "checks": "{checks}",
+          "refreshAndPrune": "{refresh}; {prune}",
+          "refreshAndChecks": "{refresh}; {checks}",
+          "pruneAndChecks": "{prune}; {checks}",
+          "refreshAndPruneAndChecks": "{refresh}; {prune}; {checks}"
+        }
       },
       "runs": {
         "kinds": {

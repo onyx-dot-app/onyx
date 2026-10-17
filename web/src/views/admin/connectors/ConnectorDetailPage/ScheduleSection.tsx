@@ -114,7 +114,6 @@ export default function ScheduleSection({
   editable,
 }: ScheduleSectionProps) {
   const t = useTranslations("admin.connector.schedule");
-  const tConnector = useTranslations("admin.connector");
   const tFields = useTranslations("admin.connectorsList.scheduled");
   const tToasts = useTranslations("admin.connector.toasts");
   const tDuration = useTranslations("admin.connector.advancedConfig.duration");
@@ -174,15 +173,49 @@ export default function ScheduleSection({
     return true;
   }
 
-  const summary = [
-    refreshMinutes === null
-      ? null
-      : t("refresh", { every: minutesLabel(refreshMinutes) }),
-    pruneHours === null ? null : t("prune", { every: hoursLabel(pruneHours) }),
-    checkHours === null ? null : t("checks", { every: hoursLabel(checkHours) }),
-  ]
-    .filter((part) => part !== null)
-    .join(tConnector("summarySeparator"));
+  const clauses = {
+    refresh:
+      refreshMinutes === null
+        ? null
+        : t("refresh", { every: minutesLabel(refreshMinutes) }),
+    prune:
+      pruneHours === null
+        ? null
+        : t("prune", { every: hoursLabel(pruneHours) }),
+    checks:
+      checkHours === null
+        ? null
+        : t("checks", { every: hoursLabel(checkHours) }),
+  };
+  // Each combination is its own message, so the catalog owns the joining.
+  const has = {
+    refresh: clauses.refresh !== null,
+    prune: clauses.prune !== null,
+    checks: clauses.checks !== null,
+  };
+  const summaryKey = has.refresh
+    ? has.prune
+      ? has.checks
+        ? "summary.refreshAndPruneAndChecks"
+        : "summary.refreshAndPrune"
+      : has.checks
+        ? "summary.refreshAndChecks"
+        : "summary.refresh"
+    : has.prune
+      ? has.checks
+        ? "summary.pruneAndChecks"
+        : "summary.prune"
+      : has.checks
+        ? "summary.checks"
+        : null;
+  const summary =
+    summaryKey === null
+      ? ""
+      : t(summaryKey, {
+          refresh: clauses.refresh ?? "",
+          prune: clauses.prune ?? "",
+          checks: clauses.checks ?? "",
+        });
 
   return (
     <Collapsible

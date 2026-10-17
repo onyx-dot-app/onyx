@@ -2431,13 +2431,25 @@
         "editButton": {
           "label": "접근 권한 편집"
         },
-        "groupsUnavailable": "그룹을 불러오지 못했습니다."
+        "groupsUnavailable": "그룹을 불러오지 못했습니다.",
+        "summaryLine": {
+          "access": "{access}",
+          "accessAndManaged": "{access}; {managed}"
+        }
       },
-      "summarySeparator": "; ",
       "schedule": {
         "refresh": "**{every}**마다 새로 고침",
         "prune": "**{every}**마다 정리",
-        "checks": "**{every}**마다 검사 실행"
+        "checks": "**{every}**마다 검사 실행",
+        "summary": {
+          "refresh": "{refresh}",
+          "prune": "{prune}",
+          "checks": "{checks}",
+          "refreshAndPrune": "{refresh}; {prune}",
+          "refreshAndChecks": "{refresh}; {checks}",
+          "pruneAndChecks": "{prune}; {checks}",
+          "refreshAndPruneAndChecks": "{refresh}; {prune}; {checks}"
+        }
       },
       "runs": {
         "kinds": {

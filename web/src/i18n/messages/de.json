@@ -2431,13 +2431,25 @@
         "editButton": {
           "label": "Zugriff bearbeiten"
         },
-        "groupsUnavailable": "Die Gruppen konnten nicht geladen werden."
+        "groupsUnavailable": "Die Gruppen konnten nicht geladen werden.",
+        "summaryLine": {
+          "access": "{access}",
+          "accessAndManaged": "{access}; {managed}"
+        }
       },
-      "summarySeparator": "; ",
       "schedule": {
         "refresh": "Aktualisierung alle **{every}**",
         "prune": "Bereinigung alle **{every}**",
-        "checks": "Prüfungen alle **{every}**"
+        "checks": "Prüfungen alle **{every}**",
+        "summary": {
+          "refresh": "{refresh}",
+          "prune": "{prune}",
+          "checks": "{checks}",
+          "refreshAndPrune": "{refresh}; {prune}",
+          "refreshAndChecks": "{refresh}; {checks}",
+          "pruneAndChecks": "{prune}; {checks}",
+          "refreshAndPruneAndChecks": "{refresh}; {prune}; {checks}"
+        }
       },
       "runs": {
         "kinds": {

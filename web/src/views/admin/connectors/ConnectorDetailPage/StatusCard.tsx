@@ -239,9 +239,11 @@ export default function StatusCard({
                 <Text font="secondary-body" color="text-03">
                   {totalOnly ? t("documents.totalLabel") : t("documents.label")}
                 </Text>
-                <Text font="secondary-body" color="text-03">
-                  {t("documentsIndexed.label")}
-                </Text>
+                {!totalOnly && (
+                  <Text font="secondary-body" color="text-03">
+                    {t("documentsIndexed.label")}
+                  </Text>
+                )}
               </StatBlock>
               {chart && (
                 <Section

@@ -84,21 +84,23 @@ type TagBaseProps = Omit<
 };
 
 /** Passive or editable tag: the root is a `div`. */
-interface TagDivProps extends TagBaseProps {
+type TagDivProps = TagBaseProps & {
   ref?: React.Ref<HTMLDivElement>;
   onClick?: never;
-}
+};
 
 /**
  * Clickable tag: the root is a `button`. As a popover or dropdown trigger it
  * shows the inverted look while `data-state="open"` or `aria-expanded="true"`.
  * A clickable tag cannot be editable.
  */
-interface TagButtonProps extends TagBaseProps {
+type TagButtonProps = Omit<TagBaseProps, "disabled"> & {
+  /** Only an editable tag can be disabled; a trigger stays operable. */
+  disabled?: never;
   ref?: React.Ref<HTMLButtonElement>;
   onClick: React.MouseEventHandler<HTMLButtonElement>;
   onRemove?: never;
-}
+};
 
 type TagProps = TagDivProps | TagButtonProps;
 
