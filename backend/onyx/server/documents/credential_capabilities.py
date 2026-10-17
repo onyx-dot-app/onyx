@@ -20,6 +20,7 @@ from onyx.configs.constants import (
     DocumentSource,
 )
 from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckActions,
     DraftCheckPlan,
     DraftCheckRunSnapshot,
     DraftRerunMode,
@@ -541,8 +542,9 @@ def plan_draft_checks(
     )
 
 
-class DraftCheckRunRequest(BaseModel):
-    """Body of the draft run endpoint: an unsaved connector form."""
+class DraftCheckRunRequest(DraftCheckActions):
+    """Body of the draft run endpoint: an unsaved connector form, and the
+    admin's per-check actions."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -581,7 +583,8 @@ def start_draft_check_run(
 
     Checks that cannot run yet resolve at once (waiting, not applicable), and
     fresh cached results fill others; one task runs the rest. The caller polls
-    the GET with the returned ``run_id``. Never writes a stored report.
+    the GET with the returned ``run_id``. Never writes a stored report. The
+    request's per-check actions run, re-run, skip or start one check first.
     """
     mapping = CONNECTOR_CLASS_MAP.get(request.source)
     if mapping is None:
@@ -607,6 +610,7 @@ def start_draft_check_run(
             draft_key=request.draft_key,
             form_values=request.form_state,
             rerun=request.rerun,
+            actions=request,
         )
     except CapabilityRunEnqueueError as e:
         raise OnyxError(

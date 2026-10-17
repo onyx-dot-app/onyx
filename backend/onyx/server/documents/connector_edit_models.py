@@ -6,7 +6,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.connectors.capability_checks.draft_runs import DraftRerunMode
+from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckActions,
+    DraftRerunMode,
+)
 from onyx.connectors.capability_checks.findings_setting import (
     hide_findings_if_disabled,
 )
@@ -89,7 +92,7 @@ class ConnectorEditApplyResponse(BaseModel):
     reactivated: bool
 
 
-class ConnectorEditChecksRequest(BaseModel):
+class ConnectorEditChecksRequest(DraftCheckActions):
     model_config = ConfigDict(extra="forbid")
 
     connector_specific_config: dict[str, Any]

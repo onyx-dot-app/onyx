@@ -338,6 +338,7 @@ def start_cc_pair_edit_checks(
             access_type=request.access_type,
             connector_specific_config=request.connector_specific_config,
             rerun=request.rerun,
+            actions=request,
         )
     except CapabilityRunEnqueueError as e:
         raise OnyxError(
