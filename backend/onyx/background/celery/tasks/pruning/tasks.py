@@ -909,6 +909,8 @@ def monitor_ccpair_pruning_taskset(
     # A generator that threw after fan-out still drains its tasks; record FAILED
     # so the prune retries after the backoff instead of advancing last_pruned.
     failed = redis_connector.prune.generator_failed
+    # Read before any commit, so a Redis error here leaves nothing half done.
+    failed_docs = redis_connector.prune.failed_docs
     if failed:
         task_logger.warning(
             f"Connector pruning failed after fan-out: cc_pair={cc_pair_id} num_pruned={initial}"
@@ -931,7 +933,7 @@ def monitor_ccpair_pruning_taskset(
         sync_type=SyncType.PRUNING,
         sync_status=SyncStatus.FAILED if failed else SyncStatus.SUCCESS,
         num_docs_synced=initial,
-        num_docs_failed=redis_connector.prune.failed_docs,
+        num_docs_failed=failed_docs,
     )
 
     redis_connector.prune.taskset_clear()

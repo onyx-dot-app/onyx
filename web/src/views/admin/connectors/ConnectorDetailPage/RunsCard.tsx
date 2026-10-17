@@ -217,6 +217,7 @@ export default function RunsCard({
 
   function pickWindow(window: TimeWindow) {
     setPicked(window);
+    setWidened(false);
   }
 
   function pickKind(next: CCPairRunKind | null) {
@@ -329,7 +330,11 @@ export default function RunsCard({
             <ThroughputWindowPicker
               windows={PAIR_WINDOWS}
               value={sharedWindow.window}
-              onChange={onSharedWindowChange}
+              onChange={(window) => {
+                // Picking the same window again still leaves the widened view.
+                setWidened(false);
+                onSharedWindowChange(window);
+              }}
               selection={range}
               onClearSelection={onClearRange}
             />
