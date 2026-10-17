@@ -5,6 +5,7 @@ tested nothing says."""
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 import requests
 
 from onyx.configs.constants import DocumentSource
@@ -115,16 +116,31 @@ def test_a_missing_token_says_so() -> None:
     assert result.summary == "No token saved in the account"
 
 
-def test_an_unreachable_server_fails_only_a_form_run() -> None:
+@pytest.mark.parametrize(
+    "error,summary,kind",
+    [
+        (
+            requests.ConnectionError("refused"),
+            "Cannot reach GitHub",
+            CheckErrorKind.UNREACHABLE,
+        ),
+        (requests.ReadTimeout("slow"), "Sign-in timed out", CheckErrorKind.TIMEOUT),
+    ],
+    ids=["unreachable", "timeout"],
+)
+def test_an_unreachable_server_fails_only_a_form_run(
+    error: Exception, summary: str, kind: CheckErrorKind
+) -> None:
     gateway = _gateway()
-    gateway.get_token_info.side_effect = requests.ConnectionError("refused")
+    gateway.get_token_info.side_effect = error
 
     form = _run("github_auth", gateway, form_run=True)
     stored = _run("github_auth", gateway)
 
     assert form.status == CapabilityCheckStatus.FAILED
     assert stored.status == CapabilityCheckStatus.INCOMPLETE
-    assert form.summary == stored.summary == "Cannot reach GitHub"
+    assert form.summary == stored.summary == summary
+    assert form.error_kind == stored.error_kind == kind
 
 
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:

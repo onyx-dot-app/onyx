@@ -23,8 +23,10 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
     form_config,
+    sign_in_timeout_text,
 )
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     RateLimitTriedTooManyTimesError,
@@ -36,6 +38,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -60,6 +63,14 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/hubspot"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped after {time_limit} without an answer from HubSpot.\n"
+        "Re-run the checks."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("HubSpot")
 _PROBE_LIMIT = 1
 _NOTE_BODY_PROPERTY = "hs_note_body"
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
@@ -154,6 +165,10 @@ _UNREACHABLE_ROW = _RowText(
         "api.hubapi.com."
     ),
 )
+_REQUEST_TIMEOUT_ROW = _RowText(
+    summary="Timed out",
+    description="HubSpot did not answer the request in time.\nRe-run the checks.",
+)
 _UNEXPECTED_ROW = _RowText(
     summary="Unexpected response from HubSpot",
     description=(
@@ -180,6 +195,12 @@ def _raise_for_error(
                 "HubSpot kept refusing requests after 5 retries. (HTTP 429)\nWait "
                 "a minute, then re-run."
             ),
+        ) from error
+    if isinstance(error, HubSpotConnectionError) and error.timed_out:
+        raise TimedOutValidationError(
+            f"HubSpot did not answer in time: {error}",
+            summary=_REQUEST_TIMEOUT_ROW.summary,
+            description=_REQUEST_TIMEOUT_ROW.description,
         ) from error
     if isinstance(error, HubSpotConnectionError):
         raise UnreachableValidationError(
@@ -287,6 +308,7 @@ class _HubSpotCheck(CapabilityCheck[HubSpotConnectorConfig]):
         required: bool = True,
         remediation: str | None = None,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -298,6 +320,7 @@ class _HubSpotCheck(CapabilityCheck[HubSpotConnectorConfig]):
             remediation=remediation,
             docs_link=_DOCS_LINK,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -308,6 +331,7 @@ class _TokenCheck(_HubSpotCheck):
             display_name="Sign in to HubSpot",
             remediation="Create a private app in HubSpot and paste its access token.",
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -325,13 +349,10 @@ class _TokenCheck(_HubSpotCheck):
         except HubSpotConnectionError as error:
             if not error.timed_out:
                 _raise_for_error(error, denied="read the portal")
-            raise UnreachableValidationError(
+            raise TimedOutValidationError(
                 f"HubSpot did not answer the sign-in in time: {error}",
-                summary="Sign-in timed out",
-                description=(
-                    "HubSpot did not answer the sign-in in time.\nRe-run, or check "
-                    "that HubSpot is reachable from Onyx."
-                ),
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
             ) from error
         except ValueError as error:
             # A body that is not HubSpot's portal info, e.g. a proxy page.

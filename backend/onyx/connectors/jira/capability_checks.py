@@ -32,8 +32,10 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
+    CheckRowText,
     CheckStep,
     CredentialCapability,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -42,6 +44,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -71,6 +74,13 @@ from onyx.connectors.jira.utils import (
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped because Jira did not answer in time.\nRe-run the checks."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Jira")
 _SITE_FIELDS = frozenset({"jira_base_url"})
 _ERROR_DETAIL_CHARS = 300
 _CLOUD_HOST_SUFFIX = ".atlassian.net"
@@ -148,12 +158,10 @@ def _error_detail(error: JiraApiError) -> str:
 
 def _raise_for_timeout(error: JiraTimeoutError) -> NoReturn:
     """INCOMPLETE: a slow Jira says nothing about the credential."""
-    raise UnreachableValidationError(
+    raise TimedOutValidationError(
         f"{error} Run the checks again, or check the status of Jira.",
-        summary="Timed out",
-        description=(
-            "The check stopped because Jira did not answer in time.\nRe-run the checks."
-        ),
+        summary=_TIMEOUT_TEXT.summary,
+        description=_TIMEOUT_TEXT.description,
     ) from error
 
 
@@ -278,6 +286,7 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
         fails_when_unreachable: bool = False,
         row_id: str | None = None,
         step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -293,6 +302,7 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
             fails_when_unreachable=fails_when_unreachable,
             depends_on=_DEPENDS_ON.get(check_id, ()),
             step=step,
+            timeout_text=timeout_text,
         )
 
 
@@ -318,6 +328,7 @@ class _SiteAuthCheck(_JiraCheck):
                 row_id="jira_auth",
                 validates_binding=True,
                 fails_when_unreachable=True,
+                timeout_text=_SIGN_IN_TIMEOUT_TEXT,
                 display_name="Sign in to Jira",
                 remediation=(
                     "Scoped API tokens work only with Jira Cloud. Enter the email "
@@ -330,6 +341,7 @@ class _SiteAuthCheck(_JiraCheck):
                 check_id="jira_auth",
                 validates_binding=True,
                 fails_when_unreachable=True,
+                timeout_text=_SIGN_IN_TIMEOUT_TEXT,
                 display_name="Sign in to Jira",
                 remediation=(
                     "Jira Cloud: enter the email of the token's Atlassian account "
@@ -382,14 +394,11 @@ class _SiteAuthCheck(_JiraCheck):
             ) from e
         except (JiraTimeoutError, requests.Timeout) as e:
             # A raw Timeout comes from the scoped token's tenant_info call.
-            raise UnreachableValidationError(
+            raise TimedOutValidationError(
                 f"{self.config(context).jira_base_url} did not answer the sign-in "
                 f"in time: {e}",
-                summary="Sign-in timed out",
-                description=(
-                    "Jira did not answer the sign-in in time.\n"
-                    "Re-run, or check that Jira is reachable from Onyx."
-                ),
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
             ) from e
         except requests.ConnectionError as e:
             raise UnreachableValidationError(

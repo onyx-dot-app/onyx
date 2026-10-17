@@ -41,9 +41,11 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckRowText,
     CheckStep,
     CountFinding,
     CredentialCapability,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -96,6 +98,10 @@ from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 T = TypeVar("T")
 
 _OUTLOOK_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/outlook"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check did not finish within its time limit.\nRe-run the checks.",
+)
 
 # A well-known folder every mailbox has, used to prove name resolution works.
 _PROBE_WELL_KNOWN_FOLDER = "junkemail"
@@ -475,6 +481,7 @@ class _OutlookCheck(CapabilityCheck[OutlookConnectorConfig]):
         discovery: bool = False,
         row_id: str | None = None,
         step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -490,6 +497,7 @@ class _OutlookCheck(CapabilityCheck[OutlookConnectorConfig]):
             discovery=discovery,
             row_id=row_id,
             step=step,
+            timeout_text=timeout_text,
         )
 
 
@@ -512,6 +520,7 @@ class _TokenAuthCheck(_OutlookCheck):
             ),
             validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=sign_in_timeout_text("Outlook"),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:

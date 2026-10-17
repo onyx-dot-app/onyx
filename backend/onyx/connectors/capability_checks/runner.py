@@ -10,6 +10,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings_setting import check_findings_enabled
 from onyx.connectors.capability_checks.models import (
     INCOMPLETE_STATUSES,
+    TIME_LIMIT_PLACEHOLDER,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
@@ -21,6 +22,7 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckNotRunReason,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
     CredentialCapabilityReport,
     check_error_detail,
@@ -203,12 +205,17 @@ def _error_outcome(
     form_run: bool,
     message: str | None = None,
     duration_ms: int | None = None,
+    default_row: CheckRowText | None = None,
 ) -> _CheckOutcome:
     """Maps a check's exception to an outcome, per the check exception
     contract and the check's ``outcome_status``. The row text is the
-    error's own, else the default of its kind."""
+    error's own, else ``default_row``, else the default of its kind."""
     error_kind = check_error_kind(error)
-    summary, description = _DEFAULT_ROW_TEXT_BY_KIND.get(error_kind, (None, None))
+    summary, description = (
+        (default_row.summary, default_row.description)
+        if default_row is not None
+        else _DEFAULT_ROW_TEXT_BY_KIND.get(error_kind, (None, None))
+    )
     if isinstance(error, ValidationError):
         summary = error.summary or summary
         description = error.description or description
@@ -247,6 +254,28 @@ def _missing_instance_outcome(
 def effective_check_timeout_seconds(check: CapabilityCheck[Any]) -> float:
     """The check's hang guard: its own timeout, else the default."""
     return check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+
+
+def _time_limit_words(timeout_seconds: float) -> str:
+    seconds = round(timeout_seconds)
+    if seconds >= 60 and seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"{minutes} minute{'' if minutes == 1 else 's'}"
+    return f"{seconds} second{'' if seconds == 1 else 's'}"
+
+
+def _hang_guard_row(
+    check: CapabilityCheck, timeout_seconds: float
+) -> CheckRowText | None:
+    """The check's own text for its hang guard, with the guard's time limit."""
+    if check.timeout_text is None:
+        return None
+    return CheckRowText(
+        summary=check.timeout_text.summary,
+        description=check.timeout_text.description.replace(
+            TIME_LIMIT_PLACEHOLDER, _time_limit_words(timeout_seconds)
+        ),
+    )
 
 
 def _capped(timeout_seconds: float, cap_seconds: float | None) -> float:
@@ -315,6 +344,7 @@ def _execute_check(
             form_run,
             message=_TIMEOUT_MESSAGE,
             duration_ms=elapsed_ms(),
+            default_row=_hang_guard_row(check, timeout_seconds),
         )
     except Exception as e:
         if check_error_kind(e) == CheckErrorKind.UNEXPECTED:

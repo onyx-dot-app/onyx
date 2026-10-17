@@ -478,7 +478,11 @@ A source gateway's API error subclasses `exceptions.py:SourceApiError`.
 A result's row text is `summary` (a short line) and `description` (up to three
 lines). A check's `ValidationError` can carry both, and the runner falls back to
 a default for a timeout, a rate limit, an unreachable source or an unexpected
-error, and to the "Not run: …" line for a stopped check. `message` stays the
+error, and to the "Not run: …" line for a stopped check. A request that the
+source does not answer in time raises `exceptions.py:TimedOutValidationError`
+(kind `timeout`). When the hang guard stops a check, the row shows the check's
+`timeout_text` (`models.py:CheckRowText`; sign-in checks use
+`sign_in_timeout_text`), else the default. `message` stays the
 full text. A passing check gives its line in `CheckOutput.summary`. Checks that
 share a `row_id` are one row on the form: the variants of a probe (token types,
 deployments) and a probe's discovery step.

@@ -37,10 +37,12 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckRowText,
     CheckStep,
     CountFinding,
     CredentialCapability,
     OptionsFinding,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -97,6 +99,10 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = SCOPE_DOC_URL
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check ran past its time limit.\nRe-run the checks.",
+)
 
 _DRIVE_API = "Google Drive API"
 _ADMIN_API = "Admin SDK API"
@@ -496,6 +502,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
         credential_kind: GoogleCredentialKind | None = None,
         discovery: bool = False,
         step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -515,6 +522,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
             docs_link=_DOCS_LINK,
             discovery=discovery,
             step=step,
+            timeout_text=timeout_text,
         )
         self._credential_kind = credential_kind
 
@@ -547,6 +555,7 @@ class _AuthCheck(_GoogleDriveCheck):
                 "OAuth: connect Google Drive again. Turn on the Google Drive API "
                 "in the Google Cloud project of the credential."
             ),
+            timeout_text=sign_in_timeout_text("Google Drive"),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:

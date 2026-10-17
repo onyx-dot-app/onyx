@@ -46,9 +46,11 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckNotApplicableError,
     CheckOutput,
+    CheckRowText,
     CheckStep,
     CredentialCapability,
     OptionsFinding,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -82,6 +84,13 @@ from onyx.connectors.source_operations import SourceOperations
 
 _SLACK_DOCS_LINK = (
     "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed"
+)
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped after {time_limit}.\nRe-run the checks when no Slack "
+        "indexing job is running."
+    ),
 )
 
 _ADD_SCOPE_REMEDIATION = (
@@ -490,6 +499,7 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
         discovery: bool = False,
         fails_when_unreachable: bool = False,
         step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -507,6 +517,7 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
             discovery=discovery,
             fails_when_unreachable=fails_when_unreachable,
             step=step,
+            timeout_text=timeout_text,
         )
 
 
@@ -523,6 +534,7 @@ class _TokenAuthCheck(_SlackCheck):
             ),
             validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=sign_in_timeout_text("Slack"),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:

@@ -23,10 +23,12 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckRowText,
     CheckStep,
     CountFinding,
     CredentialCapability,
     form_config,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -64,6 +66,10 @@ from onyx.connectors.onedrive.source_operations import (
 )
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/onedrive"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check did not finish within its time limit.\nRe-run the checks.",
+)
 _PROBE_PAGE_SIZE = 1
 _CANDIDATE_PAGES = 20
 # A bound on the pages the drive count reads. Pages hold up to 999 users, so
@@ -370,6 +376,7 @@ class _OneDriveCheck(CapabilityCheck[OneDriveConnectorConfig]):
         discovery: bool = False,
         row_id: str | None = None,
         step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -385,6 +392,7 @@ class _OneDriveCheck(CapabilityCheck[OneDriveConnectorConfig]):
             discovery=discovery,
             row_id=row_id,
             step=step,
+            timeout_text=timeout_text,
         )
 
 
@@ -400,6 +408,7 @@ class _TokenCheck(_OneDriveCheck):
             remediation="Check the app id, tenant id, and client credential.",
             validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=sign_in_timeout_text("OneDrive"),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
