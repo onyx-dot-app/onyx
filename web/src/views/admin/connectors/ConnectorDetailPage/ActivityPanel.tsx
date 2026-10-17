@@ -41,10 +41,7 @@ import {
   SEARCH_DELAY_MS,
   SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
-import {
-  SliceRangeFilter,
-  type SliceRange,
-} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const LOADER_ROWS = 2;
 
@@ -125,9 +122,8 @@ export interface ActivityPanelProps {
   title?: string | RichStr;
   /** Shows a close button beside the title. */
   onClose?: () => void;
-  /** A chart slice that narrows every group, shown as a filter its `onClearRange` removes. */
+  /** A chart slice or span that narrows every group. The chart's picker shows and clears it. */
   range?: SliceRange | null;
-  onClearRange?: () => void;
   className?: string;
 }
 
@@ -137,7 +133,6 @@ export default function ActivityPanel({
   title,
   onClose,
   range = null,
-  onClearRange,
   className,
 }: ActivityPanelProps) {
   const t = useTranslations("admin.connector.activity");
@@ -279,9 +274,6 @@ export default function ActivityPanel({
                 width="fit"
                 height="fit"
               >
-                {range !== null && onClearRange !== undefined && (
-                  <SliceRangeFilter range={range} onClear={onClearRange} />
-                )}
                 <ActivityCountTags
                   failures={failures.total}
                   errors={errors.total}

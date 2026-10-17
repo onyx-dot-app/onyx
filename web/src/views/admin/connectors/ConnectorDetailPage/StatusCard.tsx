@@ -25,6 +25,7 @@ import ThroughputChart, {
   ThroughputWindowPicker,
   PAIR_WINDOWS,
   type PickerWindow,
+  type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 // The chart waits for the pair's first successful run.
@@ -66,8 +67,9 @@ export interface StatusCardProps {
   /** The page's time window, shared with the runs card. */
   timeWindow: PickerWindow;
   onTimeWindowChange: (window: PickerWindow) => void;
-  /** Picks a chart slice to narrow the page's run lists to. */
-  onSliceClick?: (start: Date, end: Date) => void;
+  /** The span of the chart the page is narrowed to: a click or drag on the chart picks one, the chip's X clears it. */
+  range?: SliceRange | null;
+  onRangeChange?: (range: SliceRange | null) => void;
 }
 
 /** The pair at a glance: status, latest and total documents, its last run, and documents indexed over time. */
@@ -77,7 +79,8 @@ export default function StatusCard({
   onViewChecks,
   timeWindow,
   onTimeWindowChange,
-  onSliceClick,
+  range = null,
+  onRangeChange,
 }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
@@ -228,14 +231,23 @@ export default function StatusCard({
                 <Section
                   flexDirection="row"
                   justifyContent="end"
+                  alignItems="center"
+                  gap={1}
                   width="auto"
                   height="fit"
                   className="grow basis-0"
+                  wrap
                 >
                   <ThroughputWindowPicker
                     windows={PAIR_WINDOWS}
                     value={timeWindow}
                     onChange={onTimeWindowChange}
+                    selection={range}
+                    onClearSelection={
+                      onRangeChange === undefined
+                        ? undefined
+                        : () => onRangeChange(null)
+                    }
                   />
                 </Section>
               )}
@@ -251,7 +263,8 @@ export default function StatusCard({
                 <ThroughputChart
                   ccPairId={ccPair.id}
                   range={timeWindow}
-                  onSliceClick={onSliceClick}
+                  selection={range}
+                  onRangeSelect={onRangeChange}
                 />
               </Section>
             )}

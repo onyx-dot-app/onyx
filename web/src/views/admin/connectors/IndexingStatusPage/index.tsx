@@ -18,7 +18,7 @@ export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
   const adminRouteTitle = useAdminRouteTitle();
   const [historyOpen, setHistoryOpen] = useState(false);
-  // A clicked chart slice narrows the history panel, which opens to show it.
+  // A picked span of the chart narrows the history panel, which opens to show it.
   const [range, setRange] = useState<SliceRange | null>(null);
 
   useToastFromQuery({
@@ -65,12 +65,10 @@ export default function IndexingStatusPage() {
                 className="min-w-80 grow-[8] basis-0"
               >
                 <OverviewCard
-                  onSliceClick={(start, end) => {
-                    setRange({
-                      since: start.toISOString(),
-                      until: end.toISOString(),
-                    });
-                    setHistoryOpen(true);
+                  range={range}
+                  onRangeChange={(picked) => {
+                    setRange(picked);
+                    if (picked !== null) setHistoryOpen(true);
                   }}
                 />
               </Section>
@@ -97,7 +95,6 @@ export default function IndexingStatusPage() {
                 setRange(null);
               }}
               range={range}
-              onClearRange={() => setRange(null)}
               className="max-lg:order-first"
             />
           )}

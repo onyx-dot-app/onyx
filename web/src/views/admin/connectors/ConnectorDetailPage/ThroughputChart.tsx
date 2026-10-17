@@ -1,8 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import { useFormatter, useTranslations } from "next-intl";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  ReferenceArea,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+} from "recharts";
 import {
   Card,
   Dropdown,
@@ -15,7 +23,6 @@ import { Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import { LineLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
-import { formatDateTimeLog } from "@/lib/dateUtils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
@@ -37,6 +44,28 @@ const TICK_MINUTES = {
   "24h": 4 * HOUR_MINUTES,
   "7d": DAY_MINUTES,
 } satisfies Record<CCPairThroughputWindow, number>;
+
+// A zoomed span labels the coarsest of these that still fits this many labels.
+const SPAN_TICK_MINUTES = [
+  1,
+  5,
+  10,
+  30,
+  HOUR_MINUTES,
+  2 * HOUR_MINUTES,
+  4 * HOUR_MINUTES,
+  DAY_MINUTES,
+];
+const SPAN_TICKS_WANTED = 3;
+
+/** Tick spacing for a zoomed span, so a span of any length keeps a few labels. */
+function spanTickMinutes(spanMs: number): number {
+  const spanMinutes = spanMs / 60_000;
+  const fitting = SPAN_TICK_MINUTES.filter(
+    (minutes) => spanMinutes / minutes >= SPAN_TICKS_WANTED
+  );
+  return fitting[fitting.length - 1] ?? 1;
+}
 
 /** A window a picker offers. */
 export type PickerWindow = CCPairThroughputWindow;
@@ -85,7 +114,7 @@ export function pickedWindowStart({ window }: PickedWindow): string {
   return windowStart(WINDOW_HOURS[window]);
 }
 
-/** A chart slice picked to narrow a run list, as ISO times. `until` is exclusive. */
+/** A chart slice or dragged span, as ISO times, that zooms the chart and narrows its run lists. `until` is exclusive. */
 export interface SliceRange {
   since: string;
   until: string;
@@ -113,33 +142,6 @@ const SLICE_TIME_FORMAT = {
   minute: "2-digit",
   hourCycle: "h23",
 } as const;
-
-export interface SliceRangeFilterProps {
-  range: SliceRange;
-  onClear: () => void;
-}
-
-/** The picked slice's time span as an active filter, cleared by its X. */
-export function SliceRangeFilter({ range, onClear }: SliceRangeFilterProps) {
-  const t = useTranslations("admin.connector.statusCard.throughput");
-  const since = formatDateTimeLog(range.since);
-  // The log format is "date time", so the time is what follows the space.
-  const timeOf = (stamp: string) => stamp.slice(stamp.indexOf(" ") + 1);
-  const today =
-    new Date(range.since).toDateString() === new Date().toDateString();
-  // A slice from today drops its date so the chip leaves the search input room.
-  const from = today ? timeOf(since) : since;
-  return (
-    <FilterButton
-      icon={SvgClock}
-      active
-      tooltip={t("rangeFilter")}
-      onClear={onClear}
-    >
-      {`${from} – ${timeOf(formatDateTimeLog(range.until))}`}
-    </FilterButton>
-  );
-}
 
 // The status strip draws this many hairline ticks under each bar, so a run reads as
 // thin ticks with gaps between them rather than a solid block.
@@ -227,21 +229,44 @@ export interface ThroughputWindowPickerProps<W extends PickerWindow> {
   windows: readonly W[];
   value: W;
   onChange: (window: W) => void;
+  /** A span picked on the chart. The picker shows it in place of the window, with an X that calls `onClearSelection`. */
+  selection?: SliceRange | null;
+  onClearSelection?: () => void;
 }
 
-/** Picks how far back a throughput chart, and any list that shares it, reaches. */
+/** Picks how far back a throughput chart, and any list that shares it, reaches, and shows the span picked inside it. */
 export function ThroughputWindowPicker<W extends PickerWindow>({
   windows,
   value,
   onChange,
+  selection = null,
+  onClearSelection,
 }: ThroughputWindowPickerProps<W>) {
+  const t = useTranslations("admin.connector.statusCard.throughput");
   const tWindow = useTranslations("admin.connector.runs.window");
+  const format = useFormatter();
   return (
     <Dropdown>
       <Dropdown.Trigger asChild>
-        <OpenButton icon={SvgClock} state="empty">
-          {tWindow(windowLabelKey(value))}
-        </OpenButton>
+        {selection === null || onClearSelection === undefined ? (
+          <OpenButton icon={SvgClock} state="empty">
+            {tWindow(windowLabelKey(value))}
+          </OpenButton>
+        ) : (
+          // The span takes the picker's place, so the row keeps its shape. Its X returns to the window.
+          <FilterButton
+            icon={SvgClock}
+            active
+            tooltip={t("rangeFilter")}
+            onClear={onClearSelection}
+          >
+            {format.dateTimeRange(
+              new Date(selection.since),
+              new Date(selection.until),
+              SLICE_TIME_FORMAT
+            )}
+          </FilterButton>
+        )}
       </Dropdown.Trigger>
       <Dropdown.Data
         label={tWindow("label")}
@@ -284,13 +309,21 @@ function SliceTooltip({ active, payload, sliceMs }: SliceTooltipProps) {
   );
 }
 
+/** A drag across the bars, as the indices of the first and the latest slice under the pointer. */
+interface Drag {
+  from: number;
+  to: number;
+}
+
 export interface ThroughputBarsProps {
   data: CCPairThroughputResponse;
   range: CCPairThroughputWindow;
   /** The bars' height in pixels, above the axis. */
   height?: number;
-  /** Makes each slice clickable, with its start and end. */
-  onSliceClick?: (start: Date, end: Date) => void;
+  /** Zooms the chart to this span of its window. */
+  selection?: SliceRange | null;
+  /** Lets a click pick one slice and a drag pick a span. */
+  onRangeSelect?: (range: SliceRange) => void;
 }
 
 /** Documents indexed in each slice of a window, over a strip that colors each slice by the run that covered it. */
@@ -298,26 +331,58 @@ export function ThroughputBars({
   data,
   range,
   height = BARS_HEIGHT,
-  onSliceClick,
+  selection = null,
+  onRangeSelect,
 }: ThroughputBarsProps) {
   const t = useTranslations("admin.connector.statusCard.throughput");
   const format = useFormatter();
-  const start = Date.parse(data.window_start);
-  const end = Date.parse(data.window_end);
-  const sliceMs = (end - start) / data.docs_indexed.length;
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const dataStart = Date.parse(data.window_start);
+  const dataEnd = Date.parse(data.window_end);
+  const sliceMs = (dataEnd - dataStart) / data.docs_indexed.length;
   const tickMs = sliceMs / STRIP_TICKS_PER_SLICE;
-  const slices: Slice[] = data.docs_indexed.map((docs, index) => ({
-    at: start + sliceMs * (index + 0.5),
-    docs,
-  }));
-  const tickMinutes = TICK_MINUTES[range];
+  // A selection shows only the slices that overlap it, so the bars widen to fill the span and a
+  // slice that drifts half out as the window rolls keeps its bar, clipped at the axis, until it leaves.
+  const start = selection === null ? dataStart : Date.parse(selection.since);
+  const end = selection === null ? dataEnd : Date.parse(selection.until);
+  const slices: Slice[] = data.docs_indexed
+    .map((docs, index) => ({
+      at: dataStart + sliceMs * (index + 0.5),
+      docs,
+    }))
+    .filter(
+      (slice) => slice.at + sliceMs / 2 > start && slice.at - sliceMs / 2 < end
+    );
+  const tickMinutes =
+    selection === null ? TICK_MINUTES[range] : spanTickMinutes(end - start);
   const ticks = axisTicks(start, end, tickMinutes);
   // A run still going covers up to the window's end.
   const runs: Run[] = data.runs.map((run) => ({
     start: Date.parse(run.started),
-    end: run.ended === null ? end : Date.parse(run.ended),
+    end: run.ended === null ? dataEnd : Date.parse(run.ended),
     status: run.status,
   }));
+
+  function sliceIndex(activeTooltipIndex: number | string | null | undefined) {
+    return activeTooltipIndex == null ? null : Number(activeTooltipIndex);
+  }
+  // The dragged span widened to its slices' edges, or null before a drag or once it left the bars.
+  const first =
+    drag === null ? undefined : slices[Math.min(drag.from, drag.to)];
+  const last = drag === null ? undefined : slices[Math.max(drag.from, drag.to)];
+  const dragBounds =
+    first === undefined || last === undefined
+      ? null
+      : { from: first.at - sliceMs / 2, to: last.at + sliceMs / 2 };
+  // The drag ends on the pointer's release or when it leaves the chart, and its span is what it covered.
+  function endDrag() {
+    setDrag(null);
+    if (onRangeSelect === undefined || dragBounds === null) return;
+    onRangeSelect({
+      since: new Date(dragBounds.from).toISOString(),
+      until: new Date(dragBounds.to).toISOString(),
+    });
+  }
 
   return (
     // The SVG never flips for right-to-left text, so the strip must not either.
@@ -327,29 +392,36 @@ export function ThroughputBars({
         role="img"
         aria-label={t("ariaLabel")}
         // Recharts focuses its surface on click; only keyboard focus gets a ring.
-        className="w-full [&_:focus:not(:focus-visible)]:outline-none"
+        className="w-full select-none [&_:focus:not(:focus-visible)]:outline-none"
       >
         <ResponsiveContainer width="100%" height={height + AXIS_HEIGHT}>
           <BarChart
             data={slices}
             margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
             barCategoryGap={1.5}
-            // The whole column takes the click, so a slice with no documents but a failed run can be picked too.
-            onClick={
-              onSliceClick === undefined
+            // The whole column takes the pointer, so a slice with no documents but a failed run can be picked too.
+            onMouseDown={
+              onRangeSelect === undefined
                 ? undefined
                 : ({ activeTooltipIndex }) => {
-                    if (activeTooltipIndex == null) return;
-                    const slice = slices[Number(activeTooltipIndex)];
-                    if (slice === undefined) return;
-                    onSliceClick(
-                      new Date(slice.at - sliceMs / 2),
-                      new Date(slice.at + sliceMs / 2)
-                    );
+                    const index = sliceIndex(activeTooltipIndex);
+                    if (index !== null) setDrag({ from: index, to: index });
                   }
             }
+            onMouseMove={
+              drag === null
+                ? undefined
+                : ({ activeTooltipIndex }) => {
+                    const index = sliceIndex(activeTooltipIndex);
+                    if (index !== null && index !== drag.to) {
+                      setDrag({ from: drag.from, to: index });
+                    }
+                  }
+            }
+            onMouseUp={drag === null ? undefined : endDrag}
+            onMouseLeave={drag === null ? undefined : endDrag}
             style={
-              onSliceClick === undefined ? undefined : { cursor: "pointer" }
+              onRangeSelect === undefined ? undefined : { cursor: "pointer" }
             }
           >
             <XAxis
@@ -357,6 +429,7 @@ export function ThroughputBars({
               type="number"
               scale="time"
               domain={[start, end]}
+              allowDataOverflow
               ticks={ticks}
               tickFormatter={(value: number) =>
                 tickMinutes >= DAY_MINUTES
@@ -384,6 +457,15 @@ export function ThroughputBars({
               cursor={{ fill: "var(--background-tint-02)" }}
               content={<SliceTooltip sliceMs={sliceMs} />}
             />
+            {dragBounds !== null && (
+              <ReferenceArea
+                x1={dragBounds.from}
+                x2={dragBounds.to}
+                fill="var(--action-selection-01)"
+                fillOpacity={1}
+                stroke="var(--action-selection-02)"
+              />
+            )}
             <Bar
               dataKey="docs"
               fill="var(--theme-blue-05)"
@@ -396,7 +478,7 @@ export function ThroughputBars({
       {/* raw-ok: a 10px strip of over a hundred 1px hairlines, below Section's smallest height and gap steps */}
       <div className="flex h-2.5 w-full" aria-hidden>
         {Array.from(
-          { length: slices.length * STRIP_TICKS_PER_SLICE },
+          { length: Math.round((end - start) / tickMs) },
           (_, index) => {
             const tickStart = start + index * tickMs;
             const status = sliceStatus(runs, tickStart, tickStart + tickMs);
@@ -423,14 +505,16 @@ export function ThroughputBars({
 export interface ThroughputChartProps {
   ccPairId: number;
   range: CCPairThroughputWindow;
-  onSliceClick?: (start: Date, end: Date) => void;
+  selection?: SliceRange | null;
+  onRangeSelect?: (range: SliceRange) => void;
 }
 
 /** One pair's throughput over the window, polled. */
 export default function ThroughputChart({
   ccPairId,
   range,
-  onSliceClick,
+  selection = null,
+  onRangeSelect,
 }: ThroughputChartProps) {
   const t = useTranslations("admin.connector.statusCard.throughput");
   const { data, error } = useSWR<CCPairThroughputResponse>(
@@ -443,6 +527,11 @@ export default function ThroughputChart({
   }
   if (data === undefined) return <LineLoader lines={3} />;
   return (
-    <ThroughputBars data={data} range={range} onSliceClick={onSliceClick} />
+    <ThroughputBars
+      data={data}
+      range={range}
+      selection={selection}
+      onRangeSelect={onRangeSelect}
+    />
   );
 }

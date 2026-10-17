@@ -96,8 +96,9 @@ export interface RunsCardProps {
   /** The page's window, shared with the status card. Without it the list keeps its own. */
   sharedWindow?: SharedWindow;
   onSharedWindowChange?: (window: PickerWindow) => void;
-  /** A chart slice that narrows the list inside the window; the activity panel shows its chip. */
+  /** A chart span that narrows the list inside the shared window. The shared picker shows it, and its X calls `onClearRange`. */
   range?: SliceRange | null;
+  onClearRange?: () => void;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
@@ -108,6 +109,7 @@ export default function RunsCard({
   sharedWindow,
   onSharedWindowChange,
   range = null,
+  onClearRange,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
@@ -271,6 +273,8 @@ export default function RunsCard({
               windows={PAIR_WINDOWS}
               value={sharedWindow.window}
               onChange={onSharedWindowChange}
+              selection={range}
+              onClearSelection={onClearRange}
             />
           ) : (
             <Dropdown>

@@ -95,9 +95,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
     pickWindow("12h")
   );
-  // A clicked chart slice narrows the runs and activity inside the window.
+  // A picked span of the chart zooms it and narrows the runs and activity to it.
   const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
-  // The slice belongs to the old chart, so a new window drops it.
+  // The span belongs to the old chart, so a new window drops it.
   const changeWindow = (picked: PickerWindow) => {
     setTimeWindow(pickWindow(picked));
     setSliceRange(null);
@@ -394,12 +394,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
               onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
               timeWindow={timeWindow.window}
               onTimeWindowChange={changeWindow}
-              onSliceClick={(start, end) =>
-                setSliceRange({
-                  since: start.toISOString(),
-                  until: end.toISOString(),
-                })
-              }
+              range={sliceRange}
+              onRangeChange={setSliceRange}
             />
             <PairChecksCard
               source={source}
@@ -424,6 +420,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               sharedWindow={timeWindow}
               onSharedWindowChange={changeWindow}
               range={sliceRange}
+              onClearRange={() => setSliceRange(null)}
             />
           </Section>
           <ActivityPanel
@@ -432,7 +429,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
               canResolve: canOperate && ccPair.supports_targeted_reindex,
             }}
             range={sliceRange}
-            onClearRange={() => setSliceRange(null)}
           />
         </Section>
       </SettingsLayouts.Body>
