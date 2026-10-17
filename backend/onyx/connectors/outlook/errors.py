@@ -6,6 +6,8 @@ paths tell an admin the same thing about the same failure.
 
 from typing import NoReturn
 
+from onyx.connectors.exceptions import InconclusiveValidationError
+from onyx.connectors.microsoft_utils.check_text import MicrosoftRowText
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.microsoft_utils.graph_errors import (
     raise_for_graph_error as raise_for_microsoft_graph_error,
@@ -53,11 +55,30 @@ GROUP_UNAVAILABLE_REMEDIATION = (
 )
 
 
+# The gateway's code when a lookup follows too many empty pages.
+EMPTY_PAGES_CODE = "EmptyPages"
+
+
 def raise_for_graph_error(
     error: MicrosoftGraphError,
     denied_message: str,
     remediation: str = EXCHANGE_SCOPE_REMEDIATION,
+    *,
+    denied_row: MicrosoftRowText | None = None,
+    not_found_row: MicrosoftRowText | None = None,
+    empty_pages_row: MicrosoftRowText | None = None,
+    request: str = "the request",
 ) -> NoReturn:
+    """``empty_pages_row`` is the row when Graph kept answering empty pages,
+    which proves nothing about the grant."""
+    if error.code == EMPTY_PAGES_CODE:
+        row: MicrosoftRowText = empty_pages_row or MicrosoftRowText(
+            summary="Mailbox lookup did not finish",
+            description="Microsoft kept returning empty pages.\nRe-run the checks later.",
+        )
+        raise InconclusiveValidationError(
+            str(error), summary=row.summary, description=row.description
+        ) from error
     raise_for_microsoft_graph_error(
         error,
         denied_message,
@@ -66,4 +87,7 @@ def raise_for_graph_error(
             f"Graph found no usable mailbox ({error.code}). "
             f"{MAILBOX_UNAVAILABLE_REMEDIATION}"
         ),
+        denied_row=denied_row,
+        not_found_row=not_found_row,
+        request=request,
     )
