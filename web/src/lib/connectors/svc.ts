@@ -18,6 +18,39 @@ import type {
 // Indexing
 // ---------------------------------------------------------------------------
 
+/** Cancels one running or queued index attempt. Resolves to `null` once the
+ * server takes it, else to its error detail or `fallback`. */
+export async function cancelIndexAttempt(
+  indexAttemptId: number,
+  fallback: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/manage/admin/index-attempt/${indexAttemptId}/cancel`,
+      { method: "POST" }
+    );
+    return response.ok ? null : await parseErrorDetail(response, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+/** Starts a pair's first index attempt despite its failed checks. Resolves to the error message, or `null` on success. */
+export async function releaseIndexingHold(
+  ccPairId: number,
+  fallback: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/manage/admin/cc-pair/${ccPairId}/release-indexing-hold`,
+      { method: "POST" }
+    );
+    return response.ok ? null : await parseErrorDetail(response, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
 export async function triggerIndexing(
   fromBeginning: boolean,
   connectorId: number,
@@ -298,7 +331,10 @@ export async function getConnectorOauthRedirectUrl(
 
 const BINDING_CHECK_ERROR = "Unable to check the credential";
 
-/** Checks the credential-bound fields of an unsaved form against a credential. */
+/**
+ * Checks the credential-bound fields of an unsaved form against a saved
+ * credential or the user's draft. Sends no credential values.
+ */
 export async function checkCredentialBinding(
   credentialId: number,
   request: CredentialBindingCheckRequest

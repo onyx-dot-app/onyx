@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
@@ -12,25 +12,29 @@ interface ImagePreviewProps {
   fileName: string;
 }
 
-/**
- * ImagePreview - Displays images with loading and error states
- * Includes proper accessibility attributes
- */
 export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
-  const t = useTranslations("craft.imagePreview");
-  const [imageLoading, setImageLoading] = useState(true);
-  const [imageError, setImageError] = useState(false);
-
   // Extract just the filename from path for better alt text
   const displayName = fileName.split("/").pop() || fileName;
 
-  // Reset loading state when src changes
-  useEffect(() => {
-    setImageLoading(true);
-    setImageError(false);
-  }, [src]);
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      <ImageContent key={src} src={src} displayName={displayName} />
+    </div>
+  );
+}
 
-  if (imageError) {
+function ImageContent({
+  src,
+  displayName,
+}: {
+  src: string;
+  displayName: string;
+}) {
+  const t = useTranslations("craft.imagePreview");
+  const [status, setStatus] = useState<"loading" | "loaded" | "failed">(
+    "loading"
+  );
+  if (status === "failed") {
     return (
       <Section
         height="full"
@@ -48,33 +52,27 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
       </Section>
     );
   }
-
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 flex items-center justify-center p-4">
-        {imageLoading && (
-          <div className="absolute">
-            <Text font="secondary-body" color="text-03">
-              {t("loading.label")}
-            </Text>
-          </div>
+    <div className="relative min-h-0 flex-1 flex items-center justify-center p-4">
+      {status === "loading" && (
+        <div className="absolute">
+          <Text font="secondary-body" color="text-03">
+            {t("loading.label")}
+          </Text>
+        </div>
+      )}
+      <img
+        src={src}
+        alt={displayName}
+        aria-label={t("preview.ariaLabel", { name: displayName })}
+        className={cn(
+          "max-w-full max-h-full object-contain rounded-md transition-opacity",
+          "bg-background-neutral-inverted-04",
+          status === "loading" ? "opacity-0" : "opacity-100"
         )}
-        <img
-          src={src}
-          alt={displayName}
-
-          aria-label={t("preview.ariaLabel", { name: displayName })}
-          className={cn(
-            "max-w-full max-h-full object-contain transition-opacity",
-            imageLoading ? "opacity-0" : "opacity-100"
-          )}
-          onLoad={() => setImageLoading(false)}
-          onError={() => {
-            setImageLoading(false);
-            setImageError(true);
-          }}
-        />
-      </div>
+        onLoad={() => setStatus("loaded")}
+        onError={() => setStatus("failed")}
+      />
     </div>
   );
 }

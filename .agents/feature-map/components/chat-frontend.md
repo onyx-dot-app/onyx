@@ -318,7 +318,17 @@ a toast if the active model has no vision support. It then calls `beginUpload`
 [[file-store-and-user-files]]) and appends the results to `currentMessageFiles` via
 `ProjectsProvider`.
 
+Chat CSV and spreadsheet file previews use `web/src/lib/csv.ts` for quoted-field validation.
+Craft uses the same parser with bounded preview limits; chat keeps its complete-file parsing contract.
+
 ### 4.9 Pickers
+
+- **Tool connections**: `AppInputBar` shows `MCPConnectionPrompt` after Deep Research
+  when an enabled tool requires a user connection. The pill is blue for first-time
+  setup and orange if any pending connection requires reauthentication. Its modal connects MCP servers
+  for the active agent, including the default Onyx agent. It does not block send
+  or open automatically. Switching agents resets the modal. See
+  [[mcp-and-custom-tools]] for credential scope and connection handling.
 
 - **Agent**: `useActiveAgent` (`lib/agents/hooks.ts:useActiveAgent`) resolves the active
   agent from the `agentId` query param against the loaded agent list, falling back to the
@@ -527,3 +537,5 @@ hoc for a one-off check.
   `foldSidebarForMultiModel`) and restores the prior fold state only when the user drops
   back to a single model; a change to the multi-model exit path that skips this can leave
   the sidebar stuck folded.
+
+Shared spreadsheet payload validation lives in `web/src/lib/csv.ts`. Invalid CSV shows a spreadsheet error instead of an empty sheet.

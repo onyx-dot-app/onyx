@@ -93,7 +93,7 @@ export default function ChatDocumentDisplay({
         ) : (
           <SourceIcon sourceType={document.source_type} iconSize={18} />
         )}
-        <Truncated className="line-clamp-2" side="left">
+        <Truncated className="line-clamp-2" side="start">
           {title}
         </Truncated>
       </div>

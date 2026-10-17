@@ -60,10 +60,8 @@ def _get_test_quality_for_model(model_name: str) -> str | None:
 
 
 def _build_llm_provider_request(
-    db_session: Session,
     image_provider_id: str,
     model_name: str,
-    source_llm_provider_id: int | None,
     provider: str | None,
     api_key: str | None,
     api_base: str | None,
@@ -71,61 +69,9 @@ def _build_llm_provider_request(
     deployment_name: str | None,
     custom_config: dict[str, str] | None,
 ) -> LLMProviderUpsertRequest:
-    """Build LLM provider request for image generation config.
-
-    Supports two modes:
-    1. Clone mode: source_llm_provider_id provided - uses API key from source
-    2. New credentials mode: api_key + provider provided
-
-    """
-    if source_llm_provider_id is not None:
-        # Clone mode: Only use API key from source provider
-        source_provider = db_session.get(LLMProviderModel, source_llm_provider_id)
-        if not source_provider:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Source LLM provider with id {source_llm_provider_id} not found",
-            )
-
-        _validate_llm_provider_change(
-            existing_api_base=source_provider.api_base,
-            existing_custom_config=source_provider.custom_config,
-            new_api_base=api_base,
-            new_custom_config=custom_config,
-            api_key_changed=False,  # Using stored key from source provider
-        )
-
-        custom_config = _validate_and_normalize_vertex_auth(
-            source_provider.provider, custom_config
-        )
-
-        return LLMProviderUpsertRequest(
-            name=f"Image Gen - {image_provider_id}",
-            provider=source_provider.provider,
-            api_key=(
-                source_provider.api_key.get_value(apply_mask=False)
-                if source_provider.api_key
-                else None
-            ),  # Only this from source
-            api_base=api_base,  # From request
-            api_version=api_version,  # From request
-            deployment_name=deployment_name,  # From request
-            is_public=True,
-            groups=[],
-            model_configurations=[
-                ModelConfigurationUpsertRequest(
-                    name=model_name,
-                    is_visible=True,
-                )
-            ],
-            custom_config=custom_config,
-        )
-
+    """Build the LLM provider request for an image generation config."""
     if not provider:
-        raise HTTPException(
-            status_code=400,
-            detail="No provider or source llm provided",
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No provider provided")
 
     custom_config = _validate_and_normalize_vertex_auth(provider, custom_config)
 
@@ -209,51 +155,16 @@ def _create_image_gen_llm_provider__no_commit(
 def test_image_generation(
     test_request: TestImageGenerationRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
 ) -> None:
     """Test if an API key is valid for image generation.
 
     Makes a minimal image generation request to verify credentials using LiteLLM.
-
-    Two modes:
-    1. Direct: api_key + provider provided
-    2. From existing provider: source_llm_provider_id provided (fetches API key from DB)
     """
     api_key = test_request.api_key
     provider = test_request.provider
 
-    # Resolve API key and provider
-    if test_request.source_llm_provider_id is not None:
-        # Fetch API key from existing provider
-        source_provider = db_session.get(
-            LLMProviderModel, test_request.source_llm_provider_id
-        )
-        if not source_provider:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Source LLM provider with id {test_request.source_llm_provider_id} not found",
-            )
-
-        _validate_llm_provider_change(
-            existing_api_base=source_provider.api_base,
-            existing_custom_config=source_provider.custom_config,
-            new_api_base=test_request.api_base,
-            new_custom_config=test_request.custom_config,
-            api_key_changed=False,  # Using stored key from source provider
-        )
-
-        api_key = (
-            source_provider.api_key.get_value(apply_mask=False)
-            if source_provider.api_key
-            else None
-        )
-        provider = source_provider.provider
-
     if provider is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No provider or source llm provided",
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No provider provided")
 
     custom_config = _validate_and_normalize_vertex_auth(
         provider, test_request.custom_config
@@ -312,13 +223,8 @@ def create_config(
 ) -> ImageGenerationConfigView:
     """Create a new image generation configuration.
 
-    Both modes create a new LLM provider + model config + image config:
-
-    1. Clone mode: source_llm_provider_id provided
-       → Extract api key from existing provider, create new provider
-
-    2. New credentials mode: api_key + provider provided
-       → Create new provider with given credentials
+    Creates a new LLM provider + model config + image config with the given
+    credentials.
     """
     # Check if image_provider_id already exists
     existing_config = get_image_generation_config(
@@ -333,10 +239,8 @@ def create_config(
     try:
         # Build and create LLM provider
         provider_request = _build_llm_provider_request(
-            db_session=db_session,
             image_provider_id=config_create.image_provider_id,
             model_name=config_create.model_name,
-            source_llm_provider_id=config_create.source_llm_provider_id,
             provider=config_create.provider,
             api_key=config_create.api_key,
             api_base=config_create.api_base,
@@ -432,11 +336,9 @@ def update_config(
             old_provider.name = f"{old_provider.name}-old-{old_llm_provider_id}"
             db_session.flush()
 
-        # Determine actual API key to use:
-        # - Clone mode (source_llm_provider_id): API key comes from source provider
-        # - New credentials mode: Use provided api_key, or preserve existing if not changed
+        # Use the provided api_key, or preserve the existing one if not changed
         actual_api_key = config_update.api_key
-        if config_update.source_llm_provider_id is None and old_provider:
+        if old_provider:
             # Check if we should preserve existing API key:
             # - api_key_changed=False AND (key is None/empty OR looks masked)
             provided_key_is_masked = (
@@ -461,10 +363,8 @@ def update_config(
 
         # 3. Build and create new LLM provider
         provider_request = _build_llm_provider_request(
-            db_session=db_session,
             image_provider_id=image_provider_id,
             model_name=config_update.model_name,
-            source_llm_provider_id=config_update.source_llm_provider_id,
             provider=config_update.provider,
             api_key=actual_api_key,
             api_base=config_update.api_base,

@@ -11,14 +11,25 @@ import time
 import uuid
 from collections import deque
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 
 import requests
 
-from onyx.configs.app_configs import DISABLE_TELEMETRY, WEB_DOMAIN
+from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB, WEB_DOMAIN
 from onyx.configs.constants import OnyxCeleryQueues
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
+
+
+class DeploymentType(str, Enum):
+    STANDARD = "standard"
+    LITE = "lite"
+
+
+DEPLOYMENT_TYPE: DeploymentType = (
+    DeploymentType.LITE if DISABLE_VECTOR_DB else DeploymentType.STANDARD
+)
 
 _ENDPOINT: str = (
     os.environ.get("ONYX_TELEMETRY_ENDPOINT") or "https://telemetry.onyx.app"
@@ -134,6 +145,7 @@ _FIELDS: dict[str, frozenset[str]] = {
     "query": frozenset(
         {
             "query_id",
+            "tool_usage",
             "channel",
             "mode",
             "outcome",
@@ -193,6 +205,8 @@ _FIELDS: dict[str, frozenset[str]] = {
             "users_processed",
             "groups_processed",
             "memberships_synced",
+            "last_progress_at",
+            "last_heartbeat_at",
         }
     ),
     "queue": frozenset({"queue", "depth", "shared"}),
@@ -227,6 +241,8 @@ _FIELDS: dict[str, frozenset[str]] = {
     "version": frozenset({"version"}),
     "heartbeat": frozenset(
         {
+            "deployment_type",
+            "has_indexed_connectors",
             "dropped_events",
             "recent_dropped_events",
             "rejected_events",
@@ -684,7 +700,17 @@ class BoundedTelemetry:
 
                         collect_process_resource(self)
                         self.emit(
-                            "heartbeat", {**self.delivery_health(), **self.health}
+                            "heartbeat",
+                            {
+                                **self.delivery_health(),
+                                **self.health,
+                                # Auxiliary services may not inherit the API's Lite setting.
+                                **(
+                                    {"deployment_type": DEPLOYMENT_TYPE.value}
+                                    if self.service == "api"
+                                    else {}
+                                ),
+                            },
                         )
                         last_resource = now
                     # A backlog drains in consecutive batches; an idle queue sends nothing.

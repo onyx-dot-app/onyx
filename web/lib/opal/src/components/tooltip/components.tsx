@@ -1,6 +1,7 @@
 "use client";
 
 import "@opal/components/tooltip/styles.css";
+import { useRef, useState } from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { RichStr } from "@opal/types";
 import { Text } from "@opal/components";
@@ -10,8 +11,17 @@ import { isRichStr } from "@opal/components/text/InlineMarkdown";
 // Types
 // ---------------------------------------------------------------------------
 
-type TooltipSide = "top" | "bottom" | "left" | "right";
-type TooltipAlign = "start" | "center" | "end";
+/**
+ * Which side of the trigger the tooltip appears on. `start` and `end` are
+ * logical: in a right-to-left layout `start` is the right side.
+ */
+type TooltipSide = "top" | "bottom" | "start" | "end";
+/**
+ * Where the tooltip sits along its side. `follow` slides it to stay level
+ * with the pointer: vertically for `start`/`end` sides, horizontally for
+ * `top`/`bottom`. For a tall or wide trigger, such as a block of items.
+ */
+type TooltipAlign = "start" | "center" | "end" | "follow";
 
 interface TooltipProps {
   /**
@@ -23,7 +33,7 @@ interface TooltipProps {
    */
   tooltip?: React.ReactNode | RichStr;
 
-  /** Which side the tooltip appears on. @default "right" */
+  /** Which side the tooltip appears on. @default "end" */
   side?: TooltipSide;
 
   /** Alignment along the tooltip's side axis. @default "center" */
@@ -53,6 +63,23 @@ interface TooltipProps {
    * `asChild` (i.e. a DOM element or a component that forwards refs).
    */
   children: React.ReactElement;
+}
+
+// ---------------------------------------------------------------------------
+// Direction
+// ---------------------------------------------------------------------------
+
+/** Whether the page reads right to left. The root layout sets `dir`. */
+function isRtl(): boolean {
+  return (
+    typeof document !== "undefined" && document.documentElement.dir === "rtl"
+  );
+}
+
+/** Radix positions by physical side, so `start` and `end` follow `dir`. */
+function physicalSide(side: TooltipSide): "top" | "bottom" | "left" | "right" {
+  if (side === "top" || side === "bottom") return side;
+  return (side === "start") !== isRtl() ? "left" : "right";
 }
 
 // ---------------------------------------------------------------------------
@@ -87,14 +114,41 @@ interface TooltipProps {
  */
 function Tooltip({
   tooltip,
-  side = "right",
+  side = "end",
   align = "center",
   suppressed,
   delayDuration,
   sideOffset = 4,
   children,
 }: TooltipProps) {
+  // With `align="follow"`: the pointer's distance from the trigger's start
+  // along the side's axis, and the tooltip's size on that axis.
+  const [pointerOffset, setPointerOffset] = useState<number | null>(null);
+  const [contentSize, setContentSize] = useState<number>(0);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const alongY: boolean = side === "start" || side === "end";
+
   if (tooltip == null) return children;
+
+  function trackPointer(event: React.PointerEvent<HTMLElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    // Measured from the trigger's start edge, which `align="start"` uses.
+    setPointerOffset(
+      alongY
+        ? event.clientY - rect.top
+        : isRtl()
+          ? rect.right - event.clientX
+          : event.clientX - rect.left
+    );
+    const content = contentRef.current;
+    if (content) {
+      setContentSize(alongY ? content.offsetHeight : content.offsetWidth);
+    }
+  }
+
+  // Aligned to the trigger's start, then moved so the tooltip's middle
+  // meets the pointer. Radix still shifts it back into view at an edge.
+  const following: boolean = align === "follow" && pointerOffset !== null;
 
   const content =
     typeof tooltip === "string" || isRichStr(tooltip) ? (
@@ -115,14 +169,24 @@ function Tooltip({
       appears the moment the suppression lifts. */
       disableHoverableContent={suppressed}
     >
-      <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Trigger
+        asChild
+        onPointerMove={align === "follow" ? trackPointer : undefined}
+      >
+        {children}
+      </TooltipPrimitive.Trigger>
       {!suppressed && (
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
             /* Dark surface in both themes, so the content resolves dark tokens. */
+            ref={contentRef}
             className="dark opal-tooltip"
-            side={side}
-            align={align}
+            side={physicalSide(side)}
+            // Until the pointer moves, a follower sits centered.
+            align={following ? "start" : align === "follow" ? "center" : align}
+            alignOffset={
+              following ? (pointerOffset ?? 0) - contentSize / 2 : undefined
+            }
             sideOffset={sideOffset}
           >
             {content}

@@ -273,10 +273,9 @@ turns `persona.tools` into a live tool dict, keyed by `Tool.id`:
 ### 4.4 Prompt reach
 
 `chat/chat_utils.py:get_custom_agent_prompt(persona, chat_session)` resolves
-the custom agent prompt once per turn, before the loop starts: a non-default
-persona's `system_prompt` always wins (even inside a project), unless
-`replace_base_system_prompt` makes it the system prompt outright; the default
-persona inside a project falls back to `chat_session.project.instructions`.
+instructions once per turn. Custom agents retain project instructions, with
+agent instructions taking precedence on conflicts. Replacement agents keep
+their system prompt and receive project instructions separately.
 Full detail, including the moving-message mechanics and the token-budget
 interaction, is [[context-assembly]] §4.1-4.2; this component only owns the
 persona row those functions read.
@@ -402,9 +401,8 @@ underlying counts at finer grain for the admin panel.
   system-prompt and custom-agent-prompt assembly.
 - [[chat-frontend]]: the agent picker, `/app/agents/*` pages, and the
   in-chat agent switcher all read this component's snapshots.
-- [[projects]]: a project's default agent falls back to project instructions
-  only when the default persona is active; a custom persona always
-  supersedes a project (`get_custom_agent_prompt`).
+- [[projects]]: project instructions and files remain available with custom
+  agents; see §4.4 and [[projects]] §4.5 for composition rules.
 - [[skills]] and [[mcp-and-custom-tools]]: skills and MCP tools become
   attachable `Tool` rows that personas reference the same way as any other
   tool.

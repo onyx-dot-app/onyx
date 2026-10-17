@@ -64,6 +64,6 @@
 /* The top edge is the header's bottom border, so the edge never draws one.
    A fully closed fold shows no edge. `!important` wins over the status and
    selected border colours, which the edge inherits. */
-.opal-fold[data-mounted="false"] > .opal-card-fold-body {
+.opal-fold[data-visible="false"] > .opal-card-fold-body {
   border-color: transparent !important;
 }

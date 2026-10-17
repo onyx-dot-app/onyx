@@ -83,7 +83,7 @@ def test_start_persists_the_exact_authorization_attempt(
     server = _server()
     server.oauth_additional_auth_params = {"prompt": "consent"}
     attempt_store = MagicMock()
-    monkeypatch.setattr(oauth_flow, "mcp_oauth_attempt_store", lambda: attempt_store)
+    monkeypatch.setattr(oauth_flow, "MCP_OAUTH_ATTEMPTS", attempt_store)
 
     result = oauth_flow.start_known_provider_oauth_flow(
         mcp_server=server,

@@ -53,7 +53,7 @@ downstream, so it should not hand-craft time or source scoping into the query te
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.run()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns the LLM-selected and expanded sections, no LLM answer. |
+| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.run()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns the LLM-selected and expanded sections, no LLM answer. Opens its own `search_api` trace and `internal_search` function span, because it does not pass through the chat loop or `tool_runner.py`; see [[observability]]. |
 | POST | `/admin/search` | `admin_search` (`server/query_and_chat/query_backend.py`) | Admin-only. Calls `document_index.keyword_retrieval` or `random_retrieval` directly, bypassing this whole pipeline. Used for admin document inspection, not for chat. |
 | GET | `/query/valid-tags` | `get_tags` (`server/query_and_chat/query_backend.py`) | Tag autocomplete for the filter UI. |
 
@@ -199,6 +199,16 @@ out of those results after the fact except the EE field censoring above. The
 dedicated Slack lane receives none of these filters, only the pre-fetched Slack
 token and entity config (§5.8).
 
+When combined project and custom-agent files overflow the prompt budget,
+`SearchTool` passes both file scopes to the index. They join the agent's other
+knowledge scopes with OR; ACL checks still apply. These searches retain the
+agent's user-selected source, time, and tag filters. Automatically inferred
+source limits retain `USER_FILE` when project or agent files need retrieval,
+unless the user explicitly excludes that source. Queries, filter packets, and
+search-cycle history share this resolved scope. Only project-only searches
+ignore user-selected filters. File selection and instruction rules belong to
+[[projects]] §4.4-4.5.
+
 There is **no reranking model in this path**. `RerankingModel`
 (`natural_language_processing/search_nlp_models.py:RerankingModel`) exists, but
 its only instantiation in the codebase is inside `warm_up_cross_encoder`, itself
@@ -221,6 +231,23 @@ The merged list is capped to `override_kwargs.num_hits`.
 
 ### 4.5 LLM selection
 
+Chat constructs search tools with the session client and a lazy
+SEARCH_SELECTION resolver. Query rewrites, source/time filters, and Slack query
+processing keep the session client. Selection resolves only after retrieval
+returns sections, so offering search or finding no results never checks the
+selection provider. An unset SEARCH_SELECTION returns the same session client,
+never CHAT_NAMING. The public Search API honors explicit provider/model requests for
+both clients; otherwise only selection uses SEARCH_SELECTION. The EE Search UI
+likewise keeps rewrites on the default chat client and resolves selection lazily.
+If EE selection resolution fails, for example on a cost limit, the endpoint still
+returns the documents with `llm_selected_doc_ids` unset.
+If the chat or API selection factory fails, `SearchTool` logs a warning and selects
+with the primary client. Chat checks the primary provider's cost limit at turn
+start. The public Search API skips that check when query expansion and automatic
+filters are off and passes `primary_llm_cost_checked=False`. The tool then checks
+the primary provider before the first Slack lane or selection call that uses it.
+If the check fails before a Slack lane, search skips only that lane.
+
 `_trim_sections_by_tokens` (`search_tool.py`) first drops sections once a token
 budget (`max_llm_chunks * DOC_EMBEDDING_CONTEXT_SIZE * SELECTION_TOKEN_BUDGET_MULTIPLIER`,
 `SELECTION_TOKEN_BUDGET_MULTIPLIER = 2`) is exhausted, counting at most
@@ -229,6 +256,14 @@ cannot starve the budget. `select_sections_for_expansion`
 (`secondary_llm_flows/document_filter.py`) then makes one LLM call over all
 surviving sections together (so the model can compare across documents, not just
 within one) and returns the sections it picked plus any `best_doc_ids` it flagged.
+
+When SEARCH_SELECTION is configured, `backend/onyx/secondary_llm_flows/search_prompt_budget.py` also
+bounds serialized prompts against the selection model's input and context limits,
+with an output allowance and safety margin. Selection drops trailing candidates
+until the actual prompt fits. Expansion classification bounds its own input
+without changing the original evidence. Rewrites retain their primary-model limits.
+An oversized fixed prompt takes the flow's local fallback without a provider
+call. The final answer's evidence allowance remains independent.
 
 ### 4.6 Context expansion
 
@@ -328,9 +363,9 @@ the LLM, assigning one citation number per unique `document_id` starting at
   citation-tagged string and mapping this component hands back.
 - [[tools-framework]]: `SearchTool` implements `Tool`; `tool_runner.py` merges
   repeated calls and allocates the citation range.
-- [[llm-providers]]: every secondary flow (`query_expansion`, `source_filter`,
-  `time_filter`, `document_filter`) and the selection/expansion stages make
-  their own LLM calls through the persona's resolved `LLM`.
+- [[llm-providers]]: section selection and relevance classification use the
+  optional SEARCH_SELECTION default, falling back directly to the persona's
+  resolved `LLM`. Rewrites and filters keep that primary client. CHAT_NAMING is separate.
 
 **Depended on by**
 - [[core-chat-loop]]: `construct_tools` attaches `SearchTool` per turn; the loop

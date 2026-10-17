@@ -150,7 +150,7 @@
    header and body. It should always remain the default border color,
    regardless of any status borderColor applied to the card. */
 
-.opal-card-expandable-header:has(+ .opal-fold[data-mounted="true"]) {
+.opal-card-expandable-header:has(+ .opal-fold[data-visible="true"]) {
   @apply border-b-border-01;
 }
 

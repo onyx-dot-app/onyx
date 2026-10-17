@@ -883,7 +883,7 @@ export default function MCPAuthenticationModal({
                                     name="oauth_scopes_override"
                                     value={values.oauth_scopes_override}
                                     onChange={handleChange}
-                                    placeholder="https://www.googleapis.com/auth/logging.read"
+                                    placeholder={t("placeholders.oauthScope")}
                                   />
                                 </FormField.Control>
                               </FormField>

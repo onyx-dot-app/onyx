@@ -27,6 +27,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
+from onyx.db.tools import can_manage_mcp_server
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
 
@@ -150,6 +151,18 @@ def user_can_access_mcp_server(user: User, server_id: int, db_session: Session) 
         select(MCPServer.id).where(MCPServer.id == server_id), user
     )
     return db_session.scalar(stmt) is not None
+
+
+def user_can_configure_mcp_credentials(
+    user: User, server: MCPServer, db_session: Session
+) -> bool:
+    """Whether the user may connect their own credentials to this server: users
+    who may attach it, plus its managers. Kept apart from
+    ``user_can_access_mcp_server``, which also gates agent attachment and
+    shared-credential injection."""
+    return user_can_access_mcp_server(
+        user, server.id, db_session
+    ) or can_manage_mcp_server(user, server)
 
 
 def affected_user_ids_for_mcp_server(
@@ -378,11 +391,32 @@ def get_connection_config_by_id(
     read-compare-write over its JSON blob is atomic against concurrent writers."""
     stmt = select(MCPConnectionConfig).where(MCPConnectionConfig.id == config_id)
     if for_update:
-        stmt = stmt.with_for_update()
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     config = db_session.scalar(stmt)
     if not config:
         raise ValueError("Connection config by specified id does not exist")
     return config
+
+
+def mark_connection_config_reauth_required(
+    config_id: int,
+    expected_data: MCPConnectionData,
+    db_session: Session,
+) -> bool:
+    """Record rejected credentials only if the failed request used current values."""
+    try:
+        config = get_connection_config_by_id(config_id, db_session, for_update=True)
+    except ValueError:
+        return False
+    if config.config is None:
+        return False
+    current_data = config.config.get_value(apply_mask=False)
+    if current_data != expected_data:
+        return False
+    update_connection_config(
+        config_id, db_session, {**expected_data, "reauth_required": True}
+    )
+    return True
 
 
 def get_user_connection_config(

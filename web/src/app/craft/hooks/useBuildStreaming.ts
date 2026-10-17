@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useSWRConfig } from "swr";
 
 import {
   Artifact,
   ArtifactType,
   BuildMessageAttachment,
+  type CompletedInteractiveTurn,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -17,10 +18,13 @@ import {
   processSSEStream,
   fetchSession,
   fetchScheduledRunEventStream,
+  fetchScheduledRunContext,
   RateLimitedError,
 } from "@/app/craft/services/apiServices";
+import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
 
 import {
   useBuildSessionStore,
@@ -39,10 +43,10 @@ import {
   cleanTaskOutput,
 } from "@/app/craft/utils/subagentRouting";
 
-const INTERRUPT_RECONCILE_INTERVAL_MS = 1000;
-const INTERRUPT_RECONCILE_MAX_ATTEMPTS = 30;
+const STREAM_RECONNECT_INTERVAL_MS = 1000;
+const stopRequests = new Map<string, Promise<void>>();
 
-/** Coalesce tool completions. Turn completion queues its final read immediately. */
+/** Coalesce live discovery; committed turn settlement owns the final inventory read. */
 function createOutputRefreshQueue(refresh: () => Promise<void>) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: boolean = false;
@@ -84,13 +88,7 @@ function createOutputRefreshQueue(refresh: () => Promise<void>) {
     clearTimer();
   }
 
-  function finish(): Promise<void> {
-    // Replace pending tool reads with one final read, ahead of later focus reads.
-    cancel();
-    return refresh();
-  }
-
-  return { schedule, finish, cancel };
+  return { schedule, cancel };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -147,7 +145,9 @@ function findParentTaskToolCall(
  * - Text/thinking chunks are merged when consecutive
  * - Tool calls are interleaved with text in the exact order they arrive
  */
-export function useBuildStreaming() {
+export function useBuildStreaming({
+  isEnabled = true,
+}: { isEnabled?: boolean } = {}) {
   const { mutate: globalMutate } = useSWRConfig();
   const appendMessageToSession = useBuildSessionStore(
     (state) => state.appendMessageToSession
@@ -191,79 +191,54 @@ export function useBuildStreaming() {
     (state) => state.triggerFilesRefresh
   );
 
-  const reconcileInterruptedTurn = useCallback(
-    async (
+  const requestStop = useCallback(
+    (
       sessionId: string,
-      interruptedTurnId: string | null,
+      instanceId: string,
       generation: number
     ): Promise<void> => {
-      // Only act while this is still the interrupt we launched for; otherwise a
-      // newer turn (a queued auto-send bumps the generation) would be clobbered.
-      const ownsInterrupt = (turnId: string | null): boolean => {
-        const s = useBuildSessionStore.getState().sessions.get(sessionId);
+      const key = `${instanceId}:${generation}`;
+      const pending = stopRequests.get(key);
+      if (pending) return pending;
+      const ownsRequest = (): boolean => {
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
         return (
-          !!s &&
-          s.turnGeneration === generation &&
-          s.status === "running" &&
-          (turnId === null || !s.activeTurnId || s.activeTurnId === turnId)
+          current?.instanceId === instanceId &&
+          current.turnGeneration === generation
         );
       };
-
-      // Reload BEFORE the flip to "active": the flip triggers the queued
-      // auto-send, so reloading after would race the freshly-started next turn.
-      const settle = async (): Promise<void> => {
-        await useBuildSessionStore
-          .getState()
-          .loadSession(sessionId, { force: true, preferPersisted: true })
-          .catch((err) =>
-            console.warn("[Streaming] Failed to reload settled turn:", err)
-          );
-        if (!ownsInterrupt(null)) return;
-        updateSessionData(sessionId, {
-          status: "active",
-          isInterrupting: false,
-          activeTurnId: null,
-          activeTurnIndex: null,
-          activeTurnLocalOwner: false,
+      if (!ownsRequest()) return Promise.resolve();
+      updateSessionData(sessionId, {
+        isInterrupting: true,
+        wasInterrupted: true,
+      });
+      const turnId = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId)?.activeTurnId;
+      const request = interruptMessageStream(sessionId, turnId ?? undefined)
+        .then((interrupted) => {
+          // An untargeted no-op must retain intent until creation is accepted.
+          if (turnId && !interrupted && ownsRequest())
+            updateSessionData(sessionId, { wasInterrupted: false });
+        })
+        .catch((error: unknown) => {
+          console.error("[Streaming] Failed to interrupt:", error);
+          if (ownsRequest()) {
+            const current = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId);
+            if (current?.activeTurnId)
+              updateSessionData(sessionId, { wasInterrupted: false });
+          }
+        })
+        .finally(() => {
+          if (stopRequests.get(key) !== request) return;
+          stopRequests.delete(key);
+          if (ownsRequest())
+            updateSessionData(sessionId, { isInterrupting: false });
         });
-      };
-
-      let turnId = interruptedTurnId;
-      for (let i = 0; i < INTERRUPT_RECONCILE_MAX_ATTEMPTS; i++) {
-        await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
-        if (!ownsInterrupt(turnId)) return;
-
-        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>>;
-        try {
-          activeTurn = await fetchActiveTurn(sessionId);
-        } catch (err) {
-          console.warn(
-            "[Streaming] Failed to reconcile interrupted turn:",
-            err
-          );
-          continue;
-        }
-
-        if (!activeTurn) {
-          await settle();
-          return;
-        }
-        // turnId is null when the interrupt beat the local activeTurnId — adopt
-        // the backend's; a different id means the backend moved on, so bail.
-        if (turnId === null) turnId = activeTurn.turn_id;
-        else if (activeTurn.turn_id !== turnId) return;
-      }
-
-      // Timed out: settle if the turn is actually gone now (unblock the UI),
-      // otherwise it's genuinely still running — just clear the "stopping" state.
-      console.warn("[Streaming] Interrupted turn reconciliation timed out");
-      if (!ownsInterrupt(turnId)) return;
-      const turnGone = await fetchActiveTurn(sessionId)
-        .then((t) => t === null)
-        .catch(() => false);
-      if (!ownsInterrupt(turnId)) return;
-      if (turnGone) await settle();
-      else updateSessionData(sessionId, { isInterrupting: false });
+      stopRequests.set(key, request);
+      return request;
     },
     [updateSessionData]
   );
@@ -303,7 +278,13 @@ export function useBuildStreaming() {
   const createStreamPacketProcessor = useCallback(
     (
       sessionId: string,
-      options?: { onPromptResponse?: () => void; expectedTurnId?: string }
+      options: {
+        signal: AbortSignal;
+        onPromptResponse?: () => void;
+        onTerminalError: () => void;
+        onTurnCompleted?: (turn: CompletedInteractiveTurn) => void;
+        expectedTurnId?: string;
+      }
     ) => {
       let accumulatedText = "";
       let accumulatedThinking = "";
@@ -311,9 +292,10 @@ export function useBuildStreaming() {
       const currentItems =
         useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems ??
         [];
-      const outputTurnGeneration = useBuildSessionStore
+      const outputSession = useBuildSessionStore
         .getState()
-        .sessions.get(sessionId)?.turnGeneration;
+        .sessions.get(sessionId);
+      const outputTurnGeneration = outputSession?.turnGeneration;
       const outputRefresh = createOutputRefreshQueue(async () => {
         const store = useBuildSessionStore.getState();
         const current = store.sessions.get(sessionId);
@@ -326,10 +308,6 @@ export function useBuildStreaming() {
           return;
         await store.refreshOutputInventory(sessionId);
       });
-      let finalOutputs: Promise<void> | null = null;
-      // Live events are not replayed. Always reconcile after a turn settles.
-      const finalizeOutputs = (): Promise<void> =>
-        (finalOutputs ??= outputRefresh.finish());
       let needsTurnCompletionFileRefresh = currentItems.some(
         (item) =>
           item.type === "tool_call" &&
@@ -421,22 +399,26 @@ export function useBuildStreaming() {
       // Raw SSE frame straight off the wire; parsePacket is the decoder.
       // oxlint-disable-next-line anti-slop/no-unknown-parameters
       const processPacket = (rawPacket: unknown) => {
+        if (options.signal.aborted) return;
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (
+          current?.instanceId !== outputSession?.instanceId ||
+          current?.turnGeneration !== outputTurnGeneration
+        )
+          return;
         const parsed = parsePacket(rawPacket);
         if (options?.expectedTurnId && parsed.type !== "approval_requested") {
           const currentTurnId = useBuildSessionStore
             .getState()
             .sessions.get(sessionId)?.activeTurnId;
           if (currentTurnId !== options.expectedTurnId) {
-            if (parsed.type === "prompt_response") {
-              options.onPromptResponse?.();
-            }
             return;
           }
         }
 
         switch (parsed.type) {
           case "text_chunk": {
-            if (!parsed.text) break;
+            if (!parsed.text && parsed.part?.snapshotText === undefined) break;
 
             if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
               finalizeStreaming();
@@ -447,8 +429,35 @@ export function useBuildStreaming() {
               appendSubagentResponseChunk(
                 sessionId,
                 parsed.sessionId,
-                parsed.text
+                parsed.text,
+                parsed.part
               );
+              break;
+            }
+
+            if (parsed.part) {
+              const store = useBuildSessionStore.getState();
+              const items = store.sessions.get(sessionId)?.streamItems ?? [];
+              const existing = items.find(
+                (item) =>
+                  item.type === "text" && item.partId === parsed.part?.partId
+              );
+              if (existing?.type === "text") {
+                store.updateStreamItem(sessionId, existing.id, {
+                  content:
+                    parsed.part.snapshotText ?? existing.content + parsed.text,
+                });
+              } else {
+                finalizeStreaming();
+                store.appendStreamItem(sessionId, {
+                  type: "text",
+                  id: genId("text"),
+                  partId: parsed.part.partId,
+                  content: parsed.part.snapshotText ?? parsed.text,
+                  isStreaming: true,
+                });
+              }
+              lastItemType = null;
               break;
             }
 
@@ -472,7 +481,7 @@ export function useBuildStreaming() {
           }
 
           case "thinking_chunk": {
-            if (!parsed.text) break;
+            if (!parsed.text && parsed.part?.snapshotText === undefined) break;
 
             if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
               finalizeStreaming();
@@ -483,8 +492,36 @@ export function useBuildStreaming() {
               appendSubagentThinkingChunk(
                 sessionId,
                 parsed.sessionId,
-                parsed.text
+                parsed.text,
+                parsed.part
               );
+              break;
+            }
+
+            if (parsed.part) {
+              const store = useBuildSessionStore.getState();
+              const items = store.sessions.get(sessionId)?.streamItems ?? [];
+              const existing = items.find(
+                (item) =>
+                  item.type === "thinking" &&
+                  item.partId === parsed.part?.partId
+              );
+              if (existing?.type === "thinking") {
+                store.updateStreamItem(sessionId, existing.id, {
+                  content:
+                    parsed.part.snapshotText ?? existing.content + parsed.text,
+                });
+              } else {
+                finalizeStreaming();
+                store.appendStreamItem(sessionId, {
+                  type: "thinking",
+                  id: genId("thinking"),
+                  partId: parsed.part.partId,
+                  content: parsed.part.snapshotText ?? parsed.text,
+                  isStreaming: true,
+                });
+              }
+              lastItemType = null;
               break;
             }
 
@@ -732,8 +769,18 @@ export function useBuildStreaming() {
             break;
           }
 
+          case "turn_completed":
           case "prompt_response": {
-            void finalizeOutputs();
+            if (parsed.type === "turn_completed") {
+              if (
+                parsed.turn.session_id !== sessionId ||
+                parsed.turn.turn_id !== options.expectedTurnId
+              )
+                break;
+              if (parsed.turn.status === "FAILED")
+                appendErrorItem(parsed.turn.error_detail ?? "");
+            }
+            outputRefresh.cancel();
             if (needsTurnCompletionFileRefresh) {
               // Shell commands and scripts can mutate the workspace without
               // emitting structured file paths. Reconcile once when the turn ends.
@@ -771,28 +818,20 @@ export function useBuildStreaming() {
                 type: "assistant",
                 content: textContent,
                 timestamp: new Date(),
-                turn_index: session.activeTurnIndex ?? undefined,
+                turn_index:
+                  parsed.type === "turn_completed"
+                    ? parsed.turn.turn_index
+                    : (session.activeTurnIndex ?? undefined),
                 message_metadata: {
                   streamItems: savedStreamItems,
                 },
               });
             }
 
-            if (isInterrupting) {
-              // While interrupting, defer settlement to reconcile (settling now races the
-              // in-flight cancel → "Concurrent turn in flight"); just clear persisted streamItems.
-              updateSessionData(sessionId, { streamItems: [] });
-            } else {
-              updateSessionData(sessionId, {
-                status: "active",
-                streamItems: [],
-                isInterrupting: false,
-                activeTurnId: null,
-                activeTurnIndex: null,
-                activeTurnLocalOwner: false,
-              });
-            }
-            options?.onPromptResponse?.();
+            updateSessionData(sessionId, { streamItems: [] });
+            if (parsed.type === "turn_completed")
+              options.onTurnCompleted?.(parsed.turn);
+            else options.onPromptResponse?.();
             break;
           }
 
@@ -834,23 +873,16 @@ export function useBuildStreaming() {
           }
 
           case "error": {
-            // Safety net for an error arriving mid-interrupt: defer to reconcile rather than
-            // marking failed, which strands the queued auto-send and stalls reconcile.
+            // The observer resumes after the pending Stop and reads its outcome.
             if (
               useBuildSessionStore.getState().sessions.get(sessionId)
                 ?.isInterrupting
             ) {
               break;
             }
+            outputRefresh.cancel();
             appendErrorItem(parsed.message);
-            updateSessionData(sessionId, {
-              status: "failed",
-              error: parsed.message,
-              isInterrupting: false,
-              activeTurnId: null,
-              activeTurnIndex: null,
-              activeTurnLocalOwner: false,
-            });
+            options.onTerminalError();
             break;
           }
 
@@ -860,7 +892,6 @@ export function useBuildStreaming() {
       };
       return {
         processPacket,
-        finalizeOutputs,
         cancelOutputs: outputRefresh.cancel,
       };
     },
@@ -922,104 +953,112 @@ export function useBuildStreaming() {
         clearStreamItems(sessionId);
       }
 
-      let settledFromPromptResponse = false;
-      let transportError = false;
-      const processor = createStreamPacketProcessor(sessionId, {
-        expectedTurnId: turnId,
-        onPromptResponse: () => {
-          settledFromPromptResponse = true;
-          onSettled?.();
-        },
-      });
-      const clearTurnIfCurrent = (
-        updates: Partial<{
-          status: "active" | "failed";
-          error: string;
-          isInterrupting: boolean;
-        }>
-      ) => {
-        const currentSession = useBuildSessionStore
-          .getState()
-          .sessions.get(sessionId);
-        if (currentSession?.activeTurnId !== turnId) {
-          return;
-        }
-        updateSessionData(sessionId, {
-          ...updates,
-          activeTurnId: null,
-          activeTurnIndex: null,
-          activeTurnLocalOwner: false,
-        });
+      const ownsAttachment = (): boolean => {
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        return (
+          !signal.aborted &&
+          current?.instanceId === existingSession?.instanceId &&
+          current?.turnGeneration === existingSession?.turnGeneration &&
+          current?.activeTurnId === turnId
+        );
       };
+      let settledFromTerminalPacket = false;
+      const settleFromTerminalPacket = (
+        completion?: CompletedInteractiveTurn
+      ): void => {
+        settledFromTerminalPacket = true;
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (current && !current.isInterrupting)
+          void useBuildSessionStore
+            .getState()
+            .beginTurnSettlement(
+              sessionId,
+              { kind: "interactive", turnId },
+              existingSession?.turnGeneration ?? 0,
+              completion
+            );
+        onSettled?.();
+      };
+      const processor = createStreamPacketProcessor(sessionId, {
+        signal,
+        expectedTurnId: turnId,
+        onPromptResponse: settleFromTerminalPacket,
+        onTerminalError: settleFromTerminalPacket,
+        onTurnCompleted: settleFromTerminalPacket,
+      });
 
       try {
-        const response = await fetchTurnEventStream(sessionId, turnId, signal);
-        if (!response) {
-          void processor.finalizeOutputs();
-          clearTurnIfCurrent({
-            status: "active",
-            isInterrupting: false,
-          });
-          return;
-        }
-        await processSSEStream(response, processor.processPacket);
-        void processor.finalizeOutputs();
-      } catch (err) {
-        if ((err as Error).name === "AbortError") {
-          const currentSession = useBuildSessionStore
+        while (ownsAttachment()) {
+          if (
+            useBuildSessionStore.getState().sessions.get(sessionId)
+              ?.isInterrupting
+          )
+            return;
+          try {
+            const response = await fetchTurnEventStream(
+              sessionId,
+              turnId,
+              signal
+            );
+            if (!ownsAttachment()) return;
+            if (response)
+              await processSSEStream(response, processor.processPacket);
+          } catch (error) {
+            if (
+              signal.aborted ||
+              (error instanceof Error && error.name === "AbortError")
+            )
+              return;
+            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
+            console.warn("[Streaming] Turn attach stream error:", error);
+          }
+          const current = useBuildSessionStore
             .getState()
             .sessions.get(sessionId);
-          if (currentSession?.activeTurnId === turnId) {
-            updateSessionData(sessionId, { isInterrupting: false });
+          if (
+            !ownsAttachment() ||
+            settledFromTerminalPacket ||
+            current?.error ||
+            current?.isInterrupting
+          )
+            return;
+          let active: Awaited<ReturnType<typeof fetchActiveTurn>>;
+          try {
+            active = await fetchActiveTurn(sessionId);
+          } catch (error) {
+            if (!ownsAttachment()) return;
+            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
+            console.warn("[Streaming] Failed to check attached turn:", error);
+            await sleep(STREAM_RECONNECT_INTERVAL_MS);
+            continue;
           }
-          return;
+          const owned = useBuildSessionStore.getState().sessions.get(sessionId);
+          if (!ownsAttachment() || !owned || owned.isInterrupting) return;
+          if (!active || active.turn_id !== turnId) {
+            void useBuildSessionStore
+              .getState()
+              .beginTurnSettlement(
+                sessionId,
+                { kind: "interactive", turnId },
+                owned.turnGeneration
+              );
+            return;
+          }
+          await sleep(STREAM_RECONNECT_INTERVAL_MS);
         }
-
-        transportError = true;
-        console.warn("[Streaming] Turn attach stream error:", err);
-        const currentSession = useBuildSessionStore
-          .getState()
-          .sessions.get(sessionId);
-        if (currentSession?.activeTurnId === turnId) {
+      } catch (error) {
+        if (ownsAttachment())
           updateSessionData(sessionId, {
-            status: "running",
-            isInterrupting: false,
+            status: "failed",
+            loadError: error instanceof Error ? error.message : String(error),
+            activeTurnId: null,
+            activeTurnIndex: null,
+            activeTurnLocalOwner: false,
           });
-        }
       } finally {
         processor.cancelOutputs();
-        if (!signal.aborted) {
-          const currentSession = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId);
-          // While interrupting, reconcileInterruptedTurn owns settlement; settling here races it and strands the queued auto-send.
-          if (!currentSession?.isInterrupting) {
-            if (
-              !transportError &&
-              currentSession?.status === "running" &&
-              currentSession?.activeTurnId === turnId
-            ) {
-              clearTurnIfCurrent({
-                status: "active",
-                isInterrupting: false,
-              });
-            }
-            const settledStatus = useBuildSessionStore
-              .getState()
-              .sessions.get(sessionId)?.status;
-            if (settledStatus !== "failed") {
-              await useBuildSessionStore
-                .getState()
-                .loadSession(sessionId, { force: true })
-                .catch((err) =>
-                  console.warn(
-                    "[Streaming] Failed to reload settled turn:",
-                    err
-                  )
-                );
-            }
-          }
-          if (!settledFromPromptResponse) {
+        if (ownsAttachment()) {
+          if (!settledFromTerminalPacket) {
             onSettled?.();
           }
         }
@@ -1037,7 +1076,8 @@ export function useBuildStreaming() {
       sessionId: string,
       content: string,
       model?: BuildLlmSelection | null,
-      attachments: BuildMessageAttachment[] = []
+      attachments: BuildMessageAttachment[] = [],
+      queuedMessageId?: number
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
@@ -1047,6 +1087,17 @@ export function useBuildStreaming() {
         existingSession.abortController.abort();
       }
 
+      const generation = (existingSession?.turnGeneration ?? 0) + 1;
+      const ownsTurn = (acceptedTurnId?: string) => {
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        return (
+          !controller.signal.aborted &&
+          current?.instanceId === existingSession?.instanceId &&
+          current?.turnGeneration === generation &&
+          (acceptedTurnId === undefined ||
+            current.activeTurnId === acceptedTurnId)
+        );
+      };
       const controller = new AbortController();
       setAbortController(sessionId, controller);
 
@@ -1056,7 +1107,8 @@ export function useBuildStreaming() {
         isInterrupting: false,
         wasInterrupted: false,
         outputSelectionLocked: false,
-        turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
+        turnGeneration: generation,
+        turnSettlement: null,
         activeTurnId: null,
         activeTurnIndex: null,
         activeTurnLocalOwner: true,
@@ -1067,11 +1119,37 @@ export function useBuildStreaming() {
         const turn = await createTurn(
           sessionId,
           content,
-          crypto.randomUUID(),
+          queuedMessageId === undefined
+            ? crypto.randomUUID()
+            : `queue:${existingSession?.instanceId}:${queuedMessageId}`,
           controller.signal,
           model,
           attachments
         );
+        // The accepted turn guarantees that the first message is persisted.
+        // Naming belongs to the store and survives navigation or unmount.
+        if (turn.turn_index === 0) {
+          void useBuildSessionStore.getState().nameBuildSession(sessionId);
+        }
+        if (!ownsTurn()) return;
+        if (queuedMessageId !== undefined) {
+          appendMessageToSession(sessionId, {
+            id: genId("user-msg"),
+            type: "user",
+            content,
+            attachments,
+            timestamp: new Date(),
+            turn_index: turn.turn_index,
+          });
+          const queued =
+            useBuildSessionStore.getState().sessions.get(sessionId)
+              ?.queuedMessages ?? [];
+          updateSessionData(sessionId, {
+            queuedMessages: queued.filter(
+              (message) => message.id !== queuedMessageId
+            ),
+          });
+        }
         const currentSession = useBuildSessionStore
           .getState()
           .sessions.get(sessionId);
@@ -1079,13 +1157,45 @@ export function useBuildStreaming() {
           activeTurnId: turn.turn_id,
           activeTurnIndex: turn.turn_index,
           activeTurnLocalOwner: true,
+          ...(model && {
+            agentProvider: CRAFT_GATEWAY_PROVIDER,
+            agentModel: `${model.providerId}/${model.modelName}`,
+          }),
           ...(currentSession?.skillsStaleRevision === skillsStaleRevision && {
             skillsStale: false,
           }),
         });
 
+        if (currentSession?.wasInterrupted) {
+          const pendingStop = stopRequests.get(
+            `${currentSession.instanceId}:${generation}`
+          );
+          if (pendingStop) await pendingStop;
+          if (!ownsTurn(turn.turn_id)) return;
+          await requestStop(sessionId, currentSession.instanceId, generation);
+        }
+        if (!ownsTurn(turn.turn_id)) return;
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
       } catch (err) {
+        // A session-wide Stop must finish before another turn can start.
+        const pendingStop = stopRequests.get(
+          `${existingSession?.instanceId}:${generation}`
+        );
+        if (pendingStop) await pendingStop;
+        if (!ownsTurn()) return;
+        if (queuedMessageId !== undefined) {
+          const current = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId);
+          if (current)
+            updateSessionData(sessionId, {
+              queuedMessages: current.queuedMessages.map((message) =>
+                message.id === queuedMessageId
+                  ? { ...message, phase: "failed" }
+                  : message
+              ),
+            });
+        }
         if ((err as Error).name === "AbortError") {
           updateSessionData(sessionId, { isInterrupting: false });
         } else if (err instanceof RateLimitedError) {
@@ -1123,7 +1233,10 @@ export function useBuildStreaming() {
         // (signal mismatch) and hangs the FE while the backend completes.
         const session = useBuildSessionStore.getState().sessions.get(sessionId);
         if (session?.abortController === controller) {
-          setAbortController(sessionId, new AbortController());
+          updateSessionData(sessionId, {
+            abortController: new AbortController(),
+            activeTurnLocalOwner: false,
+          });
         }
       }
     },
@@ -1131,10 +1244,61 @@ export function useBuildStreaming() {
       setAbortController,
       updateSessionData,
       appendStreamItem,
+      appendMessageToSession,
       clearStreamItems,
       streamTurnEvents,
+      requestStop,
     ]
   );
+
+  const retryQueuedMessage = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const session = useBuildSessionStore.getState().sessions.get(sessionId);
+      const message = session?.queuedMessages[0];
+      if (
+        !message ||
+        message.phase !== "failed" ||
+        !session.error ||
+        session.activeTurnId !== null ||
+        (session.status !== "active" && session.status !== "failed")
+      )
+        return;
+      updateSessionData(sessionId, {
+        queuedMessages: session.queuedMessages.map((item) =>
+          item.id === message.id ? { ...item, phase: "starting" } : item
+        ),
+      });
+      await streamMessage(
+        sessionId,
+        message.text,
+        message.model,
+        message.attachments,
+        message.id
+      );
+    },
+    [streamMessage, updateSessionData]
+  );
+
+  useEffect(() => {
+    if (!isEnabled) return;
+    const dispatch = () => {
+      const state = useBuildSessionStore.getState();
+      for (const sessionId of state.sessions.keys()) {
+        const message = state.claimQueuedMessage(sessionId);
+        if (message)
+          void streamMessage(
+            sessionId,
+            message.text,
+            message.model,
+            message.attachments,
+            message.id
+          );
+      }
+    };
+    const unsubscribe = useBuildSessionStore.subscribe(dispatch);
+    dispatch();
+    return unsubscribe;
+  }, [isEnabled, streamMessage]);
 
   /**
    * Interrupt the in-flight turn for a session. The open SSE stream terminates
@@ -1143,83 +1307,114 @@ export function useBuildStreaming() {
   const interruptStreaming = useCallback(
     async (sessionId: string): Promise<void> => {
       const session = useBuildSessionStore.getState().sessions.get(sessionId);
-      if (!session || session.status !== "running" || session.isInterrupting) {
+      if (
+        !session ||
+        (session.status !== "running" && session.status !== "creating") ||
+        (!session.activeTurnId && !session.activeTurnLocalOwner) ||
+        session.isInterrupting
+      ) {
         return;
       }
 
-      const interruptedTurnId = session.activeTurnId;
-      const generation = session.turnGeneration;
-      updateSessionData(sessionId, {
-        isInterrupting: true,
-        wasInterrupted: true,
-      });
       cancelLatestInFlightToolCallStreamItem(sessionId);
-      try {
-        await interruptMessageStream(sessionId);
-        void reconcileInterruptedTurn(sessionId, interruptedTurnId, generation);
-      } catch (err) {
-        console.error("[Streaming] Failed to interrupt:", err);
-        updateSessionData(sessionId, {
-          isInterrupting: false,
-          wasInterrupted: false,
-        });
-      }
+      await requestStop(sessionId, session.instanceId, session.turnGeneration);
     },
-    [
-      reconcileInterruptedTurn,
-      updateSessionData,
-      cancelLatestInFlightToolCallStreamItem,
-    ]
+    [requestStop, cancelLatestInFlightToolCallStreamItem]
   );
 
   const streamScheduledRunEvents = useCallback(
     async (
       sessionId: string,
+      runId: string,
       signal: AbortSignal,
       onSettled?: () => void
     ): Promise<void> => {
+      const owner = useBuildSessionStore.getState().sessions.get(sessionId);
+      if (!owner || signal.aborted) return;
+      const ownsScheduledStream = (): boolean => {
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        return (
+          !signal.aborted &&
+          current?.instanceId === owner.instanceId &&
+          current.turnGeneration === owner.turnGeneration
+        );
+      };
       // A scheduled run owns one session; reattaching does not start a new turn.
       updateSessionData(sessionId, { status: "running" });
       clearStreamItems(sessionId);
-      let settledFromPromptResponse = false;
+      let settledFromTerminalPacket = false;
+      const settleFromTerminalPacket = (): void => {
+        if (!ownsScheduledStream()) return;
+        settledFromTerminalPacket = true;
+        void useBuildSessionStore
+          .getState()
+          .beginTurnSettlement(
+            sessionId,
+            { kind: "scheduled", runId },
+            owner.turnGeneration
+          );
+        onSettled?.();
+      };
       const processor = createStreamPacketProcessor(sessionId, {
-        onPromptResponse: () => {
-          settledFromPromptResponse = true;
-          onSettled?.();
-        },
+        signal,
+        onPromptResponse: settleFromTerminalPacket,
+        onTerminalError: settleFromTerminalPacket,
       });
 
       try {
-        const response = await fetchScheduledRunEventStream(sessionId, signal);
-        await processSSEStream(response, processor.processPacket);
-        void processor.finalizeOutputs();
-      } catch (err) {
-        if ((err as Error).name === "AbortError") {
-          return;
+        while (ownsScheduledStream()) {
+          try {
+            const response = await fetchScheduledRunEventStream(
+              sessionId,
+              signal
+            );
+            if (!ownsScheduledStream()) return;
+            await processSSEStream(response, processor.processPacket);
+          } catch (error) {
+            if (
+              signal.aborted ||
+              (error instanceof Error && error.name === "AbortError")
+            )
+              return;
+            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
+            console.warn("[Streaming] Scheduled run stream error:", error);
+          }
+          if (!ownsScheduledStream() || settledFromTerminalPacket) return;
+          let run: Awaited<ReturnType<typeof fetchScheduledRunContext>>;
+          try {
+            run = await fetchScheduledRunContext(sessionId);
+          } catch (error) {
+            if (!ownsScheduledStream()) return;
+            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
+            console.warn("[Streaming] Failed to check scheduled run:", error);
+            await sleep(STREAM_RECONNECT_INTERVAL_MS);
+            continue;
+          }
+          if (!ownsScheduledStream() || run.run_id !== runId) return;
+          if (run.status !== "RUNNING" && run.status !== "QUEUED") {
+            await useBuildSessionStore
+              .getState()
+              .beginTurnSettlement(
+                sessionId,
+                { kind: "scheduled", runId },
+                owner.turnGeneration
+              );
+            return;
+          }
+          await sleep(STREAM_RECONNECT_INTERVAL_MS);
         }
-
-        console.error("[Streaming] Scheduled run stream error:", err);
-        updateSessionData(sessionId, {
-          status: "failed",
-          error: (err as Error).message,
-        });
+      } catch (error) {
+        if (ownsScheduledStream())
+          updateSessionData(sessionId, {
+            status: "failed",
+            loadError: error instanceof Error ? error.message : String(error),
+            activeTurnId: null,
+            activeTurnIndex: null,
+            activeTurnLocalOwner: false,
+          });
       } finally {
         processor.cancelOutputs();
-        if (!signal.aborted) {
-          // Only settle to "active" if the stream is still in-flight. An
-          // in-band "error" packet (or a thrown error) already moved the status
-          // to "failed", and a "prompt_response" packet already moved it to
-          // "active" — overwriting either here would mask the real outcome.
-          const currentStatus = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId)?.status;
-          if (currentStatus === "running") {
-            updateSessionData(sessionId, { status: "active" });
-          }
-          if (!settledFromPromptResponse) {
-            onSettled?.();
-          }
-        }
+        if (ownsScheduledStream() && !settledFromTerminalPacket) onSettled?.();
       }
     },
     [updateSessionData, clearStreamItems, createStreamPacketProcessor]
@@ -1228,12 +1423,14 @@ export function useBuildStreaming() {
   return useMemo(
     () => ({
       streamMessage,
+      retryQueuedMessage,
       interruptStreaming,
       streamScheduledRunEvents,
       streamTurnEvents,
     }),
     [
       streamMessage,
+      retryQueuedMessage,
       interruptStreaming,
       streamScheduledRunEvents,
       streamTurnEvents,

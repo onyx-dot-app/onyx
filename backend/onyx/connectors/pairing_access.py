@@ -7,6 +7,9 @@ from onyx.auth.scoped_permissions import get_visible_user_group_ids
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.models import User
+from onyx.document_index.opensearch.cc_pair_ids_backfill import (
+    is_cc_pair_ids_backfill_complete,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
@@ -20,15 +23,18 @@ def validate_pairing_access(
     source: DocumentSource,
     access_type: AccessType,
     data_access_group_ids: list[int] | None,
+    current_access_type: AccessType | None = None,
 ) -> None:
     """Raises ``OnyxError`` if ``user`` cannot pair a ``source`` connector with
     this access type and these data-access groups. These rules do not include
-    the GATE 2 scope checks.
+    the GATE 2 scope checks. ``current_access_type`` is the pair's access type
+    before the change, or None for a new pair.
 
     Raises:
         OnyxError: FEATURE_NOT_AVAILABLE when group restrictions are turned
-            off for a restricted pair, or when the plan does not include
-            permission sync. INVALID_INPUT when a restricted pair has no
+            off for a restricted pair, when a pair becomes restricted before
+            the cc_pair_ids backfill of the search index is complete, or when
+            the plan does not include permission sync. INVALID_INPUT when a restricted pair has no
             data-access group, when data-access groups are set on an access
             type that does not use them, or when the source does not support
             permission sync. INSUFFICIENT_PERMISSIONS when the user cannot see
@@ -45,6 +51,18 @@ def validate_pairing_access(
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "A restricted connector needs at least one data-access group.",
+            )
+        # The search filter can hide a restricted pair's chunks only when they
+        # carry cc_pair_ids. A pair that is already restricted keeps working
+        # while a new primary index runs its backfill.
+        if (
+            current_access_type != AccessType.SYNC_RESTRICTED
+            and not is_cc_pair_ids_backfill_complete(db_session)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+                "Restricted connectors are not available yet. A background job "
+                "is updating the search index for them. Try again later.",
             )
 
     if data_access_group_ids:

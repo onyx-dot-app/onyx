@@ -17,6 +17,8 @@ export interface InputTypeInProps extends WithoutStyles<
   searchIcon?: boolean;
   /** Leading icon (a select's chosen option icon). Renders after `searchIcon`. */
   icon?: IconFunctionComponent;
+  /** Content before the text, after `prefixText` (a chosen value shown as a tag). */
+  leftChildren?: React.ReactNode;
   rightChildren?: React.ReactNode;
   /** Show the clear (×) button when the field has a value. */
   clearButton?: boolean;
@@ -25,6 +27,11 @@ export interface InputTypeInProps extends WithoutStyles<
    * (a select's button trigger). `variant="readOnly"` implies it.
    */
   readOnly?: boolean;
+  /**
+   * The list this field opens is open. The field keeps its focused border,
+   * even when focus moves into the list.
+   */
+  open?: boolean;
 }
 
 /**
@@ -60,11 +67,13 @@ export default function InputTypeIn({
   ref,
   variant = "primary",
   prefixText,
+  leftChildren,
   searchIcon,
   icon: Icon,
   rightChildren,
   clearButton = false,
   readOnly = false,
+  open = false,
   value,
   onChange,
   name,
@@ -87,6 +96,7 @@ export default function InputTypeIn({
     <div
       role="presentation"
       data-variant={variant}
+      data-open={open || undefined}
       className="opal-input"
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
     >
@@ -107,6 +117,8 @@ export default function InputTypeIn({
           {prefixText}
         </span>
       )}
+
+      {leftChildren}
 
       <input
         ref={ref}

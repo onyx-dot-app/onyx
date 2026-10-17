@@ -258,6 +258,7 @@ func TestManagedFilesProdSet(t *testing.T) {
 	for _, want := range []deployfiles.File{
 		deployfiles.ProdCompose, deployfiles.EnvProdTemplate,
 		deployfiles.EnvNginxTemplate, deployfiles.NginxAppConfProd, deployfiles.NginxRunScript,
+		deployfiles.NginxMcpConf, deployfiles.NginxMcpUpstreamConf,
 	} {
 		if !has(prod, want) {
 			t.Errorf("prod set missing %s", want.DestRel)
@@ -275,6 +276,9 @@ func TestManagedFilesProdSet(t *testing.T) {
 	standard := managedFiles(false, false, false, false)
 	if !has(standard, deployfiles.Readme) || !has(standard, deployfiles.Compose) || has(standard, deployfiles.ProdCompose) {
 		t.Error("standard set changed")
+	}
+	if !has(standard, deployfiles.NginxMcpConf) || !has(standard, deployfiles.NginxMcpUpstreamConf) {
+		t.Error("standard set missing the nginx MCP templates")
 	}
 	if has(standard, deployfiles.DevOverlay) {
 		t.Error("standard set must not carry the dev overlay unless asked for")

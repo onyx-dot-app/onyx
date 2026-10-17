@@ -123,6 +123,31 @@ def test_indexing_checks_pass_on_the_test_site(
     assert verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.PASSED
 
 
+# No issue in the project is older than the site.
+_EMPTY_JQL = f'project = "{_PROJECT}" AND created < "1990-01-01"'
+
+
+def test_checks_pass_with_an_advisory_when_the_jql_matches_nothing(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    credential_json: dict[str, Any] = _credential(test_secrets, False)
+    config: dict[str, Any] = _form(False, jql_query=_EMPTY_JQL)
+    by_id: dict[str, CapabilityCheckResult] = {
+        **_results(credential_json, config),
+        **_results(credential_json, config, perm_sync=True),
+    }
+
+    for check_id in (
+        "jira_jql_query",
+        "jira_issue_read",
+        "jira_permission_scheme_read",
+    ):
+        result: CapabilityCheckResult = by_id[check_id]
+        assert result.status == CapabilityCheckStatus.PASSED, result
+        assert len(result.advisories) == 1, result
+        assert "did not verify" in result.advisories[0].message, result
+
+
 @pytest.mark.parametrize(
     "credential_override,scope,check_id,message",
     [

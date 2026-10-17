@@ -20,7 +20,7 @@ touching `backend/onyx/sandbox_proxy/` or the docker manager — see
 
 Builds on the CONTRIBUTING.md prereqs (Python 3.13, uv, Node.js 22, the venv,
 `.vscode/.env`). Docker Desktop must be running with at least 8 CPU / 16 GB
-allocated.
+allocated. For three active Craft sandboxes, allocate at least 12 CPU / 24 GB.
 
 Craft sandbox pods use Kubernetes native restartable init sidecar containers,
 so the cluster must run Kubernetes `>= 1.33`. The local `k8s-up.sh` script pins
@@ -53,6 +53,40 @@ One sudo prompt at session start; the daemon stays alive afterward:
 ```bash
 telepresence connect -n onyx
 ```
+
+## Local resource budgets
+
+`deployment/helm/dev/values-localdev.yaml` defines local service resources.
+CPU requests reserve capacity. CPU limits allow short bursts above the request.
+Memory limits remain separate from requests.
+
+| Service | CPU request / limit | Memory request / limit |
+| --- | --- | --- |
+| API (Telepresence target) | 0.1 / 0.5 | 256 MiB / 1 GiB |
+| Sandbox proxy | 0.5 / 2 | 512 MiB / 1 GiB |
+| Each model server | 1 / 2 | 1 GiB / 2 GiB |
+| OpenSearch | 1 / 2 | 2 GiB / 4 GiB |
+| PostgreSQL | 0.5 / 2 | 512 MiB / 2 GiB |
+| PostgreSQL operator | 0.1 / 1 | 128 MiB / 512 MiB |
+| MinIO | 0.25 / 1 | 256 MiB / 1 GiB |
+| Object store | 0.25 / 1 | 256 MiB / 2 GiB |
+| Redis | 0.1 / 1 | 128 MiB / 512 MiB |
+
+Redis has a 400 MB cache budget. Its memory limit also covers process overhead.
+OpenSearch keeps its 1 GiB heap and has memory for other allocations.
+
+The API serves as a Telepresence target. The developer's local Python process handles intercepted API requests.
+Its small resource budget is deliberate; local API startup can take longer.
+
+These services request 4.8 CPU and about 6 GiB before other operators and Kubernetes system pods.
+Each sandbox adds a 1 CPU / 2 GiB request, plus its sidecar's 0.1 CPU / 256 MiB request.
+Sandbox limits remain 2 CPU / 10 GiB; its sidecar has a 1 CPU / 1 GiB limit.
+These values support development. They do not guarantee performance for large indexes or models.
+
+Run `make craft-up` to apply the local overlay. Keep any local image overrides when upgrading an existing release.
+Changing PostgreSQL resources restarts its single instance. Existing connections can delay shutdown for up to three minutes.
+New database connections fail during this restart.
+Check node capacity with `kubectl describe node`; check usage with `kubectl top pods` when metrics are available.
 
 ## kubectl context
 

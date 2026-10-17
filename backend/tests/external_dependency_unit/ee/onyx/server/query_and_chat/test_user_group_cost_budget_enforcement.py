@@ -143,7 +143,9 @@ def test_user_cost_isolated_and_longest_window_reported(
     monkeypatch.setattr(
         ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: limits
     )
-    monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", _fail_token_query)
+    monkeypatch.setattr(
+        ee_token_limit, "get_user_token_buckets_since", _fail_token_query
+    )
 
     _record_cost(db_session, user, 50.0)
     _record_cost(db_session, other_user, 1_000.0)
@@ -199,7 +201,9 @@ def test_group_blocks_only_when_every_group_is_over_budget(
     _add_group_limit(db_session, under_budget_group, period_hours=24)
     db_session.commit()
     _record_cost(db_session, spender, 150.0)
-    monkeypatch.setattr(ee_token_limit, "_fetch_user_group_usage", _fail_token_query)
+    monkeypatch.setattr(
+        ee_token_limit, "get_group_token_buckets_since", _fail_token_query
+    )
 
     ee_token_limit._user_is_rate_limited_by_group(user.id)
 
@@ -237,7 +241,7 @@ def test_user_token_limit_behavior_is_unchanged(
     )
     monkeypatch.setattr(
         ee_token_limit,
-        "_fetch_user_usage",
+        "get_user_token_buckets_since",
         lambda *_: [
             TokenUsageBucket(
                 window_start=datetime.now(timezone.utc),

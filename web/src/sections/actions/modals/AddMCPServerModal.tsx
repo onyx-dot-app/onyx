@@ -11,13 +11,14 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { createMCPServer, updateMCPServer } from "@/lib/mcp/svc";
 import {
+  MCPConnectionStatus,
   MCPServerCreateRequest,
   MCPServerStatus,
   MCPServer,
 } from "@/lib/mcp/types";
 import { useModal } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { Button, Divider } from "@opal/components";
 import type { ModalCreationInterface } from "@opal/components";
@@ -202,7 +203,7 @@ export default function AddMCPServerModal({
                 >
                   <InputTypeInField
                     name="server_url"
-                    placeholder="https://your-mcp-server.com/mcp"
+                    placeholder={t("placeholders.mcpServerUrl")}
                   />
                 </InputVertical>
 
@@ -222,7 +223,7 @@ export default function AddMCPServerModal({
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&
-                  server?.user_can_authenticate &&
+                  server?.connection_status === MCPConnectionStatus.CONNECTED &&
                   server?.status === MCPServerStatus.CONNECTED && (
                     <Section
                       flexDirection="row"

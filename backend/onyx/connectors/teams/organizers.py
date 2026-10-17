@@ -53,8 +53,9 @@ USER_PAGE_SIZE = 100
 # thousands of accounts without one. Graph filters on assigned plans only as an
 # advanced query, which is a count and this header on every page.
 ADVANCED_QUERY = {"ConsistencyLevel": "eventual"}
+ORGANIZER_SELECT = "$select=id,userPrincipalName,mail,displayName"
 ORGANIZERS_URL = (
-    "users?$select=id,userPrincipalName,mail,displayName"
+    f"users?{ORGANIZER_SELECT}"
     "&$filter=accountEnabled eq true and assignedPlans/any("
     "p:p/service eq 'TeamspaceAPI' and p/capabilityStatus eq 'Enabled')"
     f"&$count=true&$top={USER_PAGE_SIZE}"
@@ -121,11 +122,18 @@ def _resolve_organizers(
             get_json_with_retry(
                 graph_client,
                 f"users('{quote(escape_odata_string(name), safe='@.')}')"
-                "?$select=id,userPrincipalName,mail,displayName",
+                f"?{ORGANIZER_SELECT}",
             )
         )
         for name in principal_names
     ]
+
+
+def fetch_organizer(graph_client: GraphClient, organizer_id: str) -> Organizer:
+    """One user by id, for a document that names its organizer."""
+    return Organizer.from_graph(
+        get_json_with_retry(graph_client, f"users/{organizer_id}?{ORGANIZER_SELECT}")
+    )
 
 
 def organizer_expert(organizer: Organizer) -> list[BasicExpertInfo]:

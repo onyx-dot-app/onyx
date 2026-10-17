@@ -15,8 +15,9 @@ no hold applies. The hold reads the pair's connector-scoped report (credential
   config that apply rejected) counts as no report.
 
 A pair with a dispatched index attempt, a pair without a report, and a source
-without named checks are never held. Nothing is held while
-CONNECTOR_CHECKS_ENABLED is off.
+without named checks are never held. An admin can release the hold; the
+release outranks any run started before it, and a later run holds again.
+Nothing is held while CONNECTOR_CHECKS_ENABLED is off.
 """
 
 from datetime import datetime, timedelta
@@ -110,6 +111,11 @@ def get_first_indexing_hold(
         db_session, cc_pair.credential_id, cc_pair.connector_id
     )
     if row is None:
+        return None
+    released_at = cc_pair.indexing_hold_released_at
+    if released_at is not None and (
+        row.run_started_at is None or row.run_started_at <= released_at
+    ):
         return None
     return decide_indexing_hold(
         row,

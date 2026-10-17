@@ -7,6 +7,8 @@ import {
   setPreferredResponse,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
+import { getConfiguredSources } from "@/lib/connectors/utils";
+import { type SourceMetadata } from "@/lib/connectors/types/source";
 import {
   applyPreferredResponse,
   chooseImplicitPreferred,
@@ -17,7 +19,6 @@ import {
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/types";
-import type { SourceMetadata } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
@@ -90,7 +91,6 @@ import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
-import { getConfiguredSources } from "@/lib/sources";
 
 const SYSTEM_MESSAGE_ID = -3;
 

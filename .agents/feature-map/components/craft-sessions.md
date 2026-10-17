@@ -51,16 +51,28 @@ over; the entire agentic loop runs inside the sandbox's `opencode serve`
 process, and the backend's job is to start it, stream its events, persist
 them, and know when to stop.
 
-The welcome panel starts on Files. Sending the first message keeps its selected tab,
-expanded folders, cached listings, and scroll position. Returning from an inline
-preview restores the tree scroll position. Each mounted Files browser owns its listing cache.
-Folder requests run independently and abort when their directory unmounts.
-A claimed welcome sandbox stays available until the URL selects the session.
-Late validity checks cannot reset it. Mounting Files revalidates visible folders.
-Opening a folder fetches its current contents, even when its cached listing is empty.
+The output panel starts closed. Its first opening shows Outputs, which lists agent-created files under `outputs/`.
+All Files browses the complete workspace; Apps opens the local webapp. Files open in individual, closeable tabs.
+Closing the active tab returns to the last viewed open tab. Closing the last tab leaves an empty panel.
+Panel layout, tab order, selection, viewing history, and Files expansion survive reload in browser session storage.
+Session creation restores saved preferences before server data arrives. Explicit initial preferences take precedence.
+Unrelated sessions never inherit welcome-panel preferences.
+
+`CraftWorkspace.tsx` owns chat/output layout and resizing; `OutputPanel.tsx` owns resource tabs and viewers.
+Medium mode shares space with chat. Full mode hides chat while preserving navigation and history access.
+Hidden surfaces are inert. Sandbox status moves with the chat header and disappears in full output mode.
+The resize handle supports pointer and keyboard input without covering the chat scrollbar.
+Restored geometry does not animate. Reduced motion disables panel transitions.
+See [[craft-webapp-proxy]] §4 for retained viewers, directory caches, and preview behavior.
+
+A pre-provisioned welcome workspace can display files before a conversation exists.
+Claiming it preserves tabs, split width, folder expansion, search, and scroll state.
+The logical workspace identity stays stable; backend requests and data caches use the actual session ID.
+A claimed sandbox remains available until the URL selects the session. Late checks cannot reset it.
 
 The composer moves from the welcome position to the conversation footer with
 a shared layout animation. Reduced-motion users get an immediate transition.
+The chat scrollbar spans the body and sticky composer, with a thin thumb and transparent track.
 
 A session with stale skills shows a blue information notice after its active turn
 ends. Its Reload action refreshes that session’s skills.
@@ -72,10 +84,12 @@ permission (per the app policy in `[[craft-admin]]` and `[[craft-external-apps]]
 the turn pauses and the user sees an approval card; the user can approve or
 reject just that request, or approve it for the rest of the session. Files
 the agent produces appear as artifacts the user can browse, download, or
-(for Markdown) export as a `.docx`. New previewable outputs add tabs; only the first
-eligible discovery in a task selects a file. Manual selection or dismissal suppresses
-automatic selection until the next interactive turn. See [[craft-streaming]] for
-inventory and selection rules. The user's own uploaded library files
+(for Markdown) export as a `.docx`.
+An app connection card resolves its pending agent request even when credentials already exist.
+It shows Connected only after the decision endpoint succeeds. Failed decisions remain retryable.
+Passive discoveries update the inventory without adding tabs, opening the panel, or changing selection.
+Explicit resource actions create and select tabs. See [[craft-streaming]] for inventory and revision rules.
+The user's own uploaded library files
 (PDFs, spreadsheets) are available inside every session's sandbox.
 
 ---
@@ -110,8 +124,9 @@ protects.
 | POST | `/build/sessions/{id}/subagents/{subagent_id}/send-message` | `send_subagent_message` (`session/messages.py`) | Bypasses the interactive-turn queue entirely; streams synchronously via `SessionManager.send_subagent_message`. See §9. |
 | POST | `/build/sessions/{id}/interrupt` | `interrupt_message` (`session/messages.py`) | See §4.4. |
 | GET | `/build/sessions/{id}/turns/active` | `get_active_interactive_turn` (`interactive_turns/api.py`) | Poll for the current turn's id/status. |
+| GET | `/build/sessions/{id}/turns/{turn_id}` | `get_interactive_turn` (`interactive_turns/api.py`) | Read an owned turn's status, including its terminal outcome. |
 | GET | `/build/sessions/{id}/turns/{turn_id}/events` | `get_interactive_turn_events` (`interactive_turns/api.py`) | SSE attach/resume to a running turn; also (re)starts the runner if it stalled. |
-| GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
+| GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/output-thumbnail/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
 | GET | `/build/approvals/sessions/{id}/live` | `list_live_approvals` (`approvals/api.py`) | |
 | POST | `/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | |
 | POST | `/build/approvals/{approval_id}/session-grant` | `submit_session_grant` (`approvals/api.py`) | Pre-approval; see §4.6. |
@@ -174,10 +189,10 @@ reads it to decide whether a turn can run.
 ### `Artifact` (`backend/onyx/db/models.py:Artifact`)
 
 One mutable row per `(session_id, path)`, upserted at turn end
-(`db/artifact.py:upsert_artifact`). `content_hash` drives change detection: a
-changed hash bumps `version` and clears `archive_file_id`; an unchanged hash
-only refreshes metadata. `deleted=True` keeps the row (so a stale FE card
-greys out instead of 404ing) rather than removing it.
+(`db/artifact.py:upsert_artifact`). `source_revision` stores the observed filesystem revision;
+Changes advance `version` and invalidate `archive_file_id`.
+Unchanged files keep their producing `turn_index`. `viewed_revision` records the session owner's last viewed version.
+`deleted=True` retains the row so chat can display an unavailable card.
 
 ### `ActionReceipt` (`backend/onyx/db/models.py:ActionReceipt`)
 
@@ -345,8 +360,8 @@ sharing code with it.
 ```
 POST /build/sessions/{id}/interrupt        session/messages.py:interrupt_message
   └─ SessionManager.interrupt_message       session/manager.py:1019
-       ├─ request_interrupt(session_id)      session/interrupt_signal.py  (cache fence)
-       └─ abort_opencode_session (thread)     best-effort direct sandbox abort
+       ├─ request_interrupt(turn_id)      session/interrupt_signal.py  (cache fence)
+       └─ abort_opencode_session              best-effort direct sandbox abort
 ```
 
 Two complementary signals, by design (`manager.py:interrupt_message`
@@ -360,6 +375,13 @@ a prompt and inside the event-streaming loop
 (`interactive_turns/executor.py:_drive_interactive_turn.interrupt_requested`),
 which also doubles as the hard-cap deadline check.
 
+Stop accepts an optional `turn_id`. A short admission lock selects the target and sets its cancellation fence.
+Transport preparation runs outside that lock. A second lock checks the same target before the direct abort.
+A completed or replaced target is a no-op. Fences belong to individual turns, so late requests cannot cancel successors.
+Without a target, Stop selects the current active turn. It never leaves a fence for future work.
+The direct abort finishes before the lock releases; its HTTP timeout is two seconds per phase.
+
+
 **Partial output is saved before the turn ends.** On every path that detects
 an interrupt, the executor calls `session_manager.finalize_persist(session_id,
 state)` and commits **before** calling `finish_turn(..., CANCELLED)`
@@ -367,21 +389,73 @@ state)` and commits **before** calling `finish_turn(..., CANCELLED)`
 `slot.lost` branch both do this). So at the backend/DB level, an interrupted
 turn's already-streamed content is durable; nothing rolls it back.
 
-On the frontend, `useBuildStreaming.ts:interruptStreaming` sets an
-`isInterrupting` flag and calls `reconcileInterruptedTurn` **after** posting
-the interrupt (`web/src/app/craft/hooks/useBuildStreaming.ts`).
-`reconcileInterruptedTurn` still exists and is the load-bearing fix for the
-historical bug: it polls `fetchActiveTurn` until the backend turn is gone,
-then, in `settle()`, reloads the session (`loadSession(..., { force: true,
-preferPersisted: true })`) **before** flipping session status back to
-`"active"` (`useBuildStreaming.ts`, comment: "Reload BEFORE the flip
-to active: the flip triggers the queued auto-send, so reloading after would
-race the freshly-started next turn"). A queued resend cannot fire until the
-reload has repopulated the interrupted turn's persisted output. This is
-current, verified behaviour, not the historical bug: interrupting and
-resending does not scrap the interrupted turn's rendered output today.
+On the frontend, `useBuildStreaming.ts:interruptStreaming` holds `isInterrupting`
+only while the interrupt request is pending. The existing stream observer resumes after the request finishes.
+After the backend turn ends, the store owns transcript settlement for both interrupted and normally completed turns.
+Interactive settlement checks the active turn. Scheduled settlement checks the expected run and its saved status.
+Interactive settlement rechecks ownership after reading history. A changed owner triggers a history reread before adoption.
+Successor assistant packets stay in the live transcript, where later snapshots replace the same parts.
+Only confirmed persistence permits canonical history replacement. Neither path loads runtime metadata or changes navigation.
+A failed read preserves the local transcript and settlement identity. The retry action resumes that same settlement.
+Interactive and scheduled observers reconnect after transport failures while their backend owner remains active.
+A failed start keeps ownership until its pending Stop request finishes. Discarding a failed queued start observes any accepted backend turn before dispatching another prompt.
+Connection loss alone never starts completion handling. Terminal packets or backend completion evidence start canonical reconciliation.
+Permanent access and missing-session errors stop observation and retain queued prompts without dispatching them.
+They use the existing session-load recovery notice, which blocks submission until an explicit reload succeeds.
+Interactive terminal errors reload saved history before releasing ownership, just like scheduled errors.
+Scheduled terminal error packets reconcile saved results through the existing run owner.
+Failed and skipped scheduled runs also reload saved history, but never grant queue permission.
+A failed history read preserves the displayed transcript and the existing retry action.
+Failed settlement or queued-start recovery disables ordinary submission until the user retries or discards it.
+Initial history load failures also block submission. The existing load error remains until recovery succeeds.
+An existing session also blocks ordinary submission before its first load completes. Live turns can still receive queued prompts.
+Only confirmed completion with persisted history permits the next queued prompt.
+Stop is available only for an active backend turn or a pending local start. History reconciliation alone is not interruptible.
+Stop owns only the interrupt request. The stream owner handles backend completion after that request finishes.
+A targeted no-op response clears the stopped notice; a pre-accept no-op retains cancellation intent until creation finishes.
+Overlapping Stop requests for a pending local start are serialized before the accepted turn resumes observation.
+Local stream ownership ends when its stream function exits. The provider then watches visible or queued turns.
+Session deletion stops local observation only after the server confirms deletion. A rejected delete preserves the live owner.
+Provider attachment pauses while Stop is pending and resumes when stopping clears, including after a failed request.
+Interactive settlement requires a terminal outcome before replacing history or granting queue permission.
+Normally, the attach stream supplies this outcome in `turn_completed` after backend finalization.
+Recovery reads the known turn when that event is unavailable.
+Settlement still checks for a successor after reading history. See [[craft-streaming]] §4.3.
+Backend failures block queued prompts even after stream disconnection. Unknown outcomes require explicit recovery.
+Expired terminal records require a page refresh to clear local recovery state. Saved history remains; unsent local queues do not.
+The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
+`CraftStreamingProvider` owns that hook and is mounted by `web/src/providers/AppProvider.tsx` inside the authenticated app provider.
+The provider also watches external interactive turns for visible sessions and sessions with queued prompts.
+Queued prompts continue after the user leaves Craft, including when completion finds a successor from another tab.
+Logout clears local sessions without changing logout navigation. Switching to another account reloads the page before Craft work resumes.
+The queue retains each prompt, its attachments, and its explicit model choice until the server accepts it.
+Sandbox restoration keeps the composer draft and disables submission until ready. Pending interactive starts still accept queued prompts.
+Rejected queued starts require an explicit retry of that failed queue entry. An unrelated prompt error cannot authorize that retry.
+Retries reuse the queued prompt's request identity, so a lost response does not create another turn.
+Discarding a rejected queue head checks server completion and saved history before the next prompt starts.
 
 ### 4.5 History durability
+
+If the post-history turn check finds a different turn, loading rereads history before attaching to include its prompt.
+
+Session loading reads persisted messages before waiting for runtime discovery or sandbox restoration.
+It checks the active turn again after history loads, so another tab’s start is not missed.
+A completed second check retains the first observed turn for canonical settlement.
+Runtime failures keep the loaded transcript and permit another load when the user revisits.
+History renders before session metadata is ready; the model picker waits for the saved model.
+Existing-session sends omit the model unless the user explicitly selects one, preserving the server-owned session model.
+Load failures use `loadError` and show a retry action without erasing history.
+Turn errors do not invalidate cached sessions or discard rejected prompts.
+Sleeping, terminated, and failed cached sandboxes also load again on entry, including return from New build.
+Transcript and turn-status writes require the same session instance, turn generation, settlement identity, and latest load generation.
+Metadata and artifact responses require the same session instance and latest load generation.
+Settlement owns its transcript until completion; metadata failures do not block confirmed queue continuation.
+Accepted starts update the cached model selection; older metadata reads cannot replace that choice.
+Restoration refreshes files and output inventory when the sandbox is running, even if a newer turn has started.
+App readiness runs separately and controls only the iframe remount.
+Readiness polling survives a successor load for the same session instance and sandbox.
+Readiness updates preserve the newer turn and require the same session instance and sandbox.
+Cached skill notices accept server state only if no newer skill-state update or skill reload intervened.
 
 Two distinct persistence surfaces, per `docs/craft/features/streaming/
 preserve-opencode-sessions.md` and confirmed against
@@ -480,10 +554,20 @@ effect.
 
 ### 4.7 Artifacts, receipts, and export
 
-Artifacts are a manifest, not a store: `upsert_artifact`
-(`db/artifact.py`) is called once per `(session, path)` at turn end, keyed on
-a content hash so an unchanged file is a metadata-only touch while a changed
-one bumps `version` and invalidates any cached archive. `download_artifact`
+`backend/onyx/server/features/build/session/output_cards.py` compares complete manifests before and after each interactive or scheduled prompt, while the runner owns the prompt slot.
+It saves changed paths and their producing turns before terminal status. Webapp source changes share the `outputs/web` entry.
+Incomplete scans and lost ownership preserve earlier attribution. Reclaimed runners do not invent a new baseline.
+Complete scans mark missing indexed paths deleted. Revisions detect filesystem writes, not differences in file contents.
+
+`GET /build/sessions/{id}/output-cards` reads indexed cards without waking the sandbox. It omits rows without a producing turn.
+`PATCH /build/sessions/{id}/output-cards/{artifact_id}/viewed` records the opened revision; `/output-cards/viewed` accepts up to 10,000 ID/revision pairs.
+Bulk acknowledgements lock rows in bytewise path order, matching output capture.
+A complete capture restores indexed files missed by failed scans without changing their last known producing turn.
+Both routes advance viewed revisions monotonically and reject future revisions with 409. Bulk requests fail before changing any row.
+Bulk requests skip deleted, unknown, and foreign-session IDs. All three routes require session ownership.
+The older `/artifacts` endpoint discovers the local webapp; it does not supply durable cards.
+
+`download_artifact`
 and `export_docx` (`session/api.py:559,610`) read the live file out of the
 sandbox workspace; `md_to_docx.py:markdown_to_docx_bytes` converts a
 Markdown artifact to `.docx` with `mistune` + `python-docx`, pure-Python, no
@@ -497,6 +581,19 @@ Drive file), inserted `PENDING` before the action executes
 `try_record_decision`). A `PENDING` row older than 10 minutes is swept to
 `UNKNOWN` (`sweep_stale_pending_receipts`) so a crashed recorder never looks
 like a silently-still-in-progress send.
+
+Frontend attachments in `web/src/app/craft/contexts/UploadFilesContext.tsx` use a separate scope for each session visit.
+The composer owns draft selections, not the persisted session directory.
+Opening a session starts an empty draft; directory listings never select attachments.
+Removing a chip or clearing a sent draft leaves stored files available to earlier messages.
+Only explicit selections enter the current turn’s attachment context. Stored files do not become new selections. Subagent follow-ups carry an empty current selection while retaining references to earlier attachments.
+Uploads hold the session row lock through quota checks and file writes, so concurrent requests share one session limit.
+URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
+Replacing that destination preserves selected source files and uploads them into the replacement.
+New Build, another session, or visit end clears the previous draft.
+Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
+Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
+ChatPanel owns its UploadFilesProvider. Unmounting chat releases its draft, including pending welcome files and navigation to Craft apps.
 
 ### 4.8 User library
 
@@ -542,9 +639,9 @@ send_message / reconcile_session_llm_config     session/manager.py
 
 Priority, per `llm_config.py:_select_gateway_default`: (1) the session's own
 persisted `agent_provider`/`agent_model`, if still visible and accessible;
-(2) the admin's Craft default (`fetch_default_craft_model`,
+(2) the admin's Craft default (`fetch_default_model(..., LLMModelFlowType.CRAFT)`,
 `LLMModelFlowType.CRAFT`); (3) the admin's chat default
-(`fetch_default_llm_model`); (4) each provider's recommended model
+(`fetch_default_model(..., LLMModelFlowType.CHAT)`); (4) each provider's recommended model
 (`recommended-models.json`); (5) the first visible model of the first
 provider. Per `[[llm-providers]]`, `CRAFT` is a pointer flow that nothing
 populates automatically, so step (2) is frequently empty and step (3) is
@@ -555,6 +652,16 @@ when the resolved config actually changed, tracked via a
 `dispose_pending` cache marker so a crash between writing the file and
 disposing the stale opencode instance is retried on the next turn rather
 than silently leaving the instance on the old config until pod death.
+
+**Automatic naming starts after the first turn is accepted.** The accepted
+`send-message` response guarantees that the user message is committed.
+The frontend store requests `PUT /sessions/{id}/name` with `name: null`.
+The backend names only unnamed sessions and checks the name again under a
+row lock after generation. A successful manual rename takes precedence. Failed
+manual renames leave pending automatic names eligible to update the sidebar. Empty or failed
+model responses use the first message, trimmed to 40 characters. Empty
+sessions reject naming instead of saving a UUID label. The generate-name
+endpoint remains a preview and does not persist its result.
 
 **Session naming does not use this resolution at all.**
 `naming.py:generate_session_name` calls `get_default_llm()` (the workspace
@@ -584,6 +691,26 @@ The response sets `complete=False` when scan limits, unreadable entries, or an u
 An existing workspace with no outputs directory returns a complete empty inventory.
 Callers must preserve unseen files when the response is incomplete.
 The endpoint does not store an index or create artifact records.
+Output inventory starts when session loading confirms filesystem readiness, before artifact discovery finishes.
+Ready cached-session visits revalidate inventory without reloading history. Restores, file changes, and explicit refreshes also update it.
+Opening or switching to Outputs does not start another scan.
+Duplicate automatic reads of the same runtime and turn share one request.
+Inventory responses from an earlier runtime cannot replace restored inventory.
+Session loads use instance, turn, and load generations to reject superseded responses.
+Session loads and cached-session refreshes apply both true and false runtime-staleness responses.
+Capability revisions prevent older reads from replacing a newer reload result.
+Cached sessions with failed or unavailable sandboxes retry restoration on explicit revisit.
+
+The frontend marks the restored sandbox and filesystem ready when restoration completes.
+Webapp readiness polling runs separately and controls iframe replacement.
+Polling survives successor loads for the same session instance and sandbox.
+Output inventory requests cancel reads from superseded runtimes, preserving request order within one runtime.
+Terminal access or not-found errors clear accepted inventory and stop retries.
+
+Output inventory data belongs to the session runtime. An active read can update files after the next queued turn starts.
+Tabs and automatic selection still require the captured turn. Passive reads retain their turn guard to protect discovery.
+Inventory reads stay ordered and do not block queued prompts. Old-turn failures do not replace the new turn’s inventory status.
+A directory scan reports current files, not exact per-turn provenance.
 
 ## 5. Contracts and invariants
 
@@ -664,7 +791,7 @@ The endpoint does not store an index or create artifact records.
 |---|---|
 | changes the turn executor (`interactive_turns/executor.py`) | every streamed terminal path still calls `finalize_persist` before `finish_turn` (the prompt-slot rejection path persists an error row instead); the timeout-continuation loop's `MAX_TIMEOUT_CONTINUATIONS` cap; `[[craft-streaming]]`'s event shapes the executor switches on (`PromptResponse`, `ActivityTimeoutError`, `SandboxError`) |
 | changes locking (`prompt_slot`, `acquire_active_turn_lock`, `session_creation_lock`) | the CONFLICT-vs-silent-failure behavior at each acquisition site; whether a reclaim (`claim_turn_for_runner`) can still race a live runner; `[[craft-sandboxes]]`'s reaper, which also touches sandbox state under related locks |
-| changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's `reconcileInterruptedTurn` polling contract (`fetchActiveTurn` going to `null`); whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` best-effort path staying best-effort (not blocking) |
+| changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's pending Stop request barrier and known-turn terminal outcome contract; whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` remaining best-effort, with a short HTTP timeout under the admission lock |
 | adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; `list_live_approvals`'s time-window filter; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_session_grant` can actually cover |
 | changes session state (`BuildSession` columns, `session_ready.py`) | `session_runtime_intact`'s fast-path check; `reconcile_session_llm_config`'s short-circuit comparison; any snapshot/restore path in `[[craft-sandboxes]]` that reads these columns |
 | changes artifact upsert or hashing | the FE artifact list/version display; `export_docx`/`download_artifact`, which read the live workspace, not the DB row's cached bytes |
@@ -798,3 +925,17 @@ processing and blocking sandbox egress during OpenCode startup.
   Craft-only table. A change to generic document/connector logic (deletion,
   metadata handling, permission sync) can silently affect Craft's user
   library, and vice versa.
+
+### Frontend layout ownership
+
+`CraftWorkspace` owns geometry and resizing; `OutputPanel` owns resource tabs, previews, reloads, and exports.
+`useOutputPanelPersistence` in `web/src/lib/build/hooks.ts` saves preferences independently of layout.
+Resize release commits the final pointer position, including moves before the next animation frame.
+Cancellation preserves the saved width. Hidden surfaces remain inert and cannot retain keyboard focus.
+
+### Output document thumbnails
+
+`GET /build/sessions/{id}/output-thumbnail/{path}` returns a cached JPEG first page
+for an owned session’s PDF or PowerPoint file. The shared document converter
+checks workspace confinement and applies advisory size preflight before bounded rendering. Full PowerPoint
+previews still use the existing slide endpoint.

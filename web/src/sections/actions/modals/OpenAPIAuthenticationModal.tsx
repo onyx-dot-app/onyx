@@ -10,6 +10,7 @@ import {
   Divider,
   MessageCard,
   InputPasswordTypeIn,
+  InputSwitch,
 } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
@@ -22,19 +23,20 @@ import {
 } from "@opal/components";
 import { OAuthConfig } from "@/lib/tools/types";
 import { getOAuthConfig } from "@/lib/oauth/api";
+import {
+  MASKED_OAUTH_CREDENTIAL,
+  type OAuthConfigFields,
+} from "@/lib/oauth/config";
+import OAuthPKCESupport from "@/sections/actions/oauth/OAuthPKCESupport";
+import OAuthConnectionCheck from "@/sections/actions/oauth/OAuthConnectionCheck";
 import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 
 export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
 
-export interface OpenAPIAuthFormValues {
+export interface OpenAPIAuthFormValues extends OAuthConfigFields {
   authMethod: AuthMethod;
-  authorizationUrl: string;
-  tokenUrl: string;
-  clientId: string;
-  clientSecret: string;
-  scopes: string;
   headers: KeyValue[];
 }
 
@@ -53,8 +55,6 @@ interface OpenAPIAuthenticationModalProps {
   passthroughOAuthEnabled?: boolean;
 }
 
-const MASKED_CREDENTIAL_VALUE = "********";
-
 const defaultValues: OpenAPIAuthFormValues = {
   authMethod: "oauth",
   authorizationUrl: "",
@@ -62,6 +62,7 @@ const defaultValues: OpenAPIAuthFormValues = {
   clientId: "",
   clientSecret: "",
   scopes: "",
+  supportsPkce: false,
   headers: [
     {
       key: "Authorization",
@@ -232,9 +233,10 @@ export default function OpenAPIAuthenticationModal({
           existingOAuthConfig?.authorization_url ||
           defaultValues.authorizationUrl,
         tokenUrl: existingOAuthConfig?.token_url || defaultValues.tokenUrl,
-        clientId: shouldMaskCredentials ? MASKED_CREDENTIAL_VALUE : "",
-        clientSecret: shouldMaskCredentials ? MASKED_CREDENTIAL_VALUE : "",
+        clientId: shouldMaskCredentials ? MASKED_OAUTH_CREDENTIAL : "",
+        clientSecret: shouldMaskCredentials ? MASKED_OAUTH_CREDENTIAL : "",
         scopes: existingOAuthConfig?.scopes?.join(", ") || "",
+        supportsPkce: existingOAuthConfig?.supports_pkce ?? false,
         headers: baseHeaders,
       };
     }
@@ -277,26 +279,8 @@ export default function OpenAPIAuthenticationModal({
         formikHelpers.setSubmitting(false);
         return;
       }
-      const sanitizeCredentials = (
-        formValues: OpenAPIAuthFormValues
-      ): OpenAPIAuthFormValues => {
-        if (!isEditingOAuthConfig || formValues.authMethod !== "oauth") {
-          return formValues;
-        }
-
-        const sanitizeValue = (value: string) =>
-          value === MASKED_CREDENTIAL_VALUE ? "" : value;
-
-        return {
-          ...formValues,
-          clientId: sanitizeValue(formValues.clientId),
-          clientSecret: sanitizeValue(formValues.clientSecret),
-        };
-      };
-
       try {
-        const sanitizedValues = sanitizeCredentials(values);
-        await onConnect?.(sanitizedValues);
+        await onConnect?.(values);
         onClose();
       } finally {
         formikHelpers.setSubmitting(false);
@@ -460,7 +444,9 @@ export default function OpenAPIAuthenticationModal({
                               name="authorizationUrl"
                               value={values.authorizationUrl}
                               onChange={handleChange}
-                              placeholder="https://example.com/oauth/authorize"
+                              placeholder={t(
+                                "placeholders.oauthAuthorizationUrl"
+                              )}
                             />
                           </FormField.Control>
                           <FormField.Message
@@ -488,7 +474,7 @@ export default function OpenAPIAuthenticationModal({
                               name="tokenUrl"
                               value={values.tokenUrl}
                               onChange={handleChange}
-                              placeholder="https://example.com/oauth/access_token"
+                              placeholder={t("placeholders.oauthTokenUrl")}
                             />
                           </FormField.Control>
                           <FormField.Message
@@ -497,6 +483,11 @@ export default function OpenAPIAuthenticationModal({
                             }}
                           />
                         </FormField>
+
+                        <OAuthPKCESupport
+                          authorizationUrl={values.authorizationUrl}
+                          tokenUrl={values.tokenUrl}
+                        />
 
                         <FormField
                           name="clientId"
@@ -601,10 +592,34 @@ export default function OpenAPIAuthenticationModal({
                           />
                         </FormField>
 
+                        <FormField name="supportsPkce">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex flex-col gap-1">
+                              <FormField.Label>
+                                {t("openApiAuthModal.pkce.label")}
+                              </FormField.Label>
+                              <FormField.Description>
+                                {t("openApiAuthModal.pkce.description")}
+                              </FormField.Description>
+                            </div>
+                            <FormField.Control asChild>
+                              <InputSwitch
+                                checked={values.supportsPkce}
+                                onCheckedChange={(checked) =>
+                                  setFieldValue("supportsPkce", checked)
+                                }
+                              />
+                            </FormField.Control>
+                          </div>
+                        </FormField>
+
+                        <OAuthConnectionCheck
+                          values={values}
+                          configId={oauthConfigId}
+                          disabled={!isValid || isSubmitting}
+                        />
+
                         <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
-                          <Text as="p" text03 secondaryBody>
-                            {t("openApiAuthModal.oauthLoginNotice.description")}
-                          </Text>
                           <div className="flex flex-col gap-2 w-full">
                             <Text
                               as="p"

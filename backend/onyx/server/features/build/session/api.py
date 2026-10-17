@@ -26,6 +26,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.serving import build_content_disposition
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.db.artifact import (
+    get_output_card_rows,
+    mark_output_viewed,
+    mark_outputs_viewed,
+)
 from onyx.server.features.build.db.build_session import (
     get_build_session,
     set_build_session_sharing_scope,
@@ -51,7 +56,11 @@ from onyx.server.features.build.session.models import (
     ArtifactResponse,
     DetailedSessionResponse,
     OpencodeHistorySnapshotResponse,
+    OutputCard,
+    OutputCardsResponse,
     OutputInventoryResponse,
+    OutputsViewedRequest,
+    OutputViewedRequest,
     PptxPreviewResponse,
     PreProvisionedCheckResponse,
     SandboxStatusResponse,
@@ -519,6 +528,70 @@ def list_artifacts(
     return artifacts
 
 
+@router.get("/{session_id}/output-cards")
+def get_output_cards(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> OutputCardsResponse:
+    if get_build_session(session_id, user.id, db_session) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+    return OutputCardsResponse(
+        cards=[
+            OutputCard.from_model(artifact)
+            for artifact in get_output_card_rows(db_session, session_id=session_id)
+        ]
+    )
+
+
+@router.patch("/{session_id}/output-cards/viewed")
+def view_output_cards(
+    session_id: UUID,
+    body: OutputsViewedRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> OutputCardsResponse:
+    if get_build_session(session_id, user.id, db_session) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+    try:
+        cards = mark_outputs_viewed(
+            db_session, session_id=session_id, revisions=body.revisions
+        )
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.CONFLICT, str(error)) from error
+    response = OutputCardsResponse(
+        cards=[OutputCard.from_model(card) for card in cards]
+    )
+    db_session.commit()
+    return response
+
+
+@router.patch("/{session_id}/output-cards/{artifact_id}/viewed")
+def view_output_card(
+    session_id: UUID,
+    artifact_id: UUID,
+    body: OutputViewedRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> OutputCard:
+    if get_build_session(session_id, user.id, db_session) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+    try:
+        result = mark_output_viewed(
+            db_session,
+            session_id=session_id,
+            artifact_id=artifact_id,
+            revision=body.revision,
+        )
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.CONFLICT, str(error)) from error
+    if result is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Output not found")
+    response = OutputCard.from_model(result)
+    db_session.commit()
+    return response
+
+
 @router.get("/{session_id}/outputs")
 def get_output_inventory(
     session_id: UUID,
@@ -665,6 +738,37 @@ def get_pptx_preview(
         raise HTTPException(status_code=404, detail="Session not found")
 
     return PptxPreviewResponse(**result)
+
+
+@router.get("/{session_id}/output-thumbnail/{path:path}")
+def get_output_thumbnail(
+    session_id: UUID,
+    path: str,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Return the first page of a PDF or presentation as a JPEG."""
+    try:
+        content = SessionManager(db_session).get_output_thumbnail(
+            session_id, user.id, path
+        )
+    except ValueError as error:
+        error_code = (
+            OnyxErrorCode.UNAUTHORIZED
+            if any(
+                term in str(error).lower()
+                for term in ("path traversal", "access denied")
+            )
+            else OnyxErrorCode.BAD_REQUEST
+        )
+        raise OnyxError(error_code, str(error)) from error
+    if content is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+    return Response(
+        content=content,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/{session_id}/webapp-info", response_model=WebappInfo)

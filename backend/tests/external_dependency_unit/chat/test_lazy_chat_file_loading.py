@@ -272,7 +272,6 @@ class TestLoadChatFileLazy:
         self,
         read_counter: _ReadCounter,
         file_cleanup: list[str],
-        db_session: Session,
     ) -> None:
         """``load_chat_file`` must not pull raw bytes from the file store at
         construction. Bytes flow only when ``.content`` is touched."""
@@ -281,7 +280,8 @@ class TestLoadChatFileLazy:
 
         loaded = load_chat_file(
             {"id": file_id, "type": ChatFileType.IMAGE, "name": "icon.png"},
-            db_session,
+            token_count=0,
+            content_pending=False,
         )
 
         # Construction must not have read raw bytes.
@@ -301,7 +301,6 @@ class TestLoadChatFileLazy:
     def test_deleted_file_yields_empty_content(
         self,
         read_counter: _ReadCounter,  # noqa: ARG002 — keeps store fixtures live
-        db_session: Session,
     ) -> None:
         """A file referenced in chat history but deleted from the file store
         (user-file deletion doesn't scrub chat-message ``files`` references)
@@ -311,7 +310,8 @@ class TestLoadChatFileLazy:
 
         loaded = load_chat_file(
             {"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"},
-            db_session,
+            token_count=0,
+            content_pending=False,
         )
 
         # Delete the underlying file after construction but before the lazy
@@ -324,7 +324,6 @@ class TestLoadChatFileLazy:
         self,
         read_counter: _ReadCounter,  # noqa: ARG002 — keeps store fixtures live
         file_cleanup: list[str],
-        db_session: Session,
     ) -> None:
         """Non-not-found failures (e.g. transient object-store errors) must
         also degrade to empty content rather than raise mid-LLM-flow — the
@@ -334,7 +333,8 @@ class TestLoadChatFileLazy:
 
         loaded = load_chat_file(
             {"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"},
-            db_session,
+            token_count=0,
+            content_pending=False,
         )
 
         with patch.object(
@@ -448,7 +448,6 @@ class TestConvertLoadedFilesToChatFilesLazy:
         self,
         read_counter: _ReadCounter,
         file_cleanup: list[str],
-        db_session: Session,
     ) -> None:
         from onyx.chat.process_message import _convert_loaded_files_to_chat_files
 
@@ -457,7 +456,8 @@ class TestConvertLoadedFilesToChatFilesLazy:
         loaded = [
             load_chat_file(
                 {"id": file_id, "type": ChatFileType.IMAGE, "name": "x.png"},
-                db_session,
+                token_count=0,
+                content_pending=False,
             )
         ]
 

@@ -35,12 +35,20 @@ in bulk, in a searchable table.
 
 On **Apps**, the admin sees every external service and MCP server the Craft
 agent can reach: built-in apps (Slack, Gmail, Google Calendar, Google Drive, Linear,
-HubSpot, Notion, GitHub), any custom app the admin has registered, and connected MCP
+HubSpot, Notion, GitHub, Zendesk), any custom app the admin has registered, and connected MCP
 servers. For each, the admin can enable or disable it, edit its per-action
 policy (auto-approve, ask, or deny each kind of action), and configure its
-credentials. On Onyx Cloud, built-in apps already have Onyx-managed OAuth
+credentials. Zendesk also exposes Help Center, side conversation, and macro policies.
+Their reads auto-approve and their writes require approval by default.
+The permissions selector shows Default when effective policies match
+the catalog and Custom for mixed overrides. Default restores each catalog policy.
+The shared MCP editor uses the same control, with Ask as each tool’s default.
+Policy rows keep controls on the right. Names and descriptions wrap within the
+remaining width so the full text stays visible without hover or expansion.
+On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
 credentials, so the admin can only toggle them on and set policy. Custom apps
-on Cloud keep a normal credential form.
+on Cloud keep a normal credential form, as does a built-in whose OAuth client
+cannot be Onyx-owned because it is registered per customer account (Zendesk).
 
 On **Preferences**, the admin sets a workspace default model for Craft
 sessions and a free-text "organization instructions" block that every Craft
@@ -118,7 +126,7 @@ permission. See §5 for why the flag alone is not the real gate.
   has no `default_policy` column. `default_policy` is a catalog field on
   `EndpointDescriptor`, and it only seeds the admin form.
 - `LLMModelFlow` row with `llm_model_flow_type = LLMModelFlowType.CRAFT`
-  (`backend/onyx/db/llm.py`, `fetch_default_craft_model`): the Preferences
+  (`backend/onyx/db/llm.py`, `fetch_default_model(..., LLMModelFlowType.CRAFT)`): the Preferences
   page's default-model selection. See `[[llm-providers]]`.
 
 ---
@@ -132,10 +140,10 @@ require_onyx_craft_enabled                  server/features/build/api.py
   └─ is_craft_enabled_for_user              server/features/build/utils.py
        ├─ User.craft_enabled override        (per-user; short-circuits if False)
        ├─ Settings.craft_default_enabled      (workspace default, when override is None)
-       └─ is_craft_available_for_deployment   (PostHog flag or ENABLE_CRAFT)
+       └─ is_craft_available_for_deployment   (PostHog flag or ENABLE_CRAFT, AND tier >= LLM_GATEWAY_MIN_TIER)
 ```
 
-`is_craft_enabled_for_user` (`build/utils.py:156`) is the single source of
+`is_craft_enabled_for_user` (`build/utils.py:177`) is the single source of
 truth: `AccountType.ANONYMOUS` users never get Craft (it is identity-bound: a
 per-user sandbox, library, and scheduled tasks), then the per-user override
 wins if set to `False`, then the workspace default gates `None`, and finally
@@ -224,7 +232,7 @@ renders nothing (no empty heading).
 `deleteDefaultCraftModel` (`web/src/lib/languageModels/svc.ts`), which hit
 `POST` / `DELETE /api/admin/llm/default-craft`. That endpoint writes the
 `LLMModelFlow` row for `LLMModelFlowType.CRAFT`
-(`backend/onyx/db/llm.py:update_default_craft_provider`).
+(`backend/onyx/db/llm.py:update_default_pointer_model`).
 Per `[[llm-providers]]`, `CRAFT` is a **pointer flow, not a capability check**:
 nothing populates this row automatically, and Craft falls back to the
 workspace chat default (`defaultText` in the page) when no explicit Craft
@@ -321,9 +329,14 @@ not cover:
   entirely; per-user OAuth credentials for external apps depend on the acting
   user's identity.
 - [[editions-and-gating]]: `is_craft_available_for_deployment` reads a
-  PostHog feature flag (or `ENABLE_CRAFT`), a deployment-level switch distinct
-  from any billing-tier check; `requiredTier: null` on all three routes
-  confirms Craft admin visibility is not tier-gated at the nav level.
+  PostHog feature flag (or `ENABLE_CRAFT`) and also requires the deployment
+  tier to reach `LLM_GATEWAY_MIN_TIER` (Business), because every Craft turn
+  goes through the tier-gated `/gateway`; Community never gets Craft.
+  When the flag is on but the tier is too low, `is_craft_locked_by_tier` sets
+  `onyx_craft_requires_upgrade` in `/settings`: the sidebar keeps Craft with a
+  Business tag and `/craft/*` renders `CraftUpgradePage`; `/build` stays 403.
+  `requiredTier: null` on all three routes confirms Craft admin visibility is
+  not tier-gated at the nav level.
 - [[llm-providers]]: the Preferences default-model picker is the `CRAFT`
   `LLMModelFlowType`; see `llm-providers.md` §9 for why it is a pointer, not a
   capability check.
@@ -448,6 +461,10 @@ there.
   `upstream_url_patterns` in the admin response; an admin on Cloud can only
   toggle enablement and edit policy for these, by design
   (`docs/craft/features/external-apps/cloud-managed-app-credentials.md`).
+- **Per-account providers own their gateway host.** The database write path
+  restores masked credentials, then asks the provider to resolve its patterns.
+  Zendesk validates one subdomain and uses it for OAuth, skill files, and the
+  gateway. Fixed-host built-ins keep submitted patterns; `CUSTOM` uses globs.
 - **`app_type` is immutable on update.** `update_external_app` raises rather
   than allowing a cross-edit between built-in and custom; deleting and
   recreating is the only path to change it.

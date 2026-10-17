@@ -46,6 +46,12 @@ export class ChatPage {
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
 
+  async reload(): Promise<void> {
+    await this.page.reload();
+    await this.page.waitForLoadState("networkidle");
+    await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
+  }
+
   async scrollTo(position: "top" | "bottom"): Promise<void> {
     await this.scrollContainer.evaluate(async (el, pos) => {
       el.scrollTo({ top: pos === "top" ? 0 : el.scrollHeight });

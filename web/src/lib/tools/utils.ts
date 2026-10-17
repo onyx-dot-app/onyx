@@ -1,5 +1,5 @@
-import { SOURCE_METADATA_MAP } from "@/lib/sources";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
+import { SOURCE_METADATA_MAP } from "@/lib/connectors/constants";
 import {
   ADMIN_CONFIG_LINKS,
   OPENAPI_ADMIN_CONFIG,

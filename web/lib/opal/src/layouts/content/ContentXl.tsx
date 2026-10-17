@@ -1,7 +1,7 @@
 "use client";
 
-import { Button, Text } from "@opal/components";
-import type { TextFont } from "@opal/components";
+import { Button, OverflowText, Tag, Text } from "@opal/components";
+import type { TagProps, TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -44,6 +44,9 @@ interface ContentXlProps {
 
   /** Optional description below the title. */
   description?: string | RichStr;
+
+  /** Tag rendered inline after the description. */
+  descriptionTag?: TagProps;
 
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
@@ -107,6 +110,7 @@ function ContentXl({
   icon: Icon,
   title,
   description,
+  descriptionTag,
   titleMaxLines,
   descriptionMaxLines,
   strikethrough,
@@ -116,6 +120,7 @@ function ContentXl({
   moreIcon2: MoreIcon2,
   ref,
 }: ContentXlProps) {
+  const hasDescription = !!description && !!toPlainString(description);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
@@ -238,24 +243,39 @@ function ContentXl({
               icon={SvgEdit}
               prominence="internal"
               size={config.editButtonSize}
+              aria-label={strings.edit}
               tooltip={strings.edit}
-              tooltipSide="right"
+              tooltipSide="end"
               onClick={startEditing}
             />
           </div>
         )}
       </div>
 
-      {description && toPlainString(description) && (
-        <div className="opal-content-xl-description">
-          <Text
-            font="secondary-body"
-            color="inherit"
-            as="p"
-            maxLines={descriptionMaxLines}
-          >
-            {description}
-          </Text>
+      {(hasDescription || descriptionTag) && (
+        <div
+          className={cn(
+            "opal-content-xl-description",
+            descriptionTag && "flex items-center gap-2"
+          )}
+        >
+          {/* Clamped, the full description shows in a tooltip when it is cut. */}
+          {hasDescription &&
+            (descriptionMaxLines ? (
+              <OverflowText
+                font="secondary-body"
+                color="inherit"
+                as="p"
+                maxLines={descriptionMaxLines}
+              >
+                {description}
+              </OverflowText>
+            ) : (
+              <Text font="secondary-body" color="inherit" as="p">
+                {description}
+              </Text>
+            ))}
+          {descriptionTag && <Tag {...descriptionTag} />}
         </div>
       )}
     </div>

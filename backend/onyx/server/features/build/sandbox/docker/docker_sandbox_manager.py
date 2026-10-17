@@ -78,12 +78,16 @@ from docker import DockerClient
 from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 from docker.models.networks import Network
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ATTACHMENTS_DIRECTORY,
+    BUN_CACHE_DIR,
+    BUN_IMAGE_CACHE_DIR,
     ONYX_SERVER_URL,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
@@ -99,9 +103,9 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_PORT,
 )
 from onyx.server.features.build.sandbox.base import (
-    BUN_CACHE_DIR,
-    BUN_IMAGE_CACHE_DIR,
     SandboxManager,
+    document_preview_command,
+    parse_document_preview_response,
 )
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
@@ -128,7 +132,9 @@ from onyx.server.features.build.sandbox.labels import (
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
+    FatalWriteError,
     FileSet,
+    RetriableWriteError,
     SandboxInfo,
     SnapshotResult,
 )
@@ -141,6 +147,7 @@ from onyx.server.features.build.sandbox.session_workspace import (
     MANAGED_SKILLS_PATH,
     MANAGED_USER_LIBRARY_PATH,
     SESSIONS_ROOT,
+    build_opencode_dependency_setup_command,
     build_session_workspace_setup_script,
     build_workspace_exists_check_script,
 )
@@ -1301,7 +1308,7 @@ echo "Session cleanup complete"
             "/bin/sh",
             "-c",
             (
-                f"cd {session_path} && tar -czf - "
+                f"cd {session_path} && tar --exclude=outputs/.document-thumbnails -czf - "
                 f"$([ -d outputs ] && echo outputs) "
                 f"$([ -d attachments ] && echo attachments)"
             ),
@@ -1597,6 +1604,7 @@ fi
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
+{build_opencode_dependency_setup_command(session_path)}
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' {shlex.quote(agents_md)} > {session_path}/AGENTS.md
@@ -1678,7 +1686,7 @@ fi
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
     def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
+        self, sandbox_id: UUID, session_id: UUID, *, include_web: bool = False
     ) -> OutputsManifestResponse:
         container = self._require_container(sandbox_id)
         try:
@@ -1696,6 +1704,7 @@ fi
                     "-m",
                     "sandbox_daemon.outputs_manifest",
                     str(session_id),
+                    *(["--include-web"] if include_web else []),
                 ],
                 workdir="/opt",
             )
@@ -1991,7 +2000,6 @@ echo WRITE_OK"""
             raise ValueError("mount_path is required")
         if ".." in Path(mount_path).parts:
             raise ValueError("mount_path may not contain '..'")
-        container = self._require_container(sandbox_id)
 
         # Build a deterministic tar (sorted, fixed mtime) like the K8s push.
         buf = io.BytesIO()
@@ -2007,32 +2015,47 @@ echo WRITE_OK"""
                 tar.addfile(info, io.BytesIO(data))
         tar_bytes = buf.getvalue()
 
-        target = mount_path
-        # Land atomically: extract into a temp dir alongside the target, then
-        # rename. Matches the K8s push daemon's atomic-swap semantics.
+        # Publish a symlink atomically, matching the daemon's bundle writer.
         script = (
             f"set -e\n"
-            f'target="{target}"\n'
-            f'parent=$(dirname "$target")\n'
-            f'mkdir -p "$parent"\n'
-            f'tmpdir=$(mktemp -d -p "$parent")\n'
-            f"trap 'rm -rf \"$tmpdir\"' EXIT\n"
-            f'tar -xzf - -C "$tmpdir"\n'
-            f'if [ -e "$target" ] && [ ! -L "$target" ]; then\n'
-            f'    rm -rf "$target"\n'
-            f"fi\n"
-            f'if [ -L "$target" ]; then rm -f "$target"; fi\n'
-            f'mv "$tmpdir" "$target"\n'
-            f"trap - EXIT\n"
+            f"target={shlex.quote(mount_path)}\n"
+            'parent=$(dirname "$target")\n'
+            'mkdir -p "$parent"\n'
+            'bundle_prefix="$parent/.bundle-$(basename "$target")-"\n'
+            'tmpdir=$(mktemp -d "${bundle_prefix}XXXXXXXXXX")\n'
+            'link="$tmpdir.link"\n'
+            'trap \'rm -rf "$tmpdir" "$link"\' EXIT\n'
+            'tar -xzf - -C "$tmpdir"\n'
+            'old_target=""\n'
+            'if [ -L "$target" ]; then old_target=$(readlink "$target"); fi\n'
+            'if [ -e "$target" ] && [ ! -L "$target" ]; then\n'
+            '    rm -rf "$target"\n'
+            "fi\n"
+            'ln -s "$tmpdir" "$link"\n'
+            'mv -Tf "$link" "$target"\n'
+            "trap - EXIT\n"
+            # Readers can finish against the prior directory during the grace period.
+            'case "$old_target" in "$bundle_prefix"*)\n'
+            '    case "${old_target#"$bundle_prefix"}" in ""|*/*) ;; *)\n'
+            '        (sleep 60; rm -rf "$old_target") </dev/null >/dev/null 2>&1 &\n'
+            "    ;; esac\n"
+            ";; esac\n"
         )
+
         try:
+            container = self._require_container(sandbox_id)
             _stream_stdin_to_container_as_sandbox_user(
                 container,
                 ["/bin/sh", "-c", script],
                 tar_bytes,
             )
-        except ExecError as e:
-            raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
+        except (ExecError, APIError) as e:
+            cause = e.__cause__ if isinstance(e, ExecError) else e
+            if isinstance(cause, APIError) and not cause.is_client_error():
+                raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
+            raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
+        except (OSError, RequestsConnectionError, Timeout) as e:
+            raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
 
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
         """Returns an http URL the api_server can reach the sandbox on.
@@ -2047,55 +2070,39 @@ echo WRITE_OK"""
             return f"http://{_sandbox_container_name(sandbox_id)}:{port}"
         return f"http://{container.name}:{port}"
 
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
         container = self._require_container(sandbox_id)
-        clean_pptx = _sanitize_relative_path(pptx_path)
+        clean_document = _sanitize_relative_path(document_path)
         clean_cache = _sanitize_relative_path(cache_dir)
         session_root = f"{SESSIONS_ROOT}/{session_id}"
-        pptx_abs = f"{session_root}/{clean_pptx}"
+        document_abs = f"{session_root}/{clean_document}"
         cache_abs = f"{session_root}/{clean_cache}"
 
+        def run_command(command: list[str]) -> str:
+            return _run_in_container_as_sandbox_user(container, command).stdout_text
+
         try:
-            result = _run_in_container_as_sandbox_user(
-                container,
-                [
-                    "python",
-                    f"{MANAGED_SKILLS_PATH}/pptx/scripts/preview.py",
-                    pptx_abs,
+            self._ensure_document_preview_bundle(sandbox_id, run_command)
+            output = run_command(
+                document_preview_command(
+                    document_abs,
                     cache_abs,
-                ],
+                    session_root,
+                    first_page_only=first_page_only,
+                ),
             )
         except ExecError as e:
-            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
+            raise RuntimeError(f"Failed to generate document preview: {e}") from e
 
-        lines = [
-            line.strip()
-            for line in result.stdout_text.strip().split("\n")
-            if line.strip()
-        ]
-        if not lines:
-            raise ValueError("Empty response from PPTX conversion.")
-        if lines[0] == "ERROR_NOT_FOUND":
-            raise ValueError(f"File not found: {pptx_path}")
-        if lines[0] == "ERROR_NO_PDF":
-            raise ValueError("soffice did not produce a PDF file.")
-
-        cached = lines[0] == "CACHED"
-        abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
-        prefix = f"{session_root}/"
-        rel_paths: list[str] = []
-        for p in abs_paths:
-            if p.startswith(prefix):
-                rel_paths.append(p[len(prefix) :])
-            elif p.endswith(".jpg"):
-                rel_paths.append(p)
-        return rel_paths, cached
+        return parse_document_preview_response(output, session_root)
 
 
 class _GeneratorReader:

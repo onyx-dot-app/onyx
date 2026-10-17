@@ -54,8 +54,8 @@ def test_normalize_github_base_url_rejects_garbage() -> None:
 
 
 def _base_url_of(connector: GithubConnector) -> str:
-    assert connector.github_client is not None
-    return connector.github_client.requester.base_url
+    """The base URL of the client the gateway builds on its first call."""
+    return connector.source_operations._client().requester.base_url
 
 
 def _connector() -> GithubConnector:
@@ -63,9 +63,7 @@ def _connector() -> GithubConnector:
 
 
 def test_credential_base_url_is_used(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "onyx.connectors.github.connector.GITHUB_CONNECTOR_BASE_URL", None
-    )
+    monkeypatch.setattr("onyx.connectors.github.utils.GITHUB_CONNECTOR_BASE_URL", None)
     connector = _connector()
     with _ssrf_env():
         connector.load_credentials(
@@ -74,12 +72,12 @@ def test_credential_base_url_is_used(monkeypatch: pytest.MonkeyPatch) -> None:
                 "github_base_url": "https://github.example.com",
             }
         )
-    assert _base_url_of(connector) == "https://github.example.com/api/v3"
+        assert _base_url_of(connector) == "https://github.example.com/api/v3"
 
 
 def test_credential_base_url_wins_over_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "onyx.connectors.github.connector.GITHUB_CONNECTOR_BASE_URL",
+        "onyx.connectors.github.utils.GITHUB_CONNECTOR_BASE_URL",
         "https://from-env.example.com/api/v3",
     )
     connector = _connector()
@@ -90,7 +88,7 @@ def test_credential_base_url_wins_over_env(monkeypatch: pytest.MonkeyPatch) -> N
                 "github_base_url": "https://from-cred.example.com",
             }
         )
-    assert _base_url_of(connector) == "https://from-cred.example.com/api/v3"
+        assert _base_url_of(connector) == "https://from-cred.example.com/api/v3"
 
 
 @pytest.mark.parametrize("cred_value", [None, "", "   "])
@@ -99,7 +97,7 @@ def test_env_base_url_is_the_fallback(
 ) -> None:
     """Existing GHES deployments set only the env var and must keep working."""
     monkeypatch.setattr(
-        "onyx.connectors.github.connector.GITHUB_CONNECTOR_BASE_URL",
+        "onyx.connectors.github.utils.GITHUB_CONNECTOR_BASE_URL",
         "https://from-env.example.com/api/v3",
     )
     connector = _connector()
@@ -107,17 +105,15 @@ def test_env_base_url_is_the_fallback(
         connector.load_credentials(
             {"github_access_token": "token", "github_base_url": cred_value}
         )
-    assert _base_url_of(connector) == "https://from-env.example.com/api/v3"
+        assert _base_url_of(connector) == "https://from-env.example.com/api/v3"
 
 
 def test_defaults_to_github_dot_com(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "onyx.connectors.github.connector.GITHUB_CONNECTOR_BASE_URL", None
-    )
+    monkeypatch.setattr("onyx.connectors.github.utils.GITHUB_CONNECTOR_BASE_URL", None)
     connector = _connector()
     with _ssrf_env():
         connector.load_credentials({"github_access_token": "token"})
-    assert _base_url_of(connector) == "https://api.github.com"
+        assert _base_url_of(connector) == "https://api.github.com"
 
 
 class TestCredentialBaseUrlSSRF:
@@ -182,10 +178,10 @@ class TestCredentialBaseUrlSSRF:
         """GITHUB_CONNECTOR_BASE_URL is deployment config, not user input.
         Existing self-hosted Enterprise Server installs must keep working."""
         monkeypatch.setattr(
-            "onyx.connectors.github.connector.GITHUB_CONNECTOR_BASE_URL",
+            "onyx.connectors.github.utils.GITHUB_CONNECTOR_BASE_URL",
             "https://10.0.0.1/api/v3",
         )
         connector = _connector()
         with _ssrf_env():
             connector.load_credentials({"github_access_token": "token"})
-        assert _base_url_of(connector) == "https://10.0.0.1/api/v3"
+            assert _base_url_of(connector) == "https://10.0.0.1/api/v3"

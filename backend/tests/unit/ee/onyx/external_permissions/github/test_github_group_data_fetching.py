@@ -1,14 +1,12 @@
 from types import SimpleNamespace
-from typing import cast
-from unittest.mock import MagicMock, patch
+from typing import Any, cast
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from github import Github
-from github.GithubException import GithubException
-from github.NamedUser import NamedUser
-from github.Organization import Organization
-from github.Repository import Repository
 
+from ee.onyx.external_permissions.github.doc_sync import (
+    _is_repo_visibility_changed_from_groups,
+)
 from ee.onyx.external_permissions.github.group_sync import github_group_sync
 from ee.onyx.external_permissions.github.utils import (
     GitHubGroupSyncCache,
@@ -17,43 +15,38 @@ from ee.onyx.external_permissions.github.utils import (
     get_external_access_permission,
     get_external_user_group,
 )
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.github.models import GitHubRepository, GitHubUser
+from onyx.connectors.github.source_operations import (
+    GitHubApiError,
+    GitHubSourceOperations,
+)
 from onyx.db.models import ConnectorCredentialPair
 
 
-class FakeUser:
-    def __init__(self, login: str, email: str | None) -> None:
-        self.login = login
-        self._email = email
-        self.email_reads = 0
-
-    @property
-    def email(self) -> str | None:
-        self.email_reads += 1
-        return self._email
+def _gateway(emails: dict[str, str | None] | None = None) -> MagicMock:
+    gateway: MagicMock = create_autospec(GitHubSourceOperations, instance=True)
+    known: dict[str, str | None] = emails or {}
+    gateway.get_user.side_effect = lambda *, login: GitHubUser(
+        login=login, email=known.get(login)
+    )
+    return gateway
 
 
-def _private_repo(repo_id: int, collaborators: list[FakeUser]) -> Repository:
-    repo = MagicMock(spec=Repository)
-    repo.id = repo_id
-    repo.name = f"repo-{repo_id}"
-    repo.full_name = f"acme/repo-{repo_id}"
-    repo.visibility = "private"
-    repo.organization = MagicMock(spec=Organization)
-    repo.get_collaborators.return_value = [
-        cast(NamedUser, collaborator) for collaborator in collaborators
-    ]
-    return cast(Repository, repo)
-
-
-def _internal_repo(repo_id: int, organization: Organization) -> Repository:
-    repo = MagicMock(spec=Repository)
-    repo.id = repo_id
-    repo.name = f"repo-{repo_id}"
-    repo.full_name = f"acme/repo-{repo_id}"
-    repo.visibility = "internal"
-    repo.organization = organization
-    return cast(Repository, repo)
+def _repo(repo_id: int, visibility: str, **overrides: Any) -> GitHubRepository:
+    return GitHubRepository.from_raw(
+        {
+            "id": repo_id,
+            "name": f"repo-{repo_id}",
+            "full_name": f"acme/repo-{repo_id}",
+            "html_url": f"https://github.com/acme/repo-{repo_id}",
+            "visibility": visibility,
+            "private": visibility != "public",
+            "owner": {"login": "acme", "id": 42, "type": "Organization"},
+            **overrides,
+        }
+    )
 
 
 def _cc_pair() -> ConnectorCredentialPair:
@@ -71,15 +64,12 @@ def _cc_pair() -> ConnectorCredentialPair:
 
 
 def test_private_repositories_use_one_group_and_cache_user_profiles() -> None:
-    first_user = FakeUser("octocat", "octocat@example.com")
-    repeated_user = FakeUser("octocat", "changed@example.com")
-    first_repo = _private_repo(1, [first_user])
-    second_repo = _private_repo(2, [repeated_user])
-    github_client = MagicMock(spec=Github)
+    gateway = _gateway({"octocat": "octocat@example.com"})
+    gateway.list_repository_collaborators.return_value = ["octocat"]
     cache = GitHubGroupSyncCache()
 
-    first_groups = get_external_user_group(first_repo, github_client, cache)
-    second_groups = get_external_user_group(second_repo, github_client, cache)
+    first_groups = get_external_user_group(_repo(1, "private"), gateway, cache)
+    second_groups = get_external_user_group(_repo(2, "private"), gateway, cache)
 
     assert [(group.id, group.user_emails) for group in first_groups] == [
         (form_collaborators_group_id(1), ["octocat@example.com"])
@@ -87,95 +77,112 @@ def test_private_repositories_use_one_group_and_cache_user_profiles() -> None:
     assert [(group.id, group.user_emails) for group in second_groups] == [
         (form_collaborators_group_id(2), ["octocat@example.com"])
     ]
-    assert first_user.email_reads == 1
-    assert repeated_user.email_reads == 0
-    cast(MagicMock, first_repo.get_teams).assert_not_called()
-    cast(MagicMock, second_repo.get_teams).assert_not_called()
-    github_client.get_organization.assert_not_called()
+    # The profile is read once for both repositories.
+    gateway.get_user.assert_called_once_with(login="octocat")
+    gateway.list_organization_members.assert_not_called()
+
+
+def test_private_repository_without_emails_has_no_group() -> None:
+    gateway = _gateway({"octocat": None})
+    gateway.list_repository_collaborators.return_value = ["octocat"]
+
+    assert (
+        get_external_user_group(_repo(1, "private"), gateway, GitHubGroupSyncCache())
+        == []
+    )
 
 
 def test_private_repository_documents_reference_only_collaborator_group() -> None:
-    repo = _private_repo(1, [])
     external_access = get_external_access_permission(
-        repo, MagicMock(spec=Github), add_prefix=False
+        _repo(1, "private"), add_prefix=False
     )
 
     assert external_access.external_user_group_ids == {form_collaborators_group_id(1)}
-    cast(MagicMock, repo.get_teams).assert_not_called()
+
+
+def test_internal_repository_documents_reference_the_organization_group() -> None:
+    external_access = get_external_access_permission(
+        _repo(1, "internal"), add_prefix=True
+    )
+
+    assert external_access.external_user_group_ids == {
+        build_ext_group_name_for_onyx(
+            source=DocumentSource.GITHUB,
+            ext_group_name=form_organization_group_id(42),
+        )
+    }
+
+
+def test_public_repository_documents_are_public() -> None:
+    assert get_external_access_permission(_repo(1, "public")).is_public
+
+
+def test_unknown_visibility_is_treated_as_private() -> None:
+    external_access = get_external_access_permission(_repo(1, "secret"))
+
+    assert external_access.external_user_group_ids == {form_collaborators_group_id(1)}
 
 
 def test_private_collaborator_fetch_failure_is_fatal() -> None:
-    repo = _private_repo(1, [])
-    cast(MagicMock, repo.get_collaborators).side_effect = GithubException(
-        status=500, data={}, headers={}
+    gateway = _gateway()
+    gateway.list_repository_collaborators.side_effect = GitHubApiError(
+        "500", status_code=500
     )
 
-    with pytest.raises(GithubException):
-        get_external_user_group(
-            repo,
-            MagicMock(spec=Github),
-            GitHubGroupSyncCache(),
-        )
+    with pytest.raises(GitHubApiError):
+        get_external_user_group(_repo(1, "private"), gateway, GitHubGroupSyncCache())
 
 
 def test_internal_organization_group_is_fetched_and_emitted_once() -> None:
-    organization = MagicMock(spec=Organization)
-    organization.id = 42
-    organization.login = "acme"
-    org_api = MagicMock(spec=Organization)
-    org_user = FakeUser("octocat", "octocat@example.com")
-    org_api.get_members.return_value = [cast(NamedUser, org_user)]
-    github_client = MagicMock(spec=Github)
-    github_client.get_organization.return_value = org_api
+    gateway = _gateway({"octocat": "octocat@example.com"})
+    gateway.list_organization_members.return_value = ["octocat"]
     cache = GitHubGroupSyncCache()
 
-    first_groups = get_external_user_group(
-        _internal_repo(1, cast(Organization, organization)),
-        github_client,
-        cache,
-    )
-    second_groups = get_external_user_group(
-        _internal_repo(2, cast(Organization, organization)),
-        github_client,
-        cache,
-    )
+    first_groups = get_external_user_group(_repo(1, "internal"), gateway, cache)
+    second_groups = get_external_user_group(_repo(2, "internal"), gateway, cache)
 
     assert [(group.id, group.user_emails) for group in first_groups] == [
         (form_organization_group_id(42), ["octocat@example.com"])
     ]
     assert second_groups == []
-    assert org_user.email_reads == 1
-    github_client.get_organization.assert_called_once_with("acme")
-    org_api.get_members.assert_called_once_with(filter_="all")
+    gateway.get_user.assert_called_once_with(login="octocat")
+    gateway.list_organization_members.assert_called_once_with(org_login="acme")
 
 
 def test_internal_member_fetch_failure_is_not_cached() -> None:
-    organization = MagicMock(spec=Organization)
-    organization.id = 42
-    organization.login = "acme"
-    org_api = MagicMock(spec=Organization)
-    org_api.get_members.side_effect = GithubException(status=500, data={}, headers={})
-    github_client = MagicMock(spec=Github)
-    github_client.get_organization.return_value = org_api
+    gateway = _gateway()
+    gateway.list_organization_members.side_effect = GitHubApiError(
+        "500", status_code=500
+    )
     cache = GitHubGroupSyncCache()
 
-    with pytest.raises(GithubException):
-        get_external_user_group(
-            _internal_repo(1, cast(Organization, organization)),
-            github_client,
-            cache,
-        )
+    with pytest.raises(GitHubApiError):
+        get_external_user_group(_repo(1, "internal"), gateway, cache)
 
     assert cache.organization_groups_by_id == {}
 
 
+def test_internal_repository_of_a_user_owner_is_an_error() -> None:
+    repo = _repo(1, "internal", owner={"login": "octocat", "id": 7, "type": "User"})
+
+    with pytest.raises(ValueError, match="has no organization"):
+        get_external_user_group(repo, _gateway(), GitHubGroupSyncCache())
+
+
+def test_visibility_change_is_read_from_the_existing_groups() -> None:
+    private_group = build_ext_group_name_for_onyx(
+        source=DocumentSource.GITHUB, ext_group_name=form_collaborators_group_id(1)
+    )
+
+    assert not _is_repo_visibility_changed_from_groups(
+        _repo(1, "private"), [private_group]
+    )
+    assert _is_repo_visibility_changed_from_groups(_repo(1, "public"), [private_group])
+
+
 def test_repository_failure_aborts_group_sync() -> None:
     connector = MagicMock()
-    connector.github_client = MagicMock(spec=Github)
-    connector.repositories = None
-    connector.get_all_repos.return_value = [
-        SimpleNamespace(id=1, name="repo", full_name="acme/repo")
-    ]
+    connector.fetch_configured_repos.return_value = [_repo(1, "private")]
 
     with (
         patch(
@@ -184,8 +191,8 @@ def test_repository_failure_aborts_group_sync() -> None:
         ),
         patch(
             "ee.onyx.external_permissions.github.group_sync.get_external_user_group",
-            side_effect=GithubException(status=500, data={}, headers={}),
+            side_effect=GitHubApiError("500", status_code=500),
         ),
-        pytest.raises(GithubException),
+        pytest.raises(GitHubApiError),
     ):
         list(github_group_sync("tenant", _cc_pair()))

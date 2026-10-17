@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 
-import { Button, Text, Tooltip } from "@opal/components";
+import { Button, Collapsible, Text, Tooltip } from "@opal/components";
 import { cn } from "@opal/utils";
 import {
   SvgAlertCircle,
@@ -12,11 +12,6 @@ import {
   SvgChevronDown,
   SvgLoader,
 } from "@opal/icons";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import {
   ApprovalConflictError,
   postApprovalDecision,
@@ -181,14 +176,14 @@ export default function ApprovalCard({
             : "border-status-info-03"
         )}
       >
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
           <div
             className={cn(
               "flex items-center gap-1 pe-2 transition-colors",
               "has-[[data-approval-trigger]:hover]:bg-background-tint-02"
             )}
           >
-            <CollapsibleTrigger asChild>
+            <Collapsible.Trigger asChild>
               <button
                 data-approval-trigger
                 className="flex items-center gap-2 min-w-0 flex-1 text-start px-3 py-2"
@@ -210,7 +205,7 @@ export default function ApprovalCard({
                   {headerText}
                 </Text>
               </button>
-            </CollapsibleTrigger>
+            </Collapsible.Trigger>
             {decided ? (
               <div
                 className={cn(
@@ -227,7 +222,7 @@ export default function ApprovalCard({
                 </Text>
               </div>
             ) : null}
-            <CollapsibleTrigger asChild>
+            <Collapsible.Trigger asChild>
               <button
                 data-approval-trigger
                 aria-label={
@@ -244,7 +239,7 @@ export default function ApprovalCard({
                   )}
                 />
               </button>
-            </CollapsibleTrigger>
+            </Collapsible.Trigger>
           </div>
           {!decided && (
             <div className="flex flex-wrap items-center justify-end gap-1 px-3 pb-2">
@@ -304,7 +299,7 @@ export default function ApprovalCard({
               </Button>
             </div>
           )}
-          <CollapsibleContent>
+          <Collapsible.Content>
             <div className="p-2 flex flex-col gap-3">
               <ActionList actions={approval.actions} />
               <PayloadView payload={approval.display_payload} />
@@ -316,8 +311,8 @@ export default function ApprovalCard({
                 </div>
               )}
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          </Collapsible.Content>
+        </Collapsible.Root>
       </div>
     </CometEdge>
   );

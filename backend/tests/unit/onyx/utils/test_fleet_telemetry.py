@@ -660,3 +660,27 @@ def test_fetch_counts_connector_batches_and_passes_every_yield_through(
         list(fetch._timed_connector_runs(broken(), 1))
     assert raised.value is error
     assert sink.call_args.args == (1, "fetch", {"fetch_errors": 1})
+
+
+@pytest.mark.parametrize("deployment_type", list(fleet.DeploymentType))
+@pytest.mark.parametrize("service", ["api", "worker"])
+def test_process_heartbeat_only_reports_api_deployment_type(
+    monkeypatch: pytest.MonkeyPatch,
+    deployment_type: fleet.DeploymentType,
+    service: str,
+) -> None:
+    monkeypatch.setattr(fleet, "DEPLOYMENT_TYPE", deployment_type)
+    monkeypatch.setattr(
+        "onyx.utils.fleet_telemetry_resources.collect_process_resource", Mock()
+    )
+    sender = make_sender()
+    sender.service = service
+    monkeypatch.setattr(sender, "flush_once", Mock(return_value=True))
+    monkeypatch.setattr(sender._stop, "wait", Mock(side_effect=sender._stop.set))
+    sender._run()
+    heartbeat = next(
+        event for event in sender._take_batch() if event["event_type"] == "heartbeat"
+    )
+    assert heartbeat["data"].get("deployment_type") == (
+        deployment_type.value if service == "api" else None
+    )

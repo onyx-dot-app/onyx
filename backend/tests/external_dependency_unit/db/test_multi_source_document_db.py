@@ -29,6 +29,12 @@ from onyx.db.models import (
     Document,
     DocumentByConnectorCredentialPair,
 )
+from onyx.db.permission_sync_attempt import (
+    create_doc_permission_sync_attempt,
+    delete_doc_permission_sync_attempts__no_commit,
+    get_open_doc_permission_sync_attempt,
+    mark_doc_permission_sync_attempt_in_progress,
+)
 from onyx.indexing.indexing_pipeline import _upsert_documents_in_db
 from onyx.kg.models import KGStage
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -72,7 +78,18 @@ def _add_cc_pair(
     return cc_pair
 
 
+def _running_attempt_id(db_session: Session, cc_pair_id: int) -> int:
+    """Permission writes happen only under the cc_pair's running sync attempt."""
+    attempt = get_open_doc_permission_sync_attempt(cc_pair_id, db_session)
+    if attempt is not None:
+        return attempt.id
+    attempt_id = create_doc_permission_sync_attempt(cc_pair_id, db_session)
+    mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
+    return attempt_id
+
+
 def _run_permission_update(
+    attempt_id: int,
     connector_id: int,
     credential_id: int,
     source: DocumentSource,
@@ -81,6 +98,7 @@ def _run_permission_update(
 ) -> None:
     assert element_update_permissions(
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        attempt_id=attempt_id,
         permissions=DocExternalAccess(
             external_access=ExternalAccess(
                 external_user_emails=set(),
@@ -103,6 +121,7 @@ def _write_permissions(
     group_id: str,
 ) -> None:
     _run_permission_update(
+        _running_attempt_id(db_session, cc_pair.id),
         cc_pair.connector_id,
         cc_pair.credential_id,
         source,
@@ -146,6 +165,7 @@ def _assert_document_group(
 
 def _index_sharepoint_document(
     db_session: Session,
+    cc_pair: ConnectorCredentialPair,
     document_id: str,
     semantic_identifier: str,
     group_id: str,
@@ -166,7 +186,9 @@ def _index_sharepoint_document(
                 doc_metadata={TEST_METADATA_KEY: semantic_identifier},
             )
         ],
-        IndexAttemptMetadata(connector_id=0, credential_id=0),
+        IndexAttemptMetadata(
+            connector_id=cc_pair.connector_id, credential_id=cc_pair.credential_id
+        ),
         db_session,
     )
 
@@ -212,6 +234,8 @@ def _delete_test_data(
         )
     )
     db_session.execute(delete(Document).where(Document.id.in_(document_ids)))
+    for cc_pair in cc_pairs:
+        delete_doc_permission_sync_attempts__no_commit(db_session, cc_pair.id)
     db_session.execute(
         delete(ConnectorCredentialPair).where(
             ConnectorCredentialPair.connector_id.in_(connector_ids)
@@ -467,6 +491,13 @@ def test_sharepoint_indexing_preserves_owned_onedrive_permissions(
 ) -> None:
     unique = uuid4().hex
     document_id = f"indexed-permission-owner-{unique}"
+    sharepoint = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
     onedrive = _add_cc_pair(
         db_session,
         DocumentSource.ONEDRIVE,
@@ -486,6 +517,7 @@ def test_sharepoint_indexing_preserves_owned_onedrive_permissions(
 
         _index_sharepoint_document(
             db_session,
+            sharepoint,
             document_id,
             "updated-by-sharepoint",
             "sharepoint",
@@ -502,7 +534,7 @@ def test_sharepoint_indexing_preserves_owned_onedrive_permissions(
         ]
         assert document.is_public is False
     finally:
-        _delete_test_data(db_session, [document_id], [onedrive])
+        _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
 
 
 @pytest.mark.parametrize(
@@ -520,6 +552,13 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
 ) -> None:
     unique = uuid4().hex
     document_id = f"index-non-owner-{unique}"
+    sharepoint = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
     onedrive = _add_cc_pair(
         db_session,
         DocumentSource.ONEDRIVE,
@@ -539,6 +578,7 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
 
         _index_sharepoint_document(
             db_session,
+            sharepoint,
             document_id,
             "updated-by-sharepoint",
             "sharepoint",
@@ -551,7 +591,7 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
         assert document.external_user_group_ids == ["sharepoint"]
         assert document.is_public is True
     finally:
-        _delete_test_data(db_session, [document_id], [onedrive])
+        _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
 
 
 @pytest.mark.parametrize(
@@ -782,8 +822,16 @@ def test_document_lock_prevents_concurrent_sharepoint_final_write(
         document_id,
         has_been_indexed=True,
     )
-    onedrive_ids = (onedrive.connector_id, onedrive.credential_id)
-    sharepoint_ids = (sharepoint.connector_id, sharepoint.credential_id)
+    onedrive_ids = (
+        _running_attempt_id(db_session, onedrive.id),
+        onedrive.connector_id,
+        onedrive.credential_id,
+    )
+    sharepoint_ids = (
+        _running_attempt_id(db_session, sharepoint.id),
+        sharepoint.connector_id,
+        sharepoint.credential_id,
+    )
 
     lock_acquired = Event()
     release_onedrive = Event()

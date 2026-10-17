@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  usePlans,
+  useTierAtLeast,
+  useTierLockedOptions,
+} from "@/lib/tiers/hooks";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { markdown } from "@opal/utils";
 import React, {
@@ -25,20 +31,12 @@ import {
   InputTypeIn,
   type SelectOption,
 } from "@opal/components";
-import { SimpleModelSelector } from "@/lib/languageModels/components";
-import {
-  filterModelConfigurations,
-  findLlmOptionById,
-} from "@/lib/languageModels/options";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
-import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   SvgAddLines,
   SvgActions,
   SvgExpand,
   SvgFold,
   SvgExternalLink,
-  SvgOrganization,
   SvgRefreshCw,
   SvgRevert,
   SvgChevronDown,
@@ -53,8 +51,8 @@ import {
 } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import { getSourceMetadata } from "@/lib/sources";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
+import { DEFAULT_LOCALE, LOCALE_OPTIONS, type Locale } from "@/i18n/config";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import {
   SEARCH_TOOL_ID,
@@ -81,10 +79,10 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/utils";
 import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
-import { MCPServer } from "@/lib/mcp/types";
+import { MCPConnectionStatus, MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
+import ChatTaskModelSettings from "@/views/admin/ChatTaskModelSettings";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -126,7 +124,7 @@ function MCPServerCard({
 
   const allToolIds = tools.map((t) => t.id);
   const serverEnabled = tools.some((t) => isToolEnabled(t.id));
-  const needsAuth = !server.user_can_authenticate;
+  const needsAuth = server.connection_status !== MCPConnectionStatus.CONNECTED;
   const authTooltip = needsAuth ? t("mcpServer.authTooltip") : undefined;
 
   const expanded = !isFolded;
@@ -437,7 +435,7 @@ const isRetentionReduction = (
 
 interface RetentionFieldProps {
   value: number | null;
-  disabled: boolean;
+  disabled?: boolean;
   onSave: (value: number | null) => void;
 }
 
@@ -445,8 +443,16 @@ interface RetentionFieldProps {
 // the dropdown in place into a numeric "days" input (with revert + reopen
 // affordances). The persisted shape (number | null) is unchanged, so any
 // existing value — preset or not — round-trips correctly.
-function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
+function RetentionField({
+  value,
+  disabled = false,
+  onSave,
+}: RetentionFieldProps) {
   const t = useTranslations("admin.chatPreferences");
+  // Retention needs Enterprise: below it, the choices stay on show, locked
+  // under an upgrade link.
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const lockForEnterprise = useTierLockedOptions(Tier.ENTERPRISE);
   const tInputSelect = useTranslations("common.inputSelect");
   const retentionPresets = useMemo(
     () => [
@@ -541,11 +547,15 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   // Only read while in select mode. A stored custom value (transiently visible
   // here after "More") maps to no option, so the select is left empty and the
   // trigger shows the placeholder until the user picks.
+  // Below Enterprise a stored custom value cannot change, so the locked list
+  // shows it as "Custom Retention" rather than the editable input.
   const selectValue =
     value === null
       ? FOREVER_RETENTION_VALUE
       : valueIsCustomRetention(value)
-        ? ""
+        ? enterpriseTier
+          ? ""
+          : CUSTOM_RETENTION_VALUE
         : String(value);
 
   const persist = (next: number | null) => {
@@ -636,6 +646,19 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   const customInvalid =
     customDays !== "" && !isValidCustomRetention(customDays);
 
+  const presetOptions: SelectOption[] = retentionPresets.map((preset) => ({
+    value: String(preset.days),
+    title: preset.label,
+  }));
+  const foreverOption: SelectOption = {
+    value: FOREVER_RETENTION_VALUE,
+    title: t("retention.forever.label"),
+  };
+  const customOption: SelectOption = {
+    value: CUSTOM_RETENTION_VALUE,
+    title: t("retention.custom.label"),
+  };
+
   const iconButtonProps = {
     prominence: "tertiary",
     size: "xs",
@@ -645,7 +668,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
   return (
     <div className="flex flex-col gap-2 w-full">
-      {showCustom ? (
+      {enterpriseTier && showCustom ? (
         <div className="flex flex-col gap-1 w-full">
           <InputTypeIn
             ref={customInputRef}
@@ -692,26 +715,17 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
             onBlur={handleSelectBlur}
             disabled={disabled}
             placeholder={tInputSelect("placeholder.fallback")}
-            options={[
-              {
-                value: FOREVER_RETENTION_VALUE,
-                title: t("retention.forever.label"),
-              },
-              ...retentionPresets.map(
-                (preset): SelectOption => ({
-                  value: String(preset.days),
-                  title: preset.label,
-                })
-              ),
-              {
-                options: [
-                  {
-                    value: CUSTOM_RETENTION_VALUE,
-                    title: t("retention.custom.label"),
-                  },
-                ],
-              },
-            ]}
+            options={
+              enterpriseTier
+                ? [foreverOption, ...presetOptions, { options: [customOption] }]
+                : // Below Enterprise every choice sits locked under an
+                  // upgrade link, the stored value selected.
+                  lockForEnterprise([
+                    foreverOption,
+                    ...presetOptions,
+                    customOption,
+                  ])
+            }
           />
         </div>
       )}
@@ -731,6 +745,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
 export default function ChatPreferencesPage() {
   const t = useTranslations("admin.chatPreferences");
+  const plans = usePlans();
   const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
@@ -739,89 +754,6 @@ export default function ChatPreferencesPage() {
   // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
-
-  // Dedicated chat-naming model. Auto-naming reads this designation via
-  // fetch_default_chat_naming_model; when unset it uses the session's model.
-  const {
-    llmProviders,
-    defaultChatNaming,
-    modelPaging,
-    refetch: refetchLlmProviders,
-  } = useAdminLanguageModels();
-
-  // Resolve defaultChatNaming (id + name based) to a model_configuration_id
-  // for the select.
-  const chatNamingModelConfigId = useMemo(() => {
-    if (!defaultChatNaming || !llmProviders) return null;
-    for (const p of llmProviders) {
-      if (p.id !== defaultChatNaming.provider_id) continue;
-      const mc = p.model_configurations.find(
-        (m) => m.name === defaultChatNaming.model_name
-      );
-      if (mc?.id != null) return mc.id;
-    }
-    return null;
-  }, [llmProviders, defaultChatNaming]);
-
-  const handleChatNamingModelChange = useCallback(
-    async ({
-      modelName,
-      modelConfigurationId,
-    }: {
-      modelName: string;
-      modelConfigurationId: number | null | undefined;
-    }) => {
-      const provider = findProviderOwningModelConfig(
-        llmProviders,
-        modelConfigurationId
-      );
-      if (!provider) {
-        toast.error(t("toasts.providerResolveFailed"));
-        return;
-      }
-      try {
-        const response = await fetch("/api/admin/llm/default-chat-naming", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider_id: provider.id,
-            model_name: modelName,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(
-            (await response.json()).detail ?? t("toasts.chatNamingUpdateFailed")
-          );
-        }
-        await refetchLlmProviders();
-        toast.success(t("toasts.chatNamingUpdated"));
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("toasts.unknownError")
-        );
-      }
-    },
-    [llmProviders, refetchLlmProviders, t]
-  );
-
-  const handleClearChatNamingModel = useCallback(async () => {
-    try {
-      const response = await fetch("/api/admin/llm/default-chat-naming", {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error(
-          (await response.json()).detail ?? t("toasts.chatNamingResetFailed")
-        );
-      }
-      await refetchLlmProviders();
-      toast.success(t("toasts.chatNamingReset"));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("toasts.unknownError")
-      );
-    }
-  }, [refetchLlmProviders, t]);
 
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
@@ -1010,41 +942,40 @@ export default function ChatPreferencesPage() {
           {/* Features */}
           <Card border="solid" rounding={4}>
             <Section alignItems="stretch">
-              <Disabled
-                disabled={!businessTier || uniqueSources.length === 0}
-                allowClick={businessTier}
-                tooltip={
+              {/* Below Business, or with no connectors, the row stays as is;
+              only its switch is locked. */}
+              <InputHorizontal
+                title={t("searchMode.title")}
+                tag={
                   !businessTier
-                    ? t("searchMode.tierTooltip")
-                    : t("searchMode.noConnectorsTooltip")
+                    ? plans[Tier.BUSINESS].tag
+                    : { title: t("betaTag.label"), color: "blue" }
                 }
+                description={t("searchMode.description")}
+                withLabel
               >
-                <InputHorizontal
-                  title={t("searchMode.title")}
-                  tag={
+                <Tooltip
+                  tooltip={
                     !businessTier
-                      ? {
-                          title: t("searchMode.businessPlanTag.label"),
-                          color: "amber",
-                          icon: SvgOrganization,
-                        }
-                      : { title: t("betaTag.label"), color: "blue" }
+                      ? plans[Tier.BUSINESS].tooltip
+                      : uniqueSources.length === 0
+                        ? t("searchMode.noConnectorsTooltip")
+                        : undefined
                   }
-                  description={t("searchMode.description")}
-                  disabled={!businessTier || uniqueSources.length === 0}
-                  withLabel
                 >
-                  <InputSwitch
-                    checked={
-                      businessTier ? (s.search_ui_enabled ?? true) : false
-                    }
-                    onCheckedChange={(checked) => {
-                      void saveSettings({ search_ui_enabled: checked });
-                    }}
-                    disabled={!businessTier || uniqueSources.length === 0}
-                  />
-                </InputHorizontal>
-              </Disabled>
+                  <div>
+                    <InputSwitch
+                      checked={
+                        businessTier ? (s.search_ui_enabled ?? true) : false
+                      }
+                      onCheckedChange={(checked) => {
+                        void saveSettings({ search_ui_enabled: checked });
+                      }}
+                      disabled={!businessTier || uniqueSources.length === 0}
+                    />
+                  </div>
+                </Tooltip>
+              </InputHorizontal>
               <InputHorizontal
                 title={t("autoDetectFilters.title")}
                 description={t("autoDetectFilters.description")}
@@ -1123,49 +1054,35 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
-              <InputHorizontal
-                title={t("chatNaming.title")}
-                description={t("chatNaming.description")}
-                withLabel
-              >
-                <div className="flex items-center gap-2">
-                  {chatNamingModelConfigId !== null && (
-                    <Button
-                      prominence="tertiary"
-                      size="sm"
-                      onClick={() => void handleClearChatNamingModel()}
-                    >
-                      {t("chatNaming.resetButton.label")}
-                    </Button>
-                  )}
-                  <SimpleModelSelector
-                    providers={filterModelConfigurations(llmProviders ?? [], {
-                      keep: chatNamingModelConfigId,
-                    })}
-                    value={chatNamingModelConfigId}
-                    grouped={!settings.hide_provider_grouping}
-                    modelPaging={modelPaging}
-                    onChange={(modelConfigurationId) => {
-                      const opt = findLlmOptionById(
-                        llmProviders,
-                        modelConfigurationId
-                      );
-                      if (!opt) return;
-                      void handleChatNamingModelChange({
-                        modelName: opt.modelName,
-                        modelConfigurationId,
-                      });
-                    }}
-                  />
-                </div>
-              </InputHorizontal>
             </Section>
           </Card>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-          {/* Team Context */}
+          <Section alignItems="stretch" gap={3}>
+            <Content title={t("taskModels.title")} sizePreset="main-ui" />
+            <ChatTaskModelSettings />
+          </Section>
+
+          {/* Workspace language and team context */}
           <Section gap={4}>
+            <InputVertical
+              title={t("defaultLanguage.title")}
+              subDescription={t("defaultLanguage.description")}
+              withLabel
+            >
+              <InputSingleSelect
+                value={s.default_language}
+                onValueChange={(value) => {
+                  // SAFETY: LOCALE_OPTIONS only carries SUPPORTED_LOCALES values.
+                  void saveSettings({ default_language: value as Locale });
+                }}
+                defaultOption={DEFAULT_LOCALE}
+                placeholder={tInputSelect("placeholder.fallback")}
+                options={LOCALE_OPTIONS}
+              />
+            </InputVertical>
+
             <InputVertical
               title={t("teamName.title")}
               subDescription={t("teamName.description")}
@@ -1480,37 +1397,26 @@ export default function ChatPreferencesPage() {
             <Section gap={4}>
               <Card border="solid" rounding={4}>
                 <Section alignItems="stretch">
-                  <Disabled
-                    disabled={!enterpriseTier}
-                    tooltip={t("retention.tierTooltip")}
+                  {/* Below Enterprise the row stays as is; only its
+                  dropdown is locked. */}
+                  <InputHorizontal
+                    title={t("retention.title")}
+                    description={t("retention.description", {
+                      appName: settings.appName,
+                    })}
+                    tag={
+                      !enterpriseTier ? plans[Tier.ENTERPRISE].tag : undefined
+                    }
+                    withLabel
+                    fillInput
                   >
-                    <InputHorizontal
-                      title={t("retention.title")}
-                      description={t("retention.description", {
-                        appName: settings.appName,
-                      })}
-                      tag={
-                        !enterpriseTier
-                          ? {
-                              title: t("retention.enterprisePlanTag.label"),
-                              color: "amber",
-                              icon: SvgOrganization,
-                            }
-                          : undefined
+                    <RetentionField
+                      value={s.maximum_chat_retention_days ?? null}
+                      onSave={(maximum_chat_retention_days) =>
+                        void saveSettings({ maximum_chat_retention_days })
                       }
-                      disabled={!enterpriseTier}
-                      withLabel
-                      fillInput
-                    >
-                      <RetentionField
-                        value={s.maximum_chat_retention_days ?? null}
-                        disabled={!enterpriseTier}
-                        onSave={(maximum_chat_retention_days) =>
-                          void saveSettings({ maximum_chat_retention_days })
-                        }
-                      />
-                    </InputHorizontal>
-                  </Disabled>
+                    />
+                  </InputHorizontal>
 
                   <InputHorizontal
                     title={t("queryHistory.title")}

@@ -71,6 +71,8 @@ export interface InputNumberProps {
   suffix?: string;
   /** Applied to the input so a `<label htmlFor>` can target it. */
   id?: string;
+  /** Whether leaving the field blank commits `null`. When false, a blank field gets its value back on blur. */
+  allowEmpty?: boolean;
 }
 
 export default function InputNumber({
@@ -87,6 +89,7 @@ export default function InputNumber({
   placeholder,
   suffix,
   id,
+  allowEmpty = true,
 }: InputNumberProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [inputValue, setInputValue] = React.useState(
@@ -135,8 +138,10 @@ export default function InputNumber({
   };
 
   const handleBlur = () => {
-    // On blur, if empty, keep as null so placeholder shows
-    if (inputValue.trim() === "") {
+    if (inputValue.trim() === "" && !allowEmpty) {
+      setInputValue(value === null ? "" : String(value));
+    } else if (inputValue.trim() === "") {
+      // Kept as null so the placeholder shows.
       onChange(null);
     } else if (value !== null && min !== undefined && value < min) {
       onChange(min);

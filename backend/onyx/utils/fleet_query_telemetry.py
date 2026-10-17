@@ -1,9 +1,11 @@
 """Measure logical requests. Content is inspected for presence only and never copied."""
 
 import inspect
+import threading
 import time
 import uuid
 from collections.abc import Callable, Generator, Iterator
+from enum import Enum
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
@@ -12,7 +14,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.fleet_telemetry import emit_telemetry, error_category
 
 if TYPE_CHECKING:
-    from onyx.chat.models import StreamingError
+    from onyx.chat.models import AnswerStreamPart, StreamingError
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -49,6 +51,13 @@ def _channel(kwargs: dict[str, Any]) -> str:
     return _ORIGIN_CHANNELS.get(request.origin.value.lower(), "web")
 
 
+class QueryToolUsage(str, Enum):
+    NONE = "none"
+    SEARCH_ONLY = "search_only"
+    OTHER_ONLY = "other_only"
+    SEARCH_AND_OTHER = "search_and_other"
+
+
 class QueryObservation:
     def __init__(self, *, channel: str, mode: str) -> None:
         self.started: float = time.monotonic()
@@ -59,6 +68,50 @@ class QueryObservation:
         # None: the request was rejected before it ran, so there is no query to report.
         self.outcome: str | None = "success"
         self.error_code: str | None = None
+        self.writer_owned = False
+        self._lock = threading.Lock()
+        self._used_search = False
+        self._used_other_tool = False
+        self._finished = False
+
+    def tool_started(self, *, is_search: bool) -> None:
+        with self._lock:
+            # Stop-button completion freezes usage while workers wind down.
+            if self._finished:
+                return
+            if is_search:
+                self._used_search = True
+            else:
+                self._used_other_tool = True
+
+    def _tool_usage(self) -> QueryToolUsage:
+        if self._used_search:
+            return (
+                QueryToolUsage.SEARCH_AND_OTHER
+                if self._used_other_tool
+                else QueryToolUsage.SEARCH_ONLY
+            )
+        return (
+            QueryToolUsage.OTHER_ONLY if self._used_other_tool else QueryToolUsage.NONE
+        )
+
+    def observe_packet(self, packet: "AnswerStreamPart") -> None:
+        from onyx.chat.models import StreamingError
+        from onyx.server.query_and_chat.streaming_models import (
+            AgentResponseDelta,
+            OverallStop,
+            Packet,
+        )
+
+        if isinstance(packet, Packet):
+            if isinstance(packet.obj, AgentResponseDelta) and packet.obj.content:
+                self.answer()
+            elif isinstance(packet.obj, OverallStop):
+                stop_outcome = _STOP_OUTCOMES.get(packet.obj.stop_reason or "")
+                if stop_outcome is not None:
+                    self.outcome = stop_outcome
+        elif isinstance(packet, StreamingError):
+            self.error_packet(packet)
 
     def answer(self) -> None:
         if self.first_answer_ms is None:
@@ -94,6 +147,11 @@ class QueryObservation:
         )
 
     def finish(self) -> None:
+        with self._lock:
+            if self._finished:
+                return
+            self._finished = True
+            tool_usage = self._tool_usage() if self.mode == "chat" else None
         if self.outcome is None:
             return
         # emit_telemetry never raises, so a stream always finishes normally.
@@ -107,47 +165,34 @@ class QueryObservation:
                 "first_answer_ms": self.first_answer_ms,
                 "time_to_results_ms": self.time_to_results_ms,
                 "error_code": self.error_code,
+                "tool_usage": tool_usage,
             },
         )
 
 
-def observe_chat_packets(packets: Iterator[Any], *, channel: str) -> Iterator[Any]:
-    from onyx.chat.models import StreamingError
-    from onyx.server.query_and_chat.streaming_models import (
-        AgentResponseDelta,
-        OverallStop,
-        Packet,
-    )
-
-    observation: QueryObservation = QueryObservation(channel=channel, mode="chat")
+def observe_chat_packets(
+    packets: Iterator[Any],
+    *,
+    channel: str,
+    observation: QueryObservation | None = None,
+) -> Iterator[Any]:
+    observation = observation or QueryObservation(channel=channel, mode="chat")
     try:
         for packet in packets:
-            try:
-                if isinstance(packet, Packet):
-                    if (
-                        isinstance(packet.obj, AgentResponseDelta)
-                        and packet.obj.content
-                    ):
-                        observation.answer()
-                    elif isinstance(packet.obj, OverallStop):
-                        stop_outcome: str | None = _STOP_OUTCOMES.get(
-                            packet.obj.stop_reason or ""
-                        )
-                        if stop_outcome is not None:
-                            observation.outcome = stop_outcome
-                elif isinstance(packet, StreamingError):
-                    observation.error_packet(packet)
-            except Exception:
-                pass
+            if not observation.writer_owned:
+                observation.observe_packet(packet)
             yield packet
     except GeneratorExit:
-        observation.outcome = "disconnected"
+        if not observation.writer_owned:
+            observation.outcome = "disconnected"
         raise
     except BaseException as error:
-        observation.failed(error)
+        if not observation.writer_owned:
+            observation.failed(error)
         raise
     finally:
-        observation.finish()
+        if not observation.writer_owned:
+            observation.finish()
         try:
             if isinstance(packets, Generator):
                 packets.close()
@@ -162,7 +207,12 @@ def telemetry_chat(function: F) -> F:
             channel = _channel(kwargs)
         except Exception:
             channel = "web"
-        yield from observe_chat_packets(function(*args, **kwargs), channel=channel)
+        observation = QueryObservation(channel=channel, mode="chat")
+        yield from observe_chat_packets(
+            function(*args, **kwargs, query_observation=observation),
+            channel=channel,
+            observation=observation,
+        )
 
     return cast(F, stream)
 

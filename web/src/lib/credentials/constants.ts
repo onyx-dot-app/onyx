@@ -3,7 +3,6 @@ import { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import type {
   CredentialDisplayName,
   CredentialFieldOptions,
-  CredentialHint,
   CredentialJsonOf,
   CredentialMethodDescription,
   CredentialMethodLabel,
@@ -66,6 +65,13 @@ function secret<const TOptions extends CredentialFieldOptions = {}>(
   return textField("secret", displayName, options);
 }
 
+function jsonFile<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("jsonFile", displayName, options);
+}
+
 function toggle(displayName: CredentialDisplayName) {
   return { kind: "toggle", displayName } as const;
 }
@@ -108,7 +114,6 @@ interface MicrosoftAppSpecOptions {
   brandName: string;
   fileType: FileTypeCategory;
   privateKeyDisplayName: CredentialDisplayName;
-  privateKeyHint?: CredentialHint;
   certificateLabel: CredentialMethodLabel;
   descriptions?: {
     clientSecret: CredentialMethodDescription;
@@ -142,7 +147,8 @@ function microsoftAppSpec<const TPrefix extends string>(
     [key("private_key")]: file(
       options.privateKeyDisplayName,
       options.fileType,
-      options.privateKeyHint ? { hint: options.privateKeyHint } : {}
+      // Every Microsoft source takes the same .pfx certificate.
+      { hint: { key: "pfxFile" } }
     ),
   } as MicrosoftAppFields<TPrefix>;
 
@@ -173,6 +179,29 @@ function microsoftAppSpec<const TPrefix extends string>(
 }
 
 /**
+ * A Google account (Gmail, Google Drive): a service account typed in, or an
+ * OAuth sign-in, which saves the account itself.
+ */
+const GOOGLE_ACCOUNT_SPEC = defineCredentialSpec({
+  brandName: "Google",
+  fields: {
+    google_primary_admin: email("primaryAdminEmail"),
+    google_service_account_key: jsonFile("serviceAccountKey", {
+      hint: { key: "googleServiceAccountKey" },
+    }),
+  },
+  methods: [
+    {
+      // The stored value for an uploaded key.
+      value: "uploaded",
+      label: "serviceAccount",
+      fields: ["google_primary_admin", "google_service_account_key"],
+    },
+    { value: "oauth", label: "oauth", fields: [], ownSetup: true },
+  ],
+});
+
+/**
  * The credential each source asks for. Field keys are the exact
  * `credential_json` keys the backend reads. A source with no credential, or
  * one whose credential is set up elsewhere, maps to `null`.
@@ -185,13 +214,15 @@ export const CREDENTIAL_SPECS = {
       github_base_url: url("enterpriseServerUrl", {
         optional: true,
         hint: { key: "githubBaseUrl" },
+        realm: true,
+        defaultValue: "https://github.com",
       }),
     },
   }),
   gitlab: defineCredentialSpec({
     brandName: "GitLab",
     fields: {
-      gitlab_url: url("url"),
+      gitlab_url: url("url", { realm: true }),
       gitlab_access_token: secret("apiToken"),
     },
   }),
@@ -203,6 +234,12 @@ export const CREDENTIAL_SPECS = {
       lumapps_service_user: email("serviceUserEmail", {
         hint: { key: "lumappsServiceUser" },
       }),
+    },
+  }),
+  youtrack: defineCredentialSpec({
+    brandName: "YouTrack",
+    fields: {
+      youtrack_token: secret("apiToken", { hint: { key: "youtrackToken" } }),
     },
   }),
   bitbucket: defineCredentialSpec({
@@ -219,7 +256,7 @@ export const CREDENTIAL_SPECS = {
   bookstack: defineCredentialSpec({
     brandName: "Bookstack",
     fields: {
-      bookstack_base_url: url("baseUrl"),
+      bookstack_base_url: url("baseUrl", { realm: true }),
       bookstack_api_token_id: text("apiTokenId"),
       bookstack_api_token_secret: secret("apiTokenSecret"),
     },
@@ -227,7 +264,10 @@ export const CREDENTIAL_SPECS = {
   outline: defineCredentialSpec({
     brandName: "Outline",
     fields: {
-      outline_base_url: url("baseUrl", { hint: { key: "outlineBaseUrl" } }),
+      outline_base_url: url("baseUrl", {
+        hint: { key: "outlineBaseUrl" },
+        realm: true,
+      }),
       outline_api_token: secret("apiToken"),
     },
   }),
@@ -279,6 +319,8 @@ export const CREDENTIAL_SPECS = {
       gong_base_url: url("apiBaseUrl", {
         optional: true,
         hint: { key: "gongBaseUrl" },
+        realm: true,
+        defaultValue: "https://api.gong.io",
       }),
     },
   }),
@@ -304,7 +346,10 @@ export const CREDENTIAL_SPECS = {
   loopio: defineCredentialSpec({
     brandName: "Loopio",
     fields: {
-      loopio_subdomain: text("subdomain"),
+      loopio_subdomain: text("subdomain", {
+        realm: true,
+        realmHostSuffix: ".loopio.com",
+      }),
       loopio_client_id: text("clientId"),
       loopio_client_token: secret("clientToken"),
     },
@@ -360,7 +405,6 @@ export const CREDENTIAL_SPECS = {
     brandName: "Microsoft Teams",
     fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
     privateKeyDisplayName: "privateKey",
-    privateKeyHint: { key: "pfxFile" },
     certificateLabel: "certificateAuthentication",
     descriptions: {
       clientSecret: "teamsClientSecret",
@@ -371,7 +415,6 @@ export const CREDENTIAL_SPECS = {
     brandName: "Microsoft Outlook",
     fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
     privateKeyDisplayName: "privateKey",
-    privateKeyHint: { key: "pfxFile" },
     certificateLabel: "certificateAuthentication",
     descriptions: {
       clientSecret: "outlookClientSecret",
@@ -381,7 +424,10 @@ export const CREDENTIAL_SPECS = {
   zendesk: defineCredentialSpec({
     brandName: "Zendesk",
     fields: {
-      zendesk_subdomain: text("subdomain"),
+      zendesk_subdomain: text("subdomain", {
+        realm: true,
+        realmHostSuffix: ".zendesk.com",
+      }),
       zendesk_email: email("accountEmail"),
       zendesk_token: secret("apiToken"),
     },
@@ -396,7 +442,7 @@ export const CREDENTIAL_SPECS = {
   axero: defineCredentialSpec({
     brandName: "Axero",
     fields: {
-      base_url: url("baseUrl"),
+      base_url: url("baseUrl", { realm: true }),
       axero_api_token: secret("apiToken"),
     },
   }),
@@ -456,7 +502,10 @@ export const CREDENTIAL_SPECS = {
   freshdesk: defineCredentialSpec({
     brandName: "Freshdesk",
     fields: {
-      freshdesk_domain: text("domain"),
+      freshdesk_domain: text("domain", {
+        realm: true,
+        realmHostSuffix: ".freshdesk.com",
+      }),
       freshdesk_api_key: secret("apiToken"),
     },
   }),
@@ -483,7 +532,7 @@ export const CREDENTIAL_SPECS = {
   egnyte: defineCredentialSpec({
     brandName: "Egnyte",
     fields: {
-      domain: text("domain"),
+      domain: text("domain", { realm: true, realmHostSuffix: ".egnyte.com" }),
       access_token: secret("apiToken"),
     },
   }),
@@ -510,15 +559,8 @@ export const CREDENTIAL_SPECS = {
     brandName: "Discord",
     fields: { discord_bot_token: secret("botToken") },
   }),
-  // Gmail and Google Drive set up their credentials on their own pages.
-  google_drive: defineCredentialSpec({
-    brandName: "Google",
-    fields: { google_tokens: secret("oauthTokens") },
-  }),
-  gmail: defineCredentialSpec({
-    brandName: "Google",
-    fields: { google_tokens: secret("oauthTokens") },
-  }),
+  google_drive: GOOGLE_ACCOUNT_SPEC,
+  gmail: GOOGLE_ACCOUNT_SPEC,
   gitbook: defineCredentialSpec({
     brandName: "GitBook",
     fields: { gitbook_api_key: secret("apiToken") },
@@ -526,7 +568,7 @@ export const CREDENTIAL_SPECS = {
   highspot: defineCredentialSpec({
     brandName: "Highspot",
     fields: {
-      highspot_url: url("url"),
+      highspot_url: url("url", { realm: true }),
       highspot_key: text("key"),
       highspot_secret: secret("secret"),
     },
@@ -541,7 +583,10 @@ export const CREDENTIAL_SPECS = {
   testrail: defineCredentialSpec({
     brandName: "TestRail",
     fields: {
-      testrail_base_url: url("baseUrl", { hint: { key: "testrailBaseUrl" } }),
+      testrail_base_url: url("baseUrl", {
+        hint: { key: "testrailBaseUrl" },
+        realm: true,
+      }),
       testrail_username: email("accountEmail"),
       testrail_api_key: secret("apiToken"),
     },

@@ -8,13 +8,22 @@
  * `InputSingleSelect` whose input carries that name as its id.
  */
 
-import { expect, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  type Locator,
+  type Page,
+  type Request,
+} from "@playwright/test";
+import { CHECKS_CARD_ID } from "@/lib/connectors/checks/constants";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 import {
+  type MockConnectorChecksOptions,
   mockPassingConnectorChecks,
   runConnectorChecks,
   startChecksButton,
 } from "@tests/e2e/utils/connectorChecks";
+
+const CREATE_URL = "**/api/manage/admin/connector-with-credential";
 
 export class ConnectorSetupPage {
   readonly page: Page;
@@ -28,6 +37,12 @@ export class ConnectorSetupPage {
   readonly groupAccessPrompt: Locator;
   /** Starts the connector checks, which the configuration waits for. */
   readonly startChecksButton: Locator;
+  /** The results card of the connector checks. */
+  readonly checksCard: Locator;
+  /** The advisory Create opens when a non-required check failed. */
+  readonly failedChecksAdvisory: Locator;
+  readonly viewFailedChecksButton: Locator;
+  readonly createAnywayButton: Locator;
 
   constructor(page: Page, source: string) {
     this.page = page;
@@ -46,16 +61,56 @@ export class ConnectorSetupPage {
       "Add groups to restrict access to this connector"
     );
     this.startChecksButton = startChecksButton(page);
+    this.checksCard = page.getByTestId(CHECKS_CARD_ID);
+    this.failedChecksAdvisory = page.getByRole("dialog", {
+      name: "Some content won't be indexed.",
+    });
+    this.viewFailedChecksButton = this.failedChecksAdvisory.getByRole(
+      "button",
+      { name: "View Failed Checks" }
+    );
+    this.createAnywayButton = this.failedChecksAdvisory.getByRole("button", {
+      name: "Create Connector Anyway",
+    });
   }
 
-  /** Make the connector checks pass without calling the source. */
-  async mockChecks(): Promise<void> {
-    await mockPassingConnectorChecks(this.page);
+  /** Mock the connector checks without calling the source. Options add a failed non-required check. */
+  async mockChecks(options?: MockConnectorChecksOptions): Promise<void> {
+    await mockPassingConnectorChecks(this.page, options);
   }
 
   /** Run the connector checks and wait for the configuration to unlock. */
   async runChecks(): Promise<void> {
     await runConnectorChecks(this.page);
+  }
+
+  /** Answer Create's request with a 500, so no connector is made. */
+  async failCreateRequests(): Promise<void> {
+    await this.page.route(CREATE_URL, (route) =>
+      route.fulfill({ status: 500, json: { detail: "e2e" } })
+    );
+  }
+
+  /** Resolves with the next create request. */
+  waitForCreateRequest(): Promise<Request> {
+    return this.page.waitForRequest(CREATE_URL);
+  }
+
+  /** A check's row in the checks card, by its display name. */
+  checkRow(displayName: string): Locator {
+    return this.checksCard.getByText(displayName);
+  }
+
+  /** Fold the checks card down to its summary line. */
+  async foldChecksCard(): Promise<void> {
+    await this.checksCard.getByRole("button", { name: "Fold" }).click();
+  }
+
+  /** Scroll the page to its end, away from the checks card. */
+  async scrollToEnd(): Promise<void> {
+    await this.page
+      .locator("#page-wrapper-scroll-container")
+      .evaluate((el) => el.scrollTo(0, el.scrollHeight));
   }
 
   /** A single-line text field from the connector config, by its config name. */
@@ -89,14 +144,19 @@ export class ConnectorSetupPage {
     await this.page.getByRole("option", { name: startsWithTitle }).click();
   }
 
-  /** The row for a credential in the credential section, by its name. */
-  credentialRow(credentialName: string): Locator {
-    return this.page.getByRole("row", { name: credentialName });
+  /**
+   * The card for a saved account in the credential section, by its id. The
+   * card is titled by its creator, so its name may not show.
+   */
+  credentialRow(credentialId: number): Locator {
+    return this.page.getByTestId(`authentication-account-${credentialId}`);
   }
 
-  /** Pick a credential in the credential section by its name. */
-  async selectCredential(credentialName: string) {
-    await this.credentialRow(credentialName).getByRole("radio").click();
+  /** Pick a saved account in the credential section by its id. */
+  async selectCredential(credentialId: number) {
+    await this.credentialRow(credentialId)
+      .getByRole("button", { name: "Use Account" })
+      .click();
   }
 
   /**

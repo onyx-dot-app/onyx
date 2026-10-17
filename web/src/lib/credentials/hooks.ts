@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  getSourceDisplayName,
+  getSourceMetadata,
+} from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { adminDeleteCredential, deleteCredential } from "@/lib/credentials/svc";
+import {
+  adminDeleteCredential,
+  deleteCredential,
+  startCredentialCheckRun,
+  updateCredentialSharing,
+} from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
@@ -13,7 +22,6 @@ import {
   shouldRedirectToOAuth,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
 import {
   EE_ENABLED,
@@ -26,13 +34,12 @@ import {
 } from "@/lib/connectors/types/source";
 import type {
   AnyCredential,
-  Credential,
+  CredentialCheckReport,
+  CredentialSharing,
+  SimilarCredential,
   CredentialSetup,
-  GmailCredentialJson,
-  GmailServiceAccountCredentialJson,
-  GoogleDriveCredentialJson,
-  GoogleDriveServiceAccountCredentialJson,
   OAuthDetails,
+  SavedDraftCredential,
   SourceCredentialsResult,
 } from "@/lib/credentials/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -76,25 +83,6 @@ export function useCredentialFieldCopy(
   };
 }
 
-/**
- * Every credential the admin can see, across all sources. Pass
- * `enabled: false` to skip the request on pages that do not need it.
- */
-export function useAdminCredentials({
-  enabled = true,
-}: { enabled?: boolean } = {}) {
-  const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<Credential<any>[]>(
-    enabled ? SWR_KEYS.adminCredentials : null,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshCredentials: () => mutate(SWR_KEYS.adminCredentials),
-  };
-}
-
 /** How often the credential lists re-poll, in milliseconds. */
 const CREDENTIALS_REFRESH_INTERVAL_MS = 5000;
 
@@ -128,7 +116,7 @@ export function useSourceCredentials(
   sourceType: ValidSources,
   { enabled = true }: CredentialFetchOptions = {}
 ): SourceCredentialsResult {
-  return useSWR<AnyCredential[], Error>(
+  return useSWR<SimilarCredential[], Error>(
     enabled ? SWR_KEYS.similarCredentials(sourceType) : null,
     errorHandlingFetcher,
     { refreshInterval: CREDENTIALS_REFRESH_INTERVAL_MS }
@@ -271,6 +259,19 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     }
   }
 
+  async function saveSharing(
+    credentialId: number,
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+  ): Promise<SimilarCredential> {
+    // The sharing route also renames: it allows group managers, and checks
+    // that the user may edit the account.
+    const response = await updateCredentialSharing(credentialId, update);
+    if (!response.ok) throw new Error(await response.text());
+    const saved: SimilarCredential = await response.json();
+    refresh();
+    return saved;
+  }
+
   async function authorize(invalidUrlMessage: string): Promise<string | null> {
     setIsAuthorizing(true);
     try {
@@ -306,6 +307,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     selectMethod,
     close,
     remove,
+    saveSharing,
     refresh,
     authorize,
     isAuthorizing,
@@ -324,72 +326,103 @@ export function refreshSourceCredentials(
   return mutate(SWR_KEYS.similarCredentials(sourceType));
 }
 
-export const useGmailCredentials = (connector: string) => {
-  // Only the Gmail setup reads the admin list; other sources skip it.
-  const {
-    data: credentialsData,
-    isLoading: isCredentialsLoading,
-    error: credentialsError,
-    refreshCredentials,
-  } = useAdminCredentials({ enabled: connector === ValidSources.Gmail });
+/** How often the check reports refresh while a run is going. */
+const CREDENTIAL_CHECK_POLL_MS = 2000;
 
-  const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
-    credentialsData?.find(
-      (credential) =>
-        credential.credential_json?.google_tokens &&
-        credential.admin_public &&
-        credential.source === connector
-    );
+/** What `useCredentialCheckReports` returns. */
+export interface CredentialCheckReports {
+  /** The credential's report for `connectorId`, or its own for null. */
+  reportFor: (
+    credentialId: number,
+    connectorId?: number | null
+  ) => CredentialCheckReport | null;
+  /** Starts the credential's checks, or its pairing's with `connectorId`. Resolves once queued. */
+  rerun: (credentialId: number, connectorId?: number | null) => Promise<void>;
+}
 
-  const gmailServiceAccountCredential:
-    | Credential<GmailServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
+/**
+ * The stored capability reports of one source's credentials, polled while
+ * any run is going. Deployments without the checks report nothing, so a
+ * failed load shows as no reports.
+ */
+export function useCredentialCheckReports(
+  source: ValidSources
+): CredentialCheckReports {
+  const { data, mutate: refresh } = useSWR<CredentialCheckReport[]>(
+    SWR_KEYS.credentialCheckReports(source),
+    errorHandlingFetcher,
+    {
+      refreshInterval: (reports) =>
+        reports?.some((report) => report.run_status === "running")
+          ? CREDENTIAL_CHECK_POLL_MS
+          : 0,
+    }
   );
 
-  const liveGmailCredential =
-    gmailPublicCredential || gmailServiceAccountCredential;
-
+  // Stable per load, so a consumer can memoize on it.
+  const reportFor = useCallback(
+    (credentialId: number, connectorId: number | null = null) =>
+      data?.find(
+        (report) =>
+          report.credential_id === credentialId &&
+          report.connector_id === connectorId
+      ) ?? null,
+    [data]
+  );
   return {
-    liveGmailCredential: liveGmailCredential,
+    reportFor,
+    rerun: async (credentialId, connectorId = null) => {
+      await startCredentialCheckRun(credentialId, connectorId);
+      await refresh();
+    },
   };
-};
+}
 
-export const useGoogleDriveCredentials = (connector: string) => {
-  // Only the Google Drive setup reads the admin list; other sources skip it.
-  const { data: credentialsData } = useAdminCredentials({
-    enabled: connector === ValidSources.GoogleDrive,
-  });
+export interface SavedDraftCredentialState {
+  /** The draft a check run saved the typed account as; `null` before one. */
+  savedDraft: SavedDraftCredential | null;
+  /** Records the draft a check run saved `values` in. */
+  rememberDraft: (
+    credentialId: number,
+    values: Record<string, unknown>
+  ) => Promise<void>;
+}
 
-  const googleDrivePublicCredential:
-    | Credential<GoogleDriveCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_tokens &&
-      credential.admin_public &&
-      credential.source === connector
+/**
+ * The draft credential that the add-connector form of `source` saved its
+ * typed account as. The checks card, the binding check and Create share it
+ * through the SWR cache.
+ */
+export function useSavedDraftCredential(
+  source: ValidSources
+): SavedDraftCredentialState {
+  const { mutate: mutateKey } = useSWRConfig();
+  const { data } = useSWR<SavedDraftCredential | null>(
+    SWR_KEYS.connectorDraftCredential(source),
+    null
   );
-
-  const googleDriveServiceAccountCredential:
-    | Credential<GoogleDriveServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
+  const rememberDraft = useCallback(
+    async (credentialId: number, values: Record<string, unknown>) => {
+      await mutateKey<SavedDraftCredential>(
+        SWR_KEYS.connectorDraftCredential(source),
+        { credential_id: credentialId, sent_values: JSON.stringify(values) },
+        { revalidate: false }
+      );
+    },
+    [source, mutateKey]
   );
+  return { savedDraft: data ?? null, rememberDraft };
+}
 
-  const liveGDriveCredential =
-    googleDrivePublicCredential || googleDriveServiceAccountCredential;
-
-  return {
-    liveGDriveCredential: liveGDriveCredential,
-  };
-};
-
-export const useGoogleCredentials = (
-  source: ValidSources.Gmail | ValidSources.GoogleDrive
-): SourceCredentialsResult => useSourceCredentials(source);
+/**
+ * Forgets the saved draft of `source` when the add-connector page mounts, so
+ * each visit saves its own. A draft left behind is deleted by the server.
+ */
+export function useResetSavedDraftCredential(source: ValidSources): void {
+  const { mutate: mutateKey } = useSWRConfig();
+  useEffect(() => {
+    void mutateKey(SWR_KEYS.connectorDraftCredential(source), undefined, {
+      revalidate: false,
+    });
+  }, [source, mutateKey]);
+}

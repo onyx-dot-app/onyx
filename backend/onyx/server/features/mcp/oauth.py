@@ -26,7 +26,6 @@ from mcp.shared.auth import (
 from pydantic import AnyUrl, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_token_manager import ensure_offline_access_auth_params
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import async_cache_shared_lock, cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -40,6 +39,7 @@ from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.oauth.authorization_attempt import generate_authorization_state
+from onyx.oauth.protocol import ensure_offline_access_auth_params
 from onyx.server.features.mcp.client_metadata import (
     mcp_oauth_redirect_uri,
     validated_mcp_oauth_client_metadata_url,
@@ -448,6 +448,7 @@ class OnyxTokenStorage(TokenStorage):
                 preserve_existing_refresh_token=preserve_existing_refresh_token,
             )
             config_data[MCPOAuthKeys.TOKENS.value] = persisted_token_dict
+            config_data.pop("reauth_required", None)
             token_expires_at_before_refresh = config_data.get(
                 MCPOAuthKeys.TOKEN_EXPIRES_AT.value
             )
@@ -519,6 +520,7 @@ class OnyxTokenStorage(TokenStorage):
                 or stored_tokens.get("refresh_token") != redeemed_refresh_token
             ):
                 return False
+            config_data["reauth_required"] = True
             config_data.pop(MCPOAuthKeys.TOKENS.value, None)
             config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
             config_data["headers"] = {

@@ -70,6 +70,7 @@ export interface OAuthConfig {
   authorization_url: string;
   token_url: string;
   scopes: string[] | null;
+  supports_pkce: boolean;
   has_client_credentials: boolean;
   tool_count: number;
   created_at: string;
@@ -84,6 +85,7 @@ export interface OAuthConfigCreate {
   client_secret: string;
   scopes?: string[];
   additional_params?: Record<string, any>;
+  supports_pkce?: boolean;
 }
 
 export interface OAuthConfigUpdate {
@@ -94,6 +96,7 @@ export interface OAuthConfigUpdate {
   client_secret?: string;
   scopes?: string[];
   additional_params?: Record<string, any>;
+  supports_pkce?: boolean;
 }
 
 export interface OAuthTokenStatus {

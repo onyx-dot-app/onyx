@@ -36,9 +36,9 @@ import { AccountType } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/settings/types";
-import { tierAtLeast } from "@/lib/tiers";
-import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
+import { Tier } from "@/lib/tiers/types";
+import { tierAtLeast } from "@/lib/tiers/utils";
+import type { MemberRow, TokenRateLimitDisplay } from "./types";
 import {
   makeBaseColumns,
   makeMemberTableColumns,
@@ -629,9 +629,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 <MessageCard
                   variant="info"
                   title={t("edit.systemGroup.title")}
-                  description={t("edit.systemGroup.description", {
-                    appName: settings.appName,
-                  })}
+                  description={t(
+                    canEditPermissions
+                      ? "edit.systemGroup.basicDescription"
+                      : "edit.systemGroup.description",
+                    { appName: settings.appName }
+                  )}
                 />
               )}
 
@@ -744,6 +747,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 <GroupPermissionsSection
                   enabledPermissions={enabledPermissions}
                   onPermissionsChange={setEnabledPermissions}
+                  isDefaultGroup={isDefaultGroup}
                 />
               )}
 

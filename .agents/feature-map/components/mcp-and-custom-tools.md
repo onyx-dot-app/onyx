@@ -39,6 +39,54 @@ per-user credential (a personal API key, or a personal OAuth login), each user
 who wants to use it connects it themselves from the chat's MCP dropdown,
 separately from the admin's setup.
 
+Chat shows a **Tools need credentials** pill after Deep Research when an enabled
+tool needs a user connection. The pill is blue when all pending connections need
+first-time setup, and orange when any requires reauthentication. The modal lists actionable
+connections for the current agent, including the default Onyx agent. It uses
+`MCPConnectionPrompt` (`web/src/lib/mcp/components/MCPConnectionPrompt.tsx`).
+Its tooltip explains that tools remain unavailable until the user connects an
+account or adds credentials. Users can continue chatting without connecting.
+Shared admin credentials and pass-through OAuth without user header fields do not produce a connection prompt.
+Servers with required user header values can prompt with `NONE` or `PT_OAUTH`.
+
+The prompt and Actions menu share persona-scoped SWR data and connection handling
+through `useMcpAuthentication` in `web/src/lib/mcp/hooks.ts`.
+The hook exposes credential requests and submit/cancel actions; each UI owns its modal props. Shared authentication types live in
+`web/src/lib/mcp/types.ts`.
+Credential submission, completed chat responses, and window focus refresh this data.
+`connection_status` distinguishes `not_connected`, `connected`, and
+`reauth_required`. The modal shows **Connect** for initial setup and **Reconnect**
+for replacement credentials. Reconnect forces a fresh OAuth grant; successful
+credential entry replaces the user's stored credentials.
+The API always includes `connection_status`; it is null only without user context.
+The backend records confirmed OAuth `invalid_grant` and HTTP 401 rejection of
+user API tokens or required headers in the encrypted connection config. Rejections are marked
+only if stored credentials still match the failed request. Expired OAuth grants
+without refresh tokens also require reconnection. Temporary failures do not change
+the connection state. Successful replacement credentials clear the rejection marker;
+OAuth header edits and authorization attempts retain it until authorization succeeds.
+A new user connection does not inherit the admin connection's rejection history.
+For no-auth servers, missing required header values mean first-time setup, even
+with stored headers. A confirmed rejection still requires reauthentication.
+Pass-through OAuth rejection does not mark extra headers stale, since the failure
+may concern the user's Onyx login token.
+`connection_status` reports credential state, not whether a Connect button should appear.
+The client checks supported authentication flows
+with `getMcpAuthenticationFlow` in `web/src/lib/mcp/auth.ts`. It returns credential
+entry, OAuth, or no supported flow. Both chat entry points read connection state
+directly from `connection_status`.
+
+Credential entry replaces the connection list within the same dialog.
+A shared backdrop stays mounted across screens to prevent transition flashes.
+**Back to tools** returns to the list. Back, close, Escape, and outside clicks
+ask for confirmation before discarding edited credentials. The confirmation
+replaces the form in the same dialog; keeping edits restores the entered values.
+Unchanged forms can leave without confirmation. Submission blocks dismissal.
+Successful credential saves return to the list with the server marked connected.
+Credential fields scroll within the dialog on short screens; the submit button stays visible.
+OAuth connection controls stay busy until navigation leaves the page, or a request fails.
+
+
 **OpenAPI (custom) action.** The admin pastes an OpenAPI 3.x schema and,
 optionally, static headers. Every operation in the schema (identified by its
 `operationId`) becomes its own callable action. The admin can turn on
@@ -172,6 +220,26 @@ per-user access/refresh token issued through that client, looked up by
 This is a separate mechanism from MCP's OAuth (§4.3); it exists so a single
 OpenAPI action can require its own OAuth login independent of `passthrough_auth`.
 
+The action authentication form exposes `supports_pkce` as **Use PKCE**, disabled by default.
+Enable it only for providers that support S256 PKCE.
+The form checks provider metadata for S256 support after both HTTPS endpoints are entered.
+The result appears directly below Token URL, before the credential fields.
+The result is supported, unsupported, or unknown; missing metadata does not prove lack of support.
+The manual setting remains available when detection cannot establish support.
+
+**Test connection** authorizes the current form values in a popup without saving the form.
+Saving and testing use the same field conversion in `web/src/lib/oauth/`.
+Endpoint whitespace is removed. Masked credentials are reused only when editing an existing configuration.
+Existing masked credentials are resolved on the server after checking configuration ownership.
+The test exchanges the authorization code and discards the returned tokens.
+It does not create or update an `OAuthConfig` or `OAuthUserToken` row.
+The popup reports results through a same-origin channel bound to the attempt state, with an opener-message fallback.
+A disconnected popup can still report a result until the test expires or the admin changes settings or retries.
+A test can create a grant at the provider. Success confirms the exchange, not PKCE enforcement.
+
+Authorization uses the shared tenant-aware attempt store and protocol helpers described in [[auth-and-identity]] §4.
+The action route owns configuration validation and per-user token storage; MCP keeps its separate credential model.
+
 ### Diagram
 
 ```
@@ -287,11 +355,11 @@ choice at server-creation time is what decides this, and it is visible on the
    (`mcp/oauth_flow.py`) depending on `oauth_provider_mode`. Either returns an
    `authorization_url` the frontend redirects the browser to, or reports
    `already_authenticated` if `credentials_usable` (valid, unexpired,
-   `user_can_authenticate`) and the caller did not force re-auth.
+   `user_connection_status == CONNECTED`) and the caller did not force re-auth.
 2. **Attempt tracking.** The pending flow's state (server id, connection
    config id, a fingerprint of the OAuth client info, the return path) is
    stored keyed by an opaque `state` value in
-   `mcp_oauth_attempt_store()` (`oauth_flow.py`, backed by
+   `MCP_OAUTH_ATTEMPTS` (`oauth_flow.py`, backed by
    `onyx/oauth/authorization_attempt.py`), scoped to the initiating user id.
 3. **Callback.** `POST /mcp/oauth/callback` (`process_oauth_callback`,
    `mcp/api.py`) consumes the attempt by `(user_id, state)`, re-checks the
@@ -403,6 +471,11 @@ code or exception surfaces as the raw response body or propagates up to
 
 ---
 
+Known-provider OAuth uses `onyx/oauth/protocol.py` for authorization URLs.
+Both endpoint queries and configured extras reject flow-owned parameters,
+including `resource`. The pending-attempt store resolves the tenant cache on
+each operation and consumes state before exchanging the authorization code.
+
 ## 5. Contracts and invariants
 
 1. **A tool name must be unique within one turn's tool set**, or the LLM
@@ -480,10 +553,11 @@ code or exception surfaces as the raw response body or propagates up to
 | If your change… | Also check |
 |---|---|
 | adds a transport | `MCPTransport` enum, `client.py:_create_mcp_client_function_runner`'s branch on transport, `MCPTool.run`'s SSE-specific proactive-refresh branch (§4.2), the create-server frontend form |
-| changes credential scope (`auth_performer` handling) | `resolve_mcp_credentials` (§4.3), `requires_user_authentication`, `user_can_authenticate`, the MCP dropdown's per-user connect UI, and whether an existing shared credential must be migrated or invalidated |
+| changes credential scope (`auth_performer` handling) | `resolve_mcp_credentials` (§4.3), `requires_user_authentication`, `user_connection_status`, the MCP dropdown's per-user connect UI, and whether an existing shared credential must be migrated or invalidated |
 | changes name disambiguation | `_disambiguate_mcp_tool_names`, `MCPTool.use_disambiguated_name`, and any saved chat history that stored the pre- or post-disambiguation name (`[[tools-framework]]` §7's tool-rename row applies here too) |
 | changes the `Tool` discriminator (adds a fourth kind, or changes column semantics) | `[[tools-framework]]`'s `BUILT_IN_TOOL_MAP`/dispatch, `get_tools` (`db/tools.py`, its `only_openapi`/`only_connected_mcp` filters), `_upsert_db_tools`, `create_tool__no_commit` |
 | changes `passthrough_auth` or per-tool OAuth resolution order | `tool_constructor.py`'s priority-1-then-2 logic (§4.5 step 5-6), `_validate_auth_settings` (`tool/api.py`) |
+| changes custom-action OAuth setup | the PKCE metadata check, draft test endpoints, masked credential handling, popup callback routing, and saved per-user authorization in [[auth-and-identity]] |
 | changes MCP OAuth token storage shape | `extract_connection_data`, `mcp_token_expired`, `ResolvedMCPCredentials.build_headers`, and the SSRF-safe httpx factory that every one of these calls flows through |
 | changes tool sync (`_sync_mcp_server_tools`) | admin-visible tool list going stale, the `with_for_update()` lock's contention behavior under concurrent refresh triggers |
 
@@ -520,6 +594,16 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
    appears in the reply.
 5. For an OAuth or per-user-key server, repeat as a second user and confirm
    the second user must connect independently (proves per-user scope, §4.3).
+
+### Checking OAuth settings without saving
+
+1. Open an action's OAuth settings and enter the authorization and token endpoints.
+2. Check the detected S256 status. Change the endpoints and confirm the old status disappears.
+3. Run **Test connection** and complete provider consent in the popup.
+4. Confirm the result identifies whether the test used PKCE.
+5. Confirm the test did not change saved configuration or the user's saved token.
+6. Change a form value and confirm the previous test result no longer applies.
+7. Repeat with denied consent and a closed popup. Neither case must report success.
 
 ### Adding an OpenAPI action and confirming the LLM can call them
 
@@ -583,7 +667,7 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
   reusing this factory would silently reopen the SSRF hole.
 - **The MCP OAuth callback trusts the state store, not the query string
   alone.** `process_oauth_callback` re-derives everything it needs from the
-  server-side `mcp_oauth_attempt_store()` entry keyed by `(user_id, state)`;
+  server-side `MCP_OAUTH_ATTEMPTS` entry keyed by `(user_id, state)`;
   a client that tries to shortcut the flow by POSTing arbitrary
   `code`/`server_id` values without a matching stored attempt gets rejected
   at the fingerprint/connection-config-id checks (§4.4 step 3).

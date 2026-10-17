@@ -297,9 +297,31 @@ def _get_or_extract_plaintext(
     return content_text
 
 
+def _get_chat_file_processing_info(
+    file_descriptor: FileDescriptor, db_session: Session
+) -> tuple[int, bool]:
+    """Read session-bound fields before attachment content work starts."""
+    user_file_id_str = file_descriptor.get("user_file_id", "")
+    user_file: UserFile | None = None
+    if user_file_id_str:
+        try:
+            user_file = get_user_file_by_id(UUID(user_file_id_str), db_session)
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                "Failed to look up user file for %s: %s", file_descriptor["id"], e
+            )
+    token_count = user_file.token_count if user_file and user_file.token_count else 0
+    content_pending = user_file is not None and user_file.status in (
+        UserFileStatus.PROCESSING,
+        UserFileStatus.INDEXING,
+    )
+
+    return token_count, content_pending
+
+
 @log_function_time()
 def load_chat_file(
-    file_descriptor: FileDescriptor, db_session: Session
+    file_descriptor: FileDescriptor, token_count: int, content_pending: bool
 ) -> ChatLoadedFile:
     """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
@@ -313,28 +335,14 @@ def load_chat_file(
     ``content_text`` (used for LLM context injection) and ``token_count``
     remain eager because they're cheap: the cached-plaintext store hit avoids
     reading the original bytes entirely on the common path, and token_count
-    is a single DB lookup.
+    is captured before content loading.
     """
     file_id = file_descriptor["id"]
     # `FileDescriptor` is often JSON-roundtripped (e.g. JSONB / API), so `type`
     # may arrive as a raw string value instead of a `ChatFileType`.
     file_type = ChatFileType(file_descriptor["type"])
     filename = file_descriptor.get("name")
-
-    # Look up the UserFile row first (when one exists) — it supplies the token
-    # count and tells us whether the user-file worker is still processing.
     user_file_id_str = file_descriptor.get("user_file_id", "")
-    user_file: UserFile | None = None
-    if user_file_id_str:
-        try:
-            user_file = get_user_file_by_id(UUID(user_file_id_str), db_session)
-        except (ValueError, TypeError) as e:
-            logger.warning("Failed to look up user file for %s: %s", file_id, e)
-    token_count = user_file.token_count if user_file and user_file.token_count else 0
-    content_pending = user_file is not None and user_file.status in (
-        UserFileStatus.PROCESSING,
-        UserFileStatus.INDEXING,
-    )
 
     # Extract text content if it's a text file type (not an image). The
     # cached-plaintext path avoids reading the original bytes on the steady
@@ -416,19 +424,24 @@ def load_all_chat_files(
     db_session: Session,
 ) -> list[ChatLoadedFile]:
     # Returns lazy ChatLoadedFile instances — raw bytes are not read here.
-    # Defense-in-depth: even though per-file work is now cheap (DB lookup +
-    # optional cached-plaintext fetch), cap fan-out so no future regression
+    # Defense-in-depth: even though per-file work is now cheap (an optional
+    # cached-plaintext fetch), cap fan-out so no future regression
     # can re-introduce a 500-thread storm.
     file_descriptors_for_history: list[FileDescriptor] = []
     for chat_message in chat_messages:
         if chat_message.files:
             file_descriptors_for_history.extend(chat_message.files)
 
+    # Build all arguments before starting workers. A Session cannot be shared
+    # across threads, so workers receive only the descriptor and scalar metadata.
     files = cast(
         list[ChatLoadedFile],
         run_functions_tuples_in_parallel(
             [
-                (load_chat_file, (file, db_session))
+                (
+                    load_chat_file,
+                    (file, *_get_chat_file_processing_info(file, db_session)),
+                )
                 for file in file_descriptors_for_history
             ],
             max_workers=_MAX_PARALLEL_CHAT_FILE_LOADS,
@@ -731,34 +744,23 @@ def convert_chat_history(
 
 
 def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:
-    """Get the custom agent prompt from persona or project instructions. If it's replacing the base system prompt,
-    it does not count as a custom agent prompt (logic exists later also to drop it in this case).
-
-    Chat Sessions in Projects that are using a custom agent will retain the custom agent prompt.
-    Priority: persona.system_prompt (if not default Agent) > chat_session.project.instructions
-
-    # NOTE: Logic elsewhere allows saving empty strings for potentially other purposes but for constructing the prompts
-    # we never want to return an empty string for a prompt so it's translated into an explicit None.
-
-    Args:
-        persona: The Persona object
-        chat_session: The ChatSession object
-
-    Returns:
-        The prompt to use for the custom Agent part of the prompt.
-    """
-    # If using a custom Agent, always respect its prompt, even if in a Project, and even if it's an empty custom prompt.
-    if persona.id != DEFAULT_PERSONA_ID:
-        # Logic exists later also to drop it in this case but this is strictly correct anyhow.
-        if persona.replace_base_system_prompt:
-            return None
-        return persona.system_prompt or None
-
-    # If in a project and using the default Agent, respect the project instructions.
-    if chat_session.project and chat_session.project.instructions:
-        return chat_session.project.instructions
-
-    return None
+    """Combine project and agent instructions without repeating a replacement prompt."""
+    project_instructions: str | None = (
+        chat_session.project.instructions if chat_session.project else None
+    )
+    agent_instructions: str | None = (
+        persona.system_prompt if persona.id != DEFAULT_PERSONA_ID else None
+    )
+    if persona.replace_base_system_prompt:
+        # The agent instructions already appear in the system message.
+        return project_instructions or None
+    if project_instructions and agent_instructions:
+        return (
+            f"Project instructions:\n{project_instructions}\n\n"
+            f"Agent instructions:\n{agent_instructions}\n\n"
+            "If these instructions conflict, follow the agent instructions."
+        )
+    return agent_instructions or project_instructions or None
 
 
 def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:

@@ -78,6 +78,7 @@ is already local.
 | `INDEX_BATCH_SIZE` | 16 | Documents per connector-fetch batch, and thus per `docprocessing` task. |
 | `MAX_CHUNKS_PER_DOC_BATCH` | 1000 | Sub-batch size for the embed step inside one docprocessing task; see §4.4. |
 | `MAX_DOCUMENT_CHARS` | set | A document above this char count is skipped with a `ConnectorFailure`, not chunked. |
+| `SKIP_SPREADSHEET_CONTENT` | false | Connectors skip tabular content at extraction (see [[connectors]]). Docprocessing replaces any `TabularSection` that still reaches it with the same `<content-skipped>` section. See §4.3. |
 | `PERSISTENT_INDEXING` | see configs | When true, an unhandled docprocessing batch exception is converted into per-doc failures and the attempt can finish (`COMPLETED_WITH_ERRORS`) instead of `FAILED`. Unhandled connector-generator exceptions in docfetching still mark the attempt `FAILED`. See `indexing/persistent_indexing.py` and §4.5. |
 | `ENABLE_CONTEXTUAL_RAG` | see configs | Contextual RAG is on when this global flag or `SearchSettings.enable_contextual_rag` is true. A per-model false does not turn off a true global flag (`indexing_pipeline.py`). |
 | `USE_DOCUMENT_SUMMARY` / `USE_CHUNK_SUMMARY` (`onyx/configs/app_configs.py`) | see configs | Which contextual-RAG LLM calls run; at least one must be true for `enable_contextual_rag`. |
@@ -264,7 +265,12 @@ builds a `Chunker` sized to that generation's multipass/contextual-RAG config, a
 calls `index_doc_batch`, which:
 
 1. `filter_documents` drops documents with no title and no content, or over
-   `MAX_DOCUMENT_CHARS`.
+   `MAX_DOCUMENT_CHARS`. Before it, when `SKIP_SPREADSHEET_CONTENT` is true,
+   `skip_tabular_content` replaces each document's `TabularSection`s with one
+   `<content-skipped>` `TextSection`. Connectors already do this at extraction,
+   so this catches only sections that still arrive, for example in batches
+   staged before the option was set. Only docprocessing and targeted reindex
+   pass the option; user files and the ingestion API do not.
 2. `_apply_document_ingestion_hook` runs the EE `DOCUMENT_INGESTION` hook, which can
    rewrite a document's sections or drop it (`hooks/points/document_ingestion.py`).
 3. `adapter.prepare` -> `index_doc_batch_prepare` -> `get_docs_to_update`: a
@@ -296,11 +302,54 @@ type to one of three `SectionChunker` implementations
 - `ImageChunker` (`image_section_chunker.py`): always flushes the buffer and emits
   its own one-section chunk carrying `image_file_id`; images never share a chunk
   with text.
-- `TabularChunker` (`tabular_section_chunker/tabular_section_chunker.py`): streams a
-  staged CSV twice (`file_store.read_file(csv_file_id)`), once to pack rows into
-  token-bounded chunks (`parse_to_chunks`) and once through `analyze_sheet` to build
-  descriptor/total summary chunks (`sheet_descriptor.py`, `total_descriptor.py`).
-  The full sheet is never materialized in memory.
+- `TabularChunker` (`tabular_section_chunker/tabular_section_chunker.py`): the one
+  path for spreadsheets and CSVs. `DocumentChunker` groups a document's
+  `TabularSection`s by `link` and sends each group to
+  `TabularChunker.chunk_workbook` in one call, at the first section of that
+  group, so the chunks describe one file. A document carrying two attachments
+  therefore yields two sets of chunks, not one merged workbook.
+  `workbook_chunks.py:build_workbook_chunks` (with the cell-level parsing in
+  `tabular_section_chunker/cell_values.py` and the data shapes in
+  `tabular_section_chunker/models.py`) emits one workbook overview, the full rows of
+  small sheets, and a bounded profile (column roles, identifier ranges, totals,
+  breakdowns by category and by month, frequent values, sample rows) of large
+  sheets. `TABULAR_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file,
+  so chunk count does not grow with row count. Each sheet is streamed once and
+  never materialized in memory. A file that yields no chunks is logged. The
+  document still reaches the index through the empty payload
+  `DocumentChunker.chunk` adds, so it stays findable by title and metadata, but
+  none of its sheet contents are.
+
+  There is no per-row chunking. Rows reach the index only through a small
+  sheet's verbatim block or a profile's sample rows, so a query naming one row
+  of a large sheet has little to match. The chunks make a file findable and say
+  what it holds; the file itself remains the record.
+
+  What the chunks will and will not claim:
+
+  - **Dates carry no locale assumption.** `date_key` reads ISO, `YYYY/MM/DD` and
+    written months outright. For `5/3/2024` or `5.3.2024` the separator settles
+    nothing, so the order comes from the column's own values — a part above 12
+    cannot be a month — tracked per column as `DateOrder` while both readings run
+    side by side. A column that never settles gets no time range and no monthly
+    totals, and says so in the log. Never assume dots mean day-first.
+  - **A title block does not hide the table.** `profile_sheet` skips up to
+    `_MAX_PREAMBLE_ROWS` narrow rows to reach the header, keeping them as
+    `preamble` for the overview. Only a sheet with nothing wider in that span is
+    text.
+  - **Partial lines say they are partial.** `_shown_suffix` appends
+    `(N of M shown)` to a clipped breakdown, so a truncated list is never read as
+    the whole truth.
+  - **Percentages are never summed**; a `%` column reports average, min and max
+    only (`ColumnStats.summable`, which also refuses a column that mixes
+    currencies), and a `$` column keeps its unit.
+  - **Sheets merge only when merging costs nothing.** `_can_merge` refuses to
+    pool same-header tabs whose combined category values would pass
+    `_CATEGORY_MAX_DISTINCT`, since that would delete a breakdown each tab had
+    alone.
+  - **Blocks queue one per sheet before any sheet gets extras**, and the overview
+    (up to `_OVERVIEW_MAX_CHUNKS`) names every sheet, so exhausting the budget
+    costs detail rather than whole sheets. `_Packer` logs whatever it drops.
 
 `DocumentChunker.chunk` assigns `chunk_id` sequentially over the section-ordered
 payload stream, then `ChunkPayload.to_doc_aware_chunk` attaches the per-document
@@ -336,7 +385,24 @@ enrichment (`_partition_documents_blocked_by_llm_spend_limit`).
 `indexing_pipeline.py`). Chunks are split into sub-batches of at most
 `MAX_CHUNKS_PER_DOC_BATCH` (1000) and each sub-batch is embedded in one call to
 `EmbeddingModel.encode` (`natural_language_processing/search_nlp_models.py`), which
-reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Titles
+reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`, or the
+cloud provider directly. Failed passage calls retry with exponential backoff.
+The admin can set a global rate limit on passage requests on the Index Settings
+page (`embedding_rate_limit_*` in workspace `Settings`). Every outgoing request,
+retries included, takes a slot in a per-tenant sliding window in Redis
+(`embedding_rate_limit.py`). When the window is full, or a provider answers
+429, the worker thread blocks and tries again instead of failing, so the
+thread takes no new Celery task. Self-hosted retries about once a minute
+(jittered) for up to six hours; cloud (`MULTI_TENANT`), whose workers all
+tenants share, backs off exponentially for up to one minute. When the wait runs
+out the request fails, and every remaining document of the batch fails without
+per-document retries. `docprocessing_task` acks on receipt (`acks_late=False`),
+so the broker never redelivers a waiting or slow batch to another worker; a
+duplicate delivery would count the batch twice in `completed_batches`. The wait time is
+recorded as the `EMBEDDING_RATE_LIMIT_WAIT` and `EMBEDDING_PROVIDER_THROTTLE_WAIT`
+stage metrics, which are parts of `EMBEDDING`. `encode` reads the limit once
+per call, so a change applies to the next batch. Query embeddings are never
+limited or blocked. Titles
 get no separate embedding: the title reaches the vector only through the chunk's
 `title_prefix`.
 Each successfully embedded sub-batch is immediately pickled to disk via
@@ -380,7 +446,9 @@ writer of the attempt's aggregate counters:
   TTL), acquired with a bounded `CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300`
   timeout rather than an unbounded wait, specifically to avoid every docprocessing
   thread across the fleet wedging behind a lock left by a worker killed
-  mid-section. A failed acquire raises and the task is redelivered.
+  mid-section. A failed acquire raises and fails the task. Celery does not
+  redeliver a failed task: the batch file stays in storage, the heartbeat check
+  fails the attempt, and the next attempt re-issues the batch.
 - `check_cancellation_requested` / `request_cancellation` implement admin-triggered
   cancellation without Redis fencing: a boolean column on `IndexAttempt`, polled by
   both docfetching (`_check_connector_and_attempt_status`) and
@@ -398,7 +466,12 @@ matches exactly and whose status `should_reuse_checkpoint()` (`FAILED`, `CANCELE
 or `INTERRUPTED`, but not a successful terminal state, which always starts a fresh
 window), then loads that attempt's checkpoint blob. If 50 consecutive attempts made
 no progress at all, the checkpoint is discarded and the run starts from scratch
-rather than replaying a permanently stuck cursor.
+rather than replaying a permanently stuck cursor. The lookback, and the "most
+recent attempt" whose poll window a new attempt reuses, skip attempts with no
+`poll_range_end` (`get_recent_completed_attempts_for_cc_pair`). Such an attempt
+ended before docfetching set its window, for example one cancelled by a pause
+right after the scheduler created it. Without the skip, the next attempt takes a
+fresh window, finds no matching checkpoint and deletes the leftover batches.
 
 Checkpointing tracks **which batches were sent to the file store**, not which
 batches finished processing (`run_docfetching.py` comment, verified in source). A
@@ -695,7 +768,8 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
   caught, converted into a generic `ConnectorFailure` per document (or one
   `EntityFailure` if the batch never loaded), and the batch is marked "complete"
   with zero counts so the attempt can still reach `COMPLETED_WITH_ERRORS`. Without
-  it, the same exception fails the task outright and Celery redelivers it.
+  it, the same exception fails the task outright. Celery does not redeliver it;
+  the batch stays in storage for the next attempt's `reissue_old_batches`.
 - **The cross-batch coordination lock has a bounded acquire on purpose.**
   `CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300` exists because an earlier unbounded
   `acquire()` let one killed worker's fossil lock (held for up to

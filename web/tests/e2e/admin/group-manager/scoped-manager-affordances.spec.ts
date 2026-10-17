@@ -54,7 +54,7 @@ test.describe("scoped manager affordances", () => {
     const status = new IndexingStatusPage(page);
 
     await status.goto();
-    await status.expandSourceGroup("File");
+    await status.waitForConnector(world.publicCcPairName);
 
     await status.expectRowInert(world.publicCcPairName);
     await status.expectRowOpens(world.managedCcPairName, world.managedCcPairId);

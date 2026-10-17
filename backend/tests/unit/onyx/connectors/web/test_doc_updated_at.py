@@ -46,7 +46,7 @@ def _make_page_mock() -> MagicMock:
         LAST_MODIFIED if h == "Last-Modified" else None
     )
     page.goto.return_value = response
-    page.content.return_value = "<html><body><p>static</p></body></html>"
+    page.evaluate.return_value = "<html><body><p>static</p></body></html>"
     return page
 
 
@@ -58,11 +58,11 @@ def _make_playwright_mock() -> MagicMock:
 
 @patch("onyx.connectors.web.connector.web_html_cleanup")
 @patch("onyx.connectors.web.connector.check_internet_connection")
-@patch("onyx.connectors.web.connector.requests.head")
+@patch("onyx.connectors.web.connector.ssrf_safe_get")
 @patch("onyx.connectors.web.connector.start_playwright")
 def test_doc_updated_at_is_none_even_with_last_modified_header(
     mock_start_playwright: MagicMock,
-    mock_head: MagicMock,
+    mock_fetch: MagicMock,
     _mock_check: MagicMock,
     mock_cleanup: MagicMock,
 ) -> None:
@@ -70,7 +70,9 @@ def test_doc_updated_at_is_none_even_with_last_modified_header(
     context = MagicMock()
     context.new_page.return_value = page
     mock_start_playwright.return_value = (_make_playwright_mock(), context)
-    mock_head.return_value.headers = {"content-type": "text/html"}
+    mock_fetch.return_value.__enter__.return_value.headers = {
+        "content-type": "text/html"
+    }
     mock_cleanup.return_value = ParsedHTML(title="Static Page", cleaned_text="static")
 
     connector = WebConnector(

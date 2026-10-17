@@ -14,8 +14,11 @@ from ee.onyx.configs.app_configs import (
     GITHUB_PERMISSION_DOC_SYNC_FREQUENCY,
     GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY,
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
+    LINEAR_PERMISSION_DOC_SYNC_FREQUENCY,
+    LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY,
     ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY_S,
     ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S,
     OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -24,6 +27,8 @@ from ee.onyx.configs.app_configs import (
     SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY,
+    YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY,
+    YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
     ZOOM_PERMISSION_DOC_SYNC_FREQUENCY,
     ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY,
 )
@@ -129,6 +134,12 @@ def _load_gmail_doc_sync() -> DocSyncFuncType:
     return gmail_doc_sync
 
 
+def _load_hubspot_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.hubspot.doc_sync import hubspot_doc_sync
+
+    return hubspot_doc_sync
+
+
 def _load_gdrive_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 
@@ -209,6 +220,30 @@ def _load_teams_group_sync() -> GroupSyncFuncType:
     return teams_group_sync
 
 
+def _load_linear_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.linear.doc_sync import linear_doc_sync
+
+    return linear_doc_sync
+
+
+def _load_linear_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.linear.group_sync import linear_group_sync
+
+    return linear_group_sync
+
+
+def _load_youtrack_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.youtrack.doc_sync import youtrack_doc_sync
+
+    return youtrack_doc_sync
+
+
+def _load_youtrack_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.youtrack.group_sync import youtrack_group_sync
+
+    return youtrack_group_sync
+
+
 def _load_zoom_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.zoom.doc_sync import zoom_doc_sync
 
@@ -235,6 +270,9 @@ class GroupSyncConfig(BaseModel):
 
 class CensoringConfig(BaseModel):
     chunk_censoring_func: CensoringFuncType
+    # Whether documents under only private connectors of this source go through
+    # the censor too, on top of their private ACL.
+    censors_private_connectors: bool
 
 
 class SyncConfig(BaseModel):
@@ -347,9 +385,22 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
+    # Private Salesforce connectors were indexed with the open ACL before the
+    # ACL was keyed on access type, so the censor still covers their records.
     DocumentSource.SALESFORCE: SyncConfig(
         censoring_config=CensoringConfig(
             chunk_censoring_func=_lazy_censoring(_load_censor_salesforce_chunks),
+            censors_private_connectors=True,
+        ),
+    ),
+    # HubSpot names the users who may view each record, so there are no groups.
+    DocumentSource.HUBSPOT: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_hubspot_doc_sync),
+            # Indexing never fetches viewers (the runner carries access only for
+            # checkpointed connectors), so the first doc sync is what grants access.
+            initial_index_should_sync=False,
         ),
     ),
     # Domain sign-in rules: groups filled from the account's user roster.
@@ -362,6 +413,34 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=_lazy_group_sync(_load_zoom_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.LINEAR: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=LINEAR_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_linear_doc_sync),
+            # The runner tells only checkpointed connectors to carry access, so
+            # an issue stays private until the first doc sync lists it.
+            initial_index_should_sync=False,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_linear_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.YOUTRACK: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_youtrack_doc_sync),
+            # Indexing carries no access, so an issue stays private until the
+            # first doc sync lists it.
+            initial_index_should_sync=False,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_youtrack_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),

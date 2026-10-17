@@ -71,6 +71,7 @@ const MCP_SERVER: MCPServer = {
   server_url: "https://mcp.atlassian.com/v1/sse",
   owner: "admin@example.com",
   status: MCPServerStatus.CONNECTED,
+  connection_status: null,
   is_public: true,
   groups: [],
   users: [],
@@ -146,14 +147,16 @@ describe("ExternalAppsPage", () => {
         enabled: false,
       });
     });
-    expect(appSwitch()).toBeDisabled();
+    expect(appSwitch()).toHaveAttribute("aria-disabled", "true");
     expect(
       screen.getByRole("button", { name: "Custom app actions" })
     ).toBeDisabled();
 
     await act(async () => finishRefresh?.());
 
-    await waitFor(() => expect(appSwitch()).toBeEnabled());
+    await waitFor(() =>
+      expect(appSwitch()).not.toHaveAttribute("aria-disabled")
+    );
   });
 
   it("splits apps and MCP servers into tabs with summary facts", async () => {

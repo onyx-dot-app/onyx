@@ -370,6 +370,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-09-23",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -428,6 +429,35 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-09-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "Qwen/Qwen3-VL-30B-A3B-Instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Qwen3 VL 30B A3B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-10-04",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1702,6 +1732,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-12-15",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1848,6 +1879,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-06",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

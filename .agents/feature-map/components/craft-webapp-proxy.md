@@ -11,7 +11,7 @@
 **Owns:**
 `backend/onyx/server/features/build/webapp_proxy.py`,
 `backend/onyx/server/features/build/sandbox/nextjs_dev.py`,
-`web/src/app/craft/components/output-panel/PreviewTab.tsx`,
+`web/src/app/craft/components/output-panel/`,
 `web/src/app/craft/components/OutputPanel.tsx`
 
 **Read first:** `docs/craft/lazy-webapp-provisioning.md`. It is the design
@@ -22,23 +22,33 @@ script this document's provisioning section maps to code.
 
 ## 1. What the user experiences
 
-A user asks Craft to build a web app. As the agent writes code, a Preview tab
-in the session view shows the running app in an iframe, hot-reloading as the
-agent edits files. The user never runs a command to see this; the dev server
-starts the first time the agent (or the user, via a documented fallback
-script) needs it.
+A user asks Craft to build a web app. The dev server starts when the agent first needs it.
+Opening Apps from the plus menu lists registered session apps.
+Background webapp discovery does not disable reload for a serving app. Browser reload follows the iframe document load, not discovery polling. The loading cover blocks interaction until the document load completes. Only user-requested reloads show the reload spinner.
+Each tile opens its registered session app. A tooltip shows its URL.
+The current backend supplies one app registration per session; the UI accepts a list without inventing additional servers.
+A serving app fills its Browser tab through the authorized session proxy route.
+Source edits use the existing dev server and HMR path. The managed Next.js scaffold disables the development React debug channel, keeping hydration data in the document instead of waiting for a WebSocket. Startup migrates the old managed empty-config declaration without replacing custom settings.
 
-Automatic panel opening waits for `webapp-info` to report a serving webapp.
-A URL or source-file edit alone cannot open Preview or its Files fallback.
-Concurrent opening requests share one readiness check per session with a 30-second deadline.
-The deadline aborts stalled requests and releases the shared check so later tasks can retry.
-Late checks respect dismissal, newer turns, and an already-open artifact.
-The panel retains the last serving URL for the current session through readiness failures.
-It switches to a replacement URL only after that URL is ready. Switching sessions clears this state.
-Readiness polling stops on a successful ready response or after 30 seconds.
+User actions open Browser tabs. During a task, a newly discovered app can also open after readiness succeeds.
+The task selection lock prevents automatic selection after the user navigates or dismisses the panel. Passive inventory reads do not select resources.
+When no tabs are open, a heading and three compact, stacked Outputs, All Files, and Apps tiles offer the plus menu actions.
+Folders in Outputs show an unread marker while any descendant output has an unseen revision.
+Mark all viewed acknowledges the currently loaded session-wide revisions, independent of the folder or type filter.
+The action stays disabled while saving or when no loaded outputs are unread. Failed saves retain markers and show an error.
+The Outputs page has no turn picker. Chat overflow links can scope it to one turn.
+A removable turn filter leaves folder, search, and file-type filters unchanged.
+Each Browser tab keeps its own selected app and stable resource identity.
+The panel retains app frames across tab switches, reorder, and medium/full/closed transitions.
+A transient discovery failure preserves the accepted frame while showing an unavailable state.
+A replacement URL reaches the frame only when that app reports readiness.
+Switching sessions releases the previous session's frames.
+Closing a tab or panel does not terminate its server.
+Panel preferences persist independently of file caches; see [[craft-sessions]] §1.
+Invalid preferences use defaults. Session deletion clears its preferences.
 
-Only the session owner can load the Preview tab, because `get_webapp_info`
-verifies ownership. The proxy also admits any authenticated tenant user who
+Only the session owner can discover apps, because `get_webapp_info` verifies ownership.
+The proxy also admits any authenticated tenant user who
 knows the proxy URL when the sharing scope is `PUBLIC_ORG`. A logged-in viewer
 without access gets a 404, not a broken frame.
 A logged-out viewer is redirected to `/auth/login`.
@@ -57,8 +67,8 @@ A logged-out viewer is redirected to `/auth/login`.
 `backend/onyx/server/features/build/session/api.py:get_webapp_info` (GET
 `/build/sessions/{session_id}/webapp-info`) is a separate, authenticated
 endpoint that reports `has_webapp`, `webapp_url`, and `ready`; the frontend
-polls it to decide when to show the Preview tab and what iframe URL to pass
-it (`web/src/app/craft/components/OutputPanel.tsx`).
+reads it to populate Browser home and select the authorized iframe URL
+(`web/src/app/craft/components/OutputPanel.tsx`).
 
 ### Cache keys (`webapp_proxy.py`)
 
@@ -166,6 +176,9 @@ gateway error.
 
 ### 4.4 Proxying the HMR websocket
 
+The managed Next.js scaffold disables the development React debug channel, keeping hydration data in the document.
+Startup migrates the old managed empty-config declaration without replacing custom settings.
+
 `websocket_webapp_hmr` requires an authenticated user
 (`current_user_from_websocket_cookie`, `onyx/auth/users.py`). That dependency
 checks the websocket origin and reads the session cookie. On multi-tenant
@@ -209,65 +222,87 @@ provisioning entirely, since nothing will view them live.
 
 ---
 
-### Artifact preview refresh
+### Output viewers and caches
 
-`OutputPanel.tsx` reads each file's revision from the session inventory and passes
-it through `FilePreviewContent.tsx` to the selected viewer. Files-tab inline previews
-use the same component and revision source. These production callers make revision-based
-cache reuse active; explicit reload counters change independently of file revisions.
-Idle session entry and focus reconcile metadata without selecting files.
+`OutputPanel.tsx` owns resource tabs and passes inventory revisions to `FilePreviewContent.tsx`.
+Outputs and All Files open the same file tabs. [[craft-streaming]] owns inventory refresh and automatic selection rules.
+Tab paths use sandbox POSIX separators and preserve literal backslashes in filenames.
+The panel retains Outputs, All Files, Apps, and five recently visited file viewers.
+Hidden bodies remain mounted but invisible, inert, and hidden from assistive technology.
+Stable body order preserves app frames through tab reorder and layout changes.
+Closing or evicting a file tab releases its payload and local navigation state. Switching sessions releases retained viewers.
+Callbacks from retired viewer instances cannot update their replacements.
 
-Each retained file viewer owns a private SWR cache with one current payload.
-`web/src/lib/build/hooks.ts:useFilePreview` owns revision-aware payload replacement.
-File revisions and explicit reloads replace that payload. A retained viewer with an unchanged
-revision reuses its data and DOM across tab switches. Files without revisions
-revalidate on activation while keeping their current content visible. Closing or evicting a viewer
-releases its cache; reopening fetches fresh bytes. SWR retries failed requests and
-rejects superseded responses. Viewers show only results and errors for their
-accepted revision and reload counter. Cache misses and reloads bypass the
-browser cache when fetching artifacts. PDF object URLs are revoked when replaced
-or when their viewer unmounts. Unversioned PDF activation reads compare bytes
-with the displayed PDF. Identical bytes reuse its Blob and object URL, preserving
-the iframe and reading position. Changed bytes replace the displayed PDF.
+`web/src/lib/build/hooks.ts:useFilePreview` owns one accepted payload per viewer.
+Its request identity combines file path, inventory revision, and explicit reload counter.
+Unchanged revisions reuse content across activation. Unversioned files revalidate on activation without hiding accepted content.
+Hidden viewers defer new reads and retries. Superseded responses cannot replace current content.
+Transient failures retain accepted content and show a warning. Authorization and not-found errors discard it, including stored fallback data.
+Cache misses and explicit reloads bypass the browser cache.
 
-The output panel keeps its five most recently visited tab bodies mounted, including
-pinned tabs and file previews. Inactive bodies keep their layout but are invisible,
-inert, and hidden from assistive technology. Stable DOM order prevents iframe reloads
-on tab switches. Closing a tab, changing sessions, closing the panel after its
-animation, or visiting a sixth tab releases the corresponding retained bodies.
-Hidden file viewers retain their accepted revision and payload. Activation loads
-the latest revision once; intermediate hidden edits do not trigger conversions.
-Webapp iframes remain live while retained.
+PDF.js renders PDFs through React-PDF with text selection, links, page navigation, zoom, and fit controls.
+PDF and PowerPoint share document navigation and pointer/keyboard-resizable thumbnail sidebars.
+Hidden thumbnails do not start rendering. Unchanged PDF bytes retain the existing document; React-PDF releases replaced documents.
+PowerPoint retains accepted slides during conversion. Successful conversion assigns fresh image tokens and clamps the selected slide.
+Document keyboard navigation only handles events in the active viewer toolbar.
+`web/tools/prepare-pdf-assets.cjs` copies versioned PDF.js support files before development and production builds, including Docker.
+These assets use the same origin. Downloads remain in the address row.
+Images use a neutral contrast background without changing downloaded bytes.
+Unsupported or oversized previews offer Download beside the explanation.
+Unknown files up to 10 MiB can preview as text when strict UTF-8 decoding finds no binary control characters.
 
-Files owns a private directory cache keyed by session and path. Each expanded
-directory manages its own cancellable request. Requests have a ten-second deadline;
-a stalled directory cannot block another directory. Activation and file-change
-signals revalidate visible directories while retaining their existing rows.
-Hiding or collapsing a directory aborts its request. Cancellations stay silent.
-Loading replaces the folder icon with a spinner for at least 150 ms; file rows appear as soon as they arrive.
-Collapsing or hiding the folder cancels the display timer. Failed folder reads show an icon
-with an error tooltip. Empty, loading, and failed child listings add no text rows.
-The toolbar spinner runs only for an explicit refresh, until visible directory reads finish.
-When Files shows an inline preview, an explicit refresh reloads that file instead.
-The preview shows its own loading state, and the toolbar remains available.
-Automatic directory refreshes do not reload an unchanged inline preview.
-Expansion and saved scroll
-remain in session UI state; directory responses do not. Scroll is saved on
-hiding or unmounting, without store writes on each scroll event.
+### Workspace files
 
-Artifacts derives its folder tree from the shared output inventory. It does not
-fetch directories or probe for empty folders. Activation reconciles the inventory;
-partial scans retain known files and report incomplete results. Loading, errors,
-and complete empty results have separate states.
+All Files uses shared SWR listings keyed by authenticated user, session, and directory.
+One browser stays mounted for the selected workspace, even when its tab or panel closes.
+Root and expanded-directory requests run independently, with ten-second deadlines and 30-second freshness.
+Opening fresh folders reuses listings; stale activation refreshes while retaining rows.
+Collapsing a folder, entering search, or leaving the workspace cancels obsolete reads.
+Restoration pauses resource reads, then invalidates directories and previews when the filesystem is ready.
+Saved expansion remains authoritative, including an explicitly collapsed tree.
+Only successful current-generation listings can prune missing folders.
+Loading, empty, failed, and incomplete results remain distinct. Each pending folder replaces its icon with a spinner.
+Manual reload waits for pending visible directories. Successful uploads and deletes invalidate their original workspace after navigation.
 
-PowerPoint previews use LibreOffice and PDF rasterization to produce slide images.
-Each successful conversion response assigns a fresh slide image token.
-A vertical thumbnail column supports click and keyboard navigation, marks the
-selected slide, and scrolls it into view. Thumbnail images load lazily.
-Keyboard navigation only handles events within the slide toolbar.
-Inactive presentations ignore keyboard navigation. Closed output panels are inert,
-so their controls cannot receive focus or keyboard input.
-Updated decks clamp the current slide to their new bounds.
+`workspaceFiles.ts` searches names and session-relative paths through bounded directory batches.
+A scan visits at most 128 directories and 10,000 entries, and starts no new batches after ten seconds.
+Incomplete results preserve prior hits only beneath failed directories; successful reads remove deleted hits.
+Fresh results take priority when retained hits would exceed the search inventory limit.
+Clearing search returns to the retained tree. Expansion and scroll belong to session UI state; listings do not.
+`WorkspaceUploadButton.tsx` owns the hidden picker and upload state.
+Download actions support hover, keyboard focus, and touch without opening files or toggling folders.
+
+### Outputs and persistent previews
+
+Outputs shows immediate files and folders under `outputs/`, using compact folder cards and a responsive file-preview grid.
+Breadcrumbs navigate folders. Search and extension filters include descendants; Folders shows immediate directories.
+Folder browsing shows filenames, while recursive results show relative paths.
+The shared inventory supplies files without a second scan on tab activation.
+Cached cards remain visible during refresh, with separate incomplete and failed states.
+`OutputTile.tsx` loads previews for visible eligible tiles and exposes Download.
+Images and safe-rendered text use lightweight previews; PDF and PowerPoint use the shared first-page JPEG endpoint.
+Unsupported, oversized, or failed thumbnails use file icons. Cached previews appear without a mount animation.
+
+Browser session storage contains user-and-session-scoped display snapshots, not authoritative inventories or task baselines.
+Live results replace these hints, including complete empty results. Preview requests wait for live revisions.
+Terminal errors clear stored hints; transient failures retain them.
+Oversized directory replacements discard that directory’s old hint. Failed storage writes discard the session’s directory hints.
+
+| Snapshot owner | Limit | Expiration |
+|---|---|---|
+| `workspaceDirectorySnapshots.ts` | 32 directories; 256,000 characters per session | 24 hours |
+| `outputInventorySnapshots.ts` | 2,000 files; 256,000 characters | 24 hours |
+| `outputThumbnailCache.ts` | 64 user-scoped payloads; 2 Mi characters | 30 minutes |
+
+The thumbnail cache is separate from full-file viewers and retains at most 128 entries and 16 Mi characters in memory.
+Matching revisions reuse previews across tile mounts. Changed revisions and terminal errors invalidate saved payloads and late responses.
+Partial scans invalidate changed revisions without deleting unseen entries.
+Each Outputs collection owns its SWR provider lifecycle; shared retained payloads do not share subscription ownership.
+Cache ownership and revision acceptance change after React commits, before pending callbacks may write.
+Successful logout retires retained writes and clears Craft snapshots and preferences.
+
+PowerPoint conversion and PDF thumbnails use the managed converter bundle described in [[craft-sandboxes]].
+Installation does not replace agent-managed skills or enter session snapshots.
 
 ## 5. Contracts and invariants
 
@@ -321,7 +356,7 @@ Updated decks clamp the current slide to their new bounds.
 | changes what is cached or its TTL | the cache-eviction-on-502/503/504 path in `get_webapp`, and whether a stale grant could outlive a sharing-scope change |
 | changes `webapp_base_path` | `nextjs_dev.py`'s start script, the template `next.config.ts`, and every place `_webapp_next_path` builds an upstream path |
 | changes port allocation | `[[craft-sandboxes]]`, and whether headless (scheduled) sessions still correctly skip provisioning |
-| touches the HMR websocket proxy | verify hydration still works; this is the trap in §9, and it fails silently, not loudly |
+| touches the HMR websocket proxy | verify live updates through both supported endpoints; check initial interactivity separately with the managed debug channel disabled (§9) |
 | changes response header filtering | re-check `set-cookie` stripping and cache-control handling together; a change to one filter can undo the other's intent |
 
 ---
@@ -345,12 +380,10 @@ Use manual reproduction for the cache and hot-reload behaviour below.
 
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
 2. In a Craft session, ask the agent to scaffold a simple Next.js page.
-3. Open the Preview tab. Confirm the app renders and that editing a
-   component (ask the agent to change some visible text) hot-reloads
-   without a manual refresh. If it renders once but never updates after an
-   edit, the HMR websocket is not reaching the sandbox; check
-   `_next/hmr` (or `_next/webpack-hmr`) in the browser's network panel for a failed
-   upgrade.
+3. Open Browser and select the session app. Confirm the app renders and its controls respond.
+   If `experimental.reactDebugChannel` is false, block the HMR WebSocket and reload; controls should still respond.
+   Unblock the WebSocket. Ask the agent to change visible text and confirm hot reload without a manual refresh.
+   If edits do not appear, check `/_next/hmr` or `/_next/webpack-hmr` for a failed WebSocket upgrade.
 4. Open the same session URL as a second, unrelated user account (or in an
    incognito window with no session). Confirm the second user gets a 404
    and the logged-out window is redirected to `/auth/login`, not rendered.
@@ -365,6 +398,7 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
 - An unauthorized logged-in viewer gets a 404 and a logged-out viewer gets a
   redirect to `/auth/login`. Neither sees a rendered frame.
 - Hot reload works after a file edit without a manual page reload.
+- With the managed debug channel disabled, initial controls work even when the HMR WebSocket is unavailable.
 - No stale JS/CSS after an edit, confirmed by a hard content check, not
   just "the page still looks fine."
 
@@ -372,17 +406,14 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
 
 ## 9. Footguns
 
-- **Websocket upgrade is required for hydration, and failing to provide it
-  does not look like an error.** Next.js 16 with Turbopack and React 19
-  needs its HMR websocket connected for the page to
-  hydrate correctly in dev. If a deployment's proxy or ingress fails to
-  upgrade that connection, the page still renders (the initial HTML and
-  JS load fine over plain HTTP), but no event handlers attach: dropdowns
-  don't open, buttons don't respond. This looks like a broken feature in
-  the generated app, not a proxy problem. `websocket_webapp_hmr`
-  (`webapp_proxy.py`) is confirmed to implement the upgrade and pump both
-  directions; a regression here would reproduce exactly this symptom.
-- **Next.js HMR paths vary by version.** Newer sandbox apps use `/_next/hmr`; older apps use `/_next/webpack-hmr`. Both the frontend development rewrite and backend WebSocket route must preserve the requested endpoint. Missing the new path leaves server-rendered headers visible while client components never initialize.
+- **Initial hydration and hot reload have different requirements.** The managed
+  scaffold disables `experimental.reactDebugChannel`. Initial interactivity should
+  not require the HMR WebSocket, but live source updates still require it.
+  Older or custom configurations that enable the debug channel can still delay
+  hydration when that connection fails. Check the effective configuration before diagnosing unresponsive controls.
+- **Next.js HMR paths vary by version.** Newer sandbox apps use `/_next/hmr`;
+  older apps use `/_next/webpack-hmr`. Frontend rewrites and backend WebSocket
+  routes must preserve the endpoint so source edits update the running app.
 - **Only `_next/static/media/*` is safe to cache immutably.** `_proxy_request`
   checks `rel_path.startswith("_next/static/media/")` before setting
   `cache-control: public, max-age=31536000, immutable`; every other path,
@@ -395,4 +426,4 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
   one.** `get_webapp_url` on Kubernetes returns a
   `*.svc.cluster.local` URL. This proxy is the only path a browser can use
   to reach it; there is no direct-to-pod fallback for a viewer.
-- **PowerPoint replacements can preserve modification time.** The converter reuses cached slides only when they are newer than the source modification and change times. This detects same-size replacements without hashing file contents.
+- **PowerPoint replacements can preserve modification time.** The converter reuses cached slides only when the stored source revision matches device, inode, size, modification time, and change time. Missing or malformed revision records require regeneration. This detects same-size replacements without hashing file contents.
