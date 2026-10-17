@@ -249,6 +249,28 @@ def test_resolve_refuses_a_run_with_nothing_open(
     assert refused.value.error_code == OnyxErrorCode.INVALID_INPUT
 
 
+def test_resolve_refuses_a_run_still_going(
+    db_session: Session, admin: User, cc_pair: ConnectorCredentialPair
+) -> None:
+    attempt = _index_attempt(db_session, cc_pair, 0, IndexingStatus.IN_PROGRESS)
+    db_session.add(
+        IndexAttemptError(
+            index_attempt_id=attempt.id,
+            connector_credential_pair_id=cc_pair.id,
+            document_id=f"doc-{attempt.id}",
+            failure_message="boom",
+            is_resolved=False,
+        )
+    )
+    db_session.commit()
+
+    # More failures can still land on it, so nothing is settled enough to resolve.
+    with pytest.raises(OnyxError) as refused:
+        _resolve(db_session, admin, cc_pair, [(CCPairRunKind.INDEXING, attempt.id)])
+
+    assert refused.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
 def test_resolve_refuses_a_caller_who_cannot_operate_the_pair(
     db_session: Session, admin: User, cc_pair: ConnectorCredentialPair
 ) -> None:

@@ -171,7 +171,8 @@ export default function ActivityCard({
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
   const state = cardState(run, group, closed);
-  const resolvesRun = canResolveRuns && !closed && group !== "other";
+  // A run still going can fail again, so it is resolved once it ends.
+  const resolvesRun = canResolveRuns && !closed && !active && group !== "other";
   const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure explains itself. A run with errors reports what it still did.
