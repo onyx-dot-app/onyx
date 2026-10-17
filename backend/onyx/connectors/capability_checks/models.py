@@ -145,9 +145,16 @@ class CheckAdvisory(BaseModel):
 
 class CheckOutput(BaseModel):
     """What a passing check returns: its row's short line (what it found),
-    findings, and advisories about what it could not verify."""
+    findings, and advisories about what it could not verify.
+
+    ``partial`` marks a check that confirmed only part of its scope, such as a
+    Find that found some selected items: it is INCOMPLETE, with
+    ``description`` saying what is missing, and the checks after it run on
+    what it found."""
 
     summary: str | None = None
+    description: str | None = None
+    partial: bool = False
     findings: list[CheckFinding] = []
     advisories: list[CheckAdvisory] = Field(default=[], max_length=MAX_CHECK_ADVISORIES)
 
@@ -618,6 +625,8 @@ class CapabilityCheckResult(BaseModel):
     # Why a SKIPPED check did not run, and the dependency that stopped it.
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
+    # An INCOMPLETE check that confirmed part of its scope; its dependents run.
+    partial: bool = False
     # The row's text: a short line of what the check found or what is wrong,
     # and up to three lines of what happened and what is needed. None when
     # the check gives none; ``message`` stays the full text for support.
