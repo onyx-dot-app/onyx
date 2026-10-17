@@ -61,6 +61,16 @@ def upsert_document_external_perms(
     }
 
     if not document:
+        # JSM slim retrieval runs in a separate worker from full indexing.
+        # A transient download/extraction failure can leave an attachment
+        # eligible by metadata yet without an indexed document. Do not create
+        # a metadata-only row during permission sync for such attachments.
+        if (
+            source_type == DocumentSource.JIRA_SERVICE_MANAGEMENT
+            and "/attachment/" in doc_id
+        ):
+            return False
+
         # If the document does not exist, still store the external access
         # So that if the document is added later, the external access is already stored
         # The upsert function in the indexing pipeline does not overwrite the permissions fields

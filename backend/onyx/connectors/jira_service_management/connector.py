@@ -35,6 +35,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -88,11 +89,14 @@ def _attachment_metadata_eligible(
 ) -> bool:
     """Shared deterministic admission rule for full and slim passes."""
     size = _attachment_field(attachment, "size", None)
+    filename = str(_attachment_field(attachment, "filename", "") or "")
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     return (
         bool(_attachment_field(attachment, "id", ""))
         and isinstance(size, int)
         and not isinstance(size, bool)
         and 0 < size <= _MAX_ATTACHMENT_BYTES
+        and f".{extension}" in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
     )
 
 
@@ -144,11 +148,11 @@ class JiraServiceManagementConnector(JiraConnector):
         # slim pass admits nothing for these tickets, keeping the two ID
         # sets in parity when no enumeration is available.
         self._attachment_admission_failures: set[str] = set()
-        # Ticket document ID -> doc IDs of attachments that failed in the
-        # main pass (download or content errors). The slim pass excludes
-        # exactly these IDs so admitted IDs stay in exact parity with the
-        # documents the main pass actually produced, without penalizing
-        # healthy sibling attachments.
+        # Same-instance optimization only: download/extraction failures from a
+        # full pass may be skipped by a subsequent slim pass on this instance.
+        # A fresh pruning / permission-sync worker has no such state: metadata
+        # eligibility is deterministic across workers and the permission upsert
+        # must not create missing attachment rows.
         self._failed_attachment_doc_ids: dict[str, set[str]] = {}
 
     @property
@@ -252,11 +256,8 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
             ]
 
-        # Download/convert every attachment first. Attachments that fail are
-        # tracked per doc ID so the slim pass admits exactly the IDs that
-        # produced a main-pass document (full/slim parity): extra slim docs
-        # would become permanent ``chunk_count IS NULL`` rows, and excluding
-        # only the failed IDs keeps healthy siblings unaffected.
+        # Report failures per attachment. Failed IDs are retained only for
+        # same-instance slim runs, never as cross-worker durability state.
         self._attachment_admission_failures.discard(ticket_document_id)
         outputs: list[Document | ConnectorFailure] = []
         failed_doc_ids: set[str] = set()
@@ -304,7 +305,8 @@ class JiraServiceManagementConnector(JiraConnector):
                 failure_message=(
                     f"Attachment '{filename}' ({attachment_id}) of JSM issue "
                     f"{_issue_key(issue)} has an empty, invalid, unknown or "
-                    f"oversized declared size (limit {_MAX_ATTACHMENT_BYTES} bytes)"
+                    f"oversized declared size or unsupported file type "
+                    f"(limit {_MAX_ATTACHMENT_BYTES} bytes)"
                 ),
             )
 
@@ -402,13 +404,11 @@ class JiraServiceManagementConnector(JiraConnector):
         if not self.include_attachments:
             return []
 
-        # Full/slim parity guard, two layers:
-        # 1. When the listing failed in the main pass (ticket-level mark),
-        #    no enumeration is trustworthy this run — admit nothing.
-        # 2. Attachments that failed individually in the main pass (download
-        #    or content errors) are excluded by doc ID, so admitted IDs match
-        #    the documents the main pass actually produced. Healthy siblings
-        #    are unaffected.
+        # A failed enumeration must not look like an empty attachment set.
+        # Deterministic eligibility works on fresh workers. Failed downloads
+        # are excluded when known on this instance; cross-worker pruning keeps
+        # eligible IDs instead of deleting previously indexed attachments.
+        # Permission sync may only update an existing attachment document.
         if ticket_document_id in self._attachment_admission_failures:
             # Missing enumeration does not mean "no attachments": returning
             # an empty slim set would prune previously indexed documents.
@@ -442,8 +442,7 @@ class JiraServiceManagementConnector(JiraConnector):
             attachment_id = str(_attachment_field(attachment, "id", "") or "")
             doc_id = f"{ticket_document_id}/attachment/{attachment_id}"
             if doc_id in failed_ids:
-                # Failed in the main pass: no document exists for it, so
-                # admitting the ID would create a chunk_count IS NULL row.
+                # Same-instance failed download: do not re-admit the ID.
                 continue
             created = str(_attachment_field(attachment, "created", "") or "")
             slim_docs.append(

@@ -183,6 +183,28 @@ def test_invalid_attachment_metadata_is_rejected_without_downloading(
     )
 
 
+def test_unsupported_image_is_excluded_from_full_and_fresh_slim(
+    make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    mock_jira_client: MagicMock,
+) -> None:
+    attachment = MockAttachment(id="image-1", filename="screenshot.png")
+    connector = _make_connector_with_attachments(
+        make_jsm_connector, mock_jira_client, [attachment]
+    )
+    issue = make_mock_jsm_issue()
+
+    with patch.object(attachment, "get", wraps=attachment.get) as download:
+        outputs = connector._process_issue_attachments(issue, None, TICKET_DOC_ID)
+        assert len(outputs) == 1
+        assert isinstance(outputs[0], ConnectorFailure)
+        download.assert_not_called()
+
+    fresh = _make_connector_with_attachments(
+        make_jsm_connector, mock_jira_client, [attachment]
+    )
+    assert fresh._process_issue_attachments_slim(issue, None, TICKET_DOC_ID) == []
+
+
 class TestAttachmentIndexing:
     @pytest.mark.usefixtures("mock_extract")
     def test_attachments_indexed_in_main_and_slim_pass(
@@ -192,7 +214,7 @@ class TestAttachmentIndexing:
     ) -> None:
         attachments = [
             MockAttachment(id="1001", filename="server-log.txt"),
-            MockAttachment(id="1002", filename="screenshot.png", content=b"png-bytes"),
+            MockAttachment(id="1002", filename="diagnostics.md", content=b"log-bytes"),
         ]
         connector = _make_connector_with_attachments(
             make_jsm_connector, mock_jira_client, attachments
@@ -320,7 +342,7 @@ class TestAttachmentFailureIsolation:
         attachments = [
             MockAttachment(
                 id="4001",
-                filename="corrupt.bin",
+                filename="corrupt.txt",
                 raise_on_get=RuntimeError("download exploded"),
             ),
             MockAttachment(id="4002", filename="healthy.txt"),
@@ -433,7 +455,7 @@ class TestAttachmentFailureIsolation:
         attachments = [
             MockAttachment(
                 id="6001",
-                filename="broken.bin",
+                filename="broken.txt",
                 raise_on_get=RuntimeError("download failed"),
             ),
             MockAttachment(id="6002", filename="healthy.txt"),
@@ -507,6 +529,38 @@ class TestSlimPermissionPropagation:
         )
         assert len(slim_docs) == 1
         assert slim_docs[0].external_access is None
+
+
+@pytest.mark.usefixtures("mock_extract")
+def test_fresh_slim_instance_preserves_eligible_id_after_transient_failure(
+    make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    mock_jira_client: MagicMock,
+) -> None:
+    """Pruning runs with another instance; failed downloads are not deletions."""
+    attachment = MockAttachment(
+        id="cross-worker-1",
+        filename="recoverable.txt",
+        raise_on_get=RuntimeError("transient download failure"),
+    )
+    issue = make_mock_jsm_issue()
+    full = _make_connector_with_attachments(
+        make_jsm_connector, mock_jira_client, [attachment]
+    )
+    full_outputs = full._process_issue_attachments(issue, None, TICKET_DOC_ID)
+    assert len(full_outputs) == 1
+    assert isinstance(full_outputs[0], ConnectorFailure)
+
+    fresh_slim = _make_connector_with_attachments(
+        make_jsm_connector, mock_jira_client, [attachment]
+    )
+    assert not fresh_slim._failed_attachment_doc_ids
+    slim_ids = {
+        doc.id
+        for doc in fresh_slim._process_issue_attachments_slim(
+            issue, None, TICKET_DOC_ID
+        )
+    }
+    assert slim_ids == {f"{TICKET_DOC_ID}/attachment/cross-worker-1"}
 
 
 class TestEmptyAttachmentContent:
