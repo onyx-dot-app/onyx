@@ -258,6 +258,7 @@ class UserFileIndexingAdapter:
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,
+        failed_document_ids: set[str],  # noqa: ARG002
     ) -> None:
         if not isinstance(enrichment, UserFileChunkEnricher):
             raise TypeError("User file indexing requires a UserFileChunkEnricher")

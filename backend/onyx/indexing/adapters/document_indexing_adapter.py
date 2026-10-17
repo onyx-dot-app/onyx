@@ -235,6 +235,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,  # noqa: ARG002
+        failed_document_ids: set[str],
     ) -> None:
         """Finalize DB updates, store plaintext, and mark docs as indexed."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
@@ -265,8 +266,12 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             document_ids=last_modified_ids, db_session=db_session
         )
 
+        # Only for documents the index actually took. A failed write left the
+        # old chunks in place, so committing the new count would describe an
+        # index state that does not exist - the same reason the content hash
+        # below is written only for confirmed writes.
         update_docs_chunk_count__no_commit(
-            document_ids=updatable_ids,
+            document_ids=[i for i in updatable_ids if i not in failed_document_ids],
             doc_id_to_chunk_count=enrichment.doc_id_to_new_chunk_cnt,
             db_session=db_session,
         )
