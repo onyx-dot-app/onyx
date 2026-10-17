@@ -73,6 +73,7 @@ export default function OpalStringsBridge({
         t("collapsible.foldSection", { title }),
       collapsibleExpandSection: (title) =>
         t("collapsible.expandSection", { title }),
+      dividerViewAll: t("divider.viewAll"),
       contentOptional: t("common.optional"),
       previousPage: t("pagination.previousPage"),
       nextPage: t("pagination.nextPage"),

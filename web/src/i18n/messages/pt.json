@@ -15259,7 +15259,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "Ver tudo",
+      "expand": "Expandir",
       "expandSection": "Expandir {title}",
       "fold": "Recolher",
       "foldSection": "Recolher {title}"
@@ -15302,6 +15302,9 @@
       "oneMonth": "1M",
       "sevenDays": "7D",
       "threeMonths": "3M"
+    },
+    "divider": {
+      "viewAll": "Ver tudo"
     },
     "iconTooltip": {
       "label": "Mais informações"

@@ -15259,7 +15259,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "すべて表示",
+      "expand": "展開",
       "expandSection": "{title}を展開",
       "fold": "折りたたむ",
       "foldSection": "{title}を折りたたむ"
@@ -15302,6 +15302,9 @@
       "oneMonth": "1ヶ月",
       "sevenDays": "7日",
       "threeMonths": "3ヶ月"
+    },
+    "divider": {
+      "viewAll": "すべて表示"
     },
     "iconTooltip": {
       "label": "詳細情報"

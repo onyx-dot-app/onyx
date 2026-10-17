@@ -109,7 +109,8 @@ type DividerFoldableProps = Omit<
   /**
    * Where the fold chevron sits. `"end"` puts a right chevron after the
    * line; `"start"` puts a `text-02` down chevron before the title, with a
-   * Fold / View All tooltip, and the line still follows the title.
+   * Fold / View All tooltip (`collapsibleFold`, `dividerViewAll`), and the
+   * line still follows the title.
    * Default: `"end"`.
    */
   chevronPosition?: "start" | "end";
@@ -251,9 +252,7 @@ function FoldableDivider({
                     size="sm"
                     prominence="internal"
                     tooltip={
-                      isOpen
-                        ? strings.collapsibleFold
-                        : strings.collapsibleExpand
+                      isOpen ? strings.collapsibleFold : strings.dividerViewAll
                     }
                     aria-label={
                       isOpen

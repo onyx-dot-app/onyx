@@ -80,9 +80,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Clickable ([data-clickable], `onClick` set): a tag-shaped trigger. Open, as
-   a popover or dropdown trigger, it inverts; an icon with its own color
-   (`iconColor`) keeps it.
+   Clickable: a tag-shaped trigger, inverted while open; a fixed-color icon keeps its color
    --------------------------------------------------------------------------- */
 
 .opal-auxiliary-tag[data-clickable] {

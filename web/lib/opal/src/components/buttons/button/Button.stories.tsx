@@ -167,6 +167,11 @@ export const InternalProminence: Story = {
   },
 };
 
+/**
+ * A popup trigger (`aria-haspopup` with the open state) takes the open look:
+ * a secondary one keeps its rest fill with a border-05 outline. A disclosure
+ * toggle that only sets `aria-expanded` keeps its rest look.
+ */
 export const OpenPopoverTrigger: Story = {
   render: () => (
     <div className="flex items-center gap-4">

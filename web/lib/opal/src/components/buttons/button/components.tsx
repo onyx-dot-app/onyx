@@ -66,12 +66,17 @@ function Button({
   ...interactiveProps
 }: ButtonProps) {
   const isLarge = size === "lg";
-  // An open secondary trigger keeps its rest fill; the stateless styles give
-  // it an outline instead of the hover look.
+  // Only a popup trigger takes the open look: Popover, Dropdown and Dialog
+  // triggers set `aria-haspopup`, a Collapsible or disclosure toggle sets
+  // `data-state` but opens no popup. An open secondary trigger keeps its rest
+  // fill; the stateless styles give it an outline instead of the hover look.
+  const popup = interactiveProps["aria-haspopup"];
+  const isPopupTrigger =
+    popup !== undefined && popup !== false && popup !== "false";
   const resolvedInteraction =
-    interactiveProps.prominence === "secondary"
-      ? interaction
-      : resolveTriggerInteraction(interaction, interactiveProps);
+    isPopupTrigger && interactiveProps.prominence !== "secondary"
+      ? resolveTriggerInteraction(interaction, interactiveProps)
+      : interaction;
 
   const labelEl = children ? (
     responsiveHideText ? (

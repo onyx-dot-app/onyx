@@ -179,8 +179,8 @@ export function attemptStatusTag(
       return TAGS.scheduled;
     case "in_progress":
       return isSync ? TAGS.syncing : TAGS.indexing;
-    // The warning count beside the tag carries the document errors.
     case "success":
+    // Shares the success tag: the warning count beside it carries the document errors.
     case "completed_with_errors":
       return isSync ? TAGS.synced : TAGS.indexed;
     case "failed":

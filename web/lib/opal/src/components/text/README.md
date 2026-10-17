@@ -59,7 +59,7 @@ numbers are progressively fainter.
 | Status — error     | `status-error-01`, `status-error-02`, `status-error-05`          | Error / destructive messaging (e.g. validation errors)                                            |
 | Status — success   | `status-success-01`, `status-success-02`, `status-success-05`    | Success / confirmation messaging                                                                  |
 | Status — warning   | `status-warning-05`                                              | Warnings that need attention without reading as an error                                          |
-| Theme — amber      | `theme-amber-05`                                                 | The paused state only                                                                             |
+| Theme — amber      | `theme-amber-05`                                                 | The paused state, plus legacy warnings not yet moved to `status-warning-05`                       |
 | Special            | `inherit`                                                        | Inherit the surrounding text color (no color class applied) — useful when a parent sets the color |
 
 ## Usage Examples

@@ -15259,7 +15259,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "查看全部",
+      "expand": "展开",
       "expandSection": "展开{title}",
       "fold": "折叠",
       "foldSection": "折叠{title}"
@@ -15302,6 +15302,9 @@
       "oneMonth": "1个月",
       "sevenDays": "7天",
       "threeMonths": "3个月"
+    },
+    "divider": {
+      "viewAll": "查看全部"
     },
     "iconTooltip": {
       "label": "更多信息"

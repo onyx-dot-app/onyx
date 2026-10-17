@@ -193,7 +193,7 @@ export default function ActivityCard({
   const resolvesRun = canResolveRuns && !closed && !active && group !== "other";
   const mutedColor = closed ? "text-02" : "text-03";
 
-  // A failure explains itself. A run with errors reports what it still did.
+  // A failure, superseded or not, titles with the error's first sentence and describes with the rest. A run with errors reports what it still did.
   let description: string | null = null;
   let title = t(`title.${run.kind}.${state}`);
   if (group === "failures") {

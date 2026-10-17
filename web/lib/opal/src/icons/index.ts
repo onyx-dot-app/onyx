@@ -97,7 +97,6 @@ export { default as SvgHeadsetMic } from "@opal/icons/headset-mic";
 export { default as SvgHelpCircle } from "@opal/icons/help-circle";
 export { default as SvgHistory } from "@opal/icons/history";
 export { default as SvgHome } from "@opal/icons/home";
-export { default as SvgList } from "@opal/icons/list";
 export { default as SvgListCheck } from "@opal/icons/list-check";
 export { default as SvgScissors } from "@opal/icons/scissors";
 export { default as SvgShareWebhook } from "@opal/icons/share-webhook";

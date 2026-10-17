@@ -132,17 +132,16 @@ export default function StatusCard({
     when: timeAgo(ccPair.last_indexed, locale) ?? "-",
   });
   // A paused pair names only its last run. Others lead with the card's title.
-  const statusLine =
-    ccPair.status === ConnectorCredentialPairStatus.PAUSED
-      ? lastIndexed
-      : t("statusLine", {
-          detail:
-            hold !== null
-              ? t(`hold.${hold.reason}`)
-              : speed === null
-                ? lastIndexed
-                : t("indexingSpeed", { speed }),
-        });
+  const statusLine = paused
+    ? lastIndexed
+    : t("statusLine", {
+        detail:
+          hold !== null
+            ? t(`hold.${hold.reason}`)
+            : speed === null
+              ? lastIndexed
+              : t("indexingSpeed", { speed }),
+      });
 
   const chart = !FIRST_RUN_STATUSES.has(ccPair.status);
   // Before the first run, or while it is held, there is no recent run to count.

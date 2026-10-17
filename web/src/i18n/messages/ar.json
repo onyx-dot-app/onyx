@@ -15259,7 +15259,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "عرض الكل",
+      "expand": "توسيع",
       "expandSection": "توسيع {title}",
       "fold": "طي",
       "foldSection": "طي {title}"
@@ -15302,6 +15302,9 @@
       "oneMonth": "شهر",
       "sevenDays": "7 أيام",
       "threeMonths": "3 أشهر"
+    },
+    "divider": {
+      "viewAll": "عرض الكل"
     },
     "iconTooltip": {
       "label": "مزيد من المعلومات"

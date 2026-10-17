@@ -15259,7 +15259,7 @@
   },
   "opal": {
     "collapsible": {
-      "expand": "전체 보기",
+      "expand": "펼치기",
       "expandSection": "{title} 펼치기",
       "fold": "접기",
       "foldSection": "{title} 접기"
@@ -15302,6 +15302,9 @@
       "oneMonth": "1개월",
       "sevenDays": "7일",
       "threeMonths": "3개월"
+    },
+    "divider": {
+      "viewAll": "전체 보기"
     },
     "iconTooltip": {
       "label": "자세한 정보"
