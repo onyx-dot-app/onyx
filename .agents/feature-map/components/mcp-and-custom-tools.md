@@ -344,13 +344,12 @@ Both steps use the same content insets. The footer uses an explicit Back button.
 Closing MCP or OpenAPI creation discards the local draft immediately, without confirmation.
 Directory and catalog rows share horizontal padding. Suggested rows are keyboard-accessible cards.
 An entered name is preserved; an empty name is filled from detection. A valid URL
-starts `POST /admin/mcp/probe/stream` after 700 milliseconds without another URL edit.
+starts `POST /admin/mcp/probe` after 700 milliseconds without another URL edit.
 The NDJSON stream reports Contacting server, then Detecting authentication.
 A real MCP initialization or authentication challenge completes contact. Authentication
 completes after tools load anonymously or OAuth metadata resolves. Unknown authentication
 fails that row. Unreachable servers fail contact and leave authentication waiting.
-Closing the stream cancels its probe task. The existing `/admin/mcp/probe` JSON
-endpoint remains available. Detection rows remain visible before Continue. The modal discards
+Closing the stream cancels its probe task. Detection rows remain visible before Continue. The modal discards
 responses for an earlier URL and never advances automatically.
 The credential-free check initializes MCP and lists tools through Streamable HTTP,
 then tries compatible SSE. It uses the shared SSRF guard, bounded timeouts, and
@@ -567,7 +566,7 @@ inline, not a broken turn.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| POST | `/admin/mcp/probe` | `probe_admin_mcp_server` | Credential-free MCP setup check for `MANAGE_ACTIONS`, including scoped managers. Returns public, OAuth, unknown authentication, or unreachable. No database writes. |
+| POST | `/admin/mcp/probe` | `stream_admin_mcp_probe` | Credential-free MCP setup check for `MANAGE_ACTIONS`, including scoped managers. Streams NDJSON progress, then one result: public, OAuth, unknown authentication, or unreachable. No database writes. |
 | POST | `/admin/mcp/oauth/discover` | `discover_admin_oauth` | Read-only public metadata probe for a manageable server. Returns metadata status, automatic registration support, and discovered endpoints. |
 | POST | `/admin/mcp/servers/create` | `upsert_mcp_server` (calls `_upsert_mcp_server`) | Create, or edit when the body has `existing_server_id`. An edit can rotate admin credentials, OAuth client, transport, and access list. A new server defaults `is_public=True`. |
 | POST | `/admin/mcp/servers/update` | `update_mcp_server_with_tools` | Changes only name, description, and the selected tool set (`_sync_tools_for_server`). It does not touch credentials, transport, or access. |
