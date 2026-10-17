@@ -1,9 +1,12 @@
+import functools
 import logging
 import os
+import threading
 from types import SimpleNamespace
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
@@ -42,27 +45,43 @@ def _tenant_connection_string(tenant_id: str) -> str:
     )
 
 
+# Alembic's `op` and `context` are module-level proxies, so two upgrades in one
+# process overwrite each other's state. Every worker runs tasks on a thread pool.
+_ALEMBIC_RUN_LOCK = threading.Lock()
+
+
+def _alembic_config() -> Config:
+    """Alembic config for the tenant script directory, without logging setup."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..", ".."))
+    alembic_cfg = Config(os.path.join(root_dir, "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", os.path.join(root_dir, "alembic"))
+    # Ensure that logging isn't broken
+    alembic_cfg.attributes["configure_logger"] = False
+    return alembic_cfg
+
+
+@functools.cache
+def get_alembic_head_revision() -> str:
+    """Revision the running code migrates a tenant to. Read from the script
+    directory, so it needs no database and answers whether a pool tenant is
+    current without running alembic."""
+    head = ScriptDirectory.from_config(_alembic_config()).get_current_head()
+    if head is None:
+        raise RuntimeError("Alembic script directory has no head revision")
+    return head
+
+
 def run_alembic_migrations(schema_name: str) -> None:
     logger.info("Starting Alembic migrations for schema: %s", schema_name)
 
     try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        root_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..", ".."))
-        alembic_ini_path = os.path.join(root_dir, "alembic.ini")
-
-        # Configure Alembic
-        alembic_cfg = Config(alembic_ini_path)
+        alembic_cfg = _alembic_config()
         # Pin the run to the tenant's shard. Uses env.py's dedicated attribute rather
         # than `sqlalchemy.url`, which env.py ignores by design.
         alembic_cfg.attributes[ALEMBIC_TARGET_URL_ATTRIBUTE] = (
             _tenant_connection_string(schema_name)
         )
-        alembic_cfg.set_main_option(
-            "script_location", os.path.join(root_dir, "alembic")
-        )
-
-        # Ensure that logging isn't broken
-        alembic_cfg.attributes["configure_logger"] = False
 
         # Mimic command-line options by adding 'cmd_opts' to the config
         alembic_cfg.cmd_opts = SimpleNamespace()  # ty: ignore[invalid-assignment]
@@ -71,7 +90,8 @@ def run_alembic_migrations(schema_name: str) -> None:
         ]
 
         # Run migrations programmatically
-        command.upgrade(alembic_cfg, "head")
+        with _ALEMBIC_RUN_LOCK:
+            command.upgrade(alembic_cfg, "head")
 
         # Run migrations programmatically
         logger.info(
