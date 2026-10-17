@@ -58,7 +58,7 @@ export function splitUrl(
     return {
       scheme: `${url.protocol}//`,
       host: url.host,
-      path: `${url.pathname.replace(/\/$/, "")}${url.search}${url.hash}`,
+      path: `${url.pathname}${url.search}${url.hash}`,
     };
   } catch {
     return null;
@@ -113,7 +113,12 @@ function ConfigItem({ label, value, booleanLabels }: ConfigItemProps) {
     const url = typeof value === "string" ? splitUrl(value) : null;
     if (url !== null) {
       return (
-        <Text as="p" font="main-ui-body" color="text-03">
+        <Text
+          as="p"
+          font="main-ui-body"
+          color="text-03"
+          wordWrap="wrap-anywhere"
+        >
           {richNodes(
             <>
               {url.scheme}

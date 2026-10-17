@@ -21,6 +21,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckResult,
 )
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 _KEY_PREFIX = "capability_check_stored_run_progress"
 
@@ -105,11 +108,20 @@ class StoredRunProgressRecorder:
             check_results=[*self._prior, *self._results],
             open_checks=open_checks,
         )
-        get_cache_backend().set(
-            _key(self._run_id), progress.model_dump_json(), ex=self._ttl_seconds
-        )
+        # Progress is advisory: a cache outage must not stop or fail the run.
+        try:
+            get_cache_backend().set(
+                _key(self._run_id), progress.model_dump_json(), ex=self._ttl_seconds
+            )
+        except Exception:
+            logger.exception("Could not store check run progress: run=%s", self._run_id)
 
 
 def load_stored_run_progress(run_id: UUID) -> StoredRunProgress | None:
-    raw = get_cache_backend().get(_key(run_id))
+    """The run's stored progress, or None when there is none or the cache is down."""
+    try:
+        raw = get_cache_backend().get(_key(run_id))
+    except Exception:
+        logger.exception("Could not read check run progress: run=%s", run_id)
+        return None
     return StoredRunProgress.model_validate_json(raw) if raw is not None else None

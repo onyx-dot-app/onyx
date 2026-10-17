@@ -394,9 +394,9 @@ export function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
-          {notice &&
+          {(notice !== undefined || stateCounts.failed > 0) &&
             onRerun !== undefined && (
-              // A run that broke needs a way to try again without editing settings.
+              // A run that broke or failed a check can be tried again without editing settings.
               <Button
                 rightIcon={SvgRefreshCw}
                 prominence="tertiary"

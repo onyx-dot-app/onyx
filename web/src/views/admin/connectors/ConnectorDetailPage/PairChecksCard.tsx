@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { toast } from "@opal/layouts";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { useCredentialCheckReports } from "@/lib/credentials/hooks";
 import type { CredentialCheckRunStatus } from "@/lib/credentials/types";
@@ -36,7 +38,8 @@ export default function PairChecksCard({
   held,
   expandRequest = 0,
 }: PairChecksCardProps) {
-  const { reportFor } = useCredentialCheckReports(source);
+  const tAccount = useTranslations("admin.connectorsList.add.account");
+  const { reportFor, rerun } = useCredentialCheckReports(source);
   const report =
     reportFor(credentialId, connectorId) ?? reportFor(credentialId);
   const running: boolean = report?.run_status === "running";
@@ -60,6 +63,11 @@ export default function PairChecksCard({
       expectedCount={stateCounts.pending}
       stateCounts={stateCounts}
       defaultCollapsed={!running}
+      onRerun={() => {
+        rerun(credentialId, connectorId).catch(() =>
+          toast.error(tAccount("rerunFailed.toast"))
+        );
+      }}
       expandRequest={expandRequest}
     />
   );
