@@ -406,7 +406,11 @@ dropdown. Delete is not a dropdown item. Controls respect resource permissions,
 and managed external apps cannot be deleted. MCP deletion confirmation names
 the server and states that its tools are deleted for everyone in the organization.
 Enable for main Chat opens authentication when the server needs sign-in or has no
-discovered tools. An explicit enable intent survives the OAuth return. Successful
+discovered tools. Only an explicit Enable or creation Connect action records an enable intent.
+`web/src/sections/actions/mcpChatEnableIntent.ts` binds the one-time record to the user, server, and origin.
+The record expires after five minutes and is consumed before the workspace write.
+Admin OAuth uses the same tab to retain that record. Query flags alone never enable tools.
+Missing or expired records require another explicit Enable action. Successful
 authentication and discovery then attach the tools to default Chat. Failed or
 cancelled authentication does not attach tools to default Chat. New full-admin
 setup selects discovered tools for default Chat and defaults Craft availability
