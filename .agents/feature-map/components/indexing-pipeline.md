@@ -280,7 +280,13 @@ calls `index_doc_batch`, which:
    write (`index_to_secondary=True`) so the FUTURE build doesn't cross-suppress
    against the PRESENT-only hash. Docprocessing always passes
    `ignore_time_skip=True` (the connector already filtered by recency at fetch
-   time), so only gate 2 applies here in practice.
+   time), so only gate 2 applies here in practice. A caller can also bypass both
+   gates with `force_update=True`, which `run_indexing_pipeline` exposes: the
+   per-document retry in `index_doc_batch_with_handler` uses it, and so does the
+   tabular re-chunk migration (`background/indexing/run_tabular_rechunk.py`),
+   which re-indexes documents nobody changed. That migration has no alternative
+   - `content_hash()` walks Text and Image sections only, so a tabular
+   document's hash never moves however much the workbook changed.
 4. Documents that pass the gate are upserted (`upsert_documents`, `upsert_document_tags`),
    linked to the cc-pair (`upsert_document_by_connector_credential_pair`), and
    linked to their hierarchy node.
@@ -687,7 +693,7 @@ that block, so it calls `stop_telemetry` itself first.
 | changes the checkpoint format (`ConnectorCheckpoint` subclass fields) | `checkpointing_utils.py:load_checkpoint`/`get_latest_valid_checkpoint`, and every in-flight `IndexAttempt.checkpoint_pointer` written by the old format: a rolling deploy must tolerate reading both |
 | changes `IndexAttempt` states (`IndexingStatus`) | `should_reuse_checkpoint()`, `is_terminal()`, `is_successful()`, every `mark_attempt_*` function in `db/index_attempt.py`, `validate_active_indexing_attempts`, and the admin connector-status UI that renders the enum |
 | changes `IndexingCoordination` locking or the cross-batch Redis lock | every concurrent `docprocessing_task` for the same connector pair and search settings; verify the bounded-timeout behavior still fails a task cleanly rather than wedging on a fossil lock |
-| changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), plus the FUTURE-write path (`ignore_content_hash_gate=True`) |
+| changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), the FUTURE-write path (`ignore_content_hash_gate=True`), and the forced path (`force_update=True`: the per-document retry and the tabular re-chunk migration) |
 | changes pruning or deletion's document-removal task | both callers (`pruning/tasks.py` and `connector_deletion/tasks.py`) share `document_by_cc_pair_cleanup_task`; a change there affects both flows even though they trigger differently |
 | changes the reindex-port re-embed logic | `port_reembed.py`'s two strategies must still match what the chunker/embedder currently produce for a fresh index, or the ported chunks will diverge from a true reindex |
 | renames or drops an `IndexAttempt`, `IndexAttemptError`, or `IndexAttemptStageMetric` column | the fleet queries (`db/fleet_telemetry.py:attempt_rows`, `stage_rows`) and [[observability]] §7; only the collection pass fails, so no indexing test catches it |

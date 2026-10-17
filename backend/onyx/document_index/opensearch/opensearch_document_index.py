@@ -674,6 +674,35 @@ class OpenSearchDocumentIndex(DocumentIndex):
             found.update(chunk.document_id for chunk in page)
         return found
 
+    def get_chunk_heads(
+        self, document_ids: list[str]
+    ) -> dict[str, DocumentChunkWithoutVectors]:
+        """Gets chunk 0 of each of the given documents, which carries the
+        fields Postgres does not keep - the title and the metadata tags.
+
+        A document missing chunk 0 is reported as absent, which a caller
+        rebuilding from it treats as "not re-chunkable".
+        """
+        if not document_ids:
+            return {}
+        # By deterministic id, not a scan: these documents hold hundreds of
+        # chunks and the caller wants one.
+        chunk_id_to_document_id = {
+            get_opensearch_doc_chunk_id(
+                tenant_state=self._tenant_state,
+                document_id=document_id,
+                chunk_index=0,
+            ): document_id
+            for document_id in dict.fromkeys(document_ids)
+        }
+        found = self._client.mget_chunks_without_vectors(
+            list(chunk_id_to_document_id.keys())
+        )
+        return {
+            chunk_id_to_document_id[chunk_id]: chunk
+            for chunk_id, chunk in found.items()
+        }
+
     def get_documents_missing_chunks(self, document_ids: list[str]) -> list[str]:
         """Gets the IDs of the documents whose chunk 0 is not in this index.
 
