@@ -175,8 +175,14 @@ describe("inline authentication", () => {
       expect.objectContaining({ scopes: "read, write" })
     );
     expect(onBusyChange).toHaveBeenLastCalledWith(true);
+    const scopes = screen.getByRole("textbox", { name: /Scopes/ });
+    expect(scopes).toBeDisabled();
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    await user.type(scopes, ", admin");
+    expect(scopes).toHaveValue("read, write");
     await act(async () => pending.resolve());
     await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(false));
+    expect(scopes).toBeEnabled();
     expect(onClose).not.toHaveBeenCalled();
     unmount();
     footerTarget.remove();

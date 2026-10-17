@@ -456,7 +456,7 @@ export default function OpenAPIAuthenticationModal({
                   </Text>
                 </div>
               ) : (
-                <>
+                <fieldset disabled={isSubmitting} className="contents">
                   <div className="flex flex-col gap-4 px-2 pt-2">
                     <FormField
                       name="authMethod"
@@ -826,7 +826,7 @@ export default function OpenAPIAuthenticationModal({
                       )}
                     />
                   )}
-                </>
+                </fieldset>
               )}
             </Modal.Body>
 

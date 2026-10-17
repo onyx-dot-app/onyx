@@ -303,7 +303,7 @@ function FormContent({
                 <div className="font-main-ui-mono">
                   <InputTextAreaField
                     name="definition"
-                    variant={checking ? "disabled" : undefined}
+                    variant={checking || isSubmitting ? "disabled" : undefined}
                     rows={8}
                     placeholder={t("addOpenApiModal.definition.placeholder")}
                   />

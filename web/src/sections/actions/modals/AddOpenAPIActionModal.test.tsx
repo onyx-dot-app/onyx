@@ -148,6 +148,10 @@ describe("inline schema editing", () => {
     expect(footer).toContainElement(save);
     await user.click(save);
     await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(true));
+    const editor = screen.getByRole("textbox");
+    expect(editor).toBeDisabled();
+    await user.type(editor, " later edits");
+    expect(editor).toHaveValue(JSON.stringify(definition("Updated")));
     await act(async () => {
       updateResponse.resolve(
         new Response(
@@ -162,6 +166,7 @@ describe("inline schema editing", () => {
     );
     expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
     expect(onBusyChange).toHaveBeenLastCalledWith(false);
+    expect(editor).toBeEnabled();
     view.rerender(
       <AddOpenAPIActionModal
         presentation="inline"

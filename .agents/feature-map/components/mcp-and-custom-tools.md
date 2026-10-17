@@ -740,6 +740,7 @@ Saved MCP details separate configuration, authentication, permissions, and tools
 OpenAPI creation validates a schema before the final create operation.
 Saved OpenAPI details reuse schema and authentication forms, retain drafts across tabs,
 and confirm unsaved changes. Failed retries reuse created resource IDs.
+Schema and authentication controls stay disabled during saves so acknowledgment cannot discard later edits.
 
 Workspace lifecycle actions preserve unrelated default-assistant tool selections through
 `useDefaultAssistantConfiguration`. Scoped managers retain status-only controls.
