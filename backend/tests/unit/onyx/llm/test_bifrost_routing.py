@@ -47,8 +47,8 @@ def test_chat_completions_mode_routes_via_openai_with_v1_base() -> None:
     kwargs = _completion_kwargs(llm)
     assert kwargs["custom_llm_provider"] == "openai"
     assert kwargs["base_url"] == "https://bifrost.example.com/v1"
-    # OpenAI-compatible proxies send a bare model name.
-    assert kwargs["model"] == "openai.gpt-5.6-sol"
+    # LiteLLM strips the provider prefix before the wire call.
+    assert kwargs["model"] == "openai/openai.gpt-5.6-sol"
 
 
 def test_chat_completions_mode_coerces_bare_base_to_v1() -> None:
@@ -63,7 +63,7 @@ def test_default_mode_is_chat_completions() -> None:
     assert llm._custom_llm_provider == "openai"
 
     kwargs = _completion_kwargs(llm)
-    assert kwargs["model"] == "openai.gpt-5.6-sol"
+    assert kwargs["model"] == "openai/openai.gpt-5.6-sol"
 
 
 def test_unknown_mode_falls_back_to_chat_completions() -> None:
@@ -80,8 +80,8 @@ def test_responses_mode_prefixes_model_and_keeps_v1_base() -> None:
     kwargs = _completion_kwargs(llm)
     assert kwargs["custom_llm_provider"] == "openai"
     assert kwargs["base_url"] == "https://bifrost.example.com/v1"
-    # The prefix drives litellm's bridge; it is stripped before the wire call.
-    assert kwargs["model"] == "responses/openai.gpt-5.6-sol"
+    # Both prefixes are stripped before the wire call.
+    assert kwargs["model"] == "responses/openai/openai.gpt-5.6-sol"
 
 
 def test_api_mode_is_never_injected_into_environment() -> None:
