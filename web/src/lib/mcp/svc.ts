@@ -128,7 +128,7 @@ export async function streamMCPServerProbe(
   onProgress: (event: MCPProbeProgress) => void,
   signal?: AbortSignal
 ): Promise<MCPSetupProbeResult> {
-  const response = await fetch("/api/admin/mcp/probe/stream", {
+  const response = await fetch("/api/admin/mcp/probe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ server_url: serverUrl }),
