@@ -523,6 +523,18 @@ same draft key supersedes an older one, and the cancel endpoint does the same
 without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
+A draft run or a pair dry run (`/admin/cc-pair/{cc_pair_id}/edit/checks`) also
+takes per-check actions (`draft_runs.py:DraftCheckActions`). `check_ids` runs
+only those checks, without their cached results. Every other check keeps its
+cached result or its result in the latest run of the draft key, and runs only
+when it has none, for example after a dependency that now runs.
+`skip_check_ids` do not run: an optional check is `SKIPPED`
+(`not_run_reason: skipped_by_user`), and a required one is `STOPPED`
+(`stopped_by_user`), which is no pass and holds Create. Their dependents are
+"Not run" (`dependency_skipped`). Creation reuses a cached optional skip and
+always runs a stopped required check. `start_check_id` runs that check and the
+checks it needs first. An unknown check id, or a check to run and to skip, is
+`INVALID_INPUT`. Stored runs take no actions.
 
 A passing check may return *findings* (`capability_checks/models.py:CheckFinding`):
 structured information about what the credential and config reach, such as a

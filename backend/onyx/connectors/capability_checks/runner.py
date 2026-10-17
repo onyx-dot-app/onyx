@@ -412,17 +412,46 @@ def capability_check_run_stale_after(source: DocumentSource) -> timedelta:
     return timedelta(seconds=2 * capability_check_run_ceiling_seconds(source))
 
 
-def run_order(checks: Sequence[CapabilityCheck]) -> list[CapabilityCheck]:
+def _with_dependencies(checks: Sequence[CapabilityCheck], check_id: str) -> set[str]:
+    """``check_id`` and every check of ``checks`` it depends on, directly or
+    through other checks."""
+    depends_on_by_id: dict[str, tuple[str, ...]] = {
+        check.check_id: check.depends_on for check in checks
+    }
+    found: set[str] = set()
+    stack: list[str] = [check_id]
+    while stack:
+        current = stack.pop()
+        if current in found or current not in depends_on_by_id:
+            continue
+        found.add(current)
+        stack.extend(depends_on_by_id[current])
+    return found
+
+
+def run_order(
+    checks: Sequence[CapabilityCheck], first_check_id: str | None = None
+) -> list[CapabilityCheck]:
     """The order the runner executes ``checks``: validation checks before
     discovery checks, and every check after the checks of ``checks`` it
     depends on; otherwise their given order.
 
+    ``first_check_id`` (Start Now) moves that check, and the checks it needs,
+    ahead of the others of its kind. A discovery check still runs after
+    validation.
+
     Raises:
         ValueError: The dependencies among ``checks`` form a cycle.
     """
-    remaining: list[CapabilityCheck] = [
-        check for check in checks if not check.discovery
-    ] + [check for check in checks if check.discovery]
+    first_ids: set[str] = (
+        _with_dependencies(checks, first_check_id)
+        if first_check_id is not None
+        else set()
+    )
+    # A stable sort, so the given order holds within each group.
+    remaining: list[CapabilityCheck] = sorted(
+        checks, key=lambda check: (check.discovery, check.check_id not in first_ids)
+    )
     present_ids: set[str] = {check.check_id for check in checks}
     ordered: list[CapabilityCheck] = []
     ordered_ids: set[str] = set()
@@ -458,7 +487,13 @@ _NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
     CheckNotRunReason.DEPENDENCY_INCOMPLETE: "Not run: {name} incomplete",
     CheckNotRunReason.DEPENDENCY_SKIPPED: "Not run: {name} did not run",
 }
-_NOTHING_IN_SCOPE_LINE = "Not run: {name} found nothing to test"
+# The line of a check whose dependency did not run for a reason of its own
+# (not a gate of the run). The reason stays the dependency's.
+_DEPENDENCY_NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
+    CheckNotRunReason.NOTHING_IN_SCOPE: "Not run: {name} found nothing to test",
+    CheckNotRunReason.SKIPPED_BY_USER: "Not run: {name} skipped",
+    CheckNotRunReason.STOPPED_BY_USER: "Not run: {name} stopped",
+}
 
 
 def _dependency_not_run_outcome(
@@ -474,16 +509,17 @@ def _dependency_not_run_outcome(
         dependency = results_by_check_id.get(dependency_id)
         if dependency is None or not dependency.applicable:
             continue
-        if dependency.not_run_reason == CheckNotRunReason.NOTHING_IN_SCOPE:
-            line = _NOTHING_IN_SCOPE_LINE.format(name=dependency.display_name)
-            return _CheckOutcome(
-                status=CapabilityCheckStatus.SKIPPED,
-                message=line,
-                summary=line,
-                not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
-                blocked_by=dependency_id,
-            )
-        if dependency.not_run_reason is not None:
+        if (dependency_reason := dependency.not_run_reason) is not None:
+            own_line = _DEPENDENCY_NOT_RUN_LINE_BY_REASON.get(dependency_reason)
+            if own_line is not None:
+                line = own_line.format(name=dependency.display_name)
+                return _CheckOutcome(
+                    status=CapabilityCheckStatus.SKIPPED,
+                    message=line,
+                    summary=line,
+                    not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
+                    blocked_by=dependency_id,
+                )
             return _CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED,
                 message=dependency.message,
@@ -547,9 +583,10 @@ def run_capability_checks(
     timeout_cap_seconds: float | None = None,
     prior_results: Sequence[CapabilityCheckResult] = (),
     form_run: bool = False,
+    first_check_id: str | None = None,
 ) -> list[CapabilityCheckResult]:
-    """Runs checks sequentially, in ``run_order``, and maps their outcomes to
-    statuses.
+    """Runs checks sequentially, in ``run_order`` (with ``first_check_id``),
+    and maps their outcomes to statuses.
 
     Sequential on purpose: source APIs can rate limit aggressively, so
     concurrent probes against the same credential are counterproductive. Check
@@ -615,7 +652,7 @@ def run_capability_checks(
 
     # Discovery checks run after validation, and only when it found the
     # credential usable: they exist to show what a working credential reaches.
-    for check in run_order(checks):
+    for check in run_order(checks, first_check_id):
         if check.discovery:
             discovery_outcome: _CheckOutcome | None = _discovery_skip_outcome(
                 [*prior_results, *results], check_findings_enabled()
@@ -808,6 +845,7 @@ def generate_capability_report(
     timeout_cap_seconds: float | None = None,
     prior_results: Sequence[CapabilityCheckResult] = (),
     form_run: bool = False,
+    first_check_id: str | None = None,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -829,8 +867,8 @@ def generate_capability_report(
     connector only when a selected check needs the instance.
 
     ``timeout_cap_seconds`` caps every hang guard of the run: each check's and
-    the connector instantiation's. ``prior_results`` and ``form_run`` are
-    forwarded to ``run_capability_checks``.
+    the connector instantiation's. ``prior_results``, ``form_run`` and
+    ``first_check_id`` are forwarded to ``run_capability_checks``.
     """
     source = source or credential.source
     checks = get_capability_checks(source)
@@ -932,6 +970,7 @@ def generate_capability_report(
         timeout_cap_seconds=timeout_cap_seconds,
         prior_results=prior_results,
         form_run=form_run,
+        first_check_id=first_check_id,
     )
     return CredentialCapabilityReport(
         credential_id=credential.id,

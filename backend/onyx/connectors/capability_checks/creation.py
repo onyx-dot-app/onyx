@@ -5,9 +5,11 @@ For a source with named checks, this replaces the legacy blocking validation
 (``validate_connector_settings`` and ``validate_perm_sync``). It runs the
 source's checks for the pairing's access type and stores the full report. A
 fresh result of a draft run on the same form (for an edit, of a dry run on the
-same pair and proposed state) is reused, so the check does not run again. Only
-a required check that failed within the blocking budget blocks the pairing:
-INCOMPLETE is transient, and skipped checks do not apply. A check that is
+same pair and proposed state) is reused, so the check does not run again. An
+optional check the admin skipped on that form is reused as skipped; a required
+check always runs, also when the admin stopped it. Only a required check that
+failed within the blocking budget blocks the pairing: INCOMPLETE is transient,
+and skipped checks do not apply. A check that is
 still running at the end of the budget does not block; a background run
 produces its result.
 """
@@ -133,7 +135,10 @@ def _fresh_draft_results(
 ) -> dict[str, CachedDraftResult]:
     """The cached draft results that a validation reuses. A cached FAILED
     result is left out, so the check runs again: the source may have been
-    fixed since, and a client without a draft run cannot ask for a re-run."""
+    fixed since, and a client without a draft run cannot ask for a re-run.
+    The admin's skip is reused only for an optional check: a skip never lets
+    a required check pass unrun."""
+    required_ids = {check.check_id for check in checks if check.required}
     return {
         check_id: cached
         for check_id, cached in _cached_draft_results(
@@ -145,6 +150,7 @@ def _fresh_draft_results(
             cc_pair_id=cc_pair_id,
         ).items()
         if cached.state != DraftCheckStateKind.FAILED
+        and not (cached.skipped_by_user and check_id in required_ids)
     }
 
 

@@ -339,7 +339,9 @@ def run_draft_capability_checks_task(
     try:
         # Inside the try, so a failure here marks the run FAILED_TO_RUN rather
         # than leaving it RUNNING until its lease runs out.
-        pending = pending_in_run_order(snapshot, get_capability_checks(snapshot.source))
+        pending = pending_in_run_order(
+            snapshot, get_capability_checks(snapshot.source), run.first_check_id
+        )
         pending_result_keys = list(
             dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
         )
@@ -379,6 +381,7 @@ def run_draft_capability_checks_task(
             timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
             prior_results=settled_results(snapshot),
             form_run=True,
+            first_check_id=run.first_check_id,
         )
         snapshot.status = DraftRunStatus.COMPLETED
         save_draft_run(run)
