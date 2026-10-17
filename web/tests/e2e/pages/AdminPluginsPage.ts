@@ -7,7 +7,10 @@ export class AdminPluginsPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.addButton = page.getByRole("button", { name: "Add", exact: true });
+    // The empty state repeats the header Add menu.
+    this.addButton = page
+      .getByRole("button", { name: "Add", exact: true })
+      .first();
   }
 
   async goto(): Promise<void> {
