@@ -30,12 +30,16 @@ export const SEARCH_PARAM_NAMES = {
 export type SearchParamName =
   (typeof SEARCH_PARAM_NAMES)[keyof typeof SEARCH_PARAM_NAMES];
 
+function isEnabled(rawValue: string | null | undefined) {
+  return rawValue === "true" || rawValue === "1";
+}
+
 export function shouldSubmitOnLoad(
   searchParams: ReadonlyURLSearchParams | null
 ) {
-  const rawSubmitOnLoad = searchParams?.get(SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD);
-  if (rawSubmitOnLoad === "true" || rawSubmitOnLoad === "1") {
-    return true;
-  }
-  return false;
+  return isEnabled(searchParams?.get(SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD));
+}
+
+export function shouldSendOnLoad(searchParams: ReadonlyURLSearchParams | null) {
+  return isEnabled(searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD));
 }
