@@ -119,10 +119,19 @@ export interface EditCheckResult {
   docs_link: string | null;
 }
 
+/** A check still running at the end of the blocking budget, by definition. */
+export interface PendingCheck {
+  capability: CredentialCapability;
+  check_id: string;
+  display_name: string;
+  required: boolean;
+}
+
 export interface ProposedPairingValidation {
   validation_error: string | null;
   check_results: EditCheckResult[];
   unfinished_check_ids: string[];
+  unfinished_checks: PendingCheck[];
 }
 
 export interface ConfigFieldChange {

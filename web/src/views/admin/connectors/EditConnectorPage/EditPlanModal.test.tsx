@@ -109,6 +109,7 @@ test("lists every validation check when an access type change passes", () => {
         validation_error: null,
         check_results: [PASSED_CHECK],
         unfinished_check_ids: [],
+        unfinished_checks: [],
       },
     },
   });
@@ -144,8 +145,16 @@ test("shows failed checks and unfinished ones as pending with the still-running 
           },
         ],
         unfinished_check_ids: ["list_permissions"],
+        // The definition alone names the check: no dry run of it is cached.
+        unfinished_checks: [
+          {
+            capability: "doc_permission_sync",
+            check_id: "list_permissions",
+            display_name: "List file permissions",
+            required: true,
+          },
+        ],
       },
-      dry_run_results: [PASSED_CHECK],
     },
   });
 
@@ -153,6 +162,8 @@ test("shows failed checks and unfinished ones as pending with the still-running 
   expect(screen.getByText("Missing scope")).toBeVisible();
   expect(screen.getByText("List file permissions")).toBeVisible();
   expect(screen.getByText("Queued")).toBeVisible();
+  // Required tags: the restart step, the failed check and the queued check.
+  expect(screen.getAllByText("Required")).toHaveLength(3);
   expect(screen.getAllByText(stillRunning)).toHaveLength(1);
 });
 

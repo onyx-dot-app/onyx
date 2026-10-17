@@ -37,6 +37,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CredentialCapabilityReport,
     NamedCheckRun,
+    PendingCheck,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
@@ -498,7 +499,19 @@ def run_named_checks_within_budget(
         for check in checks
         if check.discovery and check.check_id not in reused
     )
-    return NamedCheckRun(finished_results=finished, unfinished_check_ids=unfinished)
+    return NamedCheckRun(
+        finished_results=finished,
+        unfinished_checks=[
+            PendingCheck(
+                capability=check.capability,
+                check_id=check.check_id,
+                display_name=check.display_name,
+                required=check.required,
+            )
+            for check in checks
+            if check.check_id in unfinished
+        ],
+    )
 
 
 def _discovery_not_run_result(check: CapabilityCheck[Any]) -> CapabilityCheckResult:

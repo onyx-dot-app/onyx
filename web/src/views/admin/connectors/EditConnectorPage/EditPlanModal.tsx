@@ -33,7 +33,6 @@ import type {
   CredentialPath,
   EditCheckResult,
   EditNote,
-  EditPlan,
   EditStep,
   ProposedPairingValidation,
   ReconciliationOption,
@@ -202,12 +201,11 @@ function validationOutcome(
     )
   )
     return "warnings";
-  if (validation.unfinished_check_ids.length > 0) return "incomplete";
+  if (validation.unfinished_checks.length > 0) return "incomplete";
   return "passed";
 }
 
 interface ValidationSectionProps {
-  plan: EditPlan;
   validation: ProposedPairingValidation;
   blocksApply: boolean;
   stillRunningNote: EditNote | undefined;
@@ -215,49 +213,26 @@ interface ValidationSectionProps {
 
 /** Every check of the blocking validation, as the add-connector page lists them. */
 function ValidationSection({
-  plan,
   validation,
   blocksApply,
   stillRunningNote,
 }: ValidationSectionProps) {
   const t = useTranslations("admin.connectorEdit.plan.validation");
   const outcome = validationOutcome(validation, blocksApply);
-  // An unfinished check has only its ID. A dry run of it, if any, names it.
-  const unfinished: CheckLine[] = validation.unfinished_check_ids.flatMap(
-    (checkId): CheckLine[] => {
-      const dryRuns = plan.dry_run_results.filter(
-        (result) => result.check_id === checkId
-      );
-      const known: Array<
-        Pick<CheckLine, "capability" | "display_name" | "required">
-      > =
-        dryRuns.length > 0
-          ? dryRuns
-          : [
-              {
-                capability: "indexing",
-                display_name: checkId,
-                required: false,
-              },
-            ];
-      return known.map((check) => ({
-        capability: check.capability,
-        check_id: checkId,
-        display_name: check.display_name,
-        required: check.required,
-        message: "",
-        remediation: null,
-        docs_link: null,
-        state: "pending",
-      }));
-    }
-  );
   const lines: CheckLine[] = [
     ...validation.check_results.map((result) => ({
       ...result,
       state: result.status,
     })),
-    ...unfinished,
+    ...validation.unfinished_checks.map(
+      (check): CheckLine => ({
+        ...check,
+        message: "",
+        remediation: null,
+        docs_link: null,
+        state: "pending",
+      })
+    ),
   ];
 
   return (
@@ -407,7 +382,6 @@ export default function EditPlanModal({
 
             {validation !== null ? (
               <ValidationSection
-                plan={plan}
                 validation={validation}
                 blocksApply={planResponse.validation_blocks_apply}
                 stillRunningNote={stillRunningNote}
