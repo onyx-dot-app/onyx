@@ -330,6 +330,8 @@ export default function RunsCard({
             <ThroughputWindowPicker
               windows={PAIR_WINDOWS}
               value={sharedWindow.window}
+              // A widened list reaches past the chart's window, and says so.
+              label={widened ? t("window.all") : undefined}
               onChange={(window) => {
                 // Picking the same window again still leaves the widened view.
                 setWidened(false);

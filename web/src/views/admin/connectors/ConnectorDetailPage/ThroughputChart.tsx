@@ -250,6 +250,8 @@ export interface ThroughputWindowPickerProps<W extends PickerWindow> {
   /** A span picked on the chart. The picker shows it in place of the window, with an X that calls `onClearSelection`. */
   selection?: SliceRange | null;
   onClearSelection?: () => void;
+  /** Shown instead of the window's name, for a list that widened past it. */
+  label?: string;
 }
 
 /** Picks how far back a throughput chart, and any list that shares it, reaches, and shows the span picked inside it. */
@@ -259,6 +261,7 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
   onChange,
   selection = null,
   onClearSelection,
+  label,
 }: ThroughputWindowPickerProps<W>) {
   const t = useTranslations("admin.connector.statusCard.throughput");
   const tWindow = useTranslations("admin.connector.runs.window");
@@ -268,7 +271,7 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
       <Dropdown.Trigger asChild>
         {selection === null || onClearSelection === undefined ? (
           <OpenButton icon={SvgClock} state="empty">
-            {tWindow(windowLabelKey(value))}
+            {label ?? tWindow(windowLabelKey(value))}
           </OpenButton>
         ) : (
           // The span takes the picker's place, so the row keeps its shape. Its X returns to the window.
