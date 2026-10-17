@@ -178,6 +178,9 @@ def upload_user_files(
     project_id: int | None = Form(None),
     temp_id_map: str | None = Form(None),  # JSON string mapping hashed key -> temp_id
     incognito_session_id: UUID | None = Form(None),
+    # Store the files as SKIPPED and do not index them, e.g. images uploaded only
+    # so the Ingestion API accepts them as image references.
+    skip_indexing: bool = Form(False),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CategorizedFilesSnapshot:
@@ -218,6 +221,7 @@ def upload_user_files(
             db_session=db_session,
             background_tasks=bg_tasks if DISABLE_VECTOR_DB else None,
             incognito_session_id=incognito_session_id,
+            skip_indexing=skip_indexing,
         )
 
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
