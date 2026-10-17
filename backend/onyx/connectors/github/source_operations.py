@@ -14,6 +14,7 @@ errors raised while the caller iterates.
 import base64
 import functools
 import inspect
+import json
 import threading
 import urllib.parse
 from collections.abc import Callable, Iterator
@@ -30,6 +31,7 @@ from urllib3.util.retry import Retry
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
+from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.github.models import (
     GitHubBranch,
     GitHubCursorItem,
@@ -97,7 +99,7 @@ class BoundedGithubRetry(GithubRetry):
         return bound_server_wait(retry_after, "github")
 
 
-class GitHubApiError(Exception):
+class GitHubApiError(SourceApiError):
     """A GitHub API call returned an error response.
 
     ``github_message`` is the ``message`` of the error body. The two
@@ -116,9 +118,13 @@ class GitHubApiError(Exception):
         accepted_scopes: str | None = None,
         accepted_permissions: str | None = None,
         sso_required: bool = False,
+        method: str | None = None,
+        url: str | None = None,
+        body: str | None = None,
     ) -> None:
-        super().__init__(message)
-        self.status_code = status_code
+        super().__init__(
+            message, status_code=status_code, method=method, url=url, body=body
+        )
         self.github_message = github_message
         self.accepted_scopes = accepted_scopes
         self.accepted_permissions = accepted_permissions
@@ -136,9 +142,17 @@ class GitHubRateLimitError(GitHubApiError):
         status_code: int | None,
         github_message: str | None = None,
         secondary: bool,
+        method: str | None = None,
+        url: str | None = None,
+        body: str | None = None,
     ) -> None:
         super().__init__(
-            message, status_code=status_code, github_message=github_message
+            message,
+            status_code=status_code,
+            github_message=github_message,
+            method=method,
+            url=url,
+            body=body,
         )
         self.secondary = secondary
 
@@ -157,7 +171,18 @@ def _github_message(error: GithubException) -> str | None:
     return error.message
 
 
-def _translate(error: GithubException) -> GitHubApiError:
+def _body(error: GithubException) -> str | None:
+    data: Any = error.data
+    if data is None:
+        return None
+    return data if isinstance(data, str) else json.dumps(data)
+
+
+def _translate(
+    error: GithubException, *, method: str | None = None, url: str | None = None
+) -> GitHubApiError:
+    """The gateway's error for an SDK error. ``method`` and ``url`` are the
+    request, when the caller knows it."""
     headers: Any = error.headers
     github_message: str | None = _github_message(error)
     lowered: str = (github_message or "").lower()
@@ -173,6 +198,9 @@ def _translate(error: GithubException) -> GitHubApiError:
             str(error),
             status_code=error.status,
             github_message=github_message,
+            method=method,
+            url=url,
+            body=_body(error),
             secondary=(
                 Requester.isSecondaryRateLimitError(lowered)
                 or _header(headers, _RETRY_AFTER_HEADER) is not None
@@ -185,6 +213,9 @@ def _translate(error: GithubException) -> GitHubApiError:
         accepted_scopes=_header(headers, _ACCEPTED_SCOPES_HEADER),
         accepted_permissions=_header(headers, _ACCEPTED_PERMISSIONS_HEADER),
         sso_required=bool(_header(headers, _SSO_HEADER)),
+        method=method,
+        url=url,
+        body=_body(error),
     )
 
 
@@ -300,9 +331,16 @@ class GitHubSourceOperations(SourceOperations):
     ) -> tuple[dict[str, Any], Any]:
         """One GET through PyGithub's requester. Returns the response headers
         (lowercase names) and the decoded JSON."""
-        return self._client().requester.requestJsonAndCheck(
-            "GET", url, parameters=params
-        )
+        requester: Requester = self._client().requester
+        try:
+            return requester.requestJsonAndCheck("GET", url, parameters=params)
+        except GithubException as e:
+            absolute: str = (
+                url
+                if url.startswith(("http://", "https://"))
+                else requester.base_url + url
+            )
+            raise _translate(e, method="GET", url=absolute) from e
 
     def _paginate(
         self,
