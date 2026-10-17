@@ -1,7 +1,7 @@
 """add personal MCP server preferences
 
 Revision ID: b71e3a9d2c04
-Revises: a27d64f7b810
+Revises: b034d72b7abe
 Create Date: 2026-10-15 19:25:16.614907
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "b71e3a9d2c04"
-down_revision = "a27d64f7b810"
+down_revision = "b034d72b7abe"
 branch_labels = None
 depends_on = None
 
