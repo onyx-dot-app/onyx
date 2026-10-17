@@ -20,6 +20,14 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: fixed
+      description: Fix the docfetching ScaledObject's cpu/memory triggers, which
+        nested the metric type under metadata (metadata.type) instead of the
+        top-level metricType field every other ScaledObject template uses. KEDA's
+        admission webhook rejects metadata.type, so any release with
+        celery_worker_docfetching.autoscaling.targetCPUUtilizationPercentage or
+        targetMemoryUtilizationPercentage set failed to reconcile the
+        ScaledObject.
     - kind: added
       description: Add YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY and
         YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY for YouTrack permission sync.
