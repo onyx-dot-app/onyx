@@ -12,6 +12,7 @@ export type WebSearchMessageKey = Parameters<WebSearchTranslate>[0];
 export type WebSearchProviderType =
   | "google_pse"
   | "serper"
+  | "litescrape"
   | "exa"
   | "searxng"
   | "brave"
