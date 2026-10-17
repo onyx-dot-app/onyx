@@ -94,6 +94,21 @@ class UnreachableValidationError(UnexpectedValidationError):
         super().__init__(message, summary=summary, description=description)
 
 
+class TimedOutValidationError(UnreachableValidationError):
+    """Raised when the source does not answer a request of the validation in
+    time. Like an unreachable source, a slow one says nothing about the
+    credential."""
+
+    def __init__(
+        self,
+        message: str = "The source did not answer in time",
+        *,
+        summary: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(message, summary=summary, description=description)
+
+
 class InconclusiveValidationError(UnexpectedValidationError):
     """Raised when a probe ran, but what it sampled cannot decide: the sample
     held nothing to test, or the source refused every try. Not proof of a

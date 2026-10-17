@@ -172,7 +172,7 @@ def test_a_sign_in_timeout_fails_only_a_form_run(
     assert result.status == status
     assert result.summary == "Sign-in timed out"
     assert result.description == _SIGN_IN_DESCRIPTION
-    assert result.error_kind == CheckErrorKind.UNREACHABLE
+    assert result.error_kind == CheckErrorKind.TIMEOUT
     assert result.error_detail is not None
     assert result.error_detail.request == "GET example.atlassian.net/rest/api/3/myself"
 
@@ -197,6 +197,7 @@ def test_a_refused_connection_still_cannot_reach_jira() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.summary == "Cannot reach Jira"
+    assert result.error_kind == CheckErrorKind.UNREACHABLE
 
 
 def test_a_timeout_after_sign_in_is_incomplete_on_a_form_run() -> None:
@@ -212,3 +213,4 @@ def test_a_timeout_after_sign_in_is_incomplete_on_a_form_run() -> None:
     assert result.description == (
         "The check stopped because Jira did not answer in time.\nRe-run the checks."
     )
+    assert result.error_kind == CheckErrorKind.TIMEOUT

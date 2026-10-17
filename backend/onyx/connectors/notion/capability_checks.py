@@ -26,7 +26,9 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckNotApplicableError,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -36,6 +38,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -49,6 +52,14 @@ from onyx.connectors.notion.source_operations import (
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/notion"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped after {time_limit} without an answer from Notion.\n"
+        "Re-run the checks."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Notion")
 _ERROR_DETAIL_CHARS = 300
 # Keeps a row's line short when it names a page or database.
 _TITLE_CHARS = 24
@@ -162,7 +173,7 @@ def _raise_for_api_error(
             ),
         ) from error
     if status is None and error.timed_out:
-        raise UnreachableValidationError(
+        raise TimedOutValidationError(
             f"Notion did not answer in time: {detail}",
             summary="Timed out",
             description="Notion did not answer the request in time.\nRe-run the checks.",
@@ -260,6 +271,7 @@ class _NotionCheck(CapabilityCheck[NotionConnectorConfig]):
         remediation: str,
         required: bool = True,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -271,6 +283,7 @@ class _NotionCheck(CapabilityCheck[NotionConnectorConfig]):
             remediation=remediation,
             docs_link=_DOCS_LINK,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -296,6 +309,7 @@ class _AuthCheck(_NotionCheck):
                 "Configuration) and update the credential."
             ),
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -313,13 +327,10 @@ class _AuthCheck(_NotionCheck):
             ) from e
         except NotionApiError as e:
             if e.status_code is None and e.timed_out:
-                raise UnreachableValidationError(
+                raise TimedOutValidationError(
                     f"Notion did not answer the sign-in in time: {e}",
-                    summary="Sign-in timed out",
-                    description=(
-                        "Notion did not answer the sign-in in time.\nRe-run, or "
-                        "check that Notion is reachable from Onyx."
-                    ),
+                    summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                    description=_SIGN_IN_TIMEOUT_TEXT.description,
                 ) from e
             _raise_for_api_error(
                 e,

@@ -27,7 +27,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -37,6 +39,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -63,6 +66,11 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/github"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check ran past its time limit.\nRe-run the checks later.",
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("GitHub")
 _SSO_GUIDE_LINK = (
     "https://docs.github.com/en/enterprise-cloud@latest/authentication/"
     "authenticating-with-saml-single-sign-on/"
@@ -278,6 +286,7 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
         requires_fields: frozenset[str] = _OWNER_FIELDS,
         requires_connector_config: bool = False,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -291,6 +300,7 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
             remediation=remediation,
             docs_link=_DOCS_LINK,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -316,6 +326,7 @@ class _AuthCheck(_GitHubCheck):
             ),
             requires_fields=frozenset(),
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -330,7 +341,13 @@ class _AuthCheck(_GitHubCheck):
                     "token in API Token."
                 ),
             ) from e
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except requests.Timeout as e:
+            raise TimedOutValidationError(
+                f"GitHub did not answer the sign-in in time: {e}",
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 "Onyx cannot connect to GitHub. Check the Enterprise Server URL, "
                 "if one is set.",

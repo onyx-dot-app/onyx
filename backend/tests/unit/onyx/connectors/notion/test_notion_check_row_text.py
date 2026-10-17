@@ -151,18 +151,23 @@ def test_a_missing_token_fails_sign_in() -> None:
 
 
 @pytest.mark.parametrize(
-    "error,summary",
+    "error,summary,kind",
     [
-        (NotionApiError("reset", status_code=None, code=None), "Cannot reach Notion"),
+        (
+            NotionApiError("reset", status_code=None, code=None),
+            "Cannot reach Notion",
+            CheckErrorKind.UNREACHABLE,
+        ),
         (
             NotionApiError("slow", status_code=None, code=None, timed_out=True),
             "Sign-in timed out",
+            CheckErrorKind.TIMEOUT,
         ),
     ],
     ids=["unreachable", "timeout"],
 )
 def test_an_unreachable_notion_fails_only_a_form_run(
-    error: NotionApiError, summary: str
+    error: NotionApiError, summary: str, kind: CheckErrorKind
 ) -> None:
     gateway = _gateway()
     gateway.get_bot_user.side_effect = error
@@ -173,6 +178,7 @@ def test_an_unreachable_notion_fails_only_a_form_run(
     assert form.status == CapabilityCheckStatus.FAILED
     assert stored.status == CapabilityCheckStatus.INCOMPLETE
     assert form.summary == stored.summary == summary
+    assert form.error_kind == stored.error_kind == kind
 
 
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
