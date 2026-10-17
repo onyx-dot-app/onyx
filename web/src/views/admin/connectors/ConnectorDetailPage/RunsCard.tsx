@@ -120,10 +120,16 @@ export default function RunsCard({
         ? null
         : windowStart(picked.hours);
   const { since, until } = rangeWithin(windowSince, range);
-  // A new window or slice starts the list over at its first page.
-  const [pagedRange, setPagedRange] = useState({ since, until });
-  if (pagedRange.since !== since || pagedRange.until !== until) {
-    setPagedRange({ since, until });
+  // A new window or slice starts the list over at its first page. The key is
+  // the selection, not the moving start, so a passing minute keeps the page.
+  const selection = [
+    sharedWindow !== undefined ? sharedWindow.window : picked.id,
+    range?.since ?? "",
+    range?.until ?? "",
+  ].join("|");
+  const [pagedSelection, setPagedSelection] = useState(selection);
+  if (pagedSelection !== selection) {
+    setPagedSelection(selection);
     setPage(1);
   }
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
