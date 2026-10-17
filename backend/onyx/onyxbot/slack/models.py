@@ -29,6 +29,7 @@ class ThreadMessage(BaseModel):
     message: str
     sender: str | None = None
     role: MessageType = MessageType.USER
+    has_attachments: bool = False
 
 
 class SlackMessageInfo(BaseModel):
