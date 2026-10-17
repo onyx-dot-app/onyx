@@ -22,6 +22,9 @@ from onyx.configs.app_configs import (
     TABULAR_MAX_CHUNKS_PER_WORKBOOK,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    experts_from_stores_representations,
+)
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
@@ -132,6 +135,10 @@ def _rebuild_document(
         doc_created_at=db_doc.doc_created_at,
         # Chunk enrichment resolves the document's ancestors from this.
         parent_hierarchy_node_id=db_doc.parent_hierarchy_node_id,
+        # The chunk writer reads owners off the document, not off the row, so
+        # leaving these unset would drop them from the index.
+        primary_owners=experts_from_stores_representations(db_doc.primary_owners),
+        secondary_owners=experts_from_stores_representations(db_doc.secondary_owners),
     )
 
 
