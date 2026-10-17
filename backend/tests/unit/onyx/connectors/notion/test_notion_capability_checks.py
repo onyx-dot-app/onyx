@@ -10,6 +10,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckNotRunReason,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import run_capability_checks
@@ -190,9 +191,9 @@ def test_root_page_applies_only_with_a_root_page() -> None:
     assert not _run("notion_root_page", _gateway()).applicable
 
 
-def test_root_page_skips_a_run_without_config() -> None:
-    """A credential-time run has no config: the check skips and calls
-    nothing."""
+def test_root_page_does_not_apply_to_a_run_without_config() -> None:
+    """A credential-time run has no config, so no root page: the check does
+    not apply and calls nothing."""
     gateway: MagicMock = _gateway()
     (check,) = [
         check
@@ -209,6 +210,7 @@ def test_root_page_skips_a_run_without_config() -> None:
     (result,) = run_capability_checks([check], context)
 
     assert result.status == CapabilityCheckStatus.SKIPPED
+    assert not result.applicable
     gateway.get_page.assert_not_called()
 
 
@@ -297,22 +299,25 @@ def test_page_content_reads_the_root_page_when_search_is_empty() -> None:
     )
 
 
-def test_page_content_is_incomplete_when_nothing_is_shared() -> None:
+def test_page_content_is_skipped_when_nothing_is_shared() -> None:
     result: CapabilityCheckResult = _run(
         "notion_page_content", _gateway(pages=[], data_sources=[])
     )
 
-    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.not_run_reason == CheckNotRunReason.NOTHING_IN_SCOPE
 
 
-def test_page_content_passes_when_only_empty_databases_are_shared() -> None:
+def test_page_content_is_skipped_when_only_empty_databases_are_shared() -> None:
     """Sharing a database alone is a valid setup; with no row there is no page
     content to read."""
     gateway: MagicMock = _gateway(pages=[])
 
     result: CapabilityCheckResult = _run("notion_page_content", gateway)
 
-    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No pages in scope"
+    assert result.description == "Only databases with no rows are shared."
     gateway.get_block_children.assert_not_called()
 
 
@@ -353,12 +358,13 @@ def test_database_rows_reads_one_row() -> None:
     )
 
 
-def test_database_rows_passes_without_databases() -> None:
+def test_database_rows_is_skipped_without_databases() -> None:
     gateway: MagicMock = _gateway(data_sources=[])
 
     result: CapabilityCheckResult = _run("notion_database_rows", gateway)
 
-    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No database shared to test"
     gateway.query_data_source.assert_not_called()
 
 
@@ -366,7 +372,8 @@ def test_database_rows_passes_without_databases() -> None:
     "error,error_type",
     [
         (_api_error(403, "restricted_resource"), "InsufficientPermissionsError"),
-        (_api_error(404, "object_not_found"), "ConnectorValidationError"),
+        # Search returned the database, so a 404 is a denial.
+        (_api_error(404, "object_not_found"), "InsufficientPermissionsError"),
     ],
 )
 def test_database_rows_fails_when_rows_are_not_readable(

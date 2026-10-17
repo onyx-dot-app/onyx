@@ -305,6 +305,8 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
         },
         {"repo_owner": "acme", "repositories": "docs"},
     ],
+    # The root page check reads a page only when a root page is set.
+    DocumentSource.NOTION: [{"root_page_id": "root"}],
 }
 
 
