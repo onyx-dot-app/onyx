@@ -3,6 +3,7 @@ from threading import Lock
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import openai
 import pytest
 from google.auth.credentials import Credentials
 from httpx import AsyncClient
@@ -20,6 +21,7 @@ from onyx.natural_language_processing.search_nlp_models import (
     clean_model_name,
 )
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
+from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
 
@@ -83,6 +85,45 @@ async def test_openai_embedding(
 
         assert result == sample_embeddings
         mock_client.embeddings.create.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_embedding_with_dimensions_and_base_url(
+    sample_embeddings: list[list[float]],
+) -> None:
+    with patch("openai.AsyncOpenAI") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.data = [MagicMock(embedding=emb) for emb in sample_embeddings]
+        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
+
+        custom_base_url = "https://custom-ai.example.com/v1"
+        embedding = CloudEmbedding(
+            api_key="fake-custom-key",
+            provider=EmbeddingProvider.OPENAI_COMPATIBLE,
+            api_url=custom_base_url,
+        )
+        result = await embedding.embed(
+            texts=["test1", "test2"],
+            text_type=EmbedTextType.QUERY,
+            model_name="qwen3-embedding-8b",
+            reduced_dimension=1024,
+        )
+
+        assert result == sample_embeddings
+        mock_openai.assert_called_with(
+            api_key="fake-custom-key",
+            base_url=custom_base_url,
+            timeout=OPENAI_EMBEDDING_TIMEOUT,
+            max_retries=openai.DEFAULT_MAX_RETRIES,
+        )
+        mock_client.embeddings.create.assert_called_once_with(
+            input=["test1", "test2"],
+            model="qwen3-embedding-8b",
+            dimensions=1024,
+        )
 
 
 def _build_google_embed_response(
