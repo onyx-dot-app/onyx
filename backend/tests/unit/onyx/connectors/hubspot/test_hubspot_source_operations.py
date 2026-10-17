@@ -6,6 +6,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
+import urllib3
 from hubspot.crm.associations.v4.models import (
     CollectionResponseMultiAssociatedObjectWithLabelForwardPaging,
     MultiAssociatedObjectWithLabel,
@@ -31,6 +33,7 @@ from onyx.connectors.hubspot.source_operations import (
     PERMITTED_USERS_BATCH_SIZE,
     PERMITTED_USERS_PATH,
     HubSpotApiError,
+    HubSpotConnectionError,
     HubSpotSourceOperations,
     iter_pages,
 )
@@ -252,7 +255,7 @@ def test_notes_are_read_through_the_notes_client() -> None:
     assert [i.id for i in request.inputs] == ["5"]
 
 
-def test_an_sdk_refusal_carries_the_status_and_operation() -> None:
+def test_an_sdk_refusal_carries_the_status_operation_and_request() -> None:
     gateway, client = _gateway()
     client.crm.deals.basic_api.get_page.side_effect = DealsApiException(
         status=403, reason="Forbidden"
@@ -262,6 +265,81 @@ def test_an_sdk_refusal_carries_the_status_and_operation() -> None:
         gateway.list_records(variant=HubSpotObjectType.DEALS, properties=["p"])
 
     assert (refusal.value.status, refusal.value.operation) == (403, "deals listing")
+    assert (refusal.value.method, refusal.value.url, refusal.value.body) == (
+        "GET",
+        "https://api.hubapi.com/crm/v3/objects/deals",
+        "Forbidden",
+    )
+
+
+def test_a_rest_refusal_carries_the_request_and_body() -> None:
+    gateway, _ = _gateway()
+    response = _response(403, {})
+    response.text = '{"category": "MISSING_SCOPES"}'
+
+    with (
+        patch(REQUESTS_GET, return_value=response),
+        pytest.raises(HubSpotApiError) as refusal,
+    ):
+        gateway.list_users()
+
+    assert refusal.value.status_code == 403
+    assert refusal.value.method == "GET"
+    assert refusal.value.url == "https://api.hubapi.com/settings/users/2026-09"
+    assert refusal.value.body == '{"category": "MISSING_SCOPES"}'
+
+
+@pytest.mark.parametrize(
+    "failure, timed_out",
+    [
+        (requests.ConnectTimeout("connect timed out"), True),
+        (requests.ConnectionError("refused"), False),
+    ],
+)
+def test_a_rest_call_that_gets_no_answer_says_whether_it_timed_out(
+    failure: requests.RequestException, timed_out: bool
+) -> None:
+    gateway, _ = _gateway()
+
+    with (
+        patch(REQUESTS_GET, side_effect=failure),
+        pytest.raises(HubSpotConnectionError) as error,
+    ):
+        gateway.get_portal_id()
+
+    assert error.value.timed_out is timed_out
+
+
+def test_an_sdk_call_that_times_out_says_so() -> None:
+    gateway, client = _gateway()
+    client.crm.deals.basic_api.get_page.side_effect = urllib3.exceptions.MaxRetryError(
+        MagicMock(),
+        "/crm/v3/objects/deals",
+        urllib3.exceptions.ReadTimeoutError(
+            MagicMock(), "/crm/v3/objects/deals", "read timed out"
+        ),
+    )
+
+    with pytest.raises(HubSpotConnectionError) as error:
+        gateway.list_records(variant=HubSpotObjectType.DEALS, properties=["p"])
+
+    assert error.value.timed_out
+
+
+def test_a_search_keeps_the_match_count() -> None:
+    gateway, client = _gateway()
+    client.crm.tickets.search_api.do_search.return_value = _sdk_page(
+        {"results": [_sdk_record("1")], "total": 42}
+    )
+
+    page = gateway.search_records(
+        variant=HubSpotObjectType.TICKETS,
+        properties=["p"],
+        modified_after=START,
+        modified_before=None,
+    )
+
+    assert page.total == 42
 
 
 def test_the_credential_is_read_once() -> None:
