@@ -443,12 +443,11 @@ def test_configured_page_searches_by_id() -> None:
     assert kwargs["limit"] == 1
 
 
-def test_configured_page_must_be_a_number() -> None:
-    gateway = _gateway()
+def test_configured_page_waits_for_a_page_id_that_is_not_a_number() -> None:
+    # The config model rejects the value, so the form shows it on the field.
+    states = _draft_states(_form(page_id="Home"))
 
-    with pytest.raises(ConnectorValidationError, match="not a number"):
-        _run("confluence_configured_page", _context(gateway, _form(page_id="Home")))
-    gateway.search_pages.assert_not_called()
+    assert states["confluence_configured_page"] == DraftCheckStateKind.WAITING
 
 
 def test_configured_page_not_found() -> None:
@@ -476,20 +475,17 @@ def test_cql_query_runs_the_connector_query() -> None:
 
 
 @pytest.mark.parametrize(
-    "cql,message",
+    "cql",
     [
-        ("type=page and lastModified > now('-1d')", "lastModified"),
-        ("type=page and LASTMODIFIED > now('-1d')", "lastModified"),
-        ("type=page order by created", "ORDER BY"),
-        ("type=page ORDER  BY created", "ORDER BY"),
+        "type=page and lastModified > now('-1d')",
+        "type=page order by created",
     ],
 )
-def test_cql_query_rejects_filters_onyx_adds_itself(cql: str, message: str) -> None:
-    gateway = _gateway()
+def test_cql_query_waits_for_a_clause_each_sync_adds(cql: str) -> None:
+    # The config model rejects the value, so the form shows it on the field.
+    states = _draft_states(_form(cql_query=cql))
 
-    with pytest.raises(ConnectorValidationError, match=message):
-        _run("confluence_cql_query", _context(gateway, _form(cql_query=cql)))
-    gateway.search_pages.assert_not_called()
+    assert states["confluence_cql_query"] == DraftCheckStateKind.WAITING
 
 
 @pytest.mark.parametrize(

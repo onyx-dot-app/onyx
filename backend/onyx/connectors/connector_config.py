@@ -1,9 +1,20 @@
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, Any, ClassVar, LiteralString
 
 from pydantic import BaseModel, ConfigDict
+from pydantic_core import PydanticCustomError
 
 from onyx.connectors.field_policy import FieldClass, FieldPolicy
 from onyx.db.enums import HierarchyNodeType
+
+# The pydantic error type of a config field rule.
+_FIELD_FORMAT_ERROR_TYPE = "connector_config_format"
+
+
+def field_format_error(message: LiteralString) -> PydanticCustomError:
+    """The error a config field validator raises when a value breaks a format
+    rule. The form shows ``message`` on the field as-is, with no "Value error"
+    prefix. ``message`` must not contain braces or the input value."""
+    return PydanticCustomError(_FIELD_FORMAT_ERROR_TYPE, message)
 
 
 class CredentialBinding(BaseModel):
