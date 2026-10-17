@@ -2347,8 +2347,8 @@
         "targetedReindexSubmitted": "Se envió la reindexación selectiva de {count, plural, one {# documento} other {# documentos}}. Los errores desaparecerán de la lista a medida que los documentos terminen de reindexarse.",
         "checkFrequencyUpdated": "Frecuencia de comprobación del conector actualizada correctamente",
         "checkFrequencyUpdateFailed": "No se pudo actualizar la frecuencia de comprobación del conector",
-        "runResolved": "Marked resolved.",
-        "runResolveFailed": "Could not resolve: {message}",
+        "runResolved": "Marcado como resuelto.",
+        "runResolveFailed": "No se pudo resolver: {message}",
         "runsResolved": "{count, plural, one {# ejecución marcada como resuelta} other {# ejecuciones marcadas como resueltas}}."
       },
       "backButton": {
@@ -2550,8 +2550,8 @@
           "resolved": "Resuelto"
         },
         "groups": {
-          "failures": "{count, plural, one {# fallo} other {# fallos}}",
-          "errors": "{count, plural, one {# error} other {# errores}}",
+          "failures": "{count, plural, =0 {Fallos} one {# fallo} other {# fallos}}",
+          "errors": "{count, plural, =0 {Errores} one {# error} other {# errores}}",
           "other": "Otros"
         },
         "title": {
@@ -2619,7 +2619,6 @@
           "indexing": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
           "doc_permission_sync": "{count, plural, one {# usuario no se sincronizó} other {# usuarios no se sincronizaron}}",
           "group_sync": "{count, plural, one {# grupo no se sincronizó} other {# grupos no se sincronizaron}}",
-          "resolvedDocs": "{count, plural, one {# documento resuelto} other {# documentos resueltos}}",
           "pruning": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
           "checks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
           "resolved": "Resuelto"

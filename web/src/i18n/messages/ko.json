@@ -2347,8 +2347,8 @@
         "targetedReindexSubmitted": "{count, plural, one {문서 #개} other {문서 #개}}에 대해 대상 지정 재인덱싱을 요청했습니다. 문서의 재인덱싱이 끝나면 목록에서 오류가 사라집니다.",
         "checkFrequencyUpdated": "커넥터 검사 주기가 업데이트되었습니다",
         "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다",
-        "runResolved": "Marked resolved.",
-        "runResolveFailed": "Could not resolve: {message}",
+        "runResolved": "해결됨으로 표시했습니다.",
+        "runResolveFailed": "해결하지 못했습니다: {message}",
         "runsResolved": "{count, plural, other {실행 #개}}를 해결됨으로 표시했습니다."
       },
       "backButton": {
@@ -2550,8 +2550,8 @@
           "resolved": "해결됨"
         },
         "groups": {
-          "failures": "{count, plural, other {실패 #개}}",
-          "errors": "{count, plural, other {오류 #개}}",
+          "failures": "{count, plural, =0 {실패} other {실패 #개}}",
+          "errors": "{count, plural, =0 {오류} other {오류 #개}}",
           "other": "기타"
         },
         "title": {
@@ -2619,7 +2619,6 @@
           "indexing": "{count, plural, other {문서 #개 실패}}",
           "doc_permission_sync": "{count, plural, other {사용자 #명 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
-          "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
           "resolved": "해결됨"

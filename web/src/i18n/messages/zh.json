@@ -2347,8 +2347,8 @@
         "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。",
         "checkFrequencyUpdated": "连接器检查频率已更新",
         "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
-        "runResolved": "Marked resolved.",
-        "runResolveFailed": "Could not resolve: {message}",
+        "runResolved": "已标记为已解决。",
+        "runResolveFailed": "无法解决：{message}",
         "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。"
       },
       "backButton": {
@@ -2550,8 +2550,8 @@
           "resolved": "已解决"
         },
         "groups": {
-          "failures": "{count, plural, other {# 次失败}}",
-          "errors": "{count, plural, other {# 个错误}}",
+          "failures": "{count, plural, =0 {失败} other {# 次失败}}",
+          "errors": "{count, plural, =0 {错误} other {# 个错误}}",
           "other": "其他"
         },
         "title": {
@@ -2619,7 +2619,6 @@
           "indexing": "{count, plural, other {# 个文档失败}}",
           "doc_permission_sync": "{count, plural, other {# 个用户同步失败}}",
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
-          "resolvedDocs": "{count, plural, other {# 个文档已解决}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
           "resolved": "已解决"
