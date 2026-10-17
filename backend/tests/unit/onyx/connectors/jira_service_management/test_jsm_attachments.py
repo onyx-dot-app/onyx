@@ -489,72 +489,81 @@ class TestAttachmentFailureIsolation:
 
 
 class TestAttachmentFullIndexPermissions:
-    @pytest.mark.usefixtures("mock_extract")
-    def test_full_index_persists_access_independent_of_perm_sync_order(
+    @pytest.mark.parametrize("include_permissions", [False, True])
+    def test_full_index_uses_parent_jira_acl_only_when_required(
         self,
         make_jsm_connector: Callable[..., JiraServiceManagementConnector],
-        mock_jira_client: MagicMock,
+        include_permissions: bool,
     ) -> None:
-        connector = _make_connector_with_attachments(
-            make_jsm_connector,
-            mock_jira_client,
-            [MockAttachment(id="acl-1", filename="restricted.txt")],
+        """No phantom ACL row: the actual full-index path supplies the ACL.
+
+        Permission-synced JSM runs are always routed through the WithPermSync
+        loader, even for incremental indexing, so a preceding permission-sync
+        call that skipped a missing attachment does not discard its access.
+        Public/OSS indexing must NOT require project-permission APIs.
+        """
+        connector = make_jsm_connector(include_attachments=True)
+        connector.source_operations._is_cloud.return_value = False
+        issue = {
+            "key": "HELP-101",
+            "fields": {
+                "project": {"key": TEST_PROJECT_KEY, "name": "Helpdesk"},
+                "parent": None,
+                "issuetype": {"name": "Service Request"},
+            },
+        }
+        ticket = Document(
+            id=TICKET_DOC_ID,
+            source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            semantic_identifier="HELP-101",
+            sections=[],
+        )
+        attachment = Document(
+            id=f"{TICKET_DOC_ID}/attachment/acl-1",
+            source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            semantic_identifier="HELP-101 attachment",
+            sections=[],
         )
         access = ExternalAccess(
             external_user_emails={"agent@example.com"},
-            external_user_group_ids={"prefixed:team"},
+            external_user_group_ids={"jira_service_management_team"},
             is_public=False,
         )
-        with patch.object(
-            connector, "_get_project_permissions", return_value=access
-        ) as permissions:
-            outputs = connector._process_issue_attachments(
-                make_mock_jsm_issue(), None, TICKET_DOC_ID
-            )
-
-        assert len(outputs) == 1
-        assert isinstance(outputs[0], Document)
-        assert outputs[0].external_access == access
-        permissions.assert_called_once_with(TEST_PROJECT_KEY, add_prefix=True)
-
-    @pytest.mark.usefixtures("mock_extract")
-    def test_failed_access_lookup_does_not_index_unprotected_attachment(
-        self,
-        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
-        mock_jira_client: MagicMock,
-    ) -> None:
-        connector = _make_connector_with_attachments(
-            make_jsm_connector,
-            mock_jira_client,
-            [
-                MockAttachment(id="acl-2", filename="restricted.txt"),
-                MockAttachment(id="acl-3", filename="healthy.txt"),
-            ],
-        )
-        access = ExternalAccess(
-            external_user_emails=set(),
-            external_user_group_ids={"prefixed:team"},
-            is_public=False,
-        )
-        with patch.object(
-            connector,
-            "_get_project_permissions",
-            side_effect=[RuntimeError("ACL lookup failed"), access],
+        with (
+            patch(
+                "onyx.connectors.jira.connector._perform_jql_search",
+                return_value=iter([issue]),
+            ),
+            patch.object(connector, "_process_issue", return_value=ticket),
+            patch.object(
+                connector, "_process_issue_attachments", return_value=[attachment]
+            ),
+            patch.object(
+                connector, "_yield_project_hierarchy_node", return_value=iter([])
+            ),
+            patch.object(connector, "_is_epic", return_value=False),
+            patch.object(
+                connector, "_get_parent_hierarchy_raw_node_id", return_value=None
+            ),
+            patch.object(
+                connector, "_get_project_permissions", return_value=access
+            ) as permissions,
         ):
-            outputs = connector._process_issue_attachments(
-                make_mock_jsm_issue(), None, TICKET_DOC_ID
+            checkpoint = connector.build_dummy_checkpoint()
+            loader = (
+                connector.load_from_checkpoint_with_perm_sync
+                if include_permissions
+                else connector.load_from_checkpoint
             )
-
-        assert len(outputs) == 2
-        assert isinstance(outputs[0], ConnectorFailure)
-        assert outputs[0].failed_document is not None
-        assert outputs[0].failed_document.document_id.endswith("/attachment/acl-2")
-        assert isinstance(outputs[1], Document)
-        assert outputs[1].external_access == access
-        slim = connector._process_issue_attachments_slim(
-            make_mock_jsm_issue(), None, TICKET_DOC_ID
-        )
-        assert [doc.id for doc in slim] == [f"{TICKET_DOC_ID}/attachment/acl-3"]
+            emitted = list(loader(0, 1, checkpoint))
+        docs = [doc for doc in emitted if isinstance(doc, Document)]
+        assert [doc.id for doc in docs] == [ticket.id, attachment.id]
+        if include_permissions:
+            assert all(doc.external_access == access for doc in docs)
+            permissions.assert_called_once_with(TEST_PROJECT_KEY, add_prefix=True)
+        else:
+            assert all(doc.external_access is None for doc in docs)
+            permissions.assert_not_called()
 
 
 class TestSlimPermissionPropagation:

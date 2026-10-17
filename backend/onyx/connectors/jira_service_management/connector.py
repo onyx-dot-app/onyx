@@ -399,27 +399,9 @@ class JiraServiceManagementConnector(JiraConnector):
                 ),
             )
 
-        # Permission sync may precede full indexing. Fetch the current project
-        # ACL so a newly indexed attachment is not left without access data.
-        try:
-            attachment_access = self._get_project_permissions(
-                self.jira_project, add_prefix=True
-            )
-        except Exception as e:
-            logger.exception("Cannot resolve access for JSM attachment %s", doc_id)
-            return ConnectorFailure(
-                failed_document=DocumentFailure(
-                    document_id=doc_id,
-                    document_link=build_jira_url(self.jira_base, _issue_key(issue)),
-                ),
-                failure_message=f"Failed to resolve access for attachment {doc_id}",
-                exception=e,
-            )
-
         return Document(
             id=doc_id,
             source=self.document_source,
-            external_access=attachment_access,
             semantic_identifier=(
                 f"{_issue_key(issue)} attachment: {filename}"
                 if filename
