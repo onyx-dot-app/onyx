@@ -476,6 +476,32 @@ def test_a_newer_run_of_the_kind_supersedes_a_failure(db_session: Session) -> No
     assert closed.total_items == 3
 
 
+def test_a_run_still_in_progress_supersedes_nothing(db_session: Session) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.SYNC)
+    old = _index_attempt(db_session, cc_pair, 0, IndexingStatus.FAILED)
+    newer = _index_attempt(db_session, cc_pair, 1, IndexingStatus.IN_PROGRESS)
+    failed = [CCPairRunStatusGroup.FAILED]
+
+    live = _runs(db_session, admin, cc_pair, status_groups=failed, superseded=False)
+    superseded = _runs(db_session, admin, cc_pair, superseded=True)
+
+    assert _order(live) == [(CCPairRunKind.INDEXING, old.id)]
+    assert live.status_counts[CCPairRunStatusGroup.FAILED] == 1
+    assert _order(superseded) == []
+
+    # Once the newer run finishes, the old failure is stale news.
+    newer.status = IndexingStatus.SUCCESS
+    db_session.commit()
+
+    live = _runs(db_session, admin, cc_pair, status_groups=failed, superseded=False)
+    superseded = _runs(db_session, admin, cc_pair, superseded=True)
+
+    assert _order(live) == []
+    assert live.status_counts[CCPairRunStatusGroup.FAILED] == 0
+    assert _order(superseded) == [(CCPairRunKind.INDEXING, old.id)]
+
+
 def test_public_pair_shows_no_syncs(db_session: Session) -> None:
     admin = create_test_user(db_session, "runs_admin", is_admin=True)
     cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)

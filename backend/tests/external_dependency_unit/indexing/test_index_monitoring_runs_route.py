@@ -312,9 +312,15 @@ def test_a_shared_group_sync_on_a_sibling_pair_supersedes_a_failure(
     second = _create_cc_pair(
         db_session, "Monitor Runs Confluence B", source=DocumentSource.CONFLUENCE
     )
-    # Late enough that no other test's Confluence sync comes after these.
-    old = _group_sync(db_session, first, 100_000, PermissionSyncStatus.FAILED, mark)
-    new = _group_sync(db_session, second, 100_001, PermissionSyncStatus.FAILED, mark)
+    # Decades out, so no Confluence sync in the database, from a test or a
+    # live pair, comes after these.
+    far = 20_000_000
+    old = _group_sync(db_session, first, far, PermissionSyncStatus.FAILED, mark)
+    new = _group_sync(db_session, second, far + 1, PermissionSyncStatus.FAILED, mark)
+    # A sibling's sync still in progress settles nothing yet.
+    running = _group_sync(
+        db_session, first, far + 2, PermissionSyncStatus.IN_PROGRESS, mark
+    )
     failed = [CCPairRunStatusGroup.FAILED]
 
     live = _runs(db_session, admin, mark, status_groups=failed, superseded=False)
@@ -327,6 +333,15 @@ def test_a_shared_group_sync_on_a_sibling_pair_supersedes_a_failure(
     assert [(item.run.kind, item.run.attempt.id) for item in closed.items] == [
         (CCPairRunKind.GROUP_SYNC, old.id)
     ]
+
+    running.status = PermissionSyncStatus.SUCCESS
+    db_session.commit()
+
+    live = _runs(db_session, admin, mark, status_groups=failed, superseded=False)
+    closed = _runs(db_session, admin, mark, superseded=True)
+
+    assert live.items == []
+    assert [item.run.attempt.id for item in closed.items] == [new.id, old.id]
 
 
 def test_a_creator_reads_their_private_pair_but_cannot_resolve_it(
