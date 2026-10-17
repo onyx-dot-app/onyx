@@ -152,9 +152,11 @@ each with a client under `web_search/clients/`:
 | `searxng` | `searxng_client.py:SearXNGClient` | No, needs `searxng_base_url` instead |
 | `brave` | `brave_client.py:BraveClient` | Yes |
 | `tavily` | `tavily_client.py:TavilyClient` | Yes |
+| `keenable` | `keenable_client.py:KeenableClient` | No, a key is optional and lifts rate limits |
 
 `provider_requires_api_key` (`providers.py`) hardcodes the rule: every provider
-except SearXNG requires a key. `build_search_provider_from_config` (`providers.py`)
+except SearXNG and Keenable requires a key. Without a key, Keenable uses its
+public endpoint. `build_search_provider_from_config` (`providers.py`)
 is the single factory that turns a `provider_type` + `api_key` + `config` dict into
 a concrete client, validating provider-specific required config (e.g. Google PSE's
 `cx`, SearXNG's `searxng_base_url`) and raising `ValueError` if missing.

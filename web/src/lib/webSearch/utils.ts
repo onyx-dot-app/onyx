@@ -3,6 +3,7 @@ import {
   SvgExa,
   SvgFirecrawl,
   SvgGoogle,
+  SvgKeenable,
   SvgSearXNG,
   SvgSerper,
   SvgTavily,
@@ -69,6 +70,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     apiKeyUrl: "https://www.firecrawl.dev/app/api-keys",
     logo: SvgFirecrawl,
   },
+  keenable: {
+    label: "Keenable",
+    subtitle: "Keenable Search API",
+    logo: SvgKeenable,
+    apiKeyUrl: "https://app.keenable.ai/console",
+  },
 };
 
 export const SEARCH_PROVIDER_ORDER = Object.keys(
@@ -130,6 +137,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   firecrawl: {
     requiresApiKey: true,
     requiredConfigKeys: ["base_url"],
+  },
+  keenable: {
+    requiresApiKey: false,
+    requiredConfigKeys: [],
   },
 };
 
