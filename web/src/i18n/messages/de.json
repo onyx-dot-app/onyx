@@ -2626,6 +2626,7 @@
         "more": "Mehr anzeigen",
         "empty": {
           "title": "Keine Fehlschläge oder Fehler",
+          "resolved": "Keine behobenen Läufe",
           "filtered": "Nichts passt zu dieser Suche.",
           "failures": "Keine Fehlschläge",
           "errors": "Keine Fehler",

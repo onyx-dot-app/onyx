@@ -37,12 +37,13 @@ function runsQueryParams(query: CCPairRunsQuery): string {
 }
 
 function resolvableCountParams(
-  level: CCPairRunLevel,
+  level: CCPairRunLevel | null,
   q: string,
   since: string | null,
   until: string | null
 ): string {
-  const params = new URLSearchParams({ level });
+  const params = new URLSearchParams();
+  if (level !== null) params.set("level", level);
   if (q) params.set("q", q);
   if (since) params.set("since", since);
   if (until) params.set("until", until);
@@ -351,7 +352,7 @@ export const SWR_KEYS = {
     `/api/manage/admin/cc-pair/${ccPairId}/runs/resolvable-count?`,
   ccPairResolvableRunsCount: (
     ccPairId: number,
-    level: CCPairRunLevel,
+    level: CCPairRunLevel | null,
     q: string,
     since: string | null,
     until: string | null
@@ -381,7 +382,7 @@ export const SWR_KEYS = {
   indexMonitoringResolvableRunsCountPrefix:
     "/api/manage/admin/index-monitoring/runs/resolvable-count?",
   indexMonitoringResolvableRunsCount: (
-    level: CCPairRunLevel,
+    level: CCPairRunLevel | null,
     q: string,
     since: string | null,
     until: string | null

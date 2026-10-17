@@ -82,9 +82,9 @@ export async function resolveCCPairRuns(
   }
 }
 
-/** The open runs of one activity level, narrowed as the runs feed narrows them. */
+/** The open runs of one activity level, or of every level when `level` is null, narrowed as the runs feed narrows them. */
 export interface CCPairRunsMatchingFilter {
-  level: CCPairRunLevel;
+  level: CCPairRunLevel | null;
   q: string | null;
   since: string | null;
   until: string | null;

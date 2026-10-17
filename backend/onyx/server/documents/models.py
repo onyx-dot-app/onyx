@@ -747,9 +747,10 @@ class CCPairRunLevel(str, Enum):
 
 
 class CCPairRunsResolveMatchingRequest(BaseModel):
-    """The open runs of one activity level, narrowed as the runs feed narrows them."""
+    """The open runs of one activity level, or of every level when ``level`` is
+    None, narrowed as the runs feed narrows them."""
 
-    level: CCPairRunLevel
+    level: CCPairRunLevel | None = None
     q: str | None = Field(default=None, max_length=200)
     since: datetime | None = None
     until: datetime | None = None

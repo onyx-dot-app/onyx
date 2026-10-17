@@ -47,7 +47,7 @@ from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
 from onyx.server.documents.cc_pair_runs_feed import (
     connector_supports_targeted_reindex,
     fetch_run_feed,
-    open_level_filter,
+    open_level_filters,
 )
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.models import (
@@ -412,11 +412,11 @@ def _pair_of_run(
     return sibling
 
 
-def _operated_open_level(
+def _operated_open_levels(
     db_session: Session, user: User, request: CCPairRunsResolveMatchingRequest
-) -> tuple[list[CCPairRunKind], CCPairRunFilter] | None:
-    """The run kinds and filter of a level's open runs on the pairs the caller
-    operates, or None when they operate none."""
+) -> tuple[list[CCPairRunKind], list[CCPairRunFilter]] | None:
+    """The run kinds and the per-level filters of the open runs the request
+    names on the pairs the caller operates, or None when they operate none."""
     pairs = _readable_cc_pairs(db_session, user)
     operate_ids = _managed_ids(
         db_session,
@@ -430,7 +430,7 @@ def _operated_open_level(
     operated_sources = {
         pairs[cc_pair_id].connector.source for cc_pair_id in operate_ids
     }
-    run_filter = open_level_filter(
+    run_filters = open_level_filters(
         request,
         sorted(operate_ids),
         None,
@@ -439,12 +439,12 @@ def _operated_open_level(
     kinds = [
         kind for kind in CCPairRunKind if request.kinds is None or kind in request.kinds
     ]
-    return kinds, run_filter
+    return kinds, run_filters
 
 
 @router.get("/runs/resolvable-count")
 def get_resolvable_indexing_runs_count(
-    level: CCPairRunLevel = Query(...),
+    level: CCPairRunLevel | None = Query(None),
     q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
     since: datetime | None = Query(None),
     until: datetime | None = Query(None),
@@ -458,12 +458,12 @@ def get_resolvable_indexing_runs_count(
     request = CCPairRunsResolveMatchingRequest(
         level=level, q=q, since=since, until=until, kinds=kinds
     )
-    scoped = _operated_open_level(db_session, user, request)
+    scoped = _operated_open_levels(db_session, user, request)
     if scoped is None:
         return CCPairRunsResolvableCountResponse(count=0)
-    kinds_wanted, run_filter = scoped
+    kinds_wanted, run_filters = scoped
     return CCPairRunsResolvableCountResponse(
-        count=count_matching_runs(db_session, kinds_wanted, run_filter)
+        count=count_matching_runs(db_session, kinds_wanted, run_filters)
     )
 
 
@@ -475,13 +475,14 @@ def resolve_indexing_runs(
     ),
     db_session: Session = Depends(get_session),
 ) -> CCPairRunsResolveMatchingResponse:
-    """Marks every open run of a level that the fleet feed lists for the
-    filter resolved, on the pairs the caller operates, and returns how many."""
-    scoped = _operated_open_level(db_session, user, request)
+    """Marks every open run of the requested level, or of every level, that
+    the fleet feed lists for the filter resolved, on the pairs the caller
+    operates, and returns how many."""
+    scoped = _operated_open_levels(db_session, user, request)
     if scoped is None:
         return CCPairRunsResolveMatchingResponse(resolved_count=0, cc_pair_ids=[])
-    kinds, run_filter = scoped
-    resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filter, user.id)
+    kinds, run_filters = scoped
+    resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filters, user.id)
     db_session.commit()
     for cc_pair_id, count in resolved.items():
         emit_audit_event(

@@ -274,8 +274,8 @@ export function useActivityItems(
           kinds: null,
           q,
           ...groupQuery,
-          // A search finds old failures too, under the failures group.
-          superseded: q ? null : groupQuery.superseded,
+          // A search finds old failures too, under the failures group. The closed feed keeps its superseded ones.
+          superseded: q && !closed ? null : groupQuery.superseded,
         };
         return ccPairId === null
           ? SWR_KEYS.indexMonitoringRuns(query)
@@ -361,9 +361,10 @@ function refreshFeeds(ccPairIds: number[]) {
   ]);
 }
 
-/** How many open runs of the level the batch resolve would mark for the search, on the pair or the pairs the caller operates. Null skips the fetch. */
+/** How many open runs of the level, or of every level when `level` is null, the batch resolve would mark for the search, on the pair or the pairs the caller operates. Disabled, it fetches nothing. */
 export function useResolvableRunsCount(
   scope: ActivityScope,
+  enabled: boolean,
   level: CCPairRunLevel | null,
   q: string,
   timeRange: ActivityTimeRange,
@@ -371,7 +372,7 @@ export function useResolvableRunsCount(
 ): { count: number; isLoading: boolean } {
   const ccPairId = scope === "fleet" ? null : scope.ccPairId;
   const { data, isLoading } = useSWR<{ count: number }>(
-    level === null
+    !enabled
       ? null
       : ccPairId === null
         ? SWR_KEYS.indexMonitoringResolvableRunsCount(
@@ -445,10 +446,10 @@ export function useResolveRunErrors() {
     }
   }
 
-  // Marks every open run of the level the panel lists for the search resolved.
+  // Marks every open run of the level, or of every level, the panel lists for the search resolved.
   async function resolveMatching(
     scope: ActivityScope,
-    level: CCPairRunLevel,
+    level: CCPairRunLevel | null,
     q: string,
     timeRange: ActivityTimeRange
   ) {

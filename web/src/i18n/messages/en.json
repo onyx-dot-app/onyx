@@ -2626,6 +2626,7 @@
         "more": "Show more",
         "empty": {
           "title": "No failures or errors",
+          "resolved": "No resolved runs",
           "filtered": "Nothing matches this search.",
           "failures": "No failures",
           "errors": "No errors",

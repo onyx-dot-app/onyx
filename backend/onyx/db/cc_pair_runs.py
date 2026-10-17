@@ -28,6 +28,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
+from sqlalchemy.sql.dml import ReturningInsert
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.cc_pair_run_resolution import run_is_resolved
@@ -671,49 +672,62 @@ def get_resolvable_runs(
 
 
 def count_matching_runs(
-    db_session: Session, kinds: list[CCPairRunKind], run_filter: CCPairRunFilter
+    db_session: Session,
+    kinds: list[CCPairRunKind],
+    run_filters: list[CCPairRunFilter],
 ) -> int:
-    """How many runs of ``kinds`` the filter keeps, which is what
-    ``resolve_matching_runs__no_commit`` marks for the same filter."""
+    """How many runs of ``kinds`` the filters keep, which is what
+    ``resolve_matching_runs__no_commit`` marks for the same filters. The
+    filters are one per level, so no run counts twice."""
     total = 0
-    settled = _settled(run_filter)
-    for kind in kinds:
-        matching = _runs_of_kind(kind, settled, True).subquery()
-        total += db_session.scalar(select(func.count()).select_from(matching)) or 0
+    for run_filter in run_filters:
+        settled = _settled(run_filter)
+        for kind in kinds:
+            matching = _runs_of_kind(kind, settled, True).subquery()
+            total += db_session.scalar(select(func.count()).select_from(matching)) or 0
     return total
 
 
 def resolve_matching_runs__no_commit(
     db_session: Session,
     kinds: list[CCPairRunKind],
-    run_filter: CCPairRunFilter,
+    run_filters: list[CCPairRunFilter],
     user_id: UUID | None,
 ) -> dict[int, int]:
-    """Marks every run of ``kinds`` the filter keeps resolved, one INSERT from
-    SELECT per kind, and returns how many it marked per pair. A run resolved
-    before keeps its first resolution and is not counted."""
+    """Marks every run of ``kinds`` the filters keep resolved, one INSERT from
+    SELECT per filter and kind, and returns how many it marked per pair. A run
+    resolved before keeps its first resolution and is not counted."""
     resolved: Counter[int] = Counter()
-    settled = _settled(run_filter)
-    for kind in kinds:
-        run_id, pair_id = _id_and_pair_columns(kind)
-        matching = _runs_of_kind(kind, settled, True).with_only_columns(
-            literal(kind.value),
-            run_id,
-            pair_id,
-            # Typed, since Postgres reads an untyped NULL in a SELECT as text.
-            cast(literal(user_id, PGUUID(as_uuid=True)), PGUUID(as_uuid=True)),
-        )
-        stmt = (
-            insert(CCPairRunResolution)
-            .from_select(
-                ["run_kind", "attempt_id", "cc_pair_id", "resolved_by_user_id"],
-                matching,
-            )
-            .on_conflict_do_nothing(index_elements=["run_kind", "attempt_id"])
-            .returning(CCPairRunResolution.cc_pair_id)
-        )
-        resolved.update(db_session.scalars(stmt).all())
+    for run_filter in run_filters:
+        settled = _settled(run_filter)
+        for kind in kinds:
+            stmt = _resolution_insert(kind, settled, user_id)
+            resolved.update(db_session.scalars(stmt).all())
     return dict(resolved)
+
+
+def _resolution_insert(
+    kind: CCPairRunKind, settled: CCPairRunFilter, user_id: UUID | None
+) -> ReturningInsert[tuple[int]]:
+    """One INSERT from SELECT that marks the kind's runs the filter keeps and
+    returns the pair of each run it marked."""
+    run_id, pair_id = _id_and_pair_columns(kind)
+    matching = _runs_of_kind(kind, settled, True).with_only_columns(
+        literal(kind.value),
+        run_id,
+        pair_id,
+        # Typed, since Postgres reads an untyped NULL in a SELECT as text.
+        cast(literal(user_id, PGUUID(as_uuid=True)), PGUUID(as_uuid=True)),
+    )
+    return (
+        insert(CCPairRunResolution)
+        .from_select(
+            ["run_kind", "attempt_id", "cc_pair_id", "resolved_by_user_id"],
+            matching,
+        )
+        .on_conflict_do_nothing(index_elements=["run_kind", "attempt_id"])
+        .returning(CCPairRunResolution.cc_pair_id)
+    )
 
 
 def _status_column(kind: CCPairRunKind) -> InstrumentedAttribute:

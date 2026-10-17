@@ -134,15 +134,31 @@ def fetch_run_feed(
     )
 
 
-def open_level_filter(
+def open_level_filters(
+    request: CCPairRunsResolveMatchingRequest,
+    cc_pair_ids: list[int],
+    source: DocumentSource | None,
+    shared_sources: set[DocumentSource],
+) -> list[CCPairRunFilter]:
+    """The filters the activity panel lists the open runs of the requested
+    level with, one per level. A request without a level covers them all; a
+    run belongs to one level, so the filters never overlap."""
+    levels = list(CCPairRunLevel) if request.level is None else [request.level]
+    return [
+        _open_level_filter(level, request, cc_pair_ids, source, shared_sources)
+        for level in levels
+    ]
+
+
+def _open_level_filter(
+    level: CCPairRunLevel,
     request: CCPairRunsResolveMatchingRequest,
     cc_pair_ids: list[int],
     source: DocumentSource | None,
     shared_sources: set[DocumentSource],
 ) -> CCPairRunFilter:
-    """The filter the activity panel lists a level's open runs with."""
     query = (request.q or "").strip() or None
-    if request.level is CCPairRunLevel.FAILURES:
+    if level is CCPairRunLevel.FAILURES:
         status_groups = {CCPairRunStatusGroup.FAILED}
         errors = None
         # A search lists superseded failures too, so they resolve with the rest.
