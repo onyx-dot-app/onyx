@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -144,14 +144,14 @@ def test_tool_policies_patch_round_trip(
 
     resp = mcp_api.update_mcp_server_simple(
         server.id,
-        MCPServerSimpleUpdateRequest(tool_policies={"send_email": EndpointPolicy.DENY}),
+        MCPServerSimpleUpdateRequest(action_policies={"send_email": ActionPolicy.DENY}),
         db_session,
         admin,
     )
-    assert resp.tool_policies == {"send_email": EndpointPolicy.DENY}
+    assert resp.action_policies == {"send_email": ActionPolicy.DENY}
     # Sparse: the unlisted tool has no stored override (effective default ASK).
     assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
-        "send_email": EndpointPolicy.DENY
+        "send_email": ActionPolicy.DENY
     }
 
     # Default (ASK) entries are canonicalized away at the boundary, so a client
@@ -159,22 +159,22 @@ def test_tool_policies_patch_round_trip(
     resp = mcp_api.update_mcp_server_simple(
         server.id,
         MCPServerSimpleUpdateRequest(
-            tool_policies={
-                "send_email": EndpointPolicy.DENY,
-                "list_inbox": EndpointPolicy.ASK,
+            action_policies={
+                "send_email": ActionPolicy.DENY,
+                "list_inbox": ActionPolicy.ASK,
             }
         ),
         db_session,
         admin,
     )
     assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
-        "send_email": EndpointPolicy.DENY
+        "send_email": ActionPolicy.DENY
     }
 
     # Full replace: an empty map clears every override.
     mcp_api.update_mcp_server_simple(
         server.id,
-        MCPServerSimpleUpdateRequest(tool_policies={}),
+        MCPServerSimpleUpdateRequest(action_policies={}),
         db_session,
         admin,
     )
@@ -185,7 +185,7 @@ def test_tool_policies_patch_round_trip(
         mcp_api.update_mcp_server_simple(
             server.id,
             MCPServerSimpleUpdateRequest(
-                tool_policies={"not_a_tool": EndpointPolicy.ALWAYS}
+                action_policies={"not_a_tool": ActionPolicy.ALWAYS}
             ),
             db_session,
             admin,

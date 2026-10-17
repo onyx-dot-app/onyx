@@ -14,7 +14,7 @@ import {
 import { InputSingleSelect } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 
@@ -24,7 +24,7 @@ export interface PolicyEditorItem {
   id: string;
   name: string;
   description: string;
-  defaultPolicy: EndpointPolicy;
+  defaultPolicy: ActionPolicy;
 }
 
 // A required text input the app needs before it can be saved
@@ -56,14 +56,14 @@ interface ActionPolicyEditorModalProps {
   initialFieldValues: Record<string, string>;
   /** Undefined while the capability list is still loading. */
   policyItems: PolicyEditorItem[] | undefined;
-  initialPolicies: Record<string, EndpointPolicy>;
+  initialPolicies: Record<string, ActionPolicy>;
   /** Shown when the capability list resolves to empty. */
   emptyPoliciesMessage: string;
   saveLabel: string;
   /** Persist the edit; throw to surface the failure inside the modal. */
   onSave: (
     fieldValues: Record<string, string>,
-    policies: Record<string, EndpointPolicy>
+    policies: Record<string, ActionPolicy>
   ) => Promise<void>;
   bodyAfterPolicies?: (
     requestLeave: (navigate: () => void) => void
@@ -105,7 +105,7 @@ export default function ActionPolicyEditorModal({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
     ...initialFieldValues,
   });
-  const [policies, setPolicies] = useState<Record<string, EndpointPolicy>>({
+  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({
     ...initialPolicies,
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -271,7 +271,7 @@ type BulkPolicy = "DEFAULT" | "ALWAYS" | "ASK" | "CUSTOM";
 
 function bulkPolicyOf(
   items: PolicyEditorItem[],
-  policies: Record<string, EndpointPolicy>
+  policies: Record<string, ActionPolicy>
 ): BulkPolicy {
   if (
     items.every(
@@ -288,8 +288,8 @@ function bulkPolicyOf(
 
 interface PolicyEditorProps {
   items: PolicyEditorItem[];
-  policies: Record<string, EndpointPolicy>;
-  onChange: (policies: Record<string, EndpointPolicy>) => void;
+  policies: Record<string, ActionPolicy>;
+  onChange: (policies: Record<string, ActionPolicy>) => void;
 }
 
 /** Approval-policy section of the editor: a defaults/Auto-approve/Ask selector

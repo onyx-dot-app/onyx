@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.registry import get_endpoint_catalog
@@ -148,9 +148,7 @@ def test_reads_auto_approve_and_writes_ask() -> None:
     """Reads run unattended; every supported write needs approval."""
     for endpoint in _CATALOG:
         expected = (
-            EndpointPolicy.ASK
-            if endpoint.id in _WRITE_ACTIONS
-            else EndpointPolicy.ALWAYS
+            ActionPolicy.ASK if endpoint.id in _WRITE_ACTIONS else ActionPolicy.ALWAYS
         )
         assert endpoint.default_policy is expected, endpoint.id
 

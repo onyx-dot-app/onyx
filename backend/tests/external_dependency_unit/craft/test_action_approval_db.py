@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecision, EndpointPolicy
+from onyx.db.enums import ActionPolicy, ApprovalDecision
 from onyx.db.models import ActionApproval, BuildSession
 from onyx.server.features.build.db.action_approval import (
     get_action_approval,
@@ -63,8 +63,8 @@ def test_insert_action_approval_sorts_actions_strictest_first(
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
     laxest_first = [
-        action_entry("x.read", policy=EndpointPolicy.ALWAYS),
-        action_entry("x.write", policy=EndpointPolicy.ASK),
+        action_entry("x.read", policy=ActionPolicy.ALWAYS),
+        action_entry("x.write", policy=ActionPolicy.ASK),
     ]
     row = insert_action_approval(
         db_session,

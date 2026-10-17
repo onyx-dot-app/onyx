@@ -1,6 +1,6 @@
 import type React from "react";
 import type { IconProps } from "@opal/types";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 export enum MCPServerStatus {
@@ -40,7 +40,7 @@ export interface MCPServer {
   available_in_craft?: boolean;
   // Sparse per-tool Craft approval overrides (unlisted tools default to ASK).
   // Present on owner/admin views only.
-  tool_policies?: Record<string, EndpointPolicy> | null;
+  action_policies?: Record<string, ActionPolicy> | null;
   last_refreshed_at?: string;
   tool_count: number;
   // Server-stamped affordance map; fail-closed (absent = denied).
@@ -80,7 +80,7 @@ export interface MCPServerUpdateRequest {
   users?: string[];
   available_in_craft?: boolean;
   // Full replace of the stored per-tool overrides; omit to leave unchanged.
-  tool_policies?: Record<string, EndpointPolicy>;
+  action_policies?: Record<string, ActionPolicy>;
 }
 
 export interface MCPTool {

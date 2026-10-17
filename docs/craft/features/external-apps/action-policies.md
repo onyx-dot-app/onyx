@@ -261,7 +261,7 @@ matchers alone is insufficient.
 ## Implementation Phases
 
 1. **Catalog + matcher primitives (code).** In `providers/base.py`: add
-   `EndpointPolicy` and `Risk` enums, the frozen `EndpointSpec`, the `MatchRule`
+   `ActionPolicy` and `Risk` enums, the frozen `EndpointSpec`, the `MatchRule`
    union, `endpoint_catalog` on `ProviderSpec` (default `[]`), and
    `extract_actions(normalized_request) -> list[Action]` on `ExternalAppProvider`
    (base default returns the generic fallback).

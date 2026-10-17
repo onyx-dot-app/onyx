@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 
 
 class ActionPolicyView(BaseModel):
@@ -10,7 +10,7 @@ class ActionPolicyView(BaseModel):
     action_id: str
     normalised_name: str
     description: str
-    state: EndpointPolicy
+    state: ActionPolicy
 
 
 class OrgCredentialFieldDescriptor(BaseModel):
@@ -32,7 +32,7 @@ class EndpointDescriptor(BaseModel):
     description: str
     # The policy a new app's instance of this action defaults to; the create
     # form seeds each action's selector with it (the admin can still override).
-    default_policy: EndpointPolicy
+    default_policy: ActionPolicy
 
 
 class BuiltInExternalAppDescriptor(BaseModel):

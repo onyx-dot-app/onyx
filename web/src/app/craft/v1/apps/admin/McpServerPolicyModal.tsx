@@ -8,7 +8,7 @@ import { ToolSnapshot } from "@/lib/tools/types";
 import { MCPServer } from "@/lib/mcp/types";
 import { updateMCPServer } from "@/lib/mcp/svc";
 import ActionPolicyEditorModal from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 interface McpServerPolicyModalProps {
   onClose: () => void;
@@ -33,11 +33,11 @@ export default function McpServerPolicyModal({
 
   async function save(
     _values: Record<string, string>,
-    policies: Record<string, EndpointPolicy>
+    policies: Record<string, ActionPolicy>
   ) {
     // Send the full map; the backend drops default (ASK) entries so the stored
     // set stays sparse regardless of which client wrote it.
-    await updateMCPServer(server.id, { tool_policies: policies });
+    await updateMCPServer(server.id, { action_policies: policies });
     onSaved();
   }
 
@@ -57,7 +57,7 @@ export default function McpServerPolicyModal({
         description: tool.description,
         defaultPolicy: "ASK",
       }))}
-      initialPolicies={{ ...server.tool_policies }}
+      initialPolicies={{ ...server.action_policies }}
       emptyPoliciesMessage={t("emptyPolicies")}
       saveLabel={t("saveButton")}
       onSave={save}

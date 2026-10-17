@@ -2,7 +2,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -103,14 +103,14 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/tickets/{ticket_id}/audits",
             "/api/v2/tickets/{ticket_id}/related",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.SEARCH,
         normalised_name="Search",
         description="Search tickets, users, and organizations with Zendesk query syntax.",
         matches=_routes("GET", "/api/v2/search", "/api/v2/search/export"),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.INCREMENTAL_EXPORT,
@@ -124,7 +124,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/incremental/tickets",
             "/api/v2/incremental/tickets/cursor",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.TICKET_METRICS_READ,
@@ -139,7 +139,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/ticket_metrics/{ticket_metric_id}",
             "/api/v2/tickets/{ticket_id}/metrics",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.SATISFACTION_RATINGS_READ,
@@ -150,7 +150,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/satisfaction_ratings",
             "/api/v2/satisfaction_ratings/{rating_id}",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.USERS_READ,
@@ -165,7 +165,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/users/{user_id}",
             "/api/v2/users/{user_id}/organizations",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.ORGANIZATIONS_READ,
@@ -177,7 +177,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/organizations/{organization_id}",
             "/api/v2/organizations/{organization_id}/tickets",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.VIEWS_READ,
@@ -191,7 +191,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/views/{view_id}/execute",
             "/api/v2/views/{view_id}/count",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.TICKET_FIELDS_READ,
@@ -205,7 +205,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/ticket_fields",
             "/api/v2/ticket_fields/{ticket_field_id}",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.TICKETS_CREATE,
@@ -253,7 +253,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "GET",
             "/api/v2/help_center/{resource...}",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.HELP_CENTER_WRITE,
@@ -263,7 +263,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             ("POST", "PUT", "PATCH", "DELETE"),
             "/api/v2/help_center/{resource...}",
         ),
-        default_policy=EndpointPolicy.ASK,
+        default_policy=ActionPolicy.ASK,
     ),
     EndpointSpec(
         id=ZendeskAction.SIDE_CONVERSATIONS_READ,
@@ -274,7 +274,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/tickets/{ticket_id}/side_conversations",
             "/api/v2/tickets/{ticket_id}/side_conversations/{resource...}",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.SIDE_CONVERSATIONS_WRITE,
@@ -285,7 +285,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/tickets/{ticket_id}/side_conversations",
             "/api/v2/tickets/{ticket_id}/side_conversations/{resource...}",
         ),
-        default_policy=EndpointPolicy.ASK,
+        default_policy=ActionPolicy.ASK,
     ),
     EndpointSpec(
         id=ZendeskAction.MACROS_READ,
@@ -296,7 +296,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/macros",
             "/api/v2/macros/{resource...}",
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=ZendeskAction.MACROS_WRITE,
@@ -307,7 +307,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "/api/v2/macros",
             "/api/v2/macros/{resource...}",
         ),
-        default_policy=EndpointPolicy.ASK,
+        default_policy=ActionPolicy.ASK,
     ),
 ]
 

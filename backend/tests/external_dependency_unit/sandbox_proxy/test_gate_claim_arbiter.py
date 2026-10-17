@@ -19,9 +19,9 @@ from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
+    ActionPolicy,
     ApprovalDecision,
     BuildSessionStatus,
-    EndpointPolicy,
     GatedAppKind,
 )
 from onyx.db.models import ActionApproval, BuildSession, Notification
@@ -149,7 +149,7 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
                 action_type="slack.messages.write",
                 display_name="Post a message",
                 description="Post a message to a channel or conversation.",
-                policy=EndpointPolicy.ASK,
+                policy=ActionPolicy.ASK,
             ),
         ),
         target=GatedTarget(
