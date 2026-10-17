@@ -226,6 +226,36 @@ class JiraSourceOperations(SourceOperations):
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_fields(self) -> list[dict[str, Any]]:
+        """Discover field IDs without leaking Jira SDK resources."""
+        with _translate_errors():
+            fields = self._client().fields()
+            return [dict(field) for field in fields]
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+    )
+    def list_issue_attachments(self, *, issue_key: str) -> list[dict[str, Any]]:
+        """Return attachment metadata only; keep SDK resources in the gateway."""
+        with _translate_errors():
+            issue = self._client().issue(issue_key, fields="attachment")
+            attachments = issue.fields.attachment or []
+            return [dict(attachment.raw) for attachment in attachments]
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+    )
+    def download_attachment(self, *, attachment_id: str) -> bytes:
+        """Download one attachment using the credential-bound Jira client."""
+        with _translate_errors():
+            return self._client().attachment(attachment_id).get()
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
     )
     def search_issue_ids(

@@ -1393,6 +1393,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jira_service_management": {
+          "description": "Centre de services Atlassian"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },
@@ -4103,6 +4106,19 @@
             "comment_email_blacklist": {
               "label": "Liste noire d'e-mails des commentaires",
               "description": "Utile en général pour ignorer certains bots. Ajoutez les e-mails des utilisateurs dont les commentaires ne doivent PAS être indexés."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "subtext": "Indexer les demandes et tickets d’un projet Jira Service Management précis.",
+          "fields": {
+            "internal_notes": {
+              "label": "Inclure les notes internes",
+              "description": "Indexer les notes internes des agents avec le marqueur [Internal Note]. Par défaut, seuls les commentaires publics sont indexés."
+            },
+            "jql_query": {
+              "description": "Filtre JQL facultatif pour ce projet de service. N’ajoutez aucun filtre de projet ou de date."
             }
           }
         },

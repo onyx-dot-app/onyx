@@ -1393,6 +1393,9 @@
         "jira": {
           "description": "Atlassian issue tracker"
         },
+        "jira_service_management": {
+          "description": "Atlassian service desk"
+        },
         "productboard": {
           "description": "Product management"
         },
@@ -4103,6 +4106,19 @@
             "comment_email_blacklist": {
               "label": "Comment Email Blacklist",
               "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Index requests and tickets from a specific Jira Service Management service desk project.",
+          "fields": {
+            "internal_notes": {
+              "label": "Include internal notes",
+              "description": "Include internal agent notes marked [Internal Note]. Only public comments are indexed by default."
+            },
+            "jql_query": {
+              "description": "Optional JQL filter for this service desk project. Do not add project or time-based filters."
             }
           }
         },

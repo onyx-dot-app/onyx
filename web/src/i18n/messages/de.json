@@ -1393,6 +1393,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jira_service_management": {
+          "description": "Atlassian-Service-Desk"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -4103,6 +4106,19 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management-Connector konfigurieren",
+          "subtext": "Anfragen und Tickets aus einem bestimmten Jira Service Management-Projekt indexieren.",
+          "fields": {
+            "internal_notes": {
+              "label": "Interne Notizen einbeziehen",
+              "description": "Interne Agentennotizen mit [Internal Note] kennzeichnen und indexieren. Standardmäßig werden nur öffentliche Kommentare indexiert."
+            },
+            "jql_query": {
+              "description": "Optionaler JQL-Filter für dieses Service-Desk-Projekt. Keine Projekt- oder Zeitfilter hinzufügen."
             }
           }
         },

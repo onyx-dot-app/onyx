@@ -1393,6 +1393,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jira_service_management": {
+          "description": "Atlassian のサービスデスク"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -4103,6 +4106,19 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクタを設定",
+          "subtext": "指定した Jira Service Management のサービスデスクプロジェクトからリクエストとチケットをインデックス化します。",
+          "fields": {
+            "internal_notes": {
+              "label": "内部メモを含める",
+              "description": "[Internal Note] と表示した担当者の内部メモをインデックス化します。既定では公開コメントのみを対象とします。"
+            },
+            "jql_query": {
+              "description": "このサービスデスクプロジェクトに適用する任意の JQL フィルターです。プロジェクトや時間の条件を追加しないでください。"
             }
           }
         },
