@@ -59,6 +59,7 @@ from onyx.connectors.testrail.config import TestRailConnectorConfig
 from onyx.connectors.web.config import WebConnectorConfig
 from onyx.connectors.wikipedia.config import WikipediaConnectorConfig
 from onyx.connectors.xenforo.config import XenforoConnectorConfig
+from onyx.connectors.youtrack.config import YouTrackConnectorConfig
 from onyx.connectors.zendesk.config import ZendeskConnectorConfig
 from onyx.connectors.zoom.config import ZoomConnectorConfig
 from onyx.connectors.zulip.config import ZulipConnectorConfig
@@ -361,6 +362,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.lumapps.connector",
         class_name="LumAppsConnector",
         config_class=LumAppsConnectorConfig,
+    ),
+    DocumentSource.YOUTRACK: ConnectorMapping(
+        module_path="onyx.connectors.youtrack.connector",
+        class_name="YouTrackConnector",
+        config_class=YouTrackConnectorConfig,
     ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(

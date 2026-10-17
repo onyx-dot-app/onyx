@@ -4,6 +4,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ToolSnapshot } from "@/lib/tools/types";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useCallback } from "react";
 
 /**
  * Fetches OpenAPI tools configuration.
@@ -29,11 +30,20 @@ export default function useOpenApiTools() {
     isLoading: isOpenApiLoading,
     mutate: mutateOpenApiTools,
   } = useSWR<ToolSnapshot[]>(SWR_KEYS.openApiTools, errorHandlingFetcher);
+  const refreshOpenApiTools = useCallback(
+    () =>
+      mutateOpenApiTools(
+        errorHandlingFetcher<ToolSnapshot[]>(SWR_KEYS.openApiTools),
+        { revalidate: false }
+      ),
+    [mutateOpenApiTools]
+  );
 
   return {
     openApiTools: openApiTools ?? null,
     isLoading: isOpenApiLoading,
     error,
     mutateOpenApiTools,
+    refreshOpenApiTools,
   };
 }

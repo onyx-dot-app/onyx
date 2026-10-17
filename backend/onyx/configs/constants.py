@@ -176,6 +176,9 @@ CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
 # code path once we have already decided the process needs to die.
 CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS = 10  # seconds
 
+# The indexing beat runs every 15 s, so a late kick of its check has no value.
+CHECK_FOR_INDEXING_EXPIRES_SECONDS = 60
+
 # soft timeout for the lock taken by the indexing connector run
 # allows the lock to eventually expire if the managing code around it dies
 # if we can get callbacks as object bytes download, we could lower this a lot.
@@ -186,30 +189,32 @@ CELERY_INDEXING_LOCK_TIMEOUT = CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 900
 # Heartbeat interval for indexing worker liveness detection
 INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 
+# Permission and group sync attempts hold a lease in Postgres: the worker renews
+# heartbeat_at on this interval, and the beat reaper fails attempts whose lease
+# is older than the timeout.
+PERMISSION_SYNC_HEARTBEAT_INTERVAL = 60  # seconds
+PERMISSION_SYNC_LEASE_TIMEOUT = 15 * 60  # seconds
+# A worker that could not renew for this long stops writing, before the reaper
+# can fail its attempt and let a replacement start.
+# A sync still running this long past its time limit is hung (its own timeout
+# check never ran), so its lease stops renewing and the reaper frees its row.
+PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
+PERMISSION_SYNC_LEASE_SELF_EXPIRY = (
+    PERMISSION_SYNC_LEASE_TIMEOUT - 2 * PERMISSION_SYNC_HEARTBEAT_INTERVAL
+)
+# Celery drops a doc permission sync task that waited longer than this in the
+# queue. The reaper fails its NOT_STARTED attempt once the task can no longer run.
+PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
+# A NOT_STARTED attempt this old whose task is not in the broker queue lost its
+# task (e.g. a Redis restart without persistence), so the reaper fails it.
+PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
+
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 
 # needs to be long enough to cover the maximum time it takes to download an object
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
-
-# Held for one connector's whole document permission sync and refreshed every
-# quarter of the generic beat TTL, so it must not be set below that TTL. A
-# connector silent longer than this loses it, so large tenants raise it.
-CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
-    "CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT",
-    3600,
-    minimum=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-)
-
-# While this lock is held, duplicate dispatches for the same cc_pair exit
-# immediately. Deployments whose group syncs legitimately run for hours should
-# raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
-# stack concurrent crawls on one heavy worker; a worker that dies mid-sync
-# leaves the lock stuck for at most this TTL.
-CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
-    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT", 300
-)
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
@@ -324,6 +329,7 @@ class DocumentSource(str, Enum):
     TESTRAIL = "testrail"
     BRAINTRUST = "braintrust"
     LUMAPPS = "lumapps"
+    YOUTRACK = "youtrack"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -550,10 +556,6 @@ class OnyxRedisLocks:
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
-    CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
-        "da_lock:connector_doc_permissions_sync"
-    )
-    CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
     ORPHAN_TAG_SWEEP_LOCK = "da_lock:orphan_tag_sweep"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
@@ -594,12 +596,6 @@ class OnyxRedisLocks:
 
 class OnyxRedisSignals:
     BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
-    BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES = (
-        "signal:block_validate_external_group_sync_fences"
-    )
-    BLOCK_VALIDATE_PERMISSION_SYNC_FENCES = (
-        "signal:block_validate_permission_sync_fences"
-    )
     BLOCK_PRUNING = "signal:block_pruning"
     # Set by a sweep that skipped because another one held the lock.
     ORPHAN_TAG_SWEEP_PENDING = "signal:orphan_tag_sweep_pending"
@@ -718,9 +714,11 @@ class OnyxCeleryTask:
     RUN_CAPABILITY_CHECKS = "run_capability_checks"
     RUN_DRAFT_CAPABILITY_CHECKS = "run_draft_capability_checks"
     CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
+    CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS = "check_for_scheduled_capability_checks"
 
     # Draft credentials of connector forms that were never submitted
     CLEANUP_STALE_DRAFT_CREDENTIALS = "cleanup_stale_draft_credentials"
+    CLEANUP_OLD_CAPABILITY_CHECK_RUNS = "cleanup_old_capability_check_runs"
 
     # Files uploaded for a connector edit that no applied plan claimed
     CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP = "check_for_staged_connector_file_cleanup"
@@ -845,4 +843,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.TESTRAIL: "Test cases and QA management",
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
     DocumentSource.LUMAPPS: "Intranet pages, news, and content",
+    DocumentSource.YOUTRACK: "Issues and project tracking",
 }

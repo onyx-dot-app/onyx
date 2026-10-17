@@ -11,6 +11,7 @@ directly — a lighter-weight flow with optional query expansion.
 """
 
 import json
+from functools import partial
 from typing import cast
 
 from fastapi import APIRouter, Depends
@@ -34,7 +35,12 @@ from onyx.db.tools import get_tools
 from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.factory import get_default_llm, get_llm_for_persona, llm_from_provider
+from onyx.llm.factory import (
+    get_default_llm,
+    get_llm_for_persona,
+    get_search_selection_llm,
+    llm_from_provider,
+)
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     SearchRequest,
@@ -50,6 +56,12 @@ from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tracing.framework.create import (
+    SearchTraceMetadata,
+    function_span,
+    trace,
+)
+from onyx.tracing.framework.spans import SpanError
 from onyx.utils.fleet_query_telemetry import telemetry_query
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -135,13 +147,18 @@ def search(
     else:
         llm = get_default_llm()
 
-    # Since the agentic search flow requires multiple LLM calls
-    # we should check the tenant usage limits before continuing
-    check_llm_cost_limit_for_provider(
-        db_session=db_session,
-        tenant_id=get_current_tenant_id(),
-        llm_provider_api_key=llm.config.api_key,
+    auto_detect_filters = load_settings().auto_detect_search_filters is not False
+    primary_provider_checked = (
+        bool(request.provider)
+        or not request.skip_query_expansion
+        or auto_detect_filters
     )
+    if primary_provider_checked:
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=llm.config.api_key,
+        )
 
     # 3. Build filters. The public time_cutoff maps onto the internal
     # updated_at_range lower bound; TimeRange coerces naive bounds to UTC.
@@ -179,33 +196,61 @@ def search(
         user=user,
         persona_search_info=persona_search_info,
         llm=llm,
+        selection_llm_factory=(
+            partial(get_search_selection_llm, fallback=llm)
+            if not request.provider
+            else None
+        ),
+        primary_llm_cost_checked=primary_provider_checked,
         document_index=document_index,
         user_selected_filters=base_filters,
         project_id_filter=None,
         persona_id_filter=None,
         slack_context=None,
         enable_slack_search=True,
-        auto_detect_filters=load_settings().auto_detect_search_filters is not False,
+        auto_detect_filters=auto_detect_filters,
     )
 
-    # 7. Run search
-    tool_response = search_tool.run(
-        placement=Placement(turn_index=0),
-        override_kwargs=SearchToolOverrideKwargs(
-            starting_citation_num=1,
-            original_query=request.query,
-            skip_query_expansion=request.skip_query_expansion,
-            include_link=True,
-            message_history=request.message_history
-            or [
-                ChatMinimalTextMessage(
-                    message=request.query,
-                    message_type=MessageType.USER,
-                ),
-            ],
+    # 7. Run search. Chat opens the trace in the LLM loop and the tool span in
+    # the tool runner; this endpoint reaches SearchTool directly, so without both
+    # here every generation span the pipeline raises is a NoOpSpan.
+    with (
+        trace(
+            "search_api",
+            metadata=SearchTraceMetadata(
+                user_id=str(user.id),
+                persona_id=request.persona_id,
+            ).model_dump(),
         ),
-        queries=[request.query],
-    )
+        function_span(SearchTool.NAME) as tool_span,
+    ):
+        tool_span.span_data.input = request.query
+        try:
+            tool_response = search_tool.run(
+                placement=Placement(turn_index=0),
+                override_kwargs=SearchToolOverrideKwargs(
+                    starting_citation_num=1,
+                    original_query=request.query,
+                    skip_query_expansion=request.skip_query_expansion,
+                    include_link=True,
+                    message_history=request.message_history
+                    or [
+                        ChatMinimalTextMessage(
+                            message=request.query,
+                            message_type=MessageType.USER,
+                        ),
+                    ],
+                ),
+                queries=[request.query],
+            )
+        except Exception as e:
+            # Type only: provider errors can carry credentials, and nothing
+            # redacts them on this path.
+            tool_span.set_error(
+                SpanError(message=f"{type(e).__name__}: search failed", data=None)
+            )
+            raise
+        tool_span.span_data.output = tool_response.llm_facing_response
 
     # 8. Map LLM-facing JSON entries to SearchResults (one per merged section).
     llm_facing_text = tool_response.llm_facing_response

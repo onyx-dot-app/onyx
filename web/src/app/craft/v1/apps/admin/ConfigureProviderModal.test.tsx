@@ -110,6 +110,106 @@ function renderExistingProvider(onClose = jest.fn()) {
 }
 
 describe("ConfigureProviderModal", () => {
+  it("shows the saved service origin in its header without regex syntax", () => {
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={DESCRIPTOR}
+        existingApp={{
+          ...APP,
+          upstream_url_patterns: ["https://api\\.linear\\.app/.*"],
+        }}
+      />
+    );
+    expect(screen.getAllByText("https://api.linear.app")[0]).toBeVisible();
+    expect(screen.queryByText("https://api\\.linear\\.app/.*")).toBeNull();
+  });
+
+  it("shows the descriptor origin before creation", () => {
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={DESCRIPTOR}
+        existingApp={null}
+      />
+    );
+    expect(screen.getAllByText("https://slack.com")[0]).toBeVisible();
+  });
+
+  it("combines configuration and credentials and retains edits across tabs", async () => {
+    jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue(APP);
+    renderExistingProvider();
+    expect(screen.queryByText("Craft only")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeVisible();
+    expect(screen.getByLabelText("Token")).toBeVisible();
+    expect(screen.getByText(DESCRIPTOR.setup_instructions)).toBeVisible();
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Support Slack" },
+    });
+    expect(screen.getByText(DESCRIPTOR.setup_instructions)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Token"), {
+      target: { value: "new-token" },
+    });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Permissions" }), {
+      button: 0,
+    });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Configuration" }), {
+      button: 0,
+    });
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+      "Support Slack"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          name: "Support Slack",
+          organization_credentials: { token: "new-token" },
+        })
+      )
+    );
+  });
+
+  it("keeps managed provider credentials out of the editor", () => {
+    render(
+      <ConfigureProviderModal
+        existingApp={{ ...APP, is_onyx_managed: true }}
+        descriptor={DESCRIPTOR}
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      screen.queryByRole("tab", { name: "Authentication" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Token")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Permissions" })).toBeVisible();
+  });
+
+  it("labels provider credentials and closes a new draft without confirmation", () => {
+    const onClose = jest.fn();
+    render(
+      <ConfigureProviderModal
+        existingApp={null}
+        descriptor={DESCRIPTOR}
+        onClose={onClose}
+        onSaved={jest.fn()}
+      />
+    );
+    fireEvent.change(screen.getByLabelText("Token"), {
+      target: { value: "draft-token" },
+    });
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-width", "md");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+    ).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseUserSkills.mockReturnValue({
@@ -177,10 +277,56 @@ describe("ConfigureProviderModal", () => {
     expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
   });
 
+  it("sends account input to the backend for gateway resolution", async () => {
+    const perAccountDescriptor: BuiltInExternalAppDescriptor = {
+      ...DESCRIPTOR,
+      app_type: "ZENDESK",
+      name: "Zendesk",
+      upstream_url_patterns: ["https://{subdomain}\\.zendesk\\.com/api/v2/.*"],
+      required_org_credential_fields: [
+        {
+          key: "subdomain",
+          label: "Subdomain",
+          description: "Your Zendesk subdomain",
+          secret: false,
+        },
+      ],
+    };
+    jest
+      .mocked(externalAppsService.createBuiltInExternalApp)
+      .mockResolvedValue({ ...APP, associated_skills: [] });
+
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={perAccountDescriptor}
+        existingApp={null}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Subdomain"), {
+      target: { value: "acme" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(externalAppsService.createBuiltInExternalApp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          upstream_url_patterns: perAccountDescriptor.upstream_url_patterns,
+          organization_credentials: { subdomain: "acme" },
+        })
+      )
+    );
+  });
+
   it("guards unsaved provider edits before skill creation", () => {
     const { onClose } = renderExistingProvider();
     fireEvent.change(screen.getByPlaceholderText("Token"), {
       target: { value: "unsaved-token" },
+    });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Skills" }), {
+      button: 0,
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(
@@ -201,6 +347,9 @@ describe("ConfigureProviderModal", () => {
 
   it("directs GitHub imports through the Skills page", () => {
     renderExistingProvider();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Skills" }), {
+      button: 0,
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
 
     expect(
@@ -218,6 +367,9 @@ describe("ConfigureProviderModal", () => {
     fireEvent.change(screen.getByPlaceholderText("Token"), {
       target: { value: "updated-token" },
     });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Skills" }), {
+      button: 0,
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
 
@@ -225,13 +377,23 @@ describe("ConfigureProviderModal", () => {
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getByRole("dialog", { name: /Edit Slack/ })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: /^Slack/ })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Skills" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Configuration" }), {
+      button: 0,
+    });
     expect(screen.getByPlaceholderText("Token")).toHaveValue("updated-token");
     expect(onClose).not.toHaveBeenCalled();
   });
 
   it("confirms before accidentally closing a selected upload", () => {
     const { onClose } = renderExistingProvider();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Skills" }), {
+      button: 0,
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
@@ -254,7 +416,7 @@ describe("ConfigureProviderModal", () => {
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
 
-    expect(screen.getByRole("dialog", { name: /Edit Slack/ })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: /^Slack/ })).toBeVisible();
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -262,6 +424,9 @@ describe("ConfigureProviderModal", () => {
     renderExistingProvider();
     fireEvent.change(screen.getByPlaceholderText("Token"), {
       target: { value: "unsaved-token" },
+    });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Skills" }), {
+      button: 0,
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));

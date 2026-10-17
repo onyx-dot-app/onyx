@@ -7,6 +7,18 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  getSourceDisplayName,
+  getSourceDocLink,
+  getSourceMetadata,
+  isValidSource,
+  connectorConfigFromForm,
+  connectorFormControlFieldNames,
+  createConnectorInitialValues,
+  createConnectorValidationSchema,
+  isLoadState,
+  splitCredentialBoundFields,
+} from "@/lib/connectors/utils";
 import { Formik, type FormikErrors } from "formik";
 import * as Yup from "yup";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -27,12 +39,6 @@ import { SvgAlertCircle, SvgArrowExchange } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import {
-  getSourceDisplayName,
-  getSourceDocLink,
-  getSourceMetadata,
-  isValidSource,
-} from "@/lib/sources";
 import { Logo } from "@/lib/app/components";
 import {
   createConnectorWithCredential,
@@ -59,14 +65,6 @@ import {
   defaultRefreshFreqMinutes,
   useConnectorConfiguration,
 } from "@/lib/connectors/connectors";
-import {
-  connectorConfigFromForm,
-  connectorFormControlFieldNames,
-  createConnectorInitialValues,
-  createConnectorValidationSchema,
-  isLoadState,
-  splitCredentialBoundFields,
-} from "@/lib/connectors/utils";
 import type {
   ConnectionConfiguration,
   Connector,
@@ -75,9 +73,7 @@ import type {
 import { useSettings } from "@/lib/settings/hooks";
 import {
   useCredentialFieldCopy,
-  useGmailCredentials,
   useCredentialLoad,
-  useGoogleDriveCredentials,
   useResetSavedDraftCredential,
   useSavedDraftCredential,
   refreshSourceCredentials,
@@ -98,6 +94,7 @@ import {
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 import AuthenticationAccountSection from "@/views/admin/connectors/AddConnectorPage/sections/AuthenticationAccountSection";
 import ConnectorContentSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorContentSection";
+import { visibleConnectorFields } from "@/views/admin/connectors/AddConnectorPage/form/ConnectorConfigFields";
 import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
 import EditFileLocations from "@/views/admin/connectors/AddConnectorPage/form/EditFileLocations";
@@ -123,6 +120,7 @@ import {
   planConnectorEdit,
 } from "@/lib/connectors/edit/svc";
 import EditPlanModal from "@/views/admin/connectors/EditConnectorPage/EditPlanModal";
+import FailedChecksAdvisoryModal from "@/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal";
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
@@ -132,6 +130,8 @@ interface ConnectorChecksGates {
   formUnlocked: boolean;
   /** Every required check passed for the current form: Create may run. */
   createReady: boolean;
+  /** How many non-required checks failed: Create warns of them first. */
+  optionalFailedCount: number;
 }
 
 interface ConnectorChecksGateProps {
@@ -143,9 +143,9 @@ interface ConnectorChecksGateProps {
 }
 
 /**
- * Gives the form the capability checks' two gates. The hook needs the Formik
- * context, which the form's render function sits inside but cannot call hooks
- * in.
+ * Gives the form the capability checks' gates and failed-check count. The
+ * hook needs the Formik context, which the form's render function sits
+ * inside but cannot call hooks in.
  */
 function ConnectorChecksGate({
   source,
@@ -153,12 +153,15 @@ function ConnectorChecksGate({
   ccPairId,
   children,
 }: ConnectorChecksGateProps) {
-  const { formUnlocked, createReady } = useConnectorChecks({
+  const { formUnlocked, createReady, results } = useConnectorChecks({
     source,
     credential,
     ccPairId,
   });
-  return children({ formUnlocked, createReady });
+  const optionalFailedCount: number = results.filter(
+    (result) => result.status === "failed" && !result.required
+  ).length;
+  return children({ formUnlocked, createReady, optionalFailedCount });
 }
 
 async function submitConnector<T>(
@@ -293,6 +296,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
+  // Create warns of failed non-required checks before it runs.
+  const [advisoryOpen, setAdvisoryOpen] = useState(false);
+  // Counts View Failed Checks clicks, so the checks card opens and scrolls into view.
+  const [expandChecksRequest, setExpandChecksRequest] = useState(0);
   // Edit mode: the plan shown for review, with the proposal it was computed
   // for, so a stale plan can be computed again.
   const [planning, setPlanning] = useState(false);
@@ -357,8 +364,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   }, []);
 
   // Hooks for Google Drive and Gmail credentials
-  const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
-  const { liveGmailCredential } = useGmailCredentials(connector);
 
   // Sources without a credential spec skip the credential section.
   const noCredentials = credentialSpec == null;
@@ -381,16 +386,12 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   /**
    * The chosen account for these form values: the saved pick; else the typed
-   * one when its values are valid (or Google's live account).
+   * one when its values are valid.
    */
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
-    currentCredential ||
-    typedDraft(connector, accountSchema, values) ||
-    liveGDriveCredential ||
-    liveGmailCredential ||
-    null;
+    currentCredential || typedDraft(connector, accountSchema, values) || null;
 
   // The page body waits for the source's saved credentials: no connector
   // can be set up without them. Sources without credentials fetch nothing and go
@@ -687,6 +688,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         // Edit mode leaves the manage groups alone, so it needs none.
         isScopedManager && edit === undefined,
         {
+          required: (field) => tValidation("required", { field }),
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),
@@ -695,7 +697,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           ),
           stringPairEmptyKey: keyValueT("emptyKey"),
           stringPairDuplicateKey: keyValueT("duplicateKey"),
-        }
+        },
+        configuration
       ).shape({
         // Always checked, so its fields can show errors. With a saved pick
         // the typed account is not used, and Create ignores its errors (see
@@ -707,6 +710,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       {(formikProps) => {
         const busy = uploading || creatingConnector || planning;
         const formCredential = accountFor(formikProps.values);
+        const formCredentialId: number | null =
+          formCredential !== null && !isDraftCredential(formCredential)
+            ? formCredential.id
+            : null;
         const canCreate = noCredentials || formCredential !== null;
         const newAccountReady =
           typedDraft(connector, accountSchema, formikProps.values) !== null;
@@ -730,10 +737,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         const credentialSwapped: boolean =
           edit !== undefined &&
           formCredential !== null &&
-          !(
-            "id" in formCredential &&
-            formCredential.id === edit.ccPair.credential.id
-          );
+          formCredentialId !== edit.ccPair.credential.id;
         return (
           <ConnectorChecksGate
             source={connector}
@@ -751,6 +755,14 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                 : formUnlocked
                   ? undefined
                   : checksT("lockReason");
+              // Disabled while the credentials load or after they fail, since
+              // nothing can be connected then.
+              const createDisabled: boolean =
+                credentialsLoading ||
+                credentialsFailed ||
+                !blockingErrorsEmpty(formikProps.errors) ||
+                !createReady ||
+                busy;
               return (
                 <SettingsLayouts.Root width="sm">
                   <SettingsLayouts.Header
@@ -792,21 +804,19 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                       >
                         {t("header.cancelButton.label")}
                       </Button>,
-                      // Always present; disabled while the credentials load or
-                      // after they fail, since nothing can be connected then.
+                      // Always present.
                       <Button
                         key="connect"
-                        disabled={
-                          credentialsLoading ||
-                          credentialsFailed ||
-                          !blockingErrorsEmpty(formikProps.errors) ||
-                          !createReady ||
-                          busy
-                        }
+                        disabled={createDisabled}
                         icon={busy ? IconLoader : undefined}
                         onClick={async () => {
                           const errors = await formikProps.validateForm();
                           if (blockingErrorsEmpty(errors)) {
+                            // Edit mode's plan lists failed checks itself.
+                            if (!edit && checks.optionalFailedCount > 0) {
+                              setAdvisoryOpen(true);
+                              return;
+                            }
                             // Formik's own submit stops at any error.
                             await submitForm(formikProps.values);
                           } else {
@@ -918,6 +928,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 gate?.reason?.kind !== "runChecks"
                               }
                               editCCPairId={edit?.ccPair.id ?? null}
+                              expandChecksRequest={expandChecksRequest}
                             />
                           )}
 
@@ -944,30 +955,54 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           <Disabled
                             disabled={!formUnlocked}
                             tooltip={formLockReason}
+                            // The locked form is page-tall: the tooltip stays
+                            // level with the pointer, not the form's middle.
+                            tooltipAlign="follow"
                             data-testid="connector-form"
                           >
                             <Section gap={6} alignItems="stretch" width="full">
-                              <ConnectorContentSection
-                                config={contentConfiguration}
-                                values={formikProps.values}
-                                connector={connector}
-                                currentCredential={formCredential}
-                                disabled={!formUnlocked}
-                              >
-                                {edit && editsFileList && (
-                                  <EditFileLocations
-                                    ccPairId={edit.ccPair.id}
-                                    // Review waits for the upload: a plan
-                                    // made earlier would miss its files.
-                                    onUploadingChange={setUploading}
-                                  />
-                                )}
-                              </ConnectorContentSection>
+                              {/* A source with nothing to configure (Gmail) skips the
+                              section. */}
+                              {(visibleConnectorFields(
+                                contentConfiguration,
+                                formikProps.values,
+                                formCredential
+                              ).length > 0 ||
+                                contentConfiguration.subtext !== undefined ||
+                                editsFileList) && (
+                                <>
+                                  <ConnectorContentSection
+                                    config={contentConfiguration}
+                                    values={formikProps.values}
+                                    connector={connector}
+                                    currentCredential={formCredential}
+                                    reportScope={
+                                      formCredentialId === null
+                                        ? null
+                                        : {
+                                            credentialId: formCredentialId,
+                                            connectorId:
+                                              edit?.ccPair.connector.id ?? null,
+                                          }
+                                    }
+                                    disabled={!formUnlocked}
+                                  >
+                                    {edit && editsFileList && (
+                                      <EditFileLocations
+                                        ccPairId={edit.ccPair.id}
+                                        // Review waits for the upload: a plan
+                                        // made earlier would miss its files.
+                                        onUploadingChange={setUploading}
+                                      />
+                                    )}
+                                  </ConnectorContentSection>
 
-                              <Divider
-                                paddingParallel={0}
-                                paddingPerpendicular={0}
-                              />
+                                  <Divider
+                                    paddingParallel={0}
+                                    paddingPerpendicular={0}
+                                  />
+                                </>
+                              )}
                               <ConnectorSettingsSection
                                 connector={connector}
                                 currentCredential={formCredential}
@@ -993,6 +1028,21 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           </Disabled>
                         </Section>
                       </>
+                    )}
+                    {!edit && advisoryOpen && (
+                      <FailedChecksAdvisoryModal
+                        failedCount={checks.optionalFailedCount}
+                        canCreate={!createDisabled}
+                        onClose={() => setAdvisoryOpen(false)}
+                        onViewChecks={() => {
+                          setAdvisoryOpen(false);
+                          setExpandChecksRequest((count) => count + 1);
+                        }}
+                        onProceed={async () => {
+                          setAdvisoryOpen(false);
+                          await submitForm(formikProps.values);
+                        }}
+                      />
                     )}
                     {edit && editPlan && (
                       <EditPlanModal

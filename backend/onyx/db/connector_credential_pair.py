@@ -16,6 +16,7 @@ from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
@@ -457,6 +458,7 @@ def get_connector_credential_pairs_for_user(
     source: DocumentSource | None = None,
     processing_mode: ProcessingMode | None = ProcessingMode.REGULAR,
     defer_connector_config: bool = False,
+    eager_load_creator: bool = False,
 ) -> list[ConnectorCredentialPair]:
     """Get connector credential pairs for a user.
 
@@ -465,12 +467,15 @@ def get_connector_credential_pairs_for_user(
             FILE_SYSTEM connectors from standard admin UI. Pass None to get all.
         defer_connector_config: If True, skips loading Connector.connector_specific_config
             to avoid fetching large JSONB blobs when they aren't needed.
+        eager_load_creator: If True, loads each pair's creator in one query.
     """
     if eager_load_user:
         assert eager_load_credential, (
             "eager_load_credential must be True if eager_load_user is True"
         )
     stmt = select(ConnectorCredentialPair).distinct()
+    if eager_load_creator:
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.creator))
 
     if eager_load_connector:
         connector_load = selectinload(ConnectorCredentialPair.connector)
@@ -621,6 +626,35 @@ def get_connector_credential_pair_from_id_for_user(
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+def get_readable_connector_credential_pair_for_user(
+    cc_pair_id: int,
+    db_session: Session,
+    user: User,
+) -> ConnectorCredentialPair | None:
+    """A pair the user can see or operate, for the detail page and its
+    sub-resources. Neither filter contains the other, so both run: the read one
+    drops a creator's groupless private pair and pairs managed only through a
+    role, the operate one drops plain group membership. Operate runs second, so
+    the common case still costs one query."""
+    stmt = select(ConnectorCredentialPair).distinct()
+    stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+    for access_level in (CCPairAccessLevel.READ, CCPairAccessLevel.OPERATE):
+        cc_pair = db_session.execute(
+            _add_user_filters(stmt, user, access_level)
+        ).scalar_one_or_none()
+        if cc_pair is not None:
+            return cc_pair
+    return None
+
+
+def stamp_indexing_hold_release(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """Records that an admin released the pair's first-run hold now. Commits."""
+    cc_pair.indexing_hold_released_at = get_db_current_time(db_session)
+    db_session.commit()
 
 
 def verify_user_has_access_to_cc_pair(
@@ -1343,3 +1377,18 @@ def resync_cc_pair(
 
     if commit:
         db_session.commit()
+
+
+def get_cc_pairs_with_check_schedule(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    """The active pairs whose connector re-runs its checks on a schedule."""
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(Connector)
+        .where(
+            ConnectorCredentialPair.status == ConnectorCredentialPairStatus.ACTIVE,
+            Connector.check_freq.is_not(None),
+        )
+    )
+    return list(db_session.scalars(stmt).all())

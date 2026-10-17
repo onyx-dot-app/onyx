@@ -12,7 +12,8 @@
 `web/src/app/admin/craft/access/page.tsx`, `web/src/app/admin/craft/apps/page.tsx`,
 `web/src/app/admin/craft/preferences/page.tsx`,
 `web/src/views/admin/CraftPage/`, `web/src/views/admin/CraftPreferencesPage/`,
-`web/src/views/admin/ExternalAppsPage/`,
+`web/src/sections/plugins/ExternalAppPluginDetail.tsx`,
+`web/src/sections/plugins/PluginAddCatalogModal.tsx`,
 `backend/onyx/server/features/build/api.py`, `build/utils.py`,
 `backend/onyx/server/features/build/external_apps/api.py`,
 `backend/onyx/db/external_app.py`, `backend/onyx/db/gated_app.py`,
@@ -26,21 +27,48 @@ page maps to code.
 
 ## 1. What the user experiences
 
-An admin sees a "Craft" section in the admin sidebar with three pages: Access,
-Apps, Preferences.
+An admin sees Access and Preferences in the Craft sidebar section. Plugins
+manages external apps and MCP servers alongside OpenAPI actions.
 
 On **Access**, the admin sets a workspace-wide default (Craft on or off for
 everyone) and can override that default for individual users, one at a time or
 in bulk, in a searchable table.
 
-On **Apps**, the admin sees every external service and MCP server the Craft
+On **Plugins**, the admin sees every external service and MCP server the Craft
 agent can reach: built-in apps (Slack, Gmail, Google Calendar, Google Drive, Linear,
-HubSpot, Notion, GitHub), any custom app the admin has registered, and connected MCP
+HubSpot, Notion, GitHub, Zendesk), any custom app the admin has registered, and connected MCP
 servers. For each, the admin can enable or disable it, edit its per-action
 policy (auto-approve, ask, or deny each kind of action), and configure its
-credentials. On Onyx Cloud, built-in apps already have Onyx-managed OAuth
+credentials. Zendesk also exposes Help Center, side conversation, and macro policies.
+Their reads auto-approve and their writes require approval by default.
+The permissions selector shows Default when effective policies match
+the catalog and Custom for mixed overrides. Default restores each catalog policy.
+The shared MCP editor uses the same control, with Ask as each tool’s default.
+Policy rows keep controls on the right. Names and descriptions wrap within the
+remaining width so the full text stays visible without hover or expansion.
+On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
 credentials, so the admin can only toggle them on and set policy. Custom apps
-on Cloud keep a normal credential form.
+on Cloud keep a normal credential form, as does a built-in whose OAuth client
+cannot be Onyx-owned because it is registered per customer account (Zendesk).
+External-app editors share the Plugins modal frame with MCP and OpenAPI.
+Built-in and custom editors share `web/src/sections/plugins/CraftAppEditorTabs.tsx`.
+Configuration includes identity, URL patterns where applicable, and credentials.
+Built-in action policies and existing skill associations have separate tabs.
+Per-action policy controls stay visible; there is no Advanced disclosure.
+New custom apps omit the single-tab bar. Panels keep a stable scroll height;
+parents own the drafts and selected tab, including across skill-upload cancellation.
+The header shows the app logo, name, and the same clean service origin as its
+directory card, using MCP's modal padding and tab spacing.
+`web/src/lib/plugins/externalAppDisplayUrl.ts` formats literal HTTP origins for
+display; it never rewrites stored proxy URL-matching patterns. Complex host
+regexes do not produce a fabricated service URL.
+One footer saves
+the existing payload; managed-app credentials remain hidden and unchanged.
+New drafts close without a discard confirmation. Existing saved edits keep
+their confirmation in the same frame, without a width or position change.
+Creation still advances to the existing optional skills step after persistence.
+`web/src/sections/plugins/CraftAppSetupModal.stories.tsx` covers built-in,
+managed, and custom configuration, permissions, and skills states.
 
 On **Preferences**, the admin sets a workspace default model for Craft
 sessions and a free-text "organization instructions" block that every Craft
@@ -56,7 +84,8 @@ those org instructions are appended to.
 | Route | Component | Gate |
 |---|---|---|
 | `/admin/craft/access` | `CraftPage` (`web/src/views/admin/CraftPage/index.tsx`) | `Permission.FULL_ADMIN_PANEL_ACCESS`; hidden in the sidebar unless `FeatureFlags.craftAvailable` |
-| `/admin/craft/apps` | `ExternalAppsPage` (`web/src/views/admin/ExternalAppsPage/index.tsx`) | same |
+| `/admin/craft/apps` | Redirect to `/admin/plugins`, preserving external-app edit links | same |
+| `/admin/plugins/external-app/[appId]` | `ExternalAppPluginDetail` | `Permission.FULL_ADMIN_PANEL_ACCESS` |
 | `/admin/craft/preferences` | `CraftPreferencesPage` (`web/src/views/admin/CraftPreferencesPage/index.tsx`) | same |
 
 All three carry `requiredTier: null` (`web/src/lib/admin-routes.ts:159-186`): visibility is not tied
@@ -118,7 +147,7 @@ permission. See §5 for why the flag alone is not the real gate.
   has no `default_policy` column. `default_policy` is a catalog field on
   `EndpointDescriptor`, and it only seeds the admin form.
 - `LLMModelFlow` row with `llm_model_flow_type = LLMModelFlowType.CRAFT`
-  (`backend/onyx/db/llm.py`, `fetch_default_craft_model`): the Preferences
+  (`backend/onyx/db/llm.py`, `fetch_default_model(..., LLMModelFlowType.CRAFT)`): the Preferences
   page's default-model selection. See `[[llm-providers]]`.
 
 ---
@@ -132,10 +161,10 @@ require_onyx_craft_enabled                  server/features/build/api.py
   └─ is_craft_enabled_for_user              server/features/build/utils.py
        ├─ User.craft_enabled override        (per-user; short-circuits if False)
        ├─ Settings.craft_default_enabled      (workspace default, when override is None)
-       └─ is_craft_available_for_deployment   (PostHog flag or ENABLE_CRAFT)
+       └─ is_craft_available_for_deployment   (PostHog flag or ENABLE_CRAFT, AND tier >= LLM_GATEWAY_MIN_TIER)
 ```
 
-`is_craft_enabled_for_user` (`build/utils.py:156`) is the single source of
+`is_craft_enabled_for_user` (`build/utils.py:177`) is the single source of
 truth: `AccountType.ANONYMOUS` users never get Craft (it is identity-bound: a
 per-user sandbox, library, and scheduled tasks), then the per-user override
 wins if set to `False`, then the workspace default gates `None`, and finally
@@ -155,7 +184,7 @@ storing a redundant explicit value
 
 ### 4.2 Apps: what an admin configures and how it is enforced
 
-An admin action on `/admin/craft/apps` is one of: enable/disable an app,
+An admin action on `/admin/plugins` is one of: enable/disable an app,
 edit its `auth_template` and `organization_credentials` (not available for
 Onyx-managed built-ins on Cloud),
 edit its per-action policy, or associate/detach a skill. External-app changes
@@ -224,7 +253,7 @@ renders nothing (no empty heading).
 `deleteDefaultCraftModel` (`web/src/lib/languageModels/svc.ts`), which hit
 `POST` / `DELETE /api/admin/llm/default-craft`. That endpoint writes the
 `LLMModelFlow` row for `LLMModelFlowType.CRAFT`
-(`backend/onyx/db/llm.py:update_default_craft_provider`).
+(`backend/onyx/db/llm.py:update_default_pointer_model`).
 Per `[[llm-providers]]`, `CRAFT` is a **pointer flow, not a capability check**:
 nothing populates this row automatically, and Craft falls back to the
 workspace chat default (`defaultText` in the page) when no explicit Craft
@@ -321,9 +350,14 @@ not cover:
   entirely; per-user OAuth credentials for external apps depend on the acting
   user's identity.
 - [[editions-and-gating]]: `is_craft_available_for_deployment` reads a
-  PostHog feature flag (or `ENABLE_CRAFT`), a deployment-level switch distinct
-  from any billing-tier check; `requiredTier: null` on all three routes
-  confirms Craft admin visibility is not tier-gated at the nav level.
+  PostHog feature flag (or `ENABLE_CRAFT`) and also requires the deployment
+  tier to reach `LLM_GATEWAY_MIN_TIER` (Business), because every Craft turn
+  goes through the tier-gated `/gateway`; Community never gets Craft.
+  When the flag is on but the tier is too low, `is_craft_locked_by_tier` sets
+  `onyx_craft_requires_upgrade` in `/settings`: the sidebar keeps Craft with a
+  Business tag and `/craft/*` renders `CraftUpgradePage`; `/build` stays 403.
+  `requiredTier: null` on all three routes confirms Craft admin visibility is
+  not tier-gated at the nav level.
 - [[llm-providers]]: the Preferences default-model picker is the `CRAFT`
   `LLMModelFlowType`; see `llm-providers.md` §9 for why it is a pointer, not a
   capability check.
@@ -426,11 +460,10 @@ there.
   `docker_sandbox_manager` comments, `BUILD_MODE_FEATURE_ID`). Do not expect
   `grep -r craft backend/` to find the router; search for `build` too. See
   `GLOSSARY.md`.
-- **The Apps page governs MCP servers too**, not only external apps.
-  `ExternalAppsPage` renders both external apps and MCP servers as one
-  normalized "governed integration" list (`ConfiguredIntegration` in
-  `interfaces.ts`) sharing the same `GatedApp` policy mechanism. A change
-  scoped to "external apps only" easily misses the MCP tab.
+- **Plugins has separate permission gates.** MCP and OpenAPI use
+  `MANAGE_ACTIONS`. External-app administration requires full admin access.
+  `useInstalledPlugins` must not fetch organization credentials for scoped
+  action managers. External apps keep their existing `GatedApp` policies.
 - **`craftAvailable` in settings is not the enforcement gate.** The frontend
   flag only decides what renders; the actual gate is
   `is_craft_enabled_for_user`, evaluated per request on the backend. Testing
@@ -448,6 +481,10 @@ there.
   `upstream_url_patterns` in the admin response; an admin on Cloud can only
   toggle enablement and edit policy for these, by design
   (`docs/craft/features/external-apps/cloud-managed-app-credentials.md`).
+- **Per-account providers own their gateway host.** The database write path
+  restores masked credentials, then asks the provider to resolve its patterns.
+  Zendesk validates one subdomain and uses it for OAuth, skill files, and the
+  gateway. Fixed-host built-ins keep submitted patterns; `CUSTOM` uses globs.
 - **`app_type` is immutable on update.** `update_external_app` raises rather
   than allowing a cross-edit between built-in and custom; deleting and
   recreating is the only path to change it.

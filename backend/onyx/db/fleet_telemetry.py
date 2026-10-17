@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import KeyedColumnElement
 
+from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.enums import (
     AccessType,
     AccountType,
@@ -19,6 +20,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     DocPermissionSyncAttempt,
+    DocumentByConnectorCredentialPair,
     ExternalGroupPermissionSyncAttempt,
     HierarchyFetchAttempt,
     IndexAttempt,
@@ -29,6 +31,7 @@ from onyx.db.models import (
     SyncRecord,
     User,
 )
+from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 
 # Rows per read.
 ROW_LIMIT: int = 1000
@@ -66,9 +69,9 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
         select(
             ConnectorCredentialPair.id.label("cc_pair_id"),
             ConnectorCredentialPair.connector_id,
+            ConnectorCredentialPair.credential_id,
             Connector.source,
             ConnectorCredentialPair.status,
-            ConnectorCredentialPair.total_docs_indexed.label("doc_count"),
             ConnectorCredentialPair.last_successful_index_time.label("last_success_at"),
             Connector.refresh_freq.label("refresh_seconds"),
             Connector.prune_freq.label("prune_seconds"),
@@ -84,7 +87,53 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
         .order_by(ConnectorCredentialPair.id)
         .limit(ROW_LIMIT)
     )
-    return [dict(row) for row in db_session.execute(statement).mappings()]
+    rows = [dict(row) for row in db_session.execute(statement).mappings()]
+    # Match the admin count: only documents indexed for this exact pair.
+    counts = {
+        (connector_id, credential_id): count
+        for connector_id, credential_id, count in get_document_counts_for_cc_pairs(
+            db_session,
+            [
+                ConnectorCredentialPairIdentifier(
+                    connector_id=row["connector_id"],
+                    credential_id=row["credential_id"],
+                )
+                for row in rows
+            ],
+        )
+    }
+    for row in rows:
+        row["doc_count"] = counts.get(
+            (row["connector_id"], row.pop("credential_id")), 0
+        )
+    return rows
+
+
+def has_indexed_connectors__no_commit(db_session: Session) -> bool:
+    # Exclude the seeded upload connector; scan beyond the inventory reporting cap.
+    return bool(
+        db_session.scalar(
+            select(
+                select(ConnectorCredentialPair.id)
+                .join(
+                    DocumentByConnectorCredentialPair,
+                    (
+                        DocumentByConnectorCredentialPair.connector_id
+                        == ConnectorCredentialPair.connector_id
+                    )
+                    & (
+                        DocumentByConnectorCredentialPair.credential_id
+                        == ConnectorCredentialPair.credential_id
+                    ),
+                )
+                .where(
+                    ConnectorCredentialPair.connector_id > 0,
+                    DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+                )
+                .exists()
+            )
+        )
+    )
 
 
 def attempt_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
@@ -186,6 +235,8 @@ def _job(
     groups_processed: int | None = 0,
     memberships_synced: int | None = 0,
     error_count: int | None = 0,
+    last_progress_at: datetime | None = None,
+    last_heartbeat_at: datetime | None = None,
 ) -> dict[str, Any]:
     return {
         "job_id": job_id,
@@ -201,6 +252,8 @@ def _job(
         "groups_processed": groups_processed or 0,
         "memberships_synced": memberships_synced or 0,
         "error_count": error_count or 0,
+        "last_progress_at": last_progress_at,
+        "last_heartbeat_at": last_heartbeat_at,
     }
 
 
@@ -258,6 +311,8 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             DocPermissionSyncAttempt.time_created,
             DocPermissionSyncAttempt.time_started,
             DocPermissionSyncAttempt.time_finished,
+            DocPermissionSyncAttempt.last_progress_at,
+            DocPermissionSyncAttempt.heartbeat_at,
         )
         .where(
             or_(
@@ -283,6 +338,8 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             revision_at=attempt.revision_at,
             docs_processed=attempt.total_docs_synced,
             error_count=attempt.docs_with_permission_errors,
+            last_progress_at=attempt.last_progress_at,
+            last_heartbeat_at=attempt.heartbeat_at,
         )
         for attempt in permission_syncs
     )
@@ -306,6 +363,8 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             ExternalGroupPermissionSyncAttempt.time_created,
             ExternalGroupPermissionSyncAttempt.time_started,
             ExternalGroupPermissionSyncAttempt.time_finished,
+            ExternalGroupPermissionSyncAttempt.last_progress_at,
+            ExternalGroupPermissionSyncAttempt.heartbeat_at,
         )
         .where(
             or_(
@@ -335,6 +394,8 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             groups_processed=group.total_groups_processed,
             memberships_synced=group.total_group_memberships_synced,
             error_count=int(group.has_error),
+            last_progress_at=group.last_progress_at,
+            last_heartbeat_at=group.heartbeat_at,
         )
         for group in group_syncs
     )

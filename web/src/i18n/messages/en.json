@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "Authenticate and connect to {serverName}",
-        "label": "Authenticate"
+        "ariaLabel": "Set up authentication for {serverName}",
+        "label": "Set up authentication"
       },
       "deleteButton": {
         "ariaLabel": "Delete {serverName} server",
@@ -130,14 +130,13 @@
       "authStatus": {
         "apiTokenDescription": "API token configured",
         "connectedDescription": "Connected",
-        "oauthDescription": "OAuth connected to {owner}",
         "title": "Authenticated & Connected"
       },
       "cancelButton": {
         "label": "Cancel"
       },
       "description": {
-        "placeholder": "More details about the MCP server",
+        "placeholder": "What can your team do with this server?",
         "suffix": "optional",
         "title": "Description"
       },
@@ -145,21 +144,20 @@
         "tooltip": "Disconnect Server"
       },
       "editConfigsButton": {
-        "label": "Edit Configs"
+        "label": "Connection settings"
       },
       "manageHeader": {
         "description": "Update your MCP server configuration and manage authentication.",
         "title": "Manage MCP Server"
       },
       "name": {
-        "placeholder": "Name your MCP server",
+        "placeholder": "e.g. Linear",
         "required": "Server name is required",
         "title": "Server Name"
       },
       "serverUrl": {
         "invalid": "Must be a valid URL",
         "required": "Server URL is required",
-        "subDescription": "Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated.",
         "title": "MCP Server URL"
       },
       "submitButton": {
@@ -173,6 +171,34 @@
         "serverCreated": "MCP Server created successfully",
         "serverUpdated": "MCP Server updated successfully",
         "updateFailed": "Failed to update MCP server"
+      },
+      "access": {
+        "title": "Access control",
+        "description": "Choose who can use this MCP.",
+        "public": {
+          "label": "Public",
+          "description": "Anyone in your organization can use this MCP"
+        },
+        "groups": {
+          "label": "User groups",
+          "description": "Selected user groups can use this MCP.",
+          "placeholder": "Add user groups",
+          "required": "Select at least one user group."
+        },
+        "scoped": {
+          "description": "Choose at least one group you manage."
+        },
+        "retainedUsers": "{count, plural, one {Also shared directly with # user.} other {Also shared directly with # users.}}",
+        "planTag": "Business",
+        "planNote": "Group access requires a Business plan."
+      },
+      "craft": {
+        "title": "Available in Craft",
+        "description": "Let users access this MCP server in Craft."
+      },
+      "defaultChat": {
+        "title": "Available in default Onyx Chat",
+        "description": "When off, users must add this server to a custom agent to use it in Chat."
       }
     },
     "addOpenApiModal": {
@@ -279,54 +305,48 @@
       "additionalAuthParams": {
         "label": "Additional Auth Params (JSON)"
       },
-      "advanced": {
-        "description": "Configure a known OAuth provider with explicit authorization and token endpoints instead of automatic discovery.",
-        "title": "Advanced"
-      },
       "apiKey": {
         "required": "API token is required"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "Shared Key (Admin)"
+          "label": "Shared token"
         },
         "perUser": {
-          "label": "Individual Key (Per User)"
+          "label": "Personal token"
         }
       },
       "authPerformer": {
-        "required": "Authentication performer is required"
+        "label": "Credentials",
+        "required": "Choose personal or shared credentials."
       },
       "authType": {
         "apiToken": {
-          "description": "Use per-user individual API key or organization-wide shared API key.",
           "label": "API Key"
         },
         "label": "Authentication Method",
         "none": {
-          "description": "Not Recommended",
-          "label": "None"
+          "label": "No authentication"
         },
         "oauth": {
-          "description": "Each user need to authenticate via OAuth with their own credentials.",
           "label": "OAuth"
         },
         "placeholder": "Select method",
         "ptOauth": {
-          "description": "Forward the user's OAuth access token used to authenticate {appName}.",
           "label": "OAuth Pass-through"
         },
         "required": "Authentication type is required"
       },
       "authorizationEndpoint": {
         "label": "Authorization Endpoint",
-        "required": "Authorization endpoint is required in known-provider mode"
+        "required": "Enter the authorization endpoint from your provider."
       },
       "cancelButton": {
         "label": "Cancel"
       },
       "clientId": {
-        "label": "Client ID"
+        "label": "Client ID",
+        "required": "Enter your OAuth client ID."
       },
       "clientSecret": {
         "label": "Client Secret"
@@ -335,25 +355,30 @@
         "additionalParamsInvalid": "Invalid additional auth params JSON",
         "additionalParamsInvalidWithReason": "Invalid additional auth params JSON: {reason}",
         "additionalParamsNotObject": "Additional auth params must be a JSON object",
-        "oauthInitFailed": "Failed to initiate OAuth: {detail}",
         "saveAuthFailed": "Failed to save authentication configuration",
-        "saveConfigFailed": "Failed to save server configuration"
+        "saveConfigFailed": "Failed to save server configuration",
+        "saveStage": "Could not save connection settings",
+        "oauthStage": "Could not start sign-in",
+        "discoveryStage": "Could not load server tools",
+        "loadStage": "Could not load connection settings",
+        "clientRegistrationFailed": "Automatic client registration failed. Use your own OAuth client, or check the provider’s setup requirements.",
+        "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
+        "connectionFailed": "The OAuth server could not be reached. Check the server URL and try again.",
+        "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again."
       },
       "header": {
-        "defaultTitle": "Authenticate MCP Server",
-        "description": "Authenticate your connection to start using the MCP server.",
-        "title": "Authenticate *{name}*"
-      },
-      "knownProvider": {
-        "hint": "Known-provider mode requires endpoint configuration. Google reference endpoints: authorization {authorizationEndpoint} and token {tokenEndpoint}."
+        "defaultTitle": "Configure authentication",
+        "description": "Configure MCP server authentication",
+        "title": "Configure *{name}*"
       },
       "noAuthNotice": {
-        "description": "No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection.",
-        "title": "No authentication for this MCP server"
+        "description": "Users can use this server without signing in. Configured custom headers are still sent.",
+        "title": "No authentication required"
       },
       "oauthInfo": {
-        "discovery": "Client ID and secret are optional. During automatic discovery, {appName} uses a Client ID Metadata Document (CIMD) when supported and falls back to Dynamic Client Registration (DCR).",
-        "manualRegistration": "If your server supports neither method, register your {appName} instance with the server provider first. Grant {appName} the necessary scopes for your actions."
+        "discovery": "Each user signs in with their own account.",
+        "manualRegistration": "Register this redirect URI with your provider.",
+        "title": "OAuth configuration"
       },
       "passThroughNotice": {
         "description": "{appName} will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
@@ -361,14 +386,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "Use MCP SDK challenge/discovery flow (default).",
-          "label": "Auto Discovery"
+          "description": "Read the sign-in settings published by the server.",
+          "label": "Find sign-in endpoints automatically"
         },
         "knownProvider": {
-          "description": "Use configured authorization/token endpoints.",
-          "label": "Known Provider"
+          "description": "Enter the sign-in and token URLs yourself.",
+          "label": "Enter endpoints manually"
         },
-        "label": "Provider Mode",
+        "label": "OAuth endpoints",
         "placeholder": "Select mode"
       },
       "redirectUri": {
@@ -379,20 +404,55 @@
         "label": "Scopes Override (comma-separated)"
       },
       "sharedApiKey": {
-        "description": "Do not use your personal API key. Make sure this key is appropriate to share with everyone in your organization.",
+        "description": "This key is used to test the setup and connect everyone with access. Use a workspace key, not a personal key.",
         "label": "API Key",
         "placeholder": "Shared API key for your organization"
       },
       "submitButton": {
-        "label": "Connect",
-        "pendingLabel": "Connecting..."
+        "label": "Save Changes",
+        "pendingLabel": "Saving…"
       },
       "tokenEndpoint": {
         "label": "Token Endpoint",
-        "required": "Token endpoint is required in known-provider mode"
+        "required": "Enter the token endpoint from your provider."
       },
       "transport": {
-        "required": "Transport is required"
+        "required": "Transport is required",
+        "label": "Connection transport",
+        "description": "Use Streamable HTTP unless your server requires legacy SSE. This setting is not detected from the server.",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE (legacy)"
+      },
+      "advancedSettings": {
+        "title": "Advanced settings"
+      },
+      "apiTokenInfo": {
+        "title": "API key configuration",
+        "description": "Choose whether each user connects with a personal token or everyone uses a shared token."
+      },
+      "oauthSetup": {
+        "label": "OAuth setup",
+        "automatic": {
+          "label": "Set up automatically",
+          "description": "Let {appName} register an OAuth client using the server’s published settings."
+        },
+        "ownClient": {
+          "label": "Use your own OAuth client",
+          "description": "Enter a client ID from your provider. Add a secret only if required."
+        }
+      },
+      "discovery": {
+        "checking": "Checking automatic setup…",
+        "supported": "Automatic setup is available",
+        "requiresClient": "This server does not advertise automatic client registration. We recommend you set up your own OAuth client. You may still attempt automatic registration.",
+        "missing": "Check the server URL or enter the sign-in and token endpoints from your provider.",
+        "unreachable": "The server may be unavailable or blocking discovery requests.",
+        "retry": "Check again",
+        "manual": "Enter OAuth settings manually",
+        "useOwnClient": "Use your own OAuth client",
+        "unreachableTitle": "Could not determine if automatic setup is available",
+        "missingTitle": "Could not find OAuth endpoints",
+        "requiresClientTitle": "Automatic setup may be unavailable"
       }
     },
     "mcpCard": {
@@ -402,7 +462,7 @@
       "deleteModal": {
         "body": {
           "confirmation": "Are you sure you want to delete this MCP server?",
-          "description": "All tools connected to <emphasis>{title}</emphasis> will be removed. Deletion is irreversible."
+          "description": "This deletes <emphasis>{title}</emphasis> and all its tools for everyone in your organization. Deletion is irreversible."
         },
         "submitButton": {
           "label": "Delete"
@@ -415,6 +475,20 @@
       "refreshToolsButton": {
         "ariaLabel": "Refresh tools",
         "tooltip": "Refresh tools"
+      },
+      "setupIncomplete": {
+        "label": "Setup incomplete.",
+        "actionHint": "Setup incomplete. Click to finish setup."
+      },
+      "status": {
+        "ready": "Ready · {count, plural, one {# tool} other {# tools}}",
+        "incomplete": "Setup incomplete",
+        "loading": "Loading tools",
+        "disconnected": "Disconnected"
+      },
+      "authenticationButton": {
+        "tooltip": "Configure authentication",
+        "ariaLabel": "Configure authentication for {serverName}"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +567,7 @@
         "toolUpdateFailed": "Failed to update tool",
         "toolsDisabled": "{count, plural, one {# tool disabled successfully} other {# tools disabled successfully}}",
         "toolsEnabled": "{count, plural, one {# tool enabled successfully} other {# tools enabled successfully}}",
-        "toolsFetched": "Successfully connected and fetched tools",
+        "toolsFetched": "Tools loaded",
         "toolsRefreshed": "Tools refreshed successfully"
       }
     },
@@ -554,9 +628,6 @@
       "loading": {
         "label": "Loading existing configuration..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth pass-through requires an OAuth-capable login method (Google or OIDC)."
-      },
       "passThroughNotice": {
         "description": "{appName} will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
         "title": "Use pass-through for services with shared identity provider."
@@ -577,6 +648,34 @@
       "tokenUrl": {
         "label": "Token URL",
         "required": "Token URL is required"
+      },
+      "pkce": {
+        "label": "Use PKCE",
+        "description": "Enable only when the OAuth provider supports PKCE with the S256 challenge method."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Enter valid HTTPS endpoints to check PKCE support.",
+          "checking": "Checking advertised PKCE support…",
+          "supported": "Provider advertises S256 PKCE support.",
+          "unsupported": "Provider does not advertise S256 PKCE support.",
+          "unknown": "Could not verify PKCE support. You can still choose the setting manually."
+        },
+        "description": "Tests these unsaved settings without saving configuration or tokens. Provider consent may grant this app access to your account.",
+        "testing": "Testing connection…",
+        "test": "Test connection",
+        "successPkce": "Authorization succeeded with PKCE parameters. This does not prove the provider enforces PKCE.",
+        "success": "Authorization succeeded without PKCE.",
+        "result": {
+          "blocked": "Allow popups and try again.",
+          "closed": "Test window closed or disconnected. Finish any open test, or try again.",
+          "stale": "Settings changed. Test the current settings again.",
+          "failed": "Authorization test failed. Check the settings and try again.",
+          "denied": "Provider authorization was declined or canceled.",
+          "interrupted": "The test expired or was interrupted. Start a new test."
+        },
+        "returnToSettings": "Return to the settings window to see the result.",
+        "close": "Close window"
       }
     },
     "openApiCard": {
@@ -633,10 +732,8 @@
         "placeholder": "Enter {field}"
       },
       "credentials": {
-        "perUserDescription": "The following credentials will not be shared with your organization.",
-        "perUserTitle": "Only for your own account",
-        "sharedDescription": "These values are used for every user in your organization.",
-        "sharedTitle": "Shared organization values"
+        "perUserDescription": "Use your credentials to test this MCP and load its tools. They are saved to your account only.",
+        "sharedDescription": "These values are used for every user in your organization."
       },
       "headers": {
         "addButton": {
@@ -646,8 +743,8 @@
           "message": "At least one header value must include the {apiKey} placeholder."
         },
         "keyTitle": "Header Name",
-        "label": "Authentication Headers",
-        "perUserDescription": "Format headers for each user to fill in their individual credentials. Use placeholders like <mono>{apiKey}</mono> or <mono>{userEmail}</mono>. Users will be prompted to provide values for placeholders (except user_email).",
+        "label": "Custom Headers",
+        "perUserDescription": "Use <mono>{apiKey}</mono> for each user’s API key. <mono>{userEmail}</mono> uses their email automatically. Other placeholders ask users for a value.",
         "sharedDescription": "Format the headers sent with your organization's shared credentials. Use placeholders like <mono>{apiKey}</mono> in at least one header value; it is replaced with your organization's shared key.",
         "valueTitle": "Header Value"
       }
@@ -809,6 +906,417 @@
         "ariaLabel": "Search tools",
         "placeholder": "Search tools…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://your-mcp-server.com/mcp"
+    },
+    "memberPlugins": {
+      "chat": {
+        "trigger": {
+          "label": "Plugins"
+        },
+        "search": {
+          "placeholder": "Search plugins"
+        },
+        "empty": {
+          "text": "No plugins are available in this chat.",
+          "searchText": "No plugins match your search."
+        },
+        "loading": {
+          "label": "Loading plugins"
+        },
+        "loadError": {
+          "text": "Some plugins could not load. Try again."
+        },
+        "retry": {
+          "label": "Try again"
+        },
+        "browse": {
+          "label": "Browse plugins"
+        },
+        "toggle": {
+          "ariaLabel": "Use {name} in this chat"
+        },
+        "connect": {
+          "label": "Connect"
+        },
+        "connection": {
+          "connected": "Connected",
+          "workspace": "Workspace connection",
+          "session": "Session connection",
+          "none": "No connection needed",
+          "oauth": "Connect your account",
+          "credentials": "Add your credentials",
+          "checking": "Checking connection",
+          "unconfigured": "Workspace setup required",
+          "unavailable": "Connection unavailable"
+        },
+        "intent": {
+          "unavailable": "This plugin is not available to this chat's agent.",
+          "invalid": "This plugin link is invalid."
+        }
+      },
+      "oauthComplete": {
+        "success": {
+          "title": "Plugin connected",
+          "description": "Return to the previous tab to continue."
+        },
+        "error": {
+          "title": "Connection not confirmed",
+          "description": "Return to the previous tab and try connecting again."
+        },
+        "return": {
+          "label": "Return to plugins"
+        },
+        "close": {
+          "label": "Close tab"
+        }
+      },
+      "title": "Plugins",
+      "description": "Connect your accounts to use workspace plugins.",
+      "manageWorkspace": "Manage workspace plugins",
+      "search": "Search plugins",
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Craft Apps"
+      },
+      "row": {
+        "view": "View {name}",
+        "connect": "Connect {name}"
+      },
+      "status": {
+        "connected": "Connected",
+        "workspace": "Workspace connection",
+        "session": "Uses your sign-in",
+        "none": "Ready to use",
+        "oauth": "Connect your account",
+        "credentials": "Add your credentials",
+        "unconfigured": "Workspace setup required",
+        "checking": "Checking connection",
+        "unavailable": "Connection unavailable"
+      },
+      "availability": {
+        "label": "Connection status for {name}",
+        "chat": "Main Chat",
+        "craft": "Craft",
+        "on": "On",
+        "off": "Off",
+        "unknown": "Unknown"
+      },
+      "state": {
+        "loading": "Loading plugins",
+        "serversError": "MCP plugins could not load.",
+        "toolsError": "Plugin tools could not load.",
+        "oauthError": "Account connections could not load.",
+        "retry": "Retry",
+        "noResultsTitle": "No matching plugins",
+        "noResultsDescription": "Try a different name or description.",
+        "clearSearch": "View all plugins",
+        "appsError": "Craft apps could not load.",
+        "appsLoading": "Loading Craft apps",
+        "emptyTitle": "No plugins found",
+        "emptyDescription": "Try another connection filter or ask your workspace admin to add a plugin."
+      },
+      "detail": {
+        "connection": "Connection",
+        "serverUrl": "Server URL",
+        "tools": "Tools",
+        "toolCount": "{count, plural, one {# tool} other {# tools}}",
+        "toolsDescription": "Tools available from this workspace plugin.",
+        "noTools": "No visible tools are stored for this plugin.",
+        "connect": "Connect account",
+        "useInChat": "Use in Chat",
+        "chatDisabled": "This plugin is not enabled for main Chat. A workspace admin can change its availability.",
+        "chatUnknown": "Main Chat availability could not be confirmed.",
+        "disconnect": "Disconnect account",
+        "disconnectTitle": "Disconnect {name}?",
+        "disconnectDescription": "This removes your account connection. Workspace availability stays the same.",
+        "oauthDisconnectWarning": "This account connection is shared by all plugins and apps that use the same OAuth configuration. Disconnecting removes your connection from all of them.",
+        "disconnecting": "Disconnecting...",
+        "disconnectFailed": "Your account could not be disconnected. Try again.",
+        "cancel": "Cancel",
+        "close": "Done",
+        "openInCraft": "Open in Craft"
+      },
+      "connection": {
+        "title": "Connect {name}",
+        "description": "Your workspace has configured this plugin. Connect your account to use it.",
+        "credentialsDescription": "Enter your credentials for this plugin. Your account connection is separate from other members.",
+        "oauthDescription": "Continue to sign in with your account. Your provider will show the requested access.",
+        "continue": "Continue to {name}",
+        "connect": "Connect",
+        "connecting": "Connecting...",
+        "cancel": "Cancel",
+        "done": "Done",
+        "workspaceDescription": "Your workspace provides this connection. You do not need to connect an account.",
+        "sessionDescription": "This plugin uses your current sign-in.",
+        "noneDescription": "This plugin does not require an account connection.",
+        "connectedDescription": "Your account is connected.",
+        "unconfiguredDescription": "A workspace admin needs to finish this plugin's setup before you can connect.",
+        "checkingDescription": "Your connection status is still loading. Try again after it finishes.",
+        "unavailableDescription": "Your connection status could not load. Retry from the Plugins page.",
+        "errors": {
+          "popup_blocked": "Your browser blocked the sign-in window. Allow popups and try again.",
+          "cancelled": "Sign-in was cancelled. You can try again.",
+          "timed_out": "Sign-in took too long. Try again.",
+          "credentials_required": "Enter all required credentials.",
+          "unconfigured": "A workspace admin needs to finish this plugin's setup.",
+          "not_connected": "Your account connection could not be confirmed. Try again.",
+          "request_failed": "The connection failed. Try again."
+        }
+      },
+      "filters": {
+        "label": "Connection status",
+        "all": "All",
+        "connected": "Connected",
+        "needsSignIn": "Needs sign-in",
+        "showAll": "View all plugins"
+      },
+      "defaults": {
+        "chat": "Enable in main Chat by default",
+        "craft": "Enable in Craft by default",
+        "chatDescription": "Applies to default Chat. Custom agents keep their own tool settings.",
+        "craftDescription": "Use this MCP in your Craft sessions.",
+        "unavailable": "Your admin has disabled this plugin for {surface}.",
+        "saveFailed": "Could not save your plugin defaults. Try again."
+      },
+      "openapi": {
+        "chatOnly": "Chat only",
+        "chatOnlyDescription": "This plugin is available in Chat, not Craft."
+      },
+      "appSkills": {
+        "search": "Search skills",
+        "count": "{count, plural, one {# skill} other {# skills}}",
+        "empty": "No skills are associated with this app.",
+        "noMatches": "No skills match your search.",
+        "error": "Skills could not load.",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "loading": "Loading skills…"
+      },
+      "externalApp": {
+        "description": "Use your account in Craft.",
+        "craftOnly": "Craft only",
+        "craftOnlyDescription": "This app is available in Craft. Main Chat does not support it."
+      }
+    },
+    "plugins": {
+      "availability": {
+        "mainChat": "Main Chat",
+        "craft": "Craft",
+        "on": "On",
+        "off": "Off",
+        "unknown": "Unknown",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "chatEnabled": "Chat on",
+        "chatDisabled": "Chat off",
+        "chatUnknown": "Chat unknown",
+        "craftEnabled": "Craft on",
+        "craftDisabled": "Craft off"
+      },
+      "controls": {
+        "disconnect": "Enable or disable for workspace",
+        "enable": "Enable for workspace",
+        "disable": "Disable for workspace",
+        "manageAvailability": "Manage workspace availability",
+        "more": "More actions",
+        "disableChat": "Disable for main Chat",
+        "enableChat": "Enable for main Chat",
+        "disableCraft": "Disable for Craft",
+        "enableCraft": "Enable for Craft"
+      },
+      "craftApp": {
+        "tabs": {
+          "configuration": "Configuration",
+          "permissions": "Permissions",
+          "skills": "Skills"
+        }
+      },
+      "disableConfirmation": {
+        "workspaceTitle": "Disable {name} for the workspace?",
+        "workspaceDescription": "This disables {name} for everyone in your workspace, including custom agents. Saved settings and credentials are kept. You can enable it again.",
+        "scope": "All users in your organization",
+        "chatTitle": "Disable {name} for main Chat?",
+        "chatDescription": "This removes {name} from default Chat for everyone in your organization. Custom agents are not affected. You can enable it again.",
+        "craftTitle": "Disable {name} for Craft?",
+        "craftDescription": "This makes {name} unavailable in Craft for everyone in your organization. Main Chat is not affected. You can enable it again."
+      },
+      "openapi": {
+        "schemaPreview": {
+          "detected": "{count, plural, one {# tool detected} other {# tools detected}}",
+          "viewTools": "View tools",
+          "saveToUpdate": "Save changes to update tools."
+        },
+        "reviewTitle": "Review {name}",
+        "createTitle": "Add an OpenAPI plugin",
+        "detailDescription": "Manage this API and the tools available to your agents.",
+        "detailsTitle": "Plugin details",
+        "schemaTitle": "OpenAPI schema",
+        "editSchema": "Edit schema",
+        "notFound": "Plugin not found",
+        "loadFailed": "Could not load this plugin",
+        "unavailable": "This plugin may have been deleted, or you may not have access.",
+        "readOnly": "You can view this plugin. Your account cannot change its settings.",
+        "disableTitle": "Disable {name}?",
+        "disableDescription": "Agents will no longer be able to use this plugin. You can enable it again.",
+        "deleteTitle": "Delete {name}?",
+        "deleteDescription": "This permanently deletes the OpenAPI plugin and its configuration."
+      },
+      "title": "Plugins",
+      "description": "Connect tools and apps to your workspace.",
+      "search": {
+        "placeholder": "Search plugins"
+      },
+      "add": {
+        "label": "Add",
+        "mcp": "Add custom MCP server",
+        "openapi": "Add OpenAPI action"
+      },
+      "catalog": {
+        "slack": {
+          "summary": "Search conversations and send messages",
+          "description": "Search conversations and send messages. Requires a registered Slack app."
+        },
+        "hubspot": {
+          "summary": "Work with contacts and deals",
+          "description": "Work with contacts and deals. Requires a HubSpot MCP connector."
+        },
+        "asana": {
+          "summary": "Manage tasks and projects",
+          "description": "Manage tasks and projects. Requires a registered OAuth client."
+        },
+        "linear": {
+          "summary": "Manage issues, projects, and teams",
+          "description": "Manage issues, projects, and teams."
+        },
+        "notion": {
+          "summary": "Search and update your Notion workspace",
+          "description": "Search and update your Notion workspace."
+        },
+        "sentry": {
+          "summary": "Investigate errors and performance issues",
+          "description": "Investigate errors and performance issues."
+        },
+        "atlassian": {
+          "summary": "Work with Jira and Confluence",
+          "description": "Work with Jira and Confluence.",
+          "approvalNote": "Your Atlassian organization may require admin approval."
+        },
+        "setupGuide": "Setup guide",
+        "add": {
+          "label": "Add {name}"
+        }
+      },
+      "row": {
+        "manage": {
+          "label": "Manage {name}"
+        },
+        "view": {
+          "label": "View {name}"
+        }
+      },
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Craft Apps"
+      },
+      "filters": {
+        "label": "Plugin type",
+        "all": "All",
+        "apps": "Craft Apps"
+      },
+      "state": {
+        "mcpError": "MCP servers could not be loaded.",
+        "listErrorDescription": "We couldn't load this plugin list. Try again in a moment.",
+        "openapiError": "OpenAPI actions could not be loaded.",
+        "retry": {
+          "label": "Retry"
+        },
+        "loading": "Loading plugins",
+        "empty": {
+          "title": "No plugins installed",
+          "description": "Add a plugin to your workspace.",
+          "explore": {
+            "label": "Explore plugins"
+          }
+        },
+        "noResults": {
+          "title": "No plugins found",
+          "description": "Try another name, description, or server URL.",
+          "clear": {
+            "label": "View all plugins"
+          }
+        },
+        "externalAppsError": "Apps could not load"
+      }
+    },
+    "mcpSetup": {
+      "connectTo": "Connect to {name}",
+      "contactingServer": "Contacting server",
+      "detectingAuthentication": "Detecting authentication",
+      "stagePending": "In progress",
+      "stageSuccess": "Complete",
+      "stageError": "Failed",
+      "stageWaiting": "Waiting",
+      "progress": "Setup progress",
+      "serverStep": "Server",
+      "connectionStep": "Connection",
+      "permissionDenied": "You do not have permission to add MCP servers.",
+      "reviewSettings": "Review the server settings before connecting.",
+      "urlDescription": "Enter the server URL to detect its connection and authentication settings.",
+      "detectedTransport": "Transport: {transport}",
+      "retry": "Check again",
+      "authenticationUndetected": "Choose the authentication method on the next page.",
+      "configureManually": "Configure manually",
+      "details": "Details",
+      "checking": "Checking server…",
+      "unreachable": "Could not connect to this MCP server",
+      "retryCheck": "Check the URL and server availability, then try again.",
+      "blocked": "This URL is blocked by your outbound security settings.",
+      "publicDetected": "No authentication required",
+      "oauthDetected": "OAuth detected",
+      "manualRequired": "Choose authentication manually",
+      "chooseAuthentication": "We could not determine how this server authenticates. Choose a method below.",
+      "connect": "Connect",
+      "publicDetails": "Available tools: {count}",
+      "serverDetails": "Server details",
+      "authentication": "Authentication",
+      "continue": "Continue",
+      "back": "Back"
+    },
+    "mcpTools": {
+      "title": "Tools",
+      "description": "Choose available tools and set their permissions.",
+      "enabledTab": "Available tools",
+      "policiesTab": "Craft permissions",
+      "enabledDescription": "Choose which tools users can use in Onyx.",
+      "policiesDescription": "Choose when Craft asks for approval before using each tool.",
+      "back": "Authentication",
+      "refresh": "Refresh tools",
+      "loadError": "Could not load tools",
+      "saveError": "Could not save tool settings",
+      "refreshError": "Could not refresh tools",
+      "search": "Search tools"
+    },
+    "mcpDetail": {
+      "configuration": "Server configuration",
+      "editConfiguration": "Edit server configuration",
+      "authentication": "Authentication",
+      "editAuthentication": "Edit authentication",
+      "availability": "Availability",
+      "edit": "Edit",
+      "loadError": "Could not load MCP server",
+      "notFound": "MCP server not found",
+      "unavailable": "This server may have been deleted, or you may not have access.",
+      "retry": "Try again",
+      "restrictedAccess": "{groups, plural, one {# group} other {# groups}} · {users, plural, one {# user} other {# users}}",
+      "authenticationIncomplete": "Authentication is not configured.",
+      "availabilitySaved": "Availability updated"
     }
   },
   "admin": {
@@ -819,6 +1327,9 @@
         },
         "messaging": {
           "label": "Messaging"
+        },
+        "meetings": {
+          "label": "Meetings"
         },
         "sales": {
           "label": "Sales & GTM"
@@ -1031,6 +1542,9 @@
         },
         "lumapps": {
           "description": "Intranet pages & communities"
+        },
+        "youtrack": {
+          "description": "Issue tracker and project management"
         },
         "canvas": {
           "description": "Courses, pages, & announcements"
@@ -1748,6 +2262,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Model used to name chat sessions. Defaults to each session's model.",
+        "resetButton": {
+          "label": "Reset"
+        },
+        "sessionModel": {
+          "label": "Use Default model"
+        },
+        "title": "Chat naming model"
+      },
+      "searchSelectionModel": {
+        "description": "Selects and checks retrieved documents. A lower-cost model can reduce search costs, but may affect answer quality.",
+        "resetButton": {
+          "label": "Reset"
+        },
+        "sessionModel": {
+          "label": "Use Default model"
+        },
+        "title": "Search selection model"
+      },
+      "taskModels": {
+        "title": "Model selection",
+        "loadFailed": "Could not load task models",
+        "retry": {
+          "label": "Retry"
+        },
+        "noProviders": {
+          "title": "Connect a language model provider"
+        },
+        "addProvider": {
+          "label": "Add Provider"
+        }
+      },
       "advanced": {
         "title": "Advanced Options"
       },
@@ -1766,13 +2313,6 @@
       "betaTag": {
         "label": "beta"
       },
-      "chatNaming": {
-        "description": "Model used to auto-name chat sessions. Defaults to each session's own model — pin a small, fast model here if your main model can't serve concurrent requests.",
-        "resetButton": {
-          "label": "Reset"
-        },
-        "title": "Chat Naming Model"
-      },
       "connectors": {
         "empty": {
           "title": "No connectors set up"
@@ -1785,6 +2325,10 @@
       "deepResearch": {
         "description": "Agentic research system that works across the web and connected sources. Uses significantly more tokens per query.",
         "title": "Deep Research"
+      },
+      "defaultLanguage": {
+        "description": "The UI language for users who have not chosen one in their own settings.",
+        "title": "Default Language"
       },
       "disableDefaultChat": {
         "description": "This forces users to always start in an agent. New chats will be created in their first pinned agent. Set featured agents to help new users get started.",
@@ -1926,11 +2470,15 @@
         "title": "Temperature Control"
       },
       "toasts": {
-        "chatNamingReset": "Chat naming reset to the session's model",
-        "chatNamingResetFailed": "Failed to reset chat naming model",
-        "chatNamingUpdateFailed": "Failed to update chat naming model",
         "chatNamingUpdated": "Chat naming model updated",
+        "chatNamingReset": "Chat naming model reset to the default model",
+        "chatNamingUpdateFailed": "Failed to update chat naming model",
+        "chatNamingResetFailed": "Failed to reset chat naming model",
         "providerResolveFailed": "Could not resolve provider",
+        "searchSelectionReset": "Search selection model reset to the default model",
+        "searchSelectionResetFailed": "Failed to reset search selection model",
+        "searchSelectionUpdateFailed": "Failed to update search selection model",
+        "searchSelectionUpdated": "Search selection model updated",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "systemPromptUpdateFailed": "Failed to update system prompt",
@@ -2036,23 +2584,11 @@
           "days": "{count, plural, one {# day} other {# days}}",
           "hours": "{count, plural, one {# hour} other {# hours}}",
           "minutes": "{count, plural, one {# minute} other {# minutes}}"
-        },
-        "indexingStart": {
-          "label": "Indexing Start"
-        },
-        "pruningFrequency": {
-          "label": "Pruning Frequency"
-        },
-        "refreshFrequency": {
-          "label": "Refresh Frequency"
         }
       },
       "configItem": {
         "booleanFalse": "False",
         "booleanTrue": "True",
-        "edit": {
-          "tooltip": "Edit"
-        },
         "showAll": {
           "label": "Show all ({count} items)"
         },
@@ -2076,53 +2612,10 @@
         "description": "This error occurred while attempting to delete the connector. You may re-attempt a deletion by clicking the \"Delete\" button.",
         "title": "Deletion Error"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "Docs Synced",
-          "errorMessage": "Error Message",
-          "permissionErrors": "Permission Errors",
-          "status": "Status",
-          "timeStarted": "Time Started"
-        },
-        "empty": {
-          "description": "Document-permission sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds.",
-          "title": "No document permission sync attempts yet"
-        },
-        "errorModal": {
-          "title": "Document Permission Sync Error"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "Check out <link>our docs</link> for more info on configuring this connector."
         }
-      },
-      "errorsModal": {
-        "columns": {
-          "documentId": "Failure ID",
-          "errorMessage": "Error Message",
-          "status": "Status",
-          "time": "Time"
-        },
-        "description": "Below are the errors encountered during indexing. Each row represents a failed document or entity.",
-        "empty": {
-          "description": "No errors found on this page"
-        },
-        "fullReindex": {
-          "description": "Click the button below to kick off a full re-index to try and resolve these errors. This full re-index may take much longer than a normal update."
-        },
-        "resolveAllButton": {
-          "label": "Resolve All"
-        },
-        "status": {
-          "resolved": "Resolved",
-          "unresolved": "Unresolved"
-        },
-        "targetedReindex": {
-          "description": "Click the button below to re-fetch only the failing documents. Much faster than a full re-index."
-        },
-        "title": "Indexing Errors",
-        "unknownDocument": "Unknown"
       },
       "fileManagement": {
         "addFilesButton": {
@@ -2174,7 +2667,8 @@
           "cannotRemoveAllFiles": "Cannot remove all files from a connector. Delete the connector if this is desired.",
           "filesUpdated": "Files updated successfully! Document index is being updated in the background. New files are being indexed and removed files will be pruned from the search results.",
           "updateFailed": "Failed to update files"
-        }
+        },
+        "units": "{count, plural, one {file} other {files}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -2182,23 +2676,6 @@
         },
         "selectedFiles": {
           "heading": "{multiple, select, true {Selected Files} other {Selected File}}"
-        }
-      },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "Error Message",
-          "groups": "Groups",
-          "memberships": "Memberships",
-          "status": "Status",
-          "timeStarted": "Time Started",
-          "users": "Users"
-        },
-        "empty": {
-          "description": "Group-membership sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds.",
-          "title": "No group membership sync attempts yet"
-        },
-        "errorModal": {
-          "title": "Group Membership Sync Error"
         }
       },
       "groupRestriction": {
@@ -2222,38 +2699,6 @@
           "title": "Restrict Access to Groups"
         }
       },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "Error Message",
-          "newDocs": "New Docs",
-          "status": "Status",
-          "timeStarted": "Time Started",
-          "totalDocs": "Total Docs",
-          "totalDocsTooltip": "Total number of documents replaced in the index during this indexing attempt"
-        },
-        "docsPerMinute": "{rate} docs / min",
-        "docsRemoved": "(also removed {count} docs that were detected as deleted in the source)",
-        "empty": {
-          "description": "Index attempts are scheduled in the background, and may take some time to appear. Try refreshing the page in ~30 seconds!",
-          "title": "No indexing attempts scheduled yet"
-        },
-        "noAdditionalDocs": "No additional docs processed",
-        "reindexTooltip": {
-          "completed": "This index attempt was a full re-index. All documents from the source were synced into the system.",
-          "inProgress": "This index attempt is a full re-index. All documents from the source are being synced into the system."
-        },
-        "stageMetricsButton": {
-          "tooltip": "View stage metrics"
-        },
-        "viewTrace": {
-          "ariaLabel": "View full trace"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "We ran into some issues while processing some documents. <details>View details.</details>",
-        "resolvingStatus": "Resolving failures",
-        "title": "Some documents failed to index"
-      },
       "invalidState": {
         "description": "This connector is in an invalid state. Please update your credentials or create a new connector before re-indexing.",
         "title": "Invalid Connector State"
@@ -2270,7 +2715,6 @@
           }
         },
         "reIndex": {
-          "label": "Re-Index",
           "tooltip": {
             "indexing": "Cannot re-index while indexing is already in progress",
             "invalid": "Fix the connector configuration before re-indexing",
@@ -2279,45 +2723,28 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pause"
+            "label": "Pause Indexing",
+            "description": "Cancel all in-progress and future indexing runs and syncs."
           },
           "resume": {
-            "label": "Resume"
+            "label": "Resume Indexing",
+            "description": "Allow scheduled indexing runs and syncs again."
           },
           "tooltip": {
             "updating": "Status update in progress"
           }
         },
         "trigger": {
-          "label": "Manage"
+          "label": "Manage Index"
+        },
+        "updateIndex": {
+          "label": "Update Index",
+          "description": "Pull updates and index docs since the last successful indexing run."
+        },
+        "fullReindex": {
+          "label": "Full Re-index",
+          "description": "Re-index all docs from the source. This may take hours or days depending on corpus size."
         }
-      },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "Canceled"
-        },
-        "completedWithErrors": {
-          "label": "Completed with errors"
-        },
-        "failed": {
-          "label": "Failed"
-        },
-        "fallback": {
-          "label": "Not Started"
-        },
-        "inProgress": {
-          "label": "In Progress"
-        },
-        "notStarted": {
-          "label": "Scheduled"
-        },
-        "success": {
-          "label": "Succeeded"
-        }
-      },
-      "pruningFrequencyModal": {
-        "description": "How often the connector should be pruned (in hours)",
-        "title": "Pruning Frequency"
       },
       "reEnableModal": {
         "actionButton": {
@@ -2326,247 +2753,133 @@
         "additionalDetails": "This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?",
         "entityType": "Invalid Connector"
       },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "This will cause a complete re-indexing of all documents from the source.",
-          "note": "<strong>NOTE:</strong> depending on the number of documents stored in the source, this may take a long time."
-        },
-        "fullReindexButton": {
-          "label": "Run Complete Re-Indexing"
-        },
-        "title": "Run Indexing",
-        "update": {
-          "description": "This will pull in and index all documents that have changed and/or have been added since the last successful indexing run."
-        },
-        "updateButton": {
-          "label": "Run Update"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "How often the connector should refresh (in minutes)",
-        "title": "Refresh Frequency"
-      },
-      "sections": {
-        "advanced": {
-          "title": "Advanced"
-        },
-        "advancedConfiguration": {
-          "title": "Advanced Configuration"
-        },
-        "connectorConfiguration": {
-          "title": "Connector Configuration"
-        },
-        "credential": {
-          "title": "Credential"
-        },
-        "indexing": {
-          "title": "Indexing"
-        },
-        "indexingAttempts": {
-          "title": "Indexing Attempts"
-        }
-      },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "Hide attempt overhead"
-          },
-          "showButton": {
-            "label": "Show attempt overhead"
-          }
-        },
-        "batchTotal": {
-          "empty": "No completed batches yet",
-          "summary": "Average batch: {avgLabel}, {count, plural, one {# batch} other {# batches}} — distribution shown below."
-        },
-        "empty": {
-          "description": "No stage timing data has been recorded for this attempt yet. Older attempts that ran before stage instrumentation was deployed will not have metrics."
-        },
         "loadError": {
-          "description": "Stage timing data could not be loaded for this attempt. The pipeline runs even when metric recording is unavailable, so this does not indicate a problem with the indexing run itself.",
           "title": "Failed to load stage metrics"
         },
-        "loading": "Loading stage metrics…",
         "perBatch": {
-          "columns": {
-            "avgTime": "Avg time",
-            "calls": "Calls",
-            "max": "Max",
-            "min": "Min",
-            "stage": "Stage",
-            "totalTime": "Total time"
-          },
           "empty": "No per-batch stage data recorded."
-        },
-        "sort": {
-          "label": "Sort:",
-          "pipelineOrder": {
-            "label": "Pipeline order"
-          },
-          "timeTaken": {
-            "label": "Time taken"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "Reads the batch back from object storage into worker memory.",
             "label": "Batch load"
           },
           "batchTotal": {
-            "description": "Total wall-clock time elapsed processing a single batch end-to-end.",
             "label": "Batch total"
           },
           "batchUnaccounted": {
-            "description": "Batch time not attributed to any named stage. A large value suggests missing instrumentation.",
             "label": "Unaccounted"
           },
           "checkpointLoad": {
-            "description": "Loads the saved checkpoint so the attempt resumes where the previous run stopped.",
             "label": "Checkpoint load"
           },
           "chunking": {
-            "description": "Splits each document into the chunks that get embedded and indexed.",
             "label": "Chunking"
           },
           "connectorFetch": {
-            "description": "Time the connector spends calling the source API and yielding raw documents.",
             "label": "Connector fetch"
           },
           "connectorValidation": {
-            "description": "Validates that the connector is configured correctly and reachable before fetching begins.",
             "label": "Connector validation"
           },
           "contextualRag": {
-            "description": "Generates per-chunk context summaries with an LLM to improve retrieval quality.",
             "label": "Contextual RAG"
           },
           "coordLockAcquireWait": {
-            "description": "Waits for the coordination lock that guards the attempt's shared progress counters.",
             "label": "Coord lock acquire wait"
           },
           "coordinationUpdate": {
-            "description": "Updates the attempt's progress counters so the UI reflects the completed batch.",
             "label": "Coordination update"
           },
           "docBatchEnqueue": {
-            "description": "Publishes the stored batch onto the Celery queue for a docprocessing worker to pick up.",
             "label": "Doc batch enqueue"
           },
           "docBatchStore": {
-            "description": "Persists a fetched batch of documents to object storage for the docprocessing workers.",
             "label": "Doc batch store"
           },
           "docDbPrepare": {
-            "description": "Resolves which documents are new or updated and prepares the database rows.",
             "label": "Doc DB prepare"
           },
           "docLockAcquireWait": {
-            "description": "Waits for per-document locks so concurrent attempts do not write the same document.",
             "label": "Doc lock acquire wait"
           },
           "docprocessingSetup": {
-            "description": "Prepares the worker: loads search settings, embedding model, and index clients.",
             "label": "Docprocessing setup"
           },
           "embedding": {
-            "description": "Calls the embedding model to turn chunks into vectors. Usually the slowest stage.",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "Attaches access control, boosts, and other metadata to each chunk before writing.",
             "label": "Enrichment prep"
           },
           "finalization": {
-            "description": "Cleans up worker resources and releases the batch once processing completes.",
             "label": "Finalization"
           },
           "gcCollect": {
-            "description": "Time spent in explicit garbage collection between batches.",
             "label": "Garbage collection"
           },
           "hierarchyUpsert": {
-            "description": "Writes the source's folder or space hierarchy so documents can be filtered by location.",
             "label": "Hierarchy upsert"
           },
           "imageProcessing": {
-            "description": "Extracts and summarizes images so their content becomes searchable text.",
             "label": "Image processing"
           },
           "permissionValidation": {
-            "description": "Confirms the credential has the permissions required to read the source's documents.",
             "label": "Permission validation"
           },
           "postIndexDbUpdate": {
-            "description": "Updates document rows in Postgres after the index write succeeds.",
             "label": "Post-index DB update"
           },
           "queueWait": {
-            "description": "Time a batch waits in the queue before a docprocessing worker starts it.",
             "label": "Queue wait"
           },
           "vectorDbWrite": {
-            "description": "Writes the embedded chunks into the document index.",
             "label": "Vector DB write"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Embedding rate limit wait",
+            "description": "Time embedding requests waited for the embedding rate limit set on Index Settings. Part of Embedding, summed over embedding threads."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Embedding provider throttle wait",
+            "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "Per-batch and per-attempt timing for this index attempt.",
-        "title": "Indexing stage metrics"
       },
       "statusCard": {
         "documentsIndexed": {
           "label": "Documents Indexed"
         },
-        "indexingSpeed": "({speed} docs / min)",
+        "indexingSpeed": "{speed} docs/min",
         "lastIndexed": {
-          "label": "Last Indexed"
+          "value": "Last indexed {when}"
         },
-        "lastSynced": {
-          "label": "Last Synced"
+        "title": "Indexing Status",
+        "documents": {
+          "label": "Recent / Total",
+          "total": "/ {total}"
         },
-        "permissionSyncing": {
-          "label": "Permission Syncing"
+        "throughput": {
+          "ariaLabel": "Documents indexed over time",
+          "tooltip": "{count, plural, one {# document} other {# documents}}",
+          "loadError": "The chart could not load."
         },
-        "status": {
-          "label": "Status"
-        }
-      },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "View full error message"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "Document Permission Sync",
-          "notApplicableDescription": "This connector does not use a separate document-permission syncing job."
-        },
-        "groupMembership": {
-          "label": "Group Membership Sync",
-          "notApplicableDescription": "This connector does not use a separate group-membership syncing job."
-        },
-        "indexing": {
-          "label": "Indexing"
-        },
-        "loadError": {
-          "title": "Failed to load sync attempts"
-        },
-        "notApplicable": {
-          "title": "Not applicable"
+        "hold": {
+          "checks_running": "Running pre-index checks",
+          "checks_failed_to_run": "Held: the checks failed to run",
+          "required_checks_failed": "Held: required checks failed",
+          "start": "Start Indexing",
+          "released": "Indexing started",
+          "releaseFailed": "Couldn't start indexing",
+          "viewChecks": "View connector checks"
         }
       },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",
-        "completeReindexStarting": "Starting complete re-indexing...",
         "deletionScheduleFailed": "Failed to schedule deletion of connector - {message}",
-        "indexingProcessStartFailed": "Failed to start indexing process",
         "indexingStartFailed": "Failed to start indexing",
         "indexingStartUnexpectedError": "An unexpected error occurred while trying to start indexing",
         "indexingUpdateStarted": "Indexing update started successfully",
-        "indexingUpdateStarting": "Starting indexing update...",
-        "invalidPruningFrequency": "Invalid pruning frequency: must be a valid number",
-        "invalidRefreshFrequency": "Invalid refresh frequency: must be an integer",
         "nameUpdateFailed": "Failed to update connector name",
         "nameUpdated": "Connector name updated successfully",
         "noUnresolvedErrors": "No unresolved errors to retry.",
@@ -2575,7 +2888,327 @@
         "refreshFrequencyUpdateFailed": "Failed to update connector refresh frequency",
         "refreshFrequencyUpdated": "Connector refresh frequency updated successfully",
         "targetedReindexFailed": "Targeted reindex failed: {message}",
-        "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing."
+        "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing.",
+        "checkFrequencyUpdated": "Connector check frequency updated successfully",
+        "checkFrequencyUpdateFailed": "Failed to update connector check frequency"
+      },
+      "backButton": {
+        "label": "All Connectors"
+      },
+      "account": {
+        "title": "Authentication Account",
+        "editButton": {
+          "label": "Edit Account"
+        }
+      },
+      "configuration": {
+        "title": "Index Configurations",
+        "description": "{source} • {count, plural, one {# setting} other {# settings}}",
+        "editButton": {
+          "label": "Edit Configs"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {Folder} other {Folders}}",
+            "source": "{count, plural, one {Source} other {Sources}}",
+            "stub": "{count, plural, one {Node} other {Nodes}}",
+            "shared_drive": "{count, plural, one {Shared drive} other {Shared drives}}",
+            "my_drive": "{count, plural, one {My Drive} other {My Drives}}",
+            "space": "{count, plural, one {Space} other {Spaces}}",
+            "page": "{count, plural, one {Page} other {Pages}}",
+            "project": "{count, plural, one {Project} other {Projects}}",
+            "database": "{count, plural, one {Database} other {Databases}}",
+            "workspace": "{count, plural, one {Workspace} other {Workspaces}}",
+            "site": "{count, plural, one {Site} other {Sites}}",
+            "drive": "{count, plural, one {Document library} other {Document libraries}}",
+            "channel": "{count, plural, one {Channel} other {Channels}}",
+            "mailbox": "{count, plural, one {Mailbox} other {Mailboxes}}"
+          },
+          "counts": {
+            "folder": "{count, plural, one {# folder} other {# folders}}",
+            "source": "{count, plural, one {# source} other {# sources}}",
+            "stub": "{count, plural, one {# node} other {# nodes}}",
+            "shared_drive": "{count, plural, one {# shared drive} other {# shared drives}}",
+            "my_drive": "{count, plural, one {# My Drive} other {# My Drives}}",
+            "space": "{count, plural, one {# space} other {# spaces}}",
+            "page": "{count, plural, one {# page} other {# pages}}",
+            "project": "{count, plural, one {# project} other {# projects}}",
+            "database": "{count, plural, one {# database} other {# databases}}",
+            "workspace": "{count, plural, one {# workspace} other {# workspaces}}",
+            "site": "{count, plural, one {# site} other {# sites}}",
+            "drive": "{count, plural, one {# document library} other {# document libraries}}",
+            "channel": "{count, plural, one {# channel} other {# channels}}",
+            "mailbox": "{count, plural, one {# mailbox} other {# mailboxes}}"
+          },
+          "notIndexed": "Not indexed",
+          "other": "Other documents",
+          "loadError": "Couldn't load the document breakdown.",
+          "open": "Open in the source",
+          "empty": "No documents indexed yet.",
+          "unavailable": "Available after the first successful run.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {doc} other {docs}}"
+        },
+        "summary": "{realm} • {counts}"
+      },
+      "sharing": {
+        "title": "Sharing Settings",
+        "summary": {
+          "everyone": "Documents shared with **everyone**",
+          "groups": "Documents shared with **{count, plural, one {# group} other {# groups}}**",
+          "sync": "Document access **synced with {source}**",
+          "managedByAdmins": "Managed by **admins**",
+          "managedByGroups": "Managed by **{count, plural, one {# group} other {# groups}}**",
+          "syncRestricted": "Document access **synced with {source}**, restricted to **{count, plural, one {# group} other {# groups}}**",
+          "groupsPending": "Documents shared with **specific groups**",
+          "syncRestrictedPending": "Document access **synced with {source}**, restricted to **specific groups**"
+        },
+        "manageAccess": {
+          "title": "Connector Manage Access",
+          "unavailable": "You can't see who manages this connector."
+        },
+        "editButton": {
+          "label": "Edit Access"
+        },
+        "groupsUnavailable": "Couldn't load the groups."
+      },
+      "schedule": {
+        "refresh": "Refresh every **{every}**",
+        "prune": "Prune every **{every}**",
+        "checks": "Run checks every **{every}**"
+      },
+      "runs": {
+        "kinds": {
+          "label": "Run type",
+          "all": "All Types",
+          "indexing": "Document Index",
+          "doc_permission_sync": "Permissions Sync",
+          "group_sync": "Group Membership Sync",
+          "pruning": "Document Pruning",
+          "checks": "Connector Checks"
+        },
+        "detail": {
+          "queued": "Queued",
+          "running": "Running",
+          "rate": "{rate} docs/min",
+          "finished": "{time} ({minutes, number} min)"
+        },
+        "actions": {
+          "stages": "View Stage Metrics",
+          "cancel": "Cancel",
+          "logs": "View Logs",
+          "checks": "View Check Results"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, one {# document failed} other {# documents failed}}",
+          "checks": "{count, plural, one {# check failed} other {# checks failed}}"
+        },
+        "newModel": {
+          "label": "New model",
+          "tooltip": "Indexed with the embedding model that will replace the current one."
+        },
+        "figures": {
+          "indexed": "indexed",
+          "synced": "synced",
+          "memberships": "memberships",
+          "removed": "removed",
+          "checks": "checks run"
+        },
+        "counts": {
+          "newDocs": "{count, plural, one {# new document} other {# new documents}}",
+          "updatedDocs": "Updated documents",
+          "removedDocs": "{count, plural, one {# document removed} other {# documents removed}}",
+          "users": "{count, plural, one {# user} other {# users}}",
+          "groups": "{count, plural, one {# group} other {# groups}}",
+          "running": "{count, plural, one {# run in progress} other {# runs in progress}}",
+          "succeeded": "{count, plural, one {# run succeeded} other {# runs succeeded}}",
+          "failed": "{count, plural, one {# run failed} other {# runs failed}}",
+          "passedChecks": "{count, plural, one {# check passed} other {# checks passed}}",
+          "failedChecks": "{count, plural, one {# check failed} other {# checks failed}}",
+          "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}"
+        },
+        "search": {
+          "placeholder": "Search indexing runs..."
+        },
+        "window": {
+          "label": "Time range",
+          "all": "All time",
+          "h1": "Last hour",
+          "h12": "Last 12 hours",
+          "h24": "Last 24 hours",
+          "d7": "Last 7 days",
+          "d30": "Last 30 days"
+        },
+        "statusGroups": {
+          "label": "Status",
+          "all": "All Status",
+          "running": "Running",
+          "succeeded": "Succeeded",
+          "failed": "Failed",
+          "canceled": "Canceled"
+        },
+        "loadError": {
+          "title": "Couldn't load the runs."
+        },
+        "empty": {
+          "title": "No runs yet",
+          "filteredTitle": "No runs match these filters.",
+          "description": "Runs are scheduled in the background and may take a moment to appear."
+        },
+        "units": "{count, plural, one {run} other {runs}}",
+        "errorModal": {
+          "indexing": "Index Run Error",
+          "doc_permission_sync": "Document Permission Sync Error",
+          "group_sync": "Group Membership Sync Error",
+          "pruning": "Document Pruning Error",
+          "checks": "Connector Checks Error"
+        },
+        "toasts": {
+          "canceled": "The run is being canceled.",
+          "cancelFailed": "Couldn't cancel the run. Try again."
+        },
+        "checkResults": {
+          "title": "Connector Checks",
+          "close": "Close",
+          "count": "({count})"
+        }
+      },
+      "activity": {
+        "search": {
+          "placeholder": "Search activity history..."
+        },
+        "counts": {
+          "failures": "{count, plural, one {# run failed} other {# runs failed}}",
+          "errors": "{count, plural, one {# run with document errors} other {# runs with document errors}}"
+        },
+        "filter": {
+          "label": "Show",
+          "all": "All levels",
+          "failures": "Failures",
+          "errors": "Errors",
+          "other": "Other"
+        },
+        "resolved": {
+          "label": "Resolved"
+        },
+        "groups": {
+          "failures": "{count, plural, one {# Failure} other {# Failures}}",
+          "errors": "{count, plural, one {# Error} other {# Errors}}",
+          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}",
+          "other": "Other"
+        },
+        "title": {
+          "indexing": {
+            "failed": "Indexing failed",
+            "running": "Indexing in progress with errors",
+            "stopped": "Indexing stopped with errors",
+            "errors": "Indexing completed with errors",
+            "resolved": "Indexing errors resolved",
+            "succeeded": "Indexing completed successfully",
+            "inProgress": "Indexing in progress",
+            "canceled": "Indexing stopped"
+          },
+          "doc_permission_sync": {
+            "failed": "Permissions sync failed",
+            "running": "Permissions syncing with errors",
+            "stopped": "Permissions sync stopped with errors",
+            "errors": "Permissions synced with errors",
+            "resolved": "Permissions sync errors resolved",
+            "succeeded": "Permissions synced successfully",
+            "inProgress": "Permissions syncing",
+            "canceled": "Permissions sync stopped"
+          },
+          "group_sync": {
+            "failed": "Group membership sync failed",
+            "running": "Group membership syncing with errors",
+            "stopped": "Group membership sync stopped with errors",
+            "errors": "Group membership synced with errors",
+            "resolved": "Group membership sync errors resolved",
+            "succeeded": "Group membership synced successfully",
+            "inProgress": "Group membership syncing",
+            "canceled": "Group membership sync stopped"
+          },
+          "pruning": {
+            "failed": "Pruning failed",
+            "running": "Pruning in progress with errors",
+            "stopped": "Pruning stopped with errors",
+            "errors": "Pruning completed with errors",
+            "resolved": "Pruning errors resolved",
+            "succeeded": "Pruning completed successfully",
+            "inProgress": "Pruning in progress",
+            "canceled": "Pruning stopped"
+          },
+          "checks": {
+            "failed": "Connector checks failed",
+            "running": "Connector checks running with errors",
+            "stopped": "Connector checks stopped with errors",
+            "errors": "Connector checks completed with errors",
+            "resolved": "Connector check errors resolved",
+            "succeeded": "Connector checks passed",
+            "inProgress": "Connector checks running",
+            "canceled": "Connector checks stopped"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, one {# doc indexed} other {# docs indexed}}. Index run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "doc_permission_sync": "{count, plural, one {# doc synced} other {# docs synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "group_sync": "{count, plural, one {# membership synced} other {# memberships synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "pruning": "{count, plural, one {# doc removed} other {# docs removed}}. Pruning run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "checks": "{count, plural, one {# check run} other {# checks run}}. Check run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "checksFailed": "{count, plural, one {# check failed} other {# checks failed}}."
+        },
+        "tags": {
+          "stackTrace": "Stack Trace",
+          "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
+          "doc_permission_sync": "{count, plural, one {# doc failed to sync} other {# docs failed to sync}}",
+          "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
+          "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}",
+          "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
+          "checks": "{count, plural, one {# check failed} other {# checks failed}}"
+        },
+        "more": "Show more",
+        "empty": {
+          "title": "No failures or errors",
+          "resolved": "No resolved errors",
+          "filtered": "Nothing matches this search.",
+          "failures": "No failures",
+          "errors": "No errors",
+          "other": "No other runs"
+        },
+        "loadError": {
+          "title": "Couldn't load the activity."
+        },
+        "docs": {
+          "title": "Failed documents",
+          "search": {
+            "placeholder": "Search files..."
+          },
+          "resolveAll": "Resolve All",
+          "resolveOne": "Resolve this document",
+          "more": "More",
+          "less": "Less",
+          "unknownDocument": "Unknown document",
+          "empty": "No open document errors",
+          "loadError": "Couldn't load the failed documents.",
+          "open": "Open the document"
+        },
+        "trace": {
+          "runId": "Run ID: {id}",
+          "copy": "Copy the stack trace"
+        },
+        "actions": {
+          "resolve": "Resolve"
+        }
+      },
+      "stageDetails": {
+        "title": "Stage Details",
+        "calls": "Batches",
+        "averageTime": "Average Time",
+        "maxTime": "Max Time",
+        "uneven": {
+          "tooltip": "Batch times vary widely for this stage"
+        },
+        "close": "Close stage details"
       }
     },
     "connectorTitle": {
@@ -2744,6 +3377,10 @@
             "label": "Delete Account",
             "inUseTooltip": "Cannot delete this credential because there are other connectors that are using it."
           },
+          "updateButton": {
+            "label": "Update Credentials",
+            "tooltip": "Changes the saved values for every connector that uses this account."
+          },
           "usedBy": {
             "label": "Used by {count, plural, one {# connector} other {# connectors}}"
           },
@@ -2803,19 +3440,12 @@
         "fieldInvalid": "Check the {field}: {detail}",
         "rejected": "This credential cannot be used with these settings. {detail}"
       },
-      "credentialsLoadError": {
-        "title": "Failed to load credentials."
-      },
       "field": {
         "optionalSuffix": {
           "label": "optional"
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Your Google Drive credential was created. Manage or revoke it from the credential list.",
-          "title": "Authentication Complete"
-        },
         "authFailed": {
           "toast": "Failed to authenticate with Google Drive - {error}"
         },
@@ -2823,58 +3453,15 @@
           "label": "Authenticate with Google Drive",
           "pendingLabel": "Authenticating..."
         },
-        "createButton": {
-          "label": "Create Credential",
-          "pendingLabel": "Creating..."
-        },
-        "credentialsLoadError": {
-          "title": "Failed to load Google Drive credentials."
-        },
-        "invalidFile": {
-          "toast": "Invalid file provided - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Invalid file provided - expected a Service Account JSON key"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Please upload a service account key before creating a credential"
-        },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
-          "title": "Option 1: OAuth app",
           "sharedScopesNote": "Google asks for Google Drive and Gmail access together, so one account can back both connectors. To use this account for Google Drive only, untick the Gmail scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
-        },
-        "primaryAdmin": {
-          "description": "Enter the email of an admin or owner of the Google Organization that owns the Google Drive(s) you want to index.",
-          "invalidEmail": "Must be a valid email",
-          "label": "Primary Admin Email",
-          "placeholder": "admin@yourcompany.com",
-          "required": "Required"
-        },
-        "section": {
-          "title": "Google Drive Authentication"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Failed to create service account credential - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Successfully created service account credential"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2: Service account"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Upload or paste your service account JSON key"
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "Your Gmail credential was created. Manage or revoke it from the credential list.",
-          "title": "Authentication Complete"
-        },
         "authFailed": {
           "toast": "Failed to authenticate with Gmail - {error}"
         },
@@ -2882,51 +3469,12 @@
           "label": "Authenticate with Gmail",
           "pendingLabel": "Authenticating..."
         },
-        "createButton": {
-          "label": "Create Credential",
-          "pendingLabel": "Creating..."
-        },
-        "credentialsLoadError": {
-          "title": "Failed to load Gmail credentials."
-        },
-        "invalidFile": {
-          "toast": "Invalid file provided - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Invalid file provided - expected a Service Account JSON key"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Please upload a service account key before creating a credential"
-        },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Gmail you want to index.",
-          "title": "Option 1: OAuth app",
           "sharedScopesNote": "Google asks for Gmail and Google Drive access together, so one account can back both connectors. To use this account for Gmail only, untick the Google Drive scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
-        },
-        "primaryAdmin": {
-          "description": "Enter the email of an admin or owner of the Google Organization that owns the Gmail account(s) you want to index.",
-          "invalidEmail": "Must be a valid email",
-          "label": "Primary Admin Email",
-          "placeholder": "admin@yourcompany.com",
-          "required": "Required"
-        },
-        "section": {
-          "title": "Gmail Authentication"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Failed to create service account credential - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Successfully created service account credential"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2: Service account"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Upload or paste your service account JSON key"
         }
       },
       "header": {
@@ -3085,6 +3633,10 @@
         "units": {
           "hours": "hours",
           "minutes": "minutes"
+        },
+        "checkFrequency": {
+          "title": "Run Checks Every",
+          "description": "Check connection for capabilities and health."
         }
       },
       "settings": {
@@ -3137,6 +3689,1122 @@
           "title": "Connector Manage Access"
         },
         "title": "Connector Settings"
+      },
+      "optionsListInput": {
+        "placeholder": "Pick {label} from the list, or type one"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "Enable processing of page attachments including images and documents",
+              "label": "Include Attachments"
+            },
+            "scoped_token": {
+              "label": "This is an API token with scopes",
+              "description": "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens."
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "Meeting IDs",
+              "description": "Each recurring meeting is indexed occurrence by occurrence. Zoom returns occurrences from the last 15 months only, so older ones are out of reach of a meeting ID. To index history further back, scope by host email or by Zoom Group instead — neither has that limit."
+            },
+            "webinar_ids": {
+              "label": "Webinar IDs",
+              "description": "Webinars also need the Webinar add-on, enabled for the host. Unlike meeting IDs, webinar history has no 15-month limit."
+            },
+            "host_emails": {
+              "label": "Host Emails",
+              "description": "Index every session these people host, of the types ticked below. An email that matches no Zoom user is reported as an indexing error rather than silently ignored."
+            },
+            "group_id": {
+              "label": "Zoom Group ID",
+              "description": "Index every session the members of one Zoom Group host, of the types ticked below. Zoom re-reads the member list on every run, so a joiner or leaver is picked up without editing this connector."
+            },
+            "include_meetings": {
+              "label": "Include meetings",
+              "description": "Applies to Host Emails and Zoom Group. The ID lists above already say which type each ID is."
+            },
+            "include_webinars": {
+              "label": "Include webinars",
+              "description": "Applies to Host Emails and Zoom Group. Webinars also need the Webinar add-on, enabled for the host."
+            },
+            "treat_link_access_as_public": {
+              "label": "Treat link access as public",
+              "description": "Only matters with permission sync. When on, a recording whose Link access is \"Anyone with the link\" or a signed-in rule is visible to all Onyx users, and a domain rule to users of those domains. When off, every transcript is visible to the recording's owner alone, because Zoom cannot say who is in \"People with access\"."
+            },
+            "plan_tier": {
+              "label": "Zoom Plan",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "Sets how fast this connector is allowed to call Zoom. Pick `pro` on a Pro account, and `business_plus` on Business, Education, Enterprise or Partner."
+            },
+            "rate_limit_percent": {
+              "label": "Zoom API Rate Limit",
+              "description": "Whole percent, 1 to 100, of the account's Zoom rate limit this connector may spend. Blank means 50, which leaves room for the customer's other Zoom integrations. Each Zoom connector paces itself and cannot see the others, so two connectors on one Zoom account spend this percent each — divide it if you run several."
+            }
+          },
+          "description": "Configure Zoom connector",
+          "subtext": "Indexes the Cloud Recording transcript of each Zoom session, on a Zoom Pro plan or higher. A session that was never cloud-recorded is skipped. Set an Indexing Start date under Advanced. Zoom lists recordings a month per request, so without one the first crawl asks for every month back to 2013 and spends your account's API allowance on years that hold nothing."
+        },
+        "web": {
+          "description": "Configure Web connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL",
+              "placeholder": "https://example.com"
+            },
+            "web_connector_type": {
+              "label": "Scrape Method",
+              "options": {
+                "recursive": "recursive",
+                "single": "single",
+                "sitemap": "sitemap"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "Scroll before scraping",
+              "description": "Enable if the website requires scrolling for the desired content to load"
+            },
+            "url_rewrites": {
+              "label": "URL Rewrites",
+              "description": "Rewrite document URLs before storing. Useful when crawling through an internal mirror while storing the canonical public links, for example https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "Source URL prefix",
+              "rightLabel": "Replacement prefix",
+              "leftPlaceholder": "https://internal-mirror.example.com",
+              "rightPlaceholder": "https://docs.example.com"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "Configure LumApps connector",
+          "fields": {
+            "base_url": {
+              "label": "API Base URL (cell host)",
+              "description": "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com)."
+            },
+            "organization_id": {
+              "label": "Organization ID",
+              "description": "Your LumApps organization id (numeric)."
+            },
+            "instance_ids": {
+              "label": "Instance (site) IDs",
+              "description": "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user."
+            },
+            "custom_content_types": {
+              "label": "Custom Content Type IDs",
+              "description": "Restrict to specific custom content type IDs. Leave empty to index all content types."
+            },
+            "lang": {
+              "label": "Language",
+              "description": "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "Configure YouTrack connector",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack URL",
+              "description": "Your YouTrack address, e.g. https://example.youtrack.cloud. For YouTrack Server, include the context path, e.g. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projects",
+              "description": "Project short names (e.g. ABC) to index. Leave empty to index every project the token can read."
+            }
+          }
+        },
+        "github": {
+          "description": "Configure GitHub connector",
+          "fields": {
+            "github_base_url": {
+              "label": "GitHub Enterprise Server URL",
+              "description": "Leave blank for github.com.",
+              "placeholder": "https://github.example.com"
+            },
+            "repo_owner": {
+              "label": "Repository Owner"
+            },
+            "github_mode": {
+              "label": "GitHub content to index",
+              "tabs": {
+                "repo": {
+                  "label": "Specific Repository"
+                },
+                "everything": {
+                  "label": "Everything"
+                }
+              }
+            },
+            "repositories": {
+              "label": "Repository Name(s)",
+              "description": "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "Everything",
+              "description": "This connector will index all repositories the provided credentials have access to!"
+            },
+            "include_prs": {
+              "label": "Include pull requests",
+              "description": "Index pull requests from repositories"
+            },
+            "include_issues": {
+              "label": "Include Issues",
+              "description": "Index issues from repositories"
+            },
+            "include_files": {
+              "label": "Include Documents",
+              "description": "Index text-based documents (markdown, text, etc.) from repositories"
+            },
+            "branch": {
+              "label": "Branch",
+              "description": "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately."
+            }
+          }
+        },
+        "testrail": {
+          "description": "Configure TestRail connector",
+          "fields": {
+            "testrail_base_url": {
+              "label": "TestRail Base URL",
+              "placeholder": "https://acme.testrail.io"
+            },
+            "project_ids": {
+              "label": "Project IDs",
+              "description": "Comma-separated list of TestRail project IDs to index (e.g., 1 or 1,2,3). Leave empty to index all projects."
+            },
+            "cases_page_size": {
+              "label": "Cases Page Size",
+              "description": "Number of test cases to fetch per page from the TestRail API (default: 250)"
+            },
+            "max_pages": {
+              "label": "Max Pages",
+              "description": "Maximum number of pages to fetch to prevent infinite loops (default: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "Skip Document Character Limit",
+              "description": "Skip indexing test cases that exceed this character limit (default: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "Configure GitLab connector",
+          "fields": {
+            "gitlab_url": {
+              "label": "GitLab URL",
+              "placeholder": "https://gitlab.com"
+            },
+            "project_owner": {
+              "label": "Project Owner"
+            },
+            "project_name": {
+              "label": "Project Name"
+            },
+            "include_mrs": {
+              "label": "Include MRs",
+              "description": "Index merge requests from repositories"
+            },
+            "include_issues": {
+              "label": "Include Issues",
+              "description": "Index issues from repositories"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "Configure Bitbucket connector",
+          "subtext": "Configure Bitbucket connector (Cloud only). You can index a workspace, specific projects or repositories.",
+          "fields": {
+            "workspace": {
+              "label": "Workspace",
+              "description": "The Bitbucket workspace to index (e.g., \"atlassian\" from https://bitbucket.org/atlassian/workspace )."
+            },
+            "bitbucket_mode": {
+              "label": "Bitbucket content to index",
+              "tabs": {
+                "repo": {
+                  "label": "Specific Repositories"
+                },
+                "project": {
+                  "label": "Project(s)"
+                },
+                "workspace": {
+                  "label": "Workspace"
+                }
+              }
+            },
+            "repositories": {
+              "label": "Repository Slugs",
+              "description": "For multiple repositories, enter comma-separated slugs (e.g., repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "Project Key(s)",
+              "description": "One or more Bitbucket Project Keys (comma-separated) to index all repositories in those projects (e.g., PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "Workspace",
+              "description": "This connector will index all repositories in the workspace."
+            }
+          }
+        },
+        "gitbook": {
+          "description": "Configure GitBook connector",
+          "fields": {
+            "space_id": {
+              "label": "Space ID",
+              "description": "The ID of the GitBook space to index. This can be found in the URL of a page in the space. For example, if your URL looks like `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, then your space ID is `8JkzVx8QCIGRrmxhGHU8`."
+            }
+          }
+        },
+        "google_drive": {
+          "description": "Configure Google Drive connector",
+          "fields": {
+            "credential_kind": {
+              "label": "Credential kind"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "General"
+                },
+                "Specific": {
+                  "label": "Specific"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "Include shared drives",
+              "description": {
+                "oauth": "This will allow Onyx to index everything in the shared drives you have access to.",
+                "serviceAccount": "This will allow Onyx to index everything in your Organization's shared drives."
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "Include My Drive",
+                "serviceAccount": "Include Everyone's My Drive"
+              },
+              "description": {
+                "oauth": "This will allow Onyx to index everything in your My Drive.",
+                "serviceAccount": "This will allow Onyx to index everything in everyone's My Drives."
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "This will allow Onyx to index all files shared with you.",
+              "label": "Include All Files Shared With You"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "Enter a comma separated list of the URLs for the shared drive you would like to index. You must have access to these shared drives.",
+                "serviceAccount": "Enter a comma separated list of the URLs for the shared drive you would like to index."
+              },
+              "label": "Shared Drive URLs"
+            },
+            "shared_folder_urls": {
+              "description": "Enter a comma separated list of the URLs of any folders you would like to index. The files located in these folders (and all subfolders) will be indexed.",
+              "label": "Folder URLs"
+            },
+            "my_drive_emails": {
+              "description": "Enter a comma separated list of the emails of the users whose MyDrive you want to index.",
+              "label": "My Drive Emails"
+            },
+            "specific_user_emails": {
+              "description": "Enter a comma separated list of specific user emails to index. This will only index files accessible to these users.",
+              "label": "Specific User Emails"
+            },
+            "exclude_domain_link_only": {
+              "label": "Hide domain link-only files",
+              "description": "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access."
+            }
+          }
+        },
+        "gmail": {
+          "description": "Configure Gmail connector"
+        },
+        "bookstack": {
+          "description": "Configure Bookstack connector",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "BookStack Base URL",
+              "placeholder": "https://bookstack.example.com"
+            }
+          }
+        },
+        "outline": {
+          "description": "Configure Outline connector",
+          "fields": {
+            "outline_base_url": {
+              "label": "Outline Base URL",
+              "placeholder": "https://app.getoutline.com"
+            }
+          }
+        },
+        "confluence": {
+          "description": "Configure Confluence connector",
+          "fields": {
+            "is_cloud": {
+              "label": "Is Cloud",
+              "description": "Choose Confluence Cloud for a site on atlassian.net, or Confluence Data Center for a self-hosted Confluence Server or Data Center site."
+            },
+            "wiki_base": {
+              "label": "Site URL",
+              "placeholder": "https://your-domain.atlassian.net/wiki"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "space": {
+                  "label": "Space"
+                },
+                "page": {
+                  "label": "Page"
+                },
+                "cql": {
+                  "label": "CQL Query"
+                }
+              }
+            },
+            "everything": {
+              "label": "Everything",
+              "description": "This connector will index all pages the provided credentials have access to!"
+            },
+            "space": {
+              "label": "Space Key",
+              "description": "The Confluence space key to index (e.g. `KB`)."
+            },
+            "page_id": {
+              "label": "Page ID",
+              "description": "Specific page ID to index (e.g. `131368`)"
+            },
+            "index_recursively": {
+              "label": "Index Recursively",
+              "description": "If this is set, we will index the page indicated by the Page ID as well as all of its children."
+            },
+            "cql_query": {
+              "label": "CQL Query",
+              "description": "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. Do not use ORDER BY, because the connector sets its own sort order. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details."
+            }
+          }
+        },
+        "jira": {
+          "description": "Configure Jira connector",
+          "subtext": "Configure which Jira content to index. You can index everything or specify a particular project.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "project": {
+                  "label": "Project"
+                },
+                "jql": {
+                  "label": "JQL Query"
+                }
+              }
+            },
+            "everything": {
+              "label": "Everything",
+              "description": "This connector will index all issues the provided credentials have access to!"
+            },
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific project to index (e.g., 'PROJ')."
+            },
+            "jql_query": {
+              "label": "JQL Query",
+              "description": "A custom JQL query to filter Jira issues.\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses.\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax."
+            },
+            "comment_email_blacklist": {
+              "label": "Comment Email Blacklist",
+              "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
+            }
+          }
+        },
+        "salesforce": {
+          "description": "Configure Salesforce connector",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "Configuration Type",
+              "tabs": {
+                "simple": {
+                  "label": "Simple"
+                },
+                "advanced": {
+                  "label": "Advanced"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "Requested Objects",
+              "description": "Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'.\n\nHint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities')."
+            },
+            "custom_query_config": {
+              "label": "Custom Query Config",
+              "description": "Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure.\n\nExample: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n[See our docs]({docsAdminsPath}/connectors/official/salesforce) for more details."
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "Configure SharePoint connector",
+          "fields": {
+            "sites": {
+              "label": "Sites",
+              "description": "- If no sites are specified, all sites in your organization will be indexed (`Sites.Read.All` permission required).\n- Specifying `https://onyxai.sharepoint.com/sites/support` for example only indexes this site.\n- Specifying `https://onyxai.sharepoint.com/sites/support/subfolder` for example only indexes this folder.\n- To index users' personal sites, use the [OneDrive connector]({docsAdminsPath}/connectors/official/onedrive).\n- Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported."
+            },
+            "include_site_documents": {
+              "label": "Index Documents",
+              "description": "Index documents of all SharePoint libraries or folders defined above."
+            },
+            "include_site_pages": {
+              "label": "Index ASPX Sites",
+              "description": "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified."
+            },
+            "treat_sharing_link_as_public": {
+              "label": "Treat sharing links as public",
+              "description": "When enabled, documents with a sharing link (anonymous or organization-wide) are treated as public (visible to all Onyx users). When disabled, only users and groups with explicit role assignments can see the document."
+            },
+            "excluded_sites": {
+              "label": "Excluded Sites",
+              "description": "Site URLs or glob patterns to exclude from indexing. Matched sites will never be indexed, even if they appear in the sites list above. Examples: `https://contoso.sharepoint.com/sites/archive` (exact), `*://*/sites/archive-*` (glob pattern)."
+            },
+            "excluded_paths": {
+              "label": "Excluded Paths",
+              "description": "Glob patterns for file paths to exclude from indexing within document libraries. Patterns are matched against both the full relative path and the filename. Examples: `*.tmp` (temp files), `~$*` (Office lock files), `Archive/*` (folder)."
+            },
+            "authority_host": {
+              "label": "Authority Host",
+              "description": "The Microsoft identity authority host used for authentication. For most deployments, leave as default. For GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API Host",
+              "description": "The Microsoft Graph API host. For most deployments, leave as default. For GCC High / DoD, use https://graph.microsoft.us"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "SharePoint Domain Suffix",
+              "description": "The domain suffix for SharePoint sites (e.g. sharepoint.com). For most deployments, leave as default. For GCC High, use sharepoint.us"
+            }
+          }
+        },
+        "teams": {
+          "description": "Configure Teams connector",
+          "fields": {
+            "teams": {
+              "label": "Teams",
+              "description": "Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed."
+            },
+            "include_attachments": {
+              "description": "Index the files in each channel's Files tab as their own documents, with the readers SharePoint grants them. Needs a certificate credential, Files.Read.All or Sites.Read.All on Graph, and Sites.FullControl.All on the SharePoint API to read each file's readers. With Sites.Selected, grant the app full control on each channel site."
+            },
+            "include_inline_images": {
+              "label": "Include Inline Images",
+              "description": "Index the images pasted into channel messages with their thread. Needs no extra permission. Nothing is downloaded while image extraction and analysis is off in the search settings."
+            },
+            "include_meeting_transcripts": {
+              "label": "Include Meeting Transcripts",
+              "description": "Index the transcripts of scheduled meetings as their own documents, readable by the organizer and the attendees. Needs the OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All and User.Read.All application permissions, the tenant setting that allows Graph API access to transcripts, and an application access policy granted to the organizers. Channel meetings are not covered. Transcripts from the last six months are indexed, and a transcript leaves the index once it is older than that."
+            },
+            "include_meeting_chats": {
+              "label": "Include Meeting Chats",
+              "description": "Index what people write in the chat of a scheduled meeting, a document per day, readable by the members of the chat. Needs the Chat.Read.All and User.Read.All application permissions. Covers meetings organized in this tenant: Microsoft does not serve the chat of a meeting another organization set up."
+            },
+            "meeting_organizers": {
+              "label": "Meeting Organizers",
+              "description": "User principal names of the organizers whose meeting transcripts and chats to index. Leave empty to include every enabled user with a Teams license."
+            },
+            "authority_host": {
+              "label": "Authority Host",
+              "description": "The Microsoft identity authority host used for authentication. For most deployments, leave as default. For GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API Host",
+              "description": "The Microsoft Graph API host. For most deployments, leave as default. For GCC High / DoD, use https://graph.microsoft.us"
+            }
+          }
+        },
+        "outlook": {
+          "description": "Configure Outlook connector",
+          "fields": {
+            "mailboxes": {
+              "label": "Mailboxes",
+              "description": "User principal names or primary email addresses of the mailboxes to index. Leave this and Mailbox Groups empty to index every mailbox the app registration may open. Shared mailboxes are never picked up automatically and must be listed here."
+            },
+            "mailbox_groups": {
+              "label": "Mailbox Groups",
+              "description": "Display names or object IDs of Entra groups. The mailbox of every member is indexed, members of nested groups included, so a tenant can be limited to the people who use Onyx. Needs the GroupMember.Read.All application permission."
+            },
+            "include_attachments": {
+              "description": "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
+            },
+            "include_calendar": {
+              "label": "Include Calendar",
+              "description": "Index the calendar of each mailbox as well as its mail. Needs the Calendars.Read application permission."
+            },
+            "excluded_folders": {
+              "label": "Excluded Folders",
+              "description": "Folder names to skip in every mailbox, in addition to Junk Email, Deleted Items, Drafts and Outbox, which are always skipped."
+            },
+            "calendar_past_days": {
+              "label": "Calendar Past Days",
+              "description": "Used when Include Calendar is on. How far back the calendar window reaches. Events older than this leave the index at the next prune as the window moves forward. Widening it later needs a re-index, since unchanged events do not re-enter on their own."
+            },
+            "calendar_future_days": {
+              "label": "Calendar Future Days",
+              "description": "Used when Include Calendar is on. How far ahead the calendar window reaches. Widening it later needs a re-index, since unchanged events do not re-enter on their own."
+            },
+            "authority_host": {
+              "label": "Authority Host",
+              "description": "The Microsoft identity authority host used for authentication. For most deployments, leave as default. For GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API Host",
+              "description": "The Microsoft Graph API host. For most deployments, leave as default. For GCC High / DoD, use https://graph.microsoft.us"
+            }
+          }
+        },
+        "discourse": {
+          "description": "Configure Discourse connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL"
+            },
+            "categories": {
+              "label": "Categories"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "Configure Drupal Wiki connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL",
+              "description": "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "Drupal Wiki content to index",
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "specific": {
+                  "label": "Specific Spaces/Pages"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "Everything",
+              "description": "This connector will index all spaces the provided credentials have access to!"
+            },
+            "spaces": {
+              "label": "Space IDs",
+              "description": "Specify one or more space IDs to index. Only numeric values are allowed."
+            },
+            "pages": {
+              "label": "Page IDs",
+              "description": "Specify one or more page IDs to index. Only numeric values are allowed."
+            }
+          }
+        },
+        "axero": {
+          "description": "Configure Axero connector",
+          "fields": {
+            "base_url": {
+              "label": "Axero Base URL",
+              "placeholder": "https://axero.example.com"
+            },
+            "spaces": {
+              "label": "Spaces",
+              "description": "Specify zero or more Spaces to index (by the Space IDs). If no Space IDs are specified, all Spaces will be indexed."
+            }
+          }
+        },
+        "productboard": {
+          "description": "Configure Productboard connector"
+        },
+        "slack": {
+          "description": "Configure Slack connector",
+          "fields": {
+            "channels": {
+              "label": "Channels",
+              "description": "Specify 0 or more channels to index. Pick a channel from the list to follow it by id, so a rename does not break indexing, or type the name of a channel the list does not show, such as a private channel the bot was invited to. If no channels are specified, all channels in your workspace will be indexed."
+            },
+            "channel_regex_enabled": {
+              "label": "Enable Channel Regex",
+              "description": "If enabled, we will treat the \"channels\" specified above as regular expressions. A channel's messages will be pulled in by the connector if the name of the channel fully matches any of the specified regular expressions.\n\nFor example, specifying `.*-support.*` as a \"channel\" will cause the connector to include any channels with \"-support\" in the name."
+            },
+            "exclude_channels": {
+              "label": "Channels to Exclude",
+              "description": "Specify 0 or more channels to exclude. Exclusions are applied after the \"Channels\" filter above, so a channel matched by both is excluded. If no channels are specified, nothing is excluded."
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "Enable Exclude Channel Regex",
+              "description": "If enabled, we will treat the \"channels to exclude\" specified above as regular expressions. A channel will be excluded if its name fully matches any of the specified regular expressions.\n\nFor example, specifying `.*-alerts` as a \"channel to exclude\" will cause the connector to skip any channels ending in \"-alerts\"."
+            },
+            "include_bot_messages": {
+              "label": "Include Bot Messages",
+              "description": "If enabled, messages from bots and apps will be indexed. Useful for channels that are primarily bot-driven feeds (e.g. CRM updates, automated notes)."
+            }
+          }
+        },
+        "slab": {
+          "description": "Configure Slab connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL",
+              "description": "Specify the base URL for your Slab team. This will look something like: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "Configure Guru connector"
+        },
+        "gong": {
+          "description": "Configure Gong connector",
+          "fields": {
+            "gong_base_url": {
+              "label": "Gong API Base URL",
+              "description": "Defaults to `https://api.gong.io`.",
+              "placeholder": "https://api.gong.io"
+            },
+            "workspaces": {
+              "label": "Workspaces",
+              "description": "Specify 0 or more workspaces to index. Provide the workspace ID or the EXACT workspace name from Gong. If no workspaces are specified, transcripts from all workspaces will be indexed."
+            }
+          }
+        },
+        "loopio": {
+          "description": "Configure Loopio connector",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Loopio Subdomain",
+              "description": "The subdomain of your Loopio site, like `acme` in `acme.loopio.com`.",
+              "placeholder": "acme"
+            },
+            "loopio_stack_name": {
+              "label": "Loopio Stack Name",
+              "description": "Must be exact match to the name in Library Management, leave this blank if you want to index all Stacks"
+            }
+          }
+        },
+        "file": {
+          "description": "Configure File connector",
+          "fields": {
+            "file_locations": {
+              "label": "Files"
+            }
+          }
+        },
+        "zulip": {
+          "description": "Configure Zulip connector",
+          "fields": {
+            "realm_name": {
+              "label": "Realm Name"
+            },
+            "realm_url": {
+              "label": "Realm URL"
+            }
+          }
+        },
+        "coda": {
+          "description": "Configure Coda connector"
+        },
+        "notion": {
+          "description": "Configure Notion connector",
+          "fields": {
+            "root_page_id": {
+              "label": "Root Page ID",
+              "description": "If specified, will only index the specified page + all of its child pages. If left blank, will index all pages the integration has been given access to."
+            }
+          }
+        },
+        "hubspot": {
+          "description": "Configure HubSpot connector",
+          "fields": {
+            "object_types": {
+              "label": "Object Types",
+              "options": {
+                "tickets": "Tickets",
+                "companies": "Companies",
+                "deals": "Deals",
+                "contacts": "Contacts"
+              },
+              "description": "Choose which HubSpot object types to index. All types are selected by default."
+            }
+          }
+        },
+        "document360": {
+          "description": "Configure Document360 connector",
+          "fields": {
+            "workspace": {
+              "label": "Workspace"
+            },
+            "categories": {
+              "label": "Categories",
+              "description": "Specify 0 or more categories to index. For instance, specifying the category 'Help' will cause us to only index all content within the 'Help' category. If no categories are specified, all categories in your workspace will be indexed."
+            }
+          }
+        },
+        "clickup": {
+          "description": "Configure ClickUp connector",
+          "fields": {
+            "connector_type": {
+              "label": "Connector Type",
+              "options": {
+                "list": "list",
+                "folder": "folder",
+                "space": "space",
+                "workspace": "workspace"
+              }
+            },
+            "connector_ids": {
+              "label": "Connector IDs",
+              "description": "Specify 0 or more id(s) to index from."
+            },
+            "retrieve_task_comments": {
+              "label": "Retrieve Task Comments",
+              "description": "If checked, then all the comments for each task will also be retrieved and indexed."
+            }
+          }
+        },
+        "google_sites": {
+          "description": "Configure Google Sites connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL",
+              "placeholder": "https://sites.google.com/view/your-site"
+            },
+            "file_locations": {
+              "label": "Site Export",
+              "description": "Upload a `.zip` file containing the HTML of your Google Site."
+            }
+          }
+        },
+        "zendesk": {
+          "description": "Configure Zendesk connector",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Zendesk Subdomain",
+              "description": "The subdomain of your Zendesk site, like `acme` in `acme.zendesk.com`.",
+              "placeholder": "acme"
+            },
+            "content_type": {
+              "label": "Content Type",
+              "options": {
+                "articles": "articles",
+                "tickets": "tickets"
+              }
+            },
+            "calls_per_minute": {
+              "label": "API Calls per Minute",
+              "description": "Restricts how many Zendesk API calls this connector can make per minute (applies only to this connector). See defaults: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "Configure Box connector",
+          "fields": {
+            "folder_ids": {
+              "label": "Folders",
+              "description": "Box folder IDs or folder URLs (e.g. https://app.box.com/folder/123456789) to index. Leave empty to index everything visible to the authenticated user."
+            },
+            "include_web_links": {
+              "label": "Include Web Links",
+              "description": "Also index Box web links (bookmarks) as lightweight documents."
+            }
+          }
+        },
+        "dropbox": {
+          "description": "Configure Dropbox connector"
+        },
+        "s3": {
+          "description": "Configure S3 connector",
+          "fields": {
+            "bucket_name": {
+              "label": "Bucket Name"
+            },
+            "prefix": {
+              "label": "Prefix"
+            },
+            "region_name": {
+              "label": "AWS Region",
+              "description": "The AWS region of the bucket (e.g. us-east-1). Required for buckets in non-default partitions such as GovCloud (us-gov-west-1); otherwise the default region resolution is used."
+            },
+            "bucket_type": {
+              "label": "Bucket Type"
+            }
+          }
+        },
+        "r2": {
+          "description": "Configure R2 connector",
+          "fields": {
+            "bucket_name": {
+              "label": "Bucket Name"
+            },
+            "prefix": {
+              "label": "Prefix"
+            },
+            "european_residency": {
+              "label": "EU Data Residency",
+              "description": "Check this box if your bucket has EU data residency enabled."
+            },
+            "bucket_type": {
+              "label": "Bucket Type"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "Configure Google Cloud Storage connector",
+          "fields": {
+            "bucket_name": {
+              "label": "Bucket Name",
+              "description": "Name of the GCS bucket to index, e.g. my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "Path Prefix"
+            },
+            "bucket_type": {
+              "label": "Bucket Type"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "Configure OCI Storage connector",
+          "fields": {
+            "bucket_name": {
+              "label": "Bucket Name"
+            },
+            "prefix": {
+              "label": "Prefix"
+            },
+            "bucket_type": {
+              "label": "Bucket Type"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "Configure Wikipedia connector",
+          "fields": {
+            "language_code": {
+              "label": "Language Code",
+              "description": "Input a valid Wikipedia language code (e.g. 'en', 'es')"
+            },
+            "categories": {
+              "label": "Categories to index",
+              "description": "Specify 0 or more names of categories to index. For most Wikipedia sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url."
+            },
+            "pages": {
+              "label": "Pages",
+              "description": "Specify 0 or more names of pages to index."
+            },
+            "recurse_depth": {
+              "label": "Recursion Depth",
+              "description": "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen."
+            }
+          }
+        },
+        "xenforo": {
+          "description": "Configure Xenforo connector",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "The XenForo v2.2 forum URL to index. Can be board or thread."
+            }
+          }
+        },
+        "asana": {
+          "description": "Configure Asana connector",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "Workspace ID",
+              "description": "The ID of the Asana workspace to index. You can find this at https://app.asana.com/api/1.0/workspaces. It's a number that looks like 1234567890123456."
+            },
+            "asana_project_ids": {
+              "label": "Project IDs",
+              "description": "IDs of specific Asana projects to index, separated by commas. Leave empty to index all projects in the workspace. Example: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "Team ID",
+              "description": "ID of a team to use for accessing team-visible tasks. This allows indexing of team-visible tasks in addition to public tasks. Leave empty if you don't want to use this feature."
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "Configure MediaWiki connector",
+          "fields": {
+            "language_code": {
+              "label": "Language Code",
+              "description": "Input a valid MediaWiki language code (e.g. 'en', 'es')"
+            },
+            "hostname": {
+              "label": "MediaWiki Site URL"
+            },
+            "categories": {
+              "label": "Categories to index",
+              "description": "Specify 0 or more names of categories to index. For most MediaWiki sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url."
+            },
+            "pages": {
+              "label": "Pages",
+              "description": "Specify 0 or more names of pages to index. Only specify the name of the page, not its url."
+            },
+            "recurse_depth": {
+              "label": "Recursion Depth",
+              "description": "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen."
+            }
+          }
+        },
+        "discord": {
+          "description": "Configure Discord connector",
+          "fields": {
+            "server_ids": {
+              "label": "Server IDs",
+              "description": "Specify 0 or more server ids to include. Only channels inside them will be used for indexing"
+            },
+            "channel_names": {
+              "label": "Channels",
+              "description": "Specify 0 or more channels to index. For example, specifying the channel \"support\" will cause us to only index all content within the \"#support\" channel. If no channels are specified, all channels the bot has access to will be indexed."
+            },
+            "start_date": {
+              "label": "Start Date",
+              "description": "Only messages after this date will be indexed. Format: YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "Configure Freshdesk connector",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Freshdesk Domain",
+              "description": "The subdomain of your Freshdesk site, like `acme` in `acme.freshdesk.com`.",
+              "placeholder": "acme"
+            }
+          }
+        },
+        "fireflies": {
+          "description": "Configure Fireflies connector"
+        },
+        "braintrust": {
+          "description": "Configure Braintrust connector",
+          "fields": {
+            "project_name": {
+              "label": "Project Name",
+              "description": "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization."
+            },
+            "experiment_row_lookback_days": {
+              "label": "Experiment Row Lookback (days)",
+              "description": "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments."
+            }
+          }
+        },
+        "canvas": {
+          "description": "Configure Canvas connector",
+          "fields": {
+            "canvas_base_url": {
+              "label": "Canvas Base URL",
+              "description": "e.g. https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "Configure Egnyte connector",
+          "fields": {
+            "domain": {
+              "label": "Egnyte Domain",
+              "description": "The subdomain of your Egnyte site, like `acme` in `acme.egnyte.com`.",
+              "placeholder": "acme"
+            },
+            "folder_path": {
+              "label": "Folder Path",
+              "description": "The folder path to index (e.g., '/Shared/Documents'). Leave empty to index everything."
+            }
+          }
+        },
+        "airtable": {
+          "description": "Configure Airtable connector",
+          "fields": {
+            "airtable_scope": {
+              "label": "Airtable content to index",
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "specific": {
+                  "label": "Specific Table"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "Everything",
+              "description": "This connector will automatically discover and index all bases and tables accessible by your API token."
+            },
+            "airtable_url": {
+              "label": "Airtable URL",
+              "description": "Paste the URL from your browser when viewing the table, e.g. https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "Share ID",
+              "description": "Optional. If you want record links to use a shared view URL, put the share ID here e.g. shrkfjEzDmLaDtK83."
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "Treat all fields except attachments as metadata",
+              "description": "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments."
+            }
+          }
+        },
+        "highspot": {
+          "description": "Configure Highspot connector",
+          "fields": {
+            "highspot_url": {
+              "label": "Highspot URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
+            },
+            "highspot_scope": {
+              "label": "Highspot content to index",
+              "tabs": {
+                "spots": {
+                  "label": "Specific Spots"
+                },
+                "everything": {
+                  "label": "Everything"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "Spot Name(s)",
+              "description": "For multiple spots, enter your spot one by one."
+            },
+            "everything": {
+              "label": "Everything",
+              "description": "This connector will index all spots the provided credentials have access to!"
+            }
+          }
+        },
+        "imap": {
+          "description": "Configure Email connector",
+          "fields": {
+            "host": {
+              "label": "IMAP Server Host",
+              "description": "The IMAP server hostname (e.g., imap.gmail.com, outlook.office365.com)"
+            },
+            "port": {
+              "label": "IMAP Server Port",
+              "description": "The IMAP server port (default: 993 for SSL)"
+            },
+            "mailboxes": {
+              "label": "Mailboxes",
+              "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
+            }
+          }
+        }
       }
     },
     "costOverrides": {
@@ -3199,6 +4867,10 @@
         "saveFailed": "Failed to save override: {message}",
         "saved": "Saved rate for {model}.",
         "unknownError": "Unknown error"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -3393,9 +5065,6 @@
         },
         "createdOnBy": {
           "label": "Created <i>{date}</i> by <i>{email}</i>"
-        },
-        "unnamed": {
-          "label": "Credential #{id}"
         }
       },
       "create": {
@@ -3450,23 +5119,6 @@
         },
         "confirmTitle": "Confirm Deletion"
       },
-      "edit": {
-        "name": {
-          "label": "Name (optional):"
-        },
-        "permissions": {
-          "note": "Ensure that you update to a credential with the proper permissions!"
-        },
-        "resetButton": {
-          "label": "Reset Changes"
-        },
-        "updateButton": {
-          "label": "Update"
-        },
-        "updateError": {
-          "toast": "Error updating credential"
-        }
-      },
       "displayNames": {
         "accessKeyId": "{source} Access Key ID",
         "secretAccessKey": "{source} Secret Access Key",
@@ -3506,11 +5158,12 @@
         "namespace": "{source} Namespace",
         "region": "{source} Region",
         "portalId": "{source} Portal ID",
-        "oauthTokens": "{source} Oauth Tokens",
         "isSandbox": "Is Sandbox Environment",
         "serviceUserEmail": "Service User Email",
         "zuliprcContent": "Zuliprc Content",
-        "authenticationMethod": "Authentication Method"
+        "authenticationMethod": "Authentication Method",
+        "primaryAdminEmail": "Primary Admin Email",
+        "serviceAccountKey": "Service Account Key"
       },
       "hints": {
         "boxUserEmail": "Optional. The Box user to impersonate.",
@@ -3518,9 +5171,11 @@
         "gongBaseUrl": "Optional. For data outside the US, set your region's host, like https://[region].api.gong.io.",
         "jiraUserEmail": "Required for Jira Cloud.",
         "lumappsServiceUser": "The user to index on behalf of.",
+        "youtrackToken": "A permanent token for a YouTrack user that can read every project to index. Create it in your YouTrack profile under Account Security.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
-        "pfxFile": "A PFX file.",
-        "testrailBaseUrl": "For example https://yourcompany.testrail.io."
+        "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
+        "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "Upload or paste the `.json` key of a Google service account with domain-wide delegation."
       },
       "methods": {
         "labels": {
@@ -3529,7 +5184,9 @@
           "certificate": "Certificate",
           "accessKeyAndSecret": "Access Key and Secret",
           "iamRole": "IAM Role",
-          "assumeRole": "Assume Role"
+          "assumeRole": "Assume Role",
+          "serviceAccount": "Service Account",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
@@ -3541,34 +5198,12 @@
           "s3AssumeRole": "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required."
         }
       },
-      "modal": {
-        "createTitle": "Create {source} Credential",
-        "editTitle": "Edit Credential",
-        "updateTitle": "Update Credentials"
-      },
-      "modify": {
-        "createButton": {
-          "label": "Create"
-        },
-        "instructions": {
-          "message": "Select a credential as needed! Ensure that you have selected a credential with the proper permissions for this connector!"
-        },
-        "selectButton": {
-          "label": "Select"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "Connect"
         },
         "connectError": {
           "title": "Could not connect"
-        },
-        "redirectFailed": {
-          "message": "We couldn't redirect you to sign in with {source}. Please try again."
-        },
-        "retryButton": {
-          "label": "Retry"
         },
         "signIn": {
           "description": "{appName} requires read-only scopes.",
@@ -3578,44 +5213,28 @@
           "message": "Unable to start OAuth"
         }
       },
-      "swap": {
-        "error": {
-          "toast": "Issue swapping credential: {detail}"
-        },
-        "success": {
-          "toast": "Swapped credential successfully!"
-        }
+      "validation": {
+        "authMethodRequired": "Please select an authentication method",
+        "empty": "{field} cannot be empty",
+        "fileRequired": "Please select a {field} file",
+        "invalidEmail": "Please enter a valid {field}",
+        "required": "Please enter your {field}"
       },
-      "table": {
-        "actions": {
-          "label": "Actions"
-        },
-        "created": {
-          "header": "Created"
-        },
-        "edit": {
-          "ariaLabel": "Edit credential"
-        },
-        "empty": {
-          "message": "No credentials exist for this connector!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "Last Updated"
-        },
+      "edit": {
         "name": {
-          "header": "Name"
+          "label": "Name (optional):"
         },
-        "select": {
-          "label": "Select"
+        "permissions": {
+          "note": "Ensure that you update to a credential with the proper permissions!"
         },
-        "selected": {
-          "badge": "selected"
+        "resetButton": {
+          "label": "Reset Changes"
         },
-        "untitled": {
-          "label": "Untitled"
+        "updateButton": {
+          "label": "Update"
+        },
+        "updateError": {
+          "toast": "Error updating credential"
         }
       },
       "update": {
@@ -3626,12 +5245,8 @@
           "toast": "Updated credential"
         }
       },
-      "validation": {
-        "authMethodRequired": "Please select an authentication method",
-        "empty": "{field} cannot be empty",
-        "fileRequired": "Please select a {field} file",
-        "invalidEmail": "Please enter a valid {field}",
-        "required": "Please enter your {field}"
+      "modal": {
+        "editTitle": "Edit Credential"
       }
     },
     "customAnalytics": {
@@ -4709,6 +6324,9 @@
           "name": "Basic",
           "description": "Default group for all users with basic permissions."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -4982,6 +6600,9 @@
           "name": "Query Processing",
           "description": "Runs on every user query before it enters the pipeline. Allows rewriting, filtering, or rejecting queries."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://your-api-endpoint.com"
       }
     },
     "imageGeneration": {
@@ -5037,8 +6658,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Enter new API key or select existing provider",
-          "idle": "Enter a new API key or select an existing provider.",
+          "idle": "Enter your API key.",
           "label": "API Key",
           "placeholder": "Enter your API key",
           "required": "API Key is required"
@@ -5083,9 +6703,6 @@
         },
         "editHeader": {
           "title": "Edit {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "Invalid provider selection"
         },
         "loading": {
           "placeholder": "Loading..."
@@ -5700,152 +7317,106 @@
           "description": "Reload the page to try again.",
           "title": "Could not load the connector access update"
         }
+      },
+      "embeddingRateLimit": {
+        "title": "Embedding rate limit",
+        "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again instead of failing, so workers take less new work. A batch fails only if it waits too long. Search queries are not limited.",
+        "requests": {
+          "title": "Requests per window",
+          "description": "Leave empty for no limit.",
+          "placeholder": "No limit"
+        },
+        "period": {
+          "title": "Window length",
+          "description": "For example, 60 for a limit per minute.",
+          "suffix": "(seconds)"
+        },
+        "restoreDefault": "Restore default",
+        "validation": {
+          "requests": "Enter a whole number from 1 to {max, number}, or leave the field empty for no limit.",
+          "period": "Enter a whole number of seconds from 1 to {max, number}."
+        },
+        "toasts": {
+          "saved": "Rate limit saved.",
+          "failed": "Could not save the rate limit."
+        }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "Inherited from {source}"
-          },
-          "organizationPublic": {
-            "label": "Organization Public"
-          },
-          "private": {
-            "label": "Private"
-          }
+      "connectorCreated": {
+        "toast": "Connector created successfully"
+      },
+      "overview": {
+        "connectors": {
+          "caption": "Indexing / active",
+          "label": "Connectors"
         },
-        "connectorCreated": {
-          "toast": "Connector created successfully"
+        "documents": {
+          "caption": "Recently indexed / total",
+          "label": "Documents"
         },
-        "empty": {
-          "message": "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/connectors) page to get started!"
+        "ratio": {
+          "whole": "/ {whole}"
         },
-        "federated": {
-          "access": {
-            "label": "Federated Access"
-          },
-          "indexed": {
-            "label": "Indexed"
-          },
-          "notApplicable": {
-            "label": "N/A"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "Auto-Sync"
-            },
-            "private": {
-              "label": "Private"
-            },
-            "public": {
-              "label": "Public"
-            },
-            "title": "Access Type"
-          },
-          "applyButton": {
-            "label": "Apply"
-          },
-          "docCount": {
-            "placeholder": "Count",
-            "title": "Document Count"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "Completed with Errors"
-            },
-            "failed": {
-              "label": "Failed"
-            },
-            "inProgress": {
-              "label": "In Progress"
-            },
-            "interrupted": {
-              "label": "Interrupted"
-            },
-            "notStarted": {
-              "label": "Not Started"
-            },
-            "success": {
-              "label": "Success"
-            },
-            "title": "Last Status"
-          },
-          "title": "Filter Connectors"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "Access: {values}"
-          },
-          "clearBadge": {
-            "label": "Clear"
-          },
-          "docsAnyBadge": {
-            "label": "Docs {operator} any"
-          },
-          "docsBadge": {
-            "label": "Docs {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "Status: {values}"
-          }
-        },
-        "loadError": {
-          "message": "Error loading indexing status."
-        },
-        "manageConnector": {
-          "tooltip": "Manage Connector"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "Manage Federated Connector"
-        },
+        "loadError": "The overview could not load."
+      },
+      "activities": {
+        "title": "Activities",
+        "history": "Full Activity History",
+        "viewLogs": "View activity history",
+        "panel": {
+          "title": "Activity History",
+          "close": "Hide activity history"
+        }
+      },
+      "list": {
         "search": {
           "placeholder": "Search connectors..."
         },
-        "summary": {
-          "activeConnectors": {
-            "label": "Active Connectors"
-          },
-          "publicConnectors": {
-            "label": "Public Connectors"
-          },
-          "totalConnectors": {
-            "label": "Total Connectors"
-          },
-          "totalDocsIndexed": {
-            "label": "Total Docs Indexed"
-          }
+        "statusFilter": {
+          "label": "Status",
+          "all": "All Status"
         },
-        "table": {
-          "allCaughtUp": {
-            "label": "All caught up! No more connectors to show"
-          },
-          "lastIndexed": {
-            "header": "Last Indexed"
-          },
-          "name": {
-            "header": "Name"
-          },
-          "permissions": {
-            "header": "Permissions / Access"
-          },
-          "status": {
-            "header": "Status"
-          },
-          "totalDocs": {
-            "header": "Total Docs"
-          }
+        "counts": {
+          "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",
+          "indexing": "{count, plural, one {# connector indexing} other {# connectors indexing}}",
+          "failed": "{count, plural, one {# connector failed} other {# connectors failed}}",
+          "paused": "{count, plural, one {# connector paused} other {# connectors paused}}"
         },
-        "toggleAll": {
-          "collapse": {
-            "label": "Collapse All"
-          },
-          "expand": {
-            "label": "Expand All"
-          }
-        }
+        "access": {
+          "public": "Public",
+          "private": "Private",
+          "sync": "Auto-sync",
+          "sync_restricted": "Auto-sync, restricted"
+        },
+        "detail": {
+          "queued": "{position, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} in queue",
+          "lastIndexed": "Last indexed {when}",
+          "neverIndexed": "Not indexed yet"
+        },
+        "docs": {
+          "label": "docs",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "Manage",
+          "manageFederated": "Manage federated connector",
+          "expand": "View Details",
+          "collapse": "Hide Details"
+        },
+        "federated": {
+          "tag": "Federated"
+        },
+        "empty": {
+          "title": "No connectors yet",
+          "description": "Visit the [Add Connector](/admin/connectors) page to get started.",
+          "filteredTitle": "No connectors match these filters."
+        },
+        "loadError": "Couldn't load the connectors.",
+        "units": "{count, plural, one {connector} other {connectors}}"
       }
     },
     "languageModels": {
@@ -6357,6 +7928,7 @@
         "providerDeleteFailed": "Failed to delete provider: {message}",
         "providerDeleted": "Provider deleted successfully!",
         "providerLoadFailed": "Could not load the provider: {message}",
+        "providerResolveFailed": "Could not resolve provider",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
@@ -6372,6 +7944,16 @@
           "empty": "No router models found. Enable a router model on a gateway provider first.",
           "error": "Failed to load router models.",
           "retry": "Retry"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Custom Models",
+          "companyName": "LiteLLM-compatible providers"
+        },
+        "openAICompatible": {
+          "productName": "Custom Models",
+          "companyName": "OpenAI-compatible endpoints"
         }
       }
     },
@@ -7033,6 +8615,11 @@
         "securitySettingsUpdated": "Security settings updated",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -7713,7 +9300,8 @@
           },
           "nameField": {
             "description": "Unique lowercase slug used in the login URL. Cannot be changed later.",
-            "title": "Name"
+            "title": "Name",
+            "placeholder": "company-a"
           },
           "providerTypeField": {
             "description": "The protocol this provider authenticates with.",
@@ -7783,7 +9371,8 @@
         },
         "openidConfigUrl": {
           "label": "OpenID Configuration URL",
-          "description": "The IdP's OpenID Connect discovery document URL."
+          "description": "The IdP's OpenID Connect discovery document URL.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "Require Verified Email Claim",
@@ -7791,27 +9380,33 @@
         },
         "idpEntityId": {
           "label": "IdP Entity ID",
-          "description": "The identity provider's entity ID (issuer)."
+          "description": "The identity provider's entity ID (issuer).",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "IdP SSO URL",
-          "description": "The IdP endpoint that receives sign-in requests."
+          "description": "The IdP endpoint that receives sign-in requests.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "IdP X.509 Certificate",
-          "description": "The IdP's signing certificate, used to verify assertions."
+          "description": "The IdP's signing certificate, used to verify assertions.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "SP Entity ID",
-          "description": "This instance's entity ID, registered with the IdP."
+          "description": "This instance's entity ID, registered with the IdP.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "SP X.509 Certificate",
-          "description": "Only if this instance signs requests or decrypts assertions."
+          "description": "Only if this instance signs requests or decrypts assertions.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "SP Private Key",
-          "description": "Private key paired with the SP certificate. Stored encrypted."
+          "description": "Private key paired with the SP certificate. Stored encrypted.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "Email Attribute",
@@ -7975,6 +9570,9 @@
         "deleted": {
           "message": "Standard answer {id} deleted"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:it|support)\\s*ticket"
       }
     },
     "status": {
@@ -7984,18 +9582,22 @@
         "deleting": "Deleting",
         "error": "Error",
         "failed": "Failed",
-        "inProgress": "In Progress",
         "indexed": "Indexed",
         "indexing": "Indexing",
         "initialIndexing": "Initial Indexing",
         "interrupted": "Interrupted",
         "invalid": "Invalid",
         "invalidConnectorTooltip": "Connector is in an invalid state. Please update the credentials or create a new connector.",
-        "none": "None",
         "notStarted": "Not Started",
         "paused": "Paused",
         "scheduled": "Scheduled",
-        "succeeded": "Succeeded"
+        "synced": "Synced",
+        "syncing": "Syncing",
+        "pruning": "Pruning",
+        "pruned": "Pruned",
+        "checking": "Checking",
+        "passed": "Passed",
+        "failedToRun": "Failed to run"
       }
     },
     "systemInfo": {
@@ -8138,6 +9740,9 @@
         "logo": {
           "alt": "Logo"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -8313,9 +9918,6 @@
         "title": "Disconnect {label}"
       },
       "field": {
-        "optional": {
-          "title": "{label} (Optional)"
-        },
         "required": {
           "error": "{label} is required"
         }
@@ -8361,11 +9963,13 @@
             },
             "project": {
               "label": "Project Name",
-              "description": "Braintrust project name traces are logged to."
+              "description": "Braintrust project name traces are logged to.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "API URL",
-              "description": "Default to the US region. Paste your Braintrust API URL for other regions or self-hosting."
+              "description": "Default to the US region. Paste your Braintrust API URL for other regions or self-hosting.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -8382,7 +9986,8 @@
             },
             "host": {
               "label": "API Base URL",
-              "description": "Default to EU region. Paste your Langfuse base URL for other regions or self-hosting."
+              "description": "Default to EU region. Paste your Langfuse base URL for other regions or self-hosting.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -8939,6 +10544,9 @@
       },
       "unexpectedError": {
         "message": "Unexpected error occurred."
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -9055,11 +10663,14 @@
         },
         "searxngBaseUrl": {
           "label": "SearXNG Base URL",
-          "description": "Paste the base URL of your [SearXNG instance](https://docs.searxng.org/admin/installation.html)."
+          "description": "Paste the base URL of your [SearXNG instance](https://docs.searxng.org/admin/installation.html).",
+          "placeholder": "https://your-searxng-instance.com"
         },
         "firecrawlBaseUrl": {
           "label": "API Base URL",
-          "description": "Your Firecrawl API base URL."
+          "description": "Your Firecrawl API base URL.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -9140,6 +10751,17 @@
         "completed": "Checks completed.",
         "inProgress": "Checks in progress...",
         "waiting": "Waiting for connector settings..."
+      },
+      "advisory": {
+        "title": "Some content won't be indexed.",
+        "description": "**{count, plural, one {# non-required connector check failed.} other {# non-required connector checks failed.}}** They won't block the entire connector indexing but affected content won't be indexed.",
+        "proceed": "You can still proceed to create the connector and address these later.",
+        "viewButton": {
+          "label": "View Failed Checks"
+        },
+        "proceedButton": {
+          "label": "Create Connector Anyway"
+        }
       }
     },
     "connectorEdit": {
@@ -9176,7 +10798,8 @@
         },
         "uploadFailed": {
           "toast": "Could not upload the files: {detail}"
-        }
+        },
+        "units": "{count, plural, one {file} other {files}}"
       },
       "planFailed": {
         "toast": "Could not compute the plan: {detail}"
@@ -10318,6 +11941,40 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "Tools need credentials ({count})",
+        "tooltip": "Some tools are unavailable until you connect your account or add credentials."
+      },
+      "modal": {
+        "title": "Connect tools",
+        "description": "Add your credentials to use these tools in Onyx.",
+        "hint": "You can keep chatting without connecting these tools, but your agent may have limited capabilities."
+      },
+      "connect": {
+        "label": "Connect",
+        "accessibleLabel": "Connect {server}"
+      },
+      "reconnect": {
+        "label": "Reconnect",
+        "accessibleLabel": "Reconnect {server}"
+      },
+      "connecting": {
+        "label": "Connecting…"
+      },
+      "connected": {
+        "label": "Connected"
+      },
+      "required": {
+        "label": "Credentials required"
+      },
+      "done": {
+        "label": "Done"
+      },
+      "error": {
+        "description": "Could not connect. Try again."
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {File failed and was removed: {names}} other {Files failed and were removed: {names}}}"
@@ -10764,6 +12421,9 @@
         "credentials": {
           "text": "Your Credentials will be validated against the server and stored securely."
         }
+      },
+      "backButton": {
+        "label": "Back to tools"
       }
     },
     "messages": {
@@ -11293,18 +12953,6 @@
         },
         "modifyAction": {
           "label": "modify"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "Edit {property}"
-        },
-        "submitButton": {
-          "label": "Update property",
-          "loadingLabel": "Updating..."
-        },
-        "valueInput": {
-          "placeholder": "Property value"
         }
       },
       "feedback": {
@@ -11867,12 +13515,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {Choose files} other {Choose a file}}"
-      },
-      "prompt": "{multiple, select, true {Or drag and drop files here.} other {Or drag and drop a file here.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "Add New"
@@ -12408,6 +14050,31 @@
         "label": "Upgrade Plan"
       },
       "availableFor": "Available for {plan}"
+    },
+    "placeholders": {
+      "email": "email@yourcompany.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://your_resource_region.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://your-bifrost-gateway.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://your-litellm-proxy.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "my-vertex-project",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -12546,7 +14213,7 @@
           }
         },
         "managedDescription": "Provided by Onyx — configure what the agent may do.",
-        "managedNote": "This app is provided by Onyx — credentials are managed for you. Choose what the agent may do below. Users connect it from the Apps page.",
+        "managedNote": "Onyx manages credentials. Set action policies under Permissions. Members connect from Plugins.",
         "saveButton": "Save"
       },
       "customApp": {
@@ -12591,7 +14258,10 @@
           }
         },
         "saveButton": "Save",
-        "savingButton": "Saving…"
+        "savingButton": "Saving…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "App “{appName}” already has an associated skill named “{skillName}”. Upload a skill with a different name."
@@ -12644,7 +14314,7 @@
             "tabLabel": "Apps · {count}"
           },
           "mcp": {
-            "blurb": "Servers an admin made available to Craft. Use these when the app you need isn't listed under Apps, or when you specifically want a server's own MCP tools.",
+            "blurb": "Servers an admin made available to Craft. If a server requires personal credentials, connect your own account before using its tools.",
             "empty": "No MCP servers have been made available to Craft.",
             "emptyTitle": "No MCP servers yet",
             "tabLabel": "MCP servers · {count}"
@@ -12667,10 +14337,6 @@
         }
       },
       "policyEditor": {
-        "advanced": {
-          "description": "Set a policy for each action individually.",
-          "title": "Advanced"
-        },
         "cancelButton": "Cancel",
         "loading": {
           "label": "Loading…"
@@ -12679,7 +14345,8 @@
           "askOption": "Ask",
           "autoApproveOption": "Auto-approve",
           "customOption": "Custom",
-          "description": "Choose what the agent may do. “Ask” prompts you in chat before each action runs; “Auto-approve” lets it run without prompting. Use Advanced to set a policy per action.",
+          "defaultOption": "Default",
+          "description": "Choose what the agent may do. “Ask” requests approval before each action; “Auto-approve” runs without prompting.",
           "title": "Permissions"
         },
         "savingButton": "Saving…"
@@ -12774,22 +14441,6 @@
         "label": "Connect your data"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "Crafting your workspace...",
-        "enchanting": "Enchanting with magic...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "Gathering resources...",
-        "miningDependencies": "Mining for dependencies...",
-        "placingBlocks": "Placing blocks...",
-        "punchingWood": "Punching wood...",
-        "smeltingCode": "Smelting the code...",
-        "worldGenerated": "World generation complete..."
-      },
-      "tagline": {
-        "label": "Crafting your next great idea..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "Clear"
@@ -12879,6 +14530,12 @@
       "csv": {
         "truncated": "Preview limited to {rows, number} rows, {columns, number} columns, and {cells, number} cells. Download the original for all data.",
         "malformed": "This CSV contains an invalid quoted field. Download the original to inspect it."
+      },
+      "imageTooLarge": {
+        "description": "This image is too large to preview. Download the original to open it."
+      },
+      "unsupported": {
+        "description": "Download the original to open it."
       }
     },
     "filesTab": {
@@ -12895,9 +14552,37 @@
       "preparing": {
         "description": "Setting up your development environment",
         "title": "Preparing sandbox..."
+      },
+      "download": {
+        "label": "Download"
+      },
+      "partial": {
+        "label": "Some folders could not be loaded. Refresh to try again."
+      },
+      "noMatches": {
+        "label": "No matching files"
+      },
+      "previousPage": {
+        "label": "Previous page"
+      },
+      "nextPage": {
+        "label": "Next page"
+      },
+      "page": {
+        "label": "Page {page} of {total}"
+      },
+      "upload": {
+        "label": "Upload files",
+        "error": "Could not upload files. Try again."
+      },
+      "emptyDirectory": {
+        "label": "No files in this directory"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Contrast background"
+      },
       "error": {
         "description": "The image could not be displayed",
         "title": "Failed to load image"
@@ -12907,9 +14592,6 @@
       },
       "preview": {
         "ariaLabel": "Preview of {name}"
-      },
-      "background": {
-        "contrast": "Contrast background"
       }
     },
     "inputBar": {
@@ -13067,6 +14749,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF controls"
+      },
+      "thumbnails": {
+        "toggle": "Toggle page thumbnails",
+        "resize": "Resize page thumbnails",
+        "label": "Page thumbnails"
+      },
+      "page": {
+        "previous": "Previous page",
+        "next": "Next page",
+        "counter": "{current} / {total}",
+        "preview": "Page {page} preview",
+        "select": "Go to page {page}"
+      },
+      "zoom": {
+        "out": "Zoom out",
+        "in": "Zoom in",
+        "label": "Zoom",
+        "fitWidth": "Fit width",
+        "fitPage": "Fit page"
+      },
       "error": {
         "description": "The PDF file could not be loaded.",
         "title": "Cannot preview PDF"
@@ -13079,6 +14783,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Presentation controls"
+      },
+      "thumbnails": {
+        "toggle": "Toggle slide thumbnails"
+      },
+      "resize": {
+        "ariaLabel": "Resize slide thumbnails"
+      },
       "slides": {
         "label": "Slides"
       },
@@ -13089,7 +14802,7 @@
         "label": "Next slide"
       },
       "converting": {
-        "label": "Converting presentation..."
+        "label": "Preparing preview..."
       },
       "empty": {
         "label": "No slides in this presentation"
@@ -13102,9 +14815,6 @@
       },
       "slide": {
         "counter": "Slide {current} of {total}"
-      },
-      "resize": {
-        "ariaLabel": "Resize slide thumbnails"
       }
     },
     "previewTab": {
@@ -13245,6 +14955,9 @@
       "toast": {
         "deleteFailed": "Failed to delete session",
         "deleted": "Deleted \"{title}\"."
+      },
+      "plugins": {
+        "label": "Plugins"
       }
     },
     "skillsStale": {
@@ -13538,7 +15251,8 @@
         "ariaLabel": "Copy URL: {url}"
       },
       "downloadFile": {
-        "tooltip": "Download file"
+        "tooltip": "Download file",
+        "label": "Download"
       },
       "export": {
         "button": "Export to .docx",
@@ -13608,6 +15322,170 @@
     "welcome": {
       "input": {
         "placeholder": "Analyze my data and create a dashboard..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "All Files"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Output tabs"
+      },
+      "close": {
+        "label": "Close {name}"
+      },
+      "reordered": {
+        "label": "Tab moved to position {position} of {count}"
+      },
+      "open": {
+        "label": "Open a tab"
+      },
+      "outputs": {
+        "label": "Outputs"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Preview Your App"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Checking webapps"
+      },
+      "failed": {
+        "description": "Could not check local webapps. Reload to try again."
+      },
+      "unavailable": {
+        "description": "The webapp is unavailable. Restore the sandbox or reload to try again.",
+        "label": "Unavailable"
+      },
+      "empty": {
+        "title": "No webapps available",
+        "description": "Local apps appear here when they are running."
+      },
+      "starting": {
+        "label": "Starting webapp"
+      },
+      "loading": {
+        "label": "Loading webapp"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Open outputs"
+      },
+      "close": {
+        "ariaLabel": "Close outputs"
+      },
+      "expand": {
+        "ariaLabel": "Expand outputs"
+      },
+      "restore": {
+        "ariaLabel": "Restore outputs"
+      },
+      "resize": {
+        "ariaLabel": "Resize outputs"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Search files"
+        },
+        "location": {
+          "label": "All files on your sandbox"
+        }
+      },
+      "browser": {
+        "placeholder": "Webapps on your sandbox"
+      },
+      "reload": {
+        "file": "Reload file",
+        "files": "Refresh files",
+        "browser": "Refresh webapps",
+        "unavailable": "Restore the sandbox to refresh"
+      },
+      "export": {
+        "failed": "Could not export this file. Try again."
+      },
+      "empty": {
+        "title": "Choose a workspace view"
+      },
+      "status": {
+        "provisioning": "Initializing sandbox",
+        "running": "Sandbox running",
+        "sleeping": "Sandbox sleeping",
+        "restoring": "Restoring session",
+        "terminated": "Sandbox terminated",
+        "failed": "Sandbox failed",
+        "ready": "Sandbox ready",
+        "loading": "Finding sandbox"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Mark all viewed",
+        "error": "Could not mark outputs as viewed. Try again."
+      },
+      "home": {
+        "description": "Files created by your agent"
+      },
+      "empty": {
+        "description": "Files your agent creates will appear here."
+      },
+      "loading": {
+        "label": "Loading outputs…"
+      },
+      "unavailable": {
+        "description": "Outputs will appear when your sandbox is ready."
+      },
+      "error": {
+        "description": "Could not refresh outputs. Try again."
+      },
+      "incomplete": {
+        "description": "Some outputs could not be loaded."
+      },
+      "filter": {
+        "label": "File type",
+        "all": "All",
+        "folders": "Folders",
+        "noExtension": "No extension"
+      },
+      "folders": {
+        "ariaLabel": "Output folders",
+        "root": "Outputs"
+      },
+      "filtered": {
+        "empty": "No matching outputs"
+      },
+      "search": {
+        "placeholder": "Search outputs"
+      },
+      "scope": {
+        "turn": "Turn {turn, number} outputs",
+        "all": "All outputs"
+      },
+      "unseen": "New or updated"
+    },
+    "turnOutputs": {
+      "showAll": "View all {count} outputs",
+      "app": "App",
+      "unavailable": "No longer available",
+      "appTitle": "Preview your app"
+    },
+    "upgrade": {
+      "title": "Craft requires a Business plan",
+      "adminDescription": "Craft is available on the Business and Enterprise plans. It is not supported on the Community Edition until Craft merges into the main chat.",
+      "userDescription": "Craft is available on the Business and Enterprise plans. Ask your admin to upgrade to use Craft.",
+      "backToChat": {
+        "label": "Back to chat"
+      },
+      "viewPlans": {
+        "label": "View plans"
       }
     }
   },
@@ -13948,8 +15826,19 @@
       "year": "Year"
     },
     "inputFile": {
-      "attachFile": "Attach file",
       "clearFile": "Clear file"
+    },
+    "inputMultiUpload": {
+      "placeholder": "Add files…",
+      "dropToAdd": "Drop files here to add",
+      "dropToAddMore": "Drop here to add more files"
+    },
+    "inputUpload": {
+      "placeholder": "Add a file…",
+      "pasted": "Pasted text",
+      "attached": "File attached",
+      "dropToAdd": "Drop file here to add",
+      "dropToReplace": "Drop here to replace file"
     },
     "inputImage": {
       "alt": "Image",
@@ -14267,7 +16156,8 @@
       "title": "Language",
       "toasts": {
         "updateFailed": "Failed to update language preference"
-      }
+      },
+      "workspaceDefault": "Default ({language})"
     },
     "layout": {
       "header": {
@@ -14544,6 +16434,9 @@
         "llmGateway": {
           "label": "LLM Gateway"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "mcpActions": {
           "label": "MCP Actions"
         },
@@ -14639,7 +16532,8 @@
         "title": "Agents"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explore Agents"
@@ -14668,6 +16562,9 @@
       },
       "searchChats": {
         "label": "Search Chats"
+      },
+      "plugins": {
+        "label": "Plugins"
       }
     },
     "chatButton": {
@@ -15131,6 +17028,9 @@
         "transferredToast": {
           "message": "Ownership transferred."
         }
+      },
+      "placeholders": {
+        "githubRepository": "owner/repository or https://github.com/owner/repository"
       }
     },
     "page": {

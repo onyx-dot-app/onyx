@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -20,19 +20,21 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
     AccountType,
     BuildSessionStatus,
+    LLMModelFlowType,
     SandboxStatus,
     SkillSharePermission,
 )
 from onyx.db.llm import (
-    fetch_default_llm_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.db.models import (
     BuildSession,
     Sandbox,
+    ScheduledTask,
     Skill,
     Skill__UserGroup,
     User,
@@ -64,7 +66,7 @@ def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as session:
-                session.execute(text("SET lock_timeout = '10s'"))
+                session.execute(text("SET LOCAL lock_timeout = '10s'"))
                 for row_id in ids:
                     row = session.get(model, row_id)
                     if row is not None:
@@ -96,7 +98,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
     seeded_name: str | None = None
     try:
         with get_session_with_current_tenant() as session:
-            if fetch_default_llm_model(session) is None:
+            if fetch_default_model(session, LLMModelFlowType.CHAT) is None:
                 seeded_name = f"craft-ci-default-{uuid4().hex[:8]}"
                 provider = upsert_llm_provider(
                     LLMProviderUpsertRequest(
@@ -112,10 +114,11 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                     ),
                     db_session=session,
                 )
-                update_default_provider(
+                update_default_model(
                     provider_id=provider.id,
-                    model_name="gpt-5-mini",
+                    model="gpt-5-mini",
                     db_session=session,
+                    flow_type=LLMModelFlowType.CHAT,
                 )
                 session.commit()
         yield
@@ -177,10 +180,13 @@ def test_user(
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
+    user_id = user.id
     yield user
-    # Release uncommitted locks before the separate-session delete cascades from this user.
     db_session.rollback()
-    _best_effort_delete(User, [user.id])
+    # Remove recurring jobs even if the later best-effort user cleanup fails.
+    db_session.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user_id))
+    db_session.commit()
+    _best_effort_delete(User, [user_id])
 
 
 @pytest.fixture(scope="function")

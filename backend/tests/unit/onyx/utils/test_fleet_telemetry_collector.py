@@ -99,6 +99,8 @@ def _job_row(**overrides: Any) -> dict[str, Any]:
         "groups_processed": 0,
         "memberships_synced": 0,
         "error_count": 0,
+        "last_progress_at": None,
+        "last_heartbeat_at": None,
     }
     row.update(overrides)
     return row
@@ -109,6 +111,7 @@ class _Source:
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.connectors: list[dict[str, Any]] = [_connector_row()]
+        self.has_indexed_connectors: bool = True
         self.domains: list[dict[str, Any]] = [
             {"domain": "Example.COM", "first_signup_at": _NOW - timedelta(days=9)},
             {"domain": "localhost", "first_signup_at": _NOW},
@@ -131,6 +134,11 @@ class _Source:
 
         monkeypatch.setattr(collector, "get_session_with_tenant", session)
         monkeypatch.setattr(collector, "limit_statement_time", Mock())
+        monkeypatch.setattr(
+            collector,
+            "has_indexed_connectors__no_commit",
+            lambda _session: self.has_indexed_connectors,
+        )
         monkeypatch.setattr(
             collector, "connector_rows", lambda _session: self.connectors
         )
@@ -161,7 +169,11 @@ def sender(monkeypatch: pytest.MonkeyPatch) -> fleet.BoundedTelemetry:
 
 
 def _event_ids(sender: fleet.BoundedTelemetry) -> dict[str, str]:
-    return {event["event_type"]: event["event_id"] for event in sender._take_batch()}
+    return {
+        event["event_type"]: event["event_id"]
+        for event in sender._take_batch()
+        if event["event_type"] != "heartbeat"
+    }
 
 
 def _job_event(sender: fleet.BoundedTelemetry) -> dict[str, Any]:
@@ -235,6 +247,19 @@ def test_job_data_reports_duration_and_failure() -> None:
         _job_row(job_id="sync:1", job_type="pruning", cc_pair_id=None)
     )
     assert "cc_pair_id" not in unlinked
+    assert "last_progress_at" not in unlinked
+
+
+def test_job_data_reports_sync_attempt_progress() -> None:
+    running: dict[str, Any] = collector.job_data(
+        _job_row(
+            last_progress_at=_NOW - timedelta(minutes=1),
+            last_heartbeat_at=_NOW,
+        )
+    )
+    assert running["last_progress_at"] == (_NOW - timedelta(minutes=1)).isoformat()
+    assert running["last_heartbeat_at"] == _NOW.isoformat()
+    assert fleet.sanitize_data("job", running) == running
 
 
 @pytest.mark.parametrize(
@@ -301,11 +326,12 @@ def test_first_run_sends_work_then_inventory_and_sets_the_cursor(
         "attempt",
         "stage",
         "job",
+        "heartbeat",
         "connector",
         "tenant_domain",
         "license",
     ]
-    assert events[4]["data"]["domain"] == "example.com"
+    assert events[5]["data"]["domain"] == "example.com"
     stage: dict[str, Any] = events[1]
     # The service requires a stage event at the time of its last update.
     assert stage["occurred_at"] == (_NOW - timedelta(minutes=1)).isoformat()
@@ -465,3 +491,29 @@ def test_an_invalid_row_does_not_stop_its_read(
         if event["event_type"] == "job"
     ]
     assert jobs == ["sync:2"] and sender.invalid == 1
+
+
+@pytest.mark.parametrize("deployment_type", list(fleet.DeploymentType))
+@pytest.mark.parametrize("indexed", [False, True])
+@pytest.mark.parametrize("service", ["api", "worker", "collector"])
+def test_deployment_snapshot_reports_type_and_indexed_connectors_each_pass(
+    monkeypatch: pytest.MonkeyPatch,
+    source: _Source,
+    sender: fleet.BoundedTelemetry,
+    deployment_type: fleet.DeploymentType,
+    indexed: bool,
+    service: str,
+) -> None:
+    monkeypatch.setattr(collector, "DEPLOYMENT_TYPE", deployment_type)
+    source.has_indexed_connectors = indexed
+    sender.service = service
+    for _ in range(2):
+        collector.collect_snapshots("public")
+        events = sender._take_batch()
+        heartbeat = next(
+            event for event in events if event["event_type"] == "heartbeat"
+        )
+        assert heartbeat["data"] == {
+            **({"deployment_type": deployment_type.value} if service == "api" else {}),
+            "has_indexed_connectors": indexed,
+        }

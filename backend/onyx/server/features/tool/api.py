@@ -5,7 +5,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import tool_permissions
-from onyx.auth.permissions import has_permission, require_permission
+from onyx.auth.permissions import (
+    has_global_permission,
+    has_permission,
+    require_permission,
+)
 from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
@@ -19,11 +23,14 @@ from onyx.db.tools import (
     can_manage_tool,
     create_tool__no_commit,
     delete_tool__no_commit,
+    get_default_chat_tool_ids,
     get_tool_by_id,
     get_tool_ids_connected_to_groups,
+    get_tool_user_preferences,
     get_tools,
     get_tools_by_ids,
     update_tool,
+    upsert_tool_user_preference__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -32,12 +39,14 @@ from onyx.server.features.tool.models import (
     CustomToolUpdate,
     Header,
     ToolSnapshot,
+    ToolUserPreferences,
 )
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
+    openapi_to_url,
     validate_openapi_schema,
 )
 from onyx.utils.encryption import is_masked_credential
@@ -49,11 +58,27 @@ admin_router = APIRouter(prefix="/admin/tool")
 def _validate_tool_definition(definition: dict[str, Any]) -> None:
     try:
         validate_openapi_schema(definition)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
 
 
-def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> None:
+def _custom_tool_destinations(
+    definition: dict[str, Any],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    base_url = openapi_to_url(definition)
+    return {
+        (method.method, f"{base_url}{method.path}"): {
+            param["name"]: param["schema"] for param in method.get_path_param_schemas()
+        }
+        for method in openapi_to_method_specs(definition)
+    }
+
+
+def _validate_auth_settings(
+    tool_data: CustomToolCreate | CustomToolUpdate,
+    user: User,
+    existing_tool: Tool | None = None,
+) -> None:
     if tool_data.passthrough_auth and tool_data.custom_headers:
         for header in tool_data.custom_headers:
             if header.key.lower() == "authorization":
@@ -61,6 +86,35 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                     status_code=400,
                     detail="Cannot use passthrough auth with custom authorization headers",
                 )
+
+    # Passthrough sends each chatting user's login token to the tool's URLs.
+    # Only a global manager may enable it or change its destinations or headers.
+    if has_global_permission(user, Permission.MANAGE_ACTIONS):
+        return
+    if tool_data.passthrough_auth is False:
+        return
+
+    if existing_tool is None or not existing_tool.passthrough_auth:
+        forbidden = bool(tool_data.passthrough_auth)
+    else:
+        forbidden = tool_data.definition is not None and (
+            existing_tool.openapi_schema is None
+            or _custom_tool_destinations(tool_data.definition)
+            != _custom_tool_destinations(existing_tool.openapi_schema)
+        )
+        if not forbidden and tool_data.custom_headers is not None:
+            resolved_headers = _resolve_masked_headers(
+                tool_data.custom_headers, existing_tool.custom_headers
+            )
+            forbidden = [h.model_dump() for h in (resolved_headers or [])] != (
+                existing_tool.custom_headers or []
+            )
+
+    if forbidden:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only a full action manager can forward users' login tokens to an action.",
+        )
 
 
 def _resolve_masked_headers(
@@ -154,7 +208,7 @@ def create_custom_tool(
     ),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
-    _validate_auth_settings(tool_data)
+    _validate_auth_settings(tool_data, user)
     _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
     custom_headers = _resolve_masked_headers(tool_data.custom_headers, None)
     tool = create_tool__no_commit(
@@ -182,9 +236,9 @@ def update_custom_tool(
     ),
 ) -> ToolSnapshot:
     existing_tool = _get_manageable_custom_tool(tool_id, db_session, user)
-    if tool_data.definition:
+    if tool_data.definition is not None:
         _validate_tool_definition(tool_data.definition)
-    _validate_auth_settings(tool_data)
+    _validate_auth_settings(tool_data, user, existing_tool)
     _assert_can_link_oauth_config(
         tool_data.oauth_config_id,
         db_session,
@@ -347,6 +401,7 @@ def list_openapi_tools(
             )
         )
 
+    _stamp_personal_tool_preferences(openapi_tools, user, db_session)
     return openapi_tools
 
 
@@ -365,7 +420,60 @@ def get_custom_tool(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can only view actions you manage, or ones an agent in your groups uses.",
         )
-    return ToolSnapshot.from_model(tool)
+    snapshot = ToolSnapshot.from_model(tool)
+    _stamp_personal_tool_preferences([snapshot], user, db_session)
+    return snapshot
+
+
+def _stamp_personal_tool_preferences(
+    tools: list[ToolSnapshot], user: User, db_session: Session
+) -> None:
+    preferences = get_tool_user_preferences(
+        [tool.id for tool in tools if tool.definition is not None], user.id, db_session
+    )
+    for tool in tools:
+        preference = preferences.get(tool.id)
+        if preference is not None:
+            tool.user_enabled_in_chat = preference.enabled_in_chat
+
+
+@router.patch("/{tool_id}/preferences", tags=PUBLIC_API_TAGS)
+def update_tool_user_preferences(
+    tool_id: int,
+    request: ToolUserPreferences,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> ToolUserPreferences:
+    try:
+        tool = get_tool_by_id(tool_id, db_session)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found") from error
+    if (
+        tool.in_code_tool_id is not None
+        or tool.mcp_server_id is not None
+        or tool.openapi_schema is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only OpenAPI plugins support these preferences",
+        )
+    if not should_expose_tool_to_fe(tool):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "Plugin is not available"
+        )
+    if request.enabled_in_chat and (
+        not tool.enabled
+        or tool.id not in get_default_chat_tool_ids([tool.id], db_session)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Your admin has disabled this plugin for main Chat",
+        )
+    preference = upsert_tool_user_preference__no_commit(
+        tool_id, user.id, db_session, enabled_in_chat=request.enabled_in_chat
+    )
+    db_session.commit()
+    return ToolUserPreferences(enabled_in_chat=preference.enabled_in_chat)
 
 
 @router.get("", tags=PUBLIC_API_TAGS)
@@ -402,5 +510,13 @@ def list_tools(
 
         # All custom tools and available built-in tools are included
         filtered_tools.append(ToolSnapshot.from_model(tool))
+
+    default_chat_tool_ids = get_default_chat_tool_ids(
+        [tool.id for tool in filtered_tools], db_session
+    )
+    for tool in filtered_tools:
+        tool.default_chat_enabled = tool.id in default_chat_tool_ids
+
+    _stamp_personal_tool_preferences(filtered_tools, user, db_session)
 
     return filtered_tools

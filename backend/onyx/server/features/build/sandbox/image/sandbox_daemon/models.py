@@ -16,6 +16,8 @@ SIDECAR_PUSH_PATH = "/push"
 PUSH_DAEMON_PORT = 8731
 SIDECAR_FILESYSTEM_LIST_PATH = "/filesystem/list"
 SIDECAR_OUTPUTS_MANIFEST_PATH = "/filesystem/outputs-manifest"
+# Count all examined entries, including directories and ignored names.
+MANIFEST_MAX_ENTRIES = 10_000
 SIDECAR_SNAPSHOT_CREATE_PATH = "/snapshot/create"
 SIDECAR_SNAPSHOT_RESTORE_PREFIX = "/snapshot/restore"
 SIDECAR_SNAPSHOT_RESTORE_ROUTE = f"{SIDECAR_SNAPSHOT_RESTORE_PREFIX}/{{session_id}}"
@@ -33,6 +35,11 @@ _HIDDEN_NAMES = frozenset(
         "nextjs.log",
         "nextjs.pid",
     }
+)
+
+
+WEB_GENERATED_NAMES = frozenset(
+    {"dist", "build", "coverage", "out", "next-env.d.ts", "tsconfig.tsbuildinfo"}
 )
 
 
@@ -82,6 +89,7 @@ class OutputsManifestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: UUID
+    include_web: bool = False
 
 
 class OutputsManifestEntry(BaseModel):

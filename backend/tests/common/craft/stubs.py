@@ -622,12 +622,16 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        *,
+        include_web: bool = False,
     ) -> OutputsManifestResponse:
         self.get_outputs_manifest_count += 1
         self.last_outputs_manifest_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
         }
+        if include_web:
+            self.last_outputs_manifest_payload["include_web"] = True
         if self.outputs_manifest_returns is None:
             raise _not_configured("get_outputs_manifest")
         return self.outputs_manifest_returns

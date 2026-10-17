@@ -351,6 +351,7 @@ function SingleSelectFieldInner({
             aria-invalid={!isValid}
             aria-describedby={!isValid ? `${fieldId}-error` : undefined}
             readOnly={!typeIn}
+            open={isOpen}
             // A Select shows the chosen option's icon; a ComboBox's text is
             // typed, so it shows none.
             icon={typeIn ? undefined : selectedOption?.icon}

@@ -234,7 +234,7 @@ class TestMCPToolLLMNames:
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            return_value='{"ok": true}',
         ) as mock_call_mcp_tool:
             mcp_tool.run(Placement(turn_index=0))
 

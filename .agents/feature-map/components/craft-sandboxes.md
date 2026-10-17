@@ -249,7 +249,7 @@ raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
 ```
                      Pod "sandbox-{uuid[:8]}"  (namespace onyx-sandboxes)
  ┌─────────────────────────────────────────────────────────────────────┐
- │ initContainer: sandbox-init   (NET_ADMIN, firewall-init.sh)         │
+ │ initContainer: sandbox-init   (firewall-init.sh)                    │
  │   installs the proxy CA, applies the iptables egress lockdown        │
  │                                                                       │
  │ initContainer (restartable, restartPolicy=Always): sidecar           │
@@ -272,6 +272,12 @@ raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
  └─────────────────────────────────────────────────────────────────────┘
 ```
 (`deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`)
+
+The diagram shows the default firewall-enabled configuration. With
+`sandboxPod.netAdminLockdown: false`, CA bootstrap remains, but `NET_ADMIN`
+and iptables setup are omitted. A per-pod lockdown label keeps these pods excluded
+from bootstrap DNS access across Helm upgrades. The image prepuller uses the same
+RuntimeClass as sandbox pods. See §5 for the required cluster controls.
 
 **The pod spec comes from a Helm-rendered `core/v1` `PodTemplate` object**, not
 from Python. `KubernetesSandboxManager._create_sandbox_pod`
@@ -337,7 +343,10 @@ these validated entries directly.
 The outputs manifest scans visible regular files under `outputs/` without reading file contents.
 It shares file browsing's hidden-name rules through `sandbox_daemon/models.py`.
 The scan excludes dotfiles, dependencies, caches, runtime logs, symlinks, and special files.
-It also skips the root web subtree within outputs before descent. Nested directories named `web` remain visible.
+Ordinary file inventories skip the root web subtree before descent. Nested directories named `web` remain visible.
+Turn attribution requests `include_web=True` to scan app sources too. Generated `dist`, `build`, `coverage`, and `out` entries at the web root remain excluded.
+The scan also ignores root next-env.d.ts and tsconfig.tsbuildinfo; similarly named nested source paths remain visible.
+Both modes share the same traversal limits and symlink protections. The extended request requires a matching sandbox daemon image.
 All examined entries count toward one scan budget, including ignored names and directories.
 A depth limit bounds recursion. Descriptor-relative descent refuses symlinks at every workspace component.
 
@@ -375,7 +384,7 @@ that migration is complete; verify against the manager methods you're touching.
 `session_workspace.py:19` on the api-server side and
 `image/sandbox_daemon/snapshot.py:18` inside the image, kept as two literal
 copies because the daemon can't import the api-server package at runtime,
-per `base.py:62-67`'s comment). Session directories live directly under it:
+per `backend/onyx/server/features/build/configs.py`'s comment). Session directories live directly under it:
 `/workspace/sessions/$session_id/{outputs,attachments,venv,.opencode/skills,AGENTS.md,
 start-webapp.sh}` (`kubernetes_sandbox_manager.py` builds `{SESSIONS_ROOT}/{session_id}`;
 `base.py` class docstring, "Directory Structure", shows the generic layout). `emptyDir`
@@ -514,8 +523,8 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    it in Python instead will be silently overwritten by the next
    `read_namespaced_pod_template` call or, worse, drift from what the chart
    documents.
-4. **The sandbox must not reach internal cluster/host addresses.** Enforced at
-   two layers: the in-pod iptables lockdown
+4. **The sandbox must not reach internal cluster/host addresses.** By default,
+   enforced at two layers: the in-pod iptables lockdown
    (`image/firewall-init.sh:step_apply_iptables`, applied by the `sandbox-init`
    init container, dropping all outbound traffic except to the proxy) is
    authoritative; the `onyx-sandbox-egress`
@@ -528,6 +537,14 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    family permits new TCP connections to the proxy port. IPv6 permits
    neighbor solicitations and advertisements with hop limit 255. The unused
    address family stays blocked, including IPv4 compatibility egress on EKS.
+   Helm `sandboxPod.netAdminLockdown: false` removes `NET_ADMIN` and skips
+   firewall setup and verification. CA bootstrap still runs as root. The chart
+   excludes these pods from bootstrap DNS access and relies on cluster enforcement of proxy-only
+   egress. Operators must enforce policy before workload startup and address
+   node-traffic exceptions and broader additive policies. The chart cannot
+   verify those controls. Docker cannot disable firewall bootstrap.
+   `sandboxPod.runtimeClassName` selects an optional cluster-provided runtime;
+   it does not change network enforcement. Both settings affect new pods.
 5. **The sidecar and main container must agree on the workspace path.**
    `SESSIONS_ROOT` is defined twice (`session_workspace.py:19` on the
    api-server side, `image/sandbox_daemon/snapshot.py:18` inside the image)
@@ -606,7 +623,7 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
 | changes the snapshot format (what's included/excluded, archive layout) | `sandbox_daemon/snapshot.py`'s `_SNAPSHOT_ROOTS`/`_SNAPSHOT_GENERATED_*` sets; `restore_snapshot`'s webapp-restore path; existing snapshots in FileStore become unreadable by a format change unless restore stays backward-compatible |
 | changes the sidecar contract (`models.py`, `server.py` routes) | both `sidecar_client.py` (api-server side) and every route in `sandbox_daemon/server.py`; the image must ship the updated daemon in the same release as the api-server that calls it (version skew is a real risk, no negotiation exists) |
 | changes RBAC (`sandbox-rbac.yaml`) | `_wait_for_pod_ready`'s `watch.Watch()` usage needs `pods:watch`; removing it makes every provision fail with an `ApiException`, and no unit test catches it (see §9); `pods/exec` is still needed for the many residual exec call sites; `_create_sandbox_pod`'s `podtemplates:get` |
-| changes network policy (`network-policy-sandbox-*.yaml`) | the in-pod iptables lockdown (`firewall-init.sh`) stays authoritative regardless of CNI enforcement; keep the allow-list in sync with whichever worker consumes the `sandbox` Celery queue (currently `celery-worker-heavy`) |
+| changes network policy (`network-policy-sandbox-*.yaml`) | with default settings, the in-pod iptables lockdown (`firewall-init.sh`) stays authoritative regardless of CNI enforcement; without it, verify cluster enforcement; keep the allow-list in sync with whichever worker consumes the `sandbox` Celery queue (currently `celery-worker-heavy`) |
 | changes idle timeout or snapshot cadence | the `SNAPSHOT_INTERVAL_DIVISOR` relationship between idle timeout and background-snapshot freshness bound; opencode-history durability exposure scales with this gap |
 | adds a new sandbox-wide (not per-session) persisted artifact | it needs its own capture point like opencode history's, since only `outputs/`+`attachments/` ride the per-session snapshot |
 
@@ -710,8 +727,9 @@ set.
   connected-app traffic is policy-gated.** The iptables lockdown
   (`firewall-init.sh`) drops all outbound traffic except to the proxy, which
   forwards public HTTPS (needed for `npm`/`pip`); the NetworkPolicy is a CNI-dependent backstop
-  restricted to the proxy and DNS only, which is stricter-looking but inert on
-  non-enforcing clusters. Neither of these is the same control as the
+  restricted to the proxy and DNS by default, but inert on non-enforcing
+  clusters. With `netAdminLockdown: false`, it becomes the primary network
+  control and omits DNS. See §5 for the operator requirements. Neither of these is the same control as the
   egress-proxy's action-policy gate (`[[craft-admin]]` §5.4), which only
   evaluates traffic attributed to a connected app or MCP server. Don't conflate
   "the sandbox can reach `example.com`" with "the org didn't approve that."
@@ -740,25 +758,22 @@ push API. This bundle is independent of enabled agent skills.
 The converter checks session workspace confinement. The 20 MiB thumbnail size
 check is advisory preflight. Concurrent edits can change input during rendering.
 A 30-second thumbnail deadline and 120-second full-slide deadline bound lock waiting
-and conversion time. The lock opens without blocking and must be a regular file.
+and conversion time. All conversions use the same bounded subprocess executor.
+The lock opens without blocking and must be a regular file.
 
 Finished JPEGs replace cached files atomically. Failed conversion retains the last
 complete image. Source revision checks reject changed input; cache metadata records
 the rendered revision. Missing, invalid, or non-regular metadata causes regeneration. Metadata opens do not block on special files or follow symlinks.
 Both providers validate conversion status and session-relative JPEG paths with one parser.
+Conversion failures return a protocol error handled as an HTTP 400 client error.
 
 Thumbnails live under `outputs/.document-thumbnails`, which inventory rules hide.
 Both providers exclude this root cache from snapshots. Nested user directories
 with the same name remain in snapshots.
 
-A complete-file probe avoids repeated deployment. Failed pushes cannot become ready bundles.
-Deployment uses the existing managed-content push retry policy.
-Docker classifies transport and Engine server errors as retriable writes.
-Rejected requests and failed extraction are permanent errors.
-Docker publishes bundles with a symlink swap, matching Kubernetes.
+A complete-file probe reuses deployed bundles. Failed pushes cannot publish a ready bundle.
+Docker and Kubernetes publish through symlink swaps and the shared managed-content retry policy.
 Updates to an existing symlink are atomic. Replacing a legacy directory first removes that directory.
-Previous directories remain available for 60 seconds so active readers can finish.
-Cleanup accepts only direct bundle children, not paths with nested components.
-Container lookup uses the same retry classification as archive transfer.
-Concurrent publications can leave an unused bundle until the container is removed;
-publication remains atomic, but cleanup is best effort.
+Container lookup and archive transfer retry transport and Engine server failures; rejected requests and extraction failures do not retry.
+Previous bundles remain available for 60 seconds so readers can finish.
+Cleanup accepts only direct bundle children and remains best effort under concurrent publication.

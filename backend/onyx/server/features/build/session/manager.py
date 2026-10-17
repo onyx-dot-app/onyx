@@ -25,12 +25,16 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
-from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
+from onyx.db.enums import (
+    BuildSessionStatus,
+    LLMModelFlowType,
+    SandboxStatus,
+    SessionOrigin,
+)
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.llm import (
     fetch_all_accessible_llm_providers,
-    fetch_default_craft_model,
-    fetch_default_llm_model,
+    fetch_default_model,
 )
 from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
@@ -195,8 +199,8 @@ class SessionManager:
         # Craft outranks chat: an admin can point Craft at a coding model while
         # chat stays on something else.
         configured_default_models = [
-            fetch_default_craft_model(self._db_session),
-            fetch_default_llm_model(self._db_session),
+            fetch_default_model(self._db_session, LLMModelFlowType.CRAFT),
+            fetch_default_model(self._db_session, LLMModelFlowType.CHAT),
         ]
         configured_defaults = [
             GatewaySelection(model.llm_provider_id, model.name)
@@ -809,8 +813,8 @@ class SessionManager:
         """
         Update the name of a build session.
 
-        If name is None, auto-generates a name using LLM based on the first
-        user message in the session.
+        If name is None, names an unnamed session from its first user message.
+        An automatic name never replaces an existing or concurrent manual name.
 
         Args:
             session_id: The session UUID
@@ -828,8 +832,18 @@ class SessionManager:
             # Manual rename
             session.name = name
         else:
-            # Auto-generate name from first user message using LLM
-            session.name = generate_session_name(self._db_session, session_id)
+            if session.name is not None:
+                return session
+            generated_name = generate_session_name(self._db_session, session_id)
+            # Lock only for the save, after the slow model call. Reread the row
+            # so another request's manual or automatic name takes precedence.
+            session = get_build_session(
+                session_id, user_id, self._db_session, for_update=True
+            )
+            if session is None:
+                return None
+            if session.name is None:
+                session.name = generated_name
 
         update_session_activity(session_id, self._db_session)
         self._db_session.commit()
@@ -1100,8 +1114,9 @@ class SessionManager:
                 tenant_id=get_current_tenant_id(),
             )
 
-        for acp_event in raw_events:
-            yield _streaming.event_to_sse(acp_event)
+        with contextlib.closing(raw_events):
+            for acp_event in raw_events:
+                yield _streaming.event_to_sse(acp_event)
 
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #

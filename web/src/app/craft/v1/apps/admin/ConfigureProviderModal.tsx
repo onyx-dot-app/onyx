@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import isEqual from "lodash/isEqual";
-import { Divider } from "@opal/components";
 import ActionPolicyEditorModal, {
   EditorField,
 } from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
@@ -12,6 +11,7 @@ import {
   BuiltInExternalAppDescriptor,
   EndpointPolicy,
   ExternalAppAdminResponse,
+  getAppTypeLogo,
 } from "@/app/craft/v1/apps/registry";
 import {
   createBuiltInExternalApp,
@@ -31,6 +31,7 @@ import {
   skillEditUrlForApp,
 } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
+import { externalAppDisplayUrl } from "@/lib/plugins/externalAppDisplayUrl";
 
 // Field key for the instance name; prefixed so it can never collide with a
 // descriptor-declared credential key.
@@ -223,13 +224,13 @@ export default function ConfigureProviderModal({
       alternateContentConfirmationOpen={upload.confirmationOpen}
       isAdditionalContentDirty={existingAssociationDirty}
       onClose={upload.isOpen ? upload.requestDismiss : onClose}
-      title={
-        existingApp
-          ? t("editTitle", { name: existingApp.name })
-          : t("addTitle", { name: descriptor.name })
-      }
-      description={
-        managed ? t("managedDescription") : descriptor.setup_instructions
+      title={existingApp?.name ?? descriptor.name}
+      displayUrl={externalAppDisplayUrl(
+        existingApp?.upstream_url_patterns ?? descriptor.upstream_url_patterns
+      )}
+      icon={getAppTypeLogo(descriptor.app_type)}
+      authenticationInstructions={
+        managed ? undefined : descriptor.setup_instructions
       }
       note={managed ? t("managedNote") : undefined}
       fields={fields}
@@ -247,24 +248,22 @@ export default function ConfigureProviderModal({
       allowPristineSave={existingApp === null}
       onSave={save}
       closeAfterSave={existingApp !== null}
-      bodyAfterPolicies={
+      discardOnClose={existingApp === null}
+      skillsContent={
         existingApp
           ? (requestLeave) => (
-              <>
-                <Divider />
-                <AssociatedSkillsEditor
-                  app={existingApp}
-                  selectedSkillIds={selectedSkillIds}
-                  onChange={setSelectedSkillIds}
-                  onOpenSkill={(skillId) =>
-                    requestLeave(() => navigateToExistingSkill(skillId))
-                  }
-                  onCreateSkill={() =>
-                    requestLeave(() => navigateToSkillEditor())
-                  }
-                  onUploadSkill={upload.open}
-                />
-              </>
+              <AssociatedSkillsEditor
+                app={existingApp}
+                selectedSkillIds={selectedSkillIds}
+                onChange={setSelectedSkillIds}
+                onOpenSkill={(skillId) =>
+                  requestLeave(() => navigateToExistingSkill(skillId))
+                }
+                onCreateSkill={() =>
+                  requestLeave(() => navigateToSkillEditor())
+                }
+                onUploadSkill={upload.open}
+              />
             )
           : undefined
       }

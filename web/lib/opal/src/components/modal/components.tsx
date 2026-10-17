@@ -40,6 +40,15 @@ function ModalOverlay({ ref, ...props }: ModalOverlayProps) {
   );
 }
 
+/** A persistent backdrop for flows that switch between Content screens. */
+function ModalBackdrop() {
+  return (
+    <DialogPrimitive.Portal>
+      <ModalOverlay />
+    </DialogPrimitive.Portal>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
@@ -500,6 +509,7 @@ function ModalFooter({
  */
 const Modal = Object.assign(ModalRoot, {
   Content: ModalContent,
+  Backdrop: ModalBackdrop,
   Header: ModalHeader,
   Body: ModalBody,
   Footer: ModalFooter,
@@ -513,15 +523,35 @@ interface BasicModalFooterProps {
   left?: React.ReactNode;
   cancel?: React.ReactNode;
   submit?: React.ReactNode;
+  /** Put navigation above actions on narrow screens. Requires a wrapping footer. */
+  stackOnSmallScreens?: boolean;
 }
 
 /** Footer layout with an optional left slot and right-aligned cancel/submit. */
-function BasicModalFooter({ left, cancel, submit }: BasicModalFooterProps) {
+function BasicModalFooter({
+  left,
+  cancel,
+  submit,
+  stackOnSmallScreens = false,
+}: BasicModalFooterProps) {
   return (
     <>
-      {left && <Section alignItems="start">{left}</Section>}
+      {left && (
+        <Section
+          alignItems="start"
+          className={stackOnSmallScreens ? "sm:w-auto sm:flex-1" : undefined}
+        >
+          {left}
+        </Section>
+      )}
       {(cancel || submit) && (
-        <Section flexDirection="row" justifyContent="end" gap={2}>
+        <Section
+          flexDirection="row"
+          justifyContent="end"
+          gap={2}
+          wrap={stackOnSmallScreens}
+          className={stackOnSmallScreens ? "sm:w-auto" : undefined}
+        >
           {cancel}
           {submit}
         </Section>

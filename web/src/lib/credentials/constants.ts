@@ -3,7 +3,6 @@ import { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import type {
   CredentialDisplayName,
   CredentialFieldOptions,
-  CredentialHint,
   CredentialJsonOf,
   CredentialMethodDescription,
   CredentialMethodLabel,
@@ -66,6 +65,13 @@ function secret<const TOptions extends CredentialFieldOptions = {}>(
   return textField("secret", displayName, options);
 }
 
+function jsonFile<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("jsonFile", displayName, options);
+}
+
 function toggle(displayName: CredentialDisplayName) {
   return { kind: "toggle", displayName } as const;
 }
@@ -108,7 +114,6 @@ interface MicrosoftAppSpecOptions {
   brandName: string;
   fileType: FileTypeCategory;
   privateKeyDisplayName: CredentialDisplayName;
-  privateKeyHint?: CredentialHint;
   certificateLabel: CredentialMethodLabel;
   descriptions?: {
     clientSecret: CredentialMethodDescription;
@@ -142,7 +147,8 @@ function microsoftAppSpec<const TPrefix extends string>(
     [key("private_key")]: file(
       options.privateKeyDisplayName,
       options.fileType,
-      options.privateKeyHint ? { hint: options.privateKeyHint } : {}
+      // Every Microsoft source takes the same .pfx certificate.
+      { hint: { key: "pfxFile" } }
     ),
   } as MicrosoftAppFields<TPrefix>;
 
@@ -171,6 +177,29 @@ function microsoftAppSpec<const TPrefix extends string>(
     ],
   };
 }
+
+/**
+ * A Google account (Gmail, Google Drive): a service account typed in, or an
+ * OAuth sign-in, which saves the account itself.
+ */
+const GOOGLE_ACCOUNT_SPEC = defineCredentialSpec({
+  brandName: "Google",
+  fields: {
+    google_primary_admin: email("primaryAdminEmail"),
+    google_service_account_key: jsonFile("serviceAccountKey", {
+      hint: { key: "googleServiceAccountKey" },
+    }),
+  },
+  methods: [
+    {
+      // The stored value for an uploaded key.
+      value: "uploaded",
+      label: "serviceAccount",
+      fields: ["google_primary_admin", "google_service_account_key"],
+    },
+    { value: "oauth", label: "oauth", fields: [], ownSetup: true },
+  ],
+});
 
 /**
  * The credential each source asks for. Field keys are the exact
@@ -205,6 +234,12 @@ export const CREDENTIAL_SPECS = {
       lumapps_service_user: email("serviceUserEmail", {
         hint: { key: "lumappsServiceUser" },
       }),
+    },
+  }),
+  youtrack: defineCredentialSpec({
+    brandName: "YouTrack",
+    fields: {
+      youtrack_token: secret("apiToken", { hint: { key: "youtrackToken" } }),
     },
   }),
   bitbucket: defineCredentialSpec({
@@ -380,7 +415,6 @@ export const CREDENTIAL_SPECS = {
     brandName: "Microsoft Teams",
     fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
     privateKeyDisplayName: "privateKey",
-    privateKeyHint: { key: "pfxFile" },
     certificateLabel: "certificateAuthentication",
     descriptions: {
       clientSecret: "teamsClientSecret",
@@ -391,7 +425,6 @@ export const CREDENTIAL_SPECS = {
     brandName: "Microsoft Outlook",
     fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
     privateKeyDisplayName: "privateKey",
-    privateKeyHint: { key: "pfxFile" },
     certificateLabel: "certificateAuthentication",
     descriptions: {
       clientSecret: "outlookClientSecret",
@@ -536,15 +569,8 @@ export const CREDENTIAL_SPECS = {
     brandName: "Discord",
     fields: { discord_bot_token: secret("botToken") },
   }),
-  // Gmail and Google Drive set up their credentials on their own pages.
-  google_drive: defineCredentialSpec({
-    brandName: "Google",
-    fields: { google_tokens: secret("oauthTokens") },
-  }),
-  gmail: defineCredentialSpec({
-    brandName: "Google",
-    fields: { google_tokens: secret("oauthTokens") },
-  }),
+  google_drive: GOOGLE_ACCOUNT_SPEC,
+  gmail: GOOGLE_ACCOUNT_SPEC,
   gitbook: defineCredentialSpec({
     brandName: "GitBook",
     fields: { gitbook_api_key: secret("apiToken") },

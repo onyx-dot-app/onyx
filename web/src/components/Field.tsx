@@ -9,7 +9,6 @@ import {
   useField,
   useFormikContext,
 } from "formik";
-import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./admin/connectors/types";
 import { InputSingleSelect, type TooltipSide } from "@opal/components";
@@ -17,7 +16,7 @@ import { FiInfo, FiX } from "react-icons/fi";
 import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState, useEffect, memo, JSX } from "react";
+import { useState, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
 import {
   Button,
@@ -31,11 +30,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import FileDropzoneField from "@/refresh-components/form/FileDropzoneField";
 import { RichTextSubtext } from "./RichTextSubtext";
-import { TypedFile, FILE_TYPE_DEFINITIONS } from "@/lib/connectors/fileTypes";
-import { createTypedFile } from "@/lib/connectors/utils";
-import { getCredentialFileType } from "@/lib/credentials/utils";
 import Text from "@/refresh-components/texts/Text";
 
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
@@ -388,164 +383,6 @@ export function TextFormField({
 
       {explanationText && (
         <ExplanationText link={explanationLink} text={explanationText} />
-      )}
-    </div>
-  );
-}
-
-export function FileUploadFormField({
-  name,
-  label,
-  subtext,
-}: {
-  name: string;
-  label: string;
-  subtext?: string | JSX.Element;
-}) {
-  // We create a *temporary* field inside of `Formik` to throw the `File` object into.
-  // The actual *contents* of the file will be thrown into the field called `name`.
-  const fileName = `temporary.filename-${name}`;
-  const [fileField] = useField<File>(fileName);
-  const [, , contentsHelper] = useField<string>(name);
-
-  useEffect(() => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      contentsHelper.setValue(e.target?.result as string);
-    };
-    if (fileField.value instanceof File) {
-      reader.readAsText(fileField.value);
-    }
-  }, [contentsHelper, fileField.value]);
-
-  return (
-    <div className="w-full">
-      <FieldLabel name={name} label={label} subtext={subtext} />
-      <FileDropzoneField name={fileName} multiple={false} />
-    </div>
-  );
-}
-
-export function TypedFileUploadFormField({
-  name,
-  label,
-  subtext,
-}: {
-  name: string;
-  label: string;
-  subtext?: string | JSX.Element;
-}) {
-  const t = useTranslations("common.field");
-  const [field, , helpers] = useField<TypedFile | null>(name);
-  const [customError, setCustomError] = useState<string>("");
-  const [isValidating, setIsValidating] = useState(false);
-  const [description, setDescription] = useState<string>("");
-
-  useEffect(() => {
-    const typeDefinitionKey = getCredentialFileType(name);
-    if (typeDefinitionKey) {
-      setDescription(
-        FILE_TYPE_DEFINITIONS[typeDefinitionKey].description || ""
-      );
-    }
-  }, [name]);
-
-  useEffect(() => {
-    const validateFile = async () => {
-      if (!field.value) {
-        setIsValidating(false);
-        return;
-      }
-
-      setIsValidating(true);
-
-      try {
-        const validation = await field.value.validate();
-        if (validation?.isValid) {
-          setCustomError("");
-        } else {
-          setCustomError(
-            validation?.errors.join(", ") || t("fileValidation.unknownError")
-          );
-          helpers.setValue(null);
-        }
-      } catch (error) {
-        setCustomError(
-          error instanceof Error
-            ? error.message
-            : t("fileValidation.validationError")
-        );
-        helpers.setValue(null);
-      } finally {
-        setIsValidating(false);
-      }
-    };
-
-    validateFile();
-  }, [field.value, helpers, t]);
-
-  const handleFileSelection = async (files: File[]) => {
-    if (files.length === 0) {
-      helpers.setValue(null);
-      setCustomError("");
-      return;
-    }
-
-    const file = files[0];
-    if (!file) {
-      setCustomError(t("fileValidation.selectionError"));
-      return;
-    }
-
-    const typeDefinitionKey = getCredentialFileType(name);
-
-    if (!typeDefinitionKey) {
-      setCustomError(t("fileValidation.noTypeDefinition", { name }));
-      return;
-    }
-
-    try {
-      const typedFile = createTypedFile(file, name, typeDefinitionKey);
-      helpers.setValue(typedFile);
-      setCustomError("");
-    } catch (error) {
-      setCustomError(
-        error instanceof Error
-          ? error.message
-          : t("fileValidation.unknownError")
-      );
-      helpers.setValue(null);
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  return (
-    <div className="w-full">
-      <FieldLabel name={name} label={label} subtext={subtext} />
-      {description && (
-        <div className="text-sm text-text-03 mb-2">{description}</div>
-      )}
-      <FileUpload
-        selectedFiles={field.value ? [field.value.file] : []}
-        setSelectedFiles={handleFileSelection}
-        multiple={false}
-      />
-      {/* Validation feedback */}
-      {isValidating && (
-        <div className="text-status-info-05 text-sm mt-1">
-          {t("fileValidation.validating")}
-        </div>
-      )}
-
-      {customError ? (
-        <div className="text-action-danger-05 text-sm mt-1">{customError}</div>
-      ) : (
-        <ErrorMessage
-          name={name}
-          component="div"
-          className="text-action-danger-05 text-sm mt-1"
-        />
       )}
     </div>
   );

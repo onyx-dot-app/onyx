@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 
 
 class LLMErrorInfo(BaseModel):
@@ -195,6 +195,9 @@ AssistantContent = Annotated[
 
 
 class BaseMessage(BaseModel):
+    id: str | None = None
+    metadata: SerializeAsAny[BaseModel] | None = Field(default=None, exclude=True)
+    estimated_tokens: int | None = Field(default=None, exclude=True)
     # Marks a stable prompt prefix for provider prompt caching; never sent as content.
     cacheable: bool = Field(default=False, exclude=True)
 
@@ -250,16 +253,21 @@ class AssistantMessage(BaseMessage):
         return [block for block in self.content if isinstance(block, ToolCall)]
 
 
-class ToolResultMessage(BaseMessage):
-    role: Literal["tool_result"] = "tool_result"
-    # Provider tool messages carry text only.
+class ToolResult(BaseMessage):
     content: str
-    tool_call_id: str
-    tool_name: str
+    details: SerializeAsAny[BaseModel] | None = None
+    is_error: bool = False
+    terminate: bool = False
 
     @property
     def text(self) -> str:
         return self.content
+
+
+class ToolResultMessage(ToolResult):
+    role: Literal["tool_result"] = "tool_result"
+    tool_call_id: str
+    tool_name: str
 
 
 Message = Annotated[
@@ -332,7 +340,7 @@ class GenerationDoneEvent(GenerationLifecycleEvent):
 class GenerationErrorEvent(GenerationLifecycleEvent):
     type: Literal["error"] = "error"
     usage: Usage | None = None
-    stop_reason: Literal["error"] = "error"
+    stop_reason: Literal["error", "aborted"] = "error"
     error_message: str
 
 
@@ -366,6 +374,16 @@ class ToolCallDeltaEvent(GenerationToolCallEvent):
 
 class ToolCallEndEvent(GenerationToolCallEvent):
     type: Literal["tool_call_end"] = "tool_call_end"
+
+
+GenerationContentEvent = Annotated[
+    TextDeltaEvent
+    | ThinkingDeltaEvent
+    | ToolCallStartEvent
+    | ToolCallDeltaEvent
+    | ToolCallEndEvent,
+    Field(discriminator="type"),
+]
 
 
 GenerationEvent = Annotated[

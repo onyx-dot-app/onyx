@@ -73,6 +73,7 @@ from onyx.db.enums import (
     ApprovalDecision,
     ArtifactType,
     BuildSessionStatus,
+    CapabilityCheckRunStatus,
     CapabilityCheckTrigger,
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
@@ -387,12 +388,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=True,
         default=None,
     )
-    language: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
-        default="en",
-        server_default="en",
-    )
+    # UI language. None = follow Settings.default_language.
+    language: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
     default_app_mode: Mapped[DefaultAppMode] = mapped_column(
         Enum(DefaultAppMode, native_enum=False),
@@ -1056,6 +1053,11 @@ class ConnectorCredentialPair(Base):
     # grants no access at query time and the restricted guard hides its
     # documents. Cleared once its permissions are in the document index.
     perm_sync_pending_since: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # An admin started indexing despite the hold its connector checks put on
+    # the first attempt. It outranks a check run started before it.
+    indexing_hold_released_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     # Backfills an applied edit requested, oldest first. The indexing beat
@@ -2007,6 +2009,9 @@ class Connector(Base):
 
     refresh_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prune_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Seconds between scheduled runs of each pair's connector checks. None
+    # means the checks run only on request.
+    check_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -2044,6 +2049,13 @@ class Connector(Base):
             if self.prune_freq < 300:
                 raise ValueError(
                     "prune_freq must be greater than or equal to 5 minutes."
+                )
+
+    def validate_check_freq(self) -> None:
+        if self.check_freq is not None:
+            if self.check_freq < 300:
+                raise ValueError(
+                    "check_freq must be greater than or equal to 5 minutes."
                 )
 
 
@@ -2169,6 +2181,56 @@ class CredentialCapabilityReportRow(Base):
             unique=True,
             postgresql_where=text("connector_id IS NULL"),
         ),
+    )
+
+
+class CapabilityCheckRun(Base):
+    """One run of a scope's capability checks, kept after the report row moves
+    on. Rows are written by the same lifecycle as the report row and keyed on
+    its ``run_id``, so a superseded run never lands on a later row."""
+
+    __tablename__ = "capability_check_run"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(
+        ForeignKey("credential.id", ondelete="CASCADE"), nullable=False
+    )
+    # NULL for a config-less credential-time run.
+    connector_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector.id", ondelete="CASCADE"), nullable=True
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False, unique=True
+    )
+    trigger: Mapped[CapabilityCheckTrigger] = mapped_column(
+        Enum(CapabilityCheckTrigger, native_enum=False), nullable=False
+    )
+    status: Mapped[CapabilityCheckRunStatus] = mapped_column(
+        Enum(CapabilityCheckRunStatus, native_enum=False), nullable=False
+    )
+    # The serialized ``CredentialCapabilityReport`` this run produced; None
+    # until it completes.
+    report: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    # Why the run never produced a report.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_capability_check_run_scope_time",
+            "credential_id",
+            "connector_id",
+            "time_created",
+        ),
+        # Serves the cascade when a connector is deleted.
+        Index("ix_capability_check_run_connector_id", "connector_id"),
     )
 
 
@@ -2675,6 +2737,11 @@ class IndexAttempt(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    # When the attempt reached a final status. Unset on attempts that finished
+    # before this column existed.
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair", back_populates="index_attempts"
@@ -3093,6 +3160,8 @@ class SyncRecord(Base):
     sync_end_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Why the sync failed, for the pair's run history. Only prunes write it.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index(
@@ -4102,6 +4171,20 @@ class Tool(Base):
     )
 
 
+class ToolUserPreference(Base):
+    __tablename__ = "tool_user_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_id: Mapped[int] = mapped_column(
+        ForeignKey("tool.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled_in_chat: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
 class OAuthConfig(Base):
     """OAuth provider configuration that can be shared across multiple tools"""
 
@@ -4126,6 +4209,9 @@ class OAuthConfig(Base):
     scopes: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
     additional_params: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
+    )
+    supports_pkce: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     # Metadata
@@ -6024,6 +6110,23 @@ class MCPServer(Base):
     )
 
 
+class MCPServerUserPreference(Base):
+    __tablename__ = "mcp_server_user_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled_in_chat: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    enabled_in_craft: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
 class MCPServer__User(Base):
     __tablename__ = "mcp_server__user"
     mcp_server_id: Mapped[int] = mapped_column(
@@ -6144,6 +6247,16 @@ class DocPermissionSyncAttempt(Base):
     time_finished: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Lease renewed by the running worker; the reaper fails the attempt when it expires
+    heartbeat_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Last time the sync fetched or wrote something; the counts above are written with it
+    last_progress_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
 
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
@@ -6155,6 +6268,13 @@ class DocPermissionSyncAttempt(Base):
             "ix_permission_sync_attempt_latest_for_cc_pair",
             "connector_credential_pair_id",
             "time_created",
+        ),
+        # At most one open attempt per cc_pair: this is the doc permission sync lock
+        Index(
+            "uq_doc_permission_sync_attempt_open_cc_pair",
+            "connector_credential_pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
         ),
         Index(
             "ix_permission_sync_attempt_status_time",
@@ -6214,6 +6334,16 @@ class ExternalGroupPermissionSyncAttempt(Base):
     time_finished: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Lease renewed by the running worker; the reaper fails the attempt when it expires
+    heartbeat_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Last time the sync fetched or wrote something; the counts above are written with it
+    last_progress_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
 
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair | None] = relationship(
@@ -6225,6 +6355,13 @@ class ExternalGroupPermissionSyncAttempt(Base):
             "ix_group_sync_attempt_cc_pair_time",
             "connector_credential_pair_id",
             "time_created",
+        ),
+        # At most one open attempt per cc_pair: this is the group sync lock
+        Index(
+            "uq_group_sync_attempt_open_cc_pair",
+            "connector_credential_pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
         ),
         Index(
             "ix_group_sync_attempt_status_time",
@@ -6621,11 +6758,11 @@ class Artifact(Base):
     # producing turn is unknown.
     turn_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    # Content hash from the sandbox manifest. Drives change detection: an
-    # upsert with a different hash bumps version and invalidates the archive.
-    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
-    # Bumped on every content change so a consumer holding an earlier
-    # version can detect that it was superseded.
+    # Metadata identity from the bounded sandbox inventory; not a content hash.
+    source_revision: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Highest revision opened by the session owner.
+    viewed_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Advances when the source revision changes or a deleted path returns.
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     # Deleted artifacts keep their row so stale cards grey out instead of 404ing.
     deleted: Mapped[bool] = mapped_column(

@@ -412,7 +412,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "9"
+      onyx.app/nginx-config-version: "10"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1156,7 +1156,7 @@ slackbot:
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
   extraEnv: []
-  enabled: false  # Disabled by default
+  enabled: true  # Set to false to disable the MCP server and its routes
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
@@ -1763,6 +1763,9 @@ configMap:
   INDEXING_WORKER_MEMORY_LIMIT_MB: ""
   INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
+  # Index spreadsheets and other tabular files (xlsx, Google Sheets, CSV, TSV)
+  # by title only, with "<content-skipped>" as their content; "" = false
+  SKIP_SPREADSHEET_CONTENT: ""
   # OpenSearch Point-In-Time keep-alive for the reindex/port scan (default 5m)
   PIT_KEEP_ALIVE: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
@@ -1789,6 +1792,8 @@ configMap:
   ZOOM_PERMISSION_DOC_SYNC_FREQUENCY: ""
   LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   LINEAR_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY: ""
   HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
@@ -1803,13 +1808,9 @@ configMap:
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
-  # Per-connector external group sync lock TTL in seconds (default 300); raise
-  # toward the 6h crawl deadline if group syncs run long, so periodic
-  # re-dispatches can't start concurrent duplicate syncs.
-  CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: ""
-  # Per-connector document permission sync lock TTL in seconds (default 3600);
-  # raise it if a sync loses its lock mid-run ("lock that's no longer owned").
-  CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: ""
+  # Time limit in seconds for one doc permission sync or group sync (default:
+  # JOB_TIMEOUT_SECONDS, 6h); raise it for a source whose full sync takes longer.
+  PERMISSION_SYNC_TIMEOUT_SECONDS: ""
   # Document-index sync beat lock TTL in seconds (default 120); raise it if the
   # sync pass aborts with "no longer owned" or "Lock not owned on completion".
   CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: ""
@@ -1874,6 +1875,15 @@ craft:
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
 sandboxPod:
+  # Onyx tests the default runtime with NET_ADMIN and iptables enabled.
+  # If you change either setting, verify sandbox isolation and network restrictions.
+  # Allow proxy traffic; block direct internet, DNS, internal services, nodes,
+  # and cloud metadata over IPv4 and IPv6.
+  # Optional, cluster-provided RuntimeClass (for example gvisor or kata).
+  runtimeClassName: ""
+  # Install firewall rules using NET_ADMIN. If false, the cluster must enforce
+  # proxy-only access from pod creation. Runtime isolation alone is not enough.
+  netAdminLockdown: true
   # Shared OpenCode, sidecar, and preview listener. Set to "::" for IPv6-only pods.
   listenHost: "0.0.0.0"
   nodeSelector:

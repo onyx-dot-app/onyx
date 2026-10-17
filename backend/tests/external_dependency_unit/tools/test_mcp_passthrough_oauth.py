@@ -13,6 +13,7 @@ This test:
 All external HTTP calls are mocked, but Postgres and Redis are running.
 """
 
+import json
 import queue
 from typing import Any
 from unittest.mock import patch
@@ -375,9 +376,9 @@ class TestMCPPassThroughOAuth:
             connection_headers: dict[str, str],
             transport: MCPTransport,  # noqa: ARG001
             auth: Any = None,  # noqa: ARG001
-        ) -> dict[str, Any]:
+        ) -> str:
             captured_headers.update(connection_headers)
-            return mocked_response
+            return json.dumps(mocked_response)
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",

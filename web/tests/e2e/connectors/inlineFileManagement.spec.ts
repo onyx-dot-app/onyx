@@ -73,10 +73,10 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
+    const detailPage = new AdminConnectorDetailPage(page);
+    await detailPage.expandIndexConfigurations();
     await expect(page.getByText(/Files \(/)).toBeVisible({ timeout: 10000 });
-    await expect(
-      new AdminConnectorDetailPage(page).filesEditButton
-    ).toBeVisible();
+    await expect(detailPage.filesEditButton).toBeVisible();
   });
 
   test("should enter and exit edit mode", async ({ page }) => {

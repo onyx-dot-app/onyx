@@ -16,6 +16,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.prompts.filter_extration import TIME_SCOPE_DECISION_PROMPT
+from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -57,8 +58,12 @@ class TimeFilter(BaseModel):
         return filters
 
 
-# The model's "(start, end)" output; each side is one comma/paren-free token.
-_TIME_FILTER_PAIR_RE = re.compile(r"\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)")
+# The model's "(start, end)" output; each side is one comma/paren-free slot,
+# stripped by _parse_bound. One quantifier per slot keeps matching linear.
+_TIME_FILTER_PAIR_RE = re.compile(r"\(([^(),]+),([^(),]+)\)")
+
+# The expected output is under ~40 chars; only a short prefix is parsed.
+_MAX_TIME_FILTER_OUTPUT_CHARS = 512
 
 # The date field the model prefixes its pair with ("created (...)" /
 # "updated (...)"). Absent / anything else defaults to updated.
@@ -114,6 +119,7 @@ def _parse_time_decision(
     now = now or datetime.now(timezone.utc)
     if not content:
         return None
+    content = content[:_MAX_TIME_FILTER_OUTPUT_CHARS]
     # search() tolerates code fences / stray text around the pair.
     match = _TIME_FILTER_PAIR_RE.search(content)
     if match is None:
@@ -152,6 +158,7 @@ def _parse_time_decision(
 def decide_time_filter(
     history: list[ChatMinimalTextMessage],
     llm: LLM,
+    enforce_llm_input_budget: bool = False,
 ) -> TimeFilter | None:
     """Detect, in one LLM call, the time scope the conversation restricts this
     turn's internal search to: which document date it is about (created vs
@@ -182,13 +189,22 @@ def decide_time_filter(
         last_user_query=last_user_query,
     )
     messages: list[Message] = [UserMessage(content=prompt)]
+    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
+    request = GenerationRequest(
+        messages=messages,
+        options=(
+            budget.options()
+            if budget
+            else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
+        ),
+    )
+    if budget and not budget.fits(request):
+        logger.warning("Search time-scope prompt exceeds its input budget")
+        return None
 
     try:
         response = llm.invoke(
-            GenerationRequest(
-                messages=messages,
-                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
-            ),
+            request,
             context=GenerationContext(flow=LLMFlow.TIME_FILTER_EXTRACTION),
         )
         content = response.text

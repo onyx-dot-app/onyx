@@ -1686,7 +1686,7 @@ fi
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
     def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
+        self, sandbox_id: UUID, session_id: UUID, *, include_web: bool = False
     ) -> OutputsManifestResponse:
         container = self._require_container(sandbox_id)
         try:
@@ -1704,6 +1704,7 @@ fi
                     "-m",
                     "sandbox_daemon.outputs_manifest",
                     str(session_id),
+                    *(["--include-web"] if include_web else []),
                 ],
                 workdir="/opt",
             )
@@ -2048,13 +2049,9 @@ echo WRITE_OK"""
                 ["/bin/sh", "-c", script],
                 tar_bytes,
             )
-        except ExecError as e:
-            cause = e.__cause__
+        except (ExecError, APIError) as e:
+            cause = e.__cause__ if isinstance(e, ExecError) else e
             if isinstance(cause, APIError) and not cause.is_client_error():
-                raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
-            raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
-        except APIError as e:
-            if not e.is_client_error():
                 raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
             raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
         except (OSError, RequestsConnectionError, Timeout) as e:

@@ -24,7 +24,7 @@ Forwarded to `@radix-ui/react-popover` `Root`. Most common:
 
 | Prop         | Type                                                          | Default    | Description                                     |
 | ------------ | ------------------------------------------------------------- | ---------- | ----------------------------------------------- |
-| `width`      | `"fit" \| "sm" \| "md" \| "lg" \| "xl" \| "2xl" \| "trigger"` | `"fit"`    | Popover width preset                            |
+| `width`      | `"fit" \| "sm" \| "md" \| "lg" \| "xl" \| "2xl" \| "3xl" \| "trigger"` | `"fit"`    | Popover width preset                            |
 | `container`  | `HTMLElement \| null`                                         | —          | Portal container (use to render inside a modal) |
 | `align`      | `"start" \| "center" \| "end"`                                | `"center"` | Alignment along the side axis                   |
 | `sideOffset` | `number`                                                      | `4`        | Distance in pixels between trigger and popover  |
@@ -35,6 +35,7 @@ Forwarded to `@radix-ui/react-popover` `Root`. Most common:
 | -------------------- | --------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
 | `children`           | `ReactNode[]`               | —       | Menu items. `null` renders a separator; `undefined`/`false` is filtered. Leading/trailing separators are removed. |
 | `footer`             | `ReactNode`                 | —       | Footer area below the scroll region, separated by a divider                                                       |
+| `gap`                | `Spacing`                   | `4`     | Spacing steps around the footer divider                                                                           |
 | `scrollContainerRef` | `RefObject<HTMLDivElement>` | —       | Ref for programmatic scrolling                                                                                    |
 
 ## Usage

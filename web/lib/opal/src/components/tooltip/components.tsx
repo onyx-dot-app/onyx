@@ -6,6 +6,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { RichStr } from "@opal/types";
 import { Text } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
+import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,6 +25,7 @@ type TooltipSide = "top" | "bottom" | "start" | "end";
 type TooltipAlign = "start" | "center" | "end" | "follow";
 
 interface TooltipProps {
+  tone?: "default" | "neutral";
   /**
    * Tooltip content shown on hover. When `undefined`, the tooltip is not
    * rendered and children are returned as-is.
@@ -113,6 +115,7 @@ function physicalSide(side: TooltipSide): "top" | "bottom" | "left" | "right" {
  * ```
  */
 function Tooltip({
+  tone = "default",
   tooltip,
   side = "end",
   align = "center",
@@ -178,9 +181,9 @@ function Tooltip({
       {!suppressed && (
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
-            /* Dark surface in both themes, so the content resolves dark tokens. */
             ref={contentRef}
-            className="dark opal-tooltip"
+            className={cn("opal-tooltip", tone === "default" && "dark")}
+            data-tone={tone}
             side={physicalSide(side)}
             // Until the pointer moves, a follower sits centered.
             align={following ? "start" : align === "follow" ? "center" : align}

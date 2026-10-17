@@ -19,6 +19,7 @@ import { useTranslations } from "next-intl";
 
 const ForgotPasswordPage: React.FC = () => {
   const t = useTranslations("auth");
+  const tPlaceholders = useTranslations("common.placeholders");
   const [isWorking, setIsWorking] = useState(false);
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
@@ -66,7 +67,7 @@ const ForgotPasswordPage: React.FC = () => {
                 name="email"
                 label={t("forgotPassword.emailField.label")}
                 type="email"
-                placeholder="email@yourcompany.com"
+                placeholder={tPlaceholders("email")}
               />
 
               <div className="flex">

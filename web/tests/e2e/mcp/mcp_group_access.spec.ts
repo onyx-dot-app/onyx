@@ -2,6 +2,7 @@ import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { mockPublicMcpProbe } from "@tests/e2e/utils/mcpSetup";
 
 /**
  * Group/public access control for MCP servers (CE surface).
@@ -56,9 +57,11 @@ test.describe("MCP server group access control", () => {
   }) => {
     test.skip(!eeEnabled, "IsPublicGroupSelector requires business/EE tier");
     await loginAs(page, "admin");
+    await mockPublicMcpProbe(page);
     const mcpPage = new AdminMcpServersPage(page);
     await mcpPage.goto();
     await mcpPage.openAddServerModal();
+    await mcpPage.enterServerUrlAndContinue("https://example.com/mcp");
     await mcpPage.expectAccessControlVisible();
   });
 

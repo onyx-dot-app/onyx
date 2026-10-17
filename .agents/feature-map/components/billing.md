@@ -161,7 +161,9 @@ value the control plane sends.
 
 `onyx/server/settings/tier_order.py:tier_at_least` gives every caller a total
 order (`COMMUNITY < BUSINESS < ENTERPRISE`) without depending on EE code, so
-CE call sites can gate on tier without importing `ee`.
+CE call sites can gate on tier without importing `ee`. `get_current_tier` in the
+same module resolves the deployment tier (`ee.onyx.utils.tier.get_tier`, or
+`Tier.COMMUNITY` when EE code is not loaded) for those call sites.
 
 ### 4.2 License claim (self-hosted)
 

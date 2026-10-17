@@ -13,6 +13,7 @@ from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.shared._httpx_utils import McpHttpClientFactory
 from mcp.types import (
     CallToolResult,
     InitializeResult,
@@ -91,6 +92,7 @@ def _create_mcp_client_function_runner(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    httpx_client_factory: McpHttpClientFactory | None = None,
     **kwargs: Any,
 ) -> Callable[[], Coroutine[Any, Any, T]]:
     auth_headers = connection_headers or {}
@@ -111,7 +113,7 @@ def _create_mcp_client_function_runner(
             server_url,
             headers=auth_headers,
             auth=auth_for_request,
-            httpx_client_factory=mcp_ssrf_httpx_client_factory,
+            httpx_client_factory=httpx_client_factory or mcp_ssrf_httpx_client_factory,
         ) as client_tuple:
             if len(client_tuple) == 3:
                 read, write, _ = client_tuple
@@ -171,16 +173,23 @@ def _call_mcp_client_function_sync(
         raise e
 
 
-async def _call_mcp_client_function_async(
+async def call_mcp_client_function_async(
     function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    httpx_client_factory: McpHttpClientFactory | None = None,
     **kwargs: Any,
 ) -> T:
     run_client_function = _create_mcp_client_function_runner(
-        function, server_url, connection_headers, transport, auth, **kwargs
+        function,
+        server_url,
+        connection_headers,
+        transport,
+        auth,
+        httpx_client_factory=httpx_client_factory,
+        **kwargs,
     )
     return await run_client_function()
 
@@ -241,7 +250,7 @@ async def initialize_mcp_client(
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
 ) -> InitializeResult:
-    return await _call_mcp_client_function_async(
+    return await call_mcp_client_function_async(
         lambda session: session.initialize(),
         server_url,
         connection_headers,

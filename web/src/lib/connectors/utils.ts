@@ -1,11 +1,17 @@
 import * as Yup from "yup";
+import {
+  SOURCE_METADATA_MAP,
+  type PartialSourceMetadata,
+} from "@/lib/connectors/constants";
+import {
+  type SourceMetadata,
+  ValidSources,
+  type ConfigurableSources,
+} from "@/lib/connectors/types/source";
 import type {
   ConnectorAccessFormValues,
   ConnectorGroupRestrictionFormValues,
 } from "@/lib/connectors/accessType";
-import { ValidSources } from "@/lib/connectors/types/source";
-import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
-import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   connectorConfigs,
@@ -16,10 +22,6 @@ import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
 import { getCredentialSpec, realmFields } from "@/lib/credentials/utils";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
-  PIPELINE_ORDER,
-  STAGE_BAR_COLORS,
-} from "@/lib/connectors/stageMetrics/constants";
-import {
   ConnectorCredentialPairStatus,
   FileTypeCategory,
   OneDriveScope,
@@ -27,7 +29,6 @@ import {
 import type {
   ConnectionConfiguration,
   GmailConfig,
-  SortMode,
 } from "@/lib/connectors/types";
 
 // ---------------------------------------------------------------------------
@@ -176,6 +177,8 @@ export function splitCredentialBoundFields(
 }
 
 interface ConnectorValidationMessages {
+  /** A required field left empty, named by its label. */
+  required?: (field: string) => string;
   oneDriveUsersRequired?: string;
   specificGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
@@ -270,9 +273,10 @@ export function createConnectorInitialValues(
 export function createConnectorValidationSchema(
   connector: ConfigurableSources,
   requireGroups: boolean = false,
-  messages: ConnectorValidationMessages = {}
+  messages: ConnectorValidationMessages = {},
+  // The translated config, so "required" messages name translated labels.
+  configuration: ConnectionConfiguration = connectorConfigs[connector]
 ): Yup.ObjectSchema<Record<string, any>> {
-  const configuration = connectorConfigs[connector];
   const fields = [...configuration.values, ...configuration.advanced_values];
 
   const fieldSchemas = fields.reduce<Record<string, Yup.Schema>>(
@@ -293,7 +297,13 @@ export function createConnectorValidationSchema(
                     : Yup.string();
 
       if (!field.optional) {
-        schema = schema.required(`${field.label} is required`);
+        const label: string =
+          (typeof field.label === "function"
+            ? field.label(null)
+            : field.label) ?? field.name;
+        schema = schema.required(
+          messages.required?.(label) ?? `${label} is required`
+        );
       }
 
       acc[field.name] = schema;
@@ -406,35 +416,97 @@ export function statusIsNotCurrentlyActive(
 }
 
 // ---------------------------------------------------------------------------
-// Stage metrics
-// ---------------------------------------------------------------------------
-
-// Sort per-batch stages according to the current sort mode. Pipeline order is
-// the canonical enum declaration order; time-taken sorts descending by
-// total duration so the long pole sits first.
-export function sortPerBatchStages(
-  stages: IndexAttemptStageMetric[],
-  sortMode: SortMode
-): IndexAttemptStageMetric[] {
-  const sorted = [...stages];
-  if (sortMode === "pipeline") {
-    sorted.sort(
-      (a, b) => (PIPELINE_ORDER[a.stage] ?? 0) - (PIPELINE_ORDER[b.stage] ?? 0)
-    );
-  } else {
-    sorted.sort((a, b) => b.total_duration_ms - a.total_duration_ms);
-  }
-  return sorted;
-}
-
-export function colorClassForStage(stage: IndexAttemptStage): string {
-  const idx = PIPELINE_ORDER[stage] ?? 0;
-  return STAGE_BAR_COLORS[idx % STAGE_BAR_COLORS.length]!;
-}
-
-// ---------------------------------------------------------------------------
 // Gmail
 // ---------------------------------------------------------------------------
 
 export const gmailConnectorNameBuilder = (values: GmailConfig) =>
   "GmailConnector";
+
+// ---------------------------------------------------------------------------
+// Source metadata
+// ---------------------------------------------------------------------------
+
+function fillSourceMetadata(
+  partialMetadata: PartialSourceMetadata,
+  internalName: ValidSources
+): SourceMetadata {
+  return {
+    internalName: partialMetadata.baseSourceType || internalName,
+    ...partialMetadata,
+    adminUrl: `/admin/connectors/${internalName}`,
+  };
+}
+
+export function getSourceMetadata(sourceType: ValidSources): SourceMetadata {
+  const partialMetadata = SOURCE_METADATA_MAP[sourceType];
+
+  // Fallback to not_applicable if sourceType not found in map
+  if (!partialMetadata) {
+    return fillSourceMetadata(
+      SOURCE_METADATA_MAP[ValidSources.NotApplicable],
+      ValidSources.NotApplicable
+    );
+  }
+
+  return fillSourceMetadata(partialMetadata, sourceType);
+}
+
+export function listSourceMetadata(): SourceMetadata[] {
+  /* This gives back all the viewable / common sources, primarily for
+  display in the Add Connector page */
+  const entries = Object.entries(SOURCE_METADATA_MAP)
+    .filter(
+      ([source, _]) =>
+        source !== "not_applicable" &&
+        source !== "ingestion_api" &&
+        source !== "mock_connector" &&
+        // use the "regular" slack connector when listing
+        source !== "federated_slack" &&
+        // user_file is for internal use (projects), not the Add Connector page
+        source !== "user_file" &&
+        // craft_file backs the Craft user library, which has its own upload UI
+        source !== "craft_file"
+    )
+    .map(([source, metadata]) => {
+      return fillSourceMetadata(metadata, source as ValidSources);
+    });
+  return entries;
+}
+
+export function getSourceDocLink(sourceType: ValidSources): string | null {
+  return SOURCE_METADATA_MAP[sourceType].docs || null;
+}
+
+export function isValidSource(sourceType: string): boolean {
+  return Object.keys(SOURCE_METADATA_MAP).includes(sourceType);
+}
+
+export function getSourceDisplayName(sourceType: ValidSources): string | null {
+  return getSourceMetadata(sourceType).displayName;
+}
+
+/** The configured sources, one entry per source type. */
+export function getConfiguredSources(
+  availableSources: ValidSources[]
+): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
+  const seen = new Set<string>();
+  const result: Array<
+    SourceMetadata & { originalName: string; uniqueKey: string }
+  > = [];
+
+  for (const sourceName of availableSources) {
+    const cleanName = sourceName.replace("federated_", "") as ValidSources;
+    if (seen.has(cleanName)) continue;
+    seen.add(cleanName);
+
+    const metadata = getSourceMetadata(cleanName);
+    if (metadata.internalName === ValidSources.NotApplicable) continue;
+
+    result.push({
+      ...metadata,
+      originalName: sourceName,
+      uniqueKey: cleanName,
+    });
+  }
+  return result;
+}

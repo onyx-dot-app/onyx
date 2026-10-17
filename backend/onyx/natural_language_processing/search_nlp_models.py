@@ -2,11 +2,12 @@ import asyncio
 import json
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import wraps
+from dataclasses import dataclass
+from functools import partial, wraps
 from types import TracebackType
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import aioboto3
 import httpx
@@ -15,7 +16,7 @@ import voyageai
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
 from httpx import HTTPError
-from pydantic import SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
 from requests import JSONDecodeError, RequestException, Response
 from tenacity import (
     retry,
@@ -23,10 +24,10 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    wait_fixed,
     wait_random,
 )
 from tenacity.wait import wait_base
+from voyageai.error import RateLimitError as VoyageRateLimitError
 
 from onyx.configs.app_configs import (
     INDEXING_EMBEDDING_MODEL_NUM_THREADS,
@@ -51,6 +52,13 @@ from onyx.natural_language_processing.embedding_auth import (
     CloudEmbeddingAuth,
     VertexEmbeddingAuth,
     build_embedding_auth,
+)
+from onyx.natural_language_processing.embedding_rate_limit import (
+    EmbeddingRateLimiter,
+    EmbeddingWaitTimeoutError,
+    EmbeddingWaitTotals,
+    load_embedding_rate_limiter,
+    wait_sleeps,
 )
 from onyx.natural_language_processing.exceptions import (
     CohereBillingLimitError,
@@ -99,6 +107,120 @@ logger = setup_logger()
 # we hit the 60s cap exactly once, totaling ~123s before giving up.
 _RETRY_DELAY = 1 if INDEXING_ONLY else 0.1
 _RETRY_TRIES = 8 if INDEXING_ONLY else 2
+_PASSAGE_RETRY_TRIES = 8
+# Model server: attempts for errors other than rate limits.
+_MODEL_SERVER_ERROR_TRIES = 3
+
+_T = TypeVar("_T")
+
+
+class EmbeddingRetryBackoff(BaseModel):
+    """Exponential backoff between embedding retries: waits of scale, 2*scale,
+    4*scale, ... seconds, capped at max, plus up to 2s of jitter."""
+
+    model_config = ConfigDict(frozen=True)
+
+    scale_seconds: float
+    max_seconds: float
+
+    def wait(self) -> wait_base:
+        return wait_exponential(
+            multiplier=self.scale_seconds, max=self.max_seconds
+        ) + wait_random(0, 2)
+
+
+@dataclass(frozen=True)
+class EmbeddingRequestPolicy:
+    """How embedding requests retry, the rate limit each request waits for,
+    and whether a provider rate limit blocks instead of failing."""
+
+    retry_backoff: EmbeddingRetryBackoff
+    retry_tries: int
+    rate_limiter: EmbeddingRateLimiter | None = None
+    should_stop: Callable[[], bool] | None = None
+    # Indexing blocks on a provider rate limit until the request goes
+    # through, so rate limits never fail documents.
+    block_on_provider_rate_limit: bool = False
+    wait_totals: EmbeddingWaitTotals | None = None
+
+    def send(self, request: Callable[[], _T]) -> _T:
+        """Sends one provider request under this policy. The rate limit and
+        provider throttling share one wait time limit per request."""
+        started_at = time.monotonic()
+        throttle_attempt = 0
+        while True:
+            if self.rate_limiter is not None:
+                self.rate_limiter.acquire(
+                    self.should_stop, started_at, self._add_rate_limit_wait
+                )
+            try:
+                return request()
+            except Exception as e:
+                if not (self.block_on_provider_rate_limit and is_rate_limit_error(e)):
+                    raise
+                start = time.monotonic()
+                try:
+                    for sleep_seconds in self._throttle_sleeps(
+                        throttle_attempt, started_at
+                    ):
+                        time.sleep(sleep_seconds)
+                finally:
+                    self._add_provider_throttle_wait(time.monotonic() - start)
+                throttle_attempt += 1
+
+    async def send_async(self, request: Callable[[], Awaitable[_T]]) -> _T:
+        """Sends one provider request under this policy. The rate limit and
+        provider throttling share one wait time limit per request."""
+        started_at = time.monotonic()
+        throttle_attempt = 0
+        while True:
+            if self.rate_limiter is not None:
+                await self.rate_limiter.acquire_async(
+                    self.should_stop, started_at, self._add_rate_limit_wait
+                )
+            try:
+                return await request()
+            except Exception as e:
+                if not (self.block_on_provider_rate_limit and is_rate_limit_error(e)):
+                    raise
+                start = time.monotonic()
+                try:
+                    for sleep_seconds in self._throttle_sleeps(
+                        throttle_attempt, started_at
+                    ):
+                        await asyncio.sleep(sleep_seconds)
+                finally:
+                    self._add_provider_throttle_wait(time.monotonic() - start)
+                throttle_attempt += 1
+
+    def _throttle_sleeps(self, attempt: int, started_at: float) -> Iterator[float]:
+        return wait_sleeps(
+            "The embedding provider rate-limited the request",
+            attempt,
+            started_at,
+            self.should_stop,
+        )
+
+    @property
+    def counts_every_request(self) -> bool:
+        """Whether this policy sees each HTTP request, so provider SDKs must
+        not retry on their own."""
+        return self.rate_limiter is not None or self.block_on_provider_rate_limit
+
+    def _add_rate_limit_wait(self, seconds: float) -> None:
+        if self.wait_totals is not None:
+            self.wait_totals.add_rate_limit_wait(seconds)
+
+    def _add_provider_throttle_wait(self, seconds: float) -> None:
+        if self.wait_totals is not None:
+            self.wait_totals.add_provider_throttle_wait(seconds)
+
+
+_QUERY_REQUEST_POLICY = EmbeddingRequestPolicy(
+    retry_backoff=EmbeddingRetryBackoff(scale_seconds=_RETRY_DELAY, max_seconds=60),
+    retry_tries=_RETRY_TRIES,
+)
+_PASSAGE_RETRY_BACKOFF = EmbeddingRetryBackoff(scale_seconds=5, max_seconds=60)
 
 # OpenAI only allows 2048 embeddings to be computed at once
 _OPENAI_MAX_INPUT_LEN = 2048
@@ -247,6 +369,30 @@ def is_authentication_error(error: Exception) -> bool:
     )
 
 
+def is_rate_limit_error(error: BaseException) -> bool:
+    """Whether a provider refused the request because of its rate limit or quota."""
+    import openai
+    from google.genai import errors as genai_errors
+
+    # litellm's RateLimitError subclasses openai's.
+    if isinstance(
+        error,
+        (
+            ModelServerRateLimitError,
+            openai.RateLimitError,
+            VoyageRateLimitError,
+        ),
+    ):
+        return True
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code == 429
+    if isinstance(error, ApiError):
+        return error.status_code == 429
+    if isinstance(error, genai_errors.APIError):
+        return error.code == 429
+    return False
+
+
 _GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
 
 # Bifrost model IDs are `<provider>/<model>`; these routes accept `task_type`.
@@ -255,11 +401,6 @@ _BIFROST_OPENAI_MODEL_PREFIXES: tuple[str, ...] = ("openai/", "azure/")
 # Bifrost forwards a batch upstream unsplit; Cohere's cap is a safe default.
 _BIFROST_DEFAULT_MAX_INPUT_LEN: int = _COHERE_MAX_INPUT_LEN
 _BIFROST_MAX_CONCURRENT_REQUESTS: int = 8
-# Bifrost requests retry here, not in the outer @retry, with the same budget.
-_BIFROST_REQUEST_TRIES: int = _RETRY_TRIES
-_BIFROST_RETRY_WAIT: wait_base = wait_exponential(
-    multiplier=_RETRY_DELAY, max=60
-) + wait_random(0, 2)
 _BIFROST_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 # Client errors that are not a verdict on the request itself.
 _BIFROST_NON_FINAL_STATUSES: frozenset[int] = frozenset({401, 408, 429})
@@ -391,8 +532,10 @@ class CloudEmbedding:
         api_version: str | None = None,
         timeout: int = API_BASED_EMBEDDING_TIMEOUT,
         auth: CloudEmbeddingAuth | None = None,
+        policy: EmbeddingRequestPolicy = _QUERY_REQUEST_POLICY,
     ) -> None:
         self.provider = provider
+        self.policy = policy
         self.api_key = api_key
         self.api_url = api_url
         self.api_version = api_version
@@ -427,16 +570,23 @@ class CloudEmbedding:
 
         # Use the OpenAI specific timeout for this one
         client = openai.AsyncOpenAI(
-            api_key=self._resolve_api_key(), timeout=OPENAI_EMBEDDING_TIMEOUT
+            api_key=self._resolve_api_key(),
+            timeout=OPENAI_EMBEDDING_TIMEOUT,
+            max_retries=(
+                0 if self.policy.counts_every_request else openai.DEFAULT_MAX_RETRIES
+            ),
         )
 
         final_embeddings: list[Embedding] = []
 
         for text_batch in batch_list(texts, _OPENAI_MAX_INPUT_LEN):
-            response = await client.embeddings.create(
-                input=text_batch,
-                model=model,
-                dimensions=reduced_dimension or openai.omit,
+            response = await self.policy.send_async(
+                partial(
+                    client.embeddings.create,
+                    input=text_batch,
+                    model=model,
+                    dimensions=reduced_dimension or openai.omit,
+                )
             )
             final_embeddings.extend(
                 [embedding.embedding for embedding in response.data]
@@ -449,21 +599,27 @@ class CloudEmbedding:
         if not model:
             model = DEFAULT_COHERE_MODEL
 
-        client = CohereAsyncClient(api_key=self._resolve_api_key())
+        client = CohereAsyncClient(
+            api_key=self._resolve_api_key(),
+            max_retries=0 if self.policy.counts_every_request else None,
+        )
 
         final_embeddings: list[Embedding] = []
         for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
             # Does not use the same tokenizer as the Onyx API server but it's approximately the same
             # empirically it's only off by a very few tokens so it's not a big deal
-            response = await client.embed(
-                texts=text_batch,
-                model=model,
-                input_type=embedding_type,
-                truncate="END",
-                # Explicit float request — guarantees .float_ is populated
-                # on Cohere's typed v4 response and keeps the contract
-                # explicit on the older v3 endpoint too.
-                embedding_types=["float"],
+            response = await self.policy.send_async(
+                partial(
+                    client.embed,
+                    texts=text_batch,
+                    model=model,
+                    input_type=embedding_type,
+                    truncate="END",
+                    # Explicit float request — guarantees .float_ is populated
+                    # on Cohere's typed v4 response and keeps the contract
+                    # explicit on the older v3 endpoint too.
+                    embedding_types=["float"],
+                )
             )
             final_embeddings.extend(_extract_cohere_embeddings(response.embeddings))
         return final_embeddings
@@ -480,11 +636,14 @@ class CloudEmbedding:
 
         final_embeddings: list[Embedding] = []
         for text_batch in batch_list(texts, _VOYAGE_MAX_INPUT_LEN):
-            response = await client.embed(
-                texts=text_batch,
-                model=model,
-                input_type=embedding_type,
-                truncation=True,
+            response = await self.policy.send_async(
+                partial(
+                    client.embed,
+                    texts=text_batch,
+                    model=model,
+                    input_type=embedding_type,
+                    truncation=True,
+                )
             )
             final_embeddings.extend(response.embeddings)
         return final_embeddings
@@ -494,13 +653,15 @@ class CloudEmbedding:
     ) -> list[Embedding]:
         from litellm import aembedding
 
-        response = await aembedding(
-            model=model,
-            input=texts,
-            timeout=API_BASED_EMBEDDING_TIMEOUT,
-            api_key=self._resolve_api_key(),
-            api_base=self.api_url,
-            api_version=self.api_version,
+        response = await self.policy.send_async(
+            lambda: aembedding(
+                model=model,
+                input=texts,
+                timeout=API_BASED_EMBEDDING_TIMEOUT,
+                api_key=self._resolve_api_key(),
+                api_base=self.api_url,
+                api_version=self.api_version,
+            )
         )
         embeddings = [embedding["embedding"] for embedding in response.data]
         return embeddings
@@ -559,10 +720,12 @@ class CloudEmbedding:
                 )
                 for text in batch_texts
             ]
-            response = await client.aio.models.embed_content(
-                model=resolved_model,
-                contents=content_requests,
-                config=embed_config,
+            response = await self.policy.send_async(
+                lambda: client.aio.models.embed_content(
+                    model=resolved_model,
+                    contents=content_requests,
+                    config=embed_config,
+                )
             )
 
             if not response.embeddings:
@@ -629,7 +792,8 @@ class CloudEmbedding:
         if not model_name:
             raise ValueError("Model name is required for LiteLLM proxy embedding.")
 
-        if not self.api_url:
+        api_url: str | None = self.api_url
+        if not api_url:
             raise ValueError("API URL is required for LiteLLM proxy embedding.")
 
         headers = (
@@ -638,16 +802,19 @@ class CloudEmbedding:
             else {"Authorization": f"Bearer {api_key}"}
         )
 
-        response = await self.http_client.post(
-            self.api_url,
-            json={
-                "model": model_name,
-                "input": texts,
-            },
-            headers=headers,
-        )
-        response.raise_for_status()
-        result = response.json()
+        async def post() -> httpx.Response:
+            response = await self.http_client.post(
+                api_url,
+                json={
+                    "model": model_name,
+                    "input": texts,
+                },
+                headers=headers,
+            )
+            response.raise_for_status()
+            return response
+
+        result = (await self.policy.send_async(post)).json()
         return [embedding["embedding"] for embedding in result["data"]]
 
     async def _embed_bifrost(
@@ -679,18 +846,24 @@ class CloudEmbedding:
         is_google_model: bool = model.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
         is_gemini_embedding_2: bool = _is_gemini_embedding_2_model(model)
 
-        # Retry one request here. A request that still fails escapes the outer
-        # @retry, so inputs that already succeeded are not embedded again.
-        @retry(
-            retry=retry_if_exception(_is_retryable_bifrost_error),
-            stop=stop_after_attempt(_BIFROST_REQUEST_TRIES),
-            wait=_BIFROST_RETRY_WAIT,
-            reraise=True,
-        )
-        async def post(payload: dict[str, Any]) -> httpx.Response:
+        async def send(payload: dict[str, Any]) -> httpx.Response:
             response: httpx.Response = await self.http_client.post(
                 url, json=payload, headers=headers
             )
+            if response.status_code == 429:
+                response.raise_for_status()
+            return response
+
+        # Retry one request here. A request that still fails escapes the outer
+        # retry in `embed`, so inputs that already succeeded are not embedded again.
+        @retry(
+            retry=retry_if_exception(_is_retryable_bifrost_error),
+            stop=stop_after_attempt(self.policy.retry_tries),
+            wait=self.policy.retry_backoff.wait(),
+            reraise=True,
+        )
+        async def post(payload: dict[str, Any]) -> httpx.Response:
+            response = await self.policy.send_async(lambda: send(payload))
             if (
                 response.is_client_error
                 and response.status_code not in _BIFROST_NON_FINAL_STATUSES
@@ -759,13 +932,30 @@ class CloudEmbedding:
             final_embeddings.extend(result)
         return final_embeddings
 
-    @retry(
-        retry=retry_if_exception_type(RuntimeError),
-        stop=stop_after_attempt(_RETRY_TRIES),
-        wait=wait_exponential(multiplier=_RETRY_DELAY, max=60) + wait_random(0, 2),
-        reraise=True,
-    )
     async def embed(
+        self,
+        *,
+        texts: list[str],
+        text_type: EmbedTextType,
+        model_name: str | None = None,
+        deployment_name: str | None = None,
+        reduced_dimension: int | None = None,
+    ) -> list[Embedding]:
+        embed_with_retries = retry(
+            retry=retry_if_exception_type(RuntimeError),
+            stop=stop_after_attempt(self.policy.retry_tries),
+            wait=self.policy.retry_backoff.wait(),
+            reraise=True,
+        )(self._embed_once)
+        return await embed_with_retries(
+            texts=texts,
+            text_type=text_type,
+            model_name=model_name,
+            deployment_name=deployment_name,
+            reduced_dimension=reduced_dimension,
+        )
+
+    async def _embed_once(
         self,
         *,
         texts: list[str],
@@ -801,6 +991,9 @@ class CloudEmbedding:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
             raise AuthenticationError(provider="OpenAI")
+        except (ConnectorStopSignal, EmbeddingWaitTimeoutError):
+            # Raised while waiting for a rate limit; never retried.
+            raise
         except EmbeddingRequestFailedError:
             # The provider client already retried, or the provider refused the
             # request itself; retrying the whole call would resend good inputs.
@@ -817,7 +1010,7 @@ class CloudEmbedding:
                 sanitized_api_key=self.sanitized_api_key,
                 status_code=e.response.status_code,
             )
-            # Log at warning because the @retry decorator will re-invoke us
+            # Log at warning because the retry in `embed` will re-invoke us
             # on failure — an ERROR-level log here floods Sentry with up to
             # _RETRY_TRIES duplicate events per failing batch (rate limits,
             # transient provider outages). The final failure surfaces via
@@ -1000,6 +1193,8 @@ class EmbeddingModel:
             model_name=model_name, provider_type=provider_type
         )
         self.callback = callback
+        # Time this model's requests spent waiting on rate limits.
+        self.wait_totals = EmbeddingWaitTotals()
 
         # Only build model server endpoint for local models
         if self.provider_type is None:
@@ -1014,6 +1209,7 @@ class EmbeddingModel:
     async def _make_direct_api_call(
         self,
         embed_request: EmbedRequest,
+        policy: EmbeddingRequestPolicy = _QUERY_REQUEST_POLICY,
     ) -> EmbedResponse:
         """Make direct API call to cloud provider, bypassing model server."""
         if self.provider_type is None:
@@ -1054,6 +1250,7 @@ class EmbeddingModel:
             api_url=self.api_url,
             api_version=self.api_version,
             auth=self.auth,
+            policy=policy,
         ) as cloud_model:
             embeddings = await cloud_model.embed(
                 texts=embed_request.texts,
@@ -1086,6 +1283,7 @@ class EmbeddingModel:
         embed_request: EmbedRequest,
         tenant_id: str | None = None,
         request_id: str | None = None,
+        policy: EmbeddingRequestPolicy = _QUERY_REQUEST_POLICY,
     ) -> EmbedResponse:
         if self.embed_server_endpoint is None:
             raise ValueError("Model server endpoint is not configured for local models")
@@ -1101,37 +1299,32 @@ class EmbeddingModel:
             if request_id:
                 headers["X-Onyx-Request-ID"] = request_id
 
-            response = requests.post(
-                endpoint,
-                headers=headers,
-                json=embed_request.model_dump(),
-                timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
-            )
-            # signify that this is a rate limit error
-            if response.status_code == 429:
-                raise ModelServerRateLimitError(response.text)
+            def post() -> Response:
+                response = requests.post(
+                    endpoint,
+                    headers=headers,
+                    json=embed_request.model_dump(),
+                    timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
+                )
+                if response.status_code == 429:
+                    raise ModelServerRateLimitError(response.text)
+                return response
 
+            response = policy.send(post)
             response.raise_for_status()
             return response
 
         final_make_request_func = _make_request
 
-        # if the text type is a passage, add some default
-        # retries + handling for rate limiting
+        # Passage requests retry errors here. A 429 never reaches this retry:
+        # the passage policy blocks on it in `policy.send`.
         if embed_request.text_type == EmbedTextType.PASSAGE:
             final_make_request_func = retry(
                 retry=retry_if_exception_type(
                     (RequestException, ValueError, JSONDecodeError)
                 ),
-                stop=stop_after_attempt(3),
-                wait=wait_fixed(5),
-                reraise=True,
-            )(final_make_request_func)
-            # use 10 second delay as per Azure suggestion
-            final_make_request_func = retry(
-                retry=retry_if_exception_type(ModelServerRateLimitError),
-                stop=stop_after_attempt(10),
-                wait=wait_fixed(10),
+                stop=stop_after_attempt(_MODEL_SERVER_ERROR_TRIES),
+                wait=policy.retry_backoff.wait(),
                 reraise=True,
             )(final_make_request_func)
 
@@ -1163,6 +1356,20 @@ class EmbeddingModel:
         request_id: str | None = None,
     ) -> list[Embedding]:
         text_batches = batch_list(texts, batch_size)
+        # Resolved here, not in the worker threads, which lack the tenant
+        # context. Only indexing waits for the rate limit; queries never block.
+        policy = (
+            EmbeddingRequestPolicy(
+                retry_backoff=_PASSAGE_RETRY_BACKOFF,
+                retry_tries=_PASSAGE_RETRY_TRIES,
+                rate_limiter=load_embedding_rate_limiter(),
+                should_stop=self.callback.should_stop if self.callback else None,
+                block_on_provider_rate_limit=True,
+                wait_totals=self.wait_totals,
+            )
+            if text_type == EmbedTextType.PASSAGE
+            else _QUERY_REQUEST_POLICY
+        )
         num_of_batches = len(text_batches)
 
         logger.debug("Encoding %s texts in %s batches.", len(texts), num_of_batches)
@@ -1241,7 +1448,7 @@ class EmbeddingModel:
                             # during batch processing.
                             loop = _get_or_create_event_loop()
                             response = loop.run_until_complete(
-                                self._make_direct_api_call(embed_request)
+                                self._make_direct_api_call(embed_request, policy)
                             )
                         else:
                             # This code is being called from an event loop,
@@ -1253,13 +1460,18 @@ class EmbeddingModel:
                                     EmbedResponse,
                                     pool.submit(
                                         asyncio.run,
-                                        self._make_direct_api_call(embed_request),
+                                        self._make_direct_api_call(
+                                            embed_request, policy
+                                        ),
                                     ).result(),
                                 )
                     else:
                         # For local models, use model server.
                         response = self._make_model_server_request(
-                            embed_request, tenant_id=tenant_id, request_id=request_id
+                            embed_request,
+                            tenant_id=tenant_id,
+                            request_id=request_id,
+                            policy=policy,
                         )
                 success = True
             finally:

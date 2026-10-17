@@ -6,7 +6,6 @@ import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn, InputPasswordTypeIn } from "@opal/components";
-import { InputSingleComboBox } from "@opal/components";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -36,6 +35,7 @@ const AZURE_OPENAI_URL = "https://oai.azure.com";
 
 function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
   const t = useTranslations("admin.imageGeneration");
+  const tPlaceholders = useTranslations("common.placeholders");
   const {
     formikProps,
     apiStatus,
@@ -43,7 +43,6 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
     errorMessage,
     disabled,
     isLoadingCredentials,
-    apiKeyOptions,
     resetApiState,
     imageProvider,
   } = props;
@@ -53,13 +52,13 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
       {/* Target URI field */}
       <FormikField<string>
         name="target_uri"
-        render={(field, helper, meta, state) => (
+        render={(field, _helper, meta, state) => (
           <FormField name="target_uri" state={state} className="w-full">
             <FormField.Label>{t("form.targetUri.label")}</FormField.Label>
             <FormField.Control>
               <InputTypeIn
                 {...field}
-                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview"
+                placeholder={tPlaceholders("azure.imageGenerationsUrl")}
                 variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>
@@ -87,7 +86,7 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
       {/* API Key field */}
       <FormikField<string>
         name="api_key"
-        render={(field, helper, meta, state) => (
+        render={(field, _helper, meta, state) => (
           <FormField
             name="api_key"
             state={apiStatus === "error" ? "error" : state}
@@ -95,44 +94,20 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
           >
             <FormField.Label>{t("form.apiKey.label")}</FormField.Label>
             <FormField.Control>
-              {apiKeyOptions.length > 0 ? (
-                <InputSingleComboBox
-                  mode="open"
-                  value={field.value}
-                  onChange={(e) => {
-                    helper.setValue(e.target.value);
-                    resetApiState();
-                  }}
-                  onValueChange={(value) => {
-                    helper.setValue(value);
-                    resetApiState();
-                  }}
-                  onBlur={field.onBlur}
-                  options={apiKeyOptions}
-                  placeholder={
-                    isLoadingCredentials
-                      ? t("form.loading.placeholder")
-                      : t("form.apiKey.comboPlaceholder")
-                  }
-                  disabled={disabled || !formikProps.values.target_uri?.trim()}
-                  isError={apiStatus === "error"}
-                />
-              ) : (
-                <InputPasswordTypeIn
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    resetApiState();
-                  }}
-                  placeholder={
-                    isLoadingCredentials
-                      ? t("form.loading.placeholder")
-                      : t("form.apiKey.placeholder")
-                  }
-                  disabled={disabled || !formikProps.values.target_uri?.trim()}
-                  error={apiStatus === "error"}
-                />
-              )}
+              <InputPasswordTypeIn
+                {...field}
+                onChange={(e) => {
+                  field.onChange(e);
+                  resetApiState();
+                }}
+                placeholder={
+                  isLoadingCredentials
+                    ? t("form.loading.placeholder")
+                    : t("form.apiKey.placeholder")
+                }
+                disabled={disabled || !formikProps.values.target_uri?.trim()}
+                error={apiStatus === "error"}
+              />
             </FormField.Control>
             {showApiMessage ? (
               <FormField.APIMessage

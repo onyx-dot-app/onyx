@@ -54,7 +54,7 @@ def get_last_attempt_for_cc_pair(
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
     # A backfill does not move the pair's refresh schedule.
     query = query.filter(IndexAttempt.is_backfill.is_(False))
-    return query.order_by(IndexAttempt.time_updated.desc()).first()
+    return query.order_by(IndexAttempt.time_created.desc()).first()
 
 
 def get_recent_completed_attempts_for_cc_pair(
@@ -65,7 +65,11 @@ def get_recent_completed_attempts_for_cc_pair(
     ignore_targeted_reindex: bool = True,
 ) -> list[IndexAttempt]:
     """Most recent to least recent. Backfills are left out: their window and
-    checkpoint never carry over to or from a normal attempt."""
+    checkpoint never carry over to or from a normal attempt.
+
+    Attempts that ended before docfetching set their window (e.g. cancelled by
+    a pause right after being scheduled) are left out too. They have no window,
+    checkpoint or batches, so a resuming attempt must look past them."""
     query = db_session.query(IndexAttempt).filter(
         IndexAttempt.connector_credential_pair_id == cc_pair_id,
         IndexAttempt.search_settings_id == search_settings_id,
@@ -73,10 +77,11 @@ def get_recent_completed_attempts_for_cc_pair(
             [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
         ),
         IndexAttempt.is_backfill.is_(False),
+        IndexAttempt.poll_range_end.is_not(None),
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
-    return query.order_by(IndexAttempt.time_updated.desc()).limit(limit).all()
+    return query.order_by(IndexAttempt.time_created.desc()).limit(limit).all()
 
 
 def get_recent_attempts_for_cc_pair(
@@ -96,7 +101,7 @@ def get_recent_attempts_for_cc_pair(
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
     if ignore_backfill:
         query = query.filter(IndexAttempt.is_backfill.is_(False))
-    return query.order_by(IndexAttempt.time_updated.desc()).limit(limit).all()
+    return query.order_by(IndexAttempt.time_created.desc()).limit(limit).all()
 
 
 def get_index_attempt(
@@ -441,6 +446,7 @@ def mark_attempt_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.SUCCESS
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.celery_task_id = None
         db_session.commit()
 
@@ -472,6 +478,7 @@ def mark_attempt_partially_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.COMPLETED_WITH_ERRORS
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.celery_task_id = None
         db_session.commit()
 
@@ -506,6 +513,7 @@ def mark_attempt_canceled(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.CANCELED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = reason
         db_session.commit()
 
@@ -540,6 +548,7 @@ def mark_attempt_failed(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.FAILED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = failure_reason
         attempt.full_exception_trace = full_exception_trace
         attempt.celery_task_id = None
@@ -584,6 +593,7 @@ def mark_attempt_interrupted(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.INTERRUPTED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = reason
         attempt.celery_task_id = None
         db_session.commit()
@@ -721,6 +731,7 @@ def get_latest_index_attempts(
     eager_load_cc_pair: bool = False,
     only_finished: bool = False,
     ignore_targeted_reindex: bool = True,
+    ignore_backfill: bool = True,
 ) -> Sequence[IndexAttempt]:
     ids_stmt = select(
         IndexAttempt.connector_credential_pair_id,
@@ -731,7 +742,8 @@ def get_latest_index_attempts(
     ids_stmt = ids_stmt.where(SearchSettings.status == status)
     if ignore_targeted_reindex:
         ids_stmt = ids_stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
-    ids_stmt = ids_stmt.where(IndexAttempt.is_backfill.is_(False))
+    if ignore_backfill:
+        ids_stmt = ids_stmt.where(IndexAttempt.is_backfill.is_(False))
 
     if only_finished:
         ids_stmt = _add_only_finished_clause(ids_stmt)
@@ -925,6 +937,27 @@ def get_error_counts_for_index_attempts(
     stmt = (
         select(IndexAttemptError.index_attempt_id, func.count())
         .where(IndexAttemptError.index_attempt_id.in_(index_attempt_ids))
+        .group_by(IndexAttemptError.index_attempt_id)
+    )
+    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
+
+
+def get_open_doc_error_counts_for_index_attempts(
+    db_session: Session,
+    index_attempt_ids: list[int],
+) -> dict[int, int]:
+    """Per-attempt counts of unresolved document-level errors, the ones a
+    targeted reindex can retry. Attempt ids with none are absent."""
+    if not index_attempt_ids:
+        return {}
+
+    stmt = (
+        select(IndexAttemptError.index_attempt_id, func.count())
+        .where(
+            IndexAttemptError.index_attempt_id.in_(index_attempt_ids),
+            IndexAttemptError.is_resolved.is_(False),
+            IndexAttemptError.document_id.isnot(None),
+        )
         .group_by(IndexAttemptError.index_attempt_id)
     )
     return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
@@ -1214,19 +1247,46 @@ def get_index_attempt_errors(
     return list(errors.all())
 
 
+def _cc_pair_errors(
+    stmt: Select,
+    cc_pair_id: int,
+    unresolved_only: bool,
+    index_attempt_id: int | None,
+    query: str | None,
+) -> Select:
+    """Narrows an ``IndexAttemptError`` select to one pair, and optionally to
+    its open errors, one attempt, and messages, document ids or entity ids
+    containing ``query``."""
+    stmt = stmt.where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
+    if unresolved_only:
+        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
+    if index_attempt_id is not None:
+        stmt = stmt.where(IndexAttemptError.index_attempt_id == index_attempt_id)
+    if query:
+        stmt = stmt.where(
+            or_(
+                IndexAttemptError.failure_message.icontains(query, autoescape=True),
+                IndexAttemptError.document_id.icontains(query, autoescape=True),
+                IndexAttemptError.entity_id.icontains(query, autoescape=True),
+            )
+        )
+    return stmt
+
+
 def count_index_attempt_errors_for_cc_pair(
     cc_pair_id: int,
     unresolved_only: bool,
     db_session: Session,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
 ) -> int:
-    stmt = (
-        select(func.count())
-        .select_from(IndexAttemptError)
-        .where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
+    stmt = _cc_pair_errors(
+        select(func.count()).select_from(IndexAttemptError),
+        cc_pair_id,
+        unresolved_only,
+        index_attempt_id,
+        query,
     )
-    if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
-
     result = db_session.scalar(stmt)
     return 0 if result is None else result
 
@@ -1237,12 +1297,12 @@ def get_index_attempt_errors_for_cc_pair(
     db_session: Session,
     page: int | None = None,
     page_size: int | None = None,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
 ) -> list[IndexAttemptError]:
-    stmt = select(IndexAttemptError).where(
-        IndexAttemptError.connector_credential_pair_id == cc_pair_id
+    stmt = _cc_pair_errors(
+        select(IndexAttemptError), cc_pair_id, unresolved_only, index_attempt_id, query
     )
-    if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
 
     # Order by most recent first
     stmt = stmt.order_by(desc(IndexAttemptError.time_created))
@@ -1343,6 +1403,22 @@ def cc_pair_has_dispatched_index_attempts(db_session: Session, cc_pair_id: int) 
     )
 
 
+def get_queued_index_attempts(db_session: Session) -> Sequence[IndexAttempt]:
+    """Every index attempt handed to the docfetching queue and not started,
+    oldest first, whatever its search settings and backfills included. An
+    attempt held for capability checks has no task yet, and a targeted
+    reindex runs on its own queue, so neither is in this line."""
+    return db_session.scalars(
+        select(IndexAttempt)
+        .where(
+            IndexAttempt.status == IndexingStatus.NOT_STARTED,
+            IndexAttempt.celery_task_id.isnot(None),
+            IndexAttempt.targeted_reindex_job_id.is_(None),
+        )
+        .order_by(IndexAttempt.time_created, IndexAttempt.id)
+    ).all()
+
+
 def get_waiting_index_attempt(
     db_session: Session, cc_pair_id: int, search_settings_id: int
 ) -> IndexAttempt | None:
@@ -1377,14 +1453,18 @@ def claim_waiting_index_attempt(
 def cancel_waiting_index_attempt__no_commit(
     db_session: Session, index_attempt_id: int, reason: str
 ) -> bool:
-    """Ends a waiting attempt as CANCELED. Leaves ``time_started`` unset
-    (unlike ``mark_attempt_canceled``), so the attempt still counts as never
-    dispatched and the pair's next attempt still waits for the checks. False
-    when the attempt is no longer waiting. The caller commits."""
+    """Ends a waiting attempt as CANCELED, finished now. Leaves ``time_started``
+    unset (unlike ``mark_attempt_canceled``), so the attempt still counts as
+    never dispatched and the pair's next attempt still waits for the checks.
+    False when the attempt is no longer waiting. The caller commits."""
     result = db_session.execute(
         update(IndexAttempt)
         .where(IndexAttempt.id == index_attempt_id, _is_waiting_attempt())
-        .values(status=IndexingStatus.CANCELED, error_msg=reason)
+        .values(
+            status=IndexingStatus.CANCELED,
+            error_msg=reason,
+            time_finished=func.now(),
+        )
     )
     return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
 

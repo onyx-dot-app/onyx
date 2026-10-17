@@ -3,12 +3,16 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from onyx.configs.app_configs import (
+    DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
     DEFAULT_PRUNING_FREQ,
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
+    MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+    MAX_EMBEDDING_RATE_LIMIT_REQUESTS,
 )
 from onyx.configs.constants import QueryHistoryType
+from onyx.db.enums import SupportedLanguage
 from onyx.server.features.notifications.models import NotificationResponse
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -81,6 +85,17 @@ class Settings(BaseModel):
     image_extraction_and_analysis_enabled: bool | None = True
     image_analysis_max_size_mb: int | None = 20
 
+    # Global limit on indexing embedding requests: at most this many in any
+    # window of `embedding_rate_limit_period_seconds`. None means no limit.
+    embedding_rate_limit_requests: int | None = Field(
+        default=None, gt=0, le=MAX_EMBEDDING_RATE_LIMIT_REQUESTS
+    )
+    embedding_rate_limit_period_seconds: int = Field(
+        default=DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+        gt=0,
+        le=MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+    )
+
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
     user_file_max_upload_size_mb: int | None = Field(
@@ -100,6 +115,9 @@ class Settings(BaseModel):
     # Workspace default for Craft access; per-user User.craft_enabled
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
+
+    # Workspace UI language for users without a stored User.language.
+    default_language: SupportedLanguage = SupportedLanguage.EN
 
     # Workspace-wide switch for the LLM gateway (/api/gateway — direct model
     # API access for external tools like Claude Code or Cursor). When False,
@@ -131,6 +149,8 @@ class UserSettings(Settings):
     # Deployment-level Craft availability, ignoring the per-user admin toggle.
     # Gates visibility of the admin per-user Craft controls.
     onyx_craft_available: bool = False
+    # Craft is switched on but the tier is too low: show the upgrade prompt.
+    onyx_craft_requires_upgrade: bool = False
     # Dev/debug flag: when true, the FE renders a button that streams the
     # user's sandbox pod's opencode-serve logs. Gated by the
     # ENABLE_OPENCODE_DEBUGGING env var; never set in prod.

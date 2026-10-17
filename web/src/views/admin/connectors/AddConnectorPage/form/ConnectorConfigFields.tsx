@@ -3,6 +3,7 @@ import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
+import type { StoredReportScope } from "@/lib/connectors/checks/findings";
 import { RenderField } from "./FieldRendering";
 import { useFormikContext } from "formik";
 
@@ -13,6 +14,32 @@ export interface ConnectorConfigFieldsProps {
   values: any;
   connector: ConfigurableSources;
   currentCredential: CredentialValues | null;
+  /** The stored check reports that can list a field's options. */
+  reportScope: StoredReportScope | null;
+}
+
+/**
+ * The config fields the form shows for these values. Advanced fields are all
+ * optional, so they sit in the same flat list instead of behind a toggle; a
+ * field's own visibleCondition still applies.
+ */
+export function visibleConnectorFields(
+  config: ConnectionConfiguration,
+  values: Record<string, unknown>,
+  currentCredential: CredentialValues | null
+): ConnectorField[] {
+  const showAdvanced: boolean =
+    !config.advancedValuesVisibleCondition ||
+    config.advancedValuesVisibleCondition(values, currentCredential);
+  return [
+    ...config.values,
+    ...(showAdvanced ? config.advanced_values : []),
+  ].filter(
+    (field) =>
+      !field.hidden &&
+      (!field.visibleCondition ||
+        field.visibleCondition(values, currentCredential))
+  );
 }
 
 export default function ConnectorConfigFields({
@@ -20,6 +47,7 @@ export default function ConnectorConfigFields({
   values,
   connector,
   currentCredential,
+  reportScope,
 }: ConnectorConfigFieldsProps) {
   const { setFieldValue } = useFormikContext<any>(); // Get Formik's context functions
 
@@ -40,19 +68,10 @@ export default function ConnectorConfigFields({
     }
   }, [initialConnectorName, setFieldValue, values]);
 
-  // Advanced fields are all optional, so they sit in the same flat list
-  // instead of behind a toggle. A field's own visibleCondition still applies.
-  const showAdvanced: boolean =
-    !config.advancedValuesVisibleCondition ||
-    config.advancedValuesVisibleCondition(values, currentCredential);
-  const visibleFields: ConnectorField[] = [
-    ...config.values,
-    ...(showAdvanced ? config.advanced_values : []),
-  ].filter(
-    (field) =>
-      !field.hidden &&
-      (!field.visibleCondition ||
-        field.visibleCondition(values, currentCredential))
+  const visibleFields: ConnectorField[] = visibleConnectorFields(
+    config,
+    values,
+    currentCredential
   );
 
   return (
@@ -68,6 +87,7 @@ export default function ConnectorConfigFields({
           values={values}
           connector={connector}
           currentCredential={currentCredential}
+          reportScope={reportScope}
         />
       ))}
     </>

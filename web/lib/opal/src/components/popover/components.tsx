@@ -4,7 +4,7 @@ import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@opal/utils";
 import { Divider, ShadowDiv } from "@opal/components";
-import type { WithoutStyles } from "@opal/types";
+import type { Spacing, WithoutStyles } from "@opal/types";
 import { Section } from "@opal/layouts";
 
 /**
@@ -81,12 +81,6 @@ const PopoverClose = PopoverPrimitive.Close;
  *
  * The main popover container with default styling.
  *
- * Widths:
- * - `fit`: Fits content width (default)
- * - `md`: Medium width (12rem)
- * - `lg`: Large width (15rem)
- * - `xl`: Extra large width (18rem)
- *
  * @param width - Width of the popover. Default: "fit"
  *
  * @example
@@ -106,7 +100,15 @@ const PopoverClose = PopoverPrimitive.Close;
  * </Popover.Content>
  * ```
  */
-type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "2xl" | "trigger";
+type PopoverWidths =
+  | "fit"
+  | "sm"
+  | "md"
+  | "lg"
+  | "xl"
+  | "2xl"
+  | "3xl"
+  | "trigger";
 const widthClasses: Record<PopoverWidths, string> = {
   fit: "w-fit",
   sm: "w-40",
@@ -114,6 +116,7 @@ const widthClasses: Record<PopoverWidths, string> = {
   lg: "w-60",
   xl: "w-72",
   "2xl": "w-100",
+  "3xl": "w-158",
   trigger: "w-(--radix-popover-trigger-width)",
 };
 interface PopoverContentProps extends WithoutStyles<
@@ -147,6 +150,7 @@ function PopoverContent({
           "bg-background-neutral-00 p-1 z-popover rounded-12 border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           "flex flex-col",
           "max-h-(--radix-popover-content-available-height)",
+          "max-w-(--radix-popover-content-available-width)",
           "overflow-hidden",
           widthClasses[width]
         )}
@@ -210,6 +214,7 @@ function SeparatorHelper() {
 interface PopoverMenuProps {
   children?: React.ReactNode[];
   footer?: React.ReactNode;
+  gap?: Spacing;
 
   // Ref for the scrollable container (useful for programmatic scrolling)
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
@@ -217,6 +222,7 @@ interface PopoverMenuProps {
 function PopoverMenu({
   children,
   footer,
+  gap = 4,
   scrollContainerRef,
 }: PopoverMenuProps) {
   if (!children) return null;
@@ -230,7 +236,12 @@ function PopoverMenu({
   });
 
   return (
-    <Section alignItems="stretch" height="auto" className="flex-1 min-h-0">
+    <Section
+      alignItems="stretch"
+      height="auto"
+      gap={gap}
+      className="flex-1 min-h-0"
+    >
       <ShadowDiv
         scrollContainerRef={scrollContainerRef}
         className="flex flex-col gap-1 max-h-80 w-full"

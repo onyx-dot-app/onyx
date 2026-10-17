@@ -109,8 +109,8 @@ the coding-agent sandbox).
 | Method | Path | Handler | Permission |
 |---|---|---|---|
 | CRUD | `/admin/api-key*` | `server/api_key/api.py` | `Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS`. Creating or updating a key is **admin-equivalent by design**: `group_ids` is uncapped, so a holder can add a key to the Admin group (`api.py:create_api_key` comment). |
-| GET | `/user/pats/scopes` | `server/pat/api.py:list_selectable_scopes` | `Permission.BASIC_ACCESS`. Drops `use:llm_gateway` from the list while the workspace `llm_gateway_enabled` setting is off. |
-| GET/POST/DELETE | `/user/pats` | `server/pat/api.py` | Create needs `CREATE_USER_API_KEYS`. The seeded Basic group grants it by default, and a full admin can switch it off or on from the Basic group's page (`auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`). The same permission gates MCP OAuth consent (`server/oauth_provider/api.py`), so the toggle covers both. List and delete need `BASIC_ACCESS`, and a user only ever sees or revokes their own. Minting a PAT with `use:llm_gateway` while the setting is off is rejected with `INVALID_INPUT` (`server/pat/api.py:_validate_assignable_scopes`). |
+| GET | `/user/pats/scopes` | `server/pat/api.py:list_selectable_scopes` | `Permission.BASIC_ACCESS`. Drops scopes whose `min_tier` is above the current tier (`use:llm_gateway` is Business+), and drops `use:llm_gateway` while the workspace `llm_gateway_enabled` setting is off. |
+| GET/POST/DELETE | `/user/pats` | `server/pat/api.py` | Create needs `CREATE_USER_API_KEYS`. The seeded Basic group grants it by default, and a full admin can switch it off or on from the Basic group's page (`auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`). The same permission gates MCP OAuth consent (`server/oauth_provider/api.py`), so the toggle covers both. List and delete need `BASIC_ACCESS`, and a user only ever sees or revokes their own. Minting a PAT with a scope above the current tier is rejected with `FEATURE_NOT_AVAILABLE`, and minting one with `use:llm_gateway` while the setting is off is rejected with `INVALID_INPUT` (`server/pat/api.py:_validate_assignable_scopes`). |
 | GET/PUT | `/admin/security`, GET `/admin/security/pinned-fields` | `server/security/api.py` | `FULL_ADMIN_PANEL_ACCESS`. Workspace security overrides: password policy, `password_auth_enabled`, `valid_email_domains`, JWT validation fields, SSRF level, incognito availability, `allow_connector_group_restrictions`, and `allow_connector_check_findings` (on by default; off, capability checks store and return no findings). Env-pinned fields win over stored values. Turning on `allow_connector_group_restrictions` needs the Business tier. |
 | CRUD | `/admin/user-group*` | `ee/onyx/server/user_group/api.py` | See [[access-control]] §2; this is where group membership, and thus `PermissionGrant`-derived capability, is actually assigned. |
 | GET/POST/PATCH | `/admin/sso-providers*`, `/admin/sso-providers/{id}/domains` | `server/manage/sso/api.py` | `FULL_ADMIN_PANEL_ACCESS` (exact gating per route). Domain-routing SSO providers beyond the first require business tier (`_require_business_tier_for_additional_enabled_provider`). |
@@ -140,6 +140,10 @@ env-credential Google login router next to the provider rows. `oauth_refresher.p
 provider row. The removed `AUTH_TYPE=google_oauth|oidc|saml` is not read:
 `verify_auth_setting` (`auth/users.py`) only warns on stale values.
 
+`server/security/store.py:get_security_settings` keeps environment fallback for pre-tenant authentication and failed reads.
+Authorization callers can set `allow_fallback=False` to require tenant context and a successful settings read.
+Both modes share the tenant cache; failed reads never populate it.
+
 ---
 
 ## 3. Data model
@@ -150,7 +154,7 @@ User ──< OAuthAccount (fastapi-users; oauth_name + linked SSOProvider identi
      ──< ApiKey (as owner_id and as the credential's own user_id)
      ──< PersonalAccessToken
      ──< User__UserGroup >── UserGroup ──< PermissionGrant
-     ──< OAuthUserToken >── OAuthConfig  (per-tool/MCP OAuth, distinct from login OAuth)
+     ──< OAuthUserToken >── OAuthConfig  (custom-action OAuth, distinct from login OAuth)
 
 SSOProvider ── encrypted `config` blob (protocol-specific) + allowed_email_domains
 ScimToken   ── hashed bearer token for IdP-driven provisioning
@@ -223,9 +227,15 @@ false. The Community downgrade sets every token inactive
 
 ### `OAuthConfig` / `OAuthUserToken` (`models.py`)
 
-Per-tool/MCP OAuth (for custom actions calling third-party APIs), unrelated
-to login SSO. `client_id`/`client_secret` and the token blob are
-`EncryptedString`/`EncryptedJson`.
+Custom-action OAuth lets each user connect a third-party account to an OpenAPI action.
+`client_id`/`client_secret` and the token blob use `EncryptedString`/`EncryptedJson`.
+`supports_pkce` defaults to false; administrators can enable S256 PKCE for compatible providers.
+MCP stores its credentials separately in `MCPConnectionConfig` ([[mcp-and-custom-tools]] §3).
+
+`GET /user-oauth-token/status` reports literal access-token expiration and saved
+refresh capability separately. `can_refresh` requires a nonempty refresh token
+and configured client credentials. Status reads never refresh tokens or call providers.
+Refresh capability does not prove that the provider will accept a refresh request.
 
 ---
 
@@ -436,6 +446,66 @@ Accounts & Access lists the user's grants and requires confirmation to disconnec
 
 ---
 
+### Shared outgoing OAuth primitives
+
+`backend/onyx/oauth/authorization_attempt.py` owns pending authorization attempts.
+The store resolves the tenant cache for each operation. Attempts bind an owner,
+namespace, random state, expiry, and typed feature payload. Consumption uses
+`getdel` before token exchange, so each attempt can complete only once.
+Payloads may contain PKCE verifiers. Saved authorization flows keep client secrets outside the attempt.
+Draft connection tests protect unsaved settings with the deployment's credential encryption mechanism.
+This mechanism encrypts values in EE; CE stores them without encryption.
+Draft settings expire in a separate attempt namespace. Provider access and refresh tokens are never cached for tests.
+
+`backend/onyx/oauth/protocol.py` owns pure authorization URL and token-body
+construction. Endpoint query parameters and configured extras cannot override
+state, client identity, redirect URI, response type, scope, or PKCE fields.
+MCP also owns `resource`; action configurations may supply it as an extension.
+Provider adapters retain scope spelling, client authentication, and token parsing.
+Feature routes own permissions, configuration snapshots, and credential storage.
+
+### Custom-action OAuth authorization
+
+`server/features/oauth_config/api.py` starts an attempt through `POST /oauth-config/initiate`.
+The payload holds the configuration ID, validated internal return path, configuration hash, and optional PKCE verifier.
+The hash covers credentials, endpoints, scopes, additional parameters, callback URL, and PKCE setting.
+Client secrets remain outside the attempt payload.
+
+`POST /oauth-config/callback` consumes the caller's attempt before contacting the provider.
+It rejects deleted configurations and configuration changes, including cleared credentials.
+The shared exchange helper sends the stored verifier when PKCE is enabled.
+The route stores the resulting token for the caller and returns the validated return path.
+Provider failures return HTTP 502 with a safe message; the user must start authorization again.
+Database failures propagate separately from provider failures.
+Code exchange and token refresh share HTTP and response validation.
+Both reject redirects and apply a 30-second request timeout. Invalid responses do not replace saved tokens.
+Configuration snapshots check decrypted credential values, so cleared credentials are not shown as configured.
+
+Configuration creation, updates, and initiation reject reserved authorization parameters in endpoint queries and configured extras.
+Action configurations may still supply `resource` through additional parameters.
+Management keeps its owner-or-admin permission checks; initiation and callback require `BASIC_ACCESS` and bind tokens to the caller.
+
+### Custom-action OAuth setup checks
+
+`POST /admin/oauth-config/pkce-support` checks OAuth or OpenID Connect provider metadata.
+It requires global `MANAGE_ACTIONS` permission; scoped group-management authority does not grant discovery access.
+The authorization and token endpoints must match the submitted pair before metadata can establish support.
+The result distinguishes advertised S256 support, no advertised S256 support, and unknown support.
+Discovery observes the outbound URL policy and does not send client credentials.
+The manual PKCE setting remains available; detection does not prove that a provider enforces PKCE.
+
+`POST /admin/oauth-config/test/initiate` tests unsaved form values.
+An optional existing configuration ID permits reuse of masked credentials after an ownership check.
+Tests preserve an explicit empty client secret, matching saved authorization; token exchange omits that secret.
+The server applies the deployment's credential protection to the draft configuration.
+It stores the result in an owner-bound, tenant-scoped authorization attempt.
+The test uses the same registered callback URI as saved action authorization.
+A popup session-storage marker selects `POST /admin/oauth-config/test/callback` on return.
+That route consumes the test attempt, exchanges the code, and discards the tokens.
+It returns success and the PKCE setting used, without saving configuration or user tokens.
+Both test endpoints require action-management permission; the popup marker grants no access.
+Provider consent can still create a grant, even though Onyx discards the tokens.
+
 ## 5. Contracts and invariants
 
 This area is security-critical. Claims here are stated at the confidence the
@@ -569,8 +639,8 @@ is marked as such.
 - [[llm-gateway]]: the `use:llm_gateway` PAT scope (`Permission.
   USE_LLM_GATEWAY`, `db/enums.py`) is a `SELECTABLE_PAT_SCOPES` entry
   (`server/pat/models.py`) minted and checked entirely by this component's
-  PAT machinery. The workspace `llm_gateway_enabled` setting hides the scope
-  in `list_selectable_scopes` and blocks minting it, but only for third-party
+  PAT machinery. The workspace `llm_gateway_enabled` setting and the scope's
+  Business `min_tier` both hide it in `list_selectable_scopes` and block minting it, but only for third-party
   PATs; a Craft sandbox's `craft_sandbox`-scoped PAT is unaffected.
 - [[cc-pairs-and-credentials]]: connector credentials are a separate
   encrypted-secret concept from user auth; both use the same

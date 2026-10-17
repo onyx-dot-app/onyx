@@ -51,9 +51,8 @@ import {
   SvgUnplug,
   SvgVector,
 } from "@opal/icons";
-import SwitchField from "@/refresh-components/form/SwitchField";
 import { InputSingleSelect } from "@opal/components";
-import { InputSingleSelectField } from "@opal/form";
+import { InputSingleSelectField, InputSwitchField } from "@opal/form";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -118,6 +117,7 @@ import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
 import CCPairIdsBackfillCard from "@/views/admin/IndexSettingsPage/CCPairIdsBackfillCard";
+import EmbeddingRateLimitCard from "@/views/admin/IndexSettingsPage/EmbeddingRateLimitCard";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -2180,7 +2180,7 @@ export default function IndexSettingsPage() {
                                 )}
                                 withLabel
                               >
-                                <SwitchField name="enable_contextual_rag" />
+                                <InputSwitchField name="enable_contextual_rag" />
                               </InputHorizontal>
 
                               <Disabled
@@ -2264,7 +2264,7 @@ export default function IndexSettingsPage() {
                                 withLabel
                               >
                                 <div className="flex flex-col items-end">
-                                  <SwitchField name="image_processing_enabled" />
+                                  <InputSwitchField name="image_processing_enabled" />
                                   {captioningModelMissing && (
                                     <Content
                                       icon={SvgAlertTriangle}
@@ -2364,6 +2364,10 @@ export default function IndexSettingsPage() {
                       </GeneralLayouts.Section>
                     </GeneralLayouts.Section>
                   </Disabled>
+
+                  {/* Outside the re-index lock: the limit matters most during a re-index. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <EmbeddingRateLimitCard />
                 </>
               );
             }}

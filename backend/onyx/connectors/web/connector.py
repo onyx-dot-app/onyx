@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import BrowserContext, Playwright, TimeoutError
+from playwright.sync_api import Error as PlaywrightError
 from pydantic import TypeAdapter
 from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
@@ -31,18 +32,23 @@ from onyx.connectors.models import Document, HierarchyNode, SlimDocument, TextSe
 from onyx.connectors.web.config import WEB_CONNECTOR_VALID_SETTINGS, UrlRewriteRule
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.models import SSRFProtectionLevel, web_connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from onyx.utils.os_reaper import reap_zombie_children
 
 # Re-exported for backwards compatibility with existing tests/callers that
 # patch these names on `onyx.connectors.web.connector`.
 from onyx.utils.playwright_fetch import (
     DEFAULT_HEADERS,
     DEFAULT_USER_AGENT,  # noqa: F401
+    get_connector_oauth_header,
+    install_ssrf_guard,
+    read_bounded_page_html,
     start_playwright,
 )
 from onyx.utils.sitemap import list_pages_for_site
+from onyx.utils.url import ssrf_safe_get
 from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
 from shared_configs.configs import MULTI_TENANT
 
@@ -101,9 +107,11 @@ class ScrapeSessionContext:
 
         self.playwright: Playwright | None = None
         self.playwright_context: BrowserContext | None = None
+        self.authorization_header: str | None = None
 
     def initialize(self) -> None:
         self.stop()
+        self.authorization_header = get_connector_oauth_header()
         self.playwright, self.playwright_context = start_playwright()
 
     def stop(self) -> None:
@@ -114,6 +122,15 @@ class ScrapeSessionContext:
         if self.playwright:
             self.playwright.stop()
             self.playwright = None
+
+        # Teardown orphans Chromium helpers onto the docfetching subreaper;
+        # drain them now instead of letting zombies pile up until the run ends
+        reap_zombie_children()
+
+
+def _is_download_error(e: Exception) -> bool:
+    """page.goto() on a file link (ZIP, DOCX, ...) fails this way, every time."""
+    return isinstance(e, PlaywrightError) and "Download is starting" in str(e)
 
 
 class ScrapeResult:
@@ -272,12 +289,20 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     # must live here. Placed before the try so it surfaces as the SSRF error
     # rather than a wrapped sitemap-parse failure.
     protected_url_check(sitemap_url)
+    level = get_security_settings().ssrf_protection_level
+    allow_private_network = not web_connector_ssrf_enforced(level)
+    allow_loopback = level == SSRFProtectionLevel.DISABLED
 
     # Note: brotli compression is handled automatically by the requests library
     # as long as the brotli package is installed in the venv.
     try:
-        response = requests.get(
-            sitemap_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
+        response = ssrf_safe_get(
+            sitemap_url,
+            headers=DEFAULT_HEADERS,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            allow_private_network=allow_private_network,
+            block_loopback_and_link_local=not allow_loopback,
+            block_link_local_only=True,
         )
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
@@ -288,7 +313,9 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
 
         if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
             # the given url doesn't look like a sitemap, let's try to find one
-            urls = list_pages_for_site(sitemap_url)
+            urls = list_pages_for_site(
+                sitemap_url, allow_private_network, allow_loopback
+            )
 
         if len(urls) == 0:
             raise ValueError(
@@ -385,6 +412,11 @@ class WebConnector(LoadConnector, SlimConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
+        self.authorization_url: str | None = (
+            None
+            if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD
+            else _ensure_valid_url(base_url)
+        )
         # Config arrives as raw JSON (list[dict]); validate into rule models.
         rules = _URL_REWRITES_ADAPTER.validate_python(url_rewrites or [])
         self.url_rewrites = _parse_url_rewrites(rules)
@@ -453,51 +485,47 @@ class WebConnector(LoadConnector, SlimConnector):
         # Handle cookies for the URL
         _handle_cookies(session_ctx.playwright_context, initial_url)
 
-        # First do a HEAD request to check content type without downloading the entire content
-        head_response = requests.head(
+        level = get_security_settings().ssrf_protection_level
+        with ssrf_safe_get(
             initial_url,
             headers=DEFAULT_HEADERS,
-            allow_redirects=True,
             timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-        content_type = head_response.headers.get("content-type")
-        is_pdf = is_pdf_resource(initial_url, content_type)
-
-        if is_pdf:
-            if slim:
+            allow_private_network=not web_connector_ssrf_enforced(level),
+            block_loopback_and_link_local=level != SSRFProtectionLevel.DISABLED,
+            block_link_local_only=True,
+            stream=True,
+        ) as response:
+            is_pdf = is_pdf_resource(initial_url, response.headers.get("content-type"))
+            if is_pdf:
+                if slim:
+                    result.doc = Document(
+                        id=storage_url,
+                        sections=[],
+                        source=DocumentSource.WEB,
+                        semantic_identifier=storage_url,
+                        metadata={},
+                    )
+                    return result
+                page_text, metadata = extract_pdf_text(response.content)
+                # Last-Modified may change without content changes; leave doc_updated_at unset.
                 result.doc = Document(
                     id=storage_url,
-                    sections=[],
+                    sections=[TextSection(link=storage_url, text=page_text)],
                     source=DocumentSource.WEB,
-                    semantic_identifier=storage_url,
-                    metadata={},
+                    semantic_identifier=storage_url.rstrip("/").split("/")[-1]
+                    or storage_url,
+                    metadata=metadata,
                 )
                 return result
 
-            response = requests.get(
-                initial_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
-            )
-            page_text, metadata = extract_pdf_text(response.content)
-
-            # doc_updated_at is intentionally left unset for web documents. The HTTP
-            # Last-Modified header is an unreliable change signal: CDN/SSR origins
-            # (e.g. Vercel ISR) regenerate it on every fetch, so it advances on each
-            # crawl even when content is identical. A spurious advance bypasses the
-            # content-hash dedup gate in the indexing pipeline, forcing pointless
-            # re-indexing. The content hash is the authoritative change signal for
-            # web docs (see DocumentBase.content_hash).
-            result.doc = Document(
-                id=storage_url,
-                sections=[TextSection(link=storage_url, text=page_text)],
-                source=DocumentSource.WEB,
-                semantic_identifier=storage_url.rstrip("/").split("/")[-1]
-                or storage_url,
-                metadata=metadata,
-            )
-
-            return result
-
         page = session_ctx.playwright_context.new_page()
+        install_ssrf_guard(
+            page,
+            allow_private_network=not web_connector_ssrf_enforced(level),
+            allow_loopback=level == SSRFProtectionLevel.DISABLED,
+            authorization_header=session_ctx.authorization_header,
+            authorization_url=self.authorization_url,
+        )
         try:
             # Use "commit" instead of "domcontentloaded" to avoid hanging on bot-detection pages
             # that may never fire domcontentloaded. "commit" waits only for navigation to be
@@ -581,7 +609,9 @@ class WebConnector(LoadConnector, SlimConnector):
                         scroll_err,
                     )
 
-            content = page.content()
+            content = read_bounded_page_html(page)
+            if content is None:
+                raise ValueError("Rendered document exceeds the size limit")
             soup = BeautifulSoup(content, "html.parser")
 
             if self.recursive:
@@ -733,6 +763,14 @@ class WebConnector(LoadConnector, SlimConnector):
                             SlimDocument(id=result.doc.id) if slim else result.doc
                         )
                 except Exception as e:
+                    if _is_download_error(e):
+                        # A download link, not a page: deterministic, so neither
+                        # retry nor relaunch the browser (the context is fine)
+                        session_ctx.last_error = (
+                            f"Skipped '{initial_url}': not a renderable page"
+                        )
+                        logger.warning(session_ctx.last_error)
+                        break
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
                     logger.exception(session_ctx.last_error)
                     session_ctx.initialize()
