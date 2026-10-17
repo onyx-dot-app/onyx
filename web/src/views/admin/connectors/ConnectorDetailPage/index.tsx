@@ -427,6 +427,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             scope={{
               ccPairId: ccPair.id,
               canResolve: canOperate && ccPair.supports_targeted_reindex,
+              canResolveRuns: canOperate,
             }}
             range={sliceRange}
           />

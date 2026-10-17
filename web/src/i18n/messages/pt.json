@@ -2823,7 +2823,10 @@
         "targetedReindexFailed": "Falha na reindexação direcionada: {message}",
         "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados.",
         "checkFrequencyUpdated": "Frequência de verificação do conector atualizada com sucesso",
-        "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector"
+        "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "{count, plural, one {# execução marcada como resolvida} other {# execuções marcadas como resolvidas}}."
       },
       "backButton": {
         "label": "Todos os conectores"
@@ -3020,15 +3023,12 @@
           "all": "Todos os níveis",
           "failures": "Falhas",
           "errors": "Erros",
-          "other": "Outros"
-        },
-        "resolved": {
-          "label": "Resolvidos"
+          "other": "Outros",
+          "resolved": "Resolvido"
         },
         "groups": {
           "failures": "{count, plural, one {# falha} other {# falhas}}",
           "errors": "{count, plural, one {# erro} other {# erros}}",
-          "resolved": "{count, plural, one {# resolvido} other {# resolvidos}}",
           "other": "Outros"
         },
         "title": {
@@ -3098,12 +3098,12 @@
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
-          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}"
+          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
+          "resolved": "Resolvido"
         },
         "more": "Mostrar mais",
         "empty": {
           "title": "Sem falhas ou erros",
-          "resolved": "Sem erros resolvidos",
           "filtered": "Nada corresponde a esta pesquisa.",
           "failures": "Sem falhas",
           "errors": "Sem erros",
@@ -3132,6 +3132,13 @@
         },
         "actions": {
           "resolve": "Resolver"
+        },
+        "resolveAll": {
+          "button": "Resolver tudo o que é exibido",
+          "title": "Resolver todas as execuções exibidas?",
+          "description": "Isso marca como {count, plural, one {resolvida # execução} other {resolvidas # execuções}} que correspondem ao filtro atual. Elas mantêm o status e passam para a seção de resolvidas.",
+          "fleetDescription": "Isso marca como {count, plural, one {resolvida # execução} other {resolvidas # execuções}} que correspondem ao filtro atual, nos conectores que você gerencia. Elas mantêm o status e passam para a seção de resolvidas.",
+          "confirm": "Resolver tudo"
         }
       },
       "stageDetails": {

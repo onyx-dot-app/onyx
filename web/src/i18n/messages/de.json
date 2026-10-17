@@ -2823,7 +2823,10 @@
         "targetedReindexFailed": "Die gezielte Neuindizierung ist fehlgeschlagen: {message}",
         "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind.",
         "checkFrequencyUpdated": "Prüfintervall des Connectors erfolgreich aktualisiert",
-        "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden"
+        "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert."
       },
       "backButton": {
         "label": "Alle Konnektoren"
@@ -3020,15 +3023,12 @@
           "all": "Alle Stufen",
           "failures": "Fehlschläge",
           "errors": "Fehler",
-          "other": "Sonstige"
-        },
-        "resolved": {
-          "label": "Behoben"
+          "other": "Sonstige",
+          "resolved": "Behoben"
         },
         "groups": {
           "failures": "{count, plural, one {# Fehlschlag} other {# Fehlschläge}}",
           "errors": "{count, plural, one {# Fehler} other {# Fehler}}",
-          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}",
           "other": "Sonstige"
         },
         "title": {
@@ -3098,12 +3098,12 @@
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
-          "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}"
+          "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
+          "resolved": "Behoben"
         },
         "more": "Mehr anzeigen",
         "empty": {
           "title": "Keine Fehlschläge oder Fehler",
-          "resolved": "Keine behobenen Fehler",
           "filtered": "Nichts passt zu dieser Suche.",
           "failures": "Keine Fehlschläge",
           "errors": "Keine Fehler",
@@ -3132,6 +3132,13 @@
         },
         "actions": {
           "resolve": "Beheben"
+        },
+        "resolveAll": {
+          "button": "Alle angezeigten beheben",
+          "title": "Alle angezeigten Läufe beheben?",
+          "description": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
+          "fleetDescription": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, auf den Connectoren, die Sie verwalten, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
+          "confirm": "Alle beheben"
         }
       },
       "stageDetails": {

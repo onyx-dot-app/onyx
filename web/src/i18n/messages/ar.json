@@ -2823,7 +2823,10 @@
         "targetedReindexFailed": "فشلت إعادة الفهرسة الموجهة: {message}",
         "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات.",
         "checkFrequencyUpdated": "تم تحديث معدل فحص الموصّل بنجاح",
-        "checkFrequencyUpdateFailed": "فشل تحديث معدل فحص الموصّل"
+        "checkFrequencyUpdateFailed": "فشل تحديث معدل فحص الموصّل",
+        "runResolved": "Marked resolved.",
+        "runResolveFailed": "Could not resolve: {message}",
+        "runsResolved": "تم وضع علامة «تم الحل» على {count, plural, zero {# عملية تشغيل} one {عملية تشغيل واحدة} two {عمليتي تشغيل} few {# عمليات تشغيل} many {# عملية تشغيل} other {# عملية تشغيل}}."
       },
       "backButton": {
         "label": "كل الموصلات"
@@ -3020,15 +3023,12 @@
           "all": "كل المستويات",
           "failures": "الإخفاقات",
           "errors": "الأخطاء",
-          "other": "أخرى"
-        },
-        "resolved": {
-          "label": "تم حلها"
+          "other": "أخرى",
+          "resolved": "تم الحل"
         },
         "groups": {
           "failures": "{count, plural, zero {لا إخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",
           "errors": "{count, plural, zero {لا أخطاء} one {خطأ واحد} two {خطآن} few {# أخطاء} many {# خطأً} other {# خطأ}}",
-          "resolved": "{count, plural, zero {لا شيء تم حله} one {واحد تم حله} two {اثنان تم حلهما} few {# تم حلها} many {# تم حلها} other {# تم حلها}}",
           "other": "أخرى"
         },
         "title": {
@@ -3098,12 +3098,12 @@
           "group_sync": "{count, plural, zero {لم تفشل مزامنة أي مجموعة} one {فشلت مزامنة مجموعة واحدة} two {فشلت مزامنة مجموعتين} few {فشلت مزامنة # مجموعات} many {فشلت مزامنة # مجموعة} other {فشلت مزامنة # مجموعة}}",
           "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}",
           "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
-          "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
+          "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
+          "resolved": "تم الحل"
         },
         "more": "عرض المزيد",
         "empty": {
           "title": "لا توجد إخفاقات أو أخطاء",
-          "resolved": "لا توجد أخطاء تم حلها",
           "filtered": "لا شيء يطابق هذا البحث.",
           "failures": "لا توجد إخفاقات",
           "errors": "لا توجد أخطاء",
@@ -3132,6 +3132,13 @@
         },
         "actions": {
           "resolve": "حل"
+        },
+        "resolveAll": {
+          "button": "حل كل المعروض",
+          "title": "هل تريد حل كل عمليات التشغيل المعروضة؟",
+          "description": "يضع هذا علامة «تم الحل» على {count, plural, zero {# عملية تشغيل} one {عملية تشغيل واحدة} two {عمليتي تشغيل} few {# عمليات تشغيل} many {# عملية تشغيل} other {# عملية تشغيل}} تطابق عامل التصفية الحالي. تحتفظ بحالتها وتنتقل إلى قسم ما تم حله.",
+          "fleetDescription": "يضع هذا علامة «تم الحل» على {count, plural, zero {# عملية تشغيل} one {عملية تشغيل واحدة} two {عمليتي تشغيل} few {# عمليات تشغيل} many {# عملية تشغيل} other {# عملية تشغيل}} تطابق عامل التصفية الحالي، في الموصلات التي تديرها. تحتفظ بحالتها وتنتقل إلى قسم ما تم حله.",
+          "confirm": "حل الكل"
         }
       },
       "stageDetails": {
