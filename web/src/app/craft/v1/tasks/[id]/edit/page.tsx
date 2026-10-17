@@ -11,7 +11,7 @@ import { Text } from "@opal/components";
 import ScheduleTaskForm, {
   type ScheduleTaskFormInitial,
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
-import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/interfaces";
+import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/types";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
 import { decodeUtcCronToLocalPayload } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -78,6 +78,7 @@ export default function EditScheduledTaskPage() {
 
   return (
     <ScheduleTaskForm
+      key={data.id}
       initial={toFormInitial(data)}
       isEdit
       title={t("title", { name: data.name })}
@@ -102,7 +103,5 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     prompt: detail.prompt,
     mode,
     payload,
-    preApprovedAppIds: detail.pre_approved_app_ids,
-    preApprovedMcpServerIds: detail.pre_approved_mcp_server_ids,
   };
 }

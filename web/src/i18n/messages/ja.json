@@ -685,7 +685,7 @@
         "label": "確認"
       },
       "deny": {
-        "label": "拒否"
+        "label": "無効"
       }
     },
     "switchList": {
@@ -5338,7 +5338,7 @@
           "title": "アプリがまだありません"
         },
         "panel": {
-          "blurb": "組織全体に対して一度だけ設定します。アプリを編集して、共有の認証情報、アクションポリシー、関連するスキルを設定してください。"
+          "blurb": "組織全体で一度設定します。アプリを編集して、共有認証情報、承認設定、関連スキルを設定します。"
         },
         "tab": {
           "label": "アプリ",
@@ -13646,7 +13646,8 @@
       },
       "status": {
         "approved": "承認済み",
-        "rejected": "却下済み"
+        "rejected": "却下済み",
+        "expired": "期限切れ"
       },
       "submit": {
         "errorFallback": "決定を送信できませんでした"
@@ -13812,6 +13813,7 @@
         "connectButton": "接続",
         "connectingButton": "リダイレクト中…",
         "disconnectButton": "接続を解除",
+        "actionsMenuLabel": "{name} の操作",
         "empty": {
           "description": "組織向けに設定されたアプリや MCP サーバーはまだありません。",
           "title": "まだ接続できるものがありません"
@@ -14546,10 +14548,6 @@
             "label": "名前",
             "placeholder": "例: 週次の顧客エスカレーションまとめ"
           },
-          "preApproval": {
-            "description": "このタスクが無人で実行される際、Craft は選択したアプリと MCP サーバーを一時停止せずに使用できます。それ以外の承認要求は実行を一時停止させ、失敗の原因になることがあります。",
-            "label": "事前承認済みのアプリと MCP サーバー"
-          },
           "prompt": {
             "description": "このメッセージはタスクが発火するたびに Craft に送信されます。",
             "label": "プロンプト",
@@ -14608,31 +14606,6 @@
       "newPage": {
         "description": "プロンプトとスケジュールを保存すると、Craft がタイマーで実行します。",
         "title": "新しいスケジュール済みタスク"
-      },
-      "preApproval": {
-        "appFallbackName": "アプリ #{id}",
-        "appsGroupTitle": "アプリ",
-        "empty": {
-          "label": "Craft で利用できるアプリや MCP サーバーはまだありません。"
-        },
-        "errors": {
-          "loadFailed": "アプリと MCP サーバーを読み込めませんでした。更新して再試行してください。",
-          "partialLoadFailed": "一部の事前承認オプションを読み込めませんでした。更新して再試行してください。"
-        },
-        "loading": {
-          "label": "アプリと MCP サーバーを読み込み中…"
-        },
-        "mcpGroupTitle": "MCP サーバー",
-        "mcpServerFallbackName": "MCP サーバー #{id}",
-        "status": {
-          "connected": "接続済み",
-          "connectionRequired": "接続が必要です",
-          "unavailable": "利用できなくなりました"
-        },
-        "summary": {
-          "partialLoadFailed": "一部の事前承認の詳細を読み込めませんでした。更新して再試行してください。",
-          "title": "事前承認済みのアプリと MCP サーバー"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15008,6 +14981,50 @@
       "viewPlans": {
         "label": "プランを表示"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "{name} の承認設定",
+      "title": "承認設定",
+      "personalDescription": "この設定は会話と新しいタスクに適用されます。既存のタスクの設定は変わりません。",
+      "taskDescription": "このタスクでは有効なアプリのみ使用できます。変更はこのタスクのみに適用されます。",
+      "newTaskDescription": "このタスクで使用するアプリを有効にしてください。各アプリは現在のアクション設定から開始します。",
+      "workspace_disabled": "ワークスペースで無効",
+      "workspace_managed": "ワークスペースで管理",
+      "userManagement": "ユーザーによる承認設定の管理を許可",
+      "userManagementDescription": "ユーザーは利用可能なアクションの承認設定を変更できます。",
+      "loading": "承認設定を読み込み中…",
+      "loadError": "承認設定を読み込めませんでした。",
+      "retry": "再試行",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "キャンセル",
+      "saveError": "承認設定を保存できませんでした。",
+      "emptyActions": "既知のアクションがありません。不明なアクションには承認が必要です。",
+      "emptyApps": "利用可能なアプリがありません。",
+      "expired": "承認の期限が切れました。このリクエストは実行されませんでした。",
+      "rejected": "リクエストが拒否されました。このリクエストは実行されませんでした。",
+      "deadline": "{time}までに承認",
+      "agentPermissionRequired": "アクションに承認が必要なため、この実行は停止しました。権限を確認してタスクを再実行してください。",
+      "enableForTask": "このタスクで有効にする",
+      "enableAppForTask": "このタスクで{app}を有効にする",
+      "enabledForTask": "このタスクで有効",
+      "disabledForTask": "このタスクで無効",
+      "externalApp": "アプリ",
+      "mcpServer": "MCPサーバー",
+      "taskAppsTitle": "アプリとMCPサーバー",
+      "actionPolicies": "承認設定",
+      "policyCounts": "自動承認 {auto} · 確認 {ask} · 無効 {disabled}",
+      "manageActions": "アクションを管理",
+      "viewActions": "アクションを表示",
+      "taskModalDescription": "変更はタスクの保存時に適用されます。ワークスペースの制限は常に適用されます。",
+      "searchActions": "アクションを検索",
+      "applyMatching": "一致する編集可能な {count} 件のアクションを設定：",
+      "noMatchingActions": "検索に一致するアクションはありません。",
+      "close": "閉じる",
+      "saveChanges": "変更を保存",
+      "resetDefaults": "すべて既定値に戻す",
+      "resetAll": "すべてワークスペースの既定値に戻す",
+      "workspaceDisabledTooltip": "管理者がワークスペースでこのアクションを無効にしました。"
     }
   },
   "knowledge": {

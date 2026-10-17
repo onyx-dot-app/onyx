@@ -685,7 +685,7 @@
         "label": "Nachfragen"
       },
       "deny": {
-        "label": "Ablehnen"
+        "label": "Deaktiviert"
       }
     },
     "switchList": {
@@ -5338,7 +5338,7 @@
           "title": "Noch keine Apps"
         },
         "panel": {
-          "blurb": "Einmal für die gesamte Organisation konfiguriert. Bearbeiten Sie eine App, um gemeinsame Anmeldedaten, Aktionsrichtlinien und zugehörige Skills festzulegen."
+          "blurb": "Einmal für die gesamte Organisation konfiguriert. Bearbeiten Sie eine App, um gemeinsame Anmeldedaten, Genehmigungseinstellungen und zugehörige Skills festzulegen."
         },
         "tab": {
           "label": "Apps",
@@ -13646,7 +13646,8 @@
       },
       "status": {
         "approved": "Genehmigt",
-        "rejected": "Abgelehnt"
+        "rejected": "Abgelehnt",
+        "expired": "Abgelaufen"
       },
       "submit": {
         "errorFallback": "Entscheidung konnte nicht übermittelt werden"
@@ -13812,6 +13813,7 @@
         "connectButton": "Verbinden",
         "connectingButton": "Weiterleitung…",
         "disconnectButton": "Trennen",
+        "actionsMenuLabel": "Aktionen für {name}",
         "empty": {
           "description": "Für deine Organisation sind noch keine Apps oder MCP-Server konfiguriert.",
           "title": "Noch nichts zu verbinden"
@@ -14546,10 +14548,6 @@
             "label": "Name",
             "placeholder": "z. B. Wöchentliche Übersicht der Kunden-Eskalationen"
           },
-          "preApproval": {
-            "description": "Craft kann ausgewählte Apps und MCP-Server ohne Unterbrechung nutzen, wenn diese Aufgabe unbeaufsichtigt läuft. Andere Genehmigungsanfragen pausieren die Ausführung und können sie fehlschlagen lassen.",
-            "label": "Vorab genehmigte Apps und MCP-Server"
-          },
           "prompt": {
             "description": "Diese Nachricht wird bei jedem Auslösen der Aufgabe an Craft gesendet.",
             "label": "Prompt",
@@ -14608,31 +14606,6 @@
       "newPage": {
         "description": "Speichere Prompt und Zeitplan. Craft führt sie nach Timer aus.",
         "title": "Neue geplante Aufgabe"
-      },
-      "preApproval": {
-        "appFallbackName": "App Nr. {id}",
-        "appsGroupTitle": "Apps",
-        "empty": {
-          "label": "In Craft sind noch keine Apps oder MCP-Server verfügbar."
-        },
-        "errors": {
-          "loadFailed": "Apps und MCP-Server konnten nicht geladen werden. Aktualisiere, um es erneut zu versuchen.",
-          "partialLoadFailed": "Einige Vorabgenehmigungs-Optionen konnten nicht geladen werden. Aktualisiere, um es erneut zu versuchen."
-        },
-        "loading": {
-          "label": "Apps und MCP-Server werden geladen…"
-        },
-        "mcpGroupTitle": "MCP-Server",
-        "mcpServerFallbackName": "MCP-Server Nr. {id}",
-        "status": {
-          "connected": "Verbunden",
-          "connectionRequired": "Verbindung erforderlich",
-          "unavailable": "Nicht mehr verfügbar"
-        },
-        "summary": {
-          "partialLoadFailed": "Einige Vorabgenehmigungs-Details konnten nicht geladen werden. Aktualisiere, um es erneut zu versuchen.",
-          "title": "Vorab genehmigte Apps und MCP-Server"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15008,6 +14981,50 @@
       "viewPlans": {
         "label": "Pläne anzeigen"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "{name} Genehmigungseinstellungen",
+      "title": "Genehmigungseinstellungen",
+      "personalDescription": "Diese Einstellungen gelten für Ihre Unterhaltungen und neue Aufgaben. Bestehende Aufgaben behalten ihre Einstellungen.",
+      "taskDescription": "Nur aktivierte Apps sind für diese Aufgabe verfügbar. Änderungen gelten nur für diese Aufgabe.",
+      "newTaskDescription": "Aktivieren Sie die Apps für diese Aufgabe. Jede App beginnt mit Ihren aktuellen Aktionseinstellungen.",
+      "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
+      "workspace_managed": "Vom Arbeitsbereich verwaltet",
+      "userManagement": "Nutzer dürfen Genehmigungseinstellungen verwalten",
+      "userManagementDescription": "Benutzer können Genehmigungseinstellungen für verfügbare Aktionen ändern.",
+      "loading": "Genehmigungseinstellungen werden geladen…",
+      "loadError": "Genehmigungseinstellungen konnten nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "cancel": "Abbrechen",
+      "saveError": "Genehmigungseinstellungen konnten nicht gespeichert werden.",
+      "emptyActions": "Keine bekannten Aktionen. Unbekannte Aktionen erfordern eine Genehmigung.",
+      "emptyApps": "Keine Apps verfügbar.",
+      "expired": "Genehmigung abgelaufen. Diese Anfrage wurde nicht ausgeführt.",
+      "rejected": "Anfrage abgelehnt. Diese Anfrage wurde nicht ausgeführt.",
+      "deadline": "Bis {time} genehmigen",
+      "agentPermissionRequired": "Dieser Lauf wurde gestoppt, weil eine Aktion eine Genehmigung benötigte. Prüfen Sie die Berechtigungen und starten Sie erneut.",
+      "enableForTask": "Für diese Aufgabe aktivieren",
+      "enableAppForTask": "{app} für diese Aufgabe aktivieren",
+      "enabledForTask": "Für diese Aufgabe aktiviert",
+      "disabledForTask": "Für diese Aufgabe deaktiviert",
+      "externalApp": "App",
+      "mcpServer": "MCP-Server",
+      "taskAppsTitle": "Apps und MCP-Server",
+      "actionPolicies": "Genehmigungseinstellungen",
+      "policyCounts": "{auto} automatisch · {ask} nachfragen · {disabled} deaktiviert",
+      "manageActions": "Aktionen verwalten",
+      "viewActions": "Aktionen anzeigen",
+      "taskModalDescription": "Änderungen gelten, wenn Sie die Aufgabe speichern. Workspace-Einschränkungen gelten immer.",
+      "searchActions": "Aktionen suchen",
+      "applyMatching": "{count} passende bearbeitbare Aktionen festlegen:",
+      "noMatchingActions": "Keine Aktionen entsprechen Ihrer Suche.",
+      "close": "Schließen",
+      "saveChanges": "Änderungen speichern",
+      "resetDefaults": "Alle auf Standardwerte zurücksetzen",
+      "resetAll": "Alle auf Workspace-Standardwerte zurücksetzen",
+      "workspaceDisabledTooltip": "Ein Admin hat diese Aktion für den Workspace deaktiviert."
     }
   },
   "knowledge": {

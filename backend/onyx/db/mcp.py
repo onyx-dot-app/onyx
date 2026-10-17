@@ -16,6 +16,7 @@ from onyx.db.enums import (
     SandboxStatus,
 )
 from onyx.db.models import (
+    GatedApp,
     MCPAuthenticationType,
     MCPConnectionConfig,
     MCPServer,
@@ -60,7 +61,7 @@ def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPS
 
 
 def get_craft_enabled_mcp_servers(
-    db_session: Session, user: User | None
+    db_session: Session, user: User | None, *, server_ids: set[int] | None = None
 ) -> list[MCPServer]:
     """MCP servers an admin has made available to the Craft agent, filtered to
     those ``user`` may use (public / shared / owned). ``None`` skips the access
@@ -75,6 +76,8 @@ def get_craft_enabled_mcp_servers(
     )
     if user is not None:
         stmt = _add_mcp_server_access_filter(stmt, user)
+    if server_ids is not None:
+        stmt = stmt.where(MCPServer.id.in_(server_ids))
     return list(db_session.scalars(stmt).all())
 
 
@@ -258,6 +261,8 @@ def create_mcp_server__no_commit(
     )
     db_session.add(new_server)
     db_session.flush()  # Get the ID without committing
+    db_session.add(GatedApp(mcp_server_id=new_server.id))
+    db_session.flush()
     return new_server
 
 

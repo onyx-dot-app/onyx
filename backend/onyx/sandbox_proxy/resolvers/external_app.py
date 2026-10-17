@@ -12,6 +12,7 @@ from mitmproxy import http
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import GatedAppKind
+from onyx.db.external_app import get_external_app_by_id
 from onyx.external_apps.credentials import resolve_injection_headers
 from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.sandbox_proxy.credential_injection import (
@@ -62,14 +63,22 @@ class ExternalAppResolver(CredentialResolver):
         )
 
         with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
+            app = get_external_app_by_id(db, external_app_id)
+            if app is None or not app.enabled:
+                raise CredentialUnavailableError(
+                    "Connect the app before using its actions."
+                )
             headers = resolve_injection_headers(
                 db, external_app_id, ctx.sandbox.user_id
             )
+            if app.auth_template and not headers:
+                raise CredentialUnavailableError(
+                    "Connect the app before using its actions."
+                )
 
         # Per-app debug line so `external_app_id` survives in logs even when
         # the dispatcher's credential logs group by resolver.
-        # Empty `headers` means "app disabled / deleted / placeholders unfillable" —
-        # the request still forwards (upstream 401 surfaces to the user).
+        # Credentialless apps can authorize requests without adding headers.
         header_names = ",".join(sorted(headers)) or "-"
         logger.debug(
             "external_app_resolver.resolved external_app_id=%s host=%s "

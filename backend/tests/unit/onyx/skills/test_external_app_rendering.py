@@ -80,7 +80,9 @@ def test_file_renderer_substitutes_the_configured_account(
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: _App()
     )
-    monkeypatch.setattr("onyx.skills.rendering.get_action_policies", lambda *_: {})
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+    )
 
     rendered = render_external_app_files(
         cast(Session, None),
@@ -108,7 +110,9 @@ def test_an_unresolvable_app_config_still_renders(
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: _BrokenApp()
     )
-    monkeypatch.setattr("onyx.skills.rendering.get_action_policies", lambda *_: {})
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+    )
 
     rendered = render_external_app_files(
         cast(Session, None),
@@ -136,7 +140,9 @@ def test_a_helper_template_is_rendered_beside_the_skill(
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: _App()
     )
-    monkeypatch.setattr("onyx.skills.rendering.get_action_policies", lambda *_: {})
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+    )
 
     rendered = render_external_app_files(
         cast(Session, None),
@@ -218,7 +224,9 @@ def test_rendered_files_withhold_secret_credential_fields(
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: app
     )
-    monkeypatch.setattr("onyx.skills.rendering.get_action_policies", lambda *_: {})
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+    )
     monkeypatch.setattr(ZendeskProvider, "skill_template_values", capture_values)
     rendered = render_external_app_files(
         cast(Session, None),

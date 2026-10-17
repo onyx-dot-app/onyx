@@ -1,19 +1,15 @@
-"""Composes recognition + policy resolution into a single verdict for an
-outbound request."""
+"""Recognize app actions independently of saved permission settings."""
 
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy.orm import Session
 
 from onyx.db.enums import POLICY_SEVERITY, ActionPolicy, ExternalAppType, GatedAppKind
-from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.registry import (
-    effective_policy,
     get_endpoint_catalog,
     get_provider_for_app,
 )
@@ -136,77 +132,33 @@ def _app_name(app: ExternalApp) -> str:
 
 
 def recognize_actions(
-    db_session: Session,
     app: ExternalApp,
     request: ProxiedRequest,
-) -> AllMatchedActions | None:
-    """Which catalog action(s) ``request`` invokes within ``app`` — pure
-    recognition, no credential knowledge.
-
-    Returns an ``AllMatchedActions`` over every catalog action whose rules fire (each
-    carrying its ``effective_policy`` — stored override else catalog default),
-    sorted strictest-first so ``actions[0]`` is the verdict, or ``None`` when no
-    catalog action matches. The credential gate and the whole-domain fallback are
-    the caller's job (see ``apply_credential_gate``). ``payload`` is left empty here; refill
-    it via ``model_copy``.
-    """
+) -> AllMatchedActions:
+    """Identify actions with catalog defaults; the proxy resolves saved policies."""
     context = MatchContext(request)
-    stored = get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id)
     catalog = get_endpoint_catalog(app.app_type)
     matched = [
         MatchedAction(
             action_type=endpoint.id,
             display_name=endpoint.normalised_name,
             description=endpoint.description,
-            policy=effective_policy(endpoint, stored),
+            policy=endpoint.default_policy,
         )
         for endpoint in catalog
         if any(rule_matches(rule, context) for rule in endpoint.matches)
     ]
     if not matched:
-        return None
-    return AllMatchedActions(
-        actions=tuple(matched),
-        target=GatedTarget(
-            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
-        ),
-    )
-
-
-def apply_credential_gate(
-    app: ExternalApp,
-    request: ProxiedRequest,
-    matched_actions: AllMatchedActions | None,
-    *,
-    is_available: bool,
-) -> AllMatchedActions | None:
-    """Apply the credential gate to a pure ``recognize_actions`` result, given
-    whether the app ``is_available`` (is active and injectable — the caller resolves
-    that). Pure: no DB or credential access.
-
-    - ``is_available`` + a catalog action matched → those actions, unchanged.
-    - ``is_available`` + nothing matched → gate the whole domain under a default ``ASK``.
-    - not ``is_available`` → keep only a recorded ``DENY`` (an explicit block fires with
-      or without a credential), else ``None`` (forward the request bare, no prompt).
-    """
-    if not is_available:
-        if matched_actions is None:
-            return None
-        deny = tuple(
-            a for a in matched_actions.actions if a.policy is ActionPolicy.DENY
-        )
-        return matched_actions.model_copy(update={"actions": deny}) if deny else None
-    if matched_actions is not None:
-        return matched_actions
-    return AllMatchedActions(
-        actions=(
+        matched = [
             MatchedAction(
                 action_type=WHOLE_DOMAIN_ACTION_TYPE,
                 display_name="Perform action",
                 description=f"{request.method} {request.path}",
                 policy=ActionPolicy.ASK,
-            ),
-        ),
+            )
+        ]
+    return AllMatchedActions(
+        actions=tuple(matched),
         target=GatedTarget(
             kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
         ),

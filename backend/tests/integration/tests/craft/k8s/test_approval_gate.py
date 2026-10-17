@@ -249,7 +249,11 @@ def _submit_decision_response(
 ) -> httpx.Response:
     return http_client.post(
         f"{API_SERVER_URL}/build/approvals/{approval_id}/decision",
-        json={"decision": decision.value},
+        json={
+            "decision": "REJECTED"
+            if decision == ApprovalDecision.REJECTED
+            else "APPROVED"
+        },
         headers=api_user.headers,
         cookies=api_user.cookies,
     )
@@ -515,7 +519,7 @@ def test_gated_egress_without_session_tag_fails_closed(
     )
 
 
-def test_ask_with_uninvokable_app_forwards_bare(
+def test_ask_without_credentials_still_requires_approval(
     k8s_manager: object,  # noqa: ARG001 -- required to construct owned_live_pod
     k8s_client: client.CoreV1Api,
     k8s_admin_user: DATestUser,
@@ -542,20 +546,14 @@ def test_ask_with_uninvokable_app_forwards_bare(
             session_id=session_id,
         )
 
+        pending = _wait_for_pending_approval(db_session, session_id)
+        _submit_decision(api_user, pending.approval_id, ApprovalDecision.REJECTED)
         status_code, body = wait_for_pod_exec_output(
             k8s_client, pod_name, output_path, timeout_s=30
         )
-        assert status_code == 200, (
-            f"Uninvokable ASK should forward bare to Slack and Slack should 200 "
-            f"with invalid_auth in the body, got {status_code}: {body!r}"
-        )
-        assert "invalid_auth" in body.strip(), (
-            f"Bare-forwarded request should reach slack.com and get invalid_auth, "
-            f"got body {body!r}"
-        )
-        assert _approval_count_for_user(db_session, user_id) == 0, (
-            "Uninvokable ASK must not mint an approval row."
-        )
+        assert status_code == 403
+        _assert_403_error_code(body, "user_rejected")
+        assert _approval_count_for_user(db_session, user_id) == 1
     finally:
         _upsert_slack_external_app(
             k8s_admin_user,

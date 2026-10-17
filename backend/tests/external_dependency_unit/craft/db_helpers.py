@@ -25,6 +25,7 @@ from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.enums import (
     AccessType,
     AccountType,
@@ -36,7 +37,6 @@ from onyx.db.enums import (
     SandboxStatus,
     SkillSharePermission,
 )
-from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import (
     ActionApproval,
     ActionReceipt,
@@ -45,7 +45,6 @@ from onyx.db.models import (
     Credential,
     ExternalApp,
     ExternalAppUserCredential,
-    GatedActionPolicy,
     Sandbox,
     Skill,
     Skill__User,
@@ -54,6 +53,7 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
+    WorkspaceActionPolicy,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
@@ -285,7 +285,7 @@ def make_external_app(
         )
         for action_id, policy in action_policies.items():
             db_session.add(
-                GatedActionPolicy(
+                WorkspaceActionPolicy(
                     gated_app_id=gated_app_id,
                     action_id=action_id,
                     policy=policy,

@@ -685,7 +685,7 @@
         "label": "확인 요청"
       },
       "deny": {
-        "label": "거부"
+        "label": "비활성화"
       }
     },
     "switchList": {
@@ -5338,7 +5338,7 @@
           "title": "아직 앱이 없습니다"
         },
         "panel": {
-          "blurb": "조직 전체에 한 번만 설정합니다. 앱을 편집하여 공유 자격 증명, 액션 정책, 연결된 스킬을 설정하세요."
+          "blurb": "조직 전체에 대해 한 번 구성합니다. 앱을 편집하여 공유 자격 증명, 승인 설정, 연결된 스킬을 설정하세요."
         },
         "tab": {
           "label": "앱",
@@ -13646,7 +13646,8 @@
       },
       "status": {
         "approved": "승인됨",
-        "rejected": "거부됨"
+        "rejected": "거부됨",
+        "expired": "만료됨"
       },
       "submit": {
         "errorFallback": "결정을 제출하지 못했습니다"
@@ -13812,6 +13813,7 @@
         "connectButton": "연결",
         "connectingButton": "리디렉션 중…",
         "disconnectButton": "연결 해제",
+        "actionsMenuLabel": "{name} 작업",
         "empty": {
           "description": "조직에 구성된 앱이나 MCP 서버가 아직 없습니다.",
           "title": "아직 연결할 항목이 없습니다"
@@ -14546,10 +14548,6 @@
             "label": "이름",
             "placeholder": "예: 주간 고객 이슈 요약"
           },
-          "preApproval": {
-            "description": "이 작업이 무인으로 실행될 때 Craft는 선택한 앱과 MCP 서버를 일시 중지 없이 사용할 수 있습니다. 그 외의 승인 요청은 실행을 일시 중지시키고 실패의 원인이 될 수 있습니다.",
-            "label": "사전 승인된 앱 및 MCP 서버"
-          },
           "prompt": {
             "description": "작업이 실행될 때마다 이 메시지가 Craft에 전송됩니다.",
             "label": "프롬프트",
@@ -14608,31 +14606,6 @@
       "newPage": {
         "description": "프롬프트와 일정을 저장하세요. Craft가 타이머에 따라 실행합니다.",
         "title": "새 예약 작업"
-      },
-      "preApproval": {
-        "appFallbackName": "앱 #{id}",
-        "appsGroupTitle": "앱",
-        "empty": {
-          "label": "Craft에서 사용할 수 있는 앱이나 MCP 서버가 아직 없습니다."
-        },
-        "errors": {
-          "loadFailed": "앱과 MCP 서버를 불러오지 못했습니다. 새로고침하여 다시 시도하세요.",
-          "partialLoadFailed": "일부 사전 승인 옵션을 불러오지 못했습니다. 새로고침하여 다시 시도하세요."
-        },
-        "loading": {
-          "label": "앱과 MCP 서버를 불러오는 중…"
-        },
-        "mcpGroupTitle": "MCP 서버",
-        "mcpServerFallbackName": "MCP 서버 #{id}",
-        "status": {
-          "connected": "연결됨",
-          "connectionRequired": "연결 필요",
-          "unavailable": "더 이상 사용할 수 없음"
-        },
-        "summary": {
-          "partialLoadFailed": "일부 사전 승인 세부 정보를 불러오지 못했습니다. 새로고침하여 다시 시도하세요.",
-          "title": "사전 승인된 앱 및 MCP 서버"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15008,6 +14981,50 @@
       "viewPlans": {
         "label": "플랜 보기"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "{name} 승인 설정",
+      "title": "승인 설정",
+      "personalDescription": "이 설정은 대화와 새 작업에 적용됩니다. 기존 작업은 자체 설정을 유지합니다.",
+      "taskDescription": "활성화된 앱만 이 작업에서 사용할 수 있습니다. 변경 사항은 이 작업에만 적용됩니다.",
+      "newTaskDescription": "이 작업에서 사용할 앱을 활성화하세요. 각 앱은 현재 작업 설정으로 시작합니다.",
+      "workspace_disabled": "워크스페이스에서 비활성화됨",
+      "workspace_managed": "워크스페이스에서 관리",
+      "userManagement": "사용자가 승인 설정을 관리하도록 허용",
+      "userManagementDescription": "사용자는 사용 가능한 작업의 승인 설정을 변경할 수 있습니다.",
+      "loading": "승인 설정 로드 중…",
+      "loadError": "승인 설정을 불러올 수 없습니다.",
+      "retry": "다시 시도",
+      "save": "저장",
+      "saving": "저장 중…",
+      "cancel": "취소",
+      "saveError": "승인 설정을 저장할 수 없습니다.",
+      "emptyActions": "알려진 작업이 없습니다. 알 수 없는 작업은 승인이 필요합니다.",
+      "emptyApps": "사용 가능한 앱이 없습니다.",
+      "expired": "승인 기한이 만료되었습니다. 요청이 실행되지 않았습니다.",
+      "rejected": "요청이 거부되었습니다. 요청이 실행되지 않았습니다.",
+      "deadline": "{time}까지 승인",
+      "agentPermissionRequired": "작업에 승인이 필요하여 실행이 중지되었습니다. 권한을 검토한 후 다시 실행하세요.",
+      "enableForTask": "이 작업에서 활성화",
+      "enableAppForTask": "이 작업에서 {app} 활성화",
+      "enabledForTask": "이 작업에서 활성화됨",
+      "disabledForTask": "이 작업에서 비활성화됨",
+      "externalApp": "앱",
+      "mcpServer": "MCP 서버",
+      "taskAppsTitle": "앱 및 MCP 서버",
+      "actionPolicies": "승인 설정",
+      "policyCounts": "자동 승인 {auto} · 확인 {ask} · 비활성 {disabled}",
+      "manageActions": "작업 관리",
+      "viewActions": "작업 보기",
+      "taskModalDescription": "변경 사항은 예약 작업을 저장할 때 적용됩니다. 워크스페이스 제한은 항상 적용됩니다.",
+      "searchActions": "작업 검색",
+      "applyMatching": "일치하는 편집 가능한 작업 {count}개 설정:",
+      "noMatchingActions": "검색과 일치하는 작업이 없습니다.",
+      "close": "닫기",
+      "saveChanges": "변경 사항 저장",
+      "resetDefaults": "모두 기본값으로 재설정",
+      "resetAll": "모두 워크스페이스 기본값으로 재설정",
+      "workspaceDisabledTooltip": "관리자가 워크스페이스에서 이 작업을 비활성화했습니다."
     }
   },
   "knowledge": {

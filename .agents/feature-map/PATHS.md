@@ -107,7 +107,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
 | `backend/onyx/server/middleware/latency_logging.py` | observability |
 | `backend/onyx/background/celery/`, `background/periodic_poller.py`, `background/task_utils.py`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `db/scheduled_task.py`, `db/sync_record.py` | background-jobs |
-| `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/db/gated_app.py`, `backend/onyx/configs/app_configs.py` | editions-and-gating |
+| `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/configs/app_configs.py` | editions-and-gating |
 | `backend/onyx/configs/chat_configs.py` | chat-persistence, context-assembly, llm-providers |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
@@ -122,6 +122,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/ee/onyx/server/enterprise_settings/` | whitelabelling-and-theme |
 | `backend/ee/onyx/db/standard_answer.py`, `backend/ee/onyx/server/manage/standard_answer.py`, `*/onyxbot/slack/handlers/handle_standard_answers.py` | standard-answers |
 | `backend/onyx/db/notification.py`, `db/release_notes.py`, `db/admin_banner.py`, `server/features/notifications/`, `features/release_notes/`, `features/admin_banner/` | notifications |
+| `backend/onyx/db/action_policy.py`, `backend/onyx/server/features/build/action_policies.py`, `web/src/app/craft/v1/apps/action-policies/` | craft-external-apps, craft-scheduled-tasks, craft-admin, editions-and-gating |
 | `backend/onyx/db/models.py` | **any**. Check which tables the diff touches, then map those. |
 | `backend/alembic/`, `backend/alembic_tenants/` | the component that owns the table being migrated |
 | `backend/onyx/server/settings/`, `server/security/`, `db/security_settings.py` | editions-and-gating, auth-and-identity |
@@ -179,6 +180,7 @@ so verify the callers rather than a single component.
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
+| `web/src/app/craft/v1/tasks/components/TaskActionPolicies.tsx` | craft-scheduled-tasks |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx` | craft-webapp-proxy |
 | `web/src/lib/csv.ts` | craft-streaming, chat-frontend |
 | `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-webapp-proxy |

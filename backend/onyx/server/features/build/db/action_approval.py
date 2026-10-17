@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.enums import (
     POLICY_SEVERITY,
     ActionPolicy,
@@ -17,7 +18,6 @@ from onyx.db.enums import (
     ApprovalDecision,
     GatedAppKind,
 )
-from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import ActionApproval, BuildSession
 from onyx.utils.logger import setup_logger
 

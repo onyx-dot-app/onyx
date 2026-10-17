@@ -12,7 +12,7 @@
 **Owns:**
 `backend/onyx/utils/variable_functionality.py`, `backend/onyx/feature_flags/`
 (`interface.py`, `factory.py`, `flags.py`, `feature_flags_keys.py`),
-`backend/onyx/db/gated_app.py`, `backend/onyx/server/settings/` (`api.py`,
+`backend/onyx/db/action_policy.py`, `backend/onyx/server/settings/` (`api.py`,
 `store.py`, `models.py`, `tier_order.py`), `backend/ee/onyx/feature_flags/`
 (`factory.py`, `posthog_provider.py`), `backend/ee/onyx/server/license/`
 (`api.py`, `models.py`), `backend/ee/onyx/utils/tier.py`,
@@ -53,6 +53,11 @@ An admin building a custom OpenAPI action or MCP tool also sees per-action
 gating: each action defaults to a policy (`ALWAYS`, `ASK`, `DENY` in
 `backend/onyx/db/enums.py:ActionPolicy`) resolved through the `gated_app`
 tables, independent of CE/EE at all.
+Craft resolves workspace restrictions, personal overrides, and independent task
+settings through `backend/onyx/db/action_policy.py`. The app-level
+`users_can_manage_policies` switch defaults to true. Workspace DENY always wins;
+when management is off, workspace policies apply. Session approvals satisfy ASK
+without overriding disabled actions.
 
 ---
 
@@ -104,11 +109,11 @@ calls `fetch_versioned_implementation_with_fallback` for
 scaffolding; flag keys are defined ad hoc at their call sites (see
 `backend/onyx/server/features/build/utils.py:ONYX_CRAFT_ENABLED_FLAG`).
 
-### Gated apps (`backend/onyx/db/gated_app.py`)
+### Gated apps (`backend/onyx/db/action_policy.py`)
 
 Not an edition boundary. `GatedApp` is the identity row shared by every gated
 target (`GatedAppKind.EXTERNAL_APP` or `MCP_SERVER`, in `backend/onyx/db/enums.py`);
-`GatedActionPolicy` stores per-action overrides (`ActionPolicy.ALWAYS` /
+`WorkspaceActionPolicy` stores per-action overrides (`ActionPolicy.ALWAYS` /
 `ASK` / `DENY`). Consumers: `backend/onyx/server/features/mcp/api.py`,
 `backend/onyx/server/features/build/external_apps/api.py`,
 `backend/onyx/sandbox_proxy/addons/gate.py`, and
@@ -120,9 +125,9 @@ target (`GatedAppKind.EXTERNAL_APP` or `MCP_SERVER`, in `backend/onyx/db/enums.p
 
 This component is mostly code dispatch, not data, with two exceptions:
 
-- `GatedApp` / `GatedActionPolicy` (`backend/onyx/db/models.py`, CE): the
-  per-action approval policy, keyed by `(kind, target_id)` via
-  `gated_app.py:_target_column`.
+- `GatedApp` / `WorkspaceActionPolicy` (`backend/onyx/db/models.py`, CE): the
+  action policy, keyed by `(kind, target_id)` via
+  `action_policy.py:_target_column`.
 - License metadata is stored and cached by EE code
   (`backend/ee/onyx/db/license.py:get_license_metadata`,
   `get_cached_license_metadata`, `refresh_license_cache`), not owned by this
@@ -360,7 +365,7 @@ not gated.
 | changes the Dockerfile's `ee` copy or the `ee` requirements split | `backend/Dockerfile:COPY ./ee`, `backend/requirements/ee.txt`; a build that stops shipping `ee` flips every standard deployment's default resolution from EE to CE, which is the whole safety story in §5 point 2 |
 | adds a feature flag | whether it is a per-user boolean (`feature_enabled_for_user_tenant`) or a tenant-wide variant (`feature_variant_for_tenant`); what an unresolvable flag must do, since the first returns `False` when it cannot resolve; whether `MULTI_TENANT` gating on the PostHog provider is the intended scope, since self-hosted always gets `NoOpFeatureFlagProvider` unless `DEV_MODE` |
 | changes licensing (claim/upload/refresh/delete/downgrade, or `get_tier`) | `MULTI_TENANT` rejection branches in `ee/onyx/server/license/api.py`; `apply_license_status_to_settings` in `ee/onyx/server/settings/api.py`; seat-limit and `GATED_ACCESS` behaviour in `license_enforcement.py` |
-| changes `gated_app`/`GatedActionPolicy` policy resolution | every consumer: `server/features/mcp/api.py`, `server/features/build/external_apps/api.py`, `sandbox_proxy/addons/gate.py`, `external_apps/matching/engine.py`; this is unrelated to CE/EE dispatch and must not be conflated with it |
+| changes `gated_app`/`WorkspaceActionPolicy` policy resolution | every consumer: `server/features/mcp/api.py`, `server/features/build/external_apps/api.py`, `sandbox_proxy/addons/gate.py`, `external_apps/matching/engine.py`; this is unrelated to CE/EE dispatch and must not be conflated with it |
 
 ---
 
