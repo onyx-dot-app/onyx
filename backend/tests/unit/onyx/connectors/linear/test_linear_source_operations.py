@@ -7,11 +7,16 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.linear.source_operations import (
     LinearAuthError,
+    LinearRateLimitError,
     LinearSourceOperations,
+    LinearTokenLockError,
+    LinearTokenRefreshError,
+    LinearUnreachableError,
 )
 
 OPS = "onyx.connectors.linear.source_operations"
@@ -117,6 +122,83 @@ def test_a_refused_credential_is_a_typed_error() -> None:
         ops.get_viewer()
 
     post.assert_called_once()
+
+
+def _api_key_ops() -> LinearSourceOperations:
+    return LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, "linear", {"linear_api_key": "k"}
+        )
+    )
+
+
+def test_a_rate_limit_code_is_a_typed_error_and_not_retried() -> None:
+    response = MagicMock()
+    response.status_code = 400
+    response.ok = False
+    response.text = (
+        '{"errors": [{"message": "Rate limit exceeded", '
+        '"extensions": {"code": "RATELIMITED"}}]}'
+    )
+    with (
+        patch(f"{OPS}.requests.post", return_value=response) as post,
+        pytest.raises(LinearRateLimitError) as raised,
+    ):
+        _api_key_ops().get_viewer()
+
+    post.assert_called_once()
+    assert raised.value.status_code == 400
+    assert raised.value.method == "POST"
+    assert raised.value.body == response.text
+
+
+def test_no_answer_after_retries_is_a_typed_error() -> None:
+    with (
+        patch(f"{OPS}.requests.post", side_effect=requests.ReadTimeout("slow")) as post,
+        pytest.raises(LinearUnreachableError) as raised,
+    ):
+        _api_key_ops().get_viewer()
+
+    assert post.call_count == 5
+    assert raised.value.timed_out
+
+
+def test_a_rate_limit_in_a_200_answer_is_a_typed_error() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "errors": [{"message": "limited", "extensions": {"code": "RATELIMITED"}}]
+    }
+    with (
+        patch(f"{OPS}._make_query", return_value=response),
+        pytest.raises(LinearRateLimitError),
+    ):
+        _api_key_ops().get_viewer()
+
+
+@patch(f"{OPS}.refresh_oauth_token")
+def test_a_busy_refresh_lock_is_a_typed_error(refresh: MagicMock) -> None:
+    provider = _provider({"access_token": "old", "refresh_token": "r", "expire_at": 0})
+    provider.__enter__.side_effect = RuntimeError("Could not acquire lock")
+    ops = LinearSourceOperations(credentials_provider=provider)
+
+    with pytest.raises(LinearTokenLockError):
+        ops._api_key()
+
+    refresh.assert_not_called()
+
+
+@patch(f"{OPS}.refresh_oauth_token")
+def test_a_failed_refresh_keeps_its_own_error(refresh: MagicMock) -> None:
+    refresh.side_effect = LinearTokenRefreshError(
+        "Failed to refresh token", status_code=400, body="invalid_grant"
+    )
+    provider = _provider({"access_token": "old", "refresh_token": "r", "expire_at": 0})
+    ops = LinearSourceOperations(credentials_provider=provider)
+
+    with pytest.raises(LinearTokenRefreshError):
+        ops._api_key()
+
+    provider.__exit__.assert_called_once()
 
 
 def test_a_cursor_that_stops_advancing_is_refused() -> None:

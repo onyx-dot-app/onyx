@@ -7,8 +7,10 @@ capability checks all go through the operations below and nothing else talks
 to api.linear.app.
 """
 
+import json
 import time
 from collections.abc import Iterator
+from contextlib import ExitStack
 from typing import Any
 
 import requests
@@ -16,6 +18,7 @@ import requests
 from onyx.configs.app_configs import LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.linear.models import (
     IssueAccess,
     IssueAccessPage,
@@ -56,6 +59,11 @@ LISTING_PAGE_SIZE: int = 100
 ACCESS_PAGE_SIZE: int = 250
 # A walk still paging past this is a cursor cycling rather than ending.
 _MAX_PAGES: int = 100_000
+# The `extensions.code` of Linear's GraphQL errors.
+_RATE_LIMITED_CODE: str = "RATELIMITED"
+_AUTHENTICATION_ERROR_CODE: str = "AUTHENTICATION_ERROR"
+_AUTH_STATUSES: frozenset[int] = frozenset({401, 403})
+_RATE_LIMITED_STATUS: int = 429
 
 _PAGE_INFO: str = """
     pageInfo {
@@ -64,7 +72,7 @@ _PAGE_INFO: str = """
     }
 """
 _USER_FIELDS: str = "email active guest app"
-_VIEWER_QUERY: str = "query Viewer { viewer { guest } }"
+_VIEWER_QUERY: str = "query Viewer { viewer { email guest } }"
 _TEAMS_BY_KEY_QUERY: str = f"""
     query TeamsByKey($keys: [String!], $first: Int, $after: String) {{
         teams(first: $first, after: $after, filter: {{ key: {{ in: $keys }} }}) {{
@@ -161,11 +169,32 @@ _USERS_QUERY: str = f"""
 """
 
 
-class LinearGraphQLError(RuntimeError):
+class LinearApiError(SourceApiError, RuntimeError):
+    """Linear answered a request with an error. It stays a RuntimeError for
+    callers that treat any Linear failure as one."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None,
+        body: str | None,
+        url: str = _LINEAR_GRAPHQL_URL,
+    ) -> None:
+        super().__init__(
+            message, status_code=status_code, method="POST", url=url, body=body
+        )
+
+
+class LinearGraphQLError(LinearApiError):
     """Linear answered 200 with an `errors` list."""
 
     def __init__(self, errors: list[dict[str, Any]]) -> None:
-        super().__init__(f"Linear GraphQL errors: {errors}")
+        super().__init__(
+            f"Linear GraphQL errors: {errors}",
+            status_code=200,
+            body=json.dumps({"errors": errors}),
+        )
         self.errors = errors
 
     @property
@@ -177,8 +206,81 @@ class LinearGraphQLError(RuntimeError):
         )
 
 
-class LinearAuthError(RuntimeError):
+class LinearAuthError(LinearApiError):
     """Linear refused the credential itself."""
+
+
+class LinearRateLimitError(LinearApiError):
+    """Linear's rate limit refused the request."""
+
+
+class LinearTokenRefreshError(LinearApiError):
+    """Linear refused to renew the OAuth access token."""
+
+
+class LinearPagingError(RuntimeError):
+    """A walk that does not end: Linear repeats a cursor or pages past the cap."""
+
+
+class LinearUnreachableError(RuntimeError):
+    """No answer from Linear after retries: the connection failed or timed
+    out."""
+
+    def __init__(self, message: str, *, timed_out: bool) -> None:
+        super().__init__(message)
+        self.timed_out = timed_out
+
+
+def _unreachable(error: requests.RequestException) -> LinearUnreachableError:
+    # A connect timeout is also a ConnectionError: it counts as a timeout.
+    return LinearUnreachableError(
+        f"Linear did not answer: {error}",
+        timed_out=isinstance(error, requests.Timeout),
+    )
+
+
+class LinearTokenLockError(RuntimeError):
+    """Another task holds the lock that renews the OAuth token."""
+
+
+def _graphql_errors(text: str) -> list[dict[str, Any]]:
+    """The `errors` of a GraphQL error body; empty for any other body."""
+    try:
+        body: Any = json.loads(text)
+    except ValueError:
+        return []
+    errors: Any = body.get("errors") if isinstance(body, dict) else None
+    return errors if isinstance(errors, list) else []
+
+
+def _error_codes(errors: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(code)
+        for error in errors
+        if isinstance(error, dict)
+        and (code := (error.get("extensions") or {}).get("code")) is not None
+    }
+
+
+def _error_response(status_code: int, text: str) -> LinearApiError:
+    """The typed error of a non-OK answer. Linear can answer a refused key
+    or a rate limit with a GraphQL error code rather than the HTTP status."""
+    codes: set[str] = _error_codes(_graphql_errors(text))
+    if status_code in _AUTH_STATUSES or _AUTHENTICATION_ERROR_CODE in codes:
+        return LinearAuthError(
+            f"Linear refused the credential: {text}",
+            status_code=status_code,
+            body=text,
+        )
+    if status_code == _RATE_LIMITED_STATUS or _RATE_LIMITED_CODE in codes:
+        return LinearRateLimitError(
+            f"Linear rate limited the request: {text}",
+            status_code=status_code,
+            body=text,
+        )
+    return LinearApiError(
+        f"Error querying Linear: {text}", status_code=status_code, body=text
+    )
 
 
 def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response:
@@ -194,13 +296,16 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
                 json=request_body,
                 timeout=_TIMEOUT,
             )
-            if response.status_code in (401, 403):
-                raise LinearAuthError(f"Linear refused the credential: {response.text}")
             if not response.ok:
-                raise RuntimeError(f"Error querying Linear: {response.text}")
+                raise _error_response(response.status_code, response.text)
             return response
-        except LinearAuthError:
+        # An immediate retry cannot pass a refusal or a rate limit.
+        except (LinearAuthError, LinearRateLimitError):
             raise
+        except (requests.ConnectionError, requests.Timeout) as e:
+            if attempt == _NUM_RETRIES - 1:
+                raise _unreachable(e) from e
+            logger.warning("Linear did not answer: %s. Retrying...", e)
         except Exception as e:
             if attempt == _NUM_RETRIES - 1:
                 raise
@@ -213,8 +318,15 @@ def _run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str,
     query, so that is raised here rather than read as an empty result."""
     response = _make_query({"query": query, "variables": variables}, api_key)
     body: dict[str, Any] = response.json()
-    if body.get("errors"):
-        raise LinearGraphQLError(body["errors"])
+    errors: list[dict[str, Any]] | None = body.get("errors")
+    if errors:
+        if _RATE_LIMITED_CODE in _error_codes(errors):
+            raise LinearRateLimitError(
+                f"Linear rate limited the request: {errors}",
+                status_code=response.status_code,
+                body=json.dumps({"errors": errors}),
+            )
+        raise LinearGraphQLError(errors)
     return body["data"]
 
 
@@ -224,27 +336,43 @@ def refresh_oauth_token(credentials: dict[str, Any]) -> dict[str, Any]:
     Linear rotates it on every refresh today."""
     if REFRESH_TOKEN not in credentials:
         raise ConnectorMissingCredentialError("Linear")
-    response = request_with_retries(
-        method="POST",
-        url=_LINEAR_TOKEN_URL,
-        data={
-            REFRESH_TOKEN: credentials[REFRESH_TOKEN],
-            "client_id": LINEAR_CLIENT_ID,
-            "client_secret": LINEAR_CLIENT_SECRET,
-            "grant_type": REFRESH_TOKEN,
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        backoff=0,
-        delay=0.1,
-    )
+    try:
+        response = request_with_retries(
+            method="POST",
+            url=_LINEAR_TOKEN_URL,
+            data={
+                REFRESH_TOKEN: credentials[REFRESH_TOKEN],
+                "client_id": LINEAR_CLIENT_ID,
+                "client_secret": LINEAR_CLIENT_SECRET,
+                "grant_type": REFRESH_TOKEN,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            backoff=0,
+            delay=0.1,
+        )
+    except requests.HTTPError as e:
+        if e.response is None:
+            raise
+        raise _refresh_error(e.response) from e
+    except (requests.ConnectionError, requests.Timeout) as e:
+        raise _unreachable(e) from e
     if not response.ok:
-        raise RuntimeError(f"Failed to refresh token: {response.text}")
+        raise _refresh_error(response)
     token_data: dict[str, Any] = response.json()
     return {
         ACCESS_TOKEN: token_data[ACCESS_TOKEN],
         EXPIRE_AT: int(time.time() + token_data[EXPIRES_IN]),
         REFRESH_TOKEN: token_data.get(REFRESH_TOKEN, credentials[REFRESH_TOKEN]),
     }
+
+
+def _refresh_error(response: requests.Response) -> LinearTokenRefreshError:
+    return LinearTokenRefreshError(
+        f"Failed to refresh token: {response.text}",
+        status_code=response.status_code,
+        body=response.text,
+        url=_LINEAR_TOKEN_URL,
+    )
 
 
 def is_expiring(credentials: dict[str, Any]) -> bool:
@@ -308,7 +436,7 @@ class LinearSourceOperations(SourceOperations):
             return self._authorization_cache
         credentials: dict[str, Any] = self.credentials_provider.get_credentials()
         if is_expiring(credentials):
-            with self.credentials_provider:
+            with self._refresh_lock():
                 credentials = self.credentials_provider.get_credentials()
                 if is_expiring(credentials):
                     credentials = refresh_oauth_token(credentials)
@@ -316,6 +444,18 @@ class LinearSourceOperations(SourceOperations):
         self._authorization_cache = _authorization(credentials)
         self._authorization_expires_at = credentials.get(EXPIRE_AT)
         return self._authorization_cache
+
+    def _refresh_lock(self) -> ExitStack:
+        """The provider's rotation lock, held by the returned stack. Only
+        taking the lock is wrapped, so a failed refresh keeps its own error."""
+        stack = ExitStack()
+        try:
+            stack.enter_context(self.credentials_provider)
+        except RuntimeError as e:
+            raise LinearTokenLockError(
+                "Another task holds the lock that renews the Linear OAuth token."
+            ) from e
+        return stack
 
     def _pages(
         self,
@@ -340,9 +480,13 @@ class LinearSourceOperations(SourceOperations):
             if not page_info["hasNextPage"]:
                 return
             if page_info["endCursor"] == cursor:
-                raise RuntimeError(f"Linear stopped advancing the {path[-1]} cursor")
+                raise LinearPagingError(
+                    f"Linear stopped advancing the {path[-1]} cursor"
+                )
             cursor = page_info["endCursor"]
-        raise RuntimeError(f"Linear kept paging {path[-1]} past {_MAX_PAGES} pages")
+        raise LinearPagingError(
+            f"Linear kept paging {path[-1]} past {_MAX_PAGES} pages"
+        )
 
     @source_operation(
         capabilities=(
