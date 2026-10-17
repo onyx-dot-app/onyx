@@ -66,10 +66,6 @@ class OneDriveDrive(BaseModel):
     web_url: str | None = None
 
 
-class OneDriveTokenInfo(BaseModel):
-    expires_in: int | None = None
-
-
 class OneDriveDiscoveredFile(BaseModel):
     model_config = ConfigDict(frozen=True)
 

@@ -1,7 +1,9 @@
-"""The plain data SharePoint permission sync works on: principals and role
-assignments from SharePoint REST, and the members of an Entra group from
-Graph. The office365 objects never leave ``sharepoint_rest``."""
+"""Plain data the Microsoft connectors share: what an app-only sign-in tells,
+and what SharePoint permission sync works on (principals and role
+assignments from SharePoint REST, the members of an Entra group from Graph).
+The office365 objects never leave ``sharepoint_rest``."""
 
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
@@ -61,3 +63,16 @@ class EntraMember(BaseModel):
     display_name: str | None = None
     user_principal_name: str | None = None
     mail: str | None = None
+
+
+class MicrosoftTokenInfo(BaseModel):
+    """What an app-only sign-in tells about the app: the token's lifetime,
+    the app's name and id from the token's claims, and, for a certificate
+    account, the certificate's end date."""
+
+    model_config = ConfigDict(frozen=True)
+
+    expires_in: int | None = None
+    app_name: str | None = None
+    app_id: str | None = None
+    certificate_not_after: datetime | None = None

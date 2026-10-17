@@ -52,6 +52,7 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
     MicrosoftGraphGateway,
     build_graph_user_url,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.outlook.models import (
     OutlookAttachment,
     OutlookDeltaPage,
@@ -65,7 +66,6 @@ from onyx.connectors.outlook.models import (
     OutlookMessageChange,
     OutlookMessagePage,
     OutlookRecipient,
-    OutlookTokenInfo,
 )
 from onyx.connectors.source_operations import (
     OperationConsumes,
@@ -400,9 +400,6 @@ class OutlookSourceOperations(SourceOperations):
         )
         return self._graph_gateway
 
-    def _token_response(self) -> dict[str, Any]:
-        return self._gateway().token_response()
-
     def _access_token(self) -> str:
         return self._gateway().access_token()
 
@@ -451,13 +448,9 @@ class OutlookSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def check_token(self) -> OutlookTokenInfo:
+    def check_token(self) -> MicrosoftTokenInfo:
         """Acquire an app-only token: proves client id, directory id and credential agree."""
-        response = self._token_response()
-        expires_in = response.get("expires_in")
-        return OutlookTokenInfo(
-            expires_in=int(expires_in) if expires_in is not None else None
-        )
+        return self._gateway().token_info()
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
