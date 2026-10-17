@@ -52,8 +52,11 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
 )
 from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
 from onyx.connectors.slack.source_operations import (
+    SlackAuthTestResponse,
     SlackChannelMembersPage,
     SlackChannelsPage,
+    SlackTeamsPage,
+    SlackUsersPage,
 )
 from onyx.connectors.source_operations import (
     SourceOperations,
@@ -91,8 +94,16 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
 
 
 def _configure_slack_spy(spy: MagicMock) -> None:
-    """A workspace where the bot sees one channel with one member, so the
-    checks that read a channel after they find one run."""
+    """A Grid org with one workspace, where the bot sees one channel with one
+    member and one user, so the checks that read an item after they find one
+    run."""
+    spy.check_auth.return_value = SlackAuthTestResponse(ok=True, enterprise_id="E1")
+    spy.list_teams.side_effect = lambda **_kwargs: iter(
+        [SlackTeamsPage(teams=[{"id": "T1", "name": "Acme"}])]
+    )
+    spy.list_users.side_effect = lambda **_kwargs: iter(
+        [SlackUsersPage(members=[{"id": "U1"}])]
+    )
     spy.list_channels.side_effect = lambda **_kwargs: iter(
         [SlackChannelsPage(channels=[{"id": "C1", "name": "general"}])]
     )
