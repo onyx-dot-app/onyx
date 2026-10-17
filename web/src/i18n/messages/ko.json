@@ -13180,14 +13180,6 @@
         "text": "업데이트: {date}"
       }
     },
-    "dropdown": {
-      "default": {
-        "label": "기본값"
-      },
-      "selectOption": {
-        "placeholder": "옵션을 선택하세요..."
-      }
-    },
     "editable": {
       "edit": {
         "ariaLabel": "편집"

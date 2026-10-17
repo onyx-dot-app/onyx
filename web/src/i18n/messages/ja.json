@@ -13180,14 +13180,6 @@
         "text": "更新日: {date}"
       }
     },
-    "dropdown": {
-      "default": {
-        "label": "デフォルト"
-      },
-      "selectOption": {
-        "placeholder": "オプションを選択..."
-      }
-    },
     "editable": {
       "edit": {
         "ariaLabel": "編集"

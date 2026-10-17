@@ -13180,14 +13180,6 @@
         "text": "更新于 {date}"
       }
     },
-    "dropdown": {
-      "default": {
-        "label": "默认"
-      },
-      "selectOption": {
-        "placeholder": "选择一个选项..."
-      }
-    },
     "editable": {
       "edit": {
         "ariaLabel": "编辑"

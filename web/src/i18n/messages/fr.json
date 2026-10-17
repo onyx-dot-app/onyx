@@ -13180,14 +13180,6 @@
         "text": "Mis à jour le {date}"
       }
     },
-    "dropdown": {
-      "default": {
-        "label": "Par défaut"
-      },
-      "selectOption": {
-        "placeholder": "Sélectionnez une option..."
-      }
-    },
     "editable": {
       "edit": {
         "ariaLabel": "Modifier"

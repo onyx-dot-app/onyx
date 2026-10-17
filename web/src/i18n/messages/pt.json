@@ -13180,14 +13180,6 @@
         "text": "Atualizado em {date}"
       }
     },
-    "dropdown": {
-      "default": {
-        "label": "Padrão"
-      },
-      "selectOption": {
-        "placeholder": "Selecione uma opção..."
-      }
-    },
     "editable": {
       "edit": {
         "ariaLabel": "Editar"
