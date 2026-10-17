@@ -61,6 +61,12 @@ Once signed in, the session persists across page loads via a cookie, and
 "log out" invalidates Redis-backed sessions immediately. Stateless JWTs
 (`AUTH_BACKEND=jwt`) stay valid until expiry, because
 `SingleTenantJWTStrategy.destroy_token` does nothing.
+An admin password reset (`POST /password/reset_password`) signs out all of the
+target user's sessions, and an admin cannot reset their own password there. A
+password change (`POST /password/change-password`) signs out the user's other
+sessions and keeps the current one (`UserManager.revoke_sessions`). Redis keeps
+a per-user set of session tokens for this; Postgres deletes `AccessToken` rows.
+JWT sessions stay valid until expiry.
 Native mobile clients get the same session in a header instead of a cookie
 (`bearer_transport`, `backend/onyx/auth/users.py`). A signed-out
 anonymous visitor can still use chat if an admin turned that on, with public
