@@ -17,6 +17,7 @@ def test_provider_requires_api_key() -> None:
     assert provider_requires_api_key(WebSearchProviderType.BRAVE) is True
     assert provider_requires_api_key(WebSearchProviderType.SERPER) is True
     assert provider_requires_api_key(WebSearchProviderType.GOOGLE_PSE) is True
+    assert provider_requires_api_key(WebSearchProviderType.OLLAMA) is True
     assert provider_requires_api_key(WebSearchProviderType.FIRECRAWL) is True
     assert provider_requires_api_key(WebSearchProviderType.SEARXNG) is False
 
