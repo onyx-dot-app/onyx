@@ -95,6 +95,7 @@ def get_default_chat_mcp_server_ids(
         .join(Persona__Tool, Persona__Tool.tool_id == Tool.id)
         .join(Persona, Persona.id == Persona__Tool.persona_id)
         .where(
+            Persona.id == DEFAULT_PERSONA_ID,
             Persona.builtin_persona.is_(True),
             Persona.deleted.is_(False),
             Tool.mcp_server_id.in_(server_ids),

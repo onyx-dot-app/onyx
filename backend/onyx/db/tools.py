@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.auth.permissions import has_permission
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
@@ -146,6 +147,7 @@ def get_default_chat_tool_ids(tool_ids: list[int], db_session: Session) -> set[i
         .join(Persona__Tool, Persona__Tool.tool_id == Tool.id)
         .join(Persona, Persona.id == Persona__Tool.persona_id)
         .where(
+            Persona.id == DEFAULT_PERSONA_ID,
             Persona.builtin_persona.is_(True),
             Persona.deleted.is_(False),
             Tool.id.in_(tool_ids),

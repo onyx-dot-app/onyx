@@ -9,7 +9,10 @@ from onyx.server.features.tool import api
 from onyx.server.features.tool.models import ToolSnapshot
 
 
-def test_default_chat_tool_summary_uses_visible_tool_attachments() -> None:
+@pytest.mark.parametrize("nondefault_builtin_deleted", [True, False])
+def test_default_chat_tool_summary_uses_visible_tool_attachments(
+    nondefault_builtin_deleted: bool,
+) -> None:
     from onyx.db.tools import get_default_chat_tool_ids
 
     metadata = MetaData()
@@ -40,7 +43,11 @@ def test_default_chat_tool_summary_uses_visible_tool_attachments() -> None:
             [
                 {"id": 0, "builtin_persona": True, "deleted": False},
                 {"id": 1, "builtin_persona": False, "deleted": False},
-                {"id": 2, "builtin_persona": True, "deleted": True},
+                {
+                    "id": 2,
+                    "builtin_persona": True,
+                    "deleted": nondefault_builtin_deleted,
+                },
             ],
         )
         db.execute(

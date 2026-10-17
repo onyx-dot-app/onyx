@@ -11,7 +11,10 @@ from onyx.server.features.default_assistant.models import DefaultAssistantUpdate
 from onyx.server.features.mcp.models import MCPConnectionStatus
 
 
-def test_default_chat_server_summary_uses_visible_tool_attachments() -> None:
+@pytest.mark.parametrize("nondefault_builtin_deleted", [True, False])
+def test_default_chat_server_summary_uses_visible_tool_attachments(
+    nondefault_builtin_deleted: bool,
+) -> None:
     from onyx.db.mcp import get_default_chat_mcp_server_ids
 
     metadata = MetaData()
@@ -43,7 +46,11 @@ def test_default_chat_server_summary_uses_visible_tool_attachments() -> None:
             [
                 {"id": 0, "builtin_persona": True, "deleted": False},
                 {"id": 1, "builtin_persona": False, "deleted": False},
-                {"id": 2, "builtin_persona": True, "deleted": True},
+                {
+                    "id": 2,
+                    "builtin_persona": True,
+                    "deleted": nondefault_builtin_deleted,
+                },
             ],
         )
         db.execute(
