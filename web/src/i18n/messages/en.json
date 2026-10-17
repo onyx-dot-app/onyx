@@ -1120,8 +1120,9 @@
         "craftDisabled": "Craft off"
       },
       "controls": {
-        "disconnect": "Disconnect",
-        "enable": "Enable",
+        "disconnect": "Enable or disable for workspace",
+        "enable": "Enable for workspace",
+        "disable": "Disable for workspace",
         "more": "More actions",
         "disableChat": "Disable for main Chat",
         "enableChat": "Enable for main Chat",
@@ -1136,6 +1137,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "Disable {name} for the workspace?",
+        "workspaceDescription": "This disables {name} for everyone in your workspace, including custom agents. Saved settings and credentials are kept. You can enable it again.",
         "scope": "All users in your organization",
         "chatTitle": "Disable {name} for main Chat?",
         "chatDescription": "This removes {name} from default Chat for everyone in your organization. Custom agents are not affected. You can enable it again.",

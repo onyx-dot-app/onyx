@@ -1120,8 +1120,9 @@
         "craftDisabled": "Craft 꺼짐"
       },
       "controls": {
-        "disconnect": "연결 해제",
-        "enable": "활성화",
+        "disconnect": "워크스페이스에서 활성화 또는 비활성화",
+        "enable": "워크스페이스에서 활성화",
+        "disable": "워크스페이스에서 비활성화",
         "more": "추가 작업",
         "disableChat": "기본 채팅에서 비활성화",
         "enableChat": "기본 채팅에서 활성화",
@@ -1136,6 +1137,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "워크스페이스에서 {name}을(를) 비활성화할까요?",
+        "workspaceDescription": "사용자 지정 에이전트를 포함하여 워크스페이스의 모든 사용자에게 {name}이(가) 비활성화됩니다. 저장된 설정과 자격 증명은 유지됩니다. 다시 활성화할 수 있습니다.",
         "scope": "조직의 모든 사용자",
         "chatTitle": "메인 채팅에서 {name}을(를) 비활성화할까요?",
         "chatDescription": "조직의 모든 사용자의 기본 채팅에서 {name}이(가) 제거됩니다. 사용자 지정 에이전트에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다.",

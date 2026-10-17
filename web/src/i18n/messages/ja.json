@@ -1120,8 +1120,9 @@
         "craftDisabled": "Craft 無効"
       },
       "controls": {
-        "disconnect": "切断",
-        "enable": "有効にする",
+        "disconnect": "ワークスペースで有効化または無効化",
+        "enable": "ワークスペースで有効化",
+        "disable": "ワークスペースで無効化",
         "more": "その他の操作",
         "disableChat": "メインチャットで無効にする",
         "enableChat": "メインチャットで有効にする",
@@ -1136,6 +1137,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "ワークスペースで{name}を無効にしますか？",
+        "workspaceDescription": "カスタムエージェントを含め、ワークスペースの全員に対して{name}を無効にします。保存済みの設定と認証情報は保持されます。再び有効にできます。",
         "scope": "組織内のすべてのユーザー",
         "chatTitle": "メインチャットで {name} を無効にしますか？",
         "chatDescription": "組織内のすべてのユーザーのデフォルトチャットから {name} が削除されます。カスタムエージェントには影響しません。再度有効にできます。",

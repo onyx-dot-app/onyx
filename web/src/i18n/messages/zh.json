@@ -1120,8 +1120,9 @@
         "craftDisabled": "Craft 已关闭"
       },
       "controls": {
-        "disconnect": "断开连接",
-        "enable": "启用",
+        "disconnect": "为工作区启用或禁用",
+        "enable": "为工作区启用",
+        "disable": "为工作区禁用",
         "more": "更多操作",
         "disableChat": "在主聊天中禁用",
         "enableChat": "在主聊天中启用",
@@ -1136,6 +1137,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "为工作区禁用 {name}？",
+        "workspaceDescription": "这将为工作区中的所有人禁用 {name}，包括自定义智能体。已保存的设置和凭据将被保留。您可以再次启用。",
         "scope": "组织内的所有用户",
         "chatTitle": "要为主聊天禁用 {name} 吗？",
         "chatDescription": "这会从组织内所有用户的默认聊天中移除 {name}。自定义智能体不受影响。你可以重新启用它。",

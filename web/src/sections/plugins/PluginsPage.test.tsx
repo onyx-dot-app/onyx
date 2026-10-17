@@ -393,7 +393,7 @@ test("the status circle and disconnect icon open the same availability menu", as
   await user.click(
     within(screen.getByRole("group", { name: mockServer.name })).getByRole(
       "button",
-      { name: "Disconnect" }
+      { name: "Enable or disable for workspace" }
     )
   );
   expect(

@@ -166,7 +166,7 @@ test("keeps lifecycle controls on the Plugins directory, not detail", async () =
   render(<MCPServerDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Server draft" });
   expect(
-    screen.queryByRole("button", { name: "Disconnect" })
+    screen.queryByRole("button", { name: "Enable or disable for workspace" })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Enable" })

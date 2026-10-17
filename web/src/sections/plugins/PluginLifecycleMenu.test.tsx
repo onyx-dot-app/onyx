@@ -122,7 +122,7 @@ afterEach(() => jest.restoreAllMocks());
 test("does not fetch configuration or tools until the menu opens", () => {
   render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
   expect(
-    screen.getByRole("button", { name: "Disconnect" })
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
   ).toBeInTheDocument();
   expect(reads).toEqual([]);
 });
@@ -130,7 +130,9 @@ test("does not fetch configuration or tools until the menu opens", () => {
 test("external availability writes only Craft enabled and never loads main Chat configuration", async () => {
   render(<PluginLifecycleMenu plugin={{ kind: "external-app", app }} />);
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
   await user.click(screen.getByRole("menuitem", { name: "Disable for Craft" }));
   await waitFor(() =>
     expect(writes).toContainEqual({
@@ -148,7 +150,9 @@ test("managed external apps expose availability but cannot be deleted", async ()
       plugin={{ kind: "external-app", app: { ...app, is_onyx_managed: true } }}
     />
   );
-  await setupUser().click(screen.getByRole("button", { name: "Disconnect" }));
+  await setupUser().click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
   expect(
     screen.queryByRole("button", { name: "Delete" })
   ).not.toBeInTheDocument();
@@ -158,7 +162,7 @@ test("non-full admins cannot open external app lifecycle controls", () => {
   mockFullAdmin = false;
   render(<PluginLifecycleMenu plugin={{ kind: "external-app", app }} />);
   expect(
-    screen.queryByRole("button", { name: "Disconnect" })
+    screen.queryByRole("button", { name: "Enable or disable for workspace" })
   ).not.toBeInTheDocument();
   expect(reads).toEqual([]);
 });
@@ -200,11 +204,23 @@ test("deletes an external app only after confirmation", async () => {
   );
 });
 
-test("disconnects an OpenAPI action without opening another modal", async () => {
+test("disables an OpenAPI action for the workspace only after confirmation", async () => {
   const user = setupUser();
   render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
-  await user.click(screen.getByRole("button", { name: "Disconnect" }));
-  await user.click(await screen.findByRole("menuitem", { name: "Disconnect" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
+  await user.click(
+    await screen.findByRole("menuitem", { name: /Disable for workspace/ })
+  );
+  expect(writes).toEqual([]);
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByText(/everyone in your workspace/)).toBeVisible();
+  expect(within(dialog).getByText(/including custom agents/)).toBeVisible();
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  await user.click(
+    within(dialog).getByRole("button", { name: "Disable for workspace" })
+  );
   await waitFor(() =>
     expect(writes).toContainEqual({
       path: "/api/admin/tool/status",
@@ -213,6 +229,65 @@ test("disconnects an OpenAPI action without opening another modal", async () => 
     })
   );
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test.each([true, false])(
+  "cancelling OpenAPI workspace disable makes no changes, full admin=%s",
+  async (fullAdmin) => {
+    mockFullAdmin = fullAdmin;
+    const user = setupUser();
+    render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
+    await user.click(
+      screen.getByRole("button", { name: "Enable or disable for workspace" })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /Disable for workspace/ })
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Disable Reports for the workspace?",
+    });
+    expect(writes).toEqual([]);
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(writes).toEqual([]);
+  }
+);
+
+test("failed OpenAPI workspace disable stays open for retry", async () => {
+  failDisable = true;
+  const user = setupUser();
+  render(<PluginLifecycleMenu plugin={{ kind: "openapi", tool }} />);
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
+  await user.click(
+    await screen.findByRole("menuitem", { name: /Disable for workspace/ })
+  );
+  const dialog = await screen.findByRole("dialog");
+  const submit = within(dialog).getByRole("button", {
+    name: "Disable for workspace",
+  });
+  await user.click(submit);
+  expect(
+    await within(dialog).findByText("Availability update failed")
+  ).toBeVisible();
+  failDisable = false;
+  await user.click(submit);
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  );
+  expect(writes).toEqual([
+    {
+      path: "/api/admin/tool/status",
+      method: "PATCH",
+      body: { tool_ids: [42], enabled: false },
+    },
+    {
+      path: "/api/admin/tool/status",
+      method: "PATCH",
+      body: { tool_ids: [42], enabled: false },
+    },
+  ]);
 });
 
 test.each([true, false])(
@@ -225,8 +300,12 @@ test.each([true, false])(
         plugin={{ kind: "openapi", tool: { ...tool, enabled } }}
       />
     );
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Enable" }));
+    await user.click(
+      screen.getByRole("button", { name: "Enable or disable for workspace" })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /Enable for workspace/ })
+    );
     await waitFor(() =>
       expect(writes).toContainEqual({
         path: "/api/admin/default-assistant",
@@ -248,8 +327,12 @@ test("scoped OpenAPI managers toggle status without changing default Chat", asyn
       plugin={{ kind: "openapi", tool: { ...tool, enabled: false } }}
     />
   );
-  await user.click(screen.getByRole("button", { name: "Disconnect" }));
-  await user.click(await screen.findByRole("menuitem", { name: "Enable" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
+  await user.click(
+    await screen.findByRole("menuitem", { name: /Enable for workspace/ })
+  );
   await waitFor(() => expect(writes).toHaveLength(1));
   expect(writes[0]).toEqual({
     path: "/api/admin/tool/status",
@@ -299,7 +382,9 @@ test("MCP deletion warns that the server and tools are deleted for the organizat
 test("removes only this server's tool IDs from main Chat", async () => {
   const user = setupUser();
   render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
-  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
   const action = await screen.findByRole("menuitem", {
     name: /Disable.*main Chat/,
   });
@@ -332,7 +417,9 @@ test("scoped editors can change Craft but not main Chat", async () => {
   mockFullAdmin = false;
   const user = setupUser();
   render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
-  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
   expect(
     screen.queryByRole("menuitem", { name: /main Chat/ })
   ).not.toBeInTheDocument();
@@ -362,7 +449,9 @@ test.each(["main Chat", "Craft"])(
   async (surface) => {
     const user = setupUser();
     render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await user.click(
+      screen.getByRole("button", { name: "Enable or disable for workspace" })
+    );
     const action = await screen.findByRole("menuitem", {
       name: new RegExp(`Disable for ${surface}`),
     });
@@ -384,7 +473,9 @@ test("failed Craft disable stays open for retry", async () => {
   failDisable = true;
   const user = setupUser();
   render(<PluginLifecycleMenu plugin={{ kind: "mcp", server }} />);
-  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
   await user.click(
     await screen.findByRole("menuitem", { name: /Disable for Craft/ })
   );
@@ -419,7 +510,9 @@ test("enabling Craft stays immediate", async () => {
       plugin={{ kind: "mcp", server: { ...server, available_in_craft: false } }}
     />
   );
-  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
   await user.click(
     await screen.findByRole("menuitem", { name: "Enable for Craft" })
   );
@@ -450,7 +543,9 @@ test("opens authentication instead of disabling Enable for a server awaiting sig
       }}
     />
   );
-  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  await user.click(
+    screen.getByRole("button", { name: "Enable or disable for workspace" })
+  );
   const enable = await screen.findByRole("menuitem", {
     name: "Enable for main Chat",
   });
@@ -470,7 +565,7 @@ test("hides controls when the resource grants no lifecycle permission", () => {
     />
   );
   expect(
-    screen.queryByRole("button", { name: "Disconnect" })
+    screen.queryByRole("button", { name: "Enable or disable for workspace" })
   ).not.toBeInTheDocument();
   expect(reads).toEqual([]);
 });

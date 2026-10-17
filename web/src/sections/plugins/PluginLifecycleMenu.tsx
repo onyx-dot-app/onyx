@@ -124,7 +124,7 @@ function ActivePluginLifecycleMenu({
   const defaultChat = useDefaultAssistantConfiguration();
   const [open, setOpen] = useState(initialAction === "availability");
   const [confirmation, setConfirmation] = useState<
-    "delete" | "disable-chat" | "disable-craft" | null
+    "delete" | "disable-chat" | "disable-craft" | "disable-openapi" | null
   >(initialAction === "delete" ? "delete" : null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,20 +211,25 @@ function ActivePluginLifecycleMenu({
       id: "availability",
       icon: SvgUnplug,
       title: t(
-        enabled ? "plugins.controls.disconnect" : "plugins.controls.enable"
+        enabled ? "plugins.controls.disable" : "plugins.controls.enable"
       ),
+      description: t("plugins.disableConfirmation.scope"),
       disabled:
         busy ||
         (defaultChat.canEdit && (!defaultChat.data || !!defaultChat.error)),
-      onSelect: () =>
+      onSelect: () => {
+        if (enabled) {
+          setOpen(false);
+          setError(null);
+          setConfirmation("disable-openapi");
+          return;
+        }
         void runWrite(async () => {
-          if (enabled) await updateToolStatus(tool.id, false);
-          else {
-            if (!tool.enabled) await updateToolStatus(tool.id, true);
-            if (defaultChat.canEdit)
-              await defaultChat.updateTools([tool.id], true);
-          }
-        }, t("openApiPage.toasts.disconnectFailed")),
+          if (!tool.enabled) await updateToolStatus(tool.id, true);
+          if (defaultChat.canEdit)
+            await defaultChat.updateTools([tool.id], true);
+        }, t("addOpenApiModal.toasts.updateFailed"));
+      },
     });
   }
   if (plugin.kind === "mcp") {
@@ -347,7 +352,14 @@ function ActivePluginLifecycleMenu({
   }
 
   async function disablePlugin() {
-    if (plugin.kind !== "mcp") return;
+    if (plugin.kind === "openapi") {
+      if (confirmation !== "disable-openapi" || !can(plugin.tool, "toggle"))
+        return;
+      await runWrite(async () => {
+        await updateToolStatus(plugin.tool.id, false);
+      }, t("addOpenApiModal.toasts.updateFailed"));
+      return;
+    }
     if (confirmation === "disable-chat") {
       if (
         !defaultChat.canEdit ||
@@ -374,6 +386,11 @@ function ActivePluginLifecycleMenu({
 
   const deleting = confirmation === "delete";
   const disablingChat = confirmation === "disable-chat";
+  const disableScope = disablingChat
+    ? "chat"
+    : confirmation === "disable-craft"
+      ? "craft"
+      : "workspace";
 
   return (
     <>
@@ -437,12 +454,9 @@ function ActivePluginLifecycleMenu({
                       ? "mcpCard.deleteModal.title"
                       : "openApiCard.deleteModal.title"
                   )
-                : t(
-                    disablingChat
-                      ? "plugins.disableConfirmation.chatTitle"
-                      : "plugins.disableConfirmation.craftTitle",
-                    { name: resource.name }
-                  )
+                : t(`plugins.disableConfirmation.${disableScope}Title`, {
+                    name: resource.name,
+                  })
             }
             onClose={() => {
               if (!busy) setConfirmation(null);
@@ -451,12 +465,9 @@ function ActivePluginLifecycleMenu({
           <Modal.Body twoTone={false}>
             <Text as="p" color="text-03">
               {!deleting
-                ? t(
-                    disablingChat
-                      ? "plugins.disableConfirmation.chatDescription"
-                      : "plugins.disableConfirmation.craftDescription",
-                    { name: resource.name }
-                  )
+                ? t(`plugins.disableConfirmation.${disableScope}Description`, {
+                    name: resource.name,
+                  })
                 : plugin.kind === "mcp"
                   ? t.markup("mcpCard.deleteModal.body.description", {
                       title: resource.name,
@@ -491,9 +502,11 @@ function ActivePluginLifecycleMenu({
               {t(
                 deleting
                   ? "openApiCard.deleteModal.submitButton.label"
-                  : disablingChat
-                    ? "plugins.controls.disableChat"
-                    : "plugins.controls.disableCraft"
+                  : confirmation === "disable-openapi"
+                    ? "plugins.controls.disable"
+                    : disablingChat
+                      ? "plugins.controls.disableChat"
+                      : "plugins.controls.disableCraft"
               )}
             </Button>
           </Modal.Footer>

@@ -1120,8 +1120,9 @@
         "craftDisabled": "Craft désactivé"
       },
       "controls": {
-        "disconnect": "Déconnecter",
-        "enable": "Activer",
+        "disconnect": "Activer ou désactiver pour l’espace de travail",
+        "enable": "Activer pour l’espace de travail",
+        "disable": "Désactiver pour l’espace de travail",
         "more": "Plus d’actions",
         "disableChat": "Désactiver pour le chat principal",
         "enableChat": "Activer pour le chat principal",
@@ -1136,6 +1137,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "Désactiver {name} pour l’espace de travail ?",
+        "workspaceDescription": "Cette action désactive {name} pour tout le monde dans votre espace de travail, y compris les agents personnalisés. Les paramètres et identifiants enregistrés sont conservés. Vous pouvez le réactiver.",
         "scope": "Tous les utilisateurs de votre organisation",
         "chatTitle": "Désactiver {name} pour le chat principal ?",
         "chatDescription": "Cela retire {name} du chat par défaut pour tous les utilisateurs de votre organisation. Les agents personnalisés ne sont pas affectés. Vous pouvez le réactiver.",

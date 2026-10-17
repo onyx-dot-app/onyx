@@ -1120,8 +1120,9 @@
         "craftDisabled": "Craft aus"
       },
       "controls": {
-        "disconnect": "Trennen",
-        "enable": "Aktivieren",
+        "disconnect": "Für den Arbeitsbereich aktivieren oder deaktivieren",
+        "enable": "Für den Arbeitsbereich aktivieren",
+        "disable": "Für den Arbeitsbereich deaktivieren",
         "more": "Weitere Aktionen",
         "disableChat": "Für Hauptchat deaktivieren",
         "enableChat": "Für Hauptchat aktivieren",
@@ -1136,6 +1137,8 @@
         }
       },
       "disableConfirmation": {
+        "workspaceTitle": "{name} für den Arbeitsbereich deaktivieren?",
+        "workspaceDescription": "Dadurch wird {name} für alle im Arbeitsbereich deaktiviert, einschließlich benutzerdefinierter Agenten. Gespeicherte Einstellungen und Zugangsdaten bleiben erhalten. Sie können es wieder aktivieren.",
         "scope": "Alle Benutzer Ihrer Organisation",
         "chatTitle": "{name} für den Hauptchat deaktivieren?",
         "chatDescription": "Dadurch wird {name} für alle Benutzer Ihrer Organisation aus dem Standardchat entfernt. Benutzerdefinierte Agenten sind nicht betroffen. Sie können es wieder aktivieren.",

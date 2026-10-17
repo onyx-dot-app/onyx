@@ -514,7 +514,7 @@ describe("permission-bearing detail reads", () => {
       screen.queryByRole("button", { name: "Delete" })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Disconnect" })
+      screen.queryByRole("button", { name: "Enable or disable for workspace" })
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "More actions" })
@@ -1109,7 +1109,7 @@ test("keeps lifecycle controls on the Plugins directory, not detail", async () =
   render(<OpenAPIPluginDetailPage toolId={42} />);
   await findEditorTab("Edit schema");
   expect(
-    screen.queryByRole("button", { name: "Disconnect" })
+    screen.queryByRole("button", { name: "Enable or disable for workspace" })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Enable" })

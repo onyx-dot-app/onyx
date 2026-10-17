@@ -259,17 +259,17 @@ export const EnabledMCPActions: Story = {
     if (!row) throw new Error("Plugin row missing");
     await userEvent.click(
       within(row).getByRole("button", {
-        name: messages.actions.plugins.controls.more,
+        name: messages.actions.plugins.controls.disconnect,
       })
     );
     await expect(
       await page.findByRole("menuitem", {
-        name: messages.actions.plugins.controls.disableChat,
+        name: new RegExp(messages.actions.plugins.controls.disableChat),
       })
     ).toBeVisible();
     await expect(
       await page.findByRole("menuitem", {
-        name: messages.actions.plugins.controls.disableCraft,
+        name: new RegExp(messages.actions.plugins.controls.disableCraft),
       })
     ).toBeVisible();
   },
@@ -282,12 +282,12 @@ export const PluginActions: Story = {
     if (!row) throw new Error("Plugin row missing");
     await userEvent.click(
       within(row).getByRole("button", {
-        name: messages.actions.plugins.controls.more,
+        name: messages.actions.plugins.controls.disconnect,
       })
     );
     await expect(
       await page.findByRole("menuitem", {
-        name: messages.actions.plugins.controls.disconnect,
+        name: new RegExp(messages.actions.plugins.controls.disable),
       })
     ).toBeVisible();
   },
