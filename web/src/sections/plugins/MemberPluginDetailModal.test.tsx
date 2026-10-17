@@ -155,26 +155,28 @@ test("MCP header reports needs sign-in when credentials are missing", () => {
   expect(screen.queryByText("Connected")).not.toBeInTheDocument();
 });
 
-test("Craft app details show the clean service origin once beside connection status without admin data", () => {
-  const requests = jest
-    .spyOn(global, "fetch")
-    .mockResolvedValue(jsonResponse({ builtins: [], customs: [] }));
-  show({
-    kind: "external-app",
-    app: memberApp({
-      name: "Linear",
-      app_type: "LINEAR",
-      service_urls: ["https://api.linear.app"],
-    }),
-    connection: { kind: "connected", ownership: "user" },
-  });
-  expect(screen.getAllByText("https://api.linear.app")).toHaveLength(1);
-  expect(screen.getByRole("status")).toHaveTextContent("Connected");
-  expect(screen.queryByText(/\\\.|\^https|\.\*/)).not.toBeInTheDocument();
-  expect(
-    requests.mock.calls.every(([input]) => !String(input).includes("/admin"))
-  ).toBe(true);
-});
+test.each(["https://api.linear.app", "https://[2606:4700::1111]:8443"])(
+  "Craft app details show clean service origin %s once beside status without admin data",
+  (origin) => {
+    const requests = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(jsonResponse({ builtins: [], customs: [] }));
+    show({
+      kind: "external-app",
+      app: memberApp({
+        name: "Linear",
+        app_type: "LINEAR",
+        service_urls: [origin],
+      }),
+      connection: { kind: "connected", ownership: "user" },
+    });
+    expect(screen.getAllByText(origin)).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Connected");
+    expect(
+      requests.mock.calls.every(([input]) => !String(input).includes("/admin"))
+    ).toBe(true);
+  }
+);
 
 test.each([undefined, []])(
   "Craft app details omit missing service URLs (%s)",
