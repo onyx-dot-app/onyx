@@ -4196,6 +4196,20 @@ class Tool(Base):
     )
 
 
+class ToolUserPreference(Base):
+    __tablename__ = "tool_user_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_id: Mapped[int] = mapped_column(
+        ForeignKey("tool.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled_in_chat: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
 class OAuthConfig(Base):
     """OAuth provider configuration that can be shared across multiple tools"""
 
@@ -6118,6 +6132,23 @@ class MCPServer(Base):
         "UserGroup",
         secondary="mcp_server__user_group",
         back_populates="accessible_mcp_servers",
+    )
+
+
+class MCPServerUserPreference(Base):
+    __tablename__ = "mcp_server_user_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled_in_chat: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    enabled_in_craft: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
     )
 
 

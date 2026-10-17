@@ -20,6 +20,8 @@ import { MinimalOnyxDocument } from "@/lib/search/types";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { effectiveChatForcedToolId } from "@/lib/plugins/chat";
+import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
@@ -89,6 +91,7 @@ export interface AppInputBarProps {
 
   // agents
   activeAgent: MinimalAgent | undefined;
+  memberPlugins?: readonly MemberPlugin[];
 
   handleFileUpload: (files: File[]) => void;
   deepResearchEnabled: boolean;
@@ -115,6 +118,7 @@ const AppInputBar = React.memo(
     onSubmit,
     chatState,
     activeAgent,
+    memberPlugins,
     handleFileUpload,
     llmManager,
     deepResearchEnabled,
@@ -340,7 +344,12 @@ const AppInputBar = React.memo(
       }
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const { forcedToolId, clearForcedTool } = toolConfiguration;
+    const { clearForcedTool } = toolConfiguration;
+    const forcedToolId = effectiveChatForcedToolId({
+      requestedToolId: toolConfiguration.forcedToolId,
+      agent: activeAgent,
+      plugins: memberPlugins ?? [],
+    });
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
     const { isLoading: isLoadingProjects } = useProjects();

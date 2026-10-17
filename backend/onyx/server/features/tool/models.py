@@ -38,6 +38,11 @@ class ToolSnapshot(BaseModel):
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
     enabled: bool = True
+    user_enabled_in_chat: bool = True
+    default_chat_enabled: bool | None = Field(
+        None,
+        description="Whether this tool is selected for the default assistant.",
+    )
 
     # Server-stamped affordance map; fail-closed empty (only the admin actions list stamps it).
     permissions: dict[str, bool] = Field(default_factory=dict)
@@ -76,6 +81,10 @@ class ToolSnapshot(BaseModel):
             ),
             default_enabled=config.default_enabled if config else False,
         )
+
+
+class ToolUserPreferences(BaseModel):
+    enabled_in_chat: bool
 
 
 class Header(BaseModel):

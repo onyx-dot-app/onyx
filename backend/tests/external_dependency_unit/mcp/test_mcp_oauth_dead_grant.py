@@ -324,7 +324,7 @@ def test_oauth_reconnect_preserves_status_until_authorization_succeeds(
         force_reauthentication=True,
     )
     if initialization_fails:
-        with pytest.raises(OnyxError, match="Failed to initialize OAuth client"):
+        with pytest.raises(OnyxError, match="OAuth setup failed"):
             asyncio.run(api._connect_oauth(request, db_session, False, user))
     else:
         response = asyncio.run(api._connect_oauth(request, db_session, False, user))

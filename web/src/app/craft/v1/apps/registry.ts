@@ -112,6 +112,7 @@ export interface ExternalAppUserResponse {
   id: number;
   name: string;
   app_type: ExternalAppType;
+  service_urls?: string[];
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;

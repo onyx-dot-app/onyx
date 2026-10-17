@@ -70,6 +70,7 @@ import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
   SvgDevKit,
+  SvgPlug,
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
@@ -648,6 +649,13 @@ export default function AppSidebar() {
             </div>
           )}
           {folded && moreAgentsButton}
+          <SidebarTab
+            icon={SvgPlug}
+            href="/app/plugins"
+            selected={activeSidebarTab.isPlugins()}
+          >
+            {t("appSidebar.plugins.label")}
+          </SidebarTab>
           {folded && <FoldedProjectsPopover />}
         </SidebarLayouts.Header>
 

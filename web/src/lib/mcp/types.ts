@@ -38,6 +38,9 @@ export interface MCPServer {
   groups: number[];
   users: string[];
   available_in_craft?: boolean;
+  default_chat_enabled?: boolean | null;
+  user_enabled_in_chat?: boolean;
+  user_enabled_in_craft?: boolean;
   // Sparse per-tool Craft approval overrides (unlisted tools default to ASK).
   // Present on owner/admin views only.
   tool_policies?: Record<string, EndpointPolicy> | null;
@@ -61,7 +64,17 @@ export interface MCPServersResponse {
   mcp_servers: MCPServer[];
 }
 
+export interface MCPUserPreferences {
+  enabled_in_chat: boolean;
+  enabled_in_craft: boolean;
+}
+
+export type MCPUserPreferencesRequest =
+  | { enabled_in_chat: boolean; enabled_in_craft?: boolean }
+  | { enabled_in_chat?: boolean; enabled_in_craft: boolean };
+
 export interface MCPServerCreateRequest {
+  available_in_craft?: boolean;
   name: string;
   description?: string;
   server_url: string;
@@ -145,3 +158,42 @@ export type MCPAuthenticationServer = Pick<
   | "user_credentials"
   | "transport"
 >;
+export interface MCPOAuthDiscovery {
+  status: "metadata_found" | "metadata_missing" | "unreachable";
+  supports_automatic_registration: boolean | null;
+  authorization_endpoint: string | null;
+  token_endpoint: string | null;
+}
+
+export type MCPSetupProbeResult =
+  | {
+      kind: "public";
+      transport: MCPTransportType.STREAMABLE_HTTP | MCPTransportType.SSE;
+      tool_count: number;
+      server_name: string;
+    }
+  | {
+      kind: "oauth";
+      transport: MCPTransportType.STREAMABLE_HTTP | MCPTransportType.SSE | null;
+      discovery: MCPOAuthDiscovery;
+    }
+  | {
+      kind: "auth_unknown";
+      transport: MCPTransportType.STREAMABLE_HTTP | MCPTransportType.SSE | null;
+    }
+  | { kind: "unreachable"; reason: "blocked" | "connection_failed" };
+
+export type MCPSetupRecommendation = Exclude<
+  MCPSetupProbeResult,
+  { kind: "unreachable" }
+>;
+
+export interface MCPProbeProgress {
+  type: "progress";
+  stage: "contacting_server" | "authentication";
+  state: "pending" | "success" | "error";
+}
+
+export interface MCPServerConfigurationValues extends MCPServerCreateRequest {
+  access_mode: "public" | "groups";
+}

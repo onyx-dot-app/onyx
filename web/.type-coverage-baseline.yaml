@@ -8,7 +8,7 @@
 # `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 98.9
+total: 99
 packages:
   .: 100
   src: 99.4
@@ -75,13 +75,14 @@ packages:
   src/lib/hierarchy: 100
   src/lib/hooks: 95.8
   src/lib/languageModels: 99.1
-  src/lib/mcp: 99
+  src/lib/mcp: 99.3
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
   src/lib/oauth: 100
   src/lib/oauth-provider: 100
   src/lib/opensearch-health: 100
   src/lib/permissions: 100
+  src/lib/plugins: 99.6
   src/lib/position: 100
   src/lib/projects: 99.7
   src/lib/search: 99.2
@@ -92,7 +93,7 @@ packages:
   src/lib/skills: 97.4
   src/lib/sso: 99.3
   src/lib/tiers: 100
-  src/lib/tools: 98.5
+  src/lib/tools: 99.1
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
   src/lib/users: 99.1
@@ -113,7 +114,7 @@ packages:
   src/refresh-components/texts: 99.4
   src/refresh-components/tiles: 100
   src/sections: 100
-  src/sections/actions: 99.1
+  src/sections/actions: 99.3
   src/sections/admin: 100
   src/sections/agents: 99.8
   src/sections/banners: 99.1
@@ -126,6 +127,7 @@ packages:
   src/sections/model-selector: 99.6
   src/sections/oauth-provider: 100
   src/sections/onboarding: 99.8
+  src/sections/plugins: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.3
   src/sections/skills: 99.8
