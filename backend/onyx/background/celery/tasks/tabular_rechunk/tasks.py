@@ -48,7 +48,12 @@ class TabularRechunkProgress(BaseModel):
     completed: bool = False
     documents_indexed: int = 0
     documents_failed: int = 0
+    # Everything the current pass could not re-chunk.
     failed_document_ids: list[str] = []
+    # The snapshot a retry pass works through. Held apart from
+    # `failed_document_ids` so that pass can record its own failures without
+    # changing what it still has to visit. Empty while the forward scan runs.
+    retrying_document_ids: list[str] = []
     retry_passes: int = 0
 
 
@@ -75,6 +80,38 @@ def _blocked_reason() -> str | None:
         # Tabular files index as a title plus a placeholder; nothing to chunk.
         return "SKIP_SPREADSHEET_CONTENT is set"
     return None
+
+
+def _start_next_pass(progress: TabularRechunkProgress) -> None:
+    """Called when a pass reaches the end of its work. Queues the documents it
+    could not re-chunk for another pass, or ends the migration."""
+    if not progress.failed_document_ids:
+        progress.completed = True
+        progress.retrying_document_ids = []
+        return
+
+    if progress.retry_passes >= _MAX_RETRY_PASSES:
+        task_logger.error(
+            "tabular re-chunk: giving up on %s documents after %s passes: %s",
+            len(progress.failed_document_ids),
+            progress.retry_passes,
+            progress.failed_document_ids,
+        )
+        progress.completed = True
+        progress.retrying_document_ids = []
+        return
+
+    progress.retry_passes += 1
+    # By id, not by chunk_count: a failure that got as far as chunking has
+    # already committed the smaller count and no longer looks oversized.
+    progress.retrying_document_ids = progress.failed_document_ids
+    progress.failed_document_ids = []
+    progress.cursor = None
+    task_logger.info(
+        "tabular re-chunk: retrying %s documents, pass %s",
+        len(progress.retrying_document_ids),
+        progress.retry_passes,
+    )
 
 
 def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
@@ -124,6 +161,7 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
         result = run_tabular_rechunk(
             tenant_id=tenant_id,
             after_doc_id=progress.cursor,
+            retry_document_ids=progress.retrying_document_ids or None,
             on_batch=lambda: lock.extend(_LOCK_TIMEOUT_S),
         )
 
@@ -136,26 +174,8 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
         progress.failed_document_ids = sorted(
             set(progress.failed_document_ids) | set(result.failed_document_ids)
         )
-        progress.completed = result.finished
-        if result.finished and progress.failed_document_ids:
-            # The cursor ran past documents that are still oversized.
-            if progress.retry_passes < _MAX_RETRY_PASSES:
-                progress.retry_passes += 1
-                progress.cursor = None
-                progress.completed = False
-                progress.failed_document_ids = []
-                task_logger.info(
-                    "tabular re-chunk: %s documents failed, starting retry pass %s",
-                    len(result.failed_document_ids),
-                    progress.retry_passes,
-                )
-            else:
-                task_logger.error(
-                    "tabular re-chunk: giving up on %s documents after %s passes: %s",
-                    len(progress.failed_document_ids),
-                    progress.retry_passes,
-                    progress.failed_document_ids,
-                )
+        if result.finished:
+            _start_next_pass(progress)
         get_kv_store().store(KV_TABULAR_RECHUNK_PROGRESS_KEY, progress.model_dump())
 
         return result.documents_indexed or None
