@@ -12,7 +12,10 @@ threshold that marks a credential invalid, so it is not interchangeable with
 """
 
 import base64
+import binascii
+import json
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, assert_never
 
@@ -22,7 +25,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from msal.exceptions import MsalServiceError
 from office365.runtime.auth.token_response import TokenResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic import ValidationError as PydanticValidationError
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.graph_errors import (
@@ -35,6 +39,7 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     microsoft_error_from_exception,
     msal_http_status,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -78,6 +83,8 @@ class MicrosoftAuthContext:
 
     app: msal.ConfidentialClientApplication
     method: MicrosoftAuthMethod
+    # The certificate's end date, for a certificate account.
+    certificate_not_after: datetime | None = None
 
 
 class CertificateData(BaseModel):
@@ -115,6 +122,61 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
         return None
 
 
+def certificate_not_after(pfx_data: bytes, password: str) -> datetime | None:
+    """The end date of the certificate in a .pfx bundle, read with no call to
+    Microsoft. None when the bundle does not open."""
+    try:
+        _, certificate, _ = pkcs12.load_key_and_certificates(
+            pfx_data, password.encode("utf-8")
+        )
+    except ValueError:
+        logger.debug("The PFX bundle did not open to read its end date")
+        return None
+    return certificate.not_valid_after_utc if certificate is not None else None
+
+
+class _AccessTokenClaims(BaseModel):
+    """The claims of an app-only access token that name the app."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    app_displayname: str | None = None
+    appid: str | None = None
+    azp: str | None = None
+
+
+def _access_token_claims(access_token: str) -> _AccessTokenClaims:
+    """The token's claims, read without verifying its signature: they only
+    name the app on the sign-in row. Empty when the token is not a JWT."""
+    parts: list[str] = access_token.split(".")
+    if len(parts) != 3:
+        return _AccessTokenClaims()
+    payload: str = parts[1] + "=" * (-len(parts[1]) % 4)
+    try:
+        return _AccessTokenClaims.model_validate(
+            json.loads(base64.urlsafe_b64decode(payload))
+        )
+    except (binascii.Error, ValueError, PydanticValidationError):
+        logger.debug("The access token's claims did not decode")
+        return _AccessTokenClaims()
+
+
+def token_info(
+    auth_context: MicrosoftAuthContext, token_response: dict[str, Any]
+) -> MicrosoftTokenInfo:
+    """What a token response tells about the app that signed in."""
+    claims: _AccessTokenClaims = _access_token_claims(
+        str(token_response.get("access_token") or "")
+    )
+    expires_in: int | str | None = token_response.get("expires_in")
+    return MicrosoftTokenInfo(
+        expires_in=int(expires_in) if expires_in is not None else None,
+        app_name=claims.app_displayname,
+        app_id=claims.appid or claims.azp,
+        certificate_not_after=auth_context.certificate_not_after,
+    )
+
+
 def build_msal_app(
     *,
     client_id: str,
@@ -144,9 +206,8 @@ def build_msal_app(
                 "Private key and certificate password are required for certificate authentication"
             )
 
-        certificate_data = load_certificate_from_pfx(
-            base64.b64decode(private_key_b64), certificate_password
-        )
+        pfx_data: bytes = base64.b64decode(private_key_b64)
+        certificate_data = load_certificate_from_pfx(pfx_data, certificate_password)
         if certificate_data is None:
             raise RuntimeError("Failed to load certificate")
 
@@ -158,6 +219,7 @@ def build_msal_app(
                 client_credential=certificate_data.model_dump(),
             ),
             method=MicrosoftAuthMethod.CERTIFICATE,
+            certificate_not_after=certificate_not_after(pfx_data, certificate_password),
         )
 
     if auth_method is MicrosoftAuthMethod.CLIENT_SECRET:
@@ -197,21 +259,26 @@ def build_graph_auth_context(
     except ConnectorValidationError as error:
         raise MicrosoftAuthError(INVALID_AUTH_METHOD_CODE, str(error)) from error
 
+    certificate: bool = auth_method is MicrosoftAuthMethod.CERTIFICATE
     required = [client_id, directory_id]
-    if auth_method is MicrosoftAuthMethod.CLIENT_SECRET:
-        required.append(client_secret)
-    else:
+    if certificate:
         required.extend((private_key_b64, certificate_password))
+    else:
+        required.append(client_secret)
     if any(not str(value or "").strip() for value in required):
         raise MicrosoftAuthError(
-            MISSING_CREDENTIAL_CODE, "one or more required fields are missing"
+            MISSING_CREDENTIAL_CODE,
+            "one or more required fields are missing",
+            certificate=certificate,
         )
 
-    if auth_method is MicrosoftAuthMethod.CERTIFICATE:
+    if certificate:
         try:
             base64.b64decode(private_key_b64 or "", validate=True)
         except ValueError as error:
-            raise MicrosoftAuthError(INVALID_CERTIFICATE_CODE, str(error)) from error
+            raise MicrosoftAuthError(
+                INVALID_CERTIFICATE_CODE, str(error), certificate=True
+            ) from error
 
     try:
         return build_msal_app(
@@ -232,9 +299,13 @@ def build_graph_auth_context(
             or is_msal_decode_error(error)
         ):
             raise microsoft_error_from_exception(error) from error
-        raise MicrosoftAuthError(INVALID_AUTHORITY_CODE, str(error)) from error
+        raise MicrosoftAuthError(
+            INVALID_AUTHORITY_CODE, str(error), certificate=certificate
+        ) from error
     except RuntimeError as error:
-        raise MicrosoftAuthError(INVALID_CERTIFICATE_CODE, str(error)) from error
+        raise MicrosoftAuthError(
+            INVALID_CERTIFICATE_CODE, str(error), certificate=certificate
+        ) from error
     except (MsalServiceError, requests.RequestException) as error:
         raise microsoft_error_from_exception(error) from error
 
@@ -251,6 +322,8 @@ def acquire_graph_token_response(
         raise MicrosoftAuthError(
             str(response.get("error") or "unknown_error"),
             str(response.get("error_description") or ""),
+            certificate=auth_context.method is MicrosoftAuthMethod.CERTIFICATE,
+            certificate_not_after=auth_context.certificate_not_after,
         )
     return response
 

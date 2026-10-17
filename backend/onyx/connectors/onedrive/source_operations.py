@@ -49,12 +49,12 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
     MicrosoftGraphGateway,
     build_graph_user_url,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.onedrive.models import (
     OneDriveCredentials,
     OneDriveDrive,
     OneDrivePermission,
     OneDrivePermissionPage,
-    OneDriveTokenInfo,
     OneDriveUser,
     OneDriveUserPage,
 )
@@ -133,9 +133,6 @@ class OneDriveSourceOperations(SourceOperations):
         )
         return self._graph_gateway
 
-    def _token_response(self) -> dict[str, Any]:
-        return self._gateway().token_response()
-
     def _access_token(self) -> str:
         return self._gateway().access_token()
 
@@ -149,12 +146,8 @@ class OneDriveSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def check_token(self) -> OneDriveTokenInfo:
-        response = self._token_response()
-        expires = response.get("expires_in")
-        return OneDriveTokenInfo(
-            expires_in=int(expires) if expires is not None else None
-        )
+    def check_token(self) -> MicrosoftTokenInfo:
+        return self._gateway().token_info()
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

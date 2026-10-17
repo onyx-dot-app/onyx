@@ -440,6 +440,11 @@ a gateway today (`<source>/source_operations.py`); most connectors still call th
 SharePoint's gateway is also the only importer of `msal`, `requests` and `office365`
 under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
 permission reads are shared with Teams through `microsoft_utils/sharepoint_rest.py`.
+The SharePoint, OneDrive and Outlook checks share their sign-in probe
+(`microsoft_utils/sign_in.py`) and row text (`microsoft_utils/check_text.py`),
+and every probe after sign-in depends on it. `MicrosoftGraphError` is a
+`SourceApiError` that carries the request and the response body, so a check's
+Error Details show them.
 The GitHub gateway calls the REST API through PyGithub's requester and parses the
 JSON into the models in `github/models.py`, so no PyGithub object leaves it.
 Its `GitHubApiError` is a `SourceApiError` that carries the request and the

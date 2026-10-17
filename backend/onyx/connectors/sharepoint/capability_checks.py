@@ -16,12 +16,18 @@ from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
+    CheckOutput,
     CredentialCapability,
     form_config,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
+)
+from onyx.connectors.microsoft_utils.check_text import (
+    MicrosoftAccountLabels,
+    MicrosoftSignIn,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
@@ -57,6 +63,7 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
     is_public_login_name,
     resolve_group_id,
 )
+from onyx.connectors.microsoft_utils.sign_in import sign_in
 from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.sharepoint.connector import (
     ONEDRIVE_HOST_MARKER,
@@ -124,6 +131,10 @@ _CERTIFICATE_REMEDIATION: str = (
 _SITE_SECURABLE: SharepointSecurable = SharepointSecurable(
     kind=SharepointSecurableKind.SITE
 )
+_ACCOUNT_LABELS: MicrosoftAccountLabels = MicrosoftAccountLabels.with_prefix(
+    "SharePoint"
+)
+_SIGN_IN_CHECK_ID: str = "sharepoint_token_auth"
 
 
 def _gateway(context: CapabilityCheckContext) -> SharepointSourceOperations:
@@ -460,6 +471,9 @@ class _SharepointCheck(CapabilityCheck[SharepointConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_connector_config: bool = True,
         validates_binding: bool = False,
+        fails_when_unreachable: bool = False,
+        # Every probe signs in first, so a failed sign-in is one row.
+        depends_on: tuple[str, ...] = (_SIGN_IN_CHECK_ID,),
     ) -> None:
         super().__init__(
             capability=capability,
@@ -470,6 +484,8 @@ class _SharepointCheck(CapabilityCheck[SharepointConnectorConfig]):
             remediation=remediation,
             docs_link=_DOCS_LINK,
             validates_binding=validates_binding,
+            fails_when_unreachable=fails_when_unreachable,
+            depends_on=depends_on,
         )
 
 
@@ -479,9 +495,11 @@ class _TokenCheck(_SharepointCheck):
 
     def __init__(self) -> None:
         super().__init__(
-            check_id="sharepoint_token_auth",
-            display_name="App registration can sign in",
+            check_id=_SIGN_IN_CHECK_ID,
+            display_name="Sign in to Microsoft",
             validates_binding=True,
+            fails_when_unreachable=True,
+            depends_on=(),
             remediation=(
                 "Check the client id, directory id and client secret or "
                 "certificate, and that the Graph API and authority hosts match "
@@ -489,13 +507,15 @@ class _TokenCheck(_SharepointCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
-        try:
-            _gateway(context).check_token()
-        except MicrosoftAuthError as error:
-            raise_for_auth_error(error)
-        except MicrosoftGraphError as error:
-            raise_for_graph_error(error, "Microsoft refused the token request.")
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        signed_in: MicrosoftSignIn = sign_in(
+            _gateway(context).check_token, _ACCOUNT_LABELS
+        )
+        return CheckOutput(
+            summary=signed_in.summary,
+            description=signed_in.description,
+            advisories=[CheckAdvisory(message=caveat) for caveat in signed_in.caveats],
+        )
 
 
 class _ContentTypesCheck(_SharepointCheck):
@@ -504,6 +524,7 @@ class _ContentTypesCheck(_SharepointCheck):
             check_id="sharepoint_content_types",
             display_name="A content type is selected",
             remediation="Turn on site documents, site pages, or both.",
+            depends_on=(),
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -781,7 +802,7 @@ class _CertificateAuthCheck(_SharepointCheck):
         try:
             method: MicrosoftAuthMethod = _gateway(context).get_auth_method()
         except MicrosoftAuthError as error:
-            raise_for_auth_error(error)
+            raise_for_auth_error(error, _ACCOUNT_LABELS)
         if not method.supports_sharepoint_rest:
             raise ConnectorValidationError(
                 "Permission sync needs the SharePoint REST API, which only accepts "

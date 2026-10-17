@@ -18,6 +18,10 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.check_text import (
+    MicrosoftAccountLabels,
+    MicrosoftSignIn,
+)
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     DriveDeltaItem,
@@ -25,15 +29,10 @@ from onyx.connectors.microsoft_utils.drive_delta import (
 )
 from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
-    MicrosoftAuthError as OneDriveAuthError,
-)
-from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
-from onyx.connectors.microsoft_utils.graph_errors import (
-    raise_for_auth_error,
-    raise_for_graph_error,
-)
+from onyx.connectors.microsoft_utils.graph_errors import raise_for_graph_error
+from onyx.connectors.microsoft_utils.sign_in import sign_in
 from onyx.connectors.onedrive.config import OneDriveConnectorConfig
 from onyx.connectors.onedrive.models import (
     OneDriveDrive,
@@ -55,6 +54,12 @@ _COUNT_PAGES = 20
 
 T = TypeVar("T")
 _HIDDEN_MEMBERSHIP_VISIBILITY = "HiddenMembership"
+_ACCOUNT_LABELS = MicrosoftAccountLabels.with_prefix(
+    "OneDrive", private_key="OneDrive Certificate"
+)
+_SIGN_IN_CHECK_ID = "onedrive_token_auth"
+# Every probe signs in first, so a failed sign-in is one row.
+_AFTER_SIGN_IN: tuple[str, ...] = (_SIGN_IN_CHECK_ID,)
 
 _EMPTY_DRIVE_ADVISORY = CheckAdvisory(
     message=(
@@ -242,20 +247,24 @@ class _TokenCheck(CapabilityCheck):
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
-            check_id="onedrive_token_auth",
-            display_name="App registration can sign in",
+            check_id=_SIGN_IN_CHECK_ID,
+            display_name="Sign in to Microsoft",
             requires_connector_instance=False,
             remediation="Check the app id, tenant id, and client credential.",
             docs_link=_DOCS_LINK,
+            validates_binding=True,
+            fails_when_unreachable=True,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
-        try:
-            _gateway(context).check_token()
-        except OneDriveAuthError as error:
-            raise_for_auth_error(error)
-        except OneDriveGraphError as error:
-            raise_for_graph_error(error, "Microsoft refused the token request.")
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        signed_in: MicrosoftSignIn = sign_in(
+            _gateway(context).check_token, _ACCOUNT_LABELS
+        )
+        return CheckOutput(
+            summary=signed_in.summary,
+            description=signed_in.description,
+            advisories=[CheckAdvisory(message=caveat) for caveat in signed_in.caveats],
+        )
 
 
 class _UsersCheck(CapabilityCheck):
@@ -267,6 +276,7 @@ class _UsersCheck(CapabilityCheck):
             requires_connector_instance=False,
             remediation="Grant and admin-consent `User.Read.All`.",
             docs_link=_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -309,6 +319,7 @@ class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
             requires_connector_instance=False,
             remediation="Grant and admin-consent `User.Read.All`.",
             docs_link=_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
             discovery=True,
         )
 
@@ -339,6 +350,7 @@ class _ConfiguredUsersCheck(CapabilityCheck[OneDriveConnectorConfig]):
             requires_connector_config=True,
             remediation="Use enabled member user principal names.",
             docs_link=_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -364,6 +376,7 @@ class _DriveCheck(CapabilityCheck[OneDriveConnectorConfig]):
             requires_connector_config=True,
             remediation="Grant `Sites.Read.All` or a selected personal-site read grant.",
             docs_link=_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -390,6 +403,7 @@ class _DeltaCheck(CapabilityCheck[OneDriveConnectorConfig]):
             requires_connector_config=True,
             remediation="Grant `Sites.Read.All` or a selected personal-site read grant.",
             docs_link=_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -428,6 +442,7 @@ class _PermissionCheck(CapabilityCheck[OneDriveConnectorConfig]):
             requires_connector_config=True,
             remediation="Grant `Sites.Read.All` or a selected personal-site read grant.",
             docs_link=_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
@@ -470,6 +485,7 @@ class _GroupListCheck(CapabilityCheck):
             requires_connector_instance=False,
             remediation="Grant and admin-consent `GroupMember.ReadBasic.All`.",
             docs_link=_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -488,6 +504,7 @@ class _GroupMembershipCheck(CapabilityCheck):
             requires_connector_instance=False,
             remediation="Grant `GroupMember.ReadBasic.All`.",
             docs_link=_DOCS_LINK,
+            depends_on=_AFTER_SIGN_IN,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
