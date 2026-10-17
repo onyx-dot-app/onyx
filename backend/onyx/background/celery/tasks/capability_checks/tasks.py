@@ -40,8 +40,8 @@ from onyx.connectors.capability_checks.draft_runs import (
     load_draft_run,
     mark_draft_results_in_flight,
     pending_in_run_order,
-    required_check_failed,
     save_draft_run,
+    settled_results,
     wait_for_draft_result,
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
@@ -217,6 +217,13 @@ def run_capability_checks_task(
                 access_type=parsed_access_type,
                 connector_specific_config=config,
             )
+        merged_prior: list[CapabilityCheckResult] = [
+            *awaited_results,
+            *(
+                CapabilityCheckResult.model_validate(result)
+                for result in prior_results or []
+            ),
+        ]
         report = generate_capability_report(
             credential,
             source=source,
@@ -226,14 +233,8 @@ def run_capability_checks_task(
             trigger=parsed_trigger,
             access_type=parsed_access_type,
             check_ids=frozenset(run_check_ids) if run_check_ids is not None else None,
+            prior_results=merged_prior,
         )
-        merged_prior: list[CapabilityCheckResult] = [
-            *awaited_results,
-            *(
-                CapabilityCheckResult.model_validate(result)
-                for result in prior_results or []
-            ),
-        ]
         if merged_prior:
             report = merge_capability_results(report, merged_prior)
         with get_session_with_current_tenant() as db_session:
@@ -338,7 +339,7 @@ def run_draft_capability_checks_task(
     try:
         # Inside the try, so a failure here marks the run FAILED_TO_RUN rather
         # than leaving it RUNNING until its lease runs out.
-        pending = pending_in_run_order(snapshot)
+        pending = pending_in_run_order(snapshot, get_capability_checks(snapshot.source))
         pending_result_keys = list(
             dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
         )
@@ -376,7 +377,7 @@ def run_draft_capability_checks_task(
             on_result=on_result,
             check_ids=frozenset(check.check_id for check in pending),
             timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
-            required_check_failed=required_check_failed(snapshot),
+            prior_results=settled_results(snapshot),
             form_run=True,
         )
         snapshot.status = DraftRunStatus.COMPLETED

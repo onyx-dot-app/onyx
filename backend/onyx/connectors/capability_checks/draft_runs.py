@@ -13,7 +13,7 @@ from other pairs.
 
 import math
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
@@ -43,6 +43,7 @@ from onyx.connectors.capability_checks.models import (
     CheckErrorKind,
     CheckFinding,
     CheckNotApplicableError,
+    CheckNotRunReason,
     CredentialCapability,
     compute_capability_verdicts,
     parse_known_findings,
@@ -50,6 +51,7 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.capability_checks.runner import (
     CheckReadinessKind,
     decide_check_readiness,
+    run_order,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
@@ -161,6 +163,9 @@ class DraftCheckState(BaseModel):
     # Exception class name of a failure, for support diagnosis.
     error_type: str | None = None
     error_kind: CheckErrorKind | None = None
+    # Why a SKIPPED check did not run, and the dependency that stopped it.
+    not_run_reason: CheckNotRunReason | None = None
+    blocked_by: str | None = None
     is_fallback: bool = False
     missing_fields: list[str] = []
     invalid_fields: list[str] = []
@@ -200,32 +205,40 @@ class DraftCheckRunSnapshot(BaseModel):
     def verdicts(self) -> dict[CredentialCapability, CapabilityVerdict]:
         """Each capability's verdict, as a stored report computes it. A
         capability with a check that is still pending or running has none."""
-        unfinished: set[CredentialCapability] = set()
-        results: list[CapabilityCheckResult] = []
-        for check in self.checks:
-            if check.state in _UNFINISHED_STATES:
-                unfinished.add(check.capability)
-                continue
-            results.append(
-                CapabilityCheckResult(
-                    capability=check.capability,
-                    check_id=check.check_id,
-                    display_name=check.display_name,
-                    required=check.required,
-                    # A waiting check has not verified anything yet.
-                    status=_result_status(check.state),
-                    applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
-                    discovery=check.discovery,
-                )
-            )
+        unfinished: set[CredentialCapability] = {
+            check.capability
+            for check in self.checks
+            if check.state in _UNFINISHED_STATES
+        }
         verdicts = compute_capability_verdicts(
-            get_applicable_capabilities(self.source), results
+            get_applicable_capabilities(self.source), settled_results(self)
         )
         return {
             capability: verdict
             for capability, verdict in verdicts.items()
             if capability not in unfinished
         }
+
+
+def settled_results(snapshot: DraftCheckRunSnapshot) -> list[CapabilityCheckResult]:
+    """The run's checks that are not PENDING or RUNNING, as result rows. A
+    waiting check has not verified anything, so it is SKIPPED."""
+    return [
+        CapabilityCheckResult(
+            capability=check.capability,
+            check_id=check.check_id,
+            display_name=check.display_name,
+            required=check.required,
+            status=_result_status(check.state),
+            error_kind=check.error_kind,
+            not_run_reason=check.not_run_reason,
+            blocked_by=check.blocked_by,
+            applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
+            discovery=check.discovery,
+        )
+        for check in snapshot.checks
+        if check.state not in _UNFINISHED_STATES
+    ]
 
 
 class DraftCheckPlan(BaseModel):
@@ -324,6 +337,40 @@ def decide_draft_check_state(
     return state
 
 
+def wait_for_dependencies(
+    planned: Sequence[tuple[CapabilityCheck[Any], DraftCheckState]],
+) -> None:
+    """Makes a PENDING check wait while a check it depends on waits, for the
+    same fields, so a chain of checks waits on the field its first check
+    needs."""
+    state_by_check_id: dict[str, DraftCheckState] = {}
+    for check, state in planned:
+        state_by_check_id.setdefault(check.check_id, state)
+    state_by_check: dict[int, DraftCheckState] = {
+        id(check): state for check, state in planned
+    }
+    for check in run_order([check for check, _ in planned]):
+        state = state_by_check[id(check)]
+        if state.state != DraftCheckStateKind.PENDING:
+            continue
+        waiting: list[DraftCheckState] = [
+            dependency
+            for dependency_id in check.depends_on
+            if (dependency := state_by_check_id.get(dependency_id)) is not None
+            and dependency.state == DraftCheckStateKind.WAITING
+        ]
+        if not waiting:
+            continue
+        state.state = DraftCheckStateKind.WAITING
+        state.message = waiting[0].message
+        state.missing_fields = sorted(
+            {name for dependency in waiting for name in dependency.missing_fields}
+        )
+        state.invalid_fields = sorted(
+            {name for dependency in waiting for name in dependency.invalid_fields}
+        )
+
+
 def draft_result_cache_key(
     *,
     credential_id: int,
@@ -381,11 +428,16 @@ def get_cached_draft_result(key: str) -> CachedDraftResult | None:
 
 def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
     """Caches a terminal result; INCOMPLETE is not cached, nor a sign-in check
-    FAILED by a timeout or an unreachable source. Neither is a SKIPPED
-    discovery check: its skip (a failed required check, findings turned off)
-    says nothing about the listing once the cause is gone."""
+    FAILED by a timeout or an unreachable source. Neither is a check that did
+    not run because of a dependency or a rate limit, nor a SKIPPED discovery
+    check (a failed required check, findings turned off): their skip says
+    nothing about the check once the cause is gone."""
     state = _draft_state(result)
-    if state not in _CACHEABLE_STATES or result.error_kind in TRANSIENT_ERROR_KINDS:
+    if (
+        state not in _CACHEABLE_STATES
+        or result.error_kind in TRANSIENT_ERROR_KINDS
+        or result.not_run_reason is not None
+    ):
         return
     if result.discovery and state == DraftCheckStateKind.SKIPPED:
         return
@@ -501,6 +553,8 @@ def apply_check_result(
     check_state.message = result.message
     check_state.error_type = result.error_type
     check_state.error_kind = result.error_kind
+    check_state.not_run_reason = result.not_run_reason
+    check_state.blocked_by = result.blocked_by
     check_state.duration_ms = result.duration_ms
     check_state.findings = result.findings
     check_state.advisories = result.advisories
@@ -519,26 +573,21 @@ def apply_cached_result(
     check_state.from_cache = True
 
 
-def pending_in_run_order(snapshot: DraftCheckRunSnapshot) -> list[DraftCheckState]:
-    """The run's PENDING checks in the order the runner executes them:
-    discovery checks last."""
-    return sorted(
-        (
-            check
-            for check in snapshot.checks
-            if check.state == DraftCheckStateKind.PENDING
-        ),
-        key=lambda check: check.discovery,
-    )
-
-
-def required_check_failed(snapshot: DraftCheckRunSnapshot) -> bool:
-    """A required check of the run already FAILED, from the cache: its
-    discovery checks then do not run."""
-    return any(
-        check.required and check.state == DraftCheckStateKind.FAILED
+def pending_in_run_order(
+    snapshot: DraftCheckRunSnapshot, checks: Sequence[CapabilityCheck[Any]]
+) -> list[DraftCheckState]:
+    """The run's PENDING checks in the order the runner executes them
+    (``run_order``). ``checks`` are the source's registered checks."""
+    pending: dict[tuple[str, CredentialCapability], DraftCheckState] = {
+        (check.check_id, check.capability): check
         for check in snapshot.checks
-    )
+        if check.state == DraftCheckStateKind.PENDING
+    }
+    return [
+        pending[key]
+        for check in run_order(checks)
+        if (key := (check.check_id, check.capability)) in pending
+    ]
 
 
 def cc_pair_draft_key(cc_pair_id: int) -> str:
