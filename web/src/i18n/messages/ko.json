@@ -2116,14 +2116,6 @@
           "label": "간략히 보기"
         }
       },
-      "credentialForm": {
-        "errorToast": "오류: {detail}",
-        "successToast": "성공했습니다!",
-        "updateButton": {
-          "ariaLabel": "자격 증명 업데이트",
-          "label": "업데이트"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "이 커넥터를 삭제하면 인덱싱된 문서를 제거하고 모든 사용자에게서 커넥터를 삭제하는 삭제 작업이 예약됩니다.",
         "entityType": "커넥터"

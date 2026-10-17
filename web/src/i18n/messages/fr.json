@@ -2116,14 +2116,6 @@
           "label": "Afficher moins"
         }
       },
-      "credentialForm": {
-        "errorToast": "Erreur : {detail}",
-        "successToast": "Réussi !",
-        "updateButton": {
-          "ariaLabel": "Mettre à jour les identifiants",
-          "label": "Mettre à jour"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "La suppression de ce connecteur planifie une tâche de suppression qui retire ses documents indexés et le supprime pour tous les utilisateurs.",
         "entityType": "le connecteur"

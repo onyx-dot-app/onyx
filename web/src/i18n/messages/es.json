@@ -2116,14 +2116,6 @@
           "label": "Mostrar menos"
         }
       },
-      "credentialForm": {
-        "errorToast": "Error: {detail}",
-        "successToast": "¡Listo!",
-        "updateButton": {
-          "ariaLabel": "Actualizar credenciales",
-          "label": "Actualizar"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "Al eliminar este conector se programa una tarea de eliminación que quita sus documentos indexados y lo elimina para todos los usuarios.",
         "entityType": "conector"

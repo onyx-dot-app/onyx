@@ -2116,14 +2116,6 @@
           "label": "收起"
         }
       },
-      "credentialForm": {
-        "errorToast": "错误：{detail}",
-        "successToast": "成功！",
-        "updateButton": {
-          "ariaLabel": "更新凭据",
-          "label": "更新"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "删除此连接器会安排一个删除任务，移除其已索引的文档，并对所有用户删除该连接器。",
         "entityType": "连接器"
