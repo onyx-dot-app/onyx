@@ -160,6 +160,13 @@ class HelmReleaseTest(unittest.TestCase):
         with patch.dict(os.environ, {"GITHUB_BASE_REF": "release/test"}):
             self.assertEqual(self.check().returncode, 0)
 
+    def test_release_merge_queue_is_exempt(self) -> None:
+        self.git("checkout", "--detach", "-q")
+        self.values.write_text("enabled: true\n")
+        ref: str = "refs/heads/gh-readonly-queue/release/test/pr-1-abc"
+        with patch.dict(os.environ, {"GITHUB_REF": ref}):
+            self.assertEqual(self.check().returncode, 0)
+
     def test_application_release_tag_is_exempt(self) -> None:
         self.values.write_text("enabled: true\n")
         self.commit()
@@ -171,7 +178,11 @@ class HelmReleaseTest(unittest.TestCase):
     def test_other_detached_refs_still_require_release(self) -> None:
         self.git("checkout", "--detach", "-q")
         self.values.write_text("enabled: true\n")
-        for ref in ("refs/pull/123/merge", "refs/tags/helm/onyx-1.0.0"):
+        for ref in (
+            "refs/pull/123/merge",
+            "refs/tags/helm/onyx-1.0.0",
+            "refs/heads/gh-readonly-queue/main/pr-1-abc",
+        ):
             with self.subTest(ref=ref):
                 with patch.dict(os.environ, {"GITHUB_REF": ref}):
                     self.assertEqual(self.check().returncode, 1)
