@@ -246,15 +246,19 @@ def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool
     )
     if not shared:
         return ~run.id.in_(latest_of_pair)
+    # Own aliases: the feed already joins the pair and connector tables, and an
+    # unaliased reference would correlate this set to the outer row's pair.
+    pair = aliased(ConnectorCredentialPair)
+    connector = aliased(Connector)
     latest_of_source = _latest_finished(
         newest.id,
         newest.time_created,
         newest.status,
         PermissionSyncStatus,
-        [Connector.source],
-        ConnectorCredentialPair.id == newest.connector_credential_pair_id,
-        Connector.id == ConnectorCredentialPair.connector_id,
-        Connector.source.in_(shared),
+        [connector.source],
+        pair.id == newest.connector_credential_pair_id,
+        connector.id == pair.connector_id,
+        connector.source.in_(shared),
     )
     return case(
         (
