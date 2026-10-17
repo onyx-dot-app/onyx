@@ -191,6 +191,7 @@ export interface PruneRunSnapshot {
   id: number;
   status: PruneRunStatus;
   docs_removed: number;
+  docs_failed: number;
   error_message: string | null;
   time_created: string;
   time_started: string | null;

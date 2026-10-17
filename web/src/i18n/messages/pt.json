@@ -2714,8 +2714,7 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Não é possível reindexar enquanto uma indexação está em andamento",
-            "invalid": "Corrija a configuração do conector antes de reindexar",
-            "paused": "Retome o conector antes de reindexar"
+            "invalid": "Corrija a configuração do conector antes de reindexar"
           }
         },
         "toggleStatus": {
@@ -2741,6 +2740,10 @@
         "fullReindex": {
           "label": "Reindexar tudo",
           "description": "Reindexar todos os documentos da fonte. Pode levar **horas ou dias** dependendo do tamanho."
+        },
+        "startIndexing": {
+          "label": "Iniciar indexação",
+          "description": "Ignorar as verificações do conector e indexar agora."
         }
       },
       "reEnableModal": {
@@ -2783,6 +2786,7 @@
           "label": "Documentos no índice"
         },
         "indexingSpeed": "{speed} documentos/min",
+        "indexingSpeedTooltip": "Documentos indexados por minuto desde a criação do conector",
         "lastIndexed": {
           "value": "Última indexação {when}"
         },
@@ -2942,7 +2946,9 @@
           "queued": "Na fila",
           "running": "Em execução",
           "rate": "{rate} documentos/min",
-          "finished": "{time} ({minutes, number} min)"
+          "finished": "{time} ({minutes, number} min)",
+          "rateFinished": "{rate} documentos/min ({minutes, number} min)",
+          "membershipRate": "{rate} associações/min"
         },
         "actions": {
           "stages": "Ver métricas por etapa",
@@ -2976,7 +2982,8 @@
           "canceled": "{count, plural, one {# execução cancelada} other {# execuções canceladas}}",
           "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
           "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
-          "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}"
+          "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}",
+          "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
         "search": {
           "placeholder": "Pesquisar execuções de indexação…"
@@ -3004,7 +3011,9 @@
         "empty": {
           "title": "Nenhuma execução de indexação recente",
           "filteredTitle": "Nenhuma execução corresponde a estes filtros.",
-          "description": "As execuções são agendadas em segundo plano e podem demorar um pouco para aparecer."
+          "pastRuns": "{count, plural, one {# execução anterior} other {# execuções anteriores}}",
+          "view": "Ver",
+          "viewAria": "{count, plural, one {Ver # execução anterior} other {Ver # execuções anteriores}}"
         },
         "units": "{count, plural, one {execução} other {execuções}}",
         "errorModal": {
@@ -3022,7 +3031,8 @@
           "title": "Verificações do conector",
           "close": "Fechar",
           "count": "({count})"
-        }
+        },
+        "showing": "Mostrando <mono>{from}</mono>~<mono>{to}</mono> de <mono>{total}</mono>"
       },
       "activity": {
         "search": {
@@ -3137,6 +3147,7 @@
             "placeholder": "Pesquisar documentos…"
           },
           "resolveAll": "Resolver tudo",
+          "resolveAllTooltip": "Reindexar todos os documentos com falha desta execução",
           "resolveOne": "Resolver este documento",
           "more": "Mais",
           "less": "Menos",
@@ -9544,7 +9555,6 @@
       "badges": {
         "canceled": "Cancelado",
         "deleting": "Excluindo",
-        "error": "Erro",
         "failed": "Falhou",
         "indexed": "Indexado",
         "indexing": "Indexando",

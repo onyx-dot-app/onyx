@@ -15,6 +15,7 @@ import {
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import {
   SvgCheckAll,
   SvgCheckSquare,
@@ -25,7 +26,6 @@ import type {
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
 } from "@/lib/connectors/types";
-import { formatDateTimeLog } from "@/lib/dateUtils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -36,7 +36,7 @@ import {
 const PAGE_SIZE = 50;
 // The errors route refuses a longer search.
 const SEARCH_MAX_LENGTH = 200;
-const CLAMPED_LINES = 2;
+const CLAMPED_LINES = 5;
 
 interface FailedDocRowProps {
   error: IndexAttemptError;
@@ -63,7 +63,7 @@ function FailedDocRow({
       gap={1}
       padding={1}
       height="fit"
-      className="rounded-08 hover:bg-background-tint-01"
+      className="group/row rounded-08 hover:bg-background-tint-02"
     >
       <Section
         alignItems="start"
@@ -72,7 +72,7 @@ function FailedDocRow({
         height="fit"
         className="shrink-0"
       >
-        <Text font="secondary-mono" color="text-03">
+        <Text font="secondary-mono-label" color="text-04">
           {formatDateTimeLog(error.time_created)}
         </Text>
         {error.document_name !== null && (
@@ -122,9 +122,12 @@ function FailedDocRow({
           )
         )}
       </Section>
+      {/* The toggle follows the clamped text, so "More" sits right after the ellipsis. */}
       <Section
-        alignItems="start"
-        gap={0}
+        flexDirection="row"
+        justifyContent="start"
+        alignItems="end"
+        gap={0.5}
         height="fit"
         className="min-w-0 flex-1"
       >
@@ -138,25 +141,33 @@ function FailedDocRow({
           {error.failure_message}
         </Text>
         {(expanded || clipped) && (
-          <LinkButton
-            external={false}
-            onClick={() => setExpanded((current) => !current)}
-          >
-            {expanded ? t("less") : t("more")}
-          </LinkButton>
+          <Section width="fit" height="fit" className="shrink-0">
+            <LinkButton
+              external={false}
+              onClick={() => setExpanded((current) => !current)}
+            >
+              {expanded ? t("less") : t("more")}
+            </LinkButton>
+          </Section>
         )}
       </Section>
       {/* Only a document can be re-fetched. An entity-level error has nothing to target. */}
       {canResolve && error.document_id !== null && (
-        <Button
-          icon={SvgCheckSquare}
-          prominence="tertiary"
-          size="xs"
-          tooltip={t("resolveOne")}
-          aria-label={t("resolveOne")}
-          disabled={resolving}
-          onClick={onResolve}
-        />
+        <Section
+          width="fit"
+          height="fit"
+          className="opacity-0 no-hover:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100"
+        >
+          <Button
+            icon={SvgCheckSquare}
+            prominence="tertiary"
+            size="xs"
+            tooltip={t("resolveOne")}
+            aria-label={t("resolveOne")}
+            disabled={resolving}
+            onClick={onResolve}
+          />
+        </Section>
       )}
     </Section>
   );
@@ -250,7 +261,7 @@ function FailedDocsBody({
         {/* Resolve All takes every open error, so it hides while a search narrows the list. */}
         {canResolve && q === "" && (
           <Button
-            icon={SvgCheckAll}
+            rightIcon={SvgCheckAll}
             prominence="tertiary"
             size="xs"
             disabled={resolving}
@@ -311,7 +322,7 @@ export default function FailedDocsPopoverContent(
   const t = useTranslations("admin.connector.activity.docs");
   return (
     <Popover.Content
-      width="3xl"
+      width="2.5xl"
       side="left"
       align="start"
       aria-label={t("title")}

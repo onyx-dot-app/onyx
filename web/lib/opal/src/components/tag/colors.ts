@@ -9,7 +9,8 @@ export type TagColor =
   | "gray"
   | "amber"
   | "orange"
-  | "red";
+  | "red"
+  | "white";
 
 export const TAG_COLORS: Record<TagColor, { bg: string; text: string }> = {
   green: { bg: "bg-theme-green-01", text: "text-theme-green-05" },
@@ -19,4 +20,6 @@ export const TAG_COLORS: Record<TagColor, { bg: string; text: string }> = {
   orange: { bg: "bg-status-warning-01", text: "text-status-warning-05" },
   red: { bg: "bg-status-error-01", text: "text-status-error-05" },
   gray: { bg: "bg-background-tint-02", text: "text-text-03" },
+  // A pill on a tinted row, such as "Required" on a failed check.
+  white: { bg: "bg-background-tint-00", text: "text-text-04" },
 };

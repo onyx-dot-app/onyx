@@ -46,6 +46,9 @@ import {
   runWarnings,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
+// A Tag is clickable only with an onClick, and the popover trigger around it handles the click.
+const NOOP = () => {};
+
 const GROUP_STYLE: Record<
   ActivityGroup,
   {
@@ -53,6 +56,8 @@ const GROUP_STYLE: Record<
     icon: IconFunctionComponent;
     stroke: string;
     closedStroke: string;
+    /** The 1px edge a hovered or selected card takes, in the level's 02 color. */
+    outline: string;
   }
 > = {
   failures: {
@@ -60,18 +65,21 @@ const GROUP_STYLE: Record<
     icon: SvgXOctagon,
     stroke: "stroke-status-error-05",
     closedStroke: "stroke-status-error-02",
+    outline: "outline-status-error-02",
   },
   errors: {
     color: "status-warning-00",
     icon: SvgAlertTriangle,
     stroke: "stroke-status-warning-05",
     closedStroke: "stroke-status-warning-02",
+    outline: "outline-status-warning-02",
   },
   other: {
     color: "background-tint-00",
     icon: SvgCheckCircle,
     stroke: "stroke-status-success-05",
     closedStroke: "stroke-status-success-02",
+    outline: "outline-border-01",
   },
 };
 
@@ -167,7 +175,16 @@ export default function ActivityCard({
   resolving,
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
-  const [traceOpen, setTraceOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [openPopover, setOpenPopover] = useState<"trace" | "items" | null>(
+    null
+  );
+  const selected = openPopover !== null;
+  const togglePopover = (popover: "trace" | "items") => (open: boolean) =>
+    setOpenPopover((current) =>
+      open ? popover : current === popover ? null : current
+    );
   const tRuns = useTranslations("admin.connector.runs");
   const active = isActive(run);
   const style = GROUP_STYLE[group];
@@ -218,13 +235,39 @@ export default function ActivityCard({
     count: listsDocs ? openDocs : warnings,
   });
 
+  const pillIconColor = closed ? undefined : "orange";
+
+  // The outline draws the edge inside the card, so hovering does not shift the list.
   return (
-    <Section height="fit" className="group/activity">
+    <Section
+      alignItems="stretch"
+      height="fit"
+      className={cn(
+        "rounded-08 -outline-offset-1",
+        (hovered || selected) && "outline-1 outline-solid",
+        (hovered || selected) && style.outline
+      )}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setFocused(false);
+        }
+      }}
+    >
       <Card
-        color={closed ? "background-tint-01" : style.color}
+        color={
+          hovered && !selected
+            ? "background-tint-02"
+            : closed
+              ? "background-tint-01"
+              : style.color
+        }
         border="none"
         rounding={2}
         padding={1}
+        shadow={selected ? "md" : "none"}
       >
         <Section alignItems="stretch" gap={0} height="fit">
           <Section
@@ -331,15 +374,14 @@ export default function ActivityCard({
                 wrap
               >
                 {trace !== null && (
-                  <Popover open={traceOpen} onOpenChange={setTraceOpen}>
+                  <Popover onOpenChange={togglePopover("trace")}>
                     <Popover.Trigger asChild>
-                      <Button
+                      <Tag
                         icon={SvgTextLines}
-                        prominence={traceOpen ? "primary" : "tertiary"}
-                        size="xs"
-                      >
-                        {t("tags.stackTrace")}
-                      </Button>
+                        title={t("tags.stackTrace")}
+                        size="md"
+                        onClick={NOOP}
+                      />
                     </Popover.Trigger>
                     <StackTracePopoverContent
                       runId={run.attempt.id}
@@ -348,30 +390,49 @@ export default function ActivityCard({
                   </Popover>
                 )}
                 {listsDocs ? (
-                  <Popover>
-                    <Popover.Trigger asChild>
-                      <Button icon={SvgFiles} prominence="tertiary" size="xs">
-                        {docsLabel}
-                      </Button>
-                    </Popover.Trigger>
-                    <FailedDocsPopoverContent
-                      ccPairId={ccPairId}
-                      indexAttemptId={run.attempt.id}
-                      canResolve={resolvable}
-                      onResolve={onResolve}
-                      resolving={resolving}
-                    />
-                  </Popover>
-                ) : run.kind === "checks" && listsChecks ? (
-                  <Popover>
-                    <Popover.Trigger asChild>
+                  <>
+                    <Popover onOpenChange={togglePopover("items")}>
+                      <Popover.Trigger asChild>
+                        <Tag
+                          icon={WARNING_ICONS.indexing}
+                          iconColor={pillIconColor}
+                          title={docsLabel}
+                          size="md"
+                          onClick={NOOP}
+                        />
+                      </Popover.Trigger>
+                      <FailedDocsPopoverContent
+                        ccPairId={ccPairId}
+                        indexAttemptId={run.attempt.id}
+                        canResolve={resolvable}
+                        onResolve={onResolve}
+                        resolving={resolving}
+                      />
+                    </Popover>
+                    {/* One click re-indexes every open failed document, without opening the list. */}
+                    {resolvable && !closed && (
                       <Button
-                        icon={WARNING_ICONS.checks}
+                        rightIcon={SvgCheckAll}
                         prominence="tertiary"
                         size="xs"
+                        disabled={resolving}
+                        tooltip={t("docs.resolveAllTooltip")}
+                        onClick={() => onResolve(null)}
                       >
-                        {docsLabel}
+                        {t("docs.resolveAll")}
                       </Button>
+                    )}
+                  </>
+                ) : run.kind === "checks" && listsChecks ? (
+                  <Popover onOpenChange={togglePopover("items")}>
+                    <Popover.Trigger asChild>
+                      <Tag
+                        icon={WARNING_ICONS.checks}
+                        iconColor={pillIconColor}
+                        title={docsLabel}
+                        size="md"
+                        onClick={NOOP}
+                      />
                     </Popover.Trigger>
                     <CheckRunPopoverContent run={run.attempt} beside />
                   </Popover>
@@ -379,8 +440,9 @@ export default function ActivityCard({
                   warnings > 0 && (
                     <Tag
                       icon={WARNING_ICONS[run.kind]}
+                      iconColor={pillIconColor}
                       title={docsLabel}
-                      color="gray"
+                      size="md"
                     />
                   )
                 )}
@@ -396,11 +458,14 @@ export default function ActivityCard({
                 </SelectButton>
               ) : (
                 resolvesRun && (
-                  // Only on hover or focus, so an open list reads as its runs, not a column of actions. An open popover moves focus into its portal, so its trigger's open state keeps the link shown.
+                  // Only on hover, focus or an open pill, so an open list reads as its runs. Opacity keeps it in the tab order.
                   <Section
                     width="fit"
                     height="fit"
-                    className="opacity-0 transition-opacity no-hover:opacity-100 group-hover/activity:opacity-100 group-focus-within/activity:opacity-100 group-has-[[data-state=open]]/activity:opacity-100"
+                    className={cn(
+                      "transition-opacity no-hover:opacity-100",
+                      !(hovered || focused || selected) && "opacity-0"
+                    )}
                   >
                     <Button
                       rightIcon={SvgCheckAll}

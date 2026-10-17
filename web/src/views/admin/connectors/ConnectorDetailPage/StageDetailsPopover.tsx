@@ -6,6 +6,7 @@ import {
   Divider,
   IconTooltip,
   Popover,
+  SelectButton,
   ShadowDiv,
   Text,
 } from "@opal/components";
@@ -181,13 +182,20 @@ export function barScale(buckets: BucketSummary[]): number {
 }
 
 /** Opens the stage details of one attempt. Place it inside the Popover that holds the content. */
-export function StageDetailsTrigger() {
+export interface StageDetailsTriggerProps {
+  /** Whether its popover is open. The open trigger shows selected. */
+  open?: boolean;
+}
+export function StageDetailsTrigger({
+  open = false,
+}: StageDetailsTriggerProps) {
   const t = useTranslations("admin.connector.runs");
   return (
     <Popover.Trigger asChild>
-      <Button
+      <SelectButton
         icon={SvgStackLine}
-        prominence="tertiary"
+        variant="select-light"
+        state={open ? "selected" : "empty"}
         size="xs"
         tooltip={t("actions.stages")}
         aria-label={t("actions.stages")}

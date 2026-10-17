@@ -3180,6 +3180,7 @@ class SyncRecord(Base):
     sync_status: Mapped[SyncStatus] = mapped_column(Enum(SyncStatus, native_enum=False))
 
     num_docs_synced: Mapped[int] = mapped_column(Integer, default=0)
+    num_docs_failed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     sync_start_time: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     sync_end_time: Mapped[datetime.datetime | None] = mapped_column(

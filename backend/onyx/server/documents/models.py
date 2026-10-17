@@ -569,6 +569,7 @@ class PruneRunSnapshot(BaseModel):
     id: int
     status: SyncStatus
     docs_removed: int
+    docs_failed: int
     error_message: str | None
     time_created: str
     time_started: str | None
@@ -580,6 +581,7 @@ class PruneRunSnapshot(BaseModel):
             id=record.id,
             status=record.sync_status,
             docs_removed=record.num_docs_synced,
+            docs_failed=record.num_docs_failed,
             error_message=record.error_message,
             time_created=record.sync_start_time.isoformat(),
             time_started=record.sync_start_time.isoformat(),

@@ -383,6 +383,21 @@ def _doc_permission_sync_runs(
     )
 
 
+def _prune_errors(run_filter: CCPairRunFilter) -> ColumnElement[bool] | None:
+    """The ``errors`` filter for a prune, which counts the documents it could not
+    remove. Nothing resolves these."""
+    failed = SyncRecord.num_docs_failed
+    match run_filter.errors:
+        case CCPairRunErrors.UNRESOLVED:
+            return failed > 0
+        case CCPairRunErrors.RESOLVED:
+            return false()
+        case CCPairRunErrors.NONE:
+            return failed == 0
+        case None:
+            return None
+
+
 def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
     stmt = select(ExternalGroupPermissionSyncAttempt).where(
         _group_sync_scope(run_filter)
@@ -423,7 +438,6 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
             newest.sync_type == SyncType.PRUNING,
         )
     )
-    # A prune records no per-document errors, so it either fails or succeeds.
     return _narrowed(
         stmt,
         run_filter,
@@ -432,7 +446,7 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.sync_status,
         SyncStatus,
         with_status_filter,
-        _no_item_errors(run_filter),
+        _prune_errors(run_filter),
         has_newer_run,
         run_is_resolved(CCPairRunKind.PRUNING, SyncRecord.id),
     )

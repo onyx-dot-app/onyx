@@ -68,9 +68,7 @@ export type CheckLine = Pick<
   | "docs_link"
 > & { state: CheckLineState };
 
-// Outcomes that need reading (passed, failed, unverified) show their details
-// in a heavier font and their status colour; the rest stay muted.
-const OUTCOME_FONT: TextFont = "main-ui-action";
+// Passed and failed read plainly, an unverified check is heavy and orange so it gets read, and the rest stay muted.
 const MUTED = { font: "secondary-body", color: "text-03" } as const;
 
 const CHECK_LOGS = {
@@ -78,22 +76,22 @@ const CHECK_LOGS = {
     variant: "success-light",
     icon: SvgCheckCircle,
     detail: "status.passed",
-    font: OUTCOME_FONT,
+    font: "main-ui-body",
     color: "text-04",
   },
-  // A failed required check blocks, so `CheckLog` makes it heavy.
+  // Only a failed required check blocks, so `CheckLog` makes it heavy and red.
   failed: {
     variant: "error-light",
     icon: SvgXOctagon,
     detail: "status.failed",
-    font: OUTCOME_FONT,
-    color: "status-error-05",
+    font: "main-ui-body",
+    color: "text-04",
   },
   indeterminate: {
     variant: "warning-light",
     icon: SvgAlertCircle,
     detail: "status.indeterminate",
-    font: OUTCOME_FONT,
+    font: "main-ui-action",
     color: "status-warning-05",
   },
   skipped: {
@@ -177,7 +175,7 @@ function CheckLog({ check }: CheckLogProps) {
         <OverflowText
           as="p"
           font={font}
-          color={color}
+          color={blocking ? "status-error-05" : color}
           textPosition="text-start"
         >
           {check.message || t(detail)}
@@ -191,7 +189,14 @@ function CheckLog({ check }: CheckLogProps) {
               tooltip={guidance}
             />
           )}
-          {check.required && <Tag title={t("required.label")} color="gray" />}
+          {check.required && (
+            <Tag
+              title={t("required.label")}
+              color="white"
+              variant="status"
+              font="secondary-action"
+            />
+          )}
         </Section>
       }
     />

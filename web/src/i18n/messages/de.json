@@ -2714,17 +2714,16 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Eine Neuindizierung ist nicht möglich, während bereits eine Indizierung läuft",
-            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung",
-            "paused": "Setzen Sie den Konnektor vor der Neuindizierung fort"
+            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "Indexierung & Synchronisierung pausieren",
+            "label": "Indizierung & Synchronisation pausieren",
             "description": "Laufende und künftige Indexläufe und Berechtigungssynchronisierungen abbrechen. Indexierte Dokumente sind dann nicht mehr aktuell, bleiben aber durchsuchbar."
           },
           "resume": {
-            "label": "Indexierung & Synchronisierung fortsetzen",
+            "label": "Indizierung & Synchronisation fortsetzen",
             "description": "Indexläufe und Berechtigungssynchronisierungen wieder starten."
           },
           "tooltip": {
@@ -2741,6 +2740,10 @@
         "fullReindex": {
           "label": "Vollständig neu indizieren",
           "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang **Stunden oder Tage** dauern."
+        },
+        "startIndexing": {
+          "label": "Indexierung starten",
+          "description": "Konnektorprüfungen überspringen und jetzt indexieren."
         }
       },
       "reEnableModal": {
@@ -2783,6 +2786,7 @@
           "label": "Indexierte Dokumente"
         },
         "indexingSpeed": "{speed} Dok./Min.",
+        "indexingSpeedTooltip": "Indexierte Dokumente pro Minute seit dem Anlegen des Connectors",
         "lastIndexed": {
           "value": "Zuletzt indiziert {when}"
         },
@@ -2942,7 +2946,9 @@
           "queued": "In Warteschlange",
           "running": "Läuft",
           "rate": "{rate} Dok./Min.",
-          "finished": "{time} ({minutes, number} Min.)"
+          "finished": "{time} ({minutes, number} Min.)",
+          "rateFinished": "{rate} Dok./Min. ({minutes, number} Min.)",
+          "membershipRate": "{rate} Mitgliedschaften/Min."
         },
         "actions": {
           "stages": "Phasenmetriken anzeigen",
@@ -2976,7 +2982,8 @@
           "canceled": "{count, plural, one {# Lauf abgebrochen} other {# Läufe abgebrochen}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
-          "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
+          "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}",
+          "syncedDocs": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}"
         },
         "search": {
           "placeholder": "Indexläufe durchsuchen…"
@@ -3004,7 +3011,9 @@
         "empty": {
           "title": "Keine aktuellen Indexläufe",
           "filteredTitle": "Keine Läufe entsprechen diesen Filtern.",
-          "description": "Läufe werden im Hintergrund geplant und erscheinen eventuell erst nach kurzer Zeit."
+          "pastRuns": "{count, plural, one {# vergangener Lauf} other {# vergangene Läufe}}",
+          "view": "Anzeigen",
+          "viewAria": "{count, plural, one {# vergangenen Lauf anzeigen} other {# vergangene Läufe anzeigen}}"
         },
         "units": "{count, plural, one {Lauf} other {Läufe}}",
         "errorModal": {
@@ -3022,7 +3031,8 @@
           "title": "Connector-Prüfungen",
           "close": "Schließen",
           "count": "({count})"
-        }
+        },
+        "showing": "<mono>{from}</mono>~<mono>{to}</mono> von <mono>{total}</mono>"
       },
       "activity": {
         "search": {
@@ -3137,6 +3147,7 @@
             "placeholder": "Dokumente durchsuchen…"
           },
           "resolveAll": "Alle beheben",
+          "resolveAllTooltip": "Alle fehlgeschlagenen Dokumente dieses Laufs neu indexieren",
           "resolveOne": "Dieses Dokument beheben",
           "more": "Mehr",
           "less": "Weniger",
@@ -9544,7 +9555,6 @@
       "badges": {
         "canceled": "Abgebrochen",
         "deleting": "Wird gelöscht",
-        "error": "Fehler",
         "failed": "Fehlgeschlagen",
         "indexed": "Indexiert",
         "indexing": "Indexierung",

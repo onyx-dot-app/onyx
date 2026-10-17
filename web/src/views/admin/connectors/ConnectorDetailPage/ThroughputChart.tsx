@@ -182,6 +182,24 @@ function axisTicks(start: number, end: number, minutes: number): number[] {
   return ticks;
 }
 
+/** Unlabeled ticks at a third of the label spacing, inside the window. */
+function minorTicks(
+  labels: number[],
+  start: number,
+  end: number,
+  minutes: number
+): number[] {
+  const third = (minutes * 60_000) / 3;
+  const ticks = new Set<number>();
+  for (const label of labels) {
+    for (const offset of [-2, -1, 1, 2]) {
+      const tick = label + offset * third;
+      if (tick >= start && tick <= end) ticks.add(tick);
+    }
+  }
+  return Array.from(ticks);
+}
+
 interface Run {
   start: number;
   end: number;
@@ -232,6 +250,8 @@ export interface ThroughputWindowPickerProps<W extends PickerWindow> {
   /** A span picked on the chart. The picker shows it in place of the window, with an X that calls `onClearSelection`. */
   selection?: SliceRange | null;
   onClearSelection?: () => void;
+  /** Shown instead of the window's name, for a list that widened past it. */
+  label?: string;
 }
 
 /** Picks how far back a throughput chart, and any list that shares it, reaches, and shows the span picked inside it. */
@@ -241,6 +261,7 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
   onChange,
   selection = null,
   onClearSelection,
+  label,
 }: ThroughputWindowPickerProps<W>) {
   const t = useTranslations("admin.connector.statusCard.throughput");
   const tWindow = useTranslations("admin.connector.runs.window");
@@ -250,7 +271,7 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
       <Dropdown.Trigger asChild>
         {selection === null || onClearSelection === undefined ? (
           <OpenButton icon={SvgClock} state="empty">
-            {tWindow(windowLabelKey(value))}
+            {label ?? tWindow(windowLabelKey(value))}
           </OpenButton>
         ) : (
           // The span takes the picker's place, so the row keeps its shape. Its X returns to the window.
@@ -355,7 +376,12 @@ export function ThroughputBars({
     );
   const tickMinutes =
     selection === null ? TICK_MINUTES[range] : spanTickMinutes(end - start);
-  const ticks = axisTicks(start, end, tickMinutes);
+  const labelTicks = axisTicks(start, end, tickMinutes);
+  const labelSet = new Set(labelTicks);
+  const ticks = [
+    ...labelTicks,
+    ...minorTicks(labelTicks, start, end, tickMinutes),
+  ].sort((a, b) => a - b);
   // A run still going covers up to the window's end.
   const runs: Run[] = data.runs.map((run) => ({
     start: Date.parse(run.started),
@@ -432,16 +458,18 @@ export function ThroughputBars({
               allowDataOverflow
               ticks={ticks}
               tickFormatter={(value: number) =>
-                tickMinutes >= DAY_MINUTES
-                  ? format.dateTime(new Date(value), {
-                      month: "short",
-                      day: "numeric",
-                    })
-                  : format.dateTime(new Date(value), {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hourCycle: "h23",
-                    })
+                !labelSet.has(value)
+                  ? ""
+                  : tickMinutes >= DAY_MINUTES
+                    ? format.dateTime(new Date(value), {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : format.dateTime(new Date(value), {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hourCycle: "h23",
+                      })
               }
               tick={{
                 fontSize: 10,
