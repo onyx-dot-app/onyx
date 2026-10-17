@@ -401,7 +401,9 @@ def test_an_unsafe_credential_url_fails_on_the_first_call() -> None:
             },
         )
     )
-    with patch("onyx.connectors.github.utils.get_security_settings") as settings:
+    with patch(
+        "onyx.connectors.cross_connector_utils.outbound.get_security_settings"
+    ) as settings:
         settings.return_value.ssrf_protection_level = SSRFProtectionLevel.VALIDATE_ALL
         with pytest.raises(ConnectorValidationError):
             gateway.get_token_info()
