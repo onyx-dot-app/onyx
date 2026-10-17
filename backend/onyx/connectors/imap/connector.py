@@ -4,7 +4,7 @@ import imaplib
 import os
 import re
 import ssl
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import Message
 from email.utils import parseaddr
 from enum import Enum
@@ -314,7 +314,12 @@ def _fetch_email_ids_in_mailbox(
     _select_mailbox(mail_client=mail_client, mailbox=mailbox)
 
     start_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%d-%b-%Y")
-    end_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%d-%b-%Y")
+    end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
+    end_day = end_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+    # BEFORE is exclusive and IMAP searches have only day-level precision.
+    if end_datetime > end_day:
+        end_day += timedelta(days=1)
+    end_str = end_day.strftime("%d-%b-%Y")
     search_criteria = f'(SINCE "{start_str}" BEFORE "{end_str}")'
 
     status, email_ids_byte_array = mail_client.search(None, search_criteria)
