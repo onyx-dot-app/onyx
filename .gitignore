@@ -67,3 +67,4 @@ plans
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 !.claude/settings.json
+deployment/docker_compose/docker-compose.override.yml
