@@ -142,8 +142,7 @@ export class AdminMcpServersPage {
   }
 
   async selectApiKeyTab(which: "admin" | "per-user"): Promise<void> {
-    const pattern =
-      which === "admin" ? /Shared Key.*Admin/i : /Individual Key.*Per User/i;
+    const pattern = which === "admin" ? /Shared token/i : /Personal token/i;
     const tab = this.page.getByRole("tab", { name: pattern });
     await expect(tab).toBeVisible();
     await tab.click();
