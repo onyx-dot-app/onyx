@@ -175,9 +175,6 @@ export default function MCPServerDetailPage({
           }
         }
         await refreshMemberPluginCaches(mutate);
-      } catch (cause) {
-        clearMcpChatEnableIntent(token);
-        throw cause;
       } finally {
         await refresh().catch((cause: unknown) =>
           console.error(
@@ -211,6 +208,7 @@ export default function MCPServerDetailPage({
     handledOAuthReturn.current = true;
     selectTab("tools");
     void fetchTools(server.id).catch((cause: unknown) => {
+      clearMcpChatEnableIntent(enableChatIntent);
       toast.error(
         t("mcpPage.toasts.fetchToolsFailed", {
           error:
@@ -225,6 +223,7 @@ export default function MCPServerDetailPage({
     searchParams,
     selectTab,
     fetchTools,
+    enableChatIntent,
     t,
     enableChatIntent,
     defaultChat.isLoading,

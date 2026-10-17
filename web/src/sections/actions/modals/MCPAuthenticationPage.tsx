@@ -358,7 +358,9 @@ export default function MCPAuthenticationPage({
       else await onTriggerFetchTools(savedServer.id);
       await onComplete();
     } catch (error) {
-      clearMcpChatEnableIntent(enableIntent);
+      // The caller's intent must survive for retries; it clears it on cancel.
+      if (enableIntent !== chatEnableIntent)
+        clearMcpChatEnableIntent(enableIntent);
       if (error instanceof MCPAuthValidationError) {
         helpers.setFieldError("oauth_additional_auth_params", error.message);
       }

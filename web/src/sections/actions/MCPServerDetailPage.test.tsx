@@ -443,21 +443,26 @@ test("ordinary authentication does not enable main Chat", async () => {
   expect(mockUpdateTools).not.toHaveBeenCalled();
 });
 
-test("does not enable tools when authentication discovery fails", async () => {
+test("keeps the enable request for a retry after authentication discovery fails", async () => {
   const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
   mockSearchParams = new URLSearchParams(
     `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
   );
   jest
     .mocked(refreshMCPServerTools)
-    .mockRejectedValue(new Error("Unauthenticated"));
+    .mockRejectedValueOnce(new Error("Unauthenticated"))
+    .mockResolvedValue([discoveredTool]);
   const user = setupUser();
   render(<MCPServerDetailPage serverId={7} />);
-  await user.click(
-    await screen.findByRole("button", { name: "Authenticate server" })
-  );
-  await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalled());
+  const authenticate = await screen.findByRole("button", {
+    name: "Authenticate server",
+  });
+  await user.click(authenticate);
+  await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledTimes(1));
   expect(mockUpdateTools).not.toHaveBeenCalled();
+  await waitFor(() => expect(authenticate).toBeEnabled());
+  await user.click(authenticate);
+  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledWith([81], true));
   expect(
     consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
   ).toBe(false);
