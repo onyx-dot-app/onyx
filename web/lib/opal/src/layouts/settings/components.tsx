@@ -140,11 +140,42 @@ function SettingsHeader({
     return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, [isSticky]);
 
+  // Sticky content in the body (e.g. a side panel) reads these to pin under the header and fit the visible height.
+  useEffect(() => {
+    const header = headerRef.current;
+    const scrollContainer = document.getElementById(
+      "page-wrapper-scroll-container"
+    );
+    if (!header || !scrollContainer) return;
+
+    const publish = () => {
+      scrollContainer.style.setProperty(
+        "--settings-header-height",
+        isSticky ? `${header.offsetHeight}px` : "0px"
+      );
+      scrollContainer.style.setProperty(
+        "--settings-scroll-height",
+        `${scrollContainer.clientHeight}px`
+      );
+    };
+
+    publish();
+    const resizeObserver = new ResizeObserver(publish);
+    resizeObserver.observe(header);
+    resizeObserver.observe(scrollContainer);
+
+    return () => {
+      resizeObserver.disconnect();
+      scrollContainer.style.removeProperty("--settings-header-height");
+      scrollContainer.style.removeProperty("--settings-scroll-height");
+    };
+  }, [isSticky]);
+
   return (
     <div
       ref={headerRef}
       className={cn(
-        "w-full -mb-6",
+        "w-full",
         isSticky && "sticky top-0 z-settings-header bg-background-tint-01"
       )}
     >
@@ -199,8 +230,6 @@ function SettingsHeader({
       ) : (
         <Spacer rem={0.5} />
       )}
-      {/* The header paints the body's top gap (its -mb-6 pulls the body up under it), so a pinned header leaves no unpainted band where scrolled content can show. */}
-      <Spacer rem={1.5} />
 
       {/* No fade: an opacity transition here makes Chrome paint stale page content in this band. */}
       {isSticky && (
