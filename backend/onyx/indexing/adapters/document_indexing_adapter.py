@@ -36,7 +36,10 @@ from onyx.indexing.models import (
     IndexingBatchAdapter,
     UpdatableChunkData,
 )
-from onyx.redis.redis_hierarchy import get_ancestors_from_raw_id
+from onyx.redis.redis_hierarchy import (
+    get_ancestors_from_node_id,
+    get_ancestors_from_raw_id,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -69,6 +72,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         ignore_time_skip: bool,
         index_to_secondary: bool,
         force_update: bool = False,
+        skip_document_row_writes: bool = False,
     ) -> DocumentBatchPrepareContext | None:
         """Upsert docs, map CC pairs, return context or mark as indexed if no-op.
 
@@ -83,6 +87,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
                 ignore_time_skip=ignore_time_skip,
                 index_to_secondary=index_to_secondary,
                 force_update=force_update,
+                skip_document_row_writes=skip_document_row_writes,
             )
 
             if not context:
@@ -200,14 +205,24 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         result: dict[str, list[int]] = {}
 
         for doc in documents:
-            # Use parent_hierarchy_raw_node_id directly from the document
-            # If None, get_ancestors_from_raw_id will return just the SOURCE node
-            ancestors = get_ancestors_from_raw_id(
-                redis_client=redis_client,
-                source=doc.source,
-                parent_hierarchy_raw_node_id=doc.parent_hierarchy_raw_node_id,
-                db_session=db_session,
-            )
+            # A document rebuilt from its stored row carries the resolved id
+            # but not the connector's raw one, so prefer the resolved id and
+            # skip the raw lookup. If neither is set, get_ancestors_from_raw_id
+            # returns just the SOURCE node.
+            if doc.parent_hierarchy_node_id is not None:
+                ancestors = get_ancestors_from_node_id(
+                    redis_client=redis_client,
+                    source=doc.source,
+                    node_id=doc.parent_hierarchy_node_id,
+                    db_session=db_session,
+                )
+            else:
+                ancestors = get_ancestors_from_raw_id(
+                    redis_client=redis_client,
+                    source=doc.source,
+                    parent_hierarchy_raw_node_id=doc.parent_hierarchy_raw_node_id,
+                    db_session=db_session,
+                )
             result[doc.id] = ancestors
 
         return result
@@ -220,6 +235,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,  # noqa: ARG002
+        failed_document_ids: set[str],
     ) -> None:
         """Finalize DB updates, store plaintext, and mark docs as indexed."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
@@ -250,8 +266,12 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             document_ids=last_modified_ids, db_session=db_session
         )
 
+        # Only for documents the index actually took. A failed write left the
+        # old chunks in place, so committing the new count would describe an
+        # index state that does not exist - the same reason the content hash
+        # below is written only for confirmed writes.
         update_docs_chunk_count__no_commit(
-            document_ids=updatable_ids,
+            document_ids=[i for i in updatable_ids if i not in failed_document_ids],
             doc_id_to_chunk_count=enrichment.doc_id_to_new_chunk_cnt,
             db_session=db_session,
         )

@@ -89,6 +89,7 @@ class UserFileIndexingAdapter:
         ignore_time_skip: bool,  # noqa: ARG002
         index_to_secondary: bool,  # noqa: ARG002
         force_update: bool = False,  # noqa: ARG002
+        skip_document_row_writes: bool = False,  # noqa: ARG002
     ) -> DocumentBatchPrepareContext:
         return DocumentBatchPrepareContext(
             updatable_docs=documents,
@@ -257,6 +258,7 @@ class UserFileIndexingAdapter:
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,
+        failed_document_ids: set[str],  # noqa: ARG002
     ) -> None:
         if not isinstance(enrichment, UserFileChunkEnricher):
             raise TypeError("User file indexing requires a UserFileChunkEnricher")
