@@ -173,7 +173,7 @@ def _call_mcp_client_function_sync(
         raise e
 
 
-async def _call_mcp_client_function_async(
+async def call_mcp_client_function_async(
     function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
@@ -250,7 +250,7 @@ async def initialize_mcp_client(
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
 ) -> InitializeResult:
-    return await _call_mcp_client_function_async(
+    return await call_mcp_client_function_async(
         lambda session: session.initialize(),
         server_url,
         connection_headers,

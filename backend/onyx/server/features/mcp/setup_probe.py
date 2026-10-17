@@ -9,7 +9,7 @@ from mcp import ClientSession
 from mcp.client.auth.utils import extract_resource_metadata_from_www_auth
 
 from onyx.db.enums import MCPTransport
-from onyx.server.features.mcp.client import _call_mcp_client_function_async
+from onyx.server.features.mcp.client import call_mcp_client_function_async
 from onyx.server.features.mcp.models import (
     MCPOAuthProbeResult,
     MCPPublicProbeResult,
@@ -154,7 +154,7 @@ async def _probe_transport(
             return initialized.serverInfo.name, len(tools.tools)
 
         async with asyncio.timeout(5):
-            name, tool_count = await _call_mcp_client_function_async(
+            name, tool_count = await call_mcp_client_function_async(
                 inspect,
                 server_url,
                 transport=transport,
