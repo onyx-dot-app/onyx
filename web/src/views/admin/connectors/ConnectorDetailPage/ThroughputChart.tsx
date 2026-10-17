@@ -182,6 +182,25 @@ function axisTicks(start: number, end: number, minutes: number): number[] {
   return ticks;
 }
 
+/** Unlabeled ticks at a third of the label spacing, inside the window. */
+function minorTicks(
+  labels: number[],
+  start: number,
+  end: number,
+  minutes: number
+): number[] {
+  const third = (minutes * 60_000) / 3;
+  const ticks = new Set<number>();
+  for (const label of labels) {
+    for (const offset of [-2, -1, 1, 2]) {
+      const tick = label + offset * third;
+      if (tick >= start && tick <= end) ticks.add(tick);
+    }
+  }
+  for (const label of labels) ticks.delete(label);
+  return Array.from(ticks);
+}
+
 interface Run {
   start: number;
   end: number;
@@ -249,7 +268,7 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
     <Dropdown>
       <Dropdown.Trigger asChild>
         {selection === null || onClearSelection === undefined ? (
-          <OpenButton icon={SvgClock} state="empty">
+          <OpenButton icon={SvgClock} state="filled">
             {tWindow(windowLabelKey(value))}
           </OpenButton>
         ) : (
@@ -355,7 +374,12 @@ export function ThroughputBars({
     );
   const tickMinutes =
     selection === null ? TICK_MINUTES[range] : spanTickMinutes(end - start);
-  const ticks = axisTicks(start, end, tickMinutes);
+  const labelTicks = axisTicks(start, end, tickMinutes);
+  const labelSet = new Set(labelTicks);
+  const ticks = [
+    ...labelTicks,
+    ...minorTicks(labelTicks, start, end, tickMinutes),
+  ].sort((a, b) => a - b);
   // A run still going covers up to the window's end.
   const runs: Run[] = data.runs.map((run) => ({
     start: Date.parse(run.started),
@@ -432,16 +456,18 @@ export function ThroughputBars({
               allowDataOverflow
               ticks={ticks}
               tickFormatter={(value: number) =>
-                tickMinutes >= DAY_MINUTES
-                  ? format.dateTime(new Date(value), {
-                      month: "short",
-                      day: "numeric",
-                    })
-                  : format.dateTime(new Date(value), {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hourCycle: "h23",
-                    })
+                !labelSet.has(value)
+                  ? ""
+                  : tickMinutes >= DAY_MINUTES
+                    ? format.dateTime(new Date(value), {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : format.dateTime(new Date(value), {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hourCycle: "h23",
+                      })
               }
               tick={{
                 fontSize: 10,

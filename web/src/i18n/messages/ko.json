@@ -2237,14 +2237,13 @@
         "reIndex": {
           "tooltip": {
             "indexing": "인덱싱이 이미 진행 중이면 재인덱싱할 수 없습니다",
-            "invalid": "재인덱싱하기 전에 커넥터 구성을 수정하세요",
-            "paused": "재인덱싱하기 전에 커넥터를 다시 시작하세요"
+            "invalid": "재인덱싱하기 전에 커넥터 구성을 수정하세요"
           }
         },
         "toggleStatus": {
           "pause": {
             "label": "인덱싱 및 동기화 일시 중지",
-            "description": "진행 중이거나 예정된 인덱싱 실행과 권한 동기화를 취소합니다. 인덱싱된 문서는 최신 상태가 아니게 되지만 계속 검색할 수 있습니다."
+            "description": "진행 중이거나 예정된 인덱싱 실행과 권한 동기화를 취소합니다. 인덱싱된 문서는 동기화되지 않지만 계속 검색할 수 있습니다."
           },
           "resume": {
             "label": "인덱싱 및 동기화 재개",
@@ -2264,6 +2263,10 @@
         "fullReindex": {
           "label": "전체 재인덱싱",
           "description": "소스의 모든 문서를 다시 인덱싱합니다. 규모에 따라 **몇 시간 또는 며칠**이 걸릴 수 있습니다."
+        },
+        "startIndexing": {
+          "label": "인덱싱 시작",
+          "description": "커넥터 검사를 건너뛰고 지금 인덱싱합니다."
         }
       },
       "reEnableModal": {
@@ -2465,7 +2468,8 @@
           "queued": "대기 중",
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
-          "finished": "{time} ({minutes, number}분)"
+          "finished": "{time} ({minutes, number}분)",
+          "membershipRate": "{rate} 멤버십/분"
         },
         "actions": {
           "stages": "단계별 지표 보기",
@@ -2499,7 +2503,8 @@
           "canceled": "{count, plural, other {실행 #개 취소됨}}",
           "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
           "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
-          "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
+          "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}",
+          "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
         "search": {
           "placeholder": "인덱싱 실행 검색…"
@@ -2527,7 +2532,9 @@
         "empty": {
           "title": "최근 인덱싱 실행이 없습니다",
           "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
-          "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
+          "pastRuns": "{count, plural, other {지난 실행 #개}}",
+          "view": "보기",
+          "viewAria": "{count, plural, other {지난 실행 #개 보기}}"
         },
         "units": "{count, plural, other {실행}}",
         "errorModal": {
@@ -2545,7 +2552,8 @@
           "title": "커넥터 검사",
           "close": "닫기",
           "count": "({count})"
-        }
+        },
+        "showing": "<mono>{total}</mono>개 중 <mono>{from}</mono>~<mono>{to}</mono>개 표시"
       },
       "activity": {
         "search": {

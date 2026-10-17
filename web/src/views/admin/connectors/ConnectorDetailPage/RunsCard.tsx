@@ -1,24 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { richNodes } from "@opal/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
+  Button,
   Card,
+  Divider,
   Dropdown,
   FilterButton,
   InputTypeIn,
   MessageCard,
   Pagination,
   Tag,
+  Text,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
+import SvgLongWait from "@opal/illustrations/long-wait";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { CardLoader, IconLoader } from "@opal/loaders";
 import {
   SvgActivity,
   SvgCheckCircle,
+  SvgChevronRight,
   SvgClock,
   SvgSlowMotion,
   SvgXCircle,
@@ -99,6 +105,13 @@ export interface RunsCardProps {
   /** A chart span that narrows the list inside the shared window. The shared picker shows it, and its X calls `onClearRange`. */
   range?: SliceRange | null;
   onClearRange?: () => void;
+  /** Called when a row's stage or checks popover opens or closes, so the page can step back around it. */
+  onFocusChange?: (focused: boolean) => void;
+}
+
+/** A run's key in the list. */
+function runKey(run: CCPairRun): string {
+  return `${run.kind}-${run.attempt.id}`;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
@@ -108,6 +121,7 @@ export default function RunsCard({
   embedded = false,
   sharedWindow,
   onSharedWindowChange,
+  onFocusChange,
   range = null,
   onClearRange,
 }: RunsCardProps) {
@@ -115,13 +129,15 @@ export default function RunsCard({
   const format = useFormatter();
   const [page, setPage] = useState(1);
   const [picked, setPicked] = useState<TimeWindow>(ALL_TIME);
+  // "View" on the empty state widens the list to all time until the window or slice changes.
+  const [widened, setWidened] = useState(false);
   const windowSince =
     sharedWindow !== undefined
       ? pickedWindowStart(sharedWindow)
       : picked.hours === null
         ? null
         : windowStart(picked.hours);
-  const { since, until } = rangeWithin(windowSince, range);
+  const windowRange = rangeWithin(windowSince, range);
   // A new window or slice starts the list over at its first page. The key is
   // the selection, not the moving start, so a passing minute keeps the page.
   const selection = [
@@ -133,7 +149,15 @@ export default function RunsCard({
   if (pagedSelection !== selection) {
     setPagedSelection(selection);
     setPage(1);
+    setWidened(false);
   }
+  const since = widened ? null : windowRange.since;
+  const until = widened ? null : windowRange.until;
+  const [openRun, setOpenRun] = useState<string | null>(null);
+  useEffect(() => {
+    onFocusChange?.(openRun !== null);
+  }, [openRun, onFocusChange]);
+  useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
   const [statusGroup, setStatusGroup] = useState<CCPairRunStatusGroup | null>(
     null
@@ -159,6 +183,33 @@ export default function RunsCard({
     errorHandlingFetcher,
     { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
   );
+  // An empty window with no other filter counts the pair's runs before it.
+  const emptyWindow =
+    data !== undefined &&
+    data.items.length === 0 &&
+    since !== null &&
+    kind === null &&
+    statusGroup === null &&
+    search === "";
+  const { data: allTime } = useSWR<CCPairRunsResponse>(
+    emptyWindow
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: 1,
+          since: null,
+          kinds: null,
+          statusGroups: null,
+          q: "",
+          errors: null,
+          until: null,
+          superseded: null,
+          resolved: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: RUNS_POLL_MS }
+  );
+  const pastRuns = allTime?.total_items ?? 0;
 
   function pickWindow(window: TimeWindow) {
     setPicked(window);
@@ -390,37 +441,96 @@ export default function RunsCard({
               />
             ))}
           </Section>
+        ) : emptyWindow ? (
+          <Section alignItems="stretch" gap={0} height="fit">
+            <IllustrationContent
+              illustration={SvgLongWait}
+              title={t("empty.title")}
+            />
+            {pastRuns > 0 && (
+              <Section
+                flexDirection="row"
+                alignItems="center"
+                gap={0}
+                height="fit"
+              >
+                <Section height="fit" className="min-w-0 flex-1">
+                  <Divider title={t("empty.pastRuns", { count: pastRuns })} />
+                </Section>
+                <Button
+                  icon={SvgChevronRight}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltip={t("empty.view")}
+                  aria-label={t("empty.viewAria", { count: pastRuns })}
+                  onClick={() => {
+                    setWidened(true);
+                    setPage(1);
+                  }}
+                />
+              </Section>
+            )}
+          </Section>
         ) : (data?.items.length ?? 0) === 0 ? (
           <IllustrationContent
             illustration={SvgNoResult}
             title={filtered ? t("empty.filteredTitle") : t("empty.title")}
-            description={filtered ? undefined : t("empty.description")}
           />
         ) : (
           <Section alignItems="stretch" gap={1} height="fit">
             {data?.items.map((run) => (
               <RunRow
-                key={`${run.kind}-${run.attempt.id}`}
+                key={runKey(run)}
                 run={run}
                 canCancel={canOperate}
                 onCancel={() => void cancel(run)}
                 onViewLogs={() => setLogRun(run)}
+                open={openRun === runKey(run)}
+                onOpenChange={(open) =>
+                  setOpenRun((current) =>
+                    open
+                      ? runKey(run)
+                      : current === runKey(run)
+                        ? null
+                        : current
+                  )
+                }
+                dimmed={openRun !== null && openRun !== runKey(run)}
               />
             ))}
           </Section>
         )}
 
-        {totalItems > PAGE_SIZE && (
-          <Pagination
-            variant="count"
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={PAGE_SIZE}
-            totalItems={totalItems}
-            onChange={setPage}
-            units={t("units", { count: totalItems })}
-            size="sm"
-          />
+        {totalItems > 0 && (
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
+            gap={2}
+            height="fit"
+          >
+            <Text font="secondary-body" color="text-03">
+              {richNodes(
+                t.rich("showing", {
+                  from: format.number((page - 1) * PAGE_SIZE + 1),
+                  to: format.number(Math.min(page * PAGE_SIZE, totalItems)),
+                  total: format.number(totalItems),
+                  mono: (chunks) => (
+                    <Text font="secondary-mono" color="text-03">
+                      {String(chunks)}
+                    </Text>
+                  ),
+                })
+              )}
+            </Text>
+            <Pagination
+              variant="list"
+              currentPage={page}
+              totalPages={totalPages}
+              onChange={setPage}
+              size="sm"
+            />
+          </Section>
         )}
       </Section>
     </>
@@ -433,7 +543,13 @@ export default function RunsCard({
     );
   }
   return (
-    <Card border="solid" rounding={4} padding={2} data-testid="connector-runs">
+    <Card
+      color="background-tint-01"
+      border="solid"
+      rounding={4}
+      padding={2}
+      data-testid="connector-runs"
+    >
       {body}
     </Card>
   );

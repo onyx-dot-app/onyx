@@ -2237,17 +2237,16 @@
         "reIndex": {
           "tooltip": {
             "indexing": "インデックス作成の実行中は再インデックスできません",
-            "invalid": "再インデックスの前にコネクターの設定を修正してください",
-            "paused": "再インデックスの前にコネクターを再開してください"
+            "invalid": "再インデックスの前にコネクターの設定を修正してください"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "インデックス作成と同期を一時停止",
-            "description": "進行中および今後のインデックス実行と権限の同期を取り消します。インデックス済みのドキュメントは最新ではなくなりますが、引き続き検索できます。"
+            "label": "インデックスと同期を一時停止",
+            "description": "進行中および今後のインデックス実行と権限の同期を取り消します。インデックス済みのドキュメントは同期されなくなりますが、引き続き検索できます。"
           },
           "resume": {
-            "label": "インデックス作成と同期を再開",
+            "label": "インデックスと同期を再開",
             "description": "インデックス実行と権限の同期を再開します。"
           },
           "tooltip": {
@@ -2263,7 +2262,11 @@
         },
         "fullReindex": {
           "label": "完全な再インデックス",
-          "description": "ソースの全ドキュメントを再インデックスします。規模によっては**数時間から数日**かかります。"
+          "description": "ソースの全ドキュメントを再インデックスします。規模によっては **数時間から数日** かかります。"
+        },
+        "startIndexing": {
+          "label": "インデックス作成を開始",
+          "description": "コネクターのチェックをスキップして、今すぐインデックスを作成します。"
         }
       },
       "reEnableModal": {
@@ -2465,7 +2468,8 @@
           "queued": "待機中",
           "running": "実行中",
           "rate": "{rate} 件/分",
-          "finished": "{time}（{minutes, number} 分）"
+          "finished": "{time}（{minutes, number} 分）",
+          "membershipRate": "{rate} メンバーシップ/分"
         },
         "actions": {
           "stages": "ステージの指標を表示",
@@ -2499,7 +2503,8 @@
           "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
-          "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"
+          "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}",
+          "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
         "search": {
           "placeholder": "インデックス実行を検索…"
@@ -2527,7 +2532,9 @@
         "empty": {
           "title": "最近のインデックス実行はありません",
           "filteredTitle": "このフィルターに一致する実行はありません。",
-          "description": "実行はバックグラウンドでスケジュールされるため、表示されるまでに少し時間がかかる場合があります。"
+          "pastRuns": "{count, plural, other {過去の実行 # 件}}",
+          "view": "表示",
+          "viewAria": "{count, plural, other {過去の実行 # 件を表示}}"
         },
         "units": "{count, plural, other {件の実行}}",
         "errorModal": {
@@ -2545,7 +2552,8 @@
           "title": "コネクタチェック",
           "close": "閉じる",
           "count": "({count})"
-        }
+        },
+        "showing": "<mono>{total}</mono> 件中 <mono>{from}</mono>~<mono>{to}</mono> 件を表示"
       },
       "activity": {
         "search": {

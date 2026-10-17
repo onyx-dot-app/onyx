@@ -2237,18 +2237,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "索引正在进行中，无法重新索引",
-            "invalid": "重新索引前请先修复连接器配置",
-            "paused": "重新索引前请先恢复连接器"
+            "invalid": "重新索引前请先修复连接器配置"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "暂停索引和同步",
-            "description": "取消进行中和未来的索引运行与权限同步。已索引的文档将不再保持同步，但仍可搜索。"
+            "label": "暂停索引与同步",
+            "description": "取消进行中和未来的索引运行与权限同步。已索引的文档将不再同步，但仍可搜索。"
           },
           "resume": {
-            "label": "恢复索引和同步",
-            "description": "重新开始索引运行与权限同步。"
+            "label": "恢复索引与同步",
+            "description": "重新启动索引运行与权限同步。"
           },
           "tooltip": {
             "updating": "状态更新进行中"
@@ -2263,7 +2262,11 @@
         },
         "fullReindex": {
           "label": "完全重新索引",
-          "description": "重新索引来源中的所有文档。视语料规模可能需要**数小时或数天**。"
+          "description": "重新索引来源中的所有文档。视语料规模可能需要 **数小时或数天**。"
+        },
+        "startIndexing": {
+          "label": "开始索引",
+          "description": "跳过连接器检查并立即索引。"
         }
       },
       "reEnableModal": {
@@ -2465,7 +2468,8 @@
           "queued": "排队中",
           "running": "运行中",
           "rate": "{rate} 文档/分钟",
-          "finished": "{time}（{minutes, number} 分钟）"
+          "finished": "{time}（{minutes, number} 分钟）",
+          "membershipRate": "{rate} 成员关系/分钟"
         },
         "actions": {
           "stages": "查看阶段指标",
@@ -2499,7 +2503,8 @@
           "canceled": "{count, plural, other {已取消 # 次运行}}",
           "passedChecks": "{count, plural, one {# 项检查通过} other {# 项检查通过}}",
           "failedChecks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
-          "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}"
+          "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}",
+          "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
         "search": {
           "placeholder": "搜索索引运行…"
@@ -2525,9 +2530,11 @@
           "title": "无法加载运行记录。"
         },
         "empty": {
-          "title": "暂无近期索引运行",
+          "title": "近期没有索引运行",
           "filteredTitle": "没有符合这些筛选条件的运行。",
-          "description": "运行在后台调度，可能需要一点时间才会显示。"
+          "pastRuns": "{count, plural, other {# 次过去的运行}}",
+          "view": "查看",
+          "viewAria": "{count, plural, other {查看 # 次过去的运行}}"
         },
         "units": "{count, plural, other {个运行}}",
         "errorModal": {
@@ -2545,7 +2552,8 @@
           "title": "连接器检查",
           "close": "关闭",
           "count": "({count})"
-        }
+        },
+        "showing": "显示第 <mono>{from}</mono>~<mono>{to}</mono> 条，共 <mono>{total}</mono> 条"
       },
       "activity": {
         "search": {

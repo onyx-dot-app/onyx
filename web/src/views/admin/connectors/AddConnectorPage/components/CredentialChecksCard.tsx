@@ -78,16 +78,16 @@ const CHECK_LOGS = {
     variant: "success-light",
     icon: SvgCheckCircle,
     detail: "status.passed",
-    font: OUTCOME_FONT,
+    font: "main-ui-body",
     color: "text-04",
   },
-  // A failed required check blocks, so `CheckLog` makes it heavy.
+  // Only a failed required check blocks, so `CheckLog` makes it heavy and red.
   failed: {
     variant: "error-light",
     icon: SvgXOctagon,
     detail: "status.failed",
-    font: OUTCOME_FONT,
-    color: "status-error-05",
+    font: "main-ui-body",
+    color: "text-04",
   },
   indeterminate: {
     variant: "warning-light",
@@ -177,7 +177,7 @@ function CheckLog({ check }: CheckLogProps) {
         <OverflowText
           as="p"
           font={font}
-          color={color}
+          color={blocking ? "status-error-05" : color}
           textPosition="text-start"
         >
           {check.message || t(detail)}
@@ -191,7 +191,18 @@ function CheckLog({ check }: CheckLogProps) {
               tooltip={guidance}
             />
           )}
-          {check.required && <Tag title={t("required.label")} color="gray" />}
+          {check.required && (
+            <Card
+              color="background-tint-00"
+              border="none"
+              rounding={1}
+              padding={0.5}
+            >
+              <Text font="secondary-action" color="text-04">
+                {t("required.label")}
+              </Text>
+            </Card>
+          )}
         </Section>
       }
     />

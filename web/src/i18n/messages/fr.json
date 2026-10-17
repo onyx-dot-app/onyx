@@ -2237,18 +2237,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Impossible de réindexer pendant qu'une indexation est déjà en cours",
-            "invalid": "Corrigez la configuration du connecteur avant de réindexer",
-            "paused": "Reprenez le connecteur avant de réindexer"
+            "invalid": "Corrigez la configuration du connecteur avant de réindexer"
           }
         },
         "toggleStatus": {
           "pause": {
             "label": "Suspendre l'indexation et les synchronisations",
-            "description": "Annuler les indexations et synchronisations des autorisations en cours et à venir. Les documents indexés ne seront plus à jour mais resteront consultables."
+            "description": "Annuler les indexations et synchronisations des autorisations en cours et à venir. Les documents indexés ne seront plus synchronisés, mais resteront trouvables par la recherche."
           },
           "resume": {
             "label": "Reprendre l'indexation et les synchronisations",
-            "description": "Relancer les indexations et synchronisations des autorisations."
+            "description": "Relancer les indexations et les synchronisations des autorisations."
           },
           "tooltip": {
             "updating": "Mise à jour du statut en cours"
@@ -2264,6 +2263,10 @@
         "fullReindex": {
           "label": "Réindexation complète",
           "description": "Réindexer tous les documents de la source. Cela peut prendre **des heures ou des jours** selon le volume."
+        },
+        "startIndexing": {
+          "label": "Démarrer l'indexation",
+          "description": "Ignorer les vérifications du connecteur et indexer maintenant."
         }
       },
       "reEnableModal": {
@@ -2465,7 +2468,8 @@
           "queued": "En file d'attente",
           "running": "En cours",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({minutes, number} min)"
+          "finished": "{time} ({minutes, number} min)",
+          "membershipRate": "{rate} adhésions/min"
         },
         "actions": {
           "stages": "Voir les métriques par étape",
@@ -2499,7 +2503,8 @@
           "canceled": "{count, plural, one {# exécution annulée} other {# exécutions annulées}}",
           "passedChecks": "{count, plural, one {# vérification réussie} other {# vérifications réussies}}",
           "failedChecks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
-          "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}"
+          "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}",
+          "syncedDocs": "{count, plural, one {# document synchronisé} other {# documents synchronisés}}"
         },
         "search": {
           "placeholder": "Rechercher des exécutions d'indexation…"
@@ -2525,9 +2530,11 @@
           "title": "Impossible de charger les exécutions."
         },
         "empty": {
-          "title": "Aucune exécution d'indexation récente",
+          "title": "Aucune exécution d’indexation récente",
           "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
-          "description": "Les exécutions sont planifiées en arrière-plan et peuvent mettre un moment à apparaître."
+          "pastRuns": "{count, plural, one {# exécution passée} other {# exécutions passées}}",
+          "view": "Afficher",
+          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}"
         },
         "units": "{count, plural, one {exécution} other {exécutions}}",
         "errorModal": {
@@ -2545,7 +2552,8 @@
           "title": "Vérifications du connecteur",
           "close": "Fermer",
           "count": "({count})"
-        }
+        },
+        "showing": "Affichage de <mono>{from}</mono>~<mono>{to}</mono> sur <mono>{total}</mono>"
       },
       "activity": {
         "search": {

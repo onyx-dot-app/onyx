@@ -2237,18 +2237,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Não é possível reindexar enquanto uma indexação está em andamento",
-            "invalid": "Corrija a configuração do conector antes de reindexar",
-            "paused": "Retome o conector antes de reindexar"
+            "invalid": "Corrija a configuração do conector antes de reindexar"
           }
         },
         "toggleStatus": {
           "pause": {
             "label": "Pausar indexação e sincronizações",
-            "description": "Cancelar as indexações e sincronizações de permissões em andamento e futuras. Os documentos indexados ficarão desatualizados, mas continuarão pesquisáveis."
+            "description": "Cancelar as indexações e sincronizações de permissões em andamento e futuras. Os documentos indexados ficarão dessincronizados, mas continuarão pesquisáveis."
           },
           "resume": {
             "label": "Retomar indexação e sincronizações",
-            "description": "Reiniciar as indexações e sincronizações de permissões."
+            "description": "Reiniciar as indexações e as sincronizações de permissões."
           },
           "tooltip": {
             "updating": "Atualização de status em andamento"
@@ -2264,6 +2263,10 @@
         "fullReindex": {
           "label": "Reindexar tudo",
           "description": "Reindexar todos os documentos da fonte. Pode levar **horas ou dias** dependendo do tamanho."
+        },
+        "startIndexing": {
+          "label": "Iniciar indexação",
+          "description": "Ignorar as verificações do conector e indexar agora."
         }
       },
       "reEnableModal": {
@@ -2465,7 +2468,8 @@
           "queued": "Na fila",
           "running": "Em execução",
           "rate": "{rate} documentos/min",
-          "finished": "{time} ({minutes, number} min)"
+          "finished": "{time} ({minutes, number} min)",
+          "membershipRate": "{rate} associações/min"
         },
         "actions": {
           "stages": "Ver métricas por etapa",
@@ -2499,7 +2503,8 @@
           "canceled": "{count, plural, one {# execução cancelada} other {# execuções canceladas}}",
           "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
           "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
-          "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}"
+          "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}",
+          "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
         "search": {
           "placeholder": "Pesquisar execuções de indexação…"
@@ -2527,7 +2532,9 @@
         "empty": {
           "title": "Nenhuma execução de indexação recente",
           "filteredTitle": "Nenhuma execução corresponde a estes filtros.",
-          "description": "As execuções são agendadas em segundo plano e podem demorar um pouco para aparecer."
+          "pastRuns": "{count, plural, one {# execução anterior} other {# execuções anteriores}}",
+          "view": "Ver",
+          "viewAria": "{count, plural, one {Ver # execução anterior} other {Ver # execuções anteriores}}"
         },
         "units": "{count, plural, one {execução} other {execuções}}",
         "errorModal": {
@@ -2545,7 +2552,8 @@
           "title": "Verificações do conector",
           "close": "Fechar",
           "count": "({count})"
-        }
+        },
+        "showing": "Mostrando <mono>{from}</mono>~<mono>{to}</mono> de <mono>{total}</mono>"
       },
       "activity": {
         "search": {

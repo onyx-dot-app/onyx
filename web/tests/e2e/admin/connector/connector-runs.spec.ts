@@ -114,6 +114,7 @@ function failedSyncRuns() {
           total_users_processed: 0,
           total_groups_processed: 0,
           total_group_memberships_synced: 0,
+          total_groups_failed: 0,
           time_created: "2026-05-03T12:00:00Z",
           time_started: "2026-05-03T12:00:10Z",
           time_finished: "2026-05-03T12:01:30Z",
