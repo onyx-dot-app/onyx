@@ -1788,6 +1788,8 @@ def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:
         )
 
     assert update_chunk_count.call_args.kwargs["document_ids"] == ["written"]
+
+
 def test_content_hash_is_blind_to_tabular_content() -> None:
     """A tabular document's hash never moves when its sheets change.
 
