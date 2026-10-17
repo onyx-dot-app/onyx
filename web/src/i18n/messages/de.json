@@ -130,8 +130,7 @@
       "authStatus": {
         "apiTokenDescription": "API-Token konfiguriert",
         "connectedDescription": "Verbunden",
-        "title": "Authentifiziert & verbunden",
-        "oauthDescription": "OAuth mit {owner} verbunden"
+        "title": "Authentifiziert & verbunden"
       },
       "cancelButton": {
         "label": "Abbrechen"
@@ -159,8 +158,7 @@
       "serverUrl": {
         "invalid": "Muss eine gültige URL sein",
         "required": "Die Server-URL ist erforderlich",
-        "title": "MCP-Server-URL",
-        "subDescription": "Verbinden Sie sich nur mit Servern, denen Sie vertrauen. Sie sind für die über diese Verbindung ausgeführten Aktionen und für die Aktualität Ihrer Tools verantwortlich."
+        "title": "MCP-Server-URL"
       },
       "submitButton": {
         "addLabel": "Server hinzufügen",
@@ -324,22 +322,18 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API-Schlüssel",
-          "description": "Verwenden Sie einen individuellen API-Schlüssel pro Benutzer oder einen gemeinsamen API-Schlüssel für die gesamte Organisation."
+          "label": "API-Schlüssel"
         },
         "label": "Authentifizierungsmethode",
         "none": {
-          "label": "Keine Authentifizierung",
-          "description": "Nicht empfohlen"
+          "label": "Keine Authentifizierung"
         },
         "oauth": {
-          "label": "OAuth",
-          "description": "Jeder Benutzer muss sich über OAuth mit eigenen Anmeldedaten authentifizieren."
+          "label": "OAuth"
         },
         "placeholder": "Methode auswählen",
         "ptOauth": {
-          "label": "OAuth Pass-through",
-          "description": "Das OAuth-Zugriffstoken des Benutzers weiterleiten, mit dem {appName} authentifiziert wird."
+          "label": "OAuth Pass-through"
         },
         "required": "Der Authentifizierungstyp ist erforderlich"
       },
@@ -370,8 +364,7 @@
         "clientRegistrationFailed": "Die automatische Client-Registrierung ist fehlgeschlagen. Verwenden Sie Ihren eigenen OAuth-Client oder prüfen Sie die Einrichtungsanforderungen des Anbieters.",
         "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
         "connectionFailed": "Der OAuth-Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
-        "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut.",
-        "oauthInitFailed": "OAuth konnte nicht gestartet werden: {detail}"
+        "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut."
       },
       "header": {
         "defaultTitle": "Authentifizierung konfigurieren",
@@ -460,13 +453,6 @@
         "unreachableTitle": "Verfügbarkeit der automatischen Einrichtung konnte nicht ermittelt werden",
         "missingTitle": "OAuth-Endpunkte wurden nicht gefunden",
         "requiresClientTitle": "Automatische Einrichtung ist möglicherweise nicht verfügbar"
-      },
-      "advanced": {
-        "description": "Konfigurieren Sie einen bekannten OAuth-Anbieter mit expliziten Autorisierungs- und Token-Endpunkten statt mit automatischer Erkennung.",
-        "title": "Erweitert"
-      },
-      "knownProvider": {
-        "hint": "Der Modus für bekannte Anbieter erfordert eine Endpunktkonfiguration. Referenz-Endpunkte von Google: Autorisierung {authorizationEndpoint} und Token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -747,9 +733,7 @@
       },
       "credentials": {
         "perUserDescription": "Verwenden Sie Ihre Zugangsdaten, um diesen MCP zu testen und seine Tools zu laden. Sie werden nur in Ihrem Konto gespeichert.",
-        "sharedDescription": "Diese Werte werden für jeden Benutzer in Ihrer Organisation verwendet.",
-        "perUserTitle": "Nur für Ihr eigenes Konto",
-        "sharedTitle": "Gemeinsame Werte der Organisation"
+        "sharedDescription": "Diese Werte werden für jeden Benutzer in Ihrer Organisation verwendet."
       },
       "headers": {
         "addButton": {
@@ -14361,11 +14345,7 @@
           "description": "Lege fest, was der Agent tun darf. „Nachfragen“ fordert vor jeder Aktion eine Genehmigung an; „Automatisch genehmigen“ führt sie ohne Rückfrage aus.",
           "title": "Berechtigungen"
         },
-        "savingButton": "Wird gespeichert…",
-        "advanced": {
-          "description": "Lege für jede Aktion einzeln eine Richtlinie fest.",
-          "title": "Erweitert"
-        }
+        "savingButton": "Wird gespeichert…"
       },
       "skillsStep": {
         "description": "Optional: Verknüpfe vorhandene Skills oder erstelle einen für diese App.",

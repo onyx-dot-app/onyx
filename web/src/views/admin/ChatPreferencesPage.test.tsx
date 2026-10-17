@@ -12,6 +12,14 @@ import {
   type AppSettings,
 } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+
+jest.mock("@/lib/permissions/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/permissions/hooks")>(
+    "@/lib/permissions/hooks"
+  ),
+  usePermissionAuthority: jest.fn(),
+}));
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: jest.fn() }),
@@ -55,6 +63,9 @@ const settings: AppSettings = {
 
 describe("ChatPreferencesPage", () => {
   beforeEach(() => {
+    jest
+      .mocked(usePermissionAuthority)
+      .mockReturnValue({ isGlobalHolder: true, isScopedManager: false });
     mockUseAdminLanguageModels.mockReset();
     mockUseAdminLanguageModels.mockReturnValue({
       llmProviders: [makeProvider({})],

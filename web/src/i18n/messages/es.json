@@ -130,8 +130,7 @@
       "authStatus": {
         "apiTokenDescription": "Token de API configurado",
         "connectedDescription": "Conectado",
-        "title": "Autenticado y conectado",
-        "oauthDescription": "OAuth conectado a {owner}"
+        "title": "Autenticado y conectado"
       },
       "cancelButton": {
         "label": "Cancelar"
@@ -159,8 +158,7 @@
       "serverUrl": {
         "invalid": "Debe ser una URL válida",
         "required": "La URL del servidor es obligatoria",
-        "title": "URL del servidor MCP",
-        "subDescription": "Conéctate solo a servidores en los que confíes. Eres responsable de las acciones que se realicen con esta conexión y de mantener tus herramientas actualizadas."
+        "title": "URL del servidor MCP"
       },
       "submitButton": {
         "addLabel": "Añadir un servidor",
@@ -324,22 +322,18 @@
       },
       "authType": {
         "apiToken": {
-          "label": "Clave de API",
-          "description": "Usa una clave de API individual por usuario o una clave de API compartida para toda la organización."
+          "label": "Clave de API"
         },
         "label": "Método de autenticación",
         "none": {
-          "label": "Sin autenticación",
-          "description": "No recomendado"
+          "label": "Sin autenticación"
         },
         "oauth": {
-          "label": "OAuth",
-          "description": "Cada usuario debe autenticarse con OAuth usando sus propias credenciales."
+          "label": "OAuth"
         },
         "placeholder": "Selecciona un método",
         "ptOauth": {
-          "label": "OAuth de paso directo",
-          "description": "Reenvía el token de acceso de OAuth que el usuario usa para autenticarse en {appName}."
+          "label": "OAuth de paso directo"
         },
         "required": "El tipo de autenticación es obligatorio"
       },
@@ -370,8 +364,7 @@
         "clientRegistrationFailed": "El registro automático del cliente falló. Usa tu propio cliente OAuth o revisa los requisitos de configuración del proveedor.",
         "discoveryFailed": "No se encontraron los ajustes de inicio de sesión OAuth. Comprueba la URL del servidor o introduce los endpoints de tu proveedor.",
         "connectionFailed": "No se pudo acceder al servidor OAuth. Comprueba la URL del servidor e inténtalo de nuevo.",
-        "oauthFailed": "No se pudo iniciar la sesión OAuth. Comprueba los ajustes de tu cliente e inténtalo de nuevo.",
-        "oauthInitFailed": "No se pudo iniciar OAuth: {detail}"
+        "oauthFailed": "No se pudo iniciar la sesión OAuth. Comprueba los ajustes de tu cliente e inténtalo de nuevo."
       },
       "header": {
         "defaultTitle": "Configurar autenticación",
@@ -460,13 +453,6 @@
         "unreachableTitle": "No se pudo determinar si la configuración automática está disponible",
         "missingTitle": "No se encontraron los endpoints de OAuth",
         "requiresClientTitle": "La configuración automática podría no estar disponible"
-      },
-      "advanced": {
-        "description": "Configura un proveedor de OAuth conocido con endpoints de autorización y de token explícitos en lugar del descubrimiento automático.",
-        "title": "Avanzado"
-      },
-      "knownProvider": {
-        "hint": "El modo de proveedor conocido requiere configurar los endpoints. Endpoints de referencia de Google: autorización {authorizationEndpoint} y token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -747,9 +733,7 @@
       },
       "credentials": {
         "perUserDescription": "Usa tus credenciales para probar este MCP y cargar sus herramientas. Se guardan solo en tu cuenta.",
-        "sharedDescription": "Estos valores se usan para todos los usuarios de tu organización.",
-        "perUserTitle": "Solo para tu propia cuenta",
-        "sharedTitle": "Valores compartidos de la organización"
+        "sharedDescription": "Estos valores se usan para todos los usuarios de tu organización."
       },
       "headers": {
         "addButton": {
@@ -14361,11 +14345,7 @@
           "description": "Elige qué puede hacer el agente. «Preguntar» solicita aprobación antes de cada acción; «Aprobar automáticamente» la ejecuta sin preguntar.",
           "title": "Permisos"
         },
-        "savingButton": "Guardando…",
-        "advanced": {
-          "description": "Define una política para cada acción de forma individual.",
-          "title": "Avanzado"
-        }
+        "savingButton": "Guardando…"
       },
       "skillsStep": {
         "description": "Opcional: asocia habilidades existentes o crea una para esta app.",

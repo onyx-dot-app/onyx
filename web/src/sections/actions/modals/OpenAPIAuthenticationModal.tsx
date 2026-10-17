@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
@@ -29,11 +36,14 @@ import {
 } from "@/lib/oauth/config";
 import OAuthPKCESupport from "@/sections/actions/oauth/OAuthPKCESupport";
 import OAuthConnectionCheck from "@/sections/actions/oauth/OAuthConnectionCheck";
-import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
+import { SvgArrowLeft } from "@opal/icons";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
+import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
 
-export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
+export type AuthMethod = "oauth" | "custom-header" | "pt-oauth" | "none";
 
 export interface OpenAPIAuthFormValues extends OAuthConfigFields {
   authMethod: AuthMethod;
@@ -41,6 +51,15 @@ export interface OpenAPIAuthFormValues extends OAuthConfigFields {
 }
 
 interface OpenAPIAuthenticationModalProps {
+  presentation?: "modal" | "inline";
+  active?: boolean;
+  footerTarget?: HTMLDivElement | null;
+  onBusyChange?: (busy: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  allowNoAuthentication?: boolean;
+  draftValues?: OpenAPIAuthFormValues;
+  onBack?: (values: OpenAPIAuthFormValues) => void;
+  submitLabel?: string;
   isOpen: boolean;
   onClose: () => void;
   title: string;
@@ -72,6 +91,11 @@ const defaultValues: OpenAPIAuthFormValues = {
 };
 
 export default function OpenAPIAuthenticationModal({
+  presentation = "modal",
+  active: visible = true,
+  footerTarget = null,
+  onBusyChange,
+  onDirtyChange,
   isOpen,
   onClose,
   title,
@@ -84,6 +108,10 @@ export default function OpenAPIAuthenticationModal({
   onConnect,
   onSkip,
   entityName = null,
+  allowNoAuthentication = false,
+  draftValues,
+  onBack,
+  submitLabel,
 }: OpenAPIAuthenticationModalProps) {
   const t = useTranslations("actions");
   const { appName } = useSettings();
@@ -92,11 +120,26 @@ export default function OpenAPIAuthenticationModal({
     useState<OAuthConfig | null>(null);
   const [isLoadingOAuthConfig, setIsLoadingOAuthConfig] = useState(false);
   const [oauthConfigError, setOAuthConfigError] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const active = useRef(true);
+  const formId = useId();
+
+  useEffect(() => {
+    onBusyChange?.(saving);
+    return () => onBusyChange?.(false);
+  }, [onBusyChange, saving]);
+
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
 
   const isEditingOAuthConfig = Boolean(oauthConfigId);
   const hasInitialHeaders =
     Array.isArray(initialHeaders) && initialHeaders.length > 0;
-  const isEditMode = isEditingOAuthConfig || hasInitialHeaders;
   const shouldDisableForm =
     isEditingOAuthConfig &&
     isLoadingOAuthConfig &&
@@ -155,30 +198,39 @@ export default function OpenAPIAuthenticationModal({
     () =>
       Yup.object({
         authMethod: Yup.mixed<AuthMethod>()
-          .oneOf(["oauth", "pt-oauth", "custom-header"])
+          .oneOf(
+            allowNoAuthentication
+              ? ["oauth", "pt-oauth", "custom-header", "none"]
+              : ["oauth", "pt-oauth", "custom-header"]
+          )
           .required(t("openApiAuthModal.authMethod.required")),
-        authorizationUrl: Yup.string()
-          .url(t("openApiAuthModal.errors.invalidUrl"))
-          .when("authMethod", {
-            is: "oauth",
-            then: (schema) =>
-              schema.required(t("openApiAuthModal.authorizationUrl.required")),
-            otherwise: (schema) => schema.notRequired(),
-          }),
-        tokenUrl: Yup.string()
-          .url(t("openApiAuthModal.errors.invalidUrl"))
-          .when("authMethod", {
-            is: "oauth",
-            then: (schema) =>
-              schema.required(t("openApiAuthModal.tokenUrl.required")),
-            otherwise: (schema) => schema.notRequired(),
-          }),
+        authorizationUrl: Yup.string().when("authMethod", {
+          is: "oauth",
+          then: (schema) =>
+            schema
+              .url(t("openApiAuthModal.errors.invalidUrl"))
+              .required(t("openApiAuthModal.authorizationUrl.required")),
+          otherwise: (schema) => schema.notRequired(),
+        }),
+        tokenUrl: Yup.string().when("authMethod", {
+          is: "oauth",
+          then: (schema) =>
+            schema
+              .url(t("openApiAuthModal.errors.invalidUrl"))
+              .required(t("openApiAuthModal.tokenUrl.required")),
+          otherwise: (schema) => schema.notRequired(),
+        }),
         clientId: Yup.string().when("authMethod", {
           is: "oauth",
           then: (schema) =>
             isEditingOAuthConfig
               ? schema.optional()
-              : schema.required(t("openApiAuthModal.clientId.required")),
+              : schema
+                  .notOneOf(
+                    [MASKED_OAUTH_CREDENTIAL],
+                    t("openApiAuthModal.clientId.required")
+                  )
+                  .required(t("openApiAuthModal.clientId.required")),
           otherwise: (schema) => schema.notRequired(),
         }),
         clientSecret: Yup.string().when("authMethod", {
@@ -186,7 +238,12 @@ export default function OpenAPIAuthenticationModal({
           then: (schema) =>
             isEditingOAuthConfig
               ? schema.optional()
-              : schema.required(t("openApiAuthModal.clientSecret.required")),
+              : schema
+                  .notOneOf(
+                    [MASKED_OAUTH_CREDENTIAL],
+                    t("openApiAuthModal.clientSecret.required")
+                  )
+                  .required(t("openApiAuthModal.clientSecret.required")),
           otherwise: (schema) => schema.notRequired(),
         }),
         scopes: Yup.string().notRequired(),
@@ -214,10 +271,11 @@ export default function OpenAPIAuthenticationModal({
             ),
         }),
       }),
-    [isEditingOAuthConfig, t]
+    [isEditingOAuthConfig, t, allowNoAuthentication]
   );
 
   const computedInitialValues = useMemo<OpenAPIAuthFormValues>(() => {
+    if (draftValues) return draftValues;
     const baseHeaders =
       hasInitialHeaders && initialHeaders
         ? initialHeaders.map((header) => ({ ...header }))
@@ -268,6 +326,7 @@ export default function OpenAPIAuthenticationModal({
     initialHeaders,
     isEditingOAuthConfig,
     passthroughOAuthEnabled,
+    draftValues,
   ]);
 
   const handleSubmit = useCallback(
@@ -280,13 +339,44 @@ export default function OpenAPIAuthenticationModal({
         return;
       }
       try {
+        setSaving(true);
+        setSubmissionError(null);
         await onConnect?.(values);
-        onClose();
+        if (active.current && presentation === "inline") {
+          if (values.authMethod === "oauth") {
+            setExistingOAuthConfig((current) =>
+              current
+                ? {
+                    ...current,
+                    authorization_url: values.authorizationUrl,
+                    token_url: values.tokenUrl,
+                    supports_pkce: values.supportsPkce,
+                    scopes: values.scopes
+                      .split(",")
+                      .map((scope) => scope.trim())
+                      .filter(Boolean),
+                  }
+                : current
+            );
+          }
+          formikHelpers.resetForm({ values });
+        }
+        if (active.current && presentation === "modal") onClose();
+      } catch (error) {
+        if (active.current)
+          setSubmissionError(
+            error instanceof Error && error.message
+              ? error.message
+              : t("openApiPage.toasts.authSaveFailed")
+          );
       } finally {
-        formikHelpers.setSubmitting(false);
+        if (active.current) {
+          setSaving(false);
+          formikHelpers.setSubmitting(false);
+        }
       }
     },
-    [onConnect, onClose, shouldDisableForm]
+    [onConnect, onClose, presentation, shouldDisableForm, t]
   );
 
   const handleSkip = useCallback(() => {
@@ -297,447 +387,506 @@ export default function OpenAPIAuthenticationModal({
     }
   }, [onSkip, onClose]);
 
-  return (
-    <Modal
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
+  const form = (
+    <Formik
+      initialValues={computedInitialValues}
+      validationSchema={dynamicValidationSchema}
+      validateOnMount
+      enableReinitialize={!saving && submissionError === null}
+      onSubmit={handleSubmit}
     >
-      <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
-        <Modal.Header
-          icon={SvgArrowExchange}
-          title={title}
-          description={description ?? t("openApiAuthModal.header.description")}
-          onClose={onClose}
-        />
+      {({
+        values,
+        errors,
+        touched,
+        handleChange,
+        setFieldValue,
+        setFieldError,
+        isSubmitting,
+        isValid,
+        dirty,
+      }) => {
+        const submit = (
+          <Button
+            disabled={
+              !isValid ||
+              isSubmitting ||
+              shouldDisableForm ||
+              (!onBack && !dirty)
+            }
+            type="submit"
+            form={formId}
+          >
+            {isSubmitting
+              ? t("openApiAuthModal.submitButton.pendingLabel")
+              : (submitLabel ?? t("openApiAuthModal.submitButton.label"))}
+          </Button>
+        );
+        return (
+          <Form id={formId} className="contents">
+            {onDirtyChange && (
+              <MCPFormDirtyObserver onDirtyChange={onDirtyChange} />
+            )}
+            <Modal.Body
+              twoTone={false}
+              padding={presentation === "inline" ? 0 : 6}
+              alignItems="stretch"
+            >
+              {submissionError && (
+                <Text as="p" mainUiBody className="text-action-text-danger-05">
+                  {submissionError}
+                </Text>
+              )}
+              {oauthConfigError && (
+                <div className="mb-3">
+                  <Text
+                    as="p"
+                    mainUiBody
+                    className="text-action-text-danger-05"
+                  >
+                    {oauthConfigError}
+                  </Text>
+                </div>
+              )}
 
-        <Formik
-          initialValues={computedInitialValues}
-          validationSchema={dynamicValidationSchema}
-          validateOnMount
-          enableReinitialize
-          onSubmit={handleSubmit}
-        >
-          {({
-            values,
-            errors,
-            touched,
-            handleChange,
-            setFieldValue,
-            setFieldError,
-            isSubmitting,
-            isValid,
-            dirty,
-          }) => (
-            <Form className="flex flex-col h-full">
-              <Modal.Body>
-                {oauthConfigError && (
-                  <div className="mb-3">
-                    <Text
-                      as="p"
-                      mainUiBody
-                      className="text-action-text-danger-05"
+              {shouldDisableForm ? (
+                <div className="flex min-h-[220px] items-center justify-center rounded-12 border border-border-01 bg-background-tint-00">
+                  <Text as="p" secondaryBody text03>
+                    {t("openApiAuthModal.loading.label")}
+                  </Text>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-4 px-2 pt-2">
+                    <FormField
+                      name="authMethod"
+                      state={
+                        errors.authMethod && touched.authMethod
+                          ? "error"
+                          : touched.authMethod
+                            ? "success"
+                            : "idle"
+                      }
                     >
-                      {oauthConfigError}
-                    </Text>
+                      <FormField.Label>
+                        {t("openApiAuthModal.authMethod.label")}
+                      </FormField.Label>
+                      <FormField.Control asChild>
+                        <InputSingleSelect
+                          value={values.authMethod}
+                          onValueChange={(value) =>
+                            setFieldValue("authMethod", value)
+                          }
+                          defaultOption={defaultMethod}
+                          placeholder={t(
+                            "openApiAuthModal.authMethod.placeholder"
+                          )}
+                          options={[
+                            ...(allowNoAuthentication
+                              ? [
+                                  {
+                                    value: "none",
+                                    title: t(
+                                      "mcpAuthModal.authType.none.label"
+                                    ),
+                                  },
+                                ]
+                              : []),
+                            {
+                              value: "oauth",
+                              title: t(
+                                "openApiAuthModal.authMethod.oauth.label"
+                              ),
+                              description: t(
+                                "openApiAuthModal.authMethod.oauth.description"
+                              ),
+                            },
+                            ...(isOAuthEnabled
+                              ? [
+                                  {
+                                    value: "pt-oauth",
+                                    title: t(
+                                      "openApiAuthModal.authMethod.ptOauth.label"
+                                    ),
+                                    description: t(
+                                      "openApiAuthModal.authMethod.ptOauth.description",
+                                      { appName }
+                                    ),
+                                  },
+                                ]
+                              : []),
+                            {
+                              value: "custom-header",
+                              title: t(
+                                "openApiAuthModal.authMethod.customHeader.label"
+                              ),
+                              description: t(
+                                "openApiAuthModal.authMethod.customHeader.description"
+                              ),
+                            },
+                          ]}
+                        />
+                      </FormField.Control>
+                      <FormField.Message
+                        messages={{
+                          error: errors.authMethod,
+                        }}
+                      />
+                    </FormField>
                   </div>
-                )}
 
-                {shouldDisableForm ? (
-                  <div className="flex min-h-[220px] items-center justify-center rounded-12 border border-border-01 bg-background-tint-00">
-                    <Text as="p" secondaryBody text03>
-                      {t("openApiAuthModal.loading.label")}
-                    </Text>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex flex-col gap-4 px-2 pt-2">
+                  {presentation === "modal" && (
+                    <Divider paddingPerpendicular={0} />
+                  )}
+
+                  {values.authMethod === "oauth" && (
+                    <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
                       <FormField
-                        name="authMethod"
+                        name="authorizationUrl"
                         state={
-                          errors.authMethod && touched.authMethod
+                          errors.authorizationUrl && touched.authorizationUrl
                             ? "error"
-                            : touched.authMethod
+                            : touched.authorizationUrl
                               ? "success"
                               : "idle"
                         }
                       >
                         <FormField.Label>
-                          {t("openApiAuthModal.authMethod.label")}
+                          {t("openApiAuthModal.authorizationUrl.label")}
                         </FormField.Label>
                         <FormField.Control asChild>
-                          <InputSingleSelect
-                            value={values.authMethod}
-                            onValueChange={(value) =>
-                              setFieldValue("authMethod", value)
-                            }
-                            defaultOption="oauth"
+                          <InputTypeIn
+                            name="authorizationUrl"
+                            value={values.authorizationUrl}
+                            onChange={handleChange}
                             placeholder={t(
-                              "openApiAuthModal.authMethod.placeholder"
+                              "placeholders.oauthAuthorizationUrl"
                             )}
-                            options={[
-                              {
-                                value: "oauth",
-                                title: t(
-                                  "openApiAuthModal.authMethod.oauth.label"
-                                ),
-                                description: t(
-                                  "openApiAuthModal.authMethod.oauth.description"
-                                ),
-                              },
-                              ...(isOAuthEnabled
-                                ? [
-                                    {
-                                      value: "pt-oauth",
-                                      title: t(
-                                        "openApiAuthModal.authMethod.ptOauth.label"
-                                      ),
-                                      description: t(
-                                        "openApiAuthModal.authMethod.ptOauth.description",
-                                        { appName }
-                                      ),
-                                    },
-                                  ]
-                                : []),
-                              {
-                                value: "custom-header",
-                                title: t(
-                                  "openApiAuthModal.authMethod.customHeader.label"
-                                ),
-                                description: t(
-                                  "openApiAuthModal.authMethod.customHeader.description"
-                                ),
-                              },
-                            ]}
                           />
                         </FormField.Control>
                         <FormField.Message
                           messages={{
-                            error: errors.authMethod,
+                            error: errors.authorizationUrl,
                           }}
                         />
                       </FormField>
-                    </div>
 
-                    <Divider paddingPerpendicular={0} />
-
-                    {values.authMethod === "oauth" && (
-                      <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
-                        <FormField
-                          name="authorizationUrl"
-                          state={
-                            errors.authorizationUrl && touched.authorizationUrl
-                              ? "error"
-                              : touched.authorizationUrl
-                                ? "success"
-                                : "idle"
-                          }
-                        >
-                          <FormField.Label>
-                            {t("openApiAuthModal.authorizationUrl.label")}
-                          </FormField.Label>
-                          <FormField.Control asChild>
-                            <InputTypeIn
-                              name="authorizationUrl"
-                              value={values.authorizationUrl}
-                              onChange={handleChange}
-                              placeholder={t(
-                                "placeholders.oauthAuthorizationUrl"
-                              )}
-                            />
-                          </FormField.Control>
-                          <FormField.Message
-                            messages={{
-                              error: errors.authorizationUrl,
-                            }}
+                      <FormField
+                        name="tokenUrl"
+                        state={
+                          errors.tokenUrl && touched.tokenUrl
+                            ? "error"
+                            : touched.tokenUrl
+                              ? "success"
+                              : "idle"
+                        }
+                      >
+                        <FormField.Label>
+                          {t("openApiAuthModal.tokenUrl.label")}
+                        </FormField.Label>
+                        <FormField.Control asChild>
+                          <InputTypeIn
+                            name="tokenUrl"
+                            value={values.tokenUrl}
+                            onChange={handleChange}
+                            placeholder={t("placeholders.oauthTokenUrl")}
                           />
-                        </FormField>
-
-                        <FormField
-                          name="tokenUrl"
-                          state={
-                            errors.tokenUrl && touched.tokenUrl
-                              ? "error"
-                              : touched.tokenUrl
-                                ? "success"
-                                : "idle"
-                          }
-                        >
-                          <FormField.Label>
-                            {t("openApiAuthModal.tokenUrl.label")}
-                          </FormField.Label>
-                          <FormField.Control asChild>
-                            <InputTypeIn
-                              name="tokenUrl"
-                              value={values.tokenUrl}
-                              onChange={handleChange}
-                              placeholder={t("placeholders.oauthTokenUrl")}
-                            />
-                          </FormField.Control>
-                          <FormField.Message
-                            messages={{
-                              error: errors.tokenUrl,
-                            }}
-                          />
-                        </FormField>
-
-                        <OAuthPKCESupport
-                          authorizationUrl={values.authorizationUrl}
-                          tokenUrl={values.tokenUrl}
+                        </FormField.Control>
+                        <FormField.Message
+                          messages={{
+                            error: errors.tokenUrl,
+                          }}
                         />
+                      </FormField>
 
-                        <FormField
-                          name="clientId"
-                          state={
-                            errors.clientId && touched.clientId
-                              ? "error"
-                              : touched.clientId
-                                ? "success"
-                                : "idle"
-                          }
-                        >
-                          <FormField.Label>
-                            {t("openApiAuthModal.clientId.label")}
-                          </FormField.Label>
+                      <OAuthPKCESupport
+                        authorizationUrl={values.authorizationUrl}
+                        tokenUrl={values.tokenUrl}
+                      />
+
+                      <FormField
+                        name="clientId"
+                        state={
+                          errors.clientId && touched.clientId
+                            ? "error"
+                            : touched.clientId
+                              ? "success"
+                              : "idle"
+                        }
+                      >
+                        <FormField.Label>
+                          {t("openApiAuthModal.clientId.label")}
+                        </FormField.Label>
+                        <FormField.Control asChild>
+                          <InputTypeIn
+                            name="clientId"
+                            value={values.clientId}
+                            onChange={handleChange}
+                            placeholder=" "
+                          />
+                        </FormField.Control>
+                        {isEditingOAuthConfig && (
+                          <FormField.Description>
+                            {t("openApiAuthModal.clientId.description")}
+                          </FormField.Description>
+                        )}
+                        <FormField.Message
+                          messages={{
+                            error: errors.clientId,
+                          }}
+                        />
+                      </FormField>
+
+                      <FormField
+                        name="clientSecret"
+                        state={
+                          errors.clientSecret && touched.clientSecret
+                            ? "error"
+                            : touched.clientSecret
+                              ? "success"
+                              : "idle"
+                        }
+                      >
+                        <FormField.Label>
+                          {t("openApiAuthModal.clientSecret.label")}
+                        </FormField.Label>
+                        <FormField.Control asChild>
+                          <InputPasswordTypeIn
+                            name="clientSecret"
+                            value={values.clientSecret}
+                            onChange={handleChange}
+                            placeholder=" "
+                          />
+                        </FormField.Control>
+                        {isEditingOAuthConfig && (
+                          <FormField.Description>
+                            {t("openApiAuthModal.clientSecret.description")}
+                          </FormField.Description>
+                        )}
+                        <FormField.Message
+                          messages={{
+                            error: errors.clientSecret,
+                          }}
+                        />
+                      </FormField>
+
+                      <FormField
+                        name="scopes"
+                        state={
+                          errors.scopes && touched.scopes
+                            ? "error"
+                            : touched.scopes
+                              ? "success"
+                              : "idle"
+                        }
+                      >
+                        <FormField.Label>
+                          {t.rich("openApiAuthModal.scopes.label", {
+                            optional: (chunks) => (
+                              <span className="text-text-03">{chunks}</span>
+                            ),
+                          })}
+                        </FormField.Label>
+                        <FormField.Control asChild>
+                          <InputTypeIn
+                            name="scopes"
+                            value={values.scopes}
+                            onChange={handleChange}
+                            placeholder={t(
+                              "openApiAuthModal.scopes.placeholder"
+                            )}
+                          />
+                        </FormField.Control>
+                        <FormField.Description>
+                          {t("openApiAuthModal.scopes.description")}
+                        </FormField.Description>
+                        <FormField.Message
+                          messages={{
+                            error: errors.scopes,
+                          }}
+                        />
+                      </FormField>
+
+                      <FormField name="supportsPkce">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex flex-col gap-1">
+                            <FormField.Label>
+                              {t("openApiAuthModal.pkce.label")}
+                            </FormField.Label>
+                            <FormField.Description>
+                              {t("openApiAuthModal.pkce.description")}
+                            </FormField.Description>
+                          </div>
                           <FormField.Control asChild>
-                            <InputTypeIn
-                              name="clientId"
-                              value={values.clientId}
-                              onChange={handleChange}
-                              placeholder=" "
+                            <InputSwitch
+                              checked={values.supportsPkce}
+                              onCheckedChange={(checked) =>
+                                setFieldValue("supportsPkce", checked)
+                              }
                             />
                           </FormField.Control>
-                          {isEditingOAuthConfig && (
-                            <FormField.Description>
-                              {t("openApiAuthModal.clientId.description")}
-                            </FormField.Description>
-                          )}
-                          <FormField.Message
-                            messages={{
-                              error: errors.clientId,
-                            }}
-                          />
-                        </FormField>
+                        </div>
+                      </FormField>
 
-                        <FormField
-                          name="clientSecret"
-                          state={
-                            errors.clientSecret && touched.clientSecret
-                              ? "error"
-                              : touched.clientSecret
-                                ? "success"
-                                : "idle"
-                          }
-                        >
-                          <FormField.Label>
-                            {t("openApiAuthModal.clientSecret.label")}
-                          </FormField.Label>
-                          <FormField.Control asChild>
-                            <InputPasswordTypeIn
-                              name="clientSecret"
-                              value={values.clientSecret}
-                              onChange={handleChange}
-                              placeholder=" "
-                            />
-                          </FormField.Control>
-                          {isEditingOAuthConfig && (
-                            <FormField.Description>
-                              {t("openApiAuthModal.clientSecret.description")}
-                            </FormField.Description>
-                          )}
-                          <FormField.Message
-                            messages={{
-                              error: errors.clientSecret,
-                            }}
-                          />
-                        </FormField>
+                      <OAuthConnectionCheck
+                        values={values}
+                        configId={oauthConfigId}
+                        disabled={!isValid || isSubmitting}
+                      />
 
-                        <FormField
-                          name="scopes"
-                          state={
-                            errors.scopes && touched.scopes
-                              ? "error"
-                              : touched.scopes
-                                ? "success"
-                                : "idle"
-                          }
-                        >
-                          <FormField.Label>
-                            {t.rich("openApiAuthModal.scopes.label", {
-                              optional: (chunks) => (
-                                <span className="text-text-03">{chunks}</span>
+                      <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
+                        <div className="flex flex-col gap-2 w-full">
+                          <Text
+                            as="p"
+                            text03
+                            secondaryBody
+                            className="flex flex-wrap gap-1"
+                          >
+                            {t.rich("openApiAuthModal.redirectUri.label", {
+                              emphasis: (chunks) => (
+                                <span className="font-secondary-action">
+                                  {chunks}
+                                </span>
                               ),
                             })}
-                          </FormField.Label>
-                          <FormField.Control asChild>
-                            <InputTypeIn
-                              name="scopes"
-                              value={values.scopes}
-                              onChange={handleChange}
-                              placeholder={t(
-                                "openApiAuthModal.scopes.placeholder"
-                              )}
-                            />
-                          </FormField.Control>
-                          <FormField.Description>
-                            {t("openApiAuthModal.scopes.description")}
-                          </FormField.Description>
-                          <FormField.Message
-                            messages={{
-                              error: errors.scopes,
-                            }}
-                          />
-                        </FormField>
-
-                        <FormField name="supportsPkce">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex flex-col gap-1">
-                              <FormField.Label>
-                                {t("openApiAuthModal.pkce.label")}
-                              </FormField.Label>
-                              <FormField.Description>
-                                {t("openApiAuthModal.pkce.description")}
-                              </FormField.Description>
-                            </div>
-                            <FormField.Control asChild>
-                              <InputSwitch
-                                checked={values.supportsPkce}
-                                onCheckedChange={(checked) =>
-                                  setFieldValue("supportsPkce", checked)
-                                }
-                              />
-                            </FormField.Control>
-                          </div>
-                        </FormField>
-
-                        <OAuthConnectionCheck
-                          values={values}
-                          configId={oauthConfigId}
-                          disabled={!isValid || isSubmitting}
-                        />
-
-                        <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
-                          <div className="flex flex-col gap-2 w-full">
+                          </Text>
+                          <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
                             <Text
                               as="p"
-                              text03
-                              secondaryBody
-                              className="flex flex-wrap gap-1"
+                              text04
+                              className="font-mono text-[12px] leading-[16px] truncate flex-1"
                             >
-                              {t.rich("openApiAuthModal.redirectUri.label", {
-                                emphasis: (chunks) => (
-                                  <span className="font-secondary-action">
-                                    {chunks}
-                                  </span>
-                                ),
-                              })}
+                              {redirectUri}
                             </Text>
-                            <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
-                              <Text
-                                as="p"
-                                text04
-                                className="font-mono text-[12px] leading-[16px] truncate flex-1"
-                              >
-                                {redirectUri}
-                              </Text>
-                              <CopyButton
-                                getCopyText={() => redirectUri}
-                                tooltip={t(
-                                  "openApiAuthModal.redirectUri.copyTooltip"
-                                )}
-                                prominence="tertiary"
-                                size="sm"
-                              />
-                            </div>
+                            <CopyButton
+                              getCopyText={() => redirectUri}
+                              tooltip={t(
+                                "openApiAuthModal.redirectUri.copyTooltip"
+                              )}
+                              prominence="tertiary"
+                              size="sm"
+                            />
                           </div>
                         </div>
-                      </section>
-                    )}
-                    {values.authMethod === "custom-header" && (
-                      <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
-                        <div className="flex flex-col gap-2">
-                          <Text as="p" mainUiAction text04>
-                            {t("openApiAuthModal.headers.title")}
-                          </Text>
-                          <Text as="p" secondaryBody text03>
-                            {t("openApiAuthModal.headers.description")}
-                          </Text>
-                        </div>
-                        <FormField
-                          name="headers"
-                          state={errors.headers ? "error" : "idle"}
-                        >
-                          <FormField.Control asChild>
-                            <KeyValueInput
-                              keyTitle={t("openApiAuthModal.headers.keyTitle")}
-                              valueTitle={t(
-                                "openApiAuthModal.headers.valueTitle"
-                              )}
-                              items={values.headers}
-                              onChange={(items) =>
-                                setFieldValue("headers", items)
-                              }
-                              addButtonLabel={t(
-                                "openApiAuthModal.headers.addButton.label"
-                              )}
-                              onValidationError={(message) =>
-                                setFieldError("headers", message || undefined)
-                              }
-                              layout="equal"
-                            />
-                          </FormField.Control>
-                          <FormField.Message
-                            messages={{
-                              error:
-                                typeof errors.headers === "string"
-                                  ? errors.headers
-                                  : undefined,
-                            }}
+                      </div>
+                    </section>
+                  )}
+                  {values.authMethod === "custom-header" && (
+                    <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
+                      <div className="flex flex-col gap-2">
+                        <Text as="p" mainUiAction text04>
+                          {t("openApiAuthModal.headers.title")}
+                        </Text>
+                        <Text as="p" secondaryBody text03>
+                          {t("openApiAuthModal.headers.description")}
+                        </Text>
+                      </div>
+                      <FormField
+                        name="headers"
+                        state={errors.headers ? "error" : "idle"}
+                      >
+                        <FormField.Control asChild>
+                          <KeyValueInput
+                            keyTitle={t("openApiAuthModal.headers.keyTitle")}
+                            valueTitle={t(
+                              "openApiAuthModal.headers.valueTitle"
+                            )}
+                            items={values.headers}
+                            onChange={(items) =>
+                              setFieldValue("headers", items)
+                            }
+                            addButtonLabel={t(
+                              "openApiAuthModal.headers.addButton.label"
+                            )}
+                            onValidationError={(message) =>
+                              setFieldError("headers", message || undefined)
+                            }
+                            layout="equal"
                           />
-                        </FormField>
-                      </section>
-                    )}
-                    {values.authMethod === "pt-oauth" && (
-                      <MessageCard
-                        outerPadding={1}
-                        innerPadding={1}
-                        title={t("openApiAuthModal.passThroughNotice.title")}
-                        description={t(
-                          "openApiAuthModal.passThroughNotice.description",
-                          { appName }
-                        )}
-                      />
-                    )}
-                  </>
-                )}
-              </Modal.Body>
+                        </FormField.Control>
+                        <FormField.Message
+                          messages={{
+                            error:
+                              typeof errors.headers === "string"
+                                ? errors.headers
+                                : undefined,
+                          }}
+                        />
+                      </FormField>
+                    </section>
+                  )}
+                  {values.authMethod === "pt-oauth" && (
+                    <MessageCard
+                      outerPadding={1}
+                      innerPadding={1}
+                      title={t("openApiAuthModal.passThroughNotice.title")}
+                      description={t(
+                        "openApiAuthModal.passThroughNotice.description",
+                        { appName }
+                      )}
+                    />
+                  )}
+                </>
+              )}
+            </Modal.Body>
 
-              <Modal.Footer>
-                <Button
-                  prominence="tertiary"
-                  type="button"
-                  onClick={handleSkip}
-                >
-                  {t("openApiAuthModal.cancelButton.label")}
-                </Button>
-                <Button
-                  disabled={
-                    !isValid || isSubmitting || shouldDisableForm || !dirty
-                  }
-                  type="submit"
-                >
-                  {isSubmitting
-                    ? t("openApiAuthModal.submitButton.pendingLabel")
-                    : t("openApiAuthModal.submitButton.label")}
-                </Button>
+            {presentation === "inline" ? (
+              <MCPFormActions
+                variant="page"
+                active={isOpen && visible}
+                footerTarget={footerTarget}
+                submit={submit}
+              />
+            ) : (
+              <Modal.Footer padding={6}>
+                {onBack && (
+                  <Button
+                    icon={SvgArrowLeft}
+                    type="button"
+                    prominence="tertiary"
+                    disabled={isSubmitting}
+                    onClick={() => onBack(values)}
+                  >
+                    {t("mcpSetup.back")}
+                  </Button>
+                )}
+                <div className="ms-auto flex items-center gap-2">
+                  <Button
+                    prominence="tertiary"
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleSkip}
+                  >
+                    {t("openApiAuthModal.cancelButton.label")}
+                  </Button>
+                  {submit}
+                </div>
               </Modal.Footer>
-            </Form>
-          )}
-        </Formik>
-      </Modal.Content>
+            )}
+          </Form>
+        );
+      }}
+    </Formik>
+  );
+
+  if (presentation === "inline") return isOpen ? form : null;
+
+  return (
+    <Modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !saving) onClose();
+      }}
+    >
+      <PluginModalContent skipOverlay={skipOverlay}>
+        <Modal.Header
+          padding={4}
+          title={title}
+          description={description ?? t("openApiAuthModal.header.description")}
+          onClose={saving ? undefined : onClose}
+        />
+        {form}
+      </PluginModalContent>
     </Modal>
   );
 }

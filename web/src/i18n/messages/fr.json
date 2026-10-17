@@ -130,8 +130,7 @@
       "authStatus": {
         "apiTokenDescription": "Jeton d'API configuré",
         "connectedDescription": "Connecté",
-        "title": "Authentifié et connecté",
-        "oauthDescription": "OAuth connecté à {owner}"
+        "title": "Authentifié et connecté"
       },
       "cancelButton": {
         "label": "Annuler"
@@ -159,8 +158,7 @@
       "serverUrl": {
         "invalid": "L'URL doit être valide",
         "required": "L'URL du serveur est obligatoire",
-        "title": "URL du serveur MCP",
-        "subDescription": "Connectez-vous uniquement à des serveurs de confiance. Vous êtes responsable des actions effectuées avec cette connexion et de la mise à jour de vos outils."
+        "title": "URL du serveur MCP"
       },
       "submitButton": {
         "addLabel": "Ajouter le serveur",
@@ -324,22 +322,18 @@
       },
       "authType": {
         "apiToken": {
-          "label": "Clé d'API",
-          "description": "Utilisez une clé d'API individuelle par utilisateur ou une clé d'API partagée dans toute l'organisation."
+          "label": "Clé d'API"
         },
         "label": "Méthode d'authentification",
         "none": {
-          "label": "Sans authentification",
-          "description": "Non recommandé"
+          "label": "Sans authentification"
         },
         "oauth": {
-          "label": "OAuth",
-          "description": "Chaque utilisateur doit s'authentifier via OAuth avec ses propres identifiants."
+          "label": "OAuth"
         },
         "placeholder": "Sélectionner une méthode",
         "ptOauth": {
-          "label": "Transfert OAuth",
-          "description": "Transférez le jeton d'accès OAuth utilisé par l'utilisateur pour s'authentifier auprès de {appName}."
+          "label": "Transfert OAuth"
         },
         "required": "Le type d'authentification est obligatoire"
       },
@@ -370,8 +364,7 @@
         "clientRegistrationFailed": "L’enregistrement automatique du client a échoué. Utilisez votre propre client OAuth ou vérifiez les exigences de configuration du fournisseur.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",
         "connectionFailed": "Le serveur OAuth est inaccessible. Vérifiez l’URL du serveur et réessayez.",
-        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez.",
-        "oauthInitFailed": "Échec du lancement de OAuth : {detail}"
+        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez."
       },
       "header": {
         "defaultTitle": "Configurer l’authentification",
@@ -460,13 +453,6 @@
         "unreachableTitle": "Impossible de déterminer si la configuration automatique est disponible",
         "missingTitle": "Points de terminaison OAuth introuvables",
         "requiresClientTitle": "La configuration automatique est peut-être indisponible"
-      },
-      "advanced": {
-        "description": "Configurez un fournisseur OAuth connu avec des points de terminaison d'autorisation et de jeton explicites, au lieu de la découverte automatique.",
-        "title": "Avancé"
-      },
-      "knownProvider": {
-        "hint": "Le mode fournisseur connu exige la configuration des points de terminaison. Points de terminaison Google de référence : autorisation {authorizationEndpoint} et jeton {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -747,9 +733,7 @@
       },
       "credentials": {
         "perUserDescription": "Utilisez vos identifiants pour tester ce MCP et charger ses outils. Ils sont enregistrés uniquement dans votre compte.",
-        "sharedDescription": "Ces valeurs sont utilisées pour chaque utilisateur de votre organisation.",
-        "perUserTitle": "Uniquement pour votre propre compte",
-        "sharedTitle": "Valeurs partagées de l'organisation"
+        "sharedDescription": "Ces valeurs sont utilisées pour chaque utilisateur de votre organisation."
       },
       "headers": {
         "addButton": {
@@ -14361,11 +14345,7 @@
           "description": "Choisissez ce que l’agent peut faire. « Demander » exige une autorisation avant chaque action ; « Approbation automatique » l’exécute sans demander.",
           "title": "Autorisations"
         },
-        "savingButton": "Enregistrement…",
-        "advanced": {
-          "description": "Définissez une politique pour chaque action individuellement.",
-          "title": "Avancé"
-        }
+        "savingButton": "Enregistrement…"
       },
       "skillsStep": {
         "description": "Facultatif : associez des compétences existantes ou créez-en une pour cette app.",

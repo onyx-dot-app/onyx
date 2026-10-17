@@ -134,13 +134,6 @@ export interface ChatSearchFilters {
   timeRange: { from: string; to: string } | null;
 }
 
-export enum ActionStatus {
-  CONNECTED = "connected",
-  PENDING = "pending",
-  DISCONNECTED = "disconnected",
-  FETCHING = "fetching",
-}
-
 export type SecondaryViewState =
   | { type: "sources" }
   | { type: "mcp"; serverId: number };

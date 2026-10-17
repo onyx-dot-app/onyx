@@ -30,6 +30,7 @@ export type AdminNavItemId =
   | "craftPreferences"
   | "customAnalytics"
   | "agents"
+  | "plugins"
   | "mcpActions"
   | "openapiActions"
   | "indexingStatus"
@@ -83,14 +84,14 @@ export const NAV_ITEM_IDS: Record<
   CHAT_PREFERENCES: "chatPreferences",
   LLM_GATEWAY: "llmGateway",
   CRAFT_ACCESS: "craftAccess",
-  CRAFT_APPS: "craftApps",
+  CRAFT_APPS: null,
   CRAFT_PREFERENCES: "craftPreferences",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
-  PLUGINS: null,
+  PLUGINS: "plugins",
   PLUGINS_EXTERNAL_APP: null,
-  MCP_ACTIONS: "mcpActions",
-  OPENAPI_ACTIONS: "openapiActions",
+  MCP_ACTIONS: null,
+  OPENAPI_ACTIONS: null,
   INDEXING_STATUS: "indexingStatus",
   CONNECTORS: "connectors",
   DOCUMENT_SETS: "documentSets",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useId, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import isEqual from "lodash/isEqual";
@@ -11,21 +11,17 @@ import {
   InputPasswordTypeIn,
   Text,
 } from "@opal/components";
-import { InputSingleSelect } from "@opal/components";
-import { Collapsible } from "@opal/components";
-import PolicyToggle from "@/sections/actions/PolicyToggle";
+import { InputVertical } from "@opal/layouts";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PolicyEditor, {
+  type PolicyEditorItem,
+} from "@/sections/actions/PolicyEditor";
+export type { PolicyEditorItem } from "@/sections/actions/PolicyEditor";
 import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
-
-// One agent-callable capability whose approval policy an admin can set —
-// an external-app action or an MCP tool.
-export interface PolicyEditorItem {
-  id: string;
-  name: string;
-  description: string;
-  defaultPolicy: EndpointPolicy;
-}
+import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
+import type { IconFunctionComponent } from "@opal/types";
 
 // A required text input the app needs before it can be saved
 // (name, credentials, …).
@@ -49,7 +45,9 @@ interface ActionPolicyEditorModalProps {
   isAdditionalContentDirty?: boolean;
   onClose: () => void;
   title: string;
-  description: string;
+  displayUrl?: string;
+  icon?: IconFunctionComponent;
+  authenticationInstructions?: string;
   /** Shown in place of field inputs when there is nothing to type in. */
   note?: string;
   fields: EditorField[];
@@ -65,7 +63,7 @@ interface ActionPolicyEditorModalProps {
     fieldValues: Record<string, string>,
     policies: Record<string, EndpointPolicy>
   ) => Promise<void>;
-  bodyAfterPolicies?: (
+  skillsContent?: (
     requestLeave: (navigate: () => void) => void
   ) => React.ReactNode;
   autoFocusFirstField?: boolean;
@@ -73,6 +71,7 @@ interface ActionPolicyEditorModalProps {
   allowPristineSave?: boolean;
   /** Keep the modal mounted when save advances its caller to another step. */
   closeAfterSave?: boolean;
+  discardOnClose?: boolean;
 }
 
 /** The one edit dialog for everything the Craft agent can be granted.
@@ -85,7 +84,9 @@ export default function ActionPolicyEditorModal({
   isAdditionalContentDirty = false,
   onClose,
   title,
-  description,
+  displayUrl,
+  icon,
+  authenticationInstructions,
   note,
   fields,
   initialFieldValues,
@@ -94,12 +95,14 @@ export default function ActionPolicyEditorModal({
   emptyPoliciesMessage,
   saveLabel,
   onSave,
-  bodyAfterPolicies,
+  skillsContent,
   autoFocusFirstField = true,
   allowPristineSave = false,
   closeAfterSave = true,
+  discardOnClose = false,
 }: ActionPolicyEditorModalProps) {
   const t = useTranslations("craft.apps.policyEditor");
+  const fieldId = useId();
   const focusFirstField =
     useFocusOnMount<HTMLInputElement>(autoFocusFirstField);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
@@ -109,6 +112,7 @@ export default function ActionPolicyEditorModal({
     ...initialPolicies,
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [tab, setTab] = useState("configuration");
   const [error, setError] = useState<string | null>(null);
   const fieldsFilled = fields.every(
     (field) => (fieldValues[field.key] ?? "").trim().length > 0
@@ -116,7 +120,9 @@ export default function ActionPolicyEditorModal({
   const fieldsDirty = !isEqual(fieldValues, initialFieldValues);
   const policiesDirty = !isEqual(policies, initialPolicies);
   const isDirty = fieldsDirty || policiesDirty || isAdditionalContentDirty;
-  const unsavedChanges = useUnsavedChangesGuard({ isDirty });
+  const unsavedChanges = useUnsavedChangesGuard({
+    isDirty: !discardOnClose && isDirty,
+  });
   const confirmationOpen =
     alternateContentConfirmationOpen || unsavedChanges.confirmationOpen;
   const canSave =
@@ -138,6 +144,12 @@ export default function ActionPolicyEditorModal({
     }
   }
 
+  function requestClose() {
+    if (isSaving) return;
+    if (alternateContent) onClose();
+    else unsavedChanges.requestLeave(onClose);
+  }
+
   function handleDismiss(event: Event) {
     const preventedByModal = event.defaultPrevented;
     event.preventDefault();
@@ -146,11 +158,7 @@ export default function ActionPolicyEditorModal({
       unsavedChanges.cancelLeave();
       return;
     }
-    if (alternateContent) {
-      onClose();
-    } else {
-      unsavedChanges.requestLeave(onClose);
-    }
+    requestClose();
   }
 
   const confirmationContent = unsavedChanges.confirmationOpen ? (
@@ -162,13 +170,10 @@ export default function ActionPolicyEditorModal({
 
   return (
     <Modal open>
-      <Modal.Content
-        width={confirmationOpen || alternateContent ? "sm" : "lg"}
-        height={confirmationOpen || alternateContent ? "fit" : "lg"}
+      <PluginModalContent
         onOpenAutoFocus={(event) => {
           if (!autoFocusFirstField) event.preventDefault();
         }}
-        preventAccidentalClose={!confirmationOpen}
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
@@ -184,62 +189,91 @@ export default function ActionPolicyEditorModal({
           confirmationContent
         ) : (
           <>
-            <Modal.Header title={title} description={description} />
-            <Modal.Body>
+            <Modal.Header
+              title={title}
+              description={displayUrl || undefined}
+              icon={icon}
+              onClose={requestClose}
+            />
+            <Modal.Body twoTone={false} alignItems="stretch">
               <div className="flex flex-col gap-3">
-                {note && (
-                  <Text font="secondary-body" color="text-03">
-                    {note}
-                  </Text>
-                )}
-
-                {fields.map((field) => {
-                  const Input = field.secret
-                    ? InputPasswordTypeIn
-                    : InputTypeIn;
-                  return (
-                    <div key={field.key} className="flex flex-col gap-1">
-                      <Text font="main-ui-action">{field.label}</Text>
-                      <Input
-                        ref={field === fields[0] ? focusFirstField : undefined}
-                        value={fieldValues[field.key] ?? ""}
-                        onChange={(e) =>
-                          setFieldValues((prev) => ({
-                            ...prev,
-                            [field.key]: e.target.value,
-                          }))
-                        }
-                        placeholder={field.placeholder}
-                      />
-                      <Text font="secondary-body" color="text-03">
-                        {field.description}
+                <CraftAppEditorTabs
+                  value={tab}
+                  onValueChange={setTab}
+                  busy={isSaving}
+                  configuration={
+                    <>
+                      {note && (
+                        <Text font="secondary-body" color="text-03">
+                          {note}
+                        </Text>
+                      )}
+                      {authenticationInstructions && (
+                        <Text font="secondary-body" color="text-03">
+                          {authenticationInstructions}
+                        </Text>
+                      )}
+                      {fields.map((field) => {
+                        const Input = field.secret
+                          ? InputPasswordTypeIn
+                          : InputTypeIn;
+                        return (
+                          <InputVertical
+                            key={field.key}
+                            title={field.label}
+                            subDescription={field.description}
+                            withLabel={`${fieldId}-${field.key}`}
+                          >
+                            <Input
+                              id={`${fieldId}-${field.key}`}
+                              aria-label={field.label}
+                              ref={
+                                field === fields[0]
+                                  ? focusFirstField
+                                  : undefined
+                              }
+                              value={fieldValues[field.key] ?? ""}
+                              disabled={isSaving}
+                              onChange={(event) =>
+                                setFieldValues((previous) => ({
+                                  ...previous,
+                                  [field.key]: event.target.value,
+                                }))
+                              }
+                              placeholder={field.placeholder}
+                            />
+                          </InputVertical>
+                        );
+                      })}
+                    </>
+                  }
+                  permissions={
+                    policyItems === undefined ? (
+                      <Text font="main-content-body" color="text-03">
+                        {t("loading.label")}
                       </Text>
-                    </div>
-                  );
-                })}
-
-                {policyItems === undefined ? (
-                  <Text font="main-content-body" color="text-03">
-                    {t("loading.label")}
-                  </Text>
-                ) : policyItems.length === 0 ? (
-                  <Text font="secondary-body" color="text-03">
-                    {emptyPoliciesMessage}
-                  </Text>
-                ) : (
-                  <PolicyEditor
-                    items={policyItems}
-                    policies={policies}
-                    onChange={setPolicies}
-                  />
-                )}
-
-                {bodyAfterPolicies?.(unsavedChanges.requestLeave)}
+                    ) : policyItems.length === 0 ? (
+                      <Text font="secondary-body" color="text-03">
+                        {emptyPoliciesMessage}
+                      </Text>
+                    ) : (
+                      <PolicyEditor
+                        showTitle={false}
+                        items={policyItems}
+                        policies={policies}
+                        onChange={setPolicies}
+                      />
+                    )
+                  }
+                  skills={skillsContent?.(unsavedChanges.requestLeave)}
+                />
 
                 {error && (
-                  <Text font="secondary-body" color="text-03">
-                    {error}
-                  </Text>
+                  <div role="alert">
+                    <Text font="secondary-body" color="status-error-05">
+                      {error}
+                    </Text>
+                  </div>
                 )}
               </div>
             </Modal.Body>
@@ -259,123 +293,7 @@ export default function ActionPolicyEditorModal({
             </Modal.Footer>
           </>
         )}
-      </Modal.Content>
+      </PluginModalContent>
     </Modal>
-  );
-}
-
-// ── Policy editor ──────────────────────────────────────────────────────
-
-// Custom describes overrides that no bulk preset can represent.
-type BulkPolicy = "DEFAULT" | "ALWAYS" | "ASK" | "CUSTOM";
-
-function bulkPolicyOf(
-  items: PolicyEditorItem[],
-  policies: Record<string, EndpointPolicy>
-): BulkPolicy {
-  if (
-    items.every(
-      (item) => (policies[item.id] ?? item.defaultPolicy) === item.defaultPolicy
-    )
-  ) {
-    return "DEFAULT";
-  }
-  const values = items.map((item) => policies[item.id] ?? item.defaultPolicy);
-  if (values.every((value) => value === "ALWAYS")) return "ALWAYS";
-  if (values.every((value) => value === "ASK")) return "ASK";
-  return "CUSTOM";
-}
-
-interface PolicyEditorProps {
-  items: PolicyEditorItem[];
-  policies: Record<string, EndpointPolicy>;
-  onChange: (policies: Record<string, EndpointPolicy>) => void;
-}
-
-/** Approval-policy section of the editor: a defaults/Auto-approve/Ask selector
- * plus an Advanced section with a per-item three-state toggle. */
-function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
-  const t = useTranslations("craft.apps.policyEditor");
-  const bulkValue = bulkPolicyOf(items, policies);
-  const [advancedOpen, setAdvancedOpen] = useState(
-    bulkValue === "DEFAULT" || bulkValue === "CUSTOM"
-  );
-
-  // Stored choices may arrive after mount (fetched, or seeded by an effect).
-  // Show per-item choices for defaults and custom overrides.
-  useEffect(() => {
-    if (bulkValue === "DEFAULT" || bulkValue === "CUSTOM") {
-      setAdvancedOpen(true);
-    }
-  }, [bulkValue]);
-
-  return (
-    <div className="flex flex-col gap-2 pt-2">
-      <Text font="main-ui-action">{t("permissions.title")}</Text>
-      <Text font="secondary-body" color="text-03">
-        {t("permissions.description")}
-      </Text>
-
-      <InputSingleSelect
-        value={bulkValue}
-        onValueChange={(value) => {
-          if (value === "DEFAULT" || value === "ALWAYS" || value === "ASK") {
-            onChange(
-              Object.fromEntries(
-                items.map((item) => [
-                  item.id,
-                  value === "DEFAULT" ? item.defaultPolicy : value,
-                ])
-              )
-            );
-          }
-        }}
-        defaultOption="DEFAULT"
-        placeholder={t("permissions.title")}
-        options={[
-          { value: "DEFAULT", title: t("permissions.defaultOption") },
-          ...(bulkValue === "CUSTOM"
-            ? [{ value: "CUSTOM", title: t("permissions.customOption") }]
-            : []),
-          { value: "ALWAYS", title: t("permissions.autoApproveOption") },
-          { value: "ASK", title: t("permissions.askOption") },
-        ]}
-      />
-
-      <Collapsible
-        open={advancedOpen}
-        onOpenChange={setAdvancedOpen}
-        title={t("advanced.title")}
-        description={t("advanced.description")}
-      >
-        <div className="flex flex-col gap-2">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between gap-3"
-            >
-              <div className="flex min-w-0 flex-1 flex-col">
-                <Text font="main-ui-action" wordWrap="wrap-anywhere">
-                  {item.name}
-                </Text>
-                <Text
-                  font="secondary-body"
-                  color="text-03"
-                  wordWrap="wrap-anywhere"
-                >
-                  {item.description}
-                </Text>
-              </div>
-              <PolicyToggle
-                value={policies[item.id] ?? item.defaultPolicy}
-                onChange={(value) =>
-                  onChange({ ...policies, [item.id]: value })
-                }
-              />
-            </div>
-          ))}
-        </div>
-      </Collapsible>
-    </div>
   );
 }

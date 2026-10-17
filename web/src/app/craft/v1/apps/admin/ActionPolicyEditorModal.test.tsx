@@ -32,7 +32,7 @@ const ITEMS: PolicyEditorItem[] = [
   },
 ];
 
-function renderEditor(
+async function renderEditor(
   initialPolicies: Record<string, EndpointPolicy> = {},
   items: PolicyEditorItem[] = ITEMS
 ) {
@@ -41,7 +41,7 @@ function renderEditor(
     <ActionPolicyEditorModal
       onClose={jest.fn()}
       title="App settings"
-      description="Configure this app"
+      displayUrl="https://example.com"
       fields={[]}
       initialFieldValues={{}}
       policyItems={items}
@@ -52,13 +52,12 @@ function renderEditor(
       allowPristineSave
     />
   );
+  await setupUser().click(screen.getByRole("tab", { name: "Permissions" }));
   return { onSave };
 }
 
 function expectValidSelection(label: string) {
-  expect(screen.getByRole("combobox", { name: "Permissions" })).toHaveValue(
-    label
-  );
+  expect(screen.getByRole("combobox")).toHaveValue(label);
   expect(
     screen.queryByText("Please select a valid option from the list")
   ).not.toBeInTheDocument();
@@ -75,7 +74,7 @@ describe("ActionPolicyEditorModal permissions", () => {
     "shows registry defaults without validation errors or changing stored policies: %j",
     async (policies) => {
       const user = setupUser();
-      const { onSave } = renderEditor(policies);
+      const { onSave } = await renderEditor(policies);
       expectValidSelection("Default");
       await user.click(screen.getByRole("button", { name: "Save" }));
       await waitFor(() => expect(onSave).toHaveBeenCalledWith({}, policies));
@@ -84,9 +83,9 @@ describe("ActionPolicyEditorModal permissions", () => {
 
   it("shows readable custom overrides and preserves them when selected", async () => {
     const user = setupUser();
-    const { onSave } = renderEditor({ write: "DENY" });
+    const { onSave } = await renderEditor({ write: "DENY" });
     expectValidSelection("Custom");
-    await user.click(screen.getByRole("combobox", { name: "Permissions" }));
+    await user.click(screen.getByRole("combobox"));
     const option = screen.getByRole("option", { name: "Custom" });
     expect(option).not.toHaveAttribute("aria-disabled", "true");
     fireEvent.click(option);
@@ -97,8 +96,8 @@ describe("ActionPolicyEditorModal permissions", () => {
     );
   });
 
-  it("shows Default for the shared MCP editor's all-Ask defaults", () => {
-    renderEditor(
+  it("shows Default for the shared MCP editor's all-Ask defaults", async () => {
+    await renderEditor(
       {},
       ITEMS.map((item) => ({ ...item, defaultPolicy: "ASK" }))
     );
@@ -107,22 +106,22 @@ describe("ActionPolicyEditorModal permissions", () => {
 
   it.each(["ALWAYS", "ASK"] as const)(
     "shows a uniform %s override",
-    (policy) => {
-      renderEditor({ read: policy, write: policy });
+    async (policy) => {
+      await renderEditor({ read: policy, write: policy });
       expectValidSelection(policy === "ALWAYS" ? "Auto-approve" : "Ask");
     }
   );
 
   it("restores registry defaults after a bulk override", async () => {
     const user = setupUser();
-    const { onSave } = renderEditor();
-    await user.click(screen.getByRole("combobox", { name: "Permissions" }));
+    const { onSave } = await renderEditor();
+    await user.click(screen.getByRole("combobox"));
     expect(
       screen.queryByRole("option", { name: "Custom" })
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("option", { name: "Auto-approve" }));
     expectValidSelection("Auto-approve");
-    await user.click(screen.getByRole("combobox", { name: "Permissions" }));
+    await user.click(screen.getByRole("combobox"));
     fireEvent.click(screen.getByRole("option", { name: "Default" }));
     expectValidSelection("Default");
     await user.click(screen.getByRole("button", { name: "Save" }));

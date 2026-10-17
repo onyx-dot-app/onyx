@@ -139,17 +139,9 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
 
     const uiServerName = `${serverName} (UI)`;
     await adminMcp.openAddServerModal();
-    await adminMcp.fillServerDetails({
-      name: uiServerName,
-      description: "Test per-user multi-field API key MCP server",
-      url: serverUrl,
-    });
-    uiServerId = await adminMcp.submitAddServer();
-
+    await adminMcp.enterServerUrlAndContinue(serverUrl);
     await adminMcp.selectAuthMethod("API Key");
-    // Per-user is the default tab for API Key; click it explicitly so the test
-    // fails loudly if that default ever changes.
-    await adminMcp.selectApiKeyTab("per-user");
+    await adminMcp.selectApiKeyCredentials("per-user");
 
     // Header row 1 is pre-populated with Authorization / Bearer {api_key}.
     await adminMcp.expectFirstHeaderPrefilled();
@@ -165,9 +157,12 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
       username: ADMIN_USERNAME,
     });
 
-    await adminMcp.connectAndWaitForUpsert();
+    await adminMcp.fillServerDetails({
+      name: uiServerName,
+    });
+    uiServerId = await adminMcp.connectAndWaitForCreation();
 
-    await adminMcp.expectServerCard(uiServerName);
+    await adminMcp.expectServerDetail(uiServerName);
     await adminMcp.refreshTools();
   });
 

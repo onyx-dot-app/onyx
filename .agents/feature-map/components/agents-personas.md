@@ -58,6 +58,12 @@ delete action (`AgentRowActions.tsx`,
 `db/persona.py:mark_persona_as_deleted` also refuses any built-in persona for
 every caller, admin included. See §5.
 
+MCP server configuration can also change default Chat tool attachments. Turning
+server availability off removes only its default Chat attachments. Custom agents
+keep theirs. The default Chat tool editor updates the same availability flag when
+its last selected server tool is removed. Discovery adds new tools for enabled
+servers without restoring existing tools the admin deselected.
+
 ---
 
 ## 2. Surfaces
@@ -301,9 +307,10 @@ explicitly not display priority or built-in status (`upsert_persona`'s own
 docstring repeats this limit for the general update path).
 
 Frontend `useDefaultAssistantConfiguration` sequences complete replacement
-writes per SWR cache without copying configuration data. Failed writes roll back
-before the next operation reads the cache. Separate browsers still need backend
-concurrency control for simultaneous edits.
+writes per SWR cache. Row menus, details, and Chat Preferences share that queue
+without copying configuration data. A failed write rolls back before the next
+operation reads the cache. Separate browsers still need backend concurrency
+control for simultaneous edits.
 
 ### 4.6 Pinning
 

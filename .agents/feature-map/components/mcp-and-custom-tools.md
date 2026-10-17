@@ -29,7 +29,7 @@ how an admin creates the `Tool` row and its associated `MCPServer` /
 ## 1. What the user experiences
 
 An admin who wants Onyx to call an outside system has two paths, both under
-Admin > Actions.
+Admin > Plugins.
 
 **MCP server.** The admin enters a server URL, picks a transport, and picks an
 auth mode (none, a shared API key, or OAuth). Onyx connects, lists the
@@ -106,8 +106,10 @@ inline, not a broken turn.
 
 | Route | Page | Content component |
 |---|---|---|
-| `/admin/mcp-actions` | `web/src/app/admin/mcp-actions/page.tsx` | `MCPPageContent` (`web/src/sections/actions/MCPPageContent.tsx`) |
-| `/admin/openapi-actions` | `web/src/app/admin/openapi-actions/page.tsx` | `OpenApiPageContent` (`web/src/sections/actions/OpenApiPageContent.tsx`) |
+| `/admin/plugins` | `web/src/app/admin/plugins/page.tsx` | `PluginsPage` (`web/src/sections/plugins/PluginsPage.tsx`) |
+| `/admin/plugins/mcp/[serverId]` | `web/src/app/admin/plugins/mcp/[serverId]/page.tsx` | `MCPServerDetailPage` |
+| `/admin/plugins/openapi/[toolId]` | `web/src/app/admin/plugins/openapi/[toolId]/page.tsx` | `OpenAPIPluginDetailPage` |
+| `/admin/mcp-actions`, `/admin/openapi-actions` | Existing route files | Query-preserving redirects to Plugins |
 
 ### HTTP endpoints, MCP (`backend/onyx/server/features/mcp/api.py`, prefixes `/mcp` and `/admin/mcp`)
 
@@ -723,3 +725,22 @@ OpenAPI expiry requires sign-in unless backend status confirms refresh capabilit
 Missing refresh capability retains the expired-token sign-in requirement.
 Null OpenAPI custom headers represent a connection without shared header credentials.
 These helpers do not grant access or attach new tools by themselves.
+
+### Unified workspace plugin administration
+
+Admin Plugins combines MCP servers, OpenAPI actions, and full-admin external apps.
+Scoped action managers do not fetch external-app records or provider options.
+Craft deployment gates control Craft filters, editors, and creation choices.
+The directory preserves independent loading and retry states for each resource kind.
+
+MCP setup uses the credential-free probe before authentication and tool discovery.
+Saved MCP details separate configuration, authentication, permissions, and tools.
+OpenAPI creation validates a schema before the final create operation.
+Saved OpenAPI details reuse schema and authentication forms, retain drafts across tabs,
+and confirm unsaved changes. Failed retries reuse created resource IDs.
+
+Workspace lifecycle actions preserve unrelated default-assistant tool selections through
+`useDefaultAssistantConfiguration`. Scoped managers retain status-only controls.
+MCP default Chat availability comes from tool attachments, independently of credentials.
+Custom-agent attachments survive changes to default Chat availability.
+External-app editors retain managed-credential restrictions and existing policy behavior.
