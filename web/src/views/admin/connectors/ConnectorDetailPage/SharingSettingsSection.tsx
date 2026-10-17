@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import {
   Button,
@@ -57,7 +57,6 @@ export default function SharingSettingsSection({
   const [open, setOpen] = useState(false);
   const tSettings = useTranslations("admin.connectorsList.settings");
   const tGroups = useTranslations("admin.connector.groupRestriction");
-  const format = useFormatter();
   const source = getSourceDisplayName(ccPair.connector.source) ?? "";
   const usesGroups = usesDataAccessGroups(ccPair.access_type);
   const { data: dataAccess, error: dataAccessError } = useSWR<CCPairDataAccess>(
@@ -135,12 +134,12 @@ export default function SharingSettingsSection({
     <Collapsible
       title={t("title")}
       description={markdown(
-        format.list(
-          managedSummary === null
-            ? [access.summary]
-            : [access.summary, managedSummary],
-          { type: "unit" }
-        )
+        managedSummary === null
+          ? t("summaryLine.access", { access: access.summary })
+          : t("summaryLine.accessAndManaged", {
+              access: access.summary,
+              managed: managedSummary,
+            })
       )}
       open={open}
       onOpenChange={setOpen}

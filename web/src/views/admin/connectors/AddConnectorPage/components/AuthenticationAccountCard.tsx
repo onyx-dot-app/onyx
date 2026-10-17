@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Disabled } from "@opal/core";
 import {
   Button,
@@ -41,6 +41,7 @@ import {
 } from "@/lib/credentials/components/ShareAccountField";
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import { formatDateLog, formatDateTimeLog } from "@/lib/dateUtils";
 import { IconLoader } from "@opal/loaders";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
@@ -151,20 +152,12 @@ export default function AuthenticationAccountCard({
   const tCredentialCopy = useTranslations("admin.credentials");
   const fieldCopy = useCredentialFieldCopy(source);
   const details = getCredentialDetails(credential, source);
-  const format = useFormatter();
   const { user, permissions } = useUser();
   const [starting, setStarting] = useState<boolean>(false);
   const running: boolean = starting || checkReport?.run_status === "running";
   const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
   const checkedAt: string | null = lastChecked
-    ? format.dateTime(new Date(lastChecked), {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      })
+    ? formatDateTimeLog(lastChecked)
     : null;
 
   async function rerunChecks() {
@@ -279,11 +272,7 @@ export default function AuthenticationAccountCard({
   }
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
-  const addedOn: string = format.dateTime(new Date(credential.time_created), {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  const addedOn: string = formatDateLog(credential.time_created);
 
   // The creator, by display name where they set one. An account with no
   // creator shows no owner.

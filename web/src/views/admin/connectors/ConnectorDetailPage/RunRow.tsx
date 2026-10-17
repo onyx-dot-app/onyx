@@ -26,6 +26,7 @@ import type {
 } from "@/lib/connectors/types";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
@@ -49,17 +50,6 @@ export function checkCount(
 ): number {
   return run.check_results.filter((result) => result.status === status).length;
 }
-
-/** How run times print: a full date and 24-hour time, as `useFormatter().dateTime` takes it. */
-export const RUN_TIME_FORMAT = {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-} as const;
 
 /** The run's own error message, without its trace. */
 export function runErrorMessage(run: CCPairRun): string | null {
@@ -109,7 +99,7 @@ export function runMoved(run: CCPairRun): number {
     case "doc_permission_sync":
       return run.attempt.total_docs_synced;
     case "group_sync":
-      return run.attempt.total_group_memberships_synced;
+      return run.attempt.total_groups_processed;
     case "pruning":
       return run.attempt.docs_removed;
     case "checks":
@@ -265,10 +255,9 @@ function RunFigures({ run }: RunFiguresProps) {
       const skipped = checkCount(attempt, "skipped");
       return (
         <>
-          <Figure
-            value={attempt.check_results.length}
-            label={t("figures.checks")}
-          />
+          <Text font="secondary-body" color="text-03">
+            {t("figures.checksRun", { count: attempt.check_results.length })}
+          </Text>
           {attempt.check_results.length > 0 && (
             <CountsRow>
               <Count
@@ -320,7 +309,7 @@ function RunFigures({ run }: RunFiguresProps) {
         <>
           <Figure
             value={attempt.total_group_memberships_synced}
-            label={t("figures.memberships")}
+            label={t("figures.synced")}
           />
           <CountsRow>
             <Count
@@ -365,8 +354,6 @@ export default function RunRow({
   const tag = runStatusTag(run);
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
-  const stamp = (value: string) =>
-    format.dateTime(new Date(value), RUN_TIME_FORMAT);
 
   // Queued, then the live rate, then when it finished and how long it took.
   function detail(): string {
@@ -375,15 +362,21 @@ export default function RunRow({
       const rate = getDocsProcessedPerMinute(run.attempt);
       if (rate !== null) {
         return t("detail.rate", {
-          rate: format.number(rate, { maximumFractionDigits: 2 }),
+          rate: format.number(rate, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }),
         });
       }
     }
     const finished = finishedAt(run);
     if (finished === null) return t("detail.running");
     const minutes = runMinutes(run);
-    if (minutes === null) return stamp(finished);
-    return t("detail.finished", { time: stamp(finished), minutes });
+    if (minutes === null) return formatDateTimeLog(finished);
+    return t("detail.finished", {
+      time: formatDateTimeLog(finished),
+      minutes,
+    });
   }
 
   const warnings = runWarnings(run);
@@ -420,7 +413,7 @@ export default function RunRow({
                 font={active || failed ? "secondary-action" : "secondary-body"}
                 color={active || failed ? "text-04" : "text-03"}
               >
-                {stamp(run.time_created)}
+                {formatDateTimeLog(run.time_created)}
               </Text>
             </Section>
 
@@ -443,6 +436,8 @@ export default function RunRow({
                   icon={tag.icon}
                   title={tBadges(tag.labelKey)}
                   color={tag.color}
+                  variant="status"
+                  font="secondary-body"
                 />
                 {run.kind === "indexing" && run.attempt.is_new_model && (
                   <Tag
@@ -464,7 +459,9 @@ export default function RunRow({
                         : "warnings.tooltip",
                       { count: warnings }
                     )}
-                    color="amber"
+                    color="orange"
+                    variant="count"
+                    font="secondary-body"
                   />
                 )}
               </Section>

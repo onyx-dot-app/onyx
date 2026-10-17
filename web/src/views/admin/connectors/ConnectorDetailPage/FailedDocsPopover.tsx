@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import useSWRInfinite from "swr/infinite";
 import {
   Button,
@@ -25,9 +25,9 @@ import type {
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
 } from "@/lib/connectors/types";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { RUN_TIME_FORMAT } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import {
   RUNS_POLL_MS,
   SEARCH_DELAY_MS,
@@ -52,7 +52,6 @@ function FailedDocRow({
   onResolve,
 }: FailedDocRowProps) {
   const t = useTranslations("admin.connector.activity.docs");
-  const format = useFormatter();
   const [expanded, setExpanded] = useState(false);
   const [message, setMessage] = useState<HTMLElement | null>(null);
   const clipped = useOverflow(message);
@@ -74,7 +73,7 @@ function FailedDocRow({
         className="shrink-0"
       >
         <Text font="secondary-mono" color="text-03">
-          {format.dateTime(new Date(error.time_created), RUN_TIME_FORMAT)}
+          {formatDateTimeLog(error.time_created)}
         </Text>
         {error.document_name !== null && (
           <OverflowText

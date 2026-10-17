@@ -17,10 +17,17 @@ export default function StackTracePopoverContent({
   const t = useTranslations("admin.connector.activity");
   return (
     <Popover.Content
-      width="3xl"
+      width="2.5xl"
       side="left"
       align="start"
       aria-label={t("tags.stackTrace")}
+      // Focus the panel, not its first button, so the copy tooltip opens only on hover.
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        if (event.currentTarget instanceof HTMLElement) {
+          event.currentTarget.focus();
+        }
+      }}
     >
       <Section
         alignItems="stretch"
@@ -39,17 +46,15 @@ export default function StackTracePopoverContent({
         >
           <Section
             flexDirection="row"
+            justifyContent="start"
             alignItems="center"
-            gap={1}
+            gap={0.25}
             padding={1}
             height="fit"
             className="min-w-0 flex-1"
           >
-            <Text font="secondary-action" color="text-04">
-              {t("tags.stackTrace")}
-            </Text>
             <Text font="secondary-body" color="text-03" maxLines={1}>
-              {t("trace.runId", { id: runId })}
+              {t("trace.header", { id: runId })}
             </Text>
           </Section>
           <CopyButton
@@ -60,7 +65,9 @@ export default function StackTracePopoverContent({
           />
         </Section>
         <ShadowDiv className="max-h-120 overflow-x-auto">
-          <Code showCopyButton={false}>{trace}</Code>
+          <Code tint showCopyButton={false}>
+            {trace}
+          </Code>
         </ShadowDiv>
       </Section>
     </Popover.Content>

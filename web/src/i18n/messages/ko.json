@@ -2720,12 +2720,12 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "인덱싱 일시 중지",
-            "description": "진행 중이거나 예정된 모든 인덱싱 실행과 동기화를 취소합니다."
+            "label": "인덱싱 및 동기화 일시 중지",
+            "description": "진행 중이거나 예정된 인덱싱 실행과 권한 동기화를 취소합니다. 인덱싱된 문서는 최신 상태가 아니게 되지만 계속 검색할 수 있습니다."
           },
           "resume": {
-            "label": "인덱싱 재개",
-            "description": "예약된 인덱싱 실행과 동기화를 다시 허용합니다."
+            "label": "인덱싱 및 동기화 재개",
+            "description": "인덱싱 실행과 권한 동기화를 다시 시작합니다."
           },
           "tooltip": {
             "updating": "상태 업데이트 진행 중"
@@ -2740,7 +2740,7 @@
         },
         "fullReindex": {
           "label": "전체 재인덱싱",
-          "description": "소스의 모든 문서를 다시 인덱싱합니다. 규모에 따라 몇 시간 또는 며칠이 걸릴 수 있습니다."
+          "description": "소스의 모든 문서를 다시 인덱싱합니다. 규모에 따라 **몇 시간 또는 며칠**이 걸릴 수 있습니다."
         }
       },
       "reEnableModal": {
@@ -2780,16 +2780,17 @@
       },
       "statusCard": {
         "documentsIndexed": {
-          "label": "인덱싱된 문서"
+          "label": "인덱싱 완료 문서"
         },
         "indexingSpeed": "분당 {speed}개 문서",
         "lastIndexed": {
           "value": "마지막 인덱싱 {when}"
         },
-        "title": "인덱싱 상태",
+        "statusLine": "인덱싱 상태 - {detail}",
         "documents": {
           "label": "최근 / 전체",
-          "total": "/ {total}"
+          "total": "/ {total}",
+          "totalLabel": "전체"
         },
         "throughput": {
           "ariaLabel": "시간별 인덱싱된 문서",
@@ -2885,7 +2886,8 @@
           "displayName": "• {name}",
           "docsUnit": "{count, plural, other {개 문서}}"
         },
-        "summary": "{realm} • {counts}"
+        "summary": "{realm} • {counts}",
+        "hostPrefix": "{host}: {realm}"
       },
       "sharing": {
         "title": "공유 설정",
@@ -2906,12 +2908,25 @@
         "editButton": {
           "label": "접근 권한 편집"
         },
-        "groupsUnavailable": "그룹을 불러오지 못했습니다."
+        "groupsUnavailable": "그룹을 불러오지 못했습니다.",
+        "summaryLine": {
+          "access": "{access}",
+          "accessAndManaged": "{access}; {managed}"
+        }
       },
       "schedule": {
         "refresh": "**{every}**마다 새로 고침",
         "prune": "**{every}**마다 정리",
-        "checks": "**{every}**마다 검사 실행"
+        "checks": "**{every}**마다 검사 실행",
+        "summary": {
+          "refresh": "{refresh}",
+          "prune": "{prune}",
+          "checks": "{checks}",
+          "refreshAndPrune": "{refresh}; {prune}",
+          "refreshAndChecks": "{refresh}; {checks}",
+          "pruneAndChecks": "{prune}; {checks}",
+          "refreshAndPruneAndChecks": "{refresh}; {prune}; {checks}"
+        }
       },
       "runs": {
         "kinds": {
@@ -2946,9 +2961,8 @@
         "figures": {
           "indexed": "인덱싱됨",
           "synced": "동기화됨",
-          "memberships": "멤버십",
           "removed": "개 제거됨",
-          "checks": "개 검사 실행됨"
+          "checksRun": "{count, plural, other {#개 검사 실행됨}}"
         },
         "counts": {
           "newDocs": "{count, plural, other {새 문서 #개}}",
@@ -2965,7 +2979,7 @@
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
         },
         "search": {
-          "placeholder": "인덱싱 실행 검색..."
+          "placeholder": "인덱싱 실행 검색…"
         },
         "window": {
           "label": "기간",
@@ -2988,7 +3002,7 @@
           "title": "실행 목록을 불러오지 못했습니다."
         },
         "empty": {
-          "title": "아직 실행이 없습니다",
+          "title": "최근 인덱싱 실행이 없습니다",
           "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
           "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
         },
@@ -3012,7 +3026,7 @@
       },
       "activity": {
         "search": {
-          "placeholder": "활동 기록 검색..."
+          "placeholder": "활동 기록 검색…"
         },
         "counts": {
           "failures": "{count, plural, other {실패한 실행 #개}}",
@@ -3020,7 +3034,7 @@
         },
         "filter": {
           "label": "표시",
-          "all": "모든 수준",
+          "all": "전체 수준",
           "failures": "실패",
           "errors": "오류",
           "other": "기타",
@@ -3033,60 +3047,65 @@
         },
         "title": {
           "indexing": {
-            "failed": "인덱싱 실패",
-            "running": "오류와 함께 인덱싱 진행 중",
-            "stopped": "오류와 함께 인덱싱 중단됨",
-            "errors": "오류와 함께 인덱싱 완료",
-            "resolved": "인덱싱 오류 해결됨",
-            "succeeded": "인덱싱이 성공적으로 완료됨",
-            "inProgress": "인덱싱 진행 중",
-            "canceled": "인덱싱 중지됨"
+            "failed": "인덱싱 실패.",
+            "failedWith": "인덱싱 실패: {reason}.",
+            "running": "오류와 함께 인덱싱 진행 중.",
+            "stopped": "오류와 함께 인덱싱 중단됨.",
+            "errors": "오류와 함께 인덱싱 완료.",
+            "resolved": "인덱싱 오류 해결됨.",
+            "succeeded": "인덱싱이 성공적으로 완료됨.",
+            "inProgress": "인덱싱 진행 중.",
+            "canceled": "인덱싱 중지됨."
           },
           "doc_permission_sync": {
-            "failed": "권한 동기화 실패",
-            "running": "오류와 함께 권한 동기화 중",
-            "stopped": "오류와 함께 권한 동기화 중단됨",
-            "errors": "오류와 함께 권한 동기화됨",
-            "resolved": "권한 동기화 오류 해결됨",
-            "succeeded": "권한 동기화가 성공적으로 완료됨",
-            "inProgress": "권한 동기화 중",
-            "canceled": "권한 동기화 중지됨"
+            "failed": "권한 동기화 실패.",
+            "failedWith": "권한 동기화 실패: {reason}.",
+            "running": "오류와 함께 권한 동기화 중.",
+            "stopped": "오류와 함께 권한 동기화 중단됨.",
+            "errors": "오류와 함께 권한 동기화됨.",
+            "resolved": "권한 동기화 오류 해결됨.",
+            "succeeded": "권한 동기화가 성공적으로 완료됨.",
+            "inProgress": "권한 동기화 중.",
+            "canceled": "권한 동기화 중지됨."
           },
           "group_sync": {
-            "failed": "그룹 멤버십 동기화 실패",
-            "running": "오류와 함께 그룹 멤버십 동기화 중",
-            "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨",
-            "errors": "오류와 함께 그룹 멤버십 동기화됨",
-            "resolved": "그룹 멤버십 동기화 오류 해결됨",
-            "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨",
-            "inProgress": "그룹 멤버십 동기화 중",
-            "canceled": "그룹 동기화 중지됨"
+            "failed": "그룹 멤버십 동기화 실패.",
+            "failedWith": "그룹 멤버십 동기화 실패: {reason}.",
+            "running": "오류와 함께 그룹 멤버십 동기화 중.",
+            "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨.",
+            "errors": "오류와 함께 그룹 멤버십 동기화됨.",
+            "resolved": "그룹 멤버십 동기화 오류 해결됨.",
+            "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨.",
+            "inProgress": "그룹 멤버십 동기화 중.",
+            "canceled": "그룹 동기화 중지됨."
           },
           "pruning": {
-            "failed": "정리 실패",
-            "running": "오류와 함께 정리 진행 중",
-            "stopped": "오류와 함께 정리 중지됨",
-            "errors": "오류와 함께 정리 완료됨",
-            "resolved": "정리 오류 해결됨",
-            "succeeded": "정리가 성공적으로 완료됨",
-            "inProgress": "정리 진행 중",
-            "canceled": "정리 중지됨"
+            "failed": "정리 실패.",
+            "failedWith": "정리 실패: {reason}.",
+            "running": "오류와 함께 정리 진행 중.",
+            "stopped": "오류와 함께 정리 중지됨.",
+            "errors": "오류와 함께 정리 완료됨.",
+            "resolved": "정리 오류 해결됨.",
+            "succeeded": "정리가 성공적으로 완료됨.",
+            "inProgress": "정리 진행 중.",
+            "canceled": "정리 중지됨."
           },
           "checks": {
-            "failed": "커넥터 검사 실패",
-            "running": "오류와 함께 커넥터 검사 진행 중",
-            "stopped": "오류와 함께 커넥터 검사 중지됨",
-            "errors": "오류와 함께 커넥터 검사 완료됨",
-            "resolved": "커넥터 검사 오류 해결됨",
-            "succeeded": "커넥터 검사 통과",
-            "inProgress": "커넥터 검사 진행 중",
-            "canceled": "커넥터 검사 중지됨"
+            "failed": "커넥터 검사 실패.",
+            "failedWith": "커넥터 검사 실패: {reason}.",
+            "running": "오류와 함께 커넥터 검사 진행 중.",
+            "stopped": "오류와 함께 커넥터 검사 중지됨.",
+            "errors": "오류와 함께 커넥터 검사 완료됨.",
+            "resolved": "커넥터 검사 오류 해결됨.",
+            "succeeded": "커넥터 검사 통과.",
+            "inProgress": "커넥터 검사 진행 중.",
+            "canceled": "커넥터 검사 중지됨."
           }
         },
         "description": {
           "indexing": "{count, plural, other {문서 #개 인덱싱됨}}. 실행 시간 {minutes, plural, other {#분}}.",
-          "doc_permission_sync": "{count, plural, other {문서 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
-          "group_sync": "{count, plural, other {멤버십 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
+          "doc_permission_sync": "{count, plural, other {문서 권한 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
+          "group_sync": "{count, plural, other {그룹 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
           "pruning": "{count, plural, one {문서 #개 제거됨} other {문서 #개 제거됨}}. 정리 실행 시간 {minutes, plural, one {#분} other {#분}}.",
           "checks": "{count, plural, one {검사 #개 실행됨} other {검사 #개 실행됨}}. 검사 실행 시간 {minutes, plural, one {#분} other {#분}}.",
           "checksFailed": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}."
@@ -3094,7 +3113,7 @@
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
-          "doc_permission_sync": "{count, plural, other {사용자 #명 동기화 실패}}",
+          "doc_permission_sync": "{count, plural, other {문서 #개의 권한 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
@@ -3102,7 +3121,7 @@
         },
         "more": "더 보기",
         "empty": {
-          "title": "실패나 오류가 없습니다",
+          "title": "최근 활동이 없습니다",
           "resolved": "해결된 실행이 없습니다",
           "filtered": "이 검색과 일치하는 항목이 없습니다.",
           "failures": "실패가 없습니다",
@@ -3115,7 +3134,7 @@
         "docs": {
           "title": "실패한 문서",
           "search": {
-            "placeholder": "파일 검색..."
+            "placeholder": "문서 검색…"
           },
           "resolveAll": "모두 해결",
           "resolveOne": "이 문서 해결",
@@ -3127,7 +3146,7 @@
           "open": "문서 열기"
         },
         "trace": {
-          "runId": "실행 ID: {id}",
+          "header": "스택 트레이스 • 실행 ID: {id}",
           "copy": "스택 트레이스 복사"
         },
         "actions": {
@@ -7314,12 +7333,12 @@
         "viewLogs": "로그 보기",
         "panel": {
           "title": "활동 기록",
-          "close": "활동 기록 숨기기"
+          "close": "패널 닫기"
         }
       },
       "list": {
         "search": {
-          "placeholder": "커넥터 검색..."
+          "placeholder": "커넥터 검색…"
         },
         "statusFilter": {
           "label": "상태",
@@ -7362,7 +7381,8 @@
         },
         "loadError": "커넥터를 불러올 수 없습니다.",
         "units": "{count, plural, other {개 커넥터}}"
-      }
+      },
+      "title": "커넥터 인덱싱 상태"
     },
     "languageModels": {
       "availableProviders": {
@@ -9523,7 +9543,6 @@
     "status": {
       "badges": {
         "canceled": "취소됨",
-        "completedWithErrors": "오류와 함께 완료됨",
         "deleting": "삭제 중",
         "error": "오류",
         "failed": "실패",
@@ -9541,7 +9560,7 @@
         "pruning": "정리 중",
         "pruned": "정리됨",
         "checking": "검사 중",
-        "passed": "통과",
+        "passed": "완료",
         "failedToRun": "실행 실패"
       }
     },
@@ -10654,7 +10673,7 @@
       "groups": {
         "failed": "실패 {count}개",
         "indeterminate": "미확인 {count}개",
-        "passed": "완료 {count}개",
+        "passed": "성공 {count}개",
         "skipped": "건너뜀 {count}개",
         "running": "실행 중 {count}개",
         "expected": "예정 {count}개"
@@ -10679,7 +10698,7 @@
       },
       "foldButton": {
         "fold": "접기",
-        "expand": "펼치기"
+        "expand": "전체 보기"
       },
       "titleCount": "({complete}/{total})",
       "summary": {
@@ -15772,6 +15791,9 @@
       "oneMonth": "1개월",
       "sevenDays": "7일",
       "threeMonths": "3개월"
+    },
+    "divider": {
+      "viewAll": "전체 보기"
     },
     "iconTooltip": {
       "label": "자세한 정보"

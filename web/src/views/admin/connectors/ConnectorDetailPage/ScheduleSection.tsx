@@ -127,7 +127,7 @@ export default function ScheduleSection({
   const checkHours =
     check_freq === null ? null : Number((check_freq / 3600).toFixed(3));
 
-  // Whole hours read as hours, whole days as days.
+  // Whole hours read as hours, and a day reads as 24 hours.
   function minutesLabel(minutes: number): string {
     return minutes >= 60 && minutes % 60 === 0
       ? tDuration("hours", { count: minutes / 60 })
@@ -137,10 +137,7 @@ export default function ScheduleSection({
     if (hours < 1) {
       return tDuration("minutes", { count: Math.round(hours * 60) });
     }
-    const whole = Math.round(hours);
-    return whole >= 24 && whole % 24 === 0
-      ? tDuration("days", { count: whole / 24 })
-      : tDuration("hours", { count: whole });
+    return tDuration("hours", { count: Math.round(hours) });
   }
 
   // null clears the schedule, which only the check frequency allows.
@@ -176,20 +173,49 @@ export default function ScheduleSection({
     return true;
   }
 
-  const summary = format.list(
-    [
+  const clauses = {
+    refresh:
       refreshMinutes === null
         ? null
         : t("refresh", { every: minutesLabel(refreshMinutes) }),
+    prune:
       pruneHours === null
         ? null
         : t("prune", { every: hoursLabel(pruneHours) }),
+    checks:
       checkHours === null
         ? null
         : t("checks", { every: hoursLabel(checkHours) }),
-    ].filter((part) => part !== null),
-    { type: "unit" }
-  );
+  };
+  // Each combination is its own message, so the catalog owns the joining.
+  const has = {
+    refresh: clauses.refresh !== null,
+    prune: clauses.prune !== null,
+    checks: clauses.checks !== null,
+  };
+  const summaryKey = has.refresh
+    ? has.prune
+      ? has.checks
+        ? "summary.refreshAndPruneAndChecks"
+        : "summary.refreshAndPrune"
+      : has.checks
+        ? "summary.refreshAndChecks"
+        : "summary.refresh"
+    : has.prune
+      ? has.checks
+        ? "summary.pruneAndChecks"
+        : "summary.prune"
+      : has.checks
+        ? "summary.checks"
+        : null;
+  const summary =
+    summaryKey === null
+      ? ""
+      : t(summaryKey, {
+          refresh: clauses.refresh ?? "",
+          prune: clauses.prune ?? "",
+          checks: clauses.checks ?? "",
+        });
 
   return (
     <Collapsible

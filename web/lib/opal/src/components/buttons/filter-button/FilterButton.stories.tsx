@@ -19,6 +19,14 @@ export const Empty: Story = {
   },
 };
 
+export const Transparent: Story = {
+  args: {
+    icon: SvgUser,
+    transparent: true,
+    children: "Everyone",
+  },
+};
+
 export const Active: Story = {
   args: {
     icon: SvgUser,

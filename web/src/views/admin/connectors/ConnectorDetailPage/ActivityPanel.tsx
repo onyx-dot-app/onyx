@@ -29,7 +29,7 @@ import {
   SvgEye,
   SvgEyeClosed,
   SvgFold,
-  SvgXCircle,
+  SvgXOctagon,
 } from "@opal/icons";
 import type { RichStr } from "@opal/types";
 import { cn } from "@opal/utils";
@@ -60,11 +60,14 @@ type Shown = "all" | ActivityGroup;
 export interface ActivityCountTagsProps {
   failures: number;
   errors: number;
+  /** `"count"` drops the tinted backgrounds, for a card header. Default: `"status"`. */
+  variant?: "status" | "count";
 }
 /** The failed runs and the runs with document errors, as two counts. A zero count shows no tag. */
 export function ActivityCountTags({
   failures,
   errors,
+  variant = "status",
 }: ActivityCountTagsProps) {
   const t = useTranslations("admin.connector.activity");
   const format = useFormatter();
@@ -72,10 +75,12 @@ export function ActivityCountTags({
     <>
       {failures > 0 && (
         <Tag
-          icon={SvgXCircle}
+          icon={SvgXOctagon}
           title={format.number(failures)}
           tooltip={t("counts.failures", { count: failures })}
           color="red"
+          variant={variant}
+          size="md"
         />
       )}
       {errors > 0 && (
@@ -83,7 +88,9 @@ export function ActivityCountTags({
           icon={SvgAlertTriangle}
           title={format.number(errors)}
           tooltip={t("counts.errors", { count: errors })}
-          color="amber"
+          color="orange"
+          variant={variant}
+          size="md"
         />
       )}
     </>

@@ -82,6 +82,16 @@
   --interactive-foreground: var(--text-05);
   --interactive-foreground-icon: var(--text-05);
 }
+/* An open secondary popup trigger keeps its rest fill and takes a border-05
+   outline. `aria-haspopup` gates it: a Collapsible or disclosure toggle also
+   sets the open state but opens no popup. */
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][aria-haspopup]:not(
+  [aria-haspopup="false"]
+):not([data-disabled]):is([data-state="open"], [aria-expanded="true"]) {
+  @apply border-border-05;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-04);
+}
 .interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][data-disabled] {
   @apply bg-background-neutral-03;
   --interactive-foreground: var(--text-01);

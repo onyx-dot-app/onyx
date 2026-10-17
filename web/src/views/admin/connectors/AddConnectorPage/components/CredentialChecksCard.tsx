@@ -26,9 +26,9 @@ import {
   SvgExpand,
   SvgFold,
   SvgHourglass,
-  SvgMinusCircle,
   SvgPlay,
   SvgRefreshCw,
+  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
@@ -94,11 +94,11 @@ const CHECK_LOGS = {
     icon: SvgAlertCircle,
     detail: "status.indeterminate",
     font: OUTCOME_FONT,
-    color: "theme-amber-05",
+    color: "status-warning-05",
   },
   skipped: {
     variant: "default",
-    icon: SvgMinusCircle,
+    icon: SvgXCircle,
     detail: "status.skipped",
     ...MUTED,
   },

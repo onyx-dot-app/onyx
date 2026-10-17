@@ -1,7 +1,12 @@
 import React from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button } from "@opal/components";
-import { SvgPlus, SvgArrowRight, SvgSettings } from "@opal/icons";
+import { Button, Popover } from "@opal/components";
+import {
+  SvgPlus,
+  SvgArrowRight,
+  SvgSettings,
+  SvgMoreHorizontal,
+} from "@opal/icons";
 
 const meta: Meta<typeof Button> = {
   title: "opal/components/Button",
@@ -160,4 +165,36 @@ export const InternalProminence: Story = {
     prominence: "internal",
     children: "Internal",
   },
+};
+
+/**
+ * A popup trigger (`aria-haspopup` with the open state) takes the open look:
+ * a secondary one keeps its rest fill with a border-05 outline. A disclosure
+ * toggle that only sets `aria-expanded` keeps its rest look.
+ */
+export const OpenPopoverTrigger: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      <Popover>
+        <Popover.Trigger asChild>
+          <Button prominence="secondary" rightIcon={SvgMoreHorizontal}>
+            Closed
+          </Button>
+        </Popover.Trigger>
+        <Popover.Content width="md">
+          <div className="p-2">Menu</div>
+        </Popover.Content>
+      </Popover>
+      <Popover defaultOpen>
+        <Popover.Trigger asChild>
+          <Button prominence="secondary" rightIcon={SvgMoreHorizontal}>
+            Open
+          </Button>
+        </Popover.Trigger>
+        <Popover.Content width="md">
+          <div className="p-2">Menu</div>
+        </Popover.Content>
+      </Popover>
+    </div>
+  ),
 };

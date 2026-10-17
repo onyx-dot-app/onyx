@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormatter, useTranslations } from "next-intl";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -20,7 +21,6 @@ import {
   SvgTextLines,
   SvgUserShield,
   SvgUsers,
-  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import type { CardColor, IconFunctionComponent } from "@opal/types";
@@ -32,12 +32,12 @@ import type {
 } from "@/lib/connectors/types";
 import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
 import { getSourceMetadata } from "@/lib/connectors/utils";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import {
   RUN_KIND_ICONS,
-  RUN_TIME_FORMAT,
   isActive,
   runErrorMessage,
   runMinutes,
@@ -57,14 +57,14 @@ const GROUP_STYLE: Record<
 > = {
   failures: {
     color: "status-error-00",
-    icon: SvgXCircle,
+    icon: SvgXOctagon,
     stroke: "stroke-status-error-05",
     closedStroke: "stroke-status-error-02",
   },
   errors: {
     color: "status-warning-00",
     icon: SvgAlertTriangle,
-    stroke: "stroke-theme-amber-05",
+    stroke: "stroke-status-warning-05",
     closedStroke: "stroke-status-warning-02",
   },
   other: {
@@ -115,6 +115,24 @@ function cardState(
   }
 }
 
+interface FailureReason {
+  /** The error's first sentence, without its end mark. */
+  reason: string;
+  /** What follows the first sentence; `null` when nothing does. */
+  rest: string | null;
+}
+
+/** Splits an error into its first sentence and the rest. */
+function splitReason(message: string): FailureReason {
+  const trimmed = message.trim();
+  const first = /^[\s\S]+?[.!?](?=\s|$)/.exec(trimmed)?.[0] ?? trimmed;
+  const rest = trimmed.slice(first.length).trim();
+  return {
+    reason: first.replace(/[.!?]+$/, ""),
+    rest: rest === "" ? null : rest,
+  };
+}
+
 export interface ActivityCardProps {
   ccPairId: number;
   run: CCPairRun;
@@ -149,8 +167,8 @@ export default function ActivityCard({
   resolving,
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
+  const [traceOpen, setTraceOpen] = useState(false);
   const tRuns = useTranslations("admin.connector.runs");
-  const format = useFormatter();
   const active = isActive(run);
   const style = GROUP_STYLE[group];
   const StatusIcon = active ? IconLoader : style.icon;
@@ -175,12 +193,20 @@ export default function ActivityCard({
   const resolvesRun = canResolveRuns && !closed && !active && group !== "other";
   const mutedColor = closed ? "text-02" : "text-03";
 
-  // A failure explains itself. A run with errors reports what it still did.
+  // A failure, superseded or not, titles with the error's first sentence and describes with the rest. A run with errors reports what it still did.
   let description: string | null = null;
+  let title = t(`title.${run.kind}.${state}`);
   if (group === "failures") {
-    description =
-      runErrorMessage(run) ??
-      (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
+    const message = runErrorMessage(run);
+    const split = message ? splitReason(message) : null;
+    if (split !== null && split.reason !== "") {
+      title = t(`title.${run.kind}.failedWith`, { reason: split.reason });
+      description = split.rest;
+    } else {
+      description = listsChecks
+        ? t("description.checksFailed", { count: warnings })
+        : null;
+    }
   } else if (minutes !== null) {
     description = t(`description.${run.kind}`, {
       count: runMoved(run),
@@ -217,7 +243,13 @@ export default function ActivityCard({
             >
               <StatusIcon
                 size={16}
-                className={closed ? style.closedStroke : style.stroke}
+                className={
+                  active
+                    ? "stroke-status-info-05"
+                    : closed
+                      ? style.closedStroke
+                      : style.stroke
+                }
               />
             </Section>
             <Section
@@ -238,7 +270,7 @@ export default function ActivityCard({
                   color={mutedColor}
                   wordWrap="whitespace-nowrap"
                 >
-                  {format.dateTime(new Date(run.time_created), RUN_TIME_FORMAT)}
+                  {formatDateTimeLog(run.time_created)}
                 </Text>
                 <Section
                   flexDirection="row"
@@ -258,10 +290,7 @@ export default function ActivityCard({
                   <Text font="secondary-body" color={mutedColor} maxLines={1}>
                     {identity}
                   </Text>
-                  <IdentityIcon
-                    size={12}
-                    className={closed ? "stroke-text-02" : "stroke-text-03"}
-                  />
+                  <IdentityIcon size={12} className="stroke-text-02" />
                 </Section>
               </Section>
               <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
@@ -269,7 +298,7 @@ export default function ActivityCard({
                   font="main-ui-body"
                   color={closed ? "text-03" : "text-04"}
                 >
-                  {t(`title.${run.kind}.${state}`)}
+                  {title}
                 </Text>
                 {description !== null && (
                   <Text font="secondary-body" color={mutedColor} maxLines={3}>
@@ -302,11 +331,11 @@ export default function ActivityCard({
                 wrap
               >
                 {trace !== null && (
-                  <Popover>
+                  <Popover open={traceOpen} onOpenChange={setTraceOpen}>
                     <Popover.Trigger asChild>
                       <Button
                         icon={SvgTextLines}
-                        prominence="tertiary"
+                        prominence={traceOpen ? "primary" : "tertiary"}
                         size="xs"
                       >
                         {t("tags.stackTrace")}
