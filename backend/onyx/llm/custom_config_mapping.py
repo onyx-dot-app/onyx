@@ -6,6 +6,7 @@ the llm_custom_config_env_injection security setting allows it (self-hosted
 only, default on), dropped otherwise.
 """
 
+import json
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -32,6 +33,9 @@ from onyx.llm.well_known_providers.constants import (
     VERTEX_LOCATION_KWARG,
     VERTEX_PROJECT_KWARG,
 )
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # Shared by BEDROCK and BEDROCK_CONVERSE: both authenticate through LiteLLM's
 # BaseAWSLLM, which accepts these params and prefers `api_key` as the Bedrock
@@ -47,6 +51,17 @@ _BEDROCK_CUSTOM_CONFIG_KWARGS: dict[str, str] = {
     AWS_SESSION_TOKEN_KWARG: AWS_SESSION_TOKEN_KWARG,
     AWS_SESSION_TOKEN_KWARG_ENV_VAR_FORMAT: AWS_SESSION_TOKEN_KWARG,
 }
+
+# openai_compatible only: a JSON object whose contents are merged into the
+# request's extra_body whenever a call runs at ReasoningEffort.OFF. This is
+# the explicit "thinking off" signal for self-hosted hybrid-reasoning engines
+# (vLLM / SGLang): their chat templates default models like Qwen3 / GLM-4.x
+# to thinking-on when no reasoning parameter is sent, so Onyx's silence at
+# OFF does not disable thinking there. e.g.
+#   {"chat_template_kwargs": {"enable_thinking": false}}
+# Applied per call by LitellmLLM (never baked into _model_kwargs), so the
+# main chat answer keeps the engine's default.
+OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS = "OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS"
 
 # custom_config key -> litellm.completion kwarg, per provider. Both the kwarg
 # spelling and the env-var spelling map to the same kwarg; when a config
@@ -141,6 +156,32 @@ def map_custom_config_to_model_kwargs(
         if kwarg is not None:
             consumed.add(key)
             kwargs[kwarg] = value
+
+    # The OFF signal holds a JSON object, not a string kwarg, so it cannot
+    # ride the table above; like Vertex it gets a dedicated branch. Malformed
+    # values are dropped with a warning (never a raise): a typo must not
+    # block the provider from saving, and the key stays consumed so the raw
+    # string never falls through to env injection.
+    if model_provider == LlmProviderNames.OPENAI_COMPATIBLE:
+        off_signal = custom_config.get(OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS)
+        if off_signal is not None:
+            consumed.add(OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS)
+            try:
+                parsed = json.loads(off_signal)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Dropping %s: value is not valid JSON",
+                    OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS,
+                )
+            else:
+                if isinstance(parsed, dict):
+                    kwargs["extra_body"] = parsed
+                else:
+                    logger.warning(
+                        "Dropping %s: expected a JSON object, got %s",
+                        OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS,
+                        type(parsed).__name__,
+                    )
 
     provider_normalized = _normalize_key(model_provider)
     for key, value in custom_config.items():
