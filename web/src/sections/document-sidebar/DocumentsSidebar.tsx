@@ -2,6 +2,7 @@
 
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import ChatDocumentDisplay from "@/sections/document-sidebar/ChatDocumentDisplay";
+import CopyAnswerWithReferencesButton from "@/sections/document-sidebar/CopyAnswerWithReferencesButton";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
 import { Dispatch, SetStateAction, useMemo, memo } from "react";
 import { useTranslations } from "next-intl";
@@ -168,6 +169,10 @@ const DocumentsSidebar = memo(
         className="bg-background-tint-01 overflow-y-scroll h-full w-full border-s"
       >
         <div className="flex flex-col px-3 gap-6">
+          <CopyAnswerWithReferencesButton
+            key={selectedMessage.nodeId}
+            message={selectedMessage}
+          />
           {hasCited && (
             <div>
               <Header onClose={closeSidebar}>{t("citedSources.title")}</Header>
@@ -190,9 +195,7 @@ const DocumentsSidebar = memo(
           {hasOther && (
             <div>
               <Header onClose={closeSidebar}>
-                {citedDocuments.length > 0
-                  ? t("moreSources.title")
-                  : t("foundSources.title")}
+                {hasCited ? t("moreSources.title") : t("foundSources.title")}
               </Header>
               <ChatDocumentDisplayWrapper>
                 {otherDocuments.map((document) => (

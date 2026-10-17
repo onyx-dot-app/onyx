@@ -11658,6 +11658,10 @@
       "closeButton": {
         "tooltip": "Fechar a barra lateral"
       },
+      "copyWithReferences": {
+        "label": "Copiar com referências",
+        "unavailableSource": "Detalhes da fonte indisponíveis"
+      },
       "foundSources": {
         "title": "Fontes encontradas"
       },
