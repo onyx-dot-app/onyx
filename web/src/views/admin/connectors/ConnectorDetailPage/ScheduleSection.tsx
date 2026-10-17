@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
-import { Card, Collapsible, InputNumber, Text } from "@opal/components";
+import { Card, Collapsible, InputNumber } from "@opal/components";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
@@ -96,6 +96,7 @@ function FrequencyField({
           suffix={suffix}
           disabled={disabled}
           allowEmpty={onClear !== undefined}
+          plain
         />
       </Section>
     </InputHorizontal>
@@ -108,7 +109,7 @@ export interface ScheduleSectionProps {
   editable: boolean;
 }
 
-/** When the connector refreshes and prunes, and the date it indexes from. */
+/** When the connector refreshes, prunes and runs its checks. */
 export default function ScheduleSection({
   ccPair,
   editable,
@@ -117,9 +118,7 @@ export default function ScheduleSection({
   const tFields = useTranslations("admin.connectorsList.scheduled");
   const tToasts = useTranslations("admin.connector.toasts");
   const tDuration = useTranslations("admin.connector.advancedConfig.duration");
-  const format = useFormatter();
-  const { refresh_freq, prune_freq, check_freq, indexing_start } =
-    ccPair.connector;
+  const { refresh_freq, prune_freq, check_freq } = ccPair.connector;
   const refreshMinutes =
     refresh_freq === null ? null : Math.round(refresh_freq / 60);
   const pruneHours =
@@ -293,22 +292,6 @@ export default function ScheduleSection({
               }
             />
           )}
-          <InputHorizontal
-            title={tFields("indexingStart.title")}
-            description={tFields("indexingStart.description")}
-            suffix="optional"
-            fillInput
-            center
-          >
-            {/* Read-only here. The connector form changes it. */}
-            <Text font="main-ui-body" color="text-04">
-              {indexing_start === null
-                ? tFields("indexingStart.placeholder")
-                : format.dateTime(new Date(indexing_start), {
-                    dateStyle: "medium",
-                  })}
-            </Text>
-          </InputHorizontal>
         </Section>
       </Card>
     </Collapsible>

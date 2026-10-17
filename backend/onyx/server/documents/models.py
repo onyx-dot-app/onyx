@@ -827,6 +827,8 @@ class IndexingConnectorRow(BaseModel):
     cc_pair_status: ConnectorCredentialPairStatus
     status: IndexingConnectorStatus
     creator_email: str | None
+    # The owner's display name. Clients fall back to the email when it is unset.
+    creator_name: str | None
     docs_indexed: int
     last_success: datetime | None
     latest_index_attempt: IndexAttemptSnapshot | None

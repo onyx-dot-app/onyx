@@ -257,7 +257,8 @@ def get_indexing_connectors(
     ),
     db_session: Session = Depends(get_session),
 ) -> IndexingConnectorsResponse:
-    """The readable pairs page, sorted by status then name. ``q`` matches the name."""
+    """The readable pairs page, sorted by status, then source, then name, so a
+    status's connectors of one source sit together. ``q`` matches the name."""
     pairs = _readable_cc_pairs(db_session, user)
     latest = _latest_index_attempts(db_session)
     query = (q or "").strip().lower() or None
@@ -282,6 +283,7 @@ def get_indexing_connectors(
         # The id breaks name ties, so a page boundary splits same-named pairs the same way every request.
         key=lambda cc_pair: (
             _STATUS_ORDER[statuses[cc_pair.id]],
+            cc_pair.connector.source.value,
             cc_pair.name.lower(),
             cc_pair.id,
         ),
@@ -314,6 +316,7 @@ def get_indexing_connectors(
             cc_pair_status=cc_pair.status,
             status=statuses[cc_pair.id],
             creator_email=cc_pair.creator.email if cc_pair.creator else None,
+            creator_name=cc_pair.creator.personal_name if cc_pair.creator else None,
             docs_indexed=docs_indexed[cc_pair.id],
             last_success=cc_pair.last_successful_index_time,
             latest_index_attempt=(

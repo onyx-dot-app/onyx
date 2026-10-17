@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "Zugriff auf Mitglieder der ausgewählten Gruppen beschränken. Synchronisierte Berechtigungen gelten weiterhin.",
           "title": "Zugriff auf Gruppen beschränken"
-        }
+        },
+        "managerCount": "{count, plural, one {# Gruppenmanager} other {# Gruppenmanager}}"
       },
       "invalidState": {
         "description": "Dieser Konnektor befindet sich in einem ungültigen Zustand. Bitte aktualisieren Sie Ihre Anmeldedaten oder erstellen Sie einen neuen Konnektor, bevor Sie neu indizieren.",
@@ -2891,7 +2892,8 @@
           "docsUnit": "{count, plural, one {Dokument} other {Dokumente}}"
         },
         "summary": "{realm} • {counts}",
-        "hostPrefix": "{host}: {realm}"
+        "hostPrefix": "{host}: {realm}",
+        "hostType": "{source}-Hosttyp"
       },
       "sharing": {
         "title": "Freigabeeinstellungen",
@@ -3397,6 +3399,9 @@
           },
           "shareLocked": {
             "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, oder ein Admin, mit dem es geteilt ist, kann ändern, wer es nutzen darf."
+          },
+          "viewDetails": {
+            "tooltip": "Details anzeigen"
           }
         },
         "accountUnavailable": {
@@ -7344,7 +7349,8 @@
         "viewLogs": "Logs anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
-          "close": "Bereich schließen"
+          "close": "Bereich schließen",
+          "pairTitle": "Aktivitätsverlauf von {name}"
         }
       },
       "list": {
@@ -7380,7 +7386,9 @@
           "manage": "Verwalten",
           "manageFederated": "Föderierten Konnektor verwalten",
           "expand": "Details anzeigen",
-          "collapse": "Details ausblenden"
+          "collapse": "Details ausblenden",
+          "pause": "Pausieren",
+          "resume": "Fortsetzen"
         },
         "federated": {
           "tag": "Föderiert"
@@ -10722,9 +10730,7 @@
       "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
       "state": {
-        "completed": "Prüfungen abgeschlossen.",
-        "inProgress": "Prüfungen laufen...",
-        "waiting": "Warten auf Connector-Einstellungen..."
+        "inProgress": "Prüfungen laufen..."
       },
       "advisory": {
         "title": "Einige Inhalte werden nicht indexiert.",

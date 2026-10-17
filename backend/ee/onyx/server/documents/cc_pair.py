@@ -25,7 +25,8 @@ from ee.onyx.server.documents.manage_access import (
     CCPairManageAccessRow,
     CCPairManageAccessUpdateRequest,
     apply_manage_access_change__no_commit,
-    fixed_manage_access_rows,
+    fixed_manage_access_groups,
+    manage_access_rows,
 )
 from ee.onyx.server.documents.models import (
     CCPairDataAccess,
@@ -313,8 +314,8 @@ def _manage_access_rows(
     """The fixed rows, then the stored rows of groups the caller can see
     (``visible_group_ids``, None: all). A stored row of a group that is also
     fixed is left out: the fixed Editor row already covers it."""
-    fixed_rows = fixed_manage_access_rows(db_session)
-    fixed_group_ids = {row.group_id for row in fixed_rows}
+    fixed_groups = fixed_manage_access_groups(db_session)
+    fixed_group_ids = {group.id for group in fixed_groups}
     roles = fetch_manage_roles_for_cc_pair(db_session, cc_pair_id)
     shown_group_ids = {
         group_id
@@ -324,15 +325,14 @@ def _manage_access_rows(
     groups = fetch_user_groups(
         db_session, only_up_to_date=False, restrict_to_group_ids=shown_group_ids
     )
-    return fixed_rows + [
-        CCPairManageAccessRow(
-            group_id=group.id,
-            group_name=group.name,
-            role=roles[group.id],
-            is_fixed=False,
-        )
-        for group in sorted(groups, key=lambda group: group.id)
-    ]
+    return manage_access_rows(
+        db_session,
+        fixed_groups,
+        [
+            (group, roles[group.id])
+            for group in sorted(groups, key=lambda group: group.id)
+        ],
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/manage-access")
@@ -431,8 +431,8 @@ def get_manage_access_prefill(
 ) -> list[CCPairManageAccessRow]:
     """Starting manage access for the create form: groups with global Manage Connectors
     are fixed Editors, and the chosen data-access groups become Operators."""
-    fixed_rows = fixed_manage_access_rows(db_session)
-    fixed_group_ids = {row.group_id for row in fixed_rows}
+    fixed_groups = fixed_manage_access_groups(db_session)
+    fixed_group_ids = {group.id for group in fixed_groups}
     visible_group_ids = get_visible_user_group_ids(user, db_session)
     operator_group_ids = {
         group_id
@@ -446,12 +446,11 @@ def get_manage_access_prefill(
         include_default=False,
         restrict_to_group_ids=operator_group_ids,
     )
-    return fixed_rows + [
-        CCPairManageAccessRow(
-            group_id=group.id,
-            group_name=group.name,
-            role=ConnectorManageRole.OPERATOR,
-            is_fixed=False,
-        )
-        for group in sorted(operator_groups, key=lambda group: group.id)
-    ]
+    return manage_access_rows(
+        db_session,
+        fixed_groups,
+        [
+            (group, ConnectorManageRole.OPERATOR)
+            for group in sorted(operator_groups, key=lambda group: group.id)
+        ],
+    )

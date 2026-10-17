@@ -32,6 +32,10 @@ import {
   RUNS_POLL_MS,
   SEARCH_DELAY_MS,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import {
+  PLACEMENT_PROPS,
+  type PopoverPlacement,
+} from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 
 const PAGE_SIZE = 50;
 // The errors route refuses a longer search.
@@ -315,16 +319,16 @@ function FailedDocsBody({
   );
 }
 
-/** One attempt's open document errors beside its card. Radix mounts the content only while open, so nothing is fetched until then. */
-export default function FailedDocsPopoverContent(
-  props: FailedDocsPopoverContentProps
-) {
+/** One attempt's open document errors beside or below its card. Radix mounts the content only while open, so nothing is fetched until then. */
+export default function FailedDocsPopoverContent({
+  placement = "beside",
+  ...props
+}: FailedDocsPopoverContentProps & { placement?: PopoverPlacement }) {
   const t = useTranslations("admin.connector.activity.docs");
   return (
     <Popover.Content
       width="2.5xl"
-      side="left"
-      align="start"
+      {...PLACEMENT_PROPS[placement]}
       aria-label={t("title")}
     >
       <FailedDocsBody {...props} />

@@ -43,6 +43,8 @@ export interface IndexingConnectorRow {
   cc_pair_status: ConnectorCredentialPairStatus;
   status: IndexingConnectorStatus;
   creator_email: string | null;
+  /** The owner's display name, unset when the owner has none. */
+  creator_name: string | null;
   docs_indexed: number;
   last_success: string | null;
   latest_index_attempt: IndexAttemptSnapshot | null;

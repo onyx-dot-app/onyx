@@ -7,7 +7,7 @@ document sync and no ``is_current`` history.
 from collections import defaultdict
 from collections.abc import Collection
 
-from sqlalchemy import delete, select, tuple_
+from sqlalchemy import delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from onyx.db.enums import ConnectorManageRole, Permission
 from onyx.db.models import (
     ConnectorCredentialPair,
     PermissionGrant,
+    User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
@@ -78,6 +79,26 @@ def fetch_managed_cc_pair_roles_for_group(
         )
     ).tuples()
     return dict(rows.all())
+
+
+def fetch_group_member_counts(
+    db_session: Session, group_ids: Collection[int]
+) -> dict[int, tuple[int, int]]:
+    """Group id → (members, managers), in one query. A group with no members is absent."""
+    if not group_ids:
+        return {}
+    rows = db_session.execute(
+        select(
+            User__UserGroup.user_group_id,
+            func.count(User__UserGroup.user_id),
+            func.count(User__UserGroup.user_id).filter(
+                User__UserGroup.is_manager.is_(True)
+            ),
+        )
+        .where(User__UserGroup.user_group_id.in_(group_ids))
+        .group_by(User__UserGroup.user_group_id)
+    ).tuples()
+    return {group_id: (members, managers) for group_id, members, managers in rows}
 
 
 def fetch_groups_with_global_permission(

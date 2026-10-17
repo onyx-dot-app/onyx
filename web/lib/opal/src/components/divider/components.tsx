@@ -114,6 +114,12 @@ type DividerFoldableProps = Omit<
    * Default: `"end"`.
    */
   chevronPosition?: "start" | "end";
+  /**
+   * Where a `"start"` chevron points while folded. `"right"` turns it, as a
+   * fold does; `"down"` keeps it, for a footer that opens its content
+   * elsewhere. Default: `"right"`.
+   */
+  foldedChevron?: "right" | "down";
 };
 
 type DividerProps =
@@ -213,6 +219,7 @@ function FoldableDivider({
   interaction,
   headerProps,
   chevronPosition = "end",
+  foldedChevron = "right",
 }: DividerFoldableProps) {
   const strings = useOpalStrings();
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
@@ -246,6 +253,7 @@ function FoldableDivider({
                   className="opal-divider-chevron"
                   data-position="start"
                   data-open={isOpen}
+                  data-folded-chevron={foldedChevron}
                 >
                   <Button
                     icon={SvgChevronDown}

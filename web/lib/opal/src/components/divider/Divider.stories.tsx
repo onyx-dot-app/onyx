@@ -97,3 +97,16 @@ export const FoldableChevronStart: Story = {
     </div>
   ),
 };
+
+export const FoldableChevronStartDown: Story = {
+  render: () => (
+    <Divider
+      title="Full Activity History"
+      foldable
+      chevronPosition="start"
+      foldedChevron="down"
+      open={false}
+      onOpenChange={() => undefined}
+    />
+  ),
+};

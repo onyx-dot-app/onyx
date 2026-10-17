@@ -12,7 +12,7 @@ import {
 } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
-import { SvgActivity, SvgChevronDown, SvgFileText } from "@opal/icons";
+import { SvgActivity, SvgFileText } from "@opal/icons";
 import {
   useActivityItems,
   useResolveRunErrors,
@@ -152,32 +152,21 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
                   resolving={resolving}
                   onResolve={(errorIds) => void resolve(item, errorIds)}
                   onResolveRun={() => void resolveRun(item)}
+                  popoverPlacement="below"
                 />
               ))}
             </Section>
           </ShadowDiv>
         )}
-        {/* The toggle sits inside the divider as its label. */}
-        <Section
-          flexDirection="row"
-          alignItems="center"
-          gap={0}
-          height="fit"
-          className="shrink-0"
-        >
-          <Divider paddingParallel={0} paddingPerpendicular={0} />
-          <Button
-            icon={SvgChevronDown}
-            prominence="tertiary"
-            size="xs"
-            onClick={onOpenHistory}
-          >
-            {t("history")}
-          </Button>
-          <Section height="fit" className="min-w-0 flex-1">
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-          </Section>
-        </Section>
+        {/* Never unfolds in place: the history opens beside the page instead. */}
+        <Divider
+          title={t("history")}
+          foldable
+          chevronPosition="start"
+          foldedChevron="down"
+          open={false}
+          onOpenChange={onOpenHistory}
+        />
       </Section>
     </Card>
   );

@@ -99,7 +99,10 @@ function NodeRow({ entry }: NodeRowProps) {
     <BreakdownRow docCount={entry.doc_count}>
       {/* A SharePoint key is a whole site URL, so the key truncates and the link rides on an icon. */}
       <OverflowText
-        font="main-ui-action"
+        // A numeric key (a Confluence page ID) reads as an ID.
+        font={
+          /^\d+$/.test(entry.raw_node_id) ? "main-ui-mono" : "main-ui-action"
+        }
         color={entry.doc_count === null ? "text-03" : "text-04"}
       >
         {entry.raw_node_id}
@@ -150,7 +153,7 @@ function BreakdownGroup({ title, children }: BreakdownGroupProps) {
         </Text>
         <Button
           icon={open ? SvgChevronUp : SvgChevronDown}
-          prominence="tertiary"
+          prominence="internal"
           size="xs"
           aria-label={label}
           aria-expanded={open}

@@ -67,8 +67,8 @@
   --interactive-foreground-icon: var(--text-02);
 }
 
-/* Start chevron: a down chevron, turned to point right while folded. */
-.opal-divider-chevron[data-position="start"][data-open="false"] {
+/* Start chevron: a down chevron, turned to point right while folded unless the folded chevron stays down. */
+.opal-divider-chevron[data-position="start"][data-open="false"][data-folded-chevron="right"] {
   transform: rotate(-90deg);
 }
 

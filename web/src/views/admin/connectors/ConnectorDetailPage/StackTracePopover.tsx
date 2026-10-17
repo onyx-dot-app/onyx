@@ -3,23 +3,28 @@
 import { useTranslations } from "next-intl";
 import { Code, CopyButton, Popover, ShadowDiv, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import {
+  PLACEMENT_PROPS,
+  type PopoverPlacement,
+} from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 
 export interface StackTracePopoverContentProps {
   runId: number;
   trace: string;
+  placement?: PopoverPlacement;
 }
 
-/** A run's stack trace beside its card, with a copy button. The caller provides the Popover and its trigger. */
+/** A run's stack trace beside or below its card, with a copy button. The caller provides the Popover and its trigger. */
 export default function StackTracePopoverContent({
   runId,
   trace,
+  placement = "beside",
 }: StackTracePopoverContentProps) {
   const t = useTranslations("admin.connector.activity");
   return (
     <Popover.Content
       width="2.5xl"
-      side="left"
-      align="start"
+      {...PLACEMENT_PROPS[placement]}
       aria-label={t("tags.stackTrace")}
       // Focus the panel, not its first button, so the copy tooltip opens only on hover.
       onOpenAutoFocus={(event) => {
