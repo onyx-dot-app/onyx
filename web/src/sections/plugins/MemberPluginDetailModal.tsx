@@ -81,7 +81,11 @@ function MemberDetailTabs({
           {secondaryTab === "skills" ? craftTabs("skills") : t("detail.tools")}
         </Tabs.Trigger>
       </Tabs.List>
-      <Tabs.Content value="connection">
+      <Tabs.Content
+        value="connection"
+        keepMounted
+        hidden={tab !== "connection"}
+      >
         <div className="flex h-[min(18rem,40dvh)] flex-col gap-6 overflow-y-auto">
           {connection}
         </div>

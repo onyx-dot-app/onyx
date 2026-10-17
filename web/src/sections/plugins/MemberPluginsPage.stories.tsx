@@ -254,6 +254,7 @@ export const StoredToolsDetail: Story = {
       await page.findByRole("button", { name: "View Linear" })
     );
     const dialog = await page.findByRole("dialog", { name: /^Linear/ });
+    await userEvent.click(within(dialog).getByRole("tab", { name: "Tools" }));
     await expect(within(dialog).getByText("Search issues")).toBeVisible();
     await expect(
       within(dialog).getByRole("button", { name: "Use in Chat" })

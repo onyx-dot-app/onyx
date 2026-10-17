@@ -87,8 +87,8 @@ Member details show returned tool metadata without live discovery. Provider acco
 emails and granted scopes are not available in these responses. The UI does not
 invent them. Personal disconnect removes only the caller's credentials. OpenAPI
 tools sharing an OAuth configuration also share the caller's connection.
-Expired OpenAPI grants show sign-in until the token-status endpoint reports a
-non-expired grant. An expired row alone does not prove that refresh will succeed.
+Expired OpenAPI grants require sign-in when `can_refresh !== true`.
+Authoritative refresh capability keeps the connection available despite expiry.
 Main-app MCP details use the shared modal shell with Connection and Tools tabs.
 The Tools tab uses a searchable read-only list. Tool names and descriptions are
 searchable; compact rows match the admin list's main-ui typography, padding, and

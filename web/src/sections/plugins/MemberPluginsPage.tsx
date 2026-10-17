@@ -456,6 +456,7 @@ export default function MemberPluginsPage({
       {activePlugin && dialog?.kind === "connect" && (
         <MemberPluginConnectionDialog
           plugin={activePlugin}
+          surface={surface}
           open
           onClose={() => setDialog(null)}
           onConnected={() => {

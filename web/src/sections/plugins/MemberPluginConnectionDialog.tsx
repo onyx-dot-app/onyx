@@ -15,6 +15,8 @@ import {
 
 interface MemberPluginConnectionDialogProps {
   plugin: MemberPlugin;
+  agentId?: number;
+  surface?: "all" | "chat" | "craft";
   open: boolean;
   onClose: () => void;
   onConnected: () => void;
@@ -27,6 +29,8 @@ type ConnectionAttempt =
 
 function ConnectionForm({
   plugin,
+  agentId,
+  surface,
   onClose,
   onConnected,
 }: Omit<MemberPluginConnectionDialogProps, "open">) {
@@ -65,6 +69,8 @@ function ConnectionForm({
     try {
       await connectMemberPlugin(plugin, credentials, {
         signal: current.signal,
+        agentId,
+        surface,
       });
       if (!current.signal.aborted) onConnected();
     } catch (error) {

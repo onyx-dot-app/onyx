@@ -238,6 +238,8 @@ export default function ChatPluginsPopover({
       {connecting && (
         <MemberPluginConnectionDialog
           plugin={connecting}
+          agentId={agent.id}
+          surface="chat"
           open
           onClose={() => setConnecting(null)}
           onConnected={() => {

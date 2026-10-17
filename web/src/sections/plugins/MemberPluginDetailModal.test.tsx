@@ -1,4 +1,11 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  act,
+  deferred,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import { MCPConnectionStatus } from "@/lib/mcp/types";
 import MemberPluginDetailModal from "@/sections/plugins/MemberPluginDetailModal";
 import type { MemberPlugin } from "@/lib/plugins/member";
@@ -84,6 +91,44 @@ function show(
 }
 
 afterEach(() => jest.restoreAllMocks());
+
+test.each(["mcp", "openapi"] as const)(
+  "%s preference errors survive switching away during a save",
+  async (kind) => {
+    const pending = deferred<Response>();
+    const requests = jest
+      .spyOn(global, "fetch")
+      .mockReturnValue(pending.promise);
+    show(
+      kind === "mcp"
+        ? {
+            kind,
+            server: memberServer(),
+            tools: [storedMcpTool],
+            connection: { kind: "connected", ownership: "user" },
+          }
+        : {
+            kind,
+            tool: memberTool(),
+            connection: { kind: "connected", ownership: "none" },
+          }
+    );
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("switch", { name: "Enable in main Chat by default" })
+    );
+    await user.click(screen.getByRole("tab", { name: "Tools" }));
+    await act(async () =>
+      pending.resolve(jsonResponse({ detail: "Save failed" }, 500))
+    );
+    await user.click(screen.getByRole("tab", { name: "Connection" }));
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(
+      screen.getByRole("switch", { name: "Enable in main Chat by default" })
+    ).toBeChecked();
+    expect(requests).toHaveBeenCalledTimes(1);
+  }
+);
 
 test("MCP connection details keep the server URL in the header without a duplicate row", () => {
   show({

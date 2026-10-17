@@ -24,16 +24,28 @@ export default function MemberPluginOAuthCompletePage() {
     const kind = searchParams?.get("pluginKind");
     const id = parsePluginId(searchParams?.get("pluginId") ?? undefined);
     const attempt = searchParams?.get("attempt");
+    const agentIdParam = searchParams?.get("agentId");
+    const agentId = agentIdParam == null ? undefined : Number(agentIdParam);
+    const surfaceParam = searchParams?.get("surface");
+    const surface =
+      surfaceParam === "all" ||
+      surfaceParam === "chat" ||
+      surfaceParam === "craft"
+        ? surfaceParam
+        : undefined;
     if (
       (kind !== "mcp" && kind !== "openapi" && kind !== "external-app") ||
       id === null ||
       !attempt ||
-      searchParams?.get("message") !== "oauth_connected"
+      searchParams?.get("message") !== "oauth_connected" ||
+      (agentIdParam != null &&
+        (!/^\d+$/.test(agentIdParam) || !Number.isSafeInteger(agentId))) ||
+      (surfaceParam != null && surface === undefined)
     ) {
       setStatus("error");
       return;
     }
-    verifyMemberPluginConnection({ kind, id }).then(
+    verifyMemberPluginConnection({ kind, id }, { agentId, surface }).then(
       () => {
         notifyMemberPluginOAuthComplete(attempt);
         setStatus("success");

@@ -9,6 +9,7 @@ import {
 import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
 import { MCPAuthenticationType, MCPConnectionStatus } from "@/lib/mcp/types";
 import type { MemberPlugin } from "@/lib/plugins/member";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   jsonResponse,
   memberServer,
@@ -98,50 +99,74 @@ test("external app credentials reuse the app service and authoritative status ch
   );
 });
 
-test("saves required credential fields through the existing boundary and confirms the resulting connection", async () => {
-  const connected = jest.fn();
-  const requests = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async (input) => {
-      if (String(input) === "/api/mcp/user-credentials")
-        return jsonResponse({});
-      if (String(input) === "/api/mcp/servers")
-        return jsonResponse({
-          mcp_servers: [
-            memberServer({ auth_type: MCPAuthenticationType.API_TOKEN }),
-          ],
-        });
-      if (String(input) === "/api/tool") return jsonResponse([storedMcpTool]);
-      if (String(input) === "/api/user-oauth-token/status")
-        return jsonResponse([]);
-      throw new Error(`Unexpected request ${String(input)}`);
-    });
-  render(
-    <MemberPluginConnectionDialog
-      plugin={credentialPlugin}
-      open
-      onClose={jest.fn()}
-      onConnected={connected}
-    />
-  );
-  const user = setupUser();
-  const submit = screen.getByRole("button", { name: "Connect" });
-  expect(submit).toBeDisabled();
-  await user.type(screen.getByLabelText("api_key"), "member-api-key");
-  await user.click(submit);
-  await waitFor(() => expect(connected).toHaveBeenCalledTimes(1));
-  expect(requests).toHaveBeenCalledWith(
-    "/api/mcp/user-credentials",
-    expect.objectContaining({
-      method: "POST",
-      body: JSON.stringify({
-        server_id: 7,
-        credentials: { api_key: "member-api-key" },
-        transport: "STREAMABLE_HTTP",
-      }),
-    })
-  );
-});
+test.each([
+  {
+    label: "directory",
+    agentId: undefined,
+    surface: "all" as const,
+    roster: SWR_KEYS.mcpServers,
+  },
+  {
+    label: "shared agent",
+    agentId: 8,
+    surface: "chat" as const,
+    roster: SWR_KEYS.agentMcpServers(8),
+  },
+  {
+    label: "Craft",
+    agentId: undefined,
+    surface: "craft" as const,
+    roster: SWR_KEYS.mcpServersCraft,
+  },
+])(
+  "saves credentials and confirms the connection in its $label roster",
+  async ({ agentId, surface, roster }) => {
+    const connected = jest.fn();
+    const requests = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input) === "/api/mcp/user-credentials")
+          return jsonResponse({});
+        if (String(input) === roster)
+          return jsonResponse({
+            mcp_servers: [
+              memberServer({ auth_type: MCPAuthenticationType.API_TOKEN }),
+            ],
+          });
+        if (String(input) === "/api/tool") return jsonResponse([storedMcpTool]);
+        if (String(input) === "/api/user-oauth-token/status")
+          return jsonResponse([]);
+        throw new Error(`Unexpected request ${String(input)}`);
+      });
+    render(
+      <MemberPluginConnectionDialog
+        plugin={credentialPlugin}
+        agentId={agentId}
+        surface={surface}
+        open
+        onClose={jest.fn()}
+        onConnected={connected}
+      />
+    );
+    const user = setupUser();
+    const submit = screen.getByRole("button", { name: "Connect" });
+    expect(submit).toBeDisabled();
+    await user.type(screen.getByLabelText("api_key"), "member-api-key");
+    await user.click(submit);
+    await waitFor(() => expect(connected).toHaveBeenCalledTimes(1));
+    expect(requests).toHaveBeenCalledWith(
+      "/api/mcp/user-credentials",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          server_id: 7,
+          credentials: { api_key: "member-api-key" },
+          transport: "STREAMABLE_HTTP",
+        }),
+      })
+    );
+  }
+);
 
 test("a blocked sign-in popup leaves the dialog open with an actionable error", async () => {
   jest.spyOn(window, "open").mockReturnValue(null);
