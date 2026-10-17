@@ -2280,89 +2280,24 @@
         "perBatch": {
           "empty": "No per-batch stage data recorded."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Batch load"
+        "buckets": {
+          "fetchSource": {
+            "label": "Fetch Source"
           },
-          "batchTotal": {
-            "label": "Batch total"
-          },
-          "batchUnaccounted": {
-            "label": "Unaccounted"
-          },
-          "checkpointLoad": {
-            "label": "Checkpoint load"
+          "batchPreProcessing": {
+            "label": "Batch Pre-Processing"
           },
           "chunking": {
             "label": "Chunking"
           },
-          "connectorFetch": {
-            "label": "Connector fetch"
-          },
-          "connectorValidation": {
-            "label": "Connector validation"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "Coord lock acquire wait"
-          },
-          "coordinationUpdate": {
-            "label": "Coordination update"
-          },
-          "docBatchEnqueue": {
-            "label": "Doc batch enqueue"
-          },
-          "docBatchStore": {
-            "label": "Doc batch store"
-          },
-          "docDbPrepare": {
-            "label": "Doc DB prepare"
-          },
-          "docLockAcquireWait": {
-            "label": "Doc lock acquire wait"
-          },
-          "docprocessingSetup": {
-            "label": "Docprocessing setup"
-          },
           "embedding": {
             "label": "Embedding"
           },
-          "enrichmentPrep": {
-            "label": "Enrichment prep"
-          },
-          "finalization": {
-            "label": "Finalization"
-          },
-          "gcCollect": {
-            "label": "Garbage collection"
-          },
-          "hierarchyUpsert": {
-            "label": "Hierarchy upsert"
-          },
-          "imageProcessing": {
-            "label": "Image processing"
-          },
-          "permissionValidation": {
-            "label": "Permission validation"
-          },
-          "postIndexDbUpdate": {
-            "label": "Post-index DB update"
-          },
-          "queueWait": {
-            "label": "Queue wait"
-          },
           "vectorDbWrite": {
-            "label": "Vector DB write"
+            "label": "Vector DB Write"
           },
-          "embeddingRateLimitWait": {
-            "label": "Embedding rate limit wait",
-            "description": "Time embedding requests waited for the embedding rate limit set on Index Settings. Part of Embedding, summed over embedding threads."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Embedding provider throttle wait",
-            "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
+          "postProcessing": {
+            "label": "Post-Processing"
           }
         }
       },
@@ -2382,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "Documents indexed over time",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
-          "loadError": "The chart could not load."
+          "loadError": "The chart could not load.",
+          "rangeFilter": "Runs created in this slice of the chart"
         },
         "hold": {
           "checks_running": "Running pre-index checks",
@@ -2543,6 +2479,7 @@
           "running": "{count, plural, one {# run in progress} other {# runs in progress}}",
           "succeeded": "{count, plural, one {# run succeeded} other {# runs succeeded}}",
           "failed": "{count, plural, one {# run failed} other {# runs failed}}",
+          "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# check passed} other {# checks passed}}",
           "failedChecks": "{count, plural, one {# check failed} other {# checks failed}}",
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}"
@@ -2680,7 +2617,7 @@
         "tags": {
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
-          "doc_permission_sync": "{count, plural, one {# doc failed to sync} other {# docs failed to sync}}",
+          "doc_permission_sync": "{count, plural, one {# user failed to sync} other {# users failed to sync}}",
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
@@ -2722,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "Stage Details",
+        "heading": {
+          "top": "Stage",
+          "bottom": "Details"
+        },
         "calls": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",
         "uneven": {
           "tooltip": "Batch times vary widely for this stage"
+        },
+        "clipped": {
+          "label": "Bar clipped: the max runs past the scale"
         },
         "close": "Close stage details"
       }
@@ -6886,7 +6830,7 @@
       "activities": {
         "title": "Activities",
         "history": "Full Activity History",
-        "viewLogs": "View activity history",
+        "viewLogs": "View Logs",
         "panel": {
           "title": "Activity History",
           "close": "Hide activity history"
@@ -10353,8 +10297,25 @@
         },
         "validation": {
           "title": "Validation",
-          "blocks": "The new settings failed validation. Fix them before you apply.",
-          "warns": "Some optional checks failed. You can still apply.",
+          "unchanged": "Settings that need validation did not change.",
+          "outcome": {
+            "failed": {
+              "title": "Validation failed",
+              "description": "The new settings failed validation. Fix them before you apply."
+            },
+            "warnings": {
+              "title": "Validation passed with warnings",
+              "description": "Some optional checks failed or could not be verified. You can still apply."
+            },
+            "incomplete": {
+              "title": "Validation did not finish",
+              "description": "The finished checks passed. You can still apply."
+            },
+            "passed": {
+              "title": "Validation passed",
+              "description": "The new settings passed every check."
+            }
+          },
           "error": {
             "title": "The settings are not valid"
           }

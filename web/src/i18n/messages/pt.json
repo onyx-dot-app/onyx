@@ -2280,89 +2280,24 @@
         "perBatch": {
           "empty": "Nenhum dado de etapa por lote registrado."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "Carga do lote"
+        "buckets": {
+          "fetchSource": {
+            "label": "Busca na fonte"
           },
-          "batchTotal": {
-            "label": "Total do lote"
-          },
-          "batchUnaccounted": {
-            "label": "Não contabilizado"
-          },
-          "checkpointLoad": {
-            "label": "Carga do checkpoint"
+          "batchPreProcessing": {
+            "label": "Pré-processamento de lotes"
           },
           "chunking": {
             "label": "Divisão em chunks"
           },
-          "connectorFetch": {
-            "label": "Busca do conector"
-          },
-          "connectorValidation": {
-            "label": "Validação do conector"
-          },
-          "contextualRag": {
-            "label": "RAG contextual"
-          },
-          "coordLockAcquireWait": {
-            "label": "Espera pelo bloqueio de coordenação"
-          },
-          "coordinationUpdate": {
-            "label": "Atualização da coordenação"
-          },
-          "docBatchEnqueue": {
-            "label": "Enfileiramento do lote de documentos"
-          },
-          "docBatchStore": {
-            "label": "Armazenamento do lote de documentos"
-          },
-          "docDbPrepare": {
-            "label": "Preparação do banco de documentos"
-          },
-          "docLockAcquireWait": {
-            "label": "Espera pelo bloqueio de documento"
-          },
-          "docprocessingSetup": {
-            "label": "Configuração do docprocessing"
-          },
           "embedding": {
             "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "Preparação do enriquecimento"
-          },
-          "finalization": {
-            "label": "Finalização"
-          },
-          "gcCollect": {
-            "label": "Coleta de lixo"
-          },
-          "hierarchyUpsert": {
-            "label": "Upsert da hierarquia"
-          },
-          "imageProcessing": {
-            "label": "Processamento de imagens"
-          },
-          "permissionValidation": {
-            "label": "Validação de permissões"
-          },
-          "postIndexDbUpdate": {
-            "label": "Atualização do banco após a indexação"
-          },
-          "queueWait": {
-            "label": "Espera na fila"
           },
           "vectorDbWrite": {
             "label": "Gravação no banco vetorial"
           },
-          "embeddingRateLimitWait": {
-            "label": "Espera pelo limite de embedding",
-            "description": "Tempo que as requisições de embedding esperaram pelo limite definido nas Configurações de índice. Parte de Embedding, somado entre as threads de embedding."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "Espera por limitação do provedor",
-            "description": "Tempo que as requisições de embedding esperaram depois que o provedor de embedding as limitou. Parte de Embedding, somado entre as threads de embedding."
+          "postProcessing": {
+            "label": "Pós-processamento"
           }
         }
       },
@@ -2382,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "Documentos indexados ao longo do tempo",
           "tooltip": "{count, plural, one {# documento} other {# documentos}}",
-          "loadError": "Não foi possível carregar o gráfico."
+          "loadError": "Não foi possível carregar o gráfico.",
+          "rangeFilter": "Execuções criadas neste trecho do gráfico"
         },
         "hold": {
           "checks_running": "Executando verificações pré-indexação",
@@ -2543,6 +2479,7 @@
           "running": "{count, plural, one {# execução em andamento} other {# execuções em andamento}}",
           "succeeded": "{count, plural, one {# execução bem-sucedida} other {# execuções bem-sucedidas}}",
           "failed": "{count, plural, one {# execução com falha} other {# execuções com falha}}",
+          "canceled": "{count, plural, one {# execução cancelada} other {# execuções canceladas}}",
           "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
           "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
           "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}"
@@ -2680,7 +2617,7 @@
         "tags": {
           "stackTrace": "Rastreamento de pilha",
           "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
-          "doc_permission_sync": "{count, plural, one {# documento não sincronizado} other {# documentos não sincronizados}}",
+          "doc_permission_sync": "{count, plural, one {# usuário não sincronizado} other {# usuários não sincronizados}}",
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
@@ -2722,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "Detalhes das etapas",
+        "heading": {
+          "top": "Detalhes",
+          "bottom": "das etapas"
+        },
         "calls": "Lotes",
         "averageTime": "Tempo médio",
         "maxTime": "Tempo máximo",
         "uneven": {
           "tooltip": "Os tempos por lote variam muito nesta etapa"
+        },
+        "clipped": {
+          "label": "Barra cortada: o máximo ultrapassa a escala"
         },
         "close": "Fechar detalhes das etapas"
       }
@@ -6886,7 +6830,7 @@
       "activities": {
         "title": "Atividades",
         "history": "Histórico completo de atividades",
-        "viewLogs": "Ver o histórico de atividades",
+        "viewLogs": "Ver registros",
         "panel": {
           "title": "Histórico de atividades",
           "close": "Ocultar o histórico de atividades"
@@ -10353,8 +10297,25 @@
         },
         "validation": {
           "title": "Validação",
-          "blocks": "As novas configurações falharam na validação. Corrija-as antes de aplicar.",
-          "warns": "Algumas verificações opcionais falharam. Você ainda pode aplicar.",
+          "unchanged": "As configurações que exigem validação não foram alteradas.",
+          "outcome": {
+            "failed": {
+              "title": "A validação falhou",
+              "description": "As novas configurações falharam na validação. Corrija-as antes de aplicar."
+            },
+            "warnings": {
+              "title": "Validação aprovada com avisos",
+              "description": "Algumas verificações opcionais falharam ou não puderam ser confirmadas. Você ainda pode aplicar."
+            },
+            "incomplete": {
+              "title": "A validação não terminou",
+              "description": "As verificações concluídas foram aprovadas. Você ainda pode aplicar."
+            },
+            "passed": {
+              "title": "Validação aprovada",
+              "description": "As novas configurações passaram em todas as verificações."
+            }
+          },
           "error": {
             "title": "As configurações não são válidas"
           }

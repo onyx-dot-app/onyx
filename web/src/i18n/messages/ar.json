@@ -2280,89 +2280,24 @@
         "perBatch": {
           "empty": "لم تُسجل بيانات مراحل لكل دفعة."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "تحميل الدفعة"
+        "buckets": {
+          "fetchSource": {
+            "label": "جلب المصدر"
           },
-          "batchTotal": {
-            "label": "إجمالي الدفعة"
-          },
-          "batchUnaccounted": {
-            "label": "غير محسوب"
-          },
-          "checkpointLoad": {
-            "label": "تحميل نقطة التحقق"
+          "batchPreProcessing": {
+            "label": "المعالجة المسبقة للدفعات"
           },
           "chunking": {
             "label": "التقسيم"
           },
-          "connectorFetch": {
-            "label": "جلب الموصل"
-          },
-          "connectorValidation": {
-            "label": "التحقق من الموصل"
-          },
-          "contextualRag": {
-            "label": "RAG السياقي"
-          },
-          "coordLockAcquireWait": {
-            "label": "انتظار قفل التنسيق"
-          },
-          "coordinationUpdate": {
-            "label": "تحديث التنسيق"
-          },
-          "docBatchEnqueue": {
-            "label": "إدراج دفعة المستندات في الطابور"
-          },
-          "docBatchStore": {
-            "label": "تخزين دفعة المستندات"
-          },
-          "docDbPrepare": {
-            "label": "تجهيز قاعدة بيانات المستندات"
-          },
-          "docLockAcquireWait": {
-            "label": "انتظار قفل المستند"
-          },
-          "docprocessingSetup": {
-            "label": "إعداد معالجة المستندات"
-          },
           "embedding": {
             "label": "التضمين"
-          },
-          "enrichmentPrep": {
-            "label": "تجهيز الإثراء"
-          },
-          "finalization": {
-            "label": "الإنهاء"
-          },
-          "gcCollect": {
-            "label": "جمع القمامة"
-          },
-          "hierarchyUpsert": {
-            "label": "تحديث التسلسل الهرمي"
-          },
-          "imageProcessing": {
-            "label": "معالجة الصور"
-          },
-          "permissionValidation": {
-            "label": "التحقق من الأذونات"
-          },
-          "postIndexDbUpdate": {
-            "label": "تحديث قاعدة البيانات بعد الفهرسة"
-          },
-          "queueWait": {
-            "label": "انتظار الطابور"
           },
           "vectorDbWrite": {
             "label": "الكتابة في قاعدة المتجهات"
           },
-          "embeddingRateLimitWait": {
-            "label": "انتظار حد معدل التضمين",
-            "description": "الوقت الذي انتظرته طلبات التضمين بسبب حد المعدل المحدد في إعدادات الفهرس. جزء من التضمين، ومجموع عبر خيوط التضمين."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "انتظار تقييد المزوّد",
-            "description": "الوقت الذي انتظرته طلبات التضمين بعد أن قيّدها مزوّد التضمين. جزء من التضمين، ومجموع عبر خيوط التضمين."
+          "postProcessing": {
+            "label": "المعالجة اللاحقة"
           }
         }
       },
@@ -2382,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "المستندات المفهرسة بمرور الوقت",
           "tooltip": "{count, plural, one {# مستند} other {# مستندات}}",
-          "loadError": "تعذر تحميل الرسم البياني."
+          "loadError": "تعذر تحميل الرسم البياني.",
+          "rangeFilter": "عمليات التشغيل التي أُنشئت في هذا الجزء من المخطط"
         },
         "hold": {
           "checks_running": "جارٍ تشغيل فحوصات ما قبل الفهرسة",
@@ -2543,6 +2479,7 @@
           "running": "{count, plural, one {تشغيل واحد قيد التنفيذ} other {# عمليات تشغيل قيد التنفيذ}}",
           "succeeded": "{count, plural, one {نجح تشغيل واحد} other {نجحت # عمليات تشغيل}}",
           "failed": "{count, plural, one {فشل تشغيل واحد} other {فشلت # عمليات تشغيل}}",
+          "canceled": "{count, plural, one {تم إلغاء # تشغيل} other {تم إلغاء # تشغيلات}}",
           "passedChecks": "{count, plural, one {نجح فحص واحد} other {نجح # فحوصات}}",
           "failedChecks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
           "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}"
@@ -2680,7 +2617,7 @@
         "tags": {
           "stackTrace": "تتبع المكدس",
           "indexing": "{count, plural, zero {لم يفشل أي مستند} one {فشل مستند واحد} two {فشل مستندان} few {فشلت # مستندات} many {فشل # مستندًا} other {فشل # مستند}}",
-          "doc_permission_sync": "{count, plural, zero {لم تفشل مزامنة أي مستند} one {فشلت مزامنة مستند واحد} two {فشلت مزامنة مستندين} few {فشلت مزامنة # مستندات} many {فشلت مزامنة # مستندًا} other {فشلت مزامنة # مستند}}",
+          "doc_permission_sync": "{count, plural, zero {لم تفشل مزامنة أي مستخدم} one {فشلت مزامنة مستخدم واحد} two {فشلت مزامنة مستخدمَين} few {فشلت مزامنة # مستخدمين} many {فشلت مزامنة # مستخدمًا} other {فشلت مزامنة # مستخدم}}",
           "group_sync": "{count, plural, zero {لم تفشل مزامنة أي مجموعة} one {فشلت مزامنة مجموعة واحدة} two {فشلت مزامنة مجموعتين} few {فشلت مزامنة # مجموعات} many {فشلت مزامنة # مجموعة} other {فشلت مزامنة # مجموعة}}",
           "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}",
           "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
@@ -2722,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "تفاصيل المراحل",
+        "heading": {
+          "top": "تفاصيل",
+          "bottom": "المراحل"
+        },
         "calls": "الدفعات",
         "averageTime": "متوسط الوقت",
         "maxTime": "أقصى وقت",
         "uneven": {
           "tooltip": "تتفاوت أوقات الدفعات كثيرًا في هذه المرحلة"
+        },
+        "clipped": {
+          "label": "تم قص الشريط: الحد الأقصى يتجاوز المقياس"
         },
         "close": "إغلاق تفاصيل المراحل"
       }
@@ -6886,7 +6830,7 @@
       "activities": {
         "title": "الأنشطة",
         "history": "سجل النشاط الكامل",
-        "viewLogs": "عرض سجل النشاط",
+        "viewLogs": "عرض السجلات",
         "panel": {
           "title": "سجل النشاط",
           "close": "إخفاء سجل النشاط"
@@ -10353,8 +10297,25 @@
         },
         "validation": {
           "title": "التحقق",
-          "blocks": "فشلت الإعدادات الجديدة في التحقق. أصلحها قبل التطبيق.",
-          "warns": "فشلت بعض الفحوصات الاختيارية. لا يزال بإمكانك التطبيق.",
+          "unchanged": "لم تتغير الإعدادات التي تحتاج إلى تحقق.",
+          "outcome": {
+            "failed": {
+              "title": "فشل التحقق",
+              "description": "فشلت الإعدادات الجديدة في التحقق. أصلحها قبل التطبيق."
+            },
+            "warnings": {
+              "title": "نجح التحقق مع تحذيرات",
+              "description": "فشلت بعض الفحوصات الاختيارية أو تعذر التحقق منها. لا يزال بإمكانك التطبيق."
+            },
+            "incomplete": {
+              "title": "لم يكتمل التحقق",
+              "description": "نجحت الفحوصات المكتملة. لا يزال بإمكانك التطبيق."
+            },
+            "passed": {
+              "title": "نجح التحقق",
+              "description": "اجتازت الإعدادات الجديدة جميع الفحوصات."
+            }
+          },
           "error": {
             "title": "الإعدادات غير صالحة"
           }

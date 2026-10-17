@@ -19,6 +19,7 @@ function runsQueryParams(query: CCPairRunsQuery): string {
     page_size: String(query.pageSize),
   });
   if (query.since !== null) params.set("since", query.since);
+  if (query.until !== null) params.set("until", query.until);
   for (const kind of query.kinds ?? []) params.append("kinds", kind);
   for (const group of query.statusGroups ?? []) {
     params.append("status_groups", group);

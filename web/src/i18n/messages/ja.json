@@ -2280,89 +2280,24 @@
         "perBatch": {
           "empty": "バッチごとのステージデータは記録されていません。"
         },
-        "stages": {
-          "batchLoad": {
-            "label": "バッチ読み込み"
+        "buckets": {
+          "fetchSource": {
+            "label": "ソース取得"
           },
-          "batchTotal": {
-            "label": "バッチ合計"
-          },
-          "batchUnaccounted": {
-            "label": "未計上"
-          },
-          "checkpointLoad": {
-            "label": "チェックポイント読み込み"
+          "batchPreProcessing": {
+            "label": "バッチ前処理"
           },
           "chunking": {
             "label": "チャンク分割"
           },
-          "connectorFetch": {
-            "label": "コネクター取得"
-          },
-          "connectorValidation": {
-            "label": "コネクター検証"
-          },
-          "contextualRag": {
-            "label": "Contextual RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "調整ロック取得待ち"
-          },
-          "coordinationUpdate": {
-            "label": "調整更新"
-          },
-          "docBatchEnqueue": {
-            "label": "ドキュメントバッチのキュー投入"
-          },
-          "docBatchStore": {
-            "label": "ドキュメントバッチ保存"
-          },
-          "docDbPrepare": {
-            "label": "ドキュメント DB の準備"
-          },
-          "docLockAcquireWait": {
-            "label": "ドキュメントロックの取得待ち"
-          },
-          "docprocessingSetup": {
-            "label": "ドキュメント処理のセットアップ"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "エンリッチメントの準備"
-          },
-          "finalization": {
-            "label": "最終処理"
-          },
-          "gcCollect": {
-            "label": "ガベージコレクション"
-          },
-          "hierarchyUpsert": {
-            "label": "階層のアップサート"
-          },
-          "imageProcessing": {
-            "label": "画像処理"
-          },
-          "permissionValidation": {
-            "label": "権限の検証"
-          },
-          "postIndexDbUpdate": {
-            "label": "インデックス後の DB 更新"
-          },
-          "queueWait": {
-            "label": "キューの待ち時間"
+            "label": "埋め込み"
           },
           "vectorDbWrite": {
             "label": "ベクトル DB への書き込み"
           },
-          "embeddingRateLimitWait": {
-            "label": "埋め込みレート制限の待機",
-            "description": "インデックス設定で設定した埋め込みのレート制限により、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "プロバイダーの制限による待機",
-            "description": "埋め込みプロバイダーがリクエストを制限した後に、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
+          "postProcessing": {
+            "label": "後処理"
           }
         }
       },
@@ -2382,7 +2317,8 @@
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
-          "loadError": "グラフを読み込めませんでした。"
+          "loadError": "グラフを読み込めませんでした。",
+          "rangeFilter": "グラフのこの区間に作成された実行"
         },
         "hold": {
           "checks_running": "インデックス前チェックを実行中",
@@ -2543,6 +2479,7 @@
           "running": "{count, plural, other {# 件の実行が進行中}}",
           "succeeded": "{count, plural, other {# 件の実行が成功}}",
           "failed": "{count, plural, other {# 件の実行が失敗}}",
+          "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"
@@ -2680,7 +2617,7 @@
         "tags": {
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
-          "doc_permission_sync": "{count, plural, other {# 件のドキュメントの同期に失敗}}",
+          "doc_permission_sync": "{count, plural, other {# 人のユーザーの同期に失敗}}",
           "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
@@ -2722,11 +2659,18 @@
       },
       "stageDetails": {
         "title": "ステージ詳細",
+        "heading": {
+          "top": "ステージ",
+          "bottom": "詳細"
+        },
         "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
         "uneven": {
           "tooltip": "このステージのバッチ時間は大きくばらついています"
+        },
+        "clipped": {
+          "label": "バーを切り詰めています：最大値が目盛りを超えています"
         },
         "close": "ステージ詳細を閉じる"
       }
@@ -6886,7 +6830,7 @@
       "activities": {
         "title": "アクティビティ",
         "history": "アクティビティ履歴をすべて表示",
-        "viewLogs": "アクティビティ履歴を表示",
+        "viewLogs": "ログを表示",
         "panel": {
           "title": "アクティビティ履歴",
           "close": "アクティビティ履歴を閉じる"
@@ -10353,8 +10297,25 @@
         },
         "validation": {
           "title": "検証",
-          "blocks": "新しい設定は検証に失敗しました。適用する前に修正してください。",
-          "warns": "一部の任意のチェックが失敗しました。適用は可能です。",
+          "unchanged": "検証が必要な設定は変更されていません。",
+          "outcome": {
+            "failed": {
+              "title": "検証に失敗しました",
+              "description": "新しい設定は検証に失敗しました。適用する前に修正してください。"
+            },
+            "warnings": {
+              "title": "警告付きで検証に合格しました",
+              "description": "一部の任意のチェックが失敗したか、確認できませんでした。適用は可能です。"
+            },
+            "incomplete": {
+              "title": "検証が完了しませんでした",
+              "description": "完了したチェックは合格しました。適用は可能です。"
+            },
+            "passed": {
+              "title": "検証に合格しました",
+              "description": "新しい設定はすべてのチェックに合格しました。"
+            }
+          },
           "error": {
             "title": "設定が無効です"
           }
