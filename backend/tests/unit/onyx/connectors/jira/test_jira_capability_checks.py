@@ -279,7 +279,7 @@ def test_configured_project_passes() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
-    gateway.get_project.assert_called_once_with(project_key="AS")
+    gateway.get_project.assert_called_once_with(project_key="AS", fast=True)
 
 
 def test_configured_project_suggests_the_key_for_a_name() -> None:
@@ -303,7 +303,7 @@ def test_configured_project_strips_spaces_around_the_key() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
-    gateway.get_project.assert_called_once_with(project_key="AS")
+    gateway.get_project.assert_called_once_with(project_key="AS", fast=True)
 
 
 def test_whitespace_project_key_means_all_projects() -> None:
@@ -410,7 +410,7 @@ def test_issue_read_reads_one_issue_on_cloud() -> None:
 
     assert result.status == CapabilityCheckStatus.PASSED
     assert gateway.search_issue_ids.call_args.kwargs["max_results"] == 1
-    gateway.bulk_fetch_issues.assert_called_once_with(issue_ids=["1"])
+    gateway.bulk_fetch_issues.assert_called_once_with(issue_ids=["1"], fast=True)
     gateway.search_issues.assert_not_called()
 
 
