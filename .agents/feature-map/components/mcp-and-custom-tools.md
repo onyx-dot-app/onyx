@@ -116,13 +116,15 @@ stable. Cancelling account disconnect returns to the selected tab. Craft keeps
 its connection-only view because it does not fetch the main-app tool catalog.
 
 `web/src/lib/plugins/member.ts` owns the native MCP/OpenAPI/external-app union and connection
-classification. `web/src/lib/plugins/memberConnection.ts` owns popup correlation,
+classification. `web/src/lib/plugins/memberConnection.ts` owns authorization-tab correlation,
 origin and source checks, cancellation, and timeout. A nonce-scoped BroadcastChannel
-also returns completion when a provider's opener policy severs the popup link.
+also returns completion when a provider's opener policy severs the new tab's opener link.
 Closing that link is not treated as proof of cancellation. The member can cancel
 from the dialog; otherwise the attempt times out. Existing backend callbacks
-complete OAuth before returning to `/app/plugins/oauth/complete`. The opener
-rechecks authoritative connection state before reporting success.
+complete OAuth before returning to `/app/plugins/oauth/complete`. That completion
+page verifies the saved connection against the originating roster before notifying
+the opener or BroadcastChannel. The connection caller then verifies the saved
+state again before the dialog reports success.
 
 The composer Plugins picker reads the active agent's MCP server roster and groups
 only Chat-capable kinds. External apps remain Craft-only. `/craft/v1/plugins`
