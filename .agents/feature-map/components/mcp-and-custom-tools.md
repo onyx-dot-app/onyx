@@ -691,10 +691,10 @@ so a caller can enable them again. Updates reload that caller's Craft sessions.
 The live proxy resolver also enforces Craft opt-outs, including no-auth servers.
 Host attribution remains workspace-wide so disabled servers cannot become off-catalog.
 
-`POST /admin/mcp/probe` and `POST /admin/mcp/probe/stream` check MCP setup without credentials.
+`POST /admin/mcp/probe` checks MCP setup without credentials.
 The stream uses newline-delimited JSON progress and one final result.
 `POST /admin/mcp/oauth/discover` reads public OAuth metadata for a manageable server.
-All three require `MANAGE_ACTIONS`, including scoped managers.
+Both require `MANAGE_ACTIONS`, including scoped managers.
 Discovery checks management access before network work and closes its database session first.
 SSRF validation covers outbound hops and runs outside the event loop.
 OAuth failures return safe messages and an `oauth_error` reason.
