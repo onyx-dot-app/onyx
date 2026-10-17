@@ -92,6 +92,13 @@ _RunT = TypeVar(
 )
 
 
+# A run supersedes the failures before it once it succeeded or failed. A
+# canceled or interrupted run, like one still going, leaves them open.
+_SUPERSEDING_GROUPS = frozenset(
+    {CCPairRunStatusGroup.SUCCEEDED, CCPairRunStatusGroup.FAILED}
+)
+
+
 def _latest_finished(
     run_id: InstrumentedAttribute[int],
     time_created: InstrumentedAttribute[datetime],
@@ -100,20 +107,19 @@ def _latest_finished(
     history: Sequence[InstrumentedAttribute[Any]],
     *scope: ColumnElement[bool],
 ) -> Select:
-    """The newest finished run on each ``history`` within ``scope``, in the
-    feed's newest-first order. A failed run outside this set has a finished run
-    after it, while a run still in progress settles nothing. One set for every
-    row, hashed once, since a shared source's history has no index a lookup
-    per row could use."""
-    finished = [
-        s
-        for s in statuses
-        if _STATUS_GROUPS[s.value] is not CCPairRunStatusGroup.RUNNING
+    """The newest settled run on each ``history`` within ``scope``, in the
+    feed's newest-first order. A failed run outside this set has a settled run
+    after it. A run still in progress settles nothing, and neither does one
+    that was canceled or interrupted, since it never got to retry the work.
+    One set for every row, hashed once, since a shared source's history has
+    no index a lookup per row could use."""
+    superseding = [
+        s for s in statuses if _STATUS_GROUPS[s.value] in _SUPERSEDING_GROUPS
     ]
     return (
         select(run_id)
         .distinct(*history)
-        .where(*scope, status.in_(finished))
+        .where(*scope, status.in_(superseding))
         .order_by(*history, time_created.desc(), run_id.desc())
     )
 
