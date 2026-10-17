@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.indexing.run_tabular_rechunk import (
     TABULAR_RECHUNK_TIME_BUDGET_S,
+    retry_tabular_rechunk,
     run_tabular_rechunk,
 )
 from onyx.cache.factory import get_cache_backend
@@ -50,9 +51,9 @@ class TabularRechunkProgress(BaseModel):
     documents_failed: int = 0
     # Everything the current pass could not re-chunk.
     failed_document_ids: list[str] = []
-    # The snapshot a retry pass works through. Held apart from
-    # `failed_document_ids` so that pass can record its own failures without
-    # changing what it still has to visit. Empty while the forward scan runs.
+    # What a retry pass still has to visit, consumed as it goes. Held apart
+    # from `failed_document_ids` so the pass can record its own failures
+    # without changing its remaining work. Empty while the forward scan runs.
     retrying_document_ids: list[str] = []
     retry_passes: int = 0
 
@@ -158,27 +159,44 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
                 task_logger.info("tabular re-chunk: waiting for the reindex port")
                 return None
 
-        result = run_tabular_rechunk(
-            tenant_id=tenant_id,
-            after_doc_id=progress.cursor,
-            retry_document_ids=progress.retrying_document_ids or None,
-            on_batch=lambda: lock.extend(_LOCK_TIMEOUT_S),
-        )
+        def extend_lock() -> None:
+            lock.extend(_LOCK_TIMEOUT_S)
+
+        if progress.retrying_document_ids:
+            retry = retry_tabular_rechunk(
+                tenant_id=tenant_id,
+                document_ids=progress.retrying_document_ids,
+                on_batch=extend_lock,
+            )
+            indexed, newly_failed = retry.documents_indexed, retry.failed_document_ids
+            remaining: list[str] | None = retry.remaining_document_ids
+            cursor, pass_over = None, not retry.remaining_document_ids
+        else:
+            result = run_tabular_rechunk(
+                tenant_id=tenant_id,
+                after_doc_id=progress.cursor,
+                on_batch=extend_lock,
+            )
+            indexed, newly_failed = result.documents_indexed, result.failed_document_ids
+            remaining = None
+            cursor, pass_over = result.last_document_id, result.finished
 
         # Re-read: the run took minutes, so write onto current state rather
         # than a stale copy.
         progress = load_progress()
-        progress.cursor = result.last_document_id
-        progress.documents_indexed += result.documents_indexed
-        progress.documents_failed += len(result.failed_document_ids)
+        progress.cursor = cursor
+        progress.documents_indexed += indexed
+        progress.documents_failed += len(newly_failed)
         progress.failed_document_ids = sorted(
-            set(progress.failed_document_ids) | set(result.failed_document_ids)
+            set(progress.failed_document_ids) | set(newly_failed)
         )
-        if result.finished:
+        if remaining is not None:
+            progress.retrying_document_ids = remaining
+        if pass_over:
             _start_next_pass(progress)
         get_kv_store().store(KV_TABULAR_RECHUNK_PROGRESS_KEY, progress.model_dump())
 
-        return result.documents_indexed or None
+        return indexed or None
     finally:
         if lock.owned():
             lock.release()
