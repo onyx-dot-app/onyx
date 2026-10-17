@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Collapsible, Divider } from "@opal/components";
+import { Button, Card, Collapsible } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgEditBig } from "@opal/icons";
 import { markdown } from "@opal/utils";
@@ -34,6 +34,7 @@ import HierarchyBreakdown, {
   breakdownGroups,
 } from "@/views/admin/connectors/ConnectorDetailPage/HierarchyBreakdown";
 import InlineFileManagement from "@/views/admin/connectors/ConnectorDetailPage/InlineFileManagement";
+import { formatTimestamp } from "@opal/time";
 
 /** Markdown-escapes a value so a URL with underscores stays literal. */
 function escapeMarkdown(value: string): string {
@@ -57,14 +58,29 @@ interface ConfigGroupsProps {
   /** The breakdown has rows, a note, or a loader to show. */
   showBreakdown: boolean;
   showEmptyBreakdown: boolean;
+  /** Shown after the other settings: when indexing starts from. */
+  lastRow: ConfigRow;
 }
 
-/** The settings bound to the account, then the breakdown, then the other settings, with a divider between the parts. */
+interface ConfigPanelProps {
+  children: React.ReactNode;
+}
+/** A white panel on the section's tinted card. */
+function ConfigPanel({ children }: ConfigPanelProps) {
+  return (
+    <Card color="background-tint-00" rounding={3} padding={3}>
+      {children}
+    </Card>
+  );
+}
+
+/** The settings bound to the account and the breakdown, each on a panel, then the other settings. */
 function ConfigGroups({
   rows,
   ccPair,
   showBreakdown,
   showEmptyBreakdown,
+  lastRow,
 }: ConfigGroupsProps) {
   const bound = new Set(credentialBoundFieldNames(ccPair.connector.source));
   const { data } = useHierarchyBreakdown(ccPair.id);
@@ -74,32 +90,24 @@ function ConfigGroups({
   const restRows = rows.filter(
     (row) => !bound.has(row.key) && !covered.has(row.key)
   );
-  const parts: React.ReactNode[] = [];
-  if (boundRows.length > 0) {
-    parts.push(<ConfigDisplay key="bound" rows={boundRows} />);
-  }
-  if (showBreakdown) {
-    parts.push(
-      <HierarchyBreakdown
-        key="breakdown"
-        ccPairId={ccPair.id}
-        showEmpty={showEmptyBreakdown}
-      />
-    );
-  }
-  if (restRows.length > 0) {
-    parts.push(<ConfigDisplay key="rest" rows={restRows} />);
-  }
   return (
-    <Section gap={4} alignItems="stretch" height="fit">
-      {parts.map((part, index) => (
-        <Fragment key={index}>
-          {index > 0 && (
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-          )}
-          {part}
-        </Fragment>
-      ))}
+    <Section gap={2} alignItems="stretch" height="fit">
+      {boundRows.length > 0 && (
+        <ConfigPanel>
+          <ConfigDisplay rows={boundRows} />
+        </ConfigPanel>
+      )}
+      {showBreakdown && (
+        <ConfigPanel>
+          <HierarchyBreakdown
+            ccPairId={ccPair.id}
+            showEmpty={showEmptyBreakdown}
+          />
+        </ConfigPanel>
+      )}
+      <Section alignItems="stretch" height="fit" padding={0.75}>
+        <ConfigDisplay rows={[...restRows, lastRow]} />
+      </Section>
     </Section>
   );
 }
@@ -117,6 +125,7 @@ function LabeledConfigGroups({
   ...rest
 }: LabeledConfigGroupsProps) {
   const configuration = useConnectorConfiguration(source);
+  const tTabs = useTranslations("admin.connectorsList.checkboxTabs");
   const { reportFor } = useCredentialCheckReports(source);
   const credentialId = ccPair.credential.id;
   const connectorId = ccPair.connector.id;
@@ -130,23 +139,49 @@ function LabeledConfigGroups({
       checks
     ) as ConfigEntries;
     // A label that depends on the credential reads as the generic form.
+    const fields = configFields([
+      ...configuration.values,
+      ...configuration.advanced_values,
+    ]);
     const labels = new Map(
-      configFields([
-        ...configuration.values,
-        ...configuration.advanced_values,
-      ]).map((field) => [
+      fields.map((field) => [
         field.name,
         typeof field.label === "function" ? field.label(null) : field.label,
       ])
+    );
+    // A checkbox the form shows as tabs reads by its tab labels.
+    const booleanLabels = new Map(
+      fields.flatMap((field) =>
+        field.type === "checkbox" && field.tabLabels !== undefined
+          ? [
+              [
+                field.name,
+                {
+                  true: tTabs(field.tabLabels.true),
+                  false: tTabs(field.tabLabels.false),
+                },
+              ] as const,
+            ]
+          : []
+      )
     );
     return Object.entries(buildConfigEntries(labeled, source)).map(
       ([key, value]): ConfigRow => ({
         key,
         label: labels.get(key) ?? key,
         value,
+        booleanLabels: booleanLabels.get(key),
       })
     );
-  }, [configuration, config, credentialId, connectorId, reportFor, source]);
+  }, [
+    configuration,
+    config,
+    credentialId,
+    connectorId,
+    reportFor,
+    source,
+    tTabs,
+  ]);
   return <ConfigGroups rows={rows} ccPair={ccPair} {...rest} />;
 }
 
@@ -168,6 +203,7 @@ export default function IndexConfigurationsSection({
 }: IndexConfigurationsSectionProps) {
   const t = useTranslations("admin.connector.configuration");
   const tTabs = useTranslations("admin.connectorsList.checkboxTabs");
+  const tScheduled = useTranslations("admin.connectorsList.scheduled");
   const format = useFormatter();
   const [open, setOpen] = useState(false);
   const source = ccPair.connector.source;
@@ -240,10 +276,19 @@ export default function IndexConfigurationsSection({
     label: key,
     value,
   }));
+  const indexingStart = ccPair.connector.indexing_start;
   const groupProps = {
     ccPair,
     showBreakdown,
     showEmptyBreakdown: breakdownOnly,
+    lastRow: {
+      key: "indexing_start",
+      label: tScheduled("indexingStart.title"),
+      value:
+        indexingStart === null
+          ? tScheduled("indexingStart.placeholder")
+          : formatTimestamp(indexingStart, { dateOnly: true }),
+    },
   };
 
   return (
@@ -256,14 +301,14 @@ export default function IndexConfigurationsSection({
       rightChildren={
         open &&
         onEdit !== null && (
-          <Button prominence="secondary" icon={SvgEditBig} onClick={onEdit}>
+          <Button prominence="tertiary" icon={SvgEditBig} onClick={onEdit}>
             {t("editButton.label")}
           </Button>
         )
       }
     >
-      <Card border="solid" rounding={4} padding={4}>
-        <Section gap={4} alignItems="stretch" height="fit">
+      <Card color="background-tint-01" border="solid" rounding={4} padding={1}>
+        <Section gap={2} alignItems="stretch" height="fit">
           {isEditableSource(source) ? (
             <LabeledConfigGroups
               source={source}

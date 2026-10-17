@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "Limit access to members of selected groups. Synced permissions still apply.",
           "title": "Restrict Access to Groups"
-        }
+        },
+        "managerCount": "{count, plural, one {# group manager} other {# group managers}}"
       },
       "invalidState": {
         "description": "This connector is in an invalid state. Please update your credentials or create a new connector before re-indexing.",
@@ -3397,6 +3398,9 @@
           },
           "shareLocked": {
             "tooltip": "Only the person who added this account, or an admin it is shared with, can change who may use it."
+          },
+          "viewDetails": {
+            "tooltip": "View Details"
           }
         },
         "accountUnavailable": {
@@ -4022,7 +4026,7 @@
           "description": "Configure Confluence connector",
           "fields": {
             "is_cloud": {
-              "label": "Is Cloud",
+              "label": "Confluence Host Type",
               "description": "Choose Confluence Cloud for a site on atlassian.net, or Confluence Data Center for a self-hosted Confluence Server or Data Center site."
             },
             "wiki_base": {
@@ -7344,7 +7348,8 @@
         "viewLogs": "View Logs",
         "panel": {
           "title": "Activity History",
-          "close": "Close Panel"
+          "close": "Close Panel",
+          "pairTitle": "{name} Activity History"
         }
       },
       "list": {
@@ -7380,7 +7385,9 @@
           "manage": "Manage",
           "manageFederated": "Manage federated connector",
           "expand": "View Details",
-          "collapse": "Hide Details"
+          "collapse": "Hide Details",
+          "pause": "Pause",
+          "resume": "Resume"
         },
         "federated": {
           "tag": "Federated"
@@ -10722,9 +10729,7 @@
       "failedToRun": "Checks failed to run. Try again.",
       "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
       "state": {
-        "completed": "Checks completed.",
-        "inProgress": "Checks in progress...",
-        "waiting": "Waiting for connector settings..."
+        "inProgress": "Checks in progress..."
       },
       "advisory": {
         "title": "Some content won't be indexed.",

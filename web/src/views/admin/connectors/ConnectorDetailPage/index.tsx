@@ -455,6 +455,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               source={source}
               credentialId={ccPair.credential.id}
               connectorId={ccPair.connector.id}
+              held={ccPair.indexing_hold !== null}
               expandRequest={checksExpandRequest}
             />
             {/* While a run row's popover is open, the sections step back; the status card stays full. */}

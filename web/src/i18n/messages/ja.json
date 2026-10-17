@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "選択したグループのメンバーにアクセスを限定します。同期された権限も引き続き適用されます。",
           "title": "グループへのアクセス制限"
-        }
+        },
+        "managerCount": "{count, plural, other {#人のグループマネージャー}}"
       },
       "invalidState": {
         "description": "このコネクターは無効な状態です。再インデックスの前に、認証情報を更新するか、新しいコネクターを作成してください。",
@@ -3397,6 +3398,9 @@
           },
           "shareLocked": {
             "tooltip": "このアカウントを追加したユーザー、または共有されている管理者のみが、使用できるユーザーを変更できます。"
+          },
+          "viewDetails": {
+            "tooltip": "詳細を表示"
           }
         },
         "accountUnavailable": {
@@ -4022,7 +4026,7 @@
           "description": "Confluence コネクターを設定",
           "fields": {
             "is_cloud": {
-              "label": "クラウド版",
+              "label": "Confluence のホストタイプ",
               "description": "atlassian.net 上のサイトには Confluence Cloud を、セルフホストの Confluence Server または Data Center サイトには Confluence Data Center を選択してください。"
             },
             "wiki_base": {
@@ -7344,7 +7348,8 @@
         "viewLogs": "ログを表示",
         "panel": {
           "title": "アクティビティ履歴",
-          "close": "パネルを閉じる"
+          "close": "パネルを閉じる",
+          "pairTitle": "{name} のアクティビティ履歴"
         }
       },
       "list": {
@@ -7380,7 +7385,9 @@
           "manage": "管理",
           "manageFederated": "フェデレーテッドコネクタを管理",
           "expand": "詳細を表示",
-          "collapse": "詳細を隠す"
+          "collapse": "詳細を隠す",
+          "pause": "一時停止",
+          "resume": "再開"
         },
         "federated": {
           "tag": "フェデレーテッド"
@@ -10722,9 +10729,7 @@
       "failedToRun": "チェックを実行できませんでした。もう一度お試しください。",
       "requiredFailed": "{count, plural, one {必須チェック # 件が失敗} other {必須チェック # 件が失敗}}",
       "state": {
-        "completed": "チェックが完了しました。",
-        "inProgress": "チェックを実行中...",
-        "waiting": "コネクタ設定を待機中..."
+        "inProgress": "チェックを実行中..."
       },
       "advisory": {
         "title": "一部のコンテンツはインデックスされません。",

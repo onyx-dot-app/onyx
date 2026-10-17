@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "قصر الوصول على أعضاء المجموعات المحددة. تظل الأذونات المتزامنة سارية.",
           "title": "تقييد الوصول بالمجموعات"
-        }
+        },
+        "managerCount": "{count, plural, zero {لا مديرين للمجموعة} one {مدير مجموعة واحد} two {مديرا مجموعة} few {# مديري مجموعة} many {# مديرًا للمجموعة} other {# مدير مجموعة}}"
       },
       "invalidState": {
         "description": "هذا الموصل في حالة غير صالحة. يرجى تحديث بيانات الاعتماد أو إنشاء موصل جديد قبل إعادة الفهرسة.",
@@ -3397,6 +3398,9 @@
           },
           "shareLocked": {
             "tooltip": "يمكن فقط لمن أضاف هذا الحساب، أو لمسؤول تمت مشاركته معه، تغيير من يمكنه استخدامه."
+          },
+          "viewDetails": {
+            "tooltip": "عرض التفاصيل"
           }
         },
         "accountUnavailable": {
@@ -4022,7 +4026,7 @@
           "description": "تهيئة موصل Confluence",
           "fields": {
             "is_cloud": {
-              "label": "سحابي",
+              "label": "نوع استضافة Confluence",
               "description": "اختر Confluence Cloud لموقع على atlassian.net، أو Confluence Data Center لموقع Confluence Server أو Data Center مستضاف ذاتيًا."
             },
             "wiki_base": {
@@ -7344,7 +7348,8 @@
         "viewLogs": "عرض السجلات",
         "panel": {
           "title": "سجل النشاط",
-          "close": "إغلاق اللوحة"
+          "close": "إغلاق اللوحة",
+          "pairTitle": "سجل نشاط {name}"
         }
       },
       "list": {
@@ -7380,7 +7385,9 @@
           "manage": "إدارة",
           "manageFederated": "إدارة الموصل الموحد",
           "expand": "عرض التفاصيل",
-          "collapse": "إخفاء التفاصيل"
+          "collapse": "إخفاء التفاصيل",
+          "pause": "إيقاف مؤقت",
+          "resume": "استئناف"
         },
         "federated": {
           "tag": "موحد"
@@ -10722,9 +10729,7 @@
       "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى.",
       "requiredFailed": "{count, plural, one {فشل فحص مطلوب واحد} other {فشل # فحوصات مطلوبة}}",
       "state": {
-        "completed": "اكتملت عمليات التحقق.",
-        "inProgress": "عمليات التحقق قيد التنفيذ...",
-        "waiting": "بانتظار إعدادات الموصل..."
+        "inProgress": "عمليات التحقق قيد التنفيذ..."
       },
       "advisory": {
         "title": "لن تتم فهرسة بعض المحتوى.",

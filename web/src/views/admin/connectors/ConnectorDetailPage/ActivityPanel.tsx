@@ -328,6 +328,7 @@ export default function ActivityPanel({
                     icon={SvgFold}
                     prominence="tertiary"
                     tooltip={tPanel("close")}
+                    tooltipSide="start"
                     aria-label={tPanel("close")}
                     onClick={onClose}
                   />

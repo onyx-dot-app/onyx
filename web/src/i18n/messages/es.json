@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "Limita el acceso a los miembros de los grupos seleccionados. Los permisos sincronizados siguen aplicándose.",
           "title": "Restringir acceso a grupos"
-        }
+        },
+        "managerCount": "{count, plural, one {# administrador del grupo} other {# administradores del grupo}}"
       },
       "invalidState": {
         "description": "Este conector está en un estado no válido. Actualiza tus credenciales o crea un conector nuevo antes de reindexar.",
@@ -3397,6 +3398,9 @@
           },
           "shareLocked": {
             "tooltip": "Solo quien añadió esta cuenta, o un administrador con quien está compartida, puede cambiar quién puede usarla."
+          },
+          "viewDetails": {
+            "tooltip": "Ver detalles"
           }
         },
         "accountUnavailable": {
@@ -4022,7 +4026,7 @@
           "description": "Configurar conector de Confluence",
           "fields": {
             "is_cloud": {
-              "label": "Es Cloud",
+              "label": "Tipo de alojamiento de Confluence",
               "description": "Elige Confluence Cloud para un sitio en atlassian.net, o Confluence Data Center para un sitio autoalojado de Confluence Server o Data Center."
             },
             "wiki_base": {
@@ -7344,7 +7348,8 @@
         "viewLogs": "Ver registros",
         "panel": {
           "title": "Historial de actividad",
-          "close": "Cerrar panel"
+          "close": "Cerrar panel",
+          "pairTitle": "Historial de actividad de {name}"
         }
       },
       "list": {
@@ -7380,7 +7385,9 @@
           "manage": "Administrar",
           "manageFederated": "Administrar conector federado",
           "expand": "Ver detalles",
-          "collapse": "Ocultar detalles"
+          "collapse": "Ocultar detalles",
+          "pause": "Pausar",
+          "resume": "Reanudar"
         },
         "federated": {
           "tag": "Federado"
@@ -10722,9 +10729,7 @@
       "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
       "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}",
       "state": {
-        "completed": "Comprobaciones completadas.",
-        "inProgress": "Comprobaciones en curso...",
-        "waiting": "Esperando la configuración del conector..."
+        "inProgress": "Comprobaciones en curso..."
       },
       "advisory": {
         "title": "Parte del contenido no se indexará.",

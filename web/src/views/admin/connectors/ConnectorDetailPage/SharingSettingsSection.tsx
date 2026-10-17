@@ -7,15 +7,14 @@ import {
   Button,
   Card,
   Collapsible,
-  Divider,
-  Tag,
+  Table,
   Text,
+  type TableColumn,
 } from "@opal/components";
 import { Content, ContentAction, Section } from "@opal/layouts";
 import {
   SvgEditBig,
   SvgOrganization,
-  SvgShare,
   SvgUserManage,
   SvgUsers,
   SvgUserSync,
@@ -31,6 +30,7 @@ import type {
   CCPairFullInfo,
   CCPairManageAccessRow,
 } from "@/lib/connectors/types";
+import type { ConnectorManageRole } from "@/lib/connectors/accessType";
 import { usesDataAccessGroups } from "@/lib/connectors/edit/prefill";
 import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -40,6 +40,50 @@ interface DocumentAccess {
   icon: IconFunctionComponent;
   label: string;
   summary: string;
+}
+
+interface ManageAccessItem {
+  id: string;
+  name: string;
+  description: string | undefined;
+  /** The avatar's glyph, or null for the admins' plain icon. */
+  avatar: IconFunctionComponent | null;
+  role: ConnectorManageRole;
+  /** Granted globally, so it cannot be removed. */
+  fixed: boolean;
+}
+
+interface ManageAvatarProps {
+  icon: IconFunctionComponent | null;
+}
+/** The row's avatar: a dark circle with the glyph, or the admins' plain icon. */
+function ManageAvatar({ icon: Icon }: ManageAvatarProps) {
+  if (Icon === null) {
+    return (
+      <div className="flex h-7 w-7 items-center justify-center">
+        <SvgUserManage size={16} className="stroke-text-03" aria-hidden />
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background-neutral-inverted-00">
+      <Icon size={16} className="stroke-text-inverted-05" aria-hidden />
+    </div>
+  );
+}
+
+interface SharingPanelProps {
+  children: React.ReactNode;
+}
+/** A white panel on the section's tinted card. */
+function SharingPanel({ children }: SharingPanelProps) {
+  return (
+    <Card color="background-tint-00" rounding={3} padding={3}>
+      <Section alignItems="stretch" gap={3} height="fit">
+        {children}
+      </Section>
+    </Card>
+  );
 }
 
 export interface SharingSettingsSectionProps {
@@ -81,6 +125,15 @@ export default function SharingSettingsSection({
       ? undefined
       : tGroups("memberCount", { count: group.users.length });
   };
+  const managerCountOf = (groupId: number): string | undefined => {
+    const group = userGroups?.find((candidate) => candidate.id === groupId);
+    return group === undefined
+      ? undefined
+      : tGroups("managerCount", { count: group.manager_ids.length });
+  };
+  const isDefaultGroup = (groupId: number): boolean =>
+    userGroups?.find((candidate) => candidate.id === groupId)?.is_default ??
+    false;
   const fixedRows = (manageRows ?? []).filter((row) => row.is_fixed);
   const storedRows = (manageRows ?? []).filter((row) => !row.is_fixed);
 
@@ -122,13 +175,107 @@ export default function SharingSettingsSection({
       ? t("summary.managedByAdmins")
       : t("summary.managedByGroups", { count: storedRows.length });
 
-  const alwaysShared = (
-    <Tag
-      icon={SvgShare}
-      title={tSettings("manageAccess.admins.alwaysShared")}
-      color="gray"
-    />
-  );
+  // The groups with a global grant, else the admins they stand for. The
+  // default (Admin) group shows as the admins.
+  const manageItems: ManageAccessItem[] = [
+    ...(fixedRows.length === 0
+      ? [
+          {
+            id: "admins",
+            name: tSettings("manageAccess.admins.title"),
+            description: undefined,
+            avatar: null,
+            role: "editor" as const,
+            fixed: true,
+          },
+        ]
+      : fixedRows.map((row) => ({
+          id: `fixed-${row.group_id}`,
+          name: row.group_name,
+          description: memberCountOf(row.group_id),
+          avatar: isDefaultGroup(row.group_id) ? null : SvgUserManage,
+          role: row.role,
+          fixed: true,
+        }))),
+    ...storedRows.map((row) => ({
+      id: `group-${row.group_id}`,
+      name: row.group_name,
+      description: managerCountOf(row.group_id),
+      avatar: SvgUsers,
+      role: row.role,
+      fixed: false,
+    })),
+  ];
+  const manageColumns: TableColumn<ManageAccessItem>[] = [
+    {
+      kind: "display",
+      id: "avatar",
+      width: { fixed: 44 },
+      hideable: false,
+      cell: (row) => <ManageAvatar icon={row.avatar} />,
+    },
+    {
+      kind: "data",
+      field: "name",
+      title: t("manageAccess.title"),
+      weight: 50,
+      sortable: false,
+      hideable: false,
+      cell: (name, row) => (
+        <Content
+          title={name}
+          description={row.description}
+          sizePreset="main-ui"
+          variant="section"
+        />
+      ),
+    },
+    {
+      kind: "display",
+      id: "role",
+      width: { weight: 25 },
+      hideable: false,
+      cell: (row) => (
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="center"
+          gap={0.5}
+          width="fit"
+          height="fit"
+        >
+          <SvgEditBig size={16} className="stroke-text-03" aria-hidden />
+          <Text font="main-ui-action" color="text-04">
+            {tSettings(`manageAccess.role.${row.role}.label`)}
+          </Text>
+        </Section>
+      ),
+    },
+    {
+      kind: "display",
+      id: "note",
+      width: { weight: 25 },
+      alignment: "right",
+      hideable: false,
+      cell: (row) =>
+        row.fixed ? (
+          <Section
+            flexDirection="row"
+            justifyContent="end"
+            alignItems="center"
+            gap={0.5}
+            width="fit"
+            height="fit"
+          >
+            <Text font="secondary-body" color="text-03">
+              {tSettings("manageAccess.admins.alwaysShared")}
+            </Text>
+            <SvgUserManage size={16} className="stroke-text-03" aria-hidden />
+          </Section>
+        ) : null,
+    },
+  ];
+  const AccessIcon = access.icon;
 
   return (
     <Collapsible
@@ -147,121 +294,105 @@ export default function SharingSettingsSection({
       rightChildren={
         open &&
         onEdit !== null && (
-          <Button prominence="secondary" icon={SvgEditBig} onClick={onEdit}>
+          <Button prominence="tertiary" icon={SvgEditBig} onClick={onEdit}>
             {t("editButton.label")}
           </Button>
         )
       }
     >
-      <Card border="solid" rounding={4} padding={4}>
-        <Section alignItems="stretch" gap={3} height="fit">
-          <ContentAction
-            title={tSettings("documentAccess.title")}
-            description={tSettings("documentAccess.description")}
-            sizePreset="main-ui"
-            variant="section"
-            padding={0}
-            rightChildren={
-              <Content
-                icon={access.icon}
-                title={access.label}
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
-                width="fit"
-              />
-            }
-          />
-          {usesGroups && dataAccessError !== undefined && (
-            <Text font="secondary-body" color="text-03">
-              {t("groupsUnavailable")}
-            </Text>
-          )}
-          {usesGroups &&
-            dataAccess === undefined &&
-            dataAccessError === undefined && <IconLoader size={16} />}
-          {usesGroups && dataAccess !== undefined && (
-            <Section
-              flexDirection="row"
-              justifyContent="start"
-              gap={2}
-              height="fit"
-              wrap
-            >
-              {dataAccess.groups.map((group) => (
-                <Tag
-                  key={group.id}
-                  icon={SvgUsers}
-                  title={group.name}
-                  value={memberCountOf(group.id)}
-                  size="md"
-                />
-              ))}
-            </Section>
-          )}
-          <Divider paddingParallel={0} paddingPerpendicular={0} />
-          <ContentAction
-            title={t("manageAccess.title")}
-            description={tSettings("manageAccess.description")}
-            sizePreset="main-ui"
-            variant="section"
-            padding={0}
-          />
-          {!manageKnown && manageError !== undefined && (
-            <Text font="secondary-body" color="text-03">
-              {t("manageAccess.unavailable")}
-            </Text>
-          )}
-          {!manageKnown && manageError === undefined && (
-            <IconLoader size={16} />
-          )}
-          {manageKnown && (
-            <Section alignItems="stretch" gap={1} height="fit">
-              {/* The groups with a global grant, else the admins they stand for. */}
-              {fixedRows.length === 0 ? (
-                <ContentAction
-                  icon={SvgUserManage}
-                  title={tSettings("manageAccess.admins.title")}
-                  sizePreset="main-ui"
-                  variant="section"
-                  padding={1}
-                  center
-                  rightChildren={alwaysShared}
-                />
-              ) : (
-                fixedRows.map((row) => (
-                  <ContentAction
-                    key={row.group_id}
-                    icon={SvgUserManage}
-                    title={row.group_name}
-                    description={memberCountOf(row.group_id)}
-                    sizePreset="main-ui"
-                    variant="section"
-                    padding={1}
-                    center
-                    rightChildren={alwaysShared}
+      <Card color="background-tint-01" border="solid" rounding={4} padding={1}>
+        <Section alignItems="stretch" gap={1} height="fit">
+          <SharingPanel>
+            <ContentAction
+              title={tSettings("documentAccess.title")}
+              description={tSettings("documentAccess.description")}
+              sizePreset="main-ui"
+              variant="section"
+              padding={0}
+              rightChildren={
+                <Section
+                  flexDirection="row"
+                  alignItems="center"
+                  gap={0.5}
+                  width="fit"
+                  height="fit"
+                >
+                  <AccessIcon
+                    size={16}
+                    className="stroke-text-04"
+                    aria-hidden
                   />
-                ))
-              )}
-              {storedRows.map((row) => (
-                <ContentAction
-                  key={row.group_id}
-                  icon={SvgUsers}
-                  title={row.group_name}
-                  description={memberCountOf(row.group_id)}
-                  sizePreset="main-ui"
-                  variant="section"
-                  padding={1}
-                  center
-                  rightChildren={
-                    <Text font="secondary-action" color="text-03">
-                      {tSettings(`manageAccess.role.${row.role}.label`)}
-                    </Text>
-                  }
-                />
-              ))}
-            </Section>
-          )}
+                  <Text font="main-ui-action" color="text-04">
+                    {access.label}
+                  </Text>
+                </Section>
+              }
+            />
+            {usesGroups && dataAccessError !== undefined && (
+              <Text font="secondary-body" color="text-03">
+                {t("groupsUnavailable")}
+              </Text>
+            )}
+            {usesGroups &&
+              dataAccess === undefined &&
+              dataAccessError === undefined && <IconLoader size={16} />}
+            {usesGroups && dataAccess !== undefined && (
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                alignItems="stretch"
+                gap={1}
+                height="fit"
+                wrap
+              >
+                {dataAccess.groups.map((group) => (
+                  // Two tiles a row; each gives up half the gap.
+                  <div
+                    key={group.id}
+                    className="min-w-0 basis-[calc(50%-0.125rem)] grow"
+                  >
+                    <Card color="background-tint-01" rounding={2} padding={2}>
+                      <Content
+                        icon={SvgUsers}
+                        title={group.name}
+                        description={memberCountOf(group.id)}
+                        sizePreset="main-ui"
+                        variant="section"
+                      />
+                    </Card>
+                  </div>
+                ))}
+              </Section>
+            )}
+          </SharingPanel>
+          <SharingPanel>
+            <ContentAction
+              title={t("manageAccess.title")}
+              description={tSettings("manageAccess.description")}
+              sizePreset="main-ui"
+              variant="section"
+              padding={0}
+            />
+            {!manageKnown && manageError !== undefined && (
+              <Text font="secondary-body" color="text-03">
+                {t("manageAccess.unavailable")}
+              </Text>
+            )}
+            {!manageKnown && manageError === undefined && (
+              <IconLoader size={16} />
+            )}
+            {manageKnown && (
+              <Table
+                label={t("manageAccess.title")}
+                items={manageItems}
+                columns={manageColumns}
+                getRowId={(row) => row.id}
+                header={false}
+                pageSize={false}
+                prominence="secondary"
+              />
+            )}
+          </SharingPanel>
         </Section>
       </Card>
     </Collapsible>

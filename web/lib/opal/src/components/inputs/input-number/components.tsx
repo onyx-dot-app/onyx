@@ -73,6 +73,8 @@ export interface InputNumberProps {
   id?: string;
   /** Whether leaving the field blank commits `null`. When false, a blank field gets its value back on blur. */
   allowEmpty?: boolean;
+  /** A plain type-in field: no stepper buttons, the value in mono and the unit in `text-02`. */
+  plain?: boolean;
 }
 
 export default function InputNumber({
@@ -90,6 +92,7 @@ export default function InputNumber({
   suffix,
   id,
   allowEmpty = true,
+  plain = false,
 }: InputNumberProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [inputValue, setInputValue] = React.useState(
@@ -178,7 +181,11 @@ export default function InputNumber({
     // already keyboard reachable.
     <div
       role="presentation"
-      className="opal-input-number flex flex-row items-center justify-between w-full h-fit pe-1.5 ps-1.5 rounded-08"
+      className={cn(
+        "opal-input-number flex flex-row items-center justify-between w-full pe-1.5 ps-1.5 rounded-08",
+        // Without the steppers, keep the stepped field's 2.25rem height.
+        plain ? "h-9" : "h-fit"
+      )}
       data-variant={variant}
       onClick={() => inputRef.current?.focus()}
     >
@@ -202,13 +209,17 @@ export default function InputNumber({
         onBlur={handleBlur}
         className={cn(
           "w-full h-6 bg-transparent p-0.5 focus:outline-hidden",
+          plain && "font-main-ui-mono",
           INNER_CLASSES[variant]
         )}
       />
 
       <div className="flex flex-row items-center gap-1">
         {suffix && (
-          <Text font="main-ui-body" color={isDisabled ? "text-01" : "text-03"}>
+          <Text
+            font="main-ui-body"
+            color={isDisabled ? "text-01" : plain ? "text-02" : "text-03"}
+          >
             {suffix}
           </Text>
         )}
@@ -220,24 +231,26 @@ export default function InputNumber({
             prominence="tertiary"
           />
         )}
-        <div className="flex flex-col">
-          <button
-            type="button"
-            onClick={handleIncrement}
-            disabled={!canIncrement || isDisabled}
-            className="p-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
-          >
-            <SvgChevronUp size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={handleDecrement}
-            disabled={!canDecrement || isDisabled}
-            className="p-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
-          >
-            <SvgChevronDown size={14} />
-          </button>
-        </div>
+        {!plain && (
+          <div className="flex flex-col">
+            <button
+              type="button"
+              onClick={handleIncrement}
+              disabled={!canIncrement || isDisabled}
+              className="p-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
+            >
+              <SvgChevronUp size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={handleDecrement}
+              disabled={!canDecrement || isDisabled}
+              className="p-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
+            >
+              <SvgChevronDown size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

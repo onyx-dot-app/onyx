@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "Limite o acesso aos membros dos grupos selecionados. As permissões sincronizadas continuam valendo.",
           "title": "Restringir acesso a grupos"
-        }
+        },
+        "managerCount": "{count, plural, one {# gerente do grupo} other {# gerentes do grupo}}"
       },
       "invalidState": {
         "description": "Este conector está em um estado inválido. Atualize suas credenciais ou crie um novo conector antes de reindexar.",
@@ -3397,6 +3398,9 @@
           },
           "shareLocked": {
             "tooltip": "Somente quem adicionou esta conta, ou um administrador com quem ela foi compartilhada, pode alterar quem pode usá-la."
+          },
+          "viewDetails": {
+            "tooltip": "Ver detalhes"
           }
         },
         "accountUnavailable": {
@@ -4022,7 +4026,7 @@
           "description": "Configurar conector do Confluence",
           "fields": {
             "is_cloud": {
-              "label": "É Cloud",
+              "label": "Tipo de hospedagem do Confluence",
               "description": "Escolha Confluence Cloud para um site em atlassian.net, ou Confluence Data Center para um site Confluence Server ou Data Center hospedado por conta própria."
             },
             "wiki_base": {
@@ -7344,7 +7348,8 @@
         "viewLogs": "Ver registros",
         "panel": {
           "title": "Histórico de atividades",
-          "close": "Fechar painel"
+          "close": "Fechar painel",
+          "pairTitle": "Histórico de atividades de {name}"
         }
       },
       "list": {
@@ -7380,7 +7385,9 @@
           "manage": "Gerenciar",
           "manageFederated": "Gerenciar conector federado",
           "expand": "Ver detalhes",
-          "collapse": "Ocultar detalhes"
+          "collapse": "Ocultar detalhes",
+          "pause": "Pausar",
+          "resume": "Retomar"
         },
         "federated": {
           "tag": "Federado"
@@ -10722,9 +10729,7 @@
       "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
       "state": {
-        "completed": "Verificações concluídas.",
-        "inProgress": "Verificações em andamento...",
-        "waiting": "Aguardando as configurações do conector..."
+        "inProgress": "Verificações em andamento..."
       },
       "advisory": {
         "title": "Parte do conteúdo não será indexada.",

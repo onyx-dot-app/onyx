@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "선택한 그룹의 멤버로 접근을 제한합니다. 동기화된 권한은 계속 적용됩니다.",
           "title": "그룹으로 접근 제한"
-        }
+        },
+        "managerCount": "{count, plural, other {그룹 관리자 #명}}"
       },
       "invalidState": {
         "description": "이 커넥터는 유효하지 않은 상태입니다. 재인덱싱하기 전에 자격 증명을 업데이트하거나 새 커넥터를 만드세요.",
@@ -3397,6 +3398,9 @@
           },
           "shareLocked": {
             "tooltip": "이 계정을 추가한 사람 또는 공유된 관리자만 사용할 수 있는 사람을 변경할 수 있습니다."
+          },
+          "viewDetails": {
+            "tooltip": "세부 정보 보기"
           }
         },
         "accountUnavailable": {
@@ -4022,7 +4026,7 @@
           "description": "Confluence 커넥터 구성",
           "fields": {
             "is_cloud": {
-              "label": "Cloud 여부",
+              "label": "Confluence 호스트 유형",
               "description": "atlassian.net 사이트이면 Confluence Cloud를, 자체 호스팅하는 Confluence Server 또는 Data Center 사이트이면 Confluence Data Center를 선택하세요."
             },
             "wiki_base": {
@@ -7344,7 +7348,8 @@
         "viewLogs": "로그 보기",
         "panel": {
           "title": "활동 기록",
-          "close": "패널 닫기"
+          "close": "패널 닫기",
+          "pairTitle": "{name} 활동 기록"
         }
       },
       "list": {
@@ -7380,7 +7385,9 @@
           "manage": "관리",
           "manageFederated": "페더레이션 커넥터 관리",
           "expand": "세부 정보 보기",
-          "collapse": "세부 정보 숨기기"
+          "collapse": "세부 정보 숨기기",
+          "pause": "일시 중지",
+          "resume": "재개"
         },
         "federated": {
           "tag": "페더레이션"
@@ -10722,9 +10729,7 @@
       "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
       "state": {
-        "completed": "검사가 완료되었습니다.",
-        "inProgress": "검사 진행 중...",
-        "waiting": "커넥터 설정을 기다리는 중..."
+        "inProgress": "검사 진행 중..."
       },
       "advisory": {
         "title": "일부 콘텐츠는 인덱싱되지 않습니다.",

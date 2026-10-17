@@ -21,7 +21,7 @@ a column of `Log`s. A line is not interactive.
 
 `LogVariant` is `"default"` or a status and a weight, e.g. `"error-heavy"`. The
 statuses are a subset of `StatusVariants`:
-`LogStatus = Extract<StatusVariants, "default" | "success" | "warning" | "error">`.
+`LogStatus = Extract<StatusVariants, "default" | "info" | "success" | "warning" | "error">`.
 
 | Status    | Icon                | `heavy` background  |
 | --------- | ------------------- | ------------------- |

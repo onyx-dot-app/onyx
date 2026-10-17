@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
           "title": "限制为群组访问"
-        }
+        },
+        "managerCount": "{count, plural, other {# 名群组管理员}}"
       },
       "invalidState": {
         "description": "此连接器处于无效状态。请先更新凭据或创建新连接器，然后再重新索引。",
@@ -3397,6 +3398,9 @@
           },
           "shareLocked": {
             "tooltip": "只有添加此账户的人或与其共享的管理员可以更改可使用此账户的人员。"
+          },
+          "viewDetails": {
+            "tooltip": "查看详情"
           }
         },
         "accountUnavailable": {
@@ -4022,7 +4026,7 @@
           "description": "配置 Confluence 连接器",
           "fields": {
             "is_cloud": {
-              "label": "是否为云端版",
+              "label": "Confluence 托管类型",
               "description": "对于 atlassian.net 上的站点，请选择 Confluence Cloud；对于自托管的 Confluence Server 或 Data Center 站点，请选择 Confluence Data Center。"
             },
             "wiki_base": {
@@ -7344,7 +7348,8 @@
         "viewLogs": "查看日志",
         "panel": {
           "title": "活动历史",
-          "close": "关闭面板"
+          "close": "关闭面板",
+          "pairTitle": "{name} 的活动历史"
         }
       },
       "list": {
@@ -7380,7 +7385,9 @@
           "manage": "管理",
           "manageFederated": "管理联合连接器",
           "expand": "查看详情",
-          "collapse": "隐藏详情"
+          "collapse": "隐藏详情",
+          "pause": "暂停",
+          "resume": "恢复"
         },
         "federated": {
           "tag": "联合"
@@ -10722,9 +10729,7 @@
       "failedToRun": "检查未能运行。请重试。",
       "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
       "state": {
-        "completed": "检查已完成。",
-        "inProgress": "检查进行中...",
-        "waiting": "正在等待连接器设置..."
+        "inProgress": "检查进行中..."
       },
       "advisory": {
         "title": "部分内容不会被索引。",

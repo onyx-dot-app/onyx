@@ -561,6 +561,7 @@ export default function AuthenticationAccountCard({
               <Button
                 icon={detailsOpen ? SvgChevronUp : SvgChevronDown}
                 prominence="tertiary"
+                tooltip={t("viewDetails.tooltip")}
                 aria-label={
                   detailsOpen
                     ? t("collapseButton.ariaLabel")

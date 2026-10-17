@@ -2694,7 +2694,8 @@
         "toggle": {
           "description": "Limite l'accès aux membres des groupes sélectionnés. Les permissions synchronisées s'appliquent toujours.",
           "title": "Restreindre l'accès à des groupes"
-        }
+        },
+        "managerCount": "{count, plural, one {# gestionnaire du groupe} other {# gestionnaires du groupe}}"
       },
       "invalidState": {
         "description": "Ce connecteur est dans un état non valide. Mettez à jour vos identifiants ou créez un nouveau connecteur avant de réindexer.",
@@ -3397,6 +3398,9 @@
           },
           "shareLocked": {
             "tooltip": "Seule la personne qui a ajouté ce compte, ou un administrateur avec qui il est partagé, peut modifier qui peut l'utiliser."
+          },
+          "viewDetails": {
+            "tooltip": "Voir les détails"
           }
         },
         "accountUnavailable": {
@@ -4022,7 +4026,7 @@
           "description": "Configurer le connecteur Confluence",
           "fields": {
             "is_cloud": {
-              "label": "Est Cloud",
+              "label": "Type d’hébergement Confluence",
               "description": "Choisissez Confluence Cloud pour un site sur atlassian.net, ou Confluence Data Center pour un site Confluence Server ou Data Center auto-hébergé."
             },
             "wiki_base": {
@@ -7344,7 +7348,8 @@
         "viewLogs": "Afficher les journaux",
         "panel": {
           "title": "Historique de l'activité",
-          "close": "Fermer le panneau"
+          "close": "Fermer le panneau",
+          "pairTitle": "Historique de l'activité de {name}"
         }
       },
       "list": {
@@ -7380,7 +7385,9 @@
           "manage": "Gérer",
           "manageFederated": "Gérer le connecteur fédéré",
           "expand": "Voir les détails",
-          "collapse": "Masquer les détails"
+          "collapse": "Masquer les détails",
+          "pause": "Suspendre",
+          "resume": "Reprendre"
         },
         "federated": {
           "tag": "Fédéré"
@@ -10722,9 +10729,7 @@
       "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
-        "completed": "Vérifications terminées.",
-        "inProgress": "Vérifications en cours...",
-        "waiting": "En attente des paramètres du connecteur..."
+        "inProgress": "Vérifications en cours..."
       },
       "advisory": {
         "title": "Certains contenus ne seront pas indexés.",
