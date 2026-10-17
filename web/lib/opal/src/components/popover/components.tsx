@@ -4,7 +4,7 @@ import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@opal/utils";
 import { Divider, ShadowDiv } from "@opal/components";
-import type { WithoutStyles } from "@opal/types";
+import type { Spacing, WithoutStyles } from "@opal/types";
 import { Section } from "@opal/layouts";
 
 /**
@@ -214,6 +214,7 @@ function SeparatorHelper() {
 interface PopoverMenuProps {
   children?: React.ReactNode[];
   footer?: React.ReactNode;
+  gap?: Spacing;
 
   // Ref for the scrollable container (useful for programmatic scrolling)
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
@@ -221,6 +222,7 @@ interface PopoverMenuProps {
 function PopoverMenu({
   children,
   footer,
+  gap = 4,
   scrollContainerRef,
 }: PopoverMenuProps) {
   if (!children) return null;
@@ -234,7 +236,12 @@ function PopoverMenu({
   });
 
   return (
-    <Section alignItems="stretch" height="auto" className="flex-1 min-h-0">
+    <Section
+      alignItems="stretch"
+      height="auto"
+      gap={gap}
+      className="flex-1 min-h-0"
+    >
       <ShadowDiv
         scrollContainerRef={scrollContainerRef}
         className="flex flex-col gap-1 max-h-80 w-full"

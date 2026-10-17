@@ -45,13 +45,13 @@ flow opens. Single-screen modals can keep the default `Modal.Content` overlay.
 
 ## Modal.Header
 
-| Prop                             | Type                    | Description                                                          |
-| -------------------------------- | ----------------------- | -------------------------------------------------------------------- |
-| `icon`, `moreIcon1`, `moreIcon2` | `IconFunctionComponent` | Heading icons. Omitting `icon` gives the minimal (icon-less) variant |
+| Prop                             | Type                    | Description                                                                         |
+| -------------------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| `icon`, `moreIcon1`, `moreIcon2` | `IconFunctionComponent` | Heading icons. Omitting `icon` gives the minimal (icon-less) variant                |
 | `color`                          | `ColorTypes`            | Colour mode of the icon and title, as on `Content` (a status colours the icon only) |
-| `title`                          | `string \| RichStr`     | Required                                                             |
-| `description`                    | `string \| RichStr`     | Optional, also wired to `aria-describedby`                           |
-| `onClose`                        | `() => void`            | Renders the close button                                             |
+| `title`                          | `string \| RichStr`     | Required                                                                            |
+| `description`                    | `string \| RichStr`     | Optional, also wired to `aria-describedby`                                          |
+| `onClose`                        | `() => void`            | Renders the close button                                                            |
 
 `children` render below the title stack (e.g. a search input).
 
@@ -63,9 +63,14 @@ flow opens. Single-screen modals can keep the default `Modal.Content` overlay.
 
 Right-aligned action row. `BasicModalFooter` adds the common layout: optional `left` slot plus right-aligned `cancel`/`submit`.
 
+Use `stackOnSmallScreens` inside `<Modal.Footer wrap>` to place navigation above
+the action buttons on narrow screens. The default layout stays unchanged.
+
 ## Positioning
 
 When a `[data-main-container]` element is present (the content area beside the sidebar), the modal centers on it instead of the viewport, and falls back to viewport centering on medium screens or when the container is absent.
+
+Top-positioned cards reserve their 72px top offset and a 1rem bottom gap when computing the height limit.
 
 ## Deferred
 
