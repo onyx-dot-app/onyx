@@ -232,6 +232,11 @@ Custom-action OAuth lets each user connect a third-party account to an OpenAPI a
 `supports_pkce` defaults to false; administrators can enable S256 PKCE for compatible providers.
 MCP stores its credentials separately in `MCPConnectionConfig` ([[mcp-and-custom-tools]] §3).
 
+`GET /user-oauth-token/status` reports literal access-token expiration and saved
+refresh capability separately. `can_refresh` requires a nonempty refresh token
+and configured client credentials. Status reads never refresh tokens or call providers.
+Refresh capability does not prove that the provider will accept a refresh request.
+
 ---
 
 ## 4. How it works

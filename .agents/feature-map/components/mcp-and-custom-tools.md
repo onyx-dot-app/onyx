@@ -671,3 +671,38 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
   a client that tries to shortcut the flow by POSTing arbitrary
   `code`/`server_id` values without a matching stored attempt gets rejected
   at the fingerprint/connection-config-id checks (§4.4 step 3).
+
+
+### Plugin API and personal defaults
+
+Member MCP listings stamp `user_enabled_in_chat` and `user_enabled_in_craft`.
+Member tool snapshots stamp `user_enabled_in_chat`. Missing preference rows mean enabled.
+`default_chat_enabled` reports default-assistant attachments independently of credentials.
+The summaries are computed in batches after existing visibility filters.
+
+`PATCH /mcp/server/{server_id}/preferences` saves independent Chat and Craft preferences.
+`PATCH /tool/{tool_id}/preferences` saves an OpenAPI Chat preference.
+These operations require basic access and cannot enable unavailable workspace capabilities.
+Preferences retain credentials. Default Chat enforces opt-outs before credential resolution.
+Custom agents retain their attached tools and existing access behavior.
+
+Craft configuration excludes personally disabled MCP servers. Its member catalog retains them
+so a caller can enable them again. Updates reload that caller's Craft sessions.
+The live proxy resolver also enforces Craft opt-outs, including no-auth servers.
+Host attribution remains workspace-wide so disabled servers cannot become off-catalog.
+
+`POST /admin/mcp/probe` checks MCP setup without credentials.
+The stream uses newline-delimited JSON progress and one final result.
+`POST /admin/mcp/oauth/discover` reads public OAuth metadata for a manageable server.
+Both require `MANAGE_ACTIONS`, including scoped managers.
+Discovery checks management access before network work and closes its database session first.
+SSRF validation covers outbound hops and runs outside the event loop.
+OAuth failures return safe messages and an `oauth_error` reason.
+
+Simple server creation accepts `available_in_craft`, defaulting to false.
+Changing a server URL invalidates existing user and administrator credentials,
+resets setup status, and reloads affected Craft sessions.
+
+Preferences use `MCPServerUserPreference` and `ToolUserPreference`.
+Apply revisions `b71e3a9d2c04` and `c82f4a0e3d15` before deploying code that
+reads the preference tables.

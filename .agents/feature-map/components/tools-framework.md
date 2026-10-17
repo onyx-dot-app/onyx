@@ -257,6 +257,12 @@ tool calls the LLM just made and the constructed `Tool` instances.
 
 ## 5. Contracts and invariants
 
+Personal MCP and OpenAPI Chat opt-outs are enforced only for `DEFAULT_PERSONA_ID`,
+before credential resolution or MCP cache reuse. An explicit `allowed_tool_ids`
+list cannot override them. Custom agents retain their own attached tools.
+Preferences are batch-read once per construction for configured MCP servers
+and OpenAPI tool IDs. Missing preferences preserve the existing default-on behavior.
+
 1. **A new built-in tool needs both `BUILT_IN_TOOL_MAP` and a DB row.** Adding the
    class alone does nothing; `_construct_tools_impl` only sees tools present on
    `persona.tools`, and those rows come from `Tool.in_code_tool_id` seeded via
@@ -422,3 +428,11 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `_merge_tool_calls` collapses N calls to `SearchTool`/`WebSearchTool`/`OpenURLTool`
   into one before execution and before it enters history, so the model later sees
   the merged, expanded arguments rather than what it originally emitted.
+
+
+### Default Chat MCP availability
+
+For the default persona, `tool_constructor.py` checks both server availability in
+Chat and the user's MCP server access before resolving credentials. This prevents
+a group-restricted server from becoming available to all users through default
+Chat. Custom agents retain their existing attached-tool access behavior.
