@@ -219,7 +219,7 @@
 }
 
 .opal-content-xl-edit-button-hover {
-  @apply opacity-0;
+  @apply opacity-0 no-hover:opacity-100;
 }
 
 .opal-content-xl:hover .opal-content-xl-edit-button-hover {
