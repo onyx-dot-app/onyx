@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
-import { SvgSlidersSmall, SvgTrash, SvgUnplug } from "@opal/icons";
+import { SvgSliders, SvgTrash, SvgUnplug } from "@opal/icons";
 import { toast, ConfirmationModalLayout } from "@opal/layouts";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {
@@ -73,7 +73,7 @@ export default function ExternalAppLifecycleMenu({
         <Dropdown open={open} onOpenChange={setOpen} align="end">
           <Dropdown.Trigger asChild>
             <Button
-              icon={SvgSlidersSmall}
+              icon={SvgSliders}
               size="sm"
               prominence="tertiary"
               disabled={pending}

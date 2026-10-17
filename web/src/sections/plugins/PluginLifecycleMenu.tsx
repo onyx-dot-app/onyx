@@ -14,7 +14,7 @@ import {
   type DropdownMenuItem,
 } from "@opal/components";
 import { toast } from "@opal/layouts";
-import { SvgSlidersSmall, SvgTrash, SvgUnplug } from "@opal/icons";
+import { SvgSliders, SvgTrash, SvgUnplug } from "@opal/icons";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { deleteMCPServer, updateMCPServer } from "@/lib/mcp/svc";
@@ -89,7 +89,7 @@ export default function PluginLifecycleMenu({
         <Button
           size="sm"
           prominence="tertiary"
-          icon={SvgSlidersSmall}
+          icon={SvgSliders}
           aria-label={availabilityLabel}
           tooltip={availabilityLabel}
           aria-haspopup="menu"
@@ -416,7 +416,7 @@ function ActivePluginLifecycleMenu({
               <Button
                 size="sm"
                 prominence="tertiary"
-                icon={SvgSlidersSmall}
+                icon={SvgSliders}
                 aria-label={availabilityLabel}
                 tooltip={availabilityLabel}
                 disabled={busy}
