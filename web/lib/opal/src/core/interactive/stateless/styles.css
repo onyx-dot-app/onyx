@@ -82,9 +82,8 @@
   --interactive-foreground: var(--text-05);
   --interactive-foreground-icon: var(--text-05);
 }
-/* An open secondary popup trigger keeps its rest fill and takes a border-05 outline. */
-.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][aria-haspopup]:not(
-  [aria-haspopup="false"],
+/* An open secondary trigger keeps its rest fill and takes a border-05 outline. */
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"]:not(
   [data-disabled]
 ):is([data-state="open"], [aria-expanded="true"]) {
   @apply border-border-05;

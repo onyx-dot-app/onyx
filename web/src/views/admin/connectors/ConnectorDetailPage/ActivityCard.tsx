@@ -12,7 +12,6 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
-import { formatTimestamp } from "@opal/time";
 import {
   SvgAlertTriangle,
   SvgCheckAll,
@@ -33,6 +32,7 @@ import type {
 } from "@/lib/connectors/types";
 import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
 import { getSourceMetadata } from "@/lib/connectors/utils";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
@@ -194,7 +194,6 @@ export default function ActivityCard({
   const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure explains itself. A run with errors reports what it still did.
-  // A failure's title carries the error's first sentence, its description the rest.
   let description: string | null = null;
   let title = t(`title.${run.kind}.${state}`);
   if (group === "failures") {
@@ -271,7 +270,7 @@ export default function ActivityCard({
                   color={mutedColor}
                   wordWrap="whitespace-nowrap"
                 >
-                  {formatTimestamp(run.time_created)}
+                  {formatDateTimeLog(run.time_created)}
                 </Text>
                 <Section
                   flexDirection="row"

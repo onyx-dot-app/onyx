@@ -185,16 +185,26 @@ export const formatCalendarDay = (
     ...(withYear && { year: "numeric" }),
   });
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * Format an ISO timestamp as "YYYY/MM/DD" (local time), the date half of
+ * `formatDateTimeLog`, for "Added on" style labels beside it.
+ */
+export function formatDateLog(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
+}
+
 /**
  * Format an ISO timestamp as "YYYY/MM/DD HH:MM:SS" (24-hour, local time).
  * Intended for log displays where full precision is needed.
  */
 export function formatDateTimeLog(iso: string): string {
   const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${formatDateLog(iso)} ${pad2(d.getHours())}:${pad2(
+    d.getMinutes()
+  )}:${pad2(d.getSeconds())}`;
 }
 
 /**

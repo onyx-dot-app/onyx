@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { Button, Card, Modal } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgEdit, SvgUserEdit } from "@opal/icons";
-import { formatTimestamp } from "@opal/time";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
+import { formatDateLog } from "@/lib/dateUtils";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import {
   useCredentialCheckReports,
@@ -47,7 +47,6 @@ export default function AuthenticationAccountSection({
   const t = useTranslations("admin.connector.account");
   const tAccount = useTranslations("admin.connectorsList.add.account");
   const tAdd = useTranslations("admin.connectorsList.add");
-  const format = useFormatter();
   const source = ccPair.connector.source;
   const sourceName = getSourceDisplayName(source) ?? source;
   const tCredentials = useTranslations("admin.credentials");
@@ -169,9 +168,7 @@ export default function AuthenticationAccountSection({
             }
             suffix={tAccount("sourceSuffix", { source: sourceName })}
             description={tAccount("addedOn.label", {
-              date: formatTimestamp(ccPair.credential.time_created, {
-                dateOnly: true,
-              }),
+              date: formatDateLog(ccPair.credential.time_created),
             })}
             sizePreset="main-ui"
             variant="section"

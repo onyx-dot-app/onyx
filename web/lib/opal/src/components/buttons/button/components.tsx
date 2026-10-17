@@ -66,17 +66,12 @@ function Button({
   ...interactiveProps
 }: ButtonProps) {
   const isLarge = size === "lg";
-  // Only a popup trigger (Popover, Dropdown) holds the open look. A disclosure
-  // toggle also sets `aria-expanded`, but it has no `aria-haspopup`. An open
-  // secondary trigger takes its outline from the stateless styles instead.
-  const opensPopup =
-    interactiveProps["aria-haspopup"] !== undefined &&
-    interactiveProps["aria-haspopup"] !== false &&
-    interactiveProps["aria-haspopup"] !== "false";
+  // An open secondary trigger keeps its rest fill; the stateless styles give
+  // it an outline instead of the hover look.
   const resolvedInteraction =
-    opensPopup && interactiveProps.prominence !== "secondary"
-      ? resolveTriggerInteraction(interaction, interactiveProps)
-      : interaction;
+    interactiveProps.prominence === "secondary"
+      ? interaction
+      : resolveTriggerInteraction(interaction, interactiveProps);
 
   const labelEl = children ? (
     responsiveHideText ? (

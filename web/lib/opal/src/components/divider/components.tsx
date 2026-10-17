@@ -108,8 +108,9 @@ type DividerFoldableProps = Omit<
     Record<`data-${string}`, string | number | undefined>;
   /**
    * Where the fold chevron sits. `"end"` puts a right chevron after the
-   * line; `"start"` puts a down chevron before the title, with a Fold /
-   * View All tooltip. Default: `"end"`.
+   * line; `"start"` puts a `text-02` down chevron before the title, with a
+   * Fold / View All tooltip, and the line still follows the title.
+   * Default: `"end"`.
    */
   chevronPosition?: "start" | "end";
 };
@@ -271,9 +272,7 @@ function FoldableDivider({
                   {title}
                 </Text>
               </div>
-              {chevronPosition === "end" && (
-                <div className="opal-divider-line" />
-              )}
+              <div className="opal-divider-line" />
               {chevronPosition === "end" && (
                 <div className="opal-divider-chevron" data-open={isOpen}>
                   <Button

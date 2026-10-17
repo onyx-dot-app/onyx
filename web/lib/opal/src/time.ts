@@ -60,25 +60,6 @@ export function timeAgo(
 }
 
 /**
- * Formats a date as `YYYY/MM/DD HH:MM:SS` in local time, 24-hour and zero padded, or as `YYYY/MM/DD` with `dateOnly`.
- * Every locale prints the same stamp so run lists line up.
- *
- * @example
- * formatTimestamp("2026-03-23T23:02:45")                     // "2026/03/23 23:02:45"
- * formatTimestamp("2026-03-23T23:02:45", { dateOnly: true }) // "2026/03/23"
- */
-export function formatTimestamp(
-  value: string | Date,
-  { dateOnly = false }: { dateOnly?: boolean } = {}
-): string {
-  const date = typeof value === "string" ? new Date(value) : value;
-  const pad = (part: number) => String(part).padStart(2, "0");
-  const day = `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
-  if (dateOnly) return day;
-  return `${day} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
-/**
  * Formats a date string as a short date-and-time in the local timezone.
  *
  * @example

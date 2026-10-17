@@ -94,7 +94,7 @@ const CHECK_LOGS = {
     icon: SvgAlertCircle,
     detail: "status.indeterminate",
     font: OUTCOME_FONT,
-    color: "theme-amber-05",
+    color: "status-warning-05",
   },
   skipped: {
     variant: "default",

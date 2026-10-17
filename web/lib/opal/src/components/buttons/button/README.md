@@ -25,7 +25,7 @@ Interactive.Stateless          <- variant, prominence, interaction, disabled, hr
 | -------------------- | ------------------------------------------------------ | ----------- | -------------------------------------- |
 | `variant`            | `"default" \| "action" \| "danger" \| "none"`          | `"default"` | Color variant                          |
 | `prominence`         | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` | Color prominence                       |
-| `interaction`        | `"rest" \| "hover" \| "active"`                        | auto        | JS-controlled interaction override. On a popup trigger (`aria-haspopup` set) it falls back to `"hover"` while `data-state="open"` or `aria-expanded="true"`. An open `secondary` trigger keeps its rest fill with a `border-05` outline and `text-04` label instead |
+| `interaction`        | `"rest" \| "hover" \| "active"`                        | auto        | JS-controlled interaction override. Unset, it is `"hover"` while the button's `data-state="open"` or `aria-expanded="true"` (a Popover or Dropdown trigger), as on FilterButton and OpenButton. An open `secondary` trigger keeps its rest fill with a `border-05` outline and `text-04` label instead |
 | `icon`               | `IconFunctionComponent`                                | —           | Left icon                              |
 | `children`           | `string`                                               | —           | Label text. Omit for icon-only buttons |
 | `rightIcon`          | `IconFunctionComponent`                                | —           | Right icon                             |

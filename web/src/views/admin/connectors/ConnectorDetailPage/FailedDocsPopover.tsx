@@ -15,7 +15,6 @@ import {
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
-import { formatTimestamp } from "@opal/time";
 import {
   SvgCheckAll,
   SvgCheckSquare,
@@ -26,6 +25,7 @@ import type {
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
 } from "@/lib/connectors/types";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -73,7 +73,7 @@ function FailedDocRow({
         className="shrink-0"
       >
         <Text font="secondary-mono" color="text-03">
-          {formatTimestamp(error.time_created)}
+          {formatDateTimeLog(error.time_created)}
         </Text>
         {error.document_name !== null && (
           <OverflowText

@@ -12,20 +12,20 @@ const SvgPause = ({ size, ...props }: IconProps) => (
   >
     <rect
       x={4}
-      y={2.75}
-      width={2.5}
-      height={10.5}
-      rx={0.5}
+      y={2.667}
+      width={2.667}
+      height={10.667}
+      rx={0.667}
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <rect
-      x={9.5}
-      y={2.75}
-      width={2.5}
-      height={10.5}
-      rx={0.5}
+      x={9.333}
+      y={2.667}
+      width={2.667}
+      height={10.667}
+      rx={0.667}
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"

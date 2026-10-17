@@ -3,7 +3,6 @@
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
-import { formatTimestamp } from "@opal/time";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,
@@ -27,6 +26,7 @@ import type {
 } from "@/lib/connectors/types";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
@@ -372,8 +372,11 @@ export default function RunRow({
     const finished = finishedAt(run);
     if (finished === null) return t("detail.running");
     const minutes = runMinutes(run);
-    if (minutes === null) return formatTimestamp(finished);
-    return t("detail.finished", { time: formatTimestamp(finished), minutes });
+    if (minutes === null) return formatDateTimeLog(finished);
+    return t("detail.finished", {
+      time: formatDateTimeLog(finished),
+      minutes,
+    });
   }
 
   const warnings = runWarnings(run);
@@ -410,7 +413,7 @@ export default function RunRow({
                 font={active || failed ? "secondary-action" : "secondary-body"}
                 color={active || failed ? "text-04" : "text-03"}
               >
-                {formatTimestamp(run.time_created)}
+                {formatDateTimeLog(run.time_created)}
               </Text>
             </Section>
 

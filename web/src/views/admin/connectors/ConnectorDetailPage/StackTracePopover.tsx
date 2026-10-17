@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { CopyButton, Popover, ShadowDiv, Text } from "@opal/components";
+import { Code, CopyButton, Popover, ShadowDiv, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 
 export interface StackTracePopoverContentProps {
@@ -17,6 +17,7 @@ export default function StackTracePopoverContent({
   const t = useTranslations("admin.connector.activity");
   return (
     <Popover.Content
+      width="2.5xl"
       side="left"
       align="start"
       aria-label={t("tags.stackTrace")}
@@ -33,7 +34,7 @@ export default function StackTracePopoverContent({
         gap={1}
         padding={1}
         height="auto"
-        className="min-h-0 w-120 max-w-full"
+        className="min-h-0"
       >
         <Section
           flexDirection="row"
@@ -64,12 +65,9 @@ export default function StackTracePopoverContent({
           />
         </Section>
         <ShadowDiv className="max-h-120 overflow-x-auto">
-          <pre
-            dir="ltr"
-            className="m-0 p-2 rounded-08 bg-background-neutral-01 whitespace-pre-wrap break-all font-secondary-mono text-text-03"
-          >
+          <Code tint showCopyButton={false}>
             {trace}
-          </pre>
+          </Code>
         </ShadowDiv>
       </Section>
     </Popover.Content>

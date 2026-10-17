@@ -18,7 +18,7 @@
 }
 
 .opal-code[data-tint] {
-  @apply bg-background-tint-01 border-transparent text-text-05;
+  @apply bg-background-tint-01 border-transparent;
 }
 
 .opal-code-copy {

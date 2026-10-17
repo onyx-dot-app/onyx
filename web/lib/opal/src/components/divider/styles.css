@@ -60,6 +60,13 @@
   transform: rotate(90deg);
 }
 
+/* Start chevron: a passive text-02 glyph at rest, one step lighter than the
+   internal button's text-03; the button's hover rule still wins on hover. */
+.opal-divider-chevron[data-position="start"]
+  .interactive[data-interactive-prominence="internal"] {
+  --interactive-foreground-icon: var(--text-02);
+}
+
 /* Start chevron: a down chevron, turned to point right while folded. */
 .opal-divider-chevron[data-position="start"][data-open="false"] {
   transform: rotate(-90deg);
