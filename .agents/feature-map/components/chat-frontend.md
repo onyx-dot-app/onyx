@@ -43,11 +43,18 @@ streaming instead of restarting (`web/src/hooks/useChatSessionController.ts:resu
 |---|---|---|
 | `/app` | `page.tsx` → `AppPage.tsx` (`views/AppPage.tsx:AppPage`) | The single chat surface. Renders the welcome screen, a conversation, or a project view depending on client state and query params, not separate routes. `page.tsx` reads `firstMessage` from the search params and redirects via `defaultAgentRedirectTarget` (`lib/app/utils`) before rendering. |
 | `/app/agents`, `/app/agents/create`, `/app/agents/edit/[id]` | `agents/page.tsx`, `agents/create/`, `agents/edit/[id]/` | Agent management. See [[agents-personas]]. |
+| `/app/plugins` | `plugins/page.tsx` | Member directory for approved workspace plugins and personal connections. See [[mcp-and-custom-tools]]. |
+| `/app/plugins/oauth/complete` | `plugins/oauth/complete/page.tsx` | Returns an OAuth popup result to its opener. The opener checks the saved connection. |
 | `/app/shared/[chatId]` | `shared/[chatId]/page.tsx` → `SharedChatDisplay.tsx` | Public, read-only. Server-fetches with `fetchSS("/chat/get-chat-session/{id}?is_shared=True")` (`shared/[chatId]/page.tsx:getSharedChat`) and renders `SharedChatDisplay`. Still requires `requireAuth()`; "shared" means shareable, not unauthenticated. |
 | `/app/settings/*` | `settings/{accounts-access,chat-preferences,connectors,general,llm-gateway,usage}/` | Per-user settings pages, not part of the turn loop. |
 
 `layout.tsx` (`app/app/layout.tsx:Layout`) wraps every `/app/*` route with `ProjectsProvider`,
 `VoiceModeProvider`, `AppSidebar`, and `AppChrome`, and calls `requireAuth()` server-side.
+
+The member Plugins directory uses All, Connected, and Needs sign-in filters.
+Craft-enabled users also see external apps, marked Craft-only. Those apps
+cannot enter Chat tool selection. `/craft/v1/plugins` uses the shared member
+directory with only MCP and external apps.
 
 ### Query params (`services/searchParams.ts:SEARCH_PARAM_NAMES`)
 

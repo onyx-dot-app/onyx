@@ -133,7 +133,3 @@ export interface ChatSearchFilters {
   /** ISO datetime strings, kept serializable rather than as `Date`s. */
   timeRange: { from: string; to: string } | null;
 }
-
-export type SecondaryViewState =
-  | { type: "sources" }
-  | { type: "mcp"; serverId: number };

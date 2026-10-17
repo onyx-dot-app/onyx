@@ -13,7 +13,7 @@ import {
 } from "@tests/e2e/utils/mcpServer";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
 import { ChatPreferencesPage } from "@tests/e2e/pages/ChatPreferencesPage";
-import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
+import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 import {
   expectMcpToolInvoked,
@@ -168,7 +168,7 @@ test.describe("Default Agent MCP Integration", () => {
     await chatPrefs.enableServerTools(serverName);
   });
 
-  test("Basic user can see and toggle MCP tools in the default agent", async ({
+  test("Basic user can toggle an MCP plugin in the default agent", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -178,20 +178,10 @@ test.describe("Default Agent MCP Integration", () => {
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
 
-    const actions = new ToolsPopover(page);
-    await actions.expectServerVisible(serverName);
-    await actions.openServer(serverName);
-
-    // Toggle a tool off and back on.
-    await actions.disableTool(MCP_ASSERTED_TOOL_NAME);
-    await actions.enableTool(MCP_ASSERTED_TOOL_NAME);
-
-    // Disable All then Enable All affect the whole server.
-    await actions.disableAll();
-    await expect(
-      actions.popover.locator('[role="switch"][aria-checked="false"]')
-    ).not.toHaveCount(0);
-    await actions.enableAll();
+    const plugins = new ChatPluginsPopover(page);
+    await plugins.expectPluginEnabled(serverName, true);
+    await plugins.setPluginEnabled(serverName, false);
+    await plugins.setPluginEnabled(serverName, true);
   });
 
   test("Basic user can create an assistant with MCP actions attached", async ({
@@ -222,15 +212,11 @@ test.describe("Default Agent MCP Integration", () => {
       assistant.tools.some((tool) => tool.mcp_server_id === serverId)
     ).toBeTruthy();
 
-    // The tool is enabled, so a forced call should actually invoke it.
-    await expectMcpToolInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
+    await expectMcpToolInvoked(page, MCP_ASSERTED_TOOL_NAME);
 
-    // Disable the tool from the actions popover and confirm it no longer runs.
-    const actions = new ToolsPopover(page);
-    await actions.openServer(serverName);
-    await actions.searchTool(MCP_ASSERTED_TOOL_NAME);
-    await actions.disableTool(MCP_ASSERTED_TOOL_NAME);
-    await actions.close();
+    const plugins = new ChatPluginsPopover(page);
+    await plugins.setPluginEnabled(serverName, false);
+    await plugins.close();
 
     await expectMcpToolNotInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
   });
@@ -285,16 +271,17 @@ test.describe("Default Agent MCP Integration", () => {
     await chatPrefs.cancelModifyPrompt();
   });
 
-  test("MCP tools appear in a basic user's chat actions", async ({ page }) => {
+  test("MCP plugin selection appears in a basic user's composer", async ({
+    page,
+  }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
 
     await page.goto("/app");
     await page.waitForURL("**/app**");
 
-    const actions = new ToolsPopover(page);
-    await actions.expectServerVisible(serverName);
-    await actions.openServer(serverName);
-    await expect(actions.toolSwitches).not.toHaveCount(0);
+    const plugins = new ChatPluginsPopover(page);
+    await plugins.expectPluginVisible(serverName);
+    await expect(plugins.pluginSwitch(serverName)).toBeEnabled();
   });
 });
