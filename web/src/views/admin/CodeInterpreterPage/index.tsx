@@ -208,14 +208,6 @@ export default function CodeInterpreterPage() {
     }
   }
 
-  useEffect(() => {
-    return () => {
-      if (fadeTimeoutRef.current) {
-        clearTimeout(fadeTimeoutRef.current);
-      }
-    };
-  }, []);
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
