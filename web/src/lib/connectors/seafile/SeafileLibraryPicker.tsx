@@ -3,12 +3,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { TextArrayField } from "@/components/Field";
 import type { CredentialValues } from "@/lib/credentials/types";
-import { Button } from "@opal/components";
+import { Button, InputCheckbox, Text } from "@opal/components";
 import { SvgLoader, SvgRefreshCw } from "@opal/icons";
 import { useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 
-type FormValues = Record<string, any>;
+interface FormValues {
+  base_url?: string;
+  repo_ids?: string[];
+}
 
 interface SeafileLibrary {
   id: string;
@@ -193,30 +196,30 @@ export default function SeafileLibraryPicker({
       {!isLoading && visibleLibraries.length > 0 && (
         <div className="mt-3 space-y-2">
           {visibleLibraries.map((library) => (
-            // oxlint-disable-next-line jsx-a11y/label-has-associated-control -- The dynamic htmlFor matches the checkbox id.
             <label
               key={library.id}
               htmlFor={`seafile-library-${library.id}`}
               className="flex items-start gap-3 rounded border border-border bg-background px-3 py-2"
             >
-              <input
+              <InputCheckbox
                 id={`seafile-library-${library.id}`}
-                type="checkbox"
-                className="mt-1"
                 checked={selectedCanonicalRepoIds.has(
                   canonicalSeafileRepoId(library.id)
                 )}
-                onChange={(event) =>
-                  toggleLibrary(library.id, event.target.checked)
+                onCheckedChange={(checked) =>
+                  toggleLibrary(library.id, checked)
                 }
               />
-              <span className="min-w-0">
-                <span className="block font-medium">{library.name}</span>
-                <span className="block break-all text-sm text-text-03">
-                  {library.id}
-                  {library.owner ? ` - ${library.owner}` : ""}
-                </span>
-              </span>
+              <div className="min-w-0">
+                <div>
+                  <Text font="main-ui-body">{library.name}</Text>
+                </div>
+                <div className="break-all">
+                  <Text font="secondary-body" color="text-03">
+                    {library.id + (library.owner ? ` - ${library.owner}` : "")}
+                  </Text>
+                </div>
+              </div>
             </label>
           ))}
         </div>
