@@ -217,6 +217,7 @@ function RecentsSection({
 
 export default function AppSidebar() {
   const t = useTranslations("sidebar");
+  const tCraftUpgrade = useTranslations("craft.upgrade");
   const moveChatErrorMessage = t("appSidebar.moveChatError.message");
   const { folded } = useSidebarState();
   const router = useRouter();
@@ -502,7 +503,7 @@ export default function AppSidebar() {
     ]
   );
 
-  const { hasAdminAccess, adminCapabilities, user } = useUser();
+  const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
   const activeSidebarTab = useAppPosition();
   const createProjectModal = useCreateModal();
   const showLogoWhenFolded = useShowLogoWhenFolded();
@@ -638,9 +639,14 @@ export default function AppSidebar() {
             <div data-testid="AppSidebar/build">
               <Disabled
                 disabled={isCraftTierLocked}
-                tooltip={markdown(
-                  t("adminSidebar.businessOrEnterpriseOnly.tooltip")
-                )}
+                // Only admins can open billing, so others are told to ask one.
+                tooltip={
+                  isAdmin
+                    ? markdown(
+                        t("adminSidebar.businessOrEnterpriseOnly.tooltip")
+                      )
+                    : tCraftUpgrade("userDescription")
+                }
               >
                 <SidebarTab
                   icon={SvgDevKit}
