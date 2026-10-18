@@ -276,7 +276,8 @@ export default function CodeInterpreterPage() {
               onMouseEnter={() => handleErrorHover(true)}
               onMouseLeave={() => handleErrorHover(false)}
             >
-              <Section padding={1}>
+              {/* 0.5rem padding (0.25rem here plus the popover's 0.25rem) and 0.5rem gap. */}
+              <Section padding={1} gap={2}>
                 <Content
                   sizePreset="main-ui"
                   variant="section"
