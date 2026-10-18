@@ -15394,7 +15394,7 @@
     "actionPolicies": {
       "appTitle": "Paramètres d’approbation de {name}",
       "title": "Paramètres d’approbation",
-      "personalDescription": "Ces paramètres concernent vos conversations et nouvelles tâches. Les tâches existantes conservent leurs paramètres.",
+      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft et les nouvelles tâches ; les tâches existantes conservent leurs propres paramètres.",
       "taskDescription": "Seules les applications activées sont disponibles pour cette tâche. Les modifications concernent uniquement cette tâche.",
       "newTaskDescription": "Activez les applications que cette tâche peut utiliser. Chaque application reprend vos paramètres d’action actuels.",
       "workspace_disabled": "Désactivée pour cet espace de travail",
@@ -15427,7 +15427,8 @@
       "viewActions": "Voir les actions",
       "taskModalDescription": "Les modifications s’appliquent lorsque vous enregistrez la tâche. Les restrictions de l’espace de travail s’appliquent toujours.",
       "searchActions": "Rechercher des actions",
-      "applyMatching": "Définir {count} actions modifiables correspondantes :",
+      "setPermissions": "Définir les autorisations",
+      "applyMatching": "{count} actions modifiables correspondantes",
       "noMatchingActions": "Aucune action ne correspond à votre recherche.",
       "close": "Fermer",
       "saveChanges": "Enregistrer",

@@ -233,7 +233,7 @@ export default function SetupCard({
           {connected && (
             <Button
               prominence="tertiary"
-              href={`/craft/v1/apps?actionPolicies=app-${externalAppId}`}
+              href={`/craft/v1/plugins?actionPolicies=app-${externalAppId}`}
             >
               {tActionPolicies("title")}
             </Button>

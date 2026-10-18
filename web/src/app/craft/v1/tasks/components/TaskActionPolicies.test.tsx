@@ -6,7 +6,7 @@ import TaskActionPolicies, {
 import type {
   AppActionPoliciesView,
   TaskAppActionPolicies,
-} from "@/app/craft/v1/apps/action-policies/types";
+} from "@/lib/plugins/types";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -176,18 +176,24 @@ it("shows a compact task summary with read-only action details", async () => {
   const user = setupUser();
   mockData = initialData.map((app) => ({ ...app, enabled: true }));
   render(<TaskActionPoliciesSummary taskId="task" />);
-  expect(screen.getByText("Enabled for this task")).toBeInTheDocument();
+  expect(
+    screen.getByRole("switch", { name: "Enable Slack for this task" })
+  ).toBeChecked();
   expect(
     screen.getByText("1 auto-approve · 0 ask · 1 disabled")
   ).toBeInTheDocument();
   expect(screen.queryByText("Send messages")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "View actions" }));
   expect(screen.getByText("Send messages")).toBeInTheDocument();
-  expect(screen.getByText("Auto-approve")).toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Auto-approve" })
+    within(screen.getByRole("group", { name: "Send messages" })).getByRole(
+      "button",
+      { name: "Auto-approve" }
+    )
+  ).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "Save changes" })
   ).not.toBeInTheDocument();
-  expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 });
 it("starts new apps off without copying actions until enabled", async () => {
   const user = setupUser();
@@ -312,8 +318,8 @@ it("keeps hundreds of actions out of the form and applies filtered edits only af
     "Send messages"
   );
   expect(screen.queryByText("Read record 199")).not.toBeInTheDocument();
-  const dialog = within(screen.getByRole("dialog"));
-  await user.click(dialog.getAllByRole("button", { name: "Ask" })[0]!);
+  await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
+  await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   await user.click(screen.getByRole("button", { name: "Discard changes" }));
   expect(
@@ -324,11 +330,8 @@ it("keeps hundreds of actions out of the form and applies filtered edits only af
     screen.getByRole("textbox", { name: "Search actions" }),
     "Send messages"
   );
-  await user.click(
-    within(screen.getByRole("dialog")).getAllByRole("button", {
-      name: "Ask",
-    })[0]!
-  );
+  await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
+  await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   expect(
     screen.getByText("0 auto-approve · 201 ask · 1 disabled")
@@ -358,14 +361,12 @@ it("searches actions and keeps workspace-disabled actions out of bulk edits", as
   );
   expect(screen.queryByText("Send messages")).not.toBeInTheDocument();
   expect(screen.getByText("Delete messages")).toBeInTheDocument();
-  expect(
-    screen.getByText("Set 0 matching editable actions to:")
-  ).toBeInTheDocument();
-  for (const button of screen.getAllByRole("button", {
-    name: "Auto-approve",
-  })) {
-    expect(button).toBeDisabled();
-  }
+  expect(screen.getByText("0 matching editable actions")).toBeInTheDocument();
+  await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
+  expect(screen.getByRole("option", { name: "Auto-approve" })).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
 });
 
 it("resets all editable actions to workspace defaults even when search hides them", async () => {
@@ -399,9 +400,8 @@ it("resets all editable actions to workspace defaults even when search hides the
     screen.getByRole("textbox", { name: "Search actions" }),
     "Send messages"
   );
-  await user.click(
-    screen.getByRole("button", { name: "Reset all to workspace defaults" })
-  );
+  await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
+  await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
   expect(
     within(screen.getByRole("group", { name: "Send messages" })).getByRole(
       "button",
@@ -441,7 +441,7 @@ it("explains admin-disabled actions in read-only task details", async () => {
   mockData = initialData.map((app) => ({ ...app, enabled: true }));
   render(<TaskActionPoliciesSummary taskId="task" />);
   await user.click(screen.getByRole("button", { name: "View actions" }));
-  await user.hover(screen.getByText("Disabled"));
+  await user.hover(screen.getByRole("group", { name: "Delete messages" }));
   expect(await screen.findByRole("tooltip")).toHaveTextContent(
     "An admin disabled this action for the workspace."
   );

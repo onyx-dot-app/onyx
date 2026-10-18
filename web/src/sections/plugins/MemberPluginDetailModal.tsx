@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import isEqual from "lodash/isEqual";
+import { useId, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Button, InputTypeIn, Modal, Tabs, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import type { AppActionPoliciesView } from "@/lib/plugins/types";
+import { saveAppActionPolicies } from "@/app/craft/services/apiServices";
+import PolicyEditor from "@/sections/actions/PolicyEditor";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import MemberMCPToolsList from "@/sections/plugins/MemberMCPToolsList";
 import MemberCraftAppSkills from "@/sections/plugins/MemberCraftAppSkills";
@@ -34,6 +42,7 @@ interface MemberPluginDetailModalProps {
   plugin: MemberPlugin;
   surface?: "all" | "craft";
   open: boolean;
+  initialTab?: "connection" | "approvals";
   onClose: () => void;
   onConnect: () => void;
   onUseInChat: () => void;
@@ -54,6 +63,7 @@ interface MemberDetailTabsProps {
   connection: ReactNode;
   capabilities: ReactNode;
   secondaryTab?: "tools" | "skills";
+  approvals?: ReactNode;
 }
 
 function MemberDetailTabs({
@@ -63,8 +73,10 @@ function MemberDetailTabs({
   connection,
   capabilities,
   secondaryTab = "tools",
+  approvals,
 }: MemberDetailTabsProps) {
   const t = useTranslations("actions.memberPlugins");
+  const approvalCopy = useTranslations("craft.actionPolicies");
   const craftTabs = useTranslations("actions.plugins.craftApp.tabs");
   if (!enabled)
     return (
@@ -77,24 +89,36 @@ function MemberDetailTabs({
     <Tabs value={tab} onValueChange={onTabChange} variant="contained" gap={6}>
       <Tabs.List>
         <Tabs.Trigger value="connection">{t("detail.connection")}</Tabs.Trigger>
-        <Tabs.Trigger value={secondaryTab}>
-          {secondaryTab === "skills" ? craftTabs("skills") : t("detail.tools")}
-        </Tabs.Trigger>
+        {capabilities && (
+          <Tabs.Trigger value={secondaryTab}>
+            {secondaryTab === "skills"
+              ? craftTabs("skills")
+              : t("detail.tools")}
+          </Tabs.Trigger>
+        )}
+        {approvals && (
+          <Tabs.Trigger value="approvals">{approvalCopy("title")}</Tabs.Trigger>
+        )}
       </Tabs.List>
       <Tabs.Content
         value="connection"
         keepMounted
         hidden={tab !== "connection"}
       >
-        <div className="flex h-[min(18rem,40dvh)] flex-col gap-6 overflow-y-auto">
-          {connection}
-        </div>
+        <div className="flex flex-col gap-6">{connection}</div>
       </Tabs.Content>
-      <Tabs.Content value={secondaryTab}>
-        <div className="h-[min(18rem,40dvh)] overflow-y-auto">
-          {capabilities}
-        </div>
-      </Tabs.Content>
+      {capabilities && (
+        <Tabs.Content value={secondaryTab}>{capabilities}</Tabs.Content>
+      )}
+      {approvals && (
+        <Tabs.Content
+          value="approvals"
+          keepMounted
+          hidden={tab !== "approvals"}
+        >
+          {approvals}
+        </Tabs.Content>
+      )}
     </Tabs>
   );
 }
@@ -129,6 +153,7 @@ export default function MemberPluginDetailModal({
   plugin,
   surface = "all",
   open,
+  initialTab = "connection",
   onClose,
   onConnect,
   onUseInChat,
@@ -140,7 +165,100 @@ export default function MemberPluginDetailModal({
   const actions = useTranslations("actions");
   const craftCopy = useTranslations("craft.apps.page");
   const [action, setAction] = useState<DetailAction>({ kind: "details" });
-  const [tab, setTab] = useState("connection");
+  const [tab, setTab] = useState<string>(
+    initialTab === "approvals" &&
+      craftEnabled &&
+      plugin.kind !== "openapi" &&
+      (plugin.kind === "external-app" ||
+        plugin.server.available_in_craft === true)
+      ? "approvals"
+      : "connection"
+  );
+  const approvalCopy = useTranslations("craft.actionPolicies");
+  const [approvalsOpened, setApprovalsOpened] = useState(
+    initialTab === "approvals"
+  );
+  const openingId = useId();
+  const [policyApp, setPolicyApp] = useState<AppActionPoliciesView | null>(
+    null
+  );
+  const [initialPolicies, setInitialPolicies] = useState<
+    Record<string, ActionPolicy>
+  >({});
+  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({});
+  const [savingPolicies, setSavingPolicies] = useState(false);
+  const [policySaveError, setPolicySaveError] = useState<string | null>(null);
+  const supportsApprovals =
+    craftEnabled &&
+    plugin.kind !== "openapi" &&
+    (plugin.kind === "external-app" ||
+      plugin.server.available_in_craft === true);
+  const showApprovals =
+    supportsApprovals && plugin.connection.kind === "connected";
+  const activeTab = tab === "approvals" && !showApprovals ? "connection" : tab;
+  const policyTarget =
+    plugin.kind === "external-app"
+      ? { kind: "external_app" as const, id: plugin.app.id }
+      : plugin.kind === "mcp"
+        ? { kind: "mcp_server" as const, id: plugin.server.id }
+        : null;
+  const { error: policyLoadError, mutate: refreshPolicies } = useSWR<
+    AppActionPoliciesView,
+    Error
+  >(
+    open && approvalsOpened && showApprovals && policyTarget
+      ? [
+          SWR_KEYS.appActionPolicies(policyTarget.kind, policyTarget.id),
+          openingId,
+        ]
+      : null,
+    ([url]: [string, string]) => errorHandlingFetcher(url),
+    {
+      revalidateOnMount: true,
+      revalidateOnFocus: false,
+      onSuccess: (app) => {
+        if (policyApp !== null) return;
+        const choices = Object.fromEntries(
+          app.actions
+            .filter((item) => item.editable || item.stored_policy !== null)
+            .map((item) => [
+              item.action_id,
+              item.stored_policy ?? item.effective_policy,
+            ])
+        );
+        setPolicyApp(app);
+        setInitialPolicies(choices);
+        setPolicies(choices);
+      },
+    }
+  );
+  const policiesDirty = !isEqual(policies, initialPolicies);
+  const guard = useUnsavedChangesGuard({
+    isDirty: policiesDirty,
+    onDiscard: () => setPolicies(initialPolicies),
+  });
+
+  async function savePolicies() {
+    if (!policyApp || savingPolicies) return;
+    setSavingPolicies(true);
+    setPolicySaveError(null);
+    try {
+      await saveAppActionPolicies(
+        "personal",
+        policyApp.gated_app_id,
+        policies,
+        approvalCopy("saveError")
+      );
+      setInitialPolicies(policies);
+      onClose();
+    } catch (error) {
+      setPolicySaveError(
+        error instanceof Error ? error.message : approvalCopy("saveError")
+      );
+    } finally {
+      setSavingPolicies(false);
+    }
+  }
   const [endpointSearch, setEndpointSearch] = useState("");
   const { data: memberTools } = useSWR<ToolSnapshot[]>(
     plugin.kind === "openapi" ? SWR_KEYS.tools : null,
@@ -180,7 +298,9 @@ export default function MemberPluginDetailModal({
     )
   );
   const hasTabs =
-    plugin.kind === "external-app" ? craftEnabled : surface !== "craft";
+    plugin.kind === "external-app"
+      ? craftEnabled
+      : surface !== "craft" || showApprovals;
   const chatEnabled =
     plugin.kind === "external-app"
       ? false
@@ -198,10 +318,10 @@ export default function MemberPluginDetailModal({
   const canConnect =
     connection.kind === "oauth" || connection.kind === "credentials";
   const confirming = action.kind !== "details";
-  const pending = action.kind === "disconnecting";
+  const pending = action.kind === "disconnecting" || savingPolicies;
 
   function close() {
-    if (!pending) onClose();
+    if (!pending) guard.requestLeave(onClose);
   }
 
   async function disconnect() {
@@ -222,12 +342,31 @@ export default function MemberPluginDetailModal({
       : t(`status.${connection.kind}`);
   const headerStatus = canConnect ? t("filters.needsSignIn") : connectionLabel;
 
+  if (guard.confirmationOpen) {
+    return (
+      <Modal open={open} onOpenChange={(next) => !next && guard.cancelLeave()}>
+        <PluginModalContent>
+          <UnsavedChangesModalContent
+            onCancel={guard.cancelLeave}
+            onDiscard={guard.discardAndLeave}
+          />
+        </PluginModalContent>
+      </Modal>
+    );
+  }
+
   return (
     <Modal open={open} onOpenChange={(next) => !next && close()}>
       <PluginModalContent>
         <Modal.Header
           icon={icon}
-          title={confirming ? t("detail.disconnectTitle", { name }) : name}
+          title={
+            confirming
+              ? t("detail.disconnectTitle", { name })
+              : activeTab === "approvals"
+                ? approvalCopy("appTitle", { name })
+                : name
+          }
           description={
             confirming ? t("detail.disconnectDescription") : undefined
           }
@@ -289,8 +428,64 @@ export default function MemberPluginDetailModal({
             <MemberDetailTabs
               enabled={hasTabs}
               secondaryTab={plugin.kind === "external-app" ? "skills" : "tools"}
-              tab={tab}
-              onTabChange={setTab}
+              tab={activeTab}
+              onTabChange={(next) => {
+                if (!pending) {
+                  setTab(next);
+                  if (next === "approvals") setApprovalsOpened(true);
+                }
+              }}
+              approvals={
+                showApprovals ? (
+                  <div className="flex flex-col gap-4">
+                    <Text font="secondary-body" color="text-03">
+                      {approvalCopy("personalDescription")}
+                    </Text>
+                    {policyApp ? (
+                      <PolicyEditor
+                        showTitle={false}
+                        showDescription={false}
+                        items={policyApp.actions.map((item) => ({
+                          id: item.action_id,
+                          name: item.normalised_name,
+                          description: item.description,
+                          defaultPolicy: item.editable
+                            ? item.workspace_policy
+                            : item.effective_policy,
+                          editable: item.editable,
+                          lockReason: item.lock_reason ?? undefined,
+                        }))}
+                        policies={policies}
+                        onChange={setPolicies}
+                        onReset={() => setPolicies({})}
+                        resetLabel={approvalCopy("resetAll")}
+                        disabled={
+                          savingPolicies || !policyApp.users_can_manage_policies
+                        }
+                      />
+                    ) : (
+                      <Text font="secondary-body">
+                        {approvalCopy(
+                          policyLoadError ? "loadError" : "loading"
+                        )}
+                      </Text>
+                    )}
+                    {!policyApp && policyLoadError && (
+                      <Button
+                        prominence="secondary"
+                        onClick={() => void refreshPolicies()}
+                      >
+                        {approvalCopy("retry")}
+                      </Button>
+                    )}
+                    {policySaveError && (
+                      <Text role="alert" color="status-error-05">
+                        {policySaveError}
+                      </Text>
+                    )}
+                  </div>
+                ) : undefined
+              }
               connection={
                 <>
                   {plugin.kind === "mcp" && (
@@ -330,6 +525,7 @@ export default function MemberPluginDetailModal({
               }
               capabilities={
                 hasTabs &&
+                (surface !== "craft" || plugin.kind === "external-app") &&
                 (plugin.kind === "external-app" ? (
                   <MemberCraftAppSkills appId={plugin.app.id} />
                 ) : plugin.kind === "mcp" ? (
@@ -389,12 +585,16 @@ export default function MemberPluginDetailModal({
             </>
           ) : (
             <>
-              {canDisconnect && (!hasTabs || tab === "connection") && (
+              {canDisconnect && (!hasTabs || activeTab === "connection") && (
                 <div className="flex flex-1">
                   <Button
                     prominence="tertiary"
                     icon={SvgUnplug}
-                    onClick={() => setAction({ kind: "confirmDisconnect" })}
+                    onClick={() =>
+                      guard.requestLeave(() =>
+                        setAction({ kind: "confirmDisconnect" })
+                      )
+                    }
                   >
                     {t("detail.disconnect")}
                   </Button>
@@ -402,7 +602,7 @@ export default function MemberPluginDetailModal({
               )}
               {plugin.kind === "external-app" &&
                 craftEnabled &&
-                tab === "skills" && (
+                activeTab === "skills" && (
                   <div className="flex flex-1">
                     <Button
                       prominence="tertiary"
@@ -412,11 +612,25 @@ export default function MemberPluginDetailModal({
                     </Button>
                   </div>
                 )}
-              <Button prominence="secondary" onClick={close}>
+              <Button prominence="secondary" disabled={pending} onClick={close}>
                 {t("detail.close")}
               </Button>
+              {activeTab === "approvals" &&
+                policyApp?.users_can_manage_policies && (
+                  <Button
+                    disabled={pending || !policiesDirty}
+                    onClick={() => void savePolicies()}
+                  >
+                    {approvalCopy("save")}
+                  </Button>
+                )}
               {canConnect && (
-                <Button onClick={onConnect}>{t("detail.connect")}</Button>
+                <Button
+                  disabled={pending}
+                  onClick={() => guard.requestLeave(onConnect)}
+                >
+                  {t("detail.connect")}
+                </Button>
               )}
               {craftEnabled &&
                 (plugin.kind === "external-app"
@@ -424,7 +638,12 @@ export default function MemberPluginDetailModal({
                   : surface === "craft") && (
                   <Button
                     href={onOpenInCraft ? undefined : CRAFT_PATH}
-                    onClick={onOpenInCraft}
+                    disabled={pending}
+                    onClick={
+                      onOpenInCraft
+                        ? () => guard.requestLeave(onOpenInCraft)
+                        : undefined
+                    }
                   >
                     {t("detail.openInCraft")}
                   </Button>
@@ -436,7 +655,12 @@ export default function MemberPluginDetailModal({
                   ? (plugin.server.user_enabled_in_chat ?? true)
                   : (openAPITool?.user_enabled_in_chat ?? true)) &&
                 chatEnabled === true && (
-                  <Button onClick={onUseInChat}>{t("detail.useInChat")}</Button>
+                  <Button
+                    disabled={pending}
+                    onClick={() => guard.requestLeave(onUseInChat)}
+                  >
+                    {t("detail.useInChat")}
+                  </Button>
                 )}
             </>
           )}

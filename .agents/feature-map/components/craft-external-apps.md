@@ -183,13 +183,14 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 
 ### Action permission ownership
 
-On the user Apps page, connected app cards have a three-dot menu for App permissions.
-The menu also offers Disconnect when the user can disconnect the app.
-Cards with a Connect button do not show this menu.
-Connect and Review skills remain visible on the card.
-Admin, personal, and task forms share the search, bulk controls, and rows in `ActionPolicyRows.tsx`. Search narrows visible actions;
-there is no policy dropdown. The matching-action count sits on the left; bulk buttons align on the right. Auto-approve, Ask every time,
-Disabled, and Reset all use the same button style.
+Members manage app and MCP approval settings in the existing plugin detail modal at
+`/app/plugins` and `/craft/v1/plugins`. Connected Craft-capable plugins have an Approval settings tab.
+OpenAPI plugins do not expose this tab: main Chat does not enforce Craft approval settings.
+Connecting an external app or Craft MCP server opens its approval settings after authentication succeeds.
+The Connection tab retains account controls and the existing default-use switches.
+Admin, personal, and task forms share `web/src/sections/actions/PolicyEditor.tsx`.
+Search narrows visible actions. The matching-action count sits on the left; Set permissions aligns on the right.
+This menu offers Auto-approve, Ask, Disabled, and a separated reset action. Each row uses the same Auto-approve, Ask, and Disabled buttons as MCP tools.
 Workspace-disabled controls show a hover tooltip that explains the admin restriction.
 Save stays disabled until a policy changes. Closing with unsaved changes requires discard confirmation.
 Bulk policy changes affect shown editable actions.
@@ -200,6 +201,10 @@ All controls change only the modal draft. Personal Save persists it; task Save c
 form draft, which persists when the user saves the task.
 
 `workspace_action_policy` stores workspace restrictions and defaults.
+Users can edit MCP approval settings while they have personally disabled the server in Craft.
+Personal and task configuration catalogs retain these servers and their saved approval settings.
+The MCP credential resolver still blocks personally disabled servers at execution time.
+
 `user_action_policy` stores personal choices; `scheduled_task_action_policy`
 stores independent task choices. `gated_app.users_can_manage_policies` controls
 whether personal and task choices apply. Workspace `DENY` always blocks.
@@ -208,8 +213,9 @@ personal settings inherit the workspace default, while missing task settings ask
 `onyx/db/action_policy.py:resolve_action_policies` owns these rules.
 The same module owns shared app identity lookup, workspace policy storage, and batched policy reads.
 One-app modals use `GET /action-policies/{kind}/{target_id}` under the user or admin router.
-Personal and MCP workspace editors wait for fresh opening data before creating their draft.
-Later refreshes do not replace that draft. Saving disables the user-management switch.
+Personal approval tabs fetch a fresh snapshot on first opening. Each modal opening owns its request.
+MCP workspace editors also wait for current server data before creating their draft.
+Later refreshes do not replace that draft. Switching tabs preserves edits. Saving disables the user-management switch.
 Closing a linked permissions modal removes only its `actionPolicies` query parameter.
 Reads return `effective_policy`, `workspace_policy`, and `stored_policy` for each action.
 Saves validate catalog IDs and workspace restrictions directly; they do not construct UI responses.

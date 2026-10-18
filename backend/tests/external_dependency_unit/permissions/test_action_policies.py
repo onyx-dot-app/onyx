@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.action_policy import (
     get_or_create_gated_app_id,
+    get_task_action_policies,
     list_action_policies,
     replace_workspace_action_policies,
     resolve_action_policies,
@@ -254,7 +255,12 @@ def test_unknown_action_and_foreign_task_are_rejected(
 def test_mcp_uses_same_settings_and_access_rules(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
+    from onyx.db.mcp import (
+        create_mcp_server__no_commit,
+        get_craft_enabled_mcp_servers,
+        update_mcp_server__no_commit,
+        upsert_mcp_server_user_preferences__no_commit,
+    )
     from onyx.db.models import Tool
 
     user, _ = owner_and_app
@@ -286,6 +292,48 @@ def test_mcp_uses_same_settings_and_access_rules(
         gated_app_id=app_id,
         catalog_policies={"send_report": ASK},
     ) == {"send_report": ALLOW}
+    task = create_scheduled_task(
+        db_session=db_session,
+        user_id=user.id,
+        name="MCP report",
+        prompt="Report",
+        cron_expression="0 9 * * *",
+        editor_mode="advanced",
+    )
+    update_scheduled_task(
+        db_session=db_session,
+        user_id=user.id,
+        task_id=task.id,
+        action_policies=_task_settings(app_id, {"send_report": ALLOW}),
+    )
+    upsert_mcp_server_user_preferences__no_commit(
+        server.id, user.id, db_session, enabled_in_craft=False
+    )
+    db_session.flush()
+    assert not get_craft_enabled_mcp_servers(db_session, user, server_ids={server.id})
+    personal = list_action_policies(db_session, user, gated_app_id=app_id)
+    assert personal[0].actions[0].effective_policy == ALLOW
+    save_user_action_policies(db_session, user, _settings(app_id, {"send_report": ASK}))
+    assert (
+        list_action_policies(db_session, user, gated_app_id=app_id)[0]
+        .actions[0]
+        .effective_policy
+        == ASK
+    )
+    task_catalog = list_action_policies(
+        db_session, user, task_id=task.id, gated_app_id=app_id
+    )
+    assert task_catalog[0].enabled is True
+    assert task_catalog[0].actions[0].effective_policy == ALLOW
+    update_scheduled_task(
+        db_session=db_session,
+        user_id=user.id,
+        task_id=task.id,
+        action_policies=[],
+    )
+    assert get_task_action_policies(db_session, task.id) == _task_settings(
+        app_id, {"send_report": ALLOW}
+    )
     update_mcp_server__no_commit(
         server_id=server.id, db_session=db_session, available_in_craft=False
     )

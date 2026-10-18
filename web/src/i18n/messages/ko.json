@@ -15394,7 +15394,7 @@
     "actionPolicies": {
       "appTitle": "{name} 승인 설정",
       "title": "승인 설정",
-      "personalDescription": "이 설정은 대화와 새 작업에 적용됩니다. 기존 작업은 자체 설정을 유지합니다.",
+      "personalDescription": "이 설정은 Craft 대화와 새 작업에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
       "taskDescription": "활성화된 앱만 이 작업에서 사용할 수 있습니다. 변경 사항은 이 작업에만 적용됩니다.",
       "newTaskDescription": "이 작업에서 사용할 앱을 활성화하세요. 각 앱은 현재 작업 설정으로 시작합니다.",
       "workspace_disabled": "워크스페이스에서 비활성화됨",
@@ -15427,7 +15427,8 @@
       "viewActions": "작업 보기",
       "taskModalDescription": "변경 사항은 예약 작업을 저장할 때 적용됩니다. 워크스페이스 제한은 항상 적용됩니다.",
       "searchActions": "작업 검색",
-      "applyMatching": "일치하는 편집 가능한 작업 {count}개 설정:",
+      "setPermissions": "권한 설정",
+      "applyMatching": "일치하는 편집 가능한 작업 {count}개",
       "noMatchingActions": "검색과 일치하는 작업이 없습니다.",
       "close": "닫기",
       "saveChanges": "변경 사항 저장",

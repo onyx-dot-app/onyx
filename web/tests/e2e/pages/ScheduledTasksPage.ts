@@ -6,7 +6,7 @@
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
-import type { AppActionPoliciesView } from "@/app/craft/v1/apps/action-policies/types";
+import type { AppActionPoliciesView } from "@/lib/plugins/types";
 import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
 
 const TASKS_LIST_PATH = "/craft/v1/tasks";
@@ -46,7 +46,7 @@ export class ScheduledTasksPage {
     this.appPolicies = page.locator("section").filter({
       has: page.getByRole("switch", { name: "Enable Acme CRM for this task" }),
     });
-    this.appCards = this.appPolicies.locator(".opal-card");
+    this.appCards = this.appPolicies.getByRole("group");
   }
 
   // ---------------------------------------------------------------------------
@@ -216,8 +216,8 @@ export class ScheduledTasksPage {
         return Boolean(
           first &&
           second &&
-          Math.abs(first.y - second.y) <= 1 &&
-          second.x > first.x
+          Math.abs(first.x - second.x) <= 1 &&
+          second.y > first.y
         );
       })
       .toBe(true);

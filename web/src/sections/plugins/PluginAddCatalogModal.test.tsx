@@ -75,6 +75,7 @@ test("installed-app failure offers retry and custom creation, then excludes inst
     actions: [],
     associated_skills: [],
     is_onyx_managed: false,
+    users_can_manage_policies: true,
   };
   let installedRequestCount = 0;
   const network = jest

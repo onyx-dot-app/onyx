@@ -139,21 +139,23 @@ describe("ConfigureProviderModal", () => {
     expect(screen.getAllByText("https://slack.com")[0]).toBeVisible();
   });
 
-  it("combines configuration and credentials and retains edits across tabs", async () => {
+  it("separates configuration and authentication and retains edits across tabs", async () => {
     jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue(APP);
     renderExistingProvider();
     expect(screen.queryByText("Craft only")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Name" })).toBeVisible();
-    expect(screen.getByLabelText("Token")).toBeVisible();
-    expect(screen.getByText(DESCRIPTOR.setup_instructions)).toBeVisible();
+    expect(screen.getByLabelText("Token")).not.toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Support Slack" },
+    });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Authentication" }), {
+      button: 0,
     });
     expect(screen.getByText(DESCRIPTOR.setup_instructions)).toBeVisible();
     fireEvent.change(screen.getByLabelText("Token"), {
       target: { value: "new-token" },
     });
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Permissions" }), {
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Tools" }), {
       button: 0,
     });
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Configuration" }), {
@@ -183,11 +185,9 @@ describe("ConfigureProviderModal", () => {
         onSaved={jest.fn()}
       />
     );
-    expect(
-      screen.queryByRole("tab", { name: "Authentication" })
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Authentication" })).toBeVisible();
     expect(screen.queryByLabelText("Token")).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Permissions" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Tools" })).toBeVisible();
   });
 
   it("labels provider credentials and closes a new draft without confirmation", () => {
@@ -203,7 +203,7 @@ describe("ConfigureProviderModal", () => {
     fireEvent.change(screen.getByLabelText("Token"), {
       target: { value: "draft-token" },
     });
-    expect(screen.getByRole("dialog")).toHaveAttribute("data-width", "md");
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-width", "lg");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(

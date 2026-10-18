@@ -15394,7 +15394,7 @@
     "actionPolicies": {
       "appTitle": "{name} Approval settings",
       "title": "Approval settings",
-      "personalDescription": "These settings apply to your conversations and new tasks. Existing tasks keep their own settings.",
+      "personalDescription": "These settings control whether actions run automatically or require approval in Craft conversations and new tasks; existing tasks keep their own settings.",
       "taskDescription": "Only enabled apps are available to this task. Changes apply only to this task.",
       "newTaskDescription": "Enable the apps this task can use. Each app starts with your current approval settings.",
       "workspace_disabled": "Disabled for the workspace",
@@ -15427,7 +15427,8 @@
       "viewActions": "View actions",
       "taskModalDescription": "Changes apply when you save the task. Workspace restrictions always apply.",
       "searchActions": "Search actions",
-      "applyMatching": "Set {count} matching editable actions to:",
+      "setPermissions": "Set permissions",
+      "applyMatching": "{count} matching editable actions",
       "noMatchingActions": "No actions match your search.",
       "close": "Close",
       "saveChanges": "Save changes",

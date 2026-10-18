@@ -35,7 +35,7 @@ import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 
 type MemberPluginDialog =
-  | { kind: "details"; reference: PluginReference }
+  | { kind: "details"; reference: PluginReference; initialTab?: "approvals" }
   | { kind: "connect"; reference: PluginReference }
   | null;
 
@@ -246,8 +246,51 @@ export default function MemberPluginsPage({
   );
   const handledConnect = useRef<string | null>(null);
   const connectIntent = searchParams.get("connect");
+  const policyIntent = searchParams.get("actionPolicies");
+  const handledPolicy = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!policyIntent) {
+      handledPolicy.current = null;
+      return;
+    }
+    if (handledPolicy.current === policyIntent) return;
+    const match = /^(app|mcp)-(\d+)$/.exec(policyIntent);
+    if (!match) return;
+    const plugin = plugins.find((item) =>
+      match[1] === "app"
+        ? item.kind === "external-app" && item.app.id === Number(match[2])
+        : item.kind === "mcp" && item.server.id === Number(match[2])
+    );
+    if (!plugin) return;
+    handledPolicy.current = policyIntent;
+    const needsConnection =
+      plugin.connection.kind === "oauth" ||
+      plugin.connection.kind === "credentials";
+    setDialog(
+      needsConnection
+        ? { kind: "connect", reference: memberPluginReference(plugin) }
+        : {
+            kind: "details",
+            reference: memberPluginReference(plugin),
+            initialTab: "approvals",
+          }
+    );
+  }, [policyIntent, plugins]);
+
+  function closeDialog() {
+    setDialog(null);
+    if (!policyIntent) return;
+    handledConnect.current = connectIntent;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("actionPolicies");
+    const query = params.toString();
+    const path = surface === "craft" ? "/craft/v1/plugins" : "/app/plugins";
+    router.replace(query ? `${path}?${query}` : path, { scroll: false });
+  }
+
+  useEffect(() => {
+    if (policyIntent) return;
     if (!connectIntent) {
       handledConnect.current = null;
       return;
@@ -271,10 +314,22 @@ export default function MemberPluginsPage({
           : "details",
       reference: memberPluginReference(plugin),
     });
-  }, [connectIntent, plugins]);
+  }, [connectIntent, plugins, policyIntent]);
 
-  function show(plugin: MemberPlugin, kind: "details" | "connect") {
-    setDialog({ kind, reference: memberPluginReference(plugin) });
+  function show(
+    plugin: MemberPlugin,
+    kind: "details" | "connect",
+    approvals = false
+  ) {
+    setDialog(
+      kind === "details"
+        ? {
+            kind,
+            reference: memberPluginReference(plugin),
+            initialTab: approvals ? "approvals" : undefined,
+          }
+        : { kind, reference: memberPluginReference(plugin) }
+    );
   }
 
   return (
@@ -436,8 +491,9 @@ export default function MemberPluginsPage({
           key={`${dialog.reference.kind}-${dialog.reference.id}`}
           plugin={activePlugin}
           surface={surface}
+          initialTab={dialog.initialTab}
           open
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
           onConnect={() => show(activePlugin, "connect")}
           onOpenInCraft={() => router.push(CRAFT_PATH)}
           onUseInChat={() => {
@@ -448,7 +504,7 @@ export default function MemberPluginsPage({
             );
           }}
           onDisconnected={() => {
-            setDialog(null);
+            closeDialog();
             void refresh();
           }}
         />
@@ -458,9 +514,9 @@ export default function MemberPluginsPage({
           plugin={activePlugin}
           surface={surface}
           open
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
           onConnected={() => {
-            show(activePlugin, "details");
+            show(activePlugin, "details", activePlugin.kind !== "openapi");
             void refresh();
           }}
         />

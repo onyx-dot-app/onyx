@@ -15394,7 +15394,7 @@
     "actionPolicies": {
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
-      "personalDescription": "この設定は会話と新しいタスクに適用されます。既存のタスクの設定は変わりません。",
+      "personalDescription": "これらの設定は、Craftの会話と新しいタスクでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
       "taskDescription": "このタスクでは有効なアプリのみ使用できます。変更はこのタスクのみに適用されます。",
       "newTaskDescription": "このタスクで使用するアプリを有効にしてください。各アプリは現在のアクション設定から開始します。",
       "workspace_disabled": "ワークスペースで無効",
@@ -15427,7 +15427,8 @@
       "viewActions": "アクションを表示",
       "taskModalDescription": "変更はタスクの保存時に適用されます。ワークスペースの制限は常に適用されます。",
       "searchActions": "アクションを検索",
-      "applyMatching": "一致する編集可能な {count} 件のアクションを設定：",
+      "setPermissions": "権限を設定",
+      "applyMatching": "一致する編集可能なアクション {count} 件",
       "noMatchingActions": "検索に一致するアクションはありません。",
       "close": "閉じる",
       "saveChanges": "変更を保存",

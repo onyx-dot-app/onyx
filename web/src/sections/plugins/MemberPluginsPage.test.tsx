@@ -32,11 +32,12 @@ function render(ui: ReactElement) {
 }
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 let mockManage = false;
 let mockSearchParams = new URLSearchParams();
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useSearchParams: () => mockSearchParams,
   usePathname: () => "/app/plugins",
 }));
@@ -469,5 +470,24 @@ test("connecting an app keeps its row in the default All filter", async () => {
   expect(screen.getByRole("button", { name: /^All$/ })).toHaveAttribute(
     "aria-pressed",
     "true"
+  );
+});
+
+test("closes an approval deep link without reopening or dropping other parameters", async () => {
+  network({ apps: [memberApp({ authenticated: true })] });
+  mockSearchParams = new URLSearchParams({
+    actionPolicies: "app-7",
+    returnTo: "/app?chatId=42",
+  });
+  render(<MemberPluginsPage />);
+  const user = setupUser();
+  const dialog = await screen.findByRole("dialog");
+  expect(
+    within(dialog).getByRole("tab", { name: "Approval settings" })
+  ).toHaveAttribute("aria-selected", "true");
+  await user.click(within(dialog).getByRole("button", { name: "Close" }));
+  expect(mockReplace).toHaveBeenCalledWith(
+    "/app/plugins?returnTo=%2Fapp%3FchatId%3D42",
+    { scroll: false }
   );
 });

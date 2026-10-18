@@ -333,7 +333,12 @@ def list_action_policies(
     servers = (
         list(db_session.scalars(select(MCPServer).where(MCPServer.id.in_(server_ids))))
         if admin
-        else get_craft_enabled_mcp_servers(db_session, user, server_ids=server_ids)
+        else get_craft_enabled_mcp_servers(
+            db_session,
+            user,
+            server_ids=server_ids,
+            include_personal_disabled=True,
+        )
     )
     mcp_servers = {server.id: server for server in servers if server.id in server_ids}
     tools_by_server: dict[int, dict[str, Tool]] = {}

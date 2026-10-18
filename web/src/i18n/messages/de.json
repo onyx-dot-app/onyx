@@ -15394,7 +15394,7 @@
     "actionPolicies": {
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
-      "personalDescription": "Diese Einstellungen gelten für Ihre Unterhaltungen und neue Aufgaben. Bestehende Aufgaben behalten ihre Einstellungen.",
+      "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen und neuen Aufgaben automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
       "taskDescription": "Nur aktivierte Apps sind für diese Aufgabe verfügbar. Änderungen gelten nur für diese Aufgabe.",
       "newTaskDescription": "Aktivieren Sie die Apps für diese Aufgabe. Jede App beginnt mit Ihren aktuellen Aktionseinstellungen.",
       "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
@@ -15427,7 +15427,8 @@
       "viewActions": "Aktionen anzeigen",
       "taskModalDescription": "Änderungen gelten, wenn Sie die Aufgabe speichern. Workspace-Einschränkungen gelten immer.",
       "searchActions": "Aktionen suchen",
-      "applyMatching": "{count} passende bearbeitbare Aktionen festlegen:",
+      "setPermissions": "Berechtigungen festlegen",
+      "applyMatching": "{count} passende bearbeitbare Aktionen",
       "noMatchingActions": "Keine Aktionen entsprechen Ihrer Suche.",
       "close": "Schließen",
       "saveChanges": "Änderungen speichern",

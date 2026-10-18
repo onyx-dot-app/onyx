@@ -82,6 +82,7 @@ export default function ConfigureProviderModal({
     ? []
     : [
         {
+          section: "configuration",
           key: NAME_KEY,
           label: t("fields.name.label"),
           description: t("fields.name.description", { name: descriptor.name }),
@@ -89,6 +90,7 @@ export default function ConfigureProviderModal({
           secret: false,
         },
         ...descriptor.required_org_credential_fields.map((field) => ({
+          section: "authentication" as const,
           key: field.key,
           label: field.label,
           description: field.description,
@@ -250,7 +252,7 @@ export default function ConfigureProviderModal({
         id: action.action_id,
         name: action.normalised_name,
         description: action.description,
-        fallbackPolicy: action.default_policy,
+        defaultPolicy: action.default_policy,
       }))}
       initialPolicies={initialPolicies}
       emptyPoliciesMessage={t("emptyPolicies")}

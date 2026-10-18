@@ -15394,7 +15394,7 @@
     "actionPolicies": {
       "appTitle": "{name} 审批设置",
       "title": "审批设置",
-      "personalDescription": "这些设置适用于您的对话和新任务。现有任务保留各自的设置。",
+      "personalDescription": "这些设置决定 Craft 对话和新任务中的操作是自动运行还是需要批准；现有任务保留各自的设置。",
       "taskDescription": "此任务只能使用已启用的应用。更改仅适用于此任务。",
       "newTaskDescription": "启用此任务可以使用的应用。每个应用初始使用您当前的操作设置。",
       "workspace_disabled": "工作区已禁用",
@@ -15427,7 +15427,8 @@
       "viewActions": "查看操作",
       "taskModalDescription": "更改将在保存任务时生效。工作区限制始终适用。",
       "searchActions": "搜索操作",
-      "applyMatching": "设置 {count} 个匹配的可编辑操作：",
+      "setPermissions": "设置权限",
+      "applyMatching": "{count} 个匹配的可编辑操作",
       "noMatchingActions": "没有与搜索条件匹配的操作。",
       "close": "关闭",
       "saveChanges": "保存更改",

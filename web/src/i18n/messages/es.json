@@ -15394,7 +15394,7 @@
     "actionPolicies": {
       "appTitle": "Ajustes de aprobación de {name}",
       "title": "Ajustes de aprobación",
-      "personalDescription": "Esta configuración se aplica a tus conversaciones y tareas nuevas. Las tareas existentes mantienen su configuración.",
+      "personalDescription": "Estos ajustes determinan si las acciones se ejecutan automáticamente o requieren aprobación en las conversaciones de Craft y las tareas nuevas; las tareas existentes conservan sus propios ajustes.",
       "taskDescription": "Solo las aplicaciones activadas están disponibles para esta tarea. Los cambios solo se aplican a esta tarea.",
       "newTaskDescription": "Activa las aplicaciones que puede usar esta tarea. Cada aplicación comienza con tu configuración de acciones actual.",
       "workspace_disabled": "Desactivada para el espacio de trabajo",
@@ -15427,7 +15427,8 @@
       "viewActions": "Ver acciones",
       "taskModalDescription": "Los cambios se aplican al guardar la tarea. Las restricciones del espacio de trabajo siempre se aplican.",
       "searchActions": "Buscar acciones",
-      "applyMatching": "Establecer {count} acciones editables coincidentes:",
+      "setPermissions": "Establecer permisos",
+      "applyMatching": "{count} acciones editables coincidentes",
       "noMatchingActions": "Ninguna acción coincide con la búsqueda.",
       "close": "Cerrar",
       "saveChanges": "Guardar cambios",
