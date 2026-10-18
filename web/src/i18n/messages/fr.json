@@ -1070,6 +1070,7 @@
       "title": "Plugins",
       "description": "Connectez des outils et des applications à votre espace de travail.",
       "search": {
+        "hotkeyPlaceholder": "Rechercher des plugins ou appuyer sur \"/\" pour activer...",
         "placeholder": "Rechercher des plugins"
       },
       "add": {

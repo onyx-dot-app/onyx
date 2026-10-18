@@ -193,7 +193,7 @@ test("Craft-disabled admins see only Chat plugins and never request Craft apps",
   await screen.findByRole("link", { name: "Manage Workspace MCP" });
   expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: "Craft Apps" })
+    screen.queryByRole("tab", { name: "Craft Apps" })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("link", { name: "Manage Workspace service" })
@@ -302,28 +302,28 @@ test("includes external apps with colliding IDs only for full admins", async () 
     screen.getByRole("link", { name: "View Reports API" })
   ).toHaveAttribute("href", "/admin/plugins/openapi/7");
   expect(screen.queryByRole("tab")).not.toBeInTheDocument();
-  const filters = screen.getByRole("group", { name: "Plugin type" });
+  const filters = screen.getByRole("tablist", { name: "Plugin type" });
   const user = setupUser();
-  await user.click(within(filters).getByRole("button", { name: "MCP" }));
+  await user.click(within(filters).getByRole("tab", { name: "MCP" }));
   expect(
     screen.getByRole("link", { name: "Manage Workspace MCP" })
   ).toBeVisible();
   expect(
     screen.queryByRole("link", { name: "View Reports API" })
   ).not.toBeInTheDocument();
-  await user.click(within(filters).getByRole("button", { name: "OpenAPI" }));
+  await user.click(within(filters).getByRole("tab", { name: "OpenAPI" }));
   expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
   expect(
     screen.queryByRole("link", { name: "Manage Workspace MCP" })
   ).not.toBeInTheDocument();
-  await user.click(within(filters).getByRole("button", { name: "Craft Apps" }));
+  await user.click(within(filters).getByRole("tab", { name: "Craft Apps" }));
   expect(
     screen.getByRole("link", { name: "Manage Workspace service" })
   ).toBeVisible();
   expect(
     screen.queryByRole("link", { name: "View Reports API" })
   ).not.toBeInTheDocument();
-  await user.click(within(filters).getByRole("button", { name: "All" }));
+  await user.click(within(filters).getByRole("tab", { name: "All" }));
   expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Add Sentry" })
@@ -337,7 +337,7 @@ test("never requests external admin records or provider options for scoped actio
   render(<PluginsPage />);
   await screen.findByRole("link", { name: "Manage Workspace MCP" });
   expect(
-    screen.queryByRole("button", { name: "Craft Apps" })
+    screen.queryByRole("tab", { name: "Craft Apps" })
   ).not.toBeInTheDocument();
   await setupUser().click(screen.getByRole("button", { name: copy.add.label }));
   expect(
@@ -424,7 +424,7 @@ test.each([true, false])(
       name: enabled ? "Chat on" : "Chat off",
     });
     expect(
-      screen.queryByRole("button", { name: "Needs sign-in" })
+      screen.queryByRole("tab", { name: "Needs sign-in" })
     ).not.toBeInTheDocument();
     await setupUser().hover(status);
     const tooltip = await screen.findByRole("tooltip");

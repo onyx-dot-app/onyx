@@ -1070,6 +1070,7 @@
       "title": "플러그인",
       "description": "도구와 앱을 워크스페이스에 연결하세요.",
       "search": {
+        "hotkeyPlaceholder": "플러그인을 검색하거나 \"/\"를 눌러 포커스...",
         "placeholder": "플러그인 검색"
       },
       "add": {

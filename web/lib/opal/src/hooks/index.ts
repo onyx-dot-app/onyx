@@ -26,6 +26,11 @@ export {
   type UseHotkeyOptions,
 } from "@opal/hooks/useHotkey";
 export { default as useOnMount } from "@opal/hooks/useOnMount";
+export {
+  default as useSearchField,
+  type UseSearchFieldOptions,
+  type UseSearchFieldReturn,
+} from "@opal/hooks/useSearchField";
 export { default as useOverflow } from "@opal/hooks/useOverflow";
 export {
   default as useScreenSize,

@@ -223,7 +223,7 @@ test("pending account status stays checking instead of offering a missing-accoun
     screen.queryByRole("button", { name: "Connect Reports API" })
   ).not.toBeInTheDocument();
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: "Needs sign-in" }));
+  await user.click(screen.getByRole("tab", { name: "Needs sign-in" }));
   expect(screen.queryByText("Checking connection")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /^All$/ }));
   expect(screen.getByText("Checking connection")).toBeVisible();
@@ -293,7 +293,7 @@ test("All keeps connected, missing, checking, unavailable, and workspace-setup e
   expect(screen.getByText("Unknown account")).toBeVisible();
   expect(screen.getByText("Workspace setup")).toBeVisible();
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: "Needs sign-in" }));
+  await user.click(screen.getByRole("tab", { name: "Needs sign-in" }));
   expect(screen.queryByText("Unknown account")).not.toBeInTheDocument();
   expect(screen.queryByText("Workspace setup")).not.toBeInTheDocument();
   expect(screen.queryByText("Linear")).not.toBeInTheDocument();
@@ -466,8 +466,8 @@ test("connecting an app keeps its row in the default All filter", async () => {
   expect(
     screen.getByRole("button", { name: "View Workspace GitHub" })
   ).toBeVisible();
-  expect(screen.getByRole("button", { name: /^All$/ })).toHaveAttribute(
-    "aria-pressed",
+  expect(screen.getByRole("tab", { name: /^All$/ })).toHaveAttribute(
+    "aria-selected",
     "true"
   );
 });

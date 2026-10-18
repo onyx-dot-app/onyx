@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, Dropdown, Text } from "@opal/components";
+import { Button, Dropdown, Tabs, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import {
   ContentAction,
@@ -250,6 +250,13 @@ export default function PluginsPage() {
     );
   }
 
+  const kindOptions = [
+    "all",
+    "mcp",
+    "openapi",
+    ...(canManageApps ? (["external-app"] as const) : []),
+  ] as const;
+
   return (
     <div className={styles.directory}>
       <SettingsLayouts.Root>
@@ -267,34 +274,25 @@ export default function PluginsPage() {
               query={query}
               onQueryChange={setQuery}
               filters={
-                <div
-                  role="group"
-                  aria-label={t("filters.label")}
-                  className="flex flex-wrap gap-2"
+                <Tabs
+                  value={kind}
+                  onValueChange={(value) => {
+                    const next = kindOptions.find((option) => option === value);
+                    if (next) setKind(next);
+                  }}
                 >
-                  {(
-                    [
-                      "all",
-                      "mcp",
-                      "openapi",
-                      ...(canManageApps ? ["external-app" as const] : []),
-                    ] as const
-                  ).map((value) => (
-                    <Button
-                      key={value}
-                      size="sm"
-                      prominence={kind === value ? "primary" : "tertiary"}
-                      aria-pressed={kind === value}
-                      onClick={() => setKind(value)}
-                    >
-                      {value === "all"
-                        ? t("filters.all")
-                        : value === "external-app"
-                          ? t("filters.apps")
-                          : t(`kind.${value}`)}
-                    </Button>
-                  ))}
-                </div>
+                  <Tabs.List aria-label={t("filters.label")}>
+                    {kindOptions.map((value) => (
+                      <Tabs.Trigger key={value} value={value}>
+                        {value === "all"
+                          ? t("filters.all")
+                          : value === "external-app"
+                            ? t("filters.apps")
+                            : t(`kind.${value}`)}
+                      </Tabs.Trigger>
+                    ))}
+                  </Tabs.List>
+                </Tabs>
               }
             />
             {mcp.hasError && (

@@ -1070,6 +1070,7 @@
       "title": "Plugins",
       "description": "Connect tools and apps to your workspace.",
       "search": {
+        "hotkeyPlaceholder": "Search plugins or press \"/\" to focus...",
         "placeholder": "Search plugins"
       },
       "add": {

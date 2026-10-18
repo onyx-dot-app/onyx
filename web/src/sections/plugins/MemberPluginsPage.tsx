@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, SelectCard, Text, Tooltip } from "@opal/components";
+import { Button, SelectCard, Tabs, Text, Tooltip } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
 import {
@@ -33,6 +33,8 @@ import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
+
+const FILTER_OPTIONS = ["all", "connected", "needsSignIn"] as const;
 
 type MemberPluginDialog =
   | { kind: "details"; reference: PluginReference }
@@ -306,25 +308,23 @@ export default function MemberPluginsPage({
               query={query}
               onQueryChange={setQuery}
               filters={
-                <div
-                  role="group"
-                  aria-label={t("filters.label")}
-                  className="flex flex-wrap gap-2"
+                <Tabs
+                  value={filter}
+                  onValueChange={(value) => {
+                    const next = FILTER_OPTIONS.find(
+                      (option) => option === value
+                    );
+                    if (next) setFilter(next);
+                  }}
                 >
-                  {(["all", "connected", "needsSignIn"] as const).map(
-                    (value) => (
-                      <Button
-                        key={value}
-                        size="sm"
-                        prominence={filter === value ? "primary" : "tertiary"}
-                        aria-pressed={filter === value}
-                        onClick={() => setFilter(value)}
-                      >
+                  <Tabs.List aria-label={t("filters.label")}>
+                    {FILTER_OPTIONS.map((value) => (
+                      <Tabs.Trigger key={value} value={value}>
                         {t(`filters.${value}`)}
-                      </Button>
-                    )
-                  )}
-                </div>
+                      </Tabs.Trigger>
+                    ))}
+                  </Tabs.List>
+                </Tabs>
               }
             />
             <div className={styles.results}>

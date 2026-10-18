@@ -1070,6 +1070,7 @@
       "title": "插件",
       "description": "将工具和应用连接到你的工作区。",
       "search": {
+        "hotkeyPlaceholder": "搜索插件，或按 \"/\" 聚焦...",
         "placeholder": "搜索插件"
       },
       "add": {

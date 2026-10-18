@@ -1070,6 +1070,7 @@
       "title": "Plugins",
       "description": "Verbinde Tools und Apps mit deinem Workspace.",
       "search": {
+        "hotkeyPlaceholder": "Plugins durchsuchen oder \"/\" drücken, um zu fokussieren...",
         "placeholder": "Plugins suchen"
       },
       "add": {
