@@ -130,6 +130,8 @@ function ConnectionStatus({
             role="button"
             tabIndex={0}
             className="cursor-pointer rounded-08 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04"
+            // The click toggles the popover; it must not also reconnect.
+            onClick={(event) => event.stopPropagation()}
             onMouseEnter={() => onErrorHover(true)}
             onMouseLeave={() => onErrorHover(false)}
             onFocus={() => onErrorHover(true)}
@@ -158,7 +160,6 @@ export default function CodeInterpreterPage() {
   const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasError = !!status && status !== "healthy";
@@ -188,16 +189,10 @@ export default function CodeInterpreterPage() {
     }, 1000);
   }
 
-  async function handleRefresh() {
-    setIsRefreshing(true);
-    try {
-      await refetch();
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
-
+  // Every card click and the refresh button reconnect: they re-enable the
+  // server and check it again.
   async function handleToggle(enabled: boolean) {
+    if (enabled && isReconnecting) return;
     setIsReconnecting(enabled);
     try {
       const response = await updateCodeInterpreter({ enabled });
@@ -210,7 +205,7 @@ export default function CodeInterpreterPage() {
         return;
       }
       setShowDisconnectModal(false);
-      void refetch();
+      await refetch();
     } finally {
       setIsReconnecting(false);
     }
@@ -238,6 +233,7 @@ export default function CodeInterpreterPage() {
                   state={isConnectionLost ? "empty" : "filled"}
                   padding={2}
                   rounding={4}
+                  onClick={isLoading ? undefined : () => handleToggle(true)}
                 >
                   <Card.Header>
                     <ContentAction
@@ -267,7 +263,10 @@ export default function CodeInterpreterPage() {
                                     prominence="tertiary"
                                     size="md"
                                     icon={SvgUnplug}
-                                    onClick={() => setShowDisconnectModal(true)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setShowDisconnectModal(true);
+                                    }}
                                     tooltip={t("card.disconnectButton.tooltip")}
                                   />
                                 </Hoverable.Item>
@@ -276,8 +275,13 @@ export default function CodeInterpreterPage() {
                                 disabled={isLoading}
                                 prominence="tertiary"
                                 size="md"
-                                icon={isRefreshing ? IconLoader : SvgRefreshCw}
-                                onClick={handleRefresh}
+                                icon={
+                                  isReconnecting ? IconLoader : SvgRefreshCw
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleToggle(true);
+                                }}
                                 tooltip={t("card.refreshButton.tooltip")}
                               />
                             </Section>
@@ -334,16 +338,28 @@ export default function CodeInterpreterPage() {
                 isReconnecting ? (
                   <CheckingStatus />
                 ) : (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowExchange}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggle(true);
-                    }}
-                  >
-                    {t("card.reconnectButton.label")}
-                  </Button>
+                  <Section flexDirection="row" justifyContent="end" gap={1}>
+                    <Button
+                      prominence="tertiary"
+                      rightIcon={SvgArrowExchange}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleToggle(true);
+                      }}
+                    >
+                      {t("card.reconnectButton.label")}
+                    </Button>
+                    <Button
+                      prominence="tertiary"
+                      size="md"
+                      icon={SvgRefreshCw}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleToggle(true);
+                      }}
+                      tooltip={t("card.refreshButton.tooltip")}
+                    />
+                  </Section>
                 )
               }
             />
