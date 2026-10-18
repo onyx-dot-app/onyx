@@ -947,6 +947,7 @@ class TestSecondaryPassSkipsTerminalSideEffects:
                 enrichment=enricher,
                 db_session=db_session,
                 index_to_secondary=True,
+                failed_document_ids=set(),
             )
             db_session.refresh(uf)
             assert uf.status == UserFileStatus.INDEXING
