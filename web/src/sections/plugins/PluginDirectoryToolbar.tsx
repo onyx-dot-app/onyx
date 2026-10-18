@@ -25,9 +25,9 @@ export default function PluginDirectoryToolbar({
   const t = useTranslations("actions.plugins");
 
   return (
-    // Search grows 2:1 against the filter tabs, as on the Agents page.
+    // The filter tabs keep their natural width; search takes the rest.
     <div className="flex flex-row items-center gap-2">
-      <div className="min-w-0 flex-2">
+      <div className="min-w-0 flex-1">
         <SearchField
           value={query}
           onChange={onQueryChange}
@@ -36,7 +36,7 @@ export default function PluginDirectoryToolbar({
           aria-label={searchLabel}
         />
       </div>
-      {filters && <div className="min-w-0 flex-1">{filters}</div>}
+      {filters && <div className="shrink-0">{filters}</div>}
     </div>
   );
 }
