@@ -22,12 +22,14 @@ Forwarded to `@radix-ui/react-popover` `Root`. Most common:
 
 ### `Popover.Content`
 
-| Prop         | Type                                                          | Default    | Description                                     |
-| ------------ | ------------------------------------------------------------- | ---------- | ----------------------------------------------- |
-| `width`      | `"fit" \| "sm" \| "md" \| "lg" \| "xl" \| "2xl" \| "2.5xl" \| "3xl" \| "trigger"` | `"fit"`    | Popover width preset                            |
-| `container`  | `HTMLElement \| null`                                         | —          | Portal container (use to render inside a modal) |
-| `align`      | `"start" \| "center" \| "end"`                                | `"center"` | Alignment along the side axis                   |
-| `sideOffset` | `number`                                                      | `4`        | Distance in pixels between trigger and popover  |
+| Prop         | Type                                                                              | Default    | Description                                          |
+| ------------ | --------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------- |
+| `width`      | `"fit" \| "sm" \| "md" \| "lg" \| "xl" \| "2xl" \| "2.5xl" \| "3xl" \| "trigger"` | `"fit"`    | Popover width preset                                 |
+| `container`  | `HTMLElement \| null`                                                             | —          | Portal container (use to render inside a modal)      |
+| `align`      | `"start" \| "center" \| "end"`                                                    | `"center"` | Alignment along the side axis                        |
+| `sideOffset` | `number`                                                                          | `4`        | Distance in pixels between trigger and popover       |
+| `padding`    | `Spacing`                                                                         | `1`        | Inner padding as a Spacing step (`N / 4` rem)        |
+| `gap`        | `Spacing`                                                                         | `0`        | Gap between children as a Spacing step (`N / 4` rem) |
 
 ### `Popover.Menu`
 

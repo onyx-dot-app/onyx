@@ -3,6 +3,7 @@
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@opal/utils";
+import { spacingToRem } from "@opal/shared";
 import { Divider, ShadowDiv } from "@opal/components";
 import type { Spacing, WithoutStyles } from "@opal/types";
 import { Section } from "@opal/layouts";
@@ -127,6 +128,10 @@ interface PopoverContentProps extends WithoutStyles<
   width?: PopoverWidths;
   /** Portal container. Set to a DOM element to render inside it (e.g. inside a modal). */
   container?: HTMLElement | null;
+  /** Inner padding, as a {@link Spacing} step (`N / 4` rem). @default 1 */
+  padding?: Spacing;
+  /** Gap between children, as a {@link Spacing} step (`N / 4` rem). @default 0 */
+  gap?: Spacing;
   ref?: React.Ref<React.ComponentRef<typeof PopoverPrimitive.Content>>;
 }
 function PopoverContent({
@@ -138,6 +143,8 @@ function PopoverContent({
   // key even when its value is `undefined`, so `collisionPadding={maybe}`
   // would replace this rather than fall back to it.
   collisionPadding = 8,
+  padding = 1,
+  gap = 0,
   ref,
   ...props
 }: PopoverContentProps) {
@@ -149,13 +156,14 @@ function PopoverContent({
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
         className={cn(
-          "bg-background-neutral-00 p-1 z-popover rounded-12 border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          "bg-background-neutral-00 z-popover rounded-12 border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           "flex flex-col",
           "max-h-(--radix-popover-content-available-height)",
           "max-w-(--radix-popover-content-available-width)",
           "overflow-hidden",
           widthClasses[width]
         )}
+        style={{ padding: spacingToRem(padding), gap: spacingToRem(gap) }}
         {...props}
       />
     </PopoverPrimitive.Portal>

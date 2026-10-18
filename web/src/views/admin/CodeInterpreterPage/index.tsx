@@ -270,28 +270,27 @@ export default function CodeInterpreterPage() {
             <Popover.Content
               align="end"
               width="md"
+              padding={2}
+              gap={2}
               // A hover popover must not take focus from the page.
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
               onMouseEnter={() => handleErrorHover(true)}
               onMouseLeave={() => handleErrorHover(false)}
             >
-              {/* 0.5rem padding (0.25rem here plus the popover's 0.25rem) and 0.5rem gap. */}
-              <Section padding={1} gap={2}>
-                <Content
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgXOctagon}
-                  color="danger"
-                  titleColor="text-04"
-                  title={
-                    status === "connection_lost"
-                      ? t("errorCard.connectionLost.title")
-                      : t("errorCard.generic.title")
-                  }
-                  description={error}
-                />
-              </Section>
+              <Content
+                sizePreset="main-ui"
+                variant="section"
+                icon={SvgXOctagon}
+                color="danger"
+                titleColor="text-04"
+                title={
+                  status === "connection_lost"
+                    ? t("errorCard.connectionLost.title")
+                    : t("errorCard.generic.title")
+                }
+                description={error}
+              />
             </Popover.Content>
           </Popover>
         ) : (
