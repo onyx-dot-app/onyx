@@ -1147,11 +1147,7 @@
           }
         },
         "noResults": {
-          "title": "플러그인을 찾을 수 없음",
-          "description": "다른 이름, 설명 또는 서버 URL로 검색하세요.",
-          "clear": {
-            "label": "모든 플러그인 보기"
-          }
+          "title": "플러그인을 찾을 수 없음"
         },
         "externalAppsError": "앱을 불러오지 못했습니다"
       }
@@ -15713,6 +15709,10 @@
     "tabs": {
       "scrollLeft": "탭을 왼쪽으로 스크롤",
       "scrollRight": "탭을 오른쪽으로 스크롤"
+    },
+    "searchNoResults": {
+      "title": "해당 검색과 일치하는 항목이 없습니다",
+      "description": "검색어를 구체화하거나 다른 항목을 검색해 보세요."
     }
   },
   "settings": {

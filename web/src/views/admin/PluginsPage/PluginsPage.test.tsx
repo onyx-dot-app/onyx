@@ -451,10 +451,11 @@ test("filters by description and URL and clears a search without losing either r
   ).toBeVisible();
   await user.clear(search);
   await user.type(search, "missing");
-  expect(screen.getByText(copy.state.noResults.title)).toBeVisible();
-  await user.click(
-    screen.getByRole("button", { name: copy.state.noResults.clear.label })
-  );
+  expect(screen.getByText(messages.opal.searchNoResults.title)).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "View all plugins" })
+  ).not.toBeInTheDocument();
+  await user.clear(search);
   expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
   expect(
     screen.getByRole("link", { name: "Manage Workspace MCP" })

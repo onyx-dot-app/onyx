@@ -1147,11 +1147,7 @@
           }
         },
         "noResults": {
-          "title": "No plugins found",
-          "description": "Try another name, description, or server URL.",
-          "clear": {
-            "label": "View all plugins"
-          }
+          "title": "No plugins found"
         },
         "externalAppsError": "Apps could not load"
       }
@@ -15713,6 +15709,10 @@
     "tabs": {
       "scrollLeft": "Scroll tabs left",
       "scrollRight": "Scroll tabs right"
+    },
+    "searchNoResults": {
+      "title": "No items match that search",
+      "description": "Try refining your search or search for something else."
     }
   },
   "settings": {

@@ -1147,11 +1147,7 @@
           }
         },
         "noResults": {
-          "title": "Aucun plugin trouvé",
-          "description": "Essayez un autre nom, une autre description ou URL de serveur.",
-          "clear": {
-            "label": "Voir tous les plugins"
-          }
+          "title": "Aucun plugin trouvé"
         },
         "externalAppsError": "Impossible de charger les applications"
       }
@@ -15713,6 +15709,10 @@
     "tabs": {
       "scrollLeft": "Faire défiler les onglets vers la gauche",
       "scrollRight": "Faire défiler les onglets vers la droite"
+    },
+    "searchNoResults": {
+      "title": "Aucun élément ne correspond à cette recherche",
+      "description": "Essayez d'affiner votre recherche ou de rechercher autre chose."
     }
   },
   "settings": {

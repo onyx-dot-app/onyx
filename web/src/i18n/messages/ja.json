@@ -1147,11 +1147,7 @@
           }
         },
         "noResults": {
-          "title": "プラグインが見つかりません",
-          "description": "別の名前、説明、サーバー URL で検索してください。",
-          "clear": {
-            "label": "すべてのプラグインを表示"
-          }
+          "title": "プラグインが見つかりません"
         },
         "externalAppsError": "アプリを読み込めませんでした"
       }
@@ -15713,6 +15709,10 @@
     "tabs": {
       "scrollLeft": "タブを左にスクロール",
       "scrollRight": "タブを右にスクロール"
+    },
+    "searchNoResults": {
+      "title": "その検索に一致する項目はありません",
+      "description": "検索条件を絞り込むか、別のキーワードで検索してください。"
     }
   },
   "settings": {

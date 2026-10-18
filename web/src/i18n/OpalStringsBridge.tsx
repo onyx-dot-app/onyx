@@ -110,6 +110,8 @@ export default function OpalStringsBridge({
       selectInvalidOption: t("select.invalidOption"),
       selectSearchPlaceholder: t("select.searchPlaceholder"),
       iconTooltipLabel: t("iconTooltip.label"),
+      searchNoResultsTitle: t("searchNoResults.title"),
+      searchNoResultsDescription: t("searchNoResults.description"),
       keyValueKey: t("keyValue.key"),
       keyValueValue: t("keyValue.value"),
       keyValueAddLine: t("keyValue.addLine"),

@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, Dropdown, Tabs, Text } from "@opal/components";
+import {
+  Button,
+  Dropdown,
+  SearchNoResults,
+  Tabs,
+  Text,
+} from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { markdown } from "@opal/utils";
 import {
@@ -12,7 +18,7 @@ import {
   SettingsLayouts,
 } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
-import { SvgPlugBroken, SvgUnPlugged } from "@opal/illustrations";
+import { SvgEmpty, SvgPlugBroken } from "@opal/illustrations";
 import {
   SvgAlertCircle,
   SvgChevronDown,
@@ -231,27 +237,6 @@ export default function PluginsPage() {
     );
   }
 
-  function noResults() {
-    return (
-      <div className="flex flex-col items-center gap-3 py-8">
-        <IllustrationContent
-          illustration={SvgUnPlugged}
-          title={t("state.noResults.title")}
-          description={t("state.noResults.description")}
-        />
-        <Button
-          prominence="secondary"
-          onClick={() => {
-            setQuery("");
-            setKind("all");
-          }}
-        >
-          {t("state.noResults.clear.label")}
-        </Button>
-      </div>
-    );
-  }
-
   const kindOptions = ["all", "mcp", "openapi", "external-app"] as const;
 
   return (
@@ -342,11 +327,21 @@ export default function PluginsPage() {
             {!isLoading &&
               !hasError &&
               filteredPlugins.length === 0 &&
-              (plugins.length > 0 || normalizedQuery ? (
-                noResults()
+              (normalizedQuery ? (
+                <div className="flex flex-col items-center py-8">
+                  <SearchNoResults />
+                </div>
+              ) : plugins.length > 0 ? (
+                <div className="flex flex-col items-center py-8">
+                  <IllustrationContent
+                    illustration={SvgEmpty}
+                    title={t("state.noResults.title")}
+                  />
+                </div>
               ) : (
                 <div className="flex flex-col items-center gap-3 py-8">
                   <IllustrationContent
+                    illustration={SvgEmpty}
                     title={t("state.empty.title")}
                     description={t("state.empty.description")}
                   />

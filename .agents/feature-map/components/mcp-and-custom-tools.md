@@ -58,7 +58,7 @@ heading/description layout and responsive toolbar sizing.
 Admin filters use the member directory's compact pill-button layout: All,
 MCP, OpenAPI, and Craft Apps. Craft Apps appears only for full admins. Search applies
 within the selected type; clearing an empty result resets both filters.
-Empty-state actions say "View all plugins" and reset search and filters.
+On the member page, empty-state actions say "View all plugins" and reset search and filters. On the admin page, a search with no match shows the shared Opal `SearchNoResults` state. A tab or list that is empty without a search shows the empty illustration.
 When Craft is unavailable, admin lists do not fetch Craft Apps or offer their
 creation, filters, or direct-link editors. MCP indicators show Chat only.
 Member defaults, Craft metadata, skills links, and Craft actions require the

@@ -33,6 +33,7 @@ export default function PluginDirectoryToolbar({
         <InputTypeIn
           ref={search.ref}
           searchIcon
+          clearButton
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={search.onKeyDown}
