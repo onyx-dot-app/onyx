@@ -53,7 +53,10 @@ import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
-import { cn } from "@opal/utils";
+import { cn, markdown } from "@opal/utils";
+import { Disabled } from "@opal/core";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { PHFeatureFlag, usePHFeatureFlag } from "@/lib/analytics/hooks";
 import {
@@ -269,6 +272,8 @@ export default function AppSidebar() {
   const isOnyxCraftUpsell =
     !isOnyxCraftEnabled &&
     combinedSettingsData?.onyx_craft_requires_upgrade === true;
+  // Gated like a Business admin page: below that tier the tab is disabled.
+  const isCraftTierLocked = !useTierAtLeast(Tier.BUSINESS);
 
   // Fetch notifications for build mode intro
   const { notifications, refresh: mutateNotifications } = useNotifications({
@@ -631,21 +636,32 @@ export default function AppSidebar() {
           />
           {(isOnyxCraftEnabled || isOnyxCraftUpsell) && (
             <div data-testid="AppSidebar/build">
-              <SidebarTab
-                icon={SvgDevKit}
-                href={CRAFT_PATH}
-                onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
-                rightChildren={
-                  isOnyxCraftUpsell ? (
-                    <Tag
-                      title={t("appSidebar.craft.businessTag")}
-                      color="blue"
-                    />
-                  ) : undefined
-                }
+              <Disabled
+                disabled={isCraftTierLocked}
+                tooltip={markdown(
+                  t("adminSidebar.businessOrEnterpriseOnly.tooltip")
+                )}
               >
-                {t("appSidebar.craft.label")}
-              </SidebarTab>
+                <SidebarTab
+                  icon={SvgDevKit}
+                  href={isCraftTierLocked ? undefined : CRAFT_PATH}
+                  onClick={
+                    isCraftTierLocked
+                      ? undefined
+                      : () => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)
+                  }
+                  rightChildren={
+                    isOnyxCraftUpsell ? (
+                      <Tag
+                        title={t("appSidebar.craft.businessTag")}
+                        color="blue"
+                      />
+                    ) : undefined
+                  }
+                >
+                  {t("appSidebar.craft.label")}
+                </SidebarTab>
+              </Disabled>
             </div>
           )}
           {folded && moreAgentsButton}
