@@ -331,7 +331,6 @@ export default function CodeInterpreterPage() {
               variant="section"
               icon={SvgTerminal}
               title={t("card.disconnectedTitle")}
-              strikethrough
               description={t("card.description")}
               padding={2}
               rightChildren={
