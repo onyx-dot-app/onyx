@@ -149,7 +149,7 @@ export default function ChatPluginsPopover({
           side="right"
           align="end"
           alignOffset={-5}
-          width="lg"
+          width={60}
           aria-label={t("chat.trigger.label")}
           onPointerEnter={cancelHover}
           onPointerLeave={(event) => {

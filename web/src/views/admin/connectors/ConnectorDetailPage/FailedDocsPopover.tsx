@@ -327,7 +327,7 @@ export default function FailedDocsPopoverContent({
   const t = useTranslations("admin.connector.activity.docs");
   return (
     <Popover.Content
-      width="2.5xl"
+      width={120}
       {...PLACEMENT_PROPS[placement]}
       aria-label={t("title")}
     >

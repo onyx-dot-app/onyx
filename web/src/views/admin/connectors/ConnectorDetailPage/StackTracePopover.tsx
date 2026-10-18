@@ -23,7 +23,7 @@ export default function StackTracePopoverContent({
   const t = useTranslations("admin.connector.activity");
   return (
     <Popover.Content
-      width="2.5xl"
+      width={120}
       {...PLACEMENT_PROPS[placement]}
       aria-label={t("tags.stackTrace")}
       // Focus the panel, not its first button, so the copy tooltip opens only on hover.

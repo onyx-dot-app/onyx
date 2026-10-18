@@ -284,7 +284,7 @@ export function BuildLLMPopover({
   return (
     <Popover open={isOpen} onOpenChange={handlePopoverOpenChange}>
       <Popover.Trigger asChild>{children}</Popover.Trigger>
-      <Popover.Content side="bottom" align="start" width="lg">
+      <Popover.Content side="bottom" align="start" width={60}>
         <div className="px-3">
           <Section gap={2}>
             <div className="flex items-center justify-between py-3 gap-3 border-b border-border-01 px-1">

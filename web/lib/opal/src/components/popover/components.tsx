@@ -3,9 +3,9 @@
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@opal/utils";
-import { spacingToRem } from "@opal/shared";
+import { contextualMenuWidthToCss, spacingToRem } from "@opal/shared";
 import { Divider, ShadowDiv } from "@opal/components";
-import type { Spacing, WithoutStyles } from "@opal/types";
+import type { ContextualMenuWidth, Spacing, WithoutStyles } from "@opal/types";
 import { Section } from "@opal/layouts";
 
 /**
@@ -90,42 +90,24 @@ const PopoverClose = PopoverPrimitive.Close;
  *   <div>Popover content here</div>
  * </Popover.Content>
  *
- * // Medium width
- * <Popover.Content width="md">
- *   <div>Medium width content</div>
+ * // A contextual-menu step: 60 is 15rem
+ * <Popover.Content width={60}>
+ *   <div>15rem wide content</div>
  * </Popover.Content>
  *
- * // Extra large width
- * <Popover.Content width="xl">
- *   <div>Extra large width content</div>
+ * // 17.5rem
+ * <Popover.Content width={70}>
+ *   <div>17.5rem wide content</div>
  * </Popover.Content>
  * ```
  */
-type PopoverWidths =
-  | "fit"
-  | "sm"
-  | "md"
-  | "lg"
-  | "xl"
-  | "2xl"
-  | "2.5xl"
-  | "3xl"
-  | "trigger";
-const widthClasses: Record<PopoverWidths, string> = {
-  fit: "w-fit",
-  sm: "w-40",
-  md: "w-48",
-  lg: "w-60",
-  xl: "w-72",
-  "2xl": "w-100",
-  "2.5xl": "w-120",
-  "3xl": "w-158",
-  trigger: "w-(--radix-popover-trigger-width)",
-};
+/** A contextual-menu step (shared with Dropdown), the content's own width
+ * (`"fit"`), or the trigger's width (`"trigger"`). */
+type PopoverWidth = ContextualMenuWidth | "fit" | "trigger";
 interface PopoverContentProps extends WithoutStyles<
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
 > {
-  width?: PopoverWidths;
+  width?: PopoverWidth;
   /** Portal container. Set to a DOM element to render inside it (e.g. inside a modal). */
   container?: HTMLElement | null;
   /** Inner padding, as a {@link Spacing} step (`N / 4` rem). @default 1 */
@@ -161,9 +143,17 @@ function PopoverContent({
           "max-h-(--radix-popover-content-available-height)",
           "max-w-(--radix-popover-content-available-width)",
           "overflow-hidden",
-          widthClasses[width]
+          width === "fit" && "w-fit",
+          width === "trigger" && "w-(--radix-popover-trigger-width)"
         )}
-        style={{ padding: spacingToRem(padding), gap: spacingToRem(gap) }}
+        style={{
+          padding: spacingToRem(padding),
+          gap: spacingToRem(gap),
+          width:
+            typeof width === "number"
+              ? contextualMenuWidthToCss(width)
+              : undefined,
+        }}
         {...props}
       />
     </PopoverPrimitive.Portal>

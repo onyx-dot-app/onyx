@@ -134,7 +134,7 @@ export default function ToolsPopover({
             />
           </div>
         </Popover.Trigger>
-        <Popover.Content side="bottom" align="start" width="lg">
+        <Popover.Content side="bottom" align="start" width={60}>
           <div data-testid="tool-options">
             {showSources ? (
               <SourcesView onBack={() => setShowSources(false)} />

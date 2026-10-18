@@ -81,7 +81,7 @@ export default function CheckRunPopoverContent({
 
   return (
     <Popover.Content
-      width={placement === undefined ? "trigger" : "3xl"}
+      width={placement === undefined ? "trigger" : 160}
       {...(placement === undefined
         ? { align: "start", sideOffset: -8 }
         : PLACEMENT_PROPS[placement])}

@@ -167,7 +167,7 @@ export const ClickableTrigger: Story = {
             onClick={() => {}}
           />
         </Popover.Trigger>
-        <Popover.Content width="lg">
+        <Popover.Content width={60}>
           <div className="p-2">Popover content</div>
         </Popover.Content>
       </Popover>
@@ -181,7 +181,7 @@ export const ClickableTrigger: Story = {
             onClick={() => {}}
           />
         </Popover.Trigger>
-        <Popover.Content width="lg">
+        <Popover.Content width={60}>
           <div className="p-2">Open: the tag inverts</div>
         </Popover.Content>
       </Popover>

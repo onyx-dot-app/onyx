@@ -15,7 +15,7 @@ import {
   useFloating,
   type ReferenceType,
 } from "@floating-ui/react-dom";
-import { DROPDOWN_WIDTH_TOKENS } from "@opal/components/dropdown/model";
+import { contextualMenuWidthToCss } from "@opal/shared";
 import type {
   DropdownAlign,
   DropdownRow,
@@ -539,7 +539,7 @@ export function useDropdownOverlay({
             const fixed =
               widthRef.current === undefined
                 ? undefined
-                : `var(${DROPDOWN_WIDTH_TOKENS[widthRef.current]})`;
+                : contextualMenuWidthToCss(widthRef.current);
             Object.assign(
               elements.floating.style,
               fixed !== undefined
