@@ -8,7 +8,7 @@ import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
 import {
   SvgChevronRight,
-  SvgFileBraces,
+  SvgCodeFile,
   SvgPlus,
   SvgSettings,
 } from "@opal/icons";
@@ -131,7 +131,7 @@ function MemberPluginRow({
             ? getAppTypeLogo(plugin.app.app_type)
             : plugin.kind === "mcp"
               ? getActionIcon(plugin.server.server_url, name)
-              : SvgFileBraces
+              : SvgCodeFile
         }
         title={name}
         description={

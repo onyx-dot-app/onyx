@@ -1,6 +1,8 @@
 export { default as SvgActions } from "@opal/icons/actions";
 export { default as SvgAudioFile } from "@opal/icons/audio-file";
+export { default as SvgCodeFile } from "@opal/icons/code-file";
 export { default as SvgDocFile } from "@opal/icons/doc-file";
+export { default as SvgExecutableFile } from "@opal/icons/executable-file";
 export { default as SvgMusicFile } from "@opal/icons/music-file";
 export { default as SvgSlidesFile } from "@opal/icons/slides-file";
 export { default as SvgSpreadsheetFile } from "@opal/icons/spreadsheet-file";
@@ -69,7 +71,6 @@ export { default as SvgEye } from "@opal/icons/eye";
 export { default as SvgEyeClosed } from "@opal/icons/eye-closed";
 export { default as SvgEyeOff } from "@opal/icons/eye-off";
 export { default as SvgFile } from "@opal/icons/file";
-export { default as SvgFileBraces } from "@opal/icons/file-braces";
 export { default as SvgFileBroadcast } from "@opal/icons/file-broadcast";
 export { default as SvgFileMinus } from "@opal/icons/file-minus";
 export { default as SvgFilePlus } from "@opal/icons/file-plus";

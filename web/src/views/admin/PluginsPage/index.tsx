@@ -17,7 +17,7 @@ import {
   SvgAlertCircle,
   SvgChevronDown,
   SvgServer,
-  SvgFileBraces,
+  SvgCodeFile,
   SvgPlug,
 } from "@opal/icons";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -25,7 +25,7 @@ import { Permission } from "@/lib/types";
 import { useInstalledPlugins } from "@/lib/plugins/hooks";
 import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { PluginRow } from "@/sections/plugins/PluginRow";
+import PluginCard from "@/views/admin/PluginsPage/PluginCard";
 import PluginAddCatalogModal, {
   type PluginCreation,
 } from "@/sections/plugins/PluginAddCatalogModal";
@@ -92,7 +92,7 @@ function PluginRowsLoading() {
     <div
       role="status"
       aria-label={t("state.loading")}
-      className="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2"
+      className="flex flex-col gap-2"
     >
       {[0, 1].map((index) => (
         <div key={index} className="flex min-w-0 items-center gap-3 py-3">
@@ -200,7 +200,7 @@ export default function PluginsPage() {
                   {
                     kind: "action" as const,
                     id: "openapi",
-                    icon: SvgFileBraces,
+                    icon: SvgCodeFile,
                     title: t("kind.openapi"),
                     onSelect: () =>
                       setDialog({
@@ -329,9 +329,9 @@ export default function PluginsPage() {
               />
             )}
             {filteredPlugins.length > 0 && (
-              <div className={styles.grid}>
+              <div className="flex flex-col gap-2">
                 {filteredPlugins.map((plugin) => (
-                  <PluginRow
+                  <PluginCard
                     key={`${plugin.kind}:${plugin.kind === "mcp" ? plugin.server.id : plugin.kind === "openapi" ? plugin.tool.id : plugin.app.id}`}
                     plugin={plugin}
                   />

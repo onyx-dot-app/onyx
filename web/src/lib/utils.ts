@@ -2,7 +2,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgImage,
   SvgFileChartPie,
-  SvgFileBraces,
+  SvgCodeFile,
   SvgFileText,
 } from "@opal/icons";
 import { ALLOWED_URL_PROTOCOLS } from "./constants";
@@ -256,7 +256,7 @@ export function getFileIcon(
   if (isImageFile(fileName)) return SvgImage;
   if (/\.pptx?$/i.test(fileName)) return SvgFileChartPie;
   if (/\.pdf$/i.test(fileName)) return SvgFileText;
-  if (isCodeFile(fileName)) return SvgFileBraces;
+  if (isCodeFile(fileName)) return SvgCodeFile;
   return SvgFileText;
 }
 

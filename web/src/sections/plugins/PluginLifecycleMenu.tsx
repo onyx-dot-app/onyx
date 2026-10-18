@@ -14,7 +14,9 @@ import {
   type DropdownMenuItem,
 } from "@opal/components";
 import { toast } from "@opal/layouts";
-import { SvgSliders, SvgTrash, SvgUnplug } from "@opal/icons";
+import { SvgSettings, SvgTrash, SvgUnplug } from "@opal/icons";
+import { Hoverable } from "@opal/core";
+import { cn } from "@opal/utils";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { deleteMCPServer, updateMCPServer } from "@/lib/mcp/svc";
@@ -42,12 +44,34 @@ export interface PluginLifecycleMenuProps {
     disabled: boolean;
     expanded: boolean;
   }) => ReactNode;
+  /** A `Hoverable` group: the delete button then shows only while it is hovered. */
+  deleteHoverGroup?: string;
+  /** Button size. `"md"` matches a settings card's actions row. @default "sm" */
+  size?: "sm" | "md";
+}
+
+/** Shows the delete button only while `group` is hovered, when one is given. */
+export function DeleteReveal({
+  group,
+  children,
+}: {
+  group?: string;
+  children: ReactNode;
+}) {
+  if (!group) return children;
+  return (
+    <Hoverable.Item group={group} variant="appear-on-hover">
+      {children}
+    </Hoverable.Item>
+  );
 }
 
 export default function PluginLifecycleMenu({
   plugin,
   renderStatus,
   craftAvailable = false,
+  deleteHoverGroup,
+  size = "sm",
 }: PluginLifecycleMenuProps) {
   const t = useTranslations("actions");
   const [activation, setActivation] = useState<
@@ -58,7 +82,12 @@ export default function PluginLifecycleMenu({
   );
   if (plugin.kind === "external-app")
     return isGlobalHolder ? (
-      <ExternalAppLifecycleMenu app={plugin.app} renderStatus={renderStatus} />
+      <ExternalAppLifecycleMenu
+        app={plugin.app}
+        renderStatus={renderStatus}
+        deleteHoverGroup={deleteHoverGroup}
+        size={size}
+      />
     ) : (
       renderStatus?.({ disabled: false, expanded: false })
     );
@@ -77,10 +106,12 @@ export default function PluginLifecycleMenu({
         initialAction={activation}
         renderStatus={renderStatus}
         craftAvailable={craftAvailable}
+        deleteHoverGroup={deleteHoverGroup}
+        size={size}
       />
     );
   return (
-    <div className="flex items-center gap-2">
+    <div className={cn("flex items-center", size === "md" ? "gap-1" : "gap-2")}>
       {renderStatus?.({
         onOpen: hasAvailability
           ? () => setActivation("availability")
@@ -88,30 +119,32 @@ export default function PluginLifecycleMenu({
         disabled: false,
         expanded: false,
       })}
+      {can(resource, "delete") ? (
+        <DeleteReveal group={deleteHoverGroup}>
+          <Button
+            size={size}
+            prominence="tertiary"
+            icon={SvgTrash}
+            aria-label={t("openApiCard.deleteModal.submitButton.label")}
+            tooltip={t("openApiCard.deleteModal.submitButton.label")}
+            onClick={() => setActivation("delete")}
+          />
+        </DeleteReveal>
+      ) : (
+        <span className={cn("shrink-0", size === "md" ? "size-8" : "size-6")} />
+      )}
       {hasAvailability ? (
         <Button
-          size="sm"
+          size={size}
           prominence="tertiary"
-          icon={SvgSliders}
+          icon={SvgSettings}
           aria-label={availabilityLabel}
           tooltip={availabilityLabel}
           aria-haspopup="menu"
           onClick={() => setActivation("availability")}
         />
       ) : (
-        <span className="size-6 shrink-0" />
-      )}
-      {can(resource, "delete") ? (
-        <Button
-          size="sm"
-          prominence="tertiary"
-          icon={SvgTrash}
-          aria-label={t("openApiCard.deleteModal.submitButton.label")}
-          tooltip={t("openApiCard.deleteModal.submitButton.label")}
-          onClick={() => setActivation("delete")}
-        />
-      ) : (
-        <span className="size-6 shrink-0" />
+        <span className={cn("shrink-0", size === "md" ? "size-8" : "size-6")} />
       )}
     </div>
   );
@@ -122,11 +155,15 @@ function ActivePluginLifecycleMenu({
   initialAction,
   renderStatus,
   craftAvailable,
+  deleteHoverGroup,
+  size,
 }: {
   plugin: Exclude<InstalledPlugin, { kind: "external-app" }>;
   initialAction: "availability" | "delete";
   renderStatus?: PluginLifecycleMenuProps["renderStatus"];
   craftAvailable: boolean;
+  deleteHoverGroup?: string;
+  size: "sm" | "md";
 }) {
   const t = useTranslations("actions");
   const router = useRouter();
@@ -422,19 +459,42 @@ function ActivePluginLifecycleMenu({
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div
+        className={cn("flex items-center", size === "md" ? "gap-1" : "gap-2")}
+      >
         {renderStatus?.({
           onOpen: items.length ? () => setOpen(true) : undefined,
           disabled: busy,
           expanded: open,
         })}
+        {can(resource, "delete") ? (
+          <DeleteReveal group={deleteHoverGroup}>
+            <Button
+              size={size}
+              prominence="tertiary"
+              icon={SvgTrash}
+              aria-label={t("openApiCard.deleteModal.submitButton.label")}
+              tooltip={t("openApiCard.deleteModal.submitButton.label")}
+              disabled={busy}
+              onClick={() => {
+                setOpen(false);
+                setError(null);
+                setConfirmation("delete");
+              }}
+            />
+          </DeleteReveal>
+        ) : (
+          <span
+            className={cn("shrink-0", size === "md" ? "size-8" : "size-6")}
+          />
+        )}
         {items.length ? (
           <Dropdown open={open} onOpenChange={setOpen} align="end">
             <Dropdown.Trigger asChild>
               <Button
-                size="sm"
+                size={size}
                 prominence="tertiary"
-                icon={SvgSliders}
+                icon={SvgSettings}
                 aria-label={availabilityLabel}
                 tooltip={availabilityLabel}
                 disabled={busy}
@@ -443,24 +503,9 @@ function ActivePluginLifecycleMenu({
             <Dropdown.Data label={availabilityLabel} items={items} />
           </Dropdown>
         ) : (
-          <span className="size-6 shrink-0" />
-        )}
-        {can(resource, "delete") ? (
-          <Button
-            size="sm"
-            prominence="tertiary"
-            icon={SvgTrash}
-            aria-label={t("openApiCard.deleteModal.submitButton.label")}
-            tooltip={t("openApiCard.deleteModal.submitButton.label")}
-            disabled={busy}
-            onClick={() => {
-              setOpen(false);
-              setError(null);
-              setConfirmation("delete");
-            }}
+          <span
+            className={cn("shrink-0", size === "md" ? "size-8" : "size-6")}
           />
-        ) : (
-          <span className="size-6 shrink-0" />
         )}
       </div>
       <Modal

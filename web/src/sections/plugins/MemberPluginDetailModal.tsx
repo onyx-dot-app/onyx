@@ -9,7 +9,7 @@ import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import MemberMCPToolsList from "@/sections/plugins/MemberMCPToolsList";
 import MemberCraftAppSkills from "@/sections/plugins/MemberCraftAppSkills";
 import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
-import { SvgFileBraces, SvgUnplug } from "@opal/icons";
+import { SvgCodeFile, SvgUnplug } from "@opal/icons";
 import MemberMCPPreferences from "@/sections/plugins/MemberMCPPreferences";
 import MemberOpenAPIPreferences from "@/sections/plugins/MemberOpenAPIPreferences";
 import type { ToolSnapshot } from "@/lib/tools/types";
@@ -192,7 +192,7 @@ export default function MemberPluginDetailModal({
       ? getAppTypeLogo(plugin.app.app_type)
       : plugin.kind === "mcp"
         ? getActionIcon(plugin.server.server_url, plugin.server.name)
-        : (getActionIcon(serverUrl ?? "", name) ?? SvgFileBraces);
+        : (getActionIcon(serverUrl ?? "", name) ?? SvgCodeFile);
   const canDisconnect =
     connection.kind === "connected" && connection.ownership === "user";
   const canConnect =
