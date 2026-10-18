@@ -65,7 +65,7 @@ logger = setup_logger()
 TABULAR_RECHUNK_TIME_BUDGET_S = 4 * 60
 
 # Per-workbook cap plus the large chunks multipass derives from it. Counting
-# those even when multipass is off only loosens the bound.
+# those when multipass is off only loosens the bound.
 TABULAR_CHUNK_CEILING = TABULAR_MAX_CHUNKS_PER_WORKBOOK + (
     TABULAR_MAX_CHUNKS_PER_WORKBOOK // LARGE_CHUNK_RATIO
 )
@@ -121,7 +121,7 @@ def _rebuild_document(
         id=db_doc.id,
         source=DocumentSource(head.source_type),
         semantic_identifier=db_doc.semantic_id,
-        # None would fall back to semantic_identifier and add a title vector
+        # None would fall back to semantic_identifier, adding a title vector
         # the document never had.
         title=head.title if head.title is not None else "",
         metadata=(
@@ -196,8 +196,7 @@ def _rechunk_batch(
             # never moves, because content_hash() ignores TabularSections.
             ignore_time_skip=True,
             force_update=True,
-            # Only the chunks and chunk_count change here; nothing re-fetched
-            # the document, so its row has nothing newer to receive.
+            # Nothing re-fetched the document, so its row has nothing newer.
             skip_document_row_writes=True,
             tenant_id=tenant_id,
             document_batch=documents,
@@ -250,9 +249,16 @@ def run_tabular_rechunk(
             search_settings=search_settings, callback=None
         )
         document_index = build_opensearch_document_index(search_settings)
+        index_name = search_settings.index_name  # read while attached
 
     while time.monotonic() - start < time_budget_s:
         with get_session_with_current_tenant() as db_session:
+            # An INSTANT swap retires the index this run holds: writing on
+            # would lower chunk_count while the new live index keeps the old
+            # chunks, stranding it. The cursor is kept for the next tick.
+            if get_current_search_settings(db_session).index_name != index_name:
+                logger.info("tabular re-chunk: the live index changed, stopping")
+                break
             targets = get_oversized_tabular_documents(
                 db_session,
                 chunk_count_above=TABULAR_CHUNK_CEILING,
@@ -262,8 +268,7 @@ def run_tabular_rechunk(
         # A short page means no further matches before the end of the table.
         finished = len(targets) < INDEX_BATCH_SIZE
 
-        # The pipeline adapter is per connector + credential, so a batch cannot
-        # mix cc-pairs.
+        # The pipeline adapter is per connector + credential.
         grouped: dict[tuple[int, int], list[TabularRechunkTarget]] = defaultdict(list)
         for target in targets:
             grouped[(target.connector_id, target.credential_id)].append(target)

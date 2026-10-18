@@ -7,7 +7,9 @@ survive the round trip.
 """
 
 from io import BytesIO
-from typing import IO
+from itertools import chain, repeat
+from types import SimpleNamespace
+from typing import IO, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,6 +17,7 @@ import pytest
 from onyx.background.indexing.run_tabular_rechunk import (
     _rebuild_document,
     _tabular_file_name,
+    run_tabular_rechunk,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import (
@@ -96,3 +99,67 @@ def test_tabular_file_name_supplies_a_missing_extension() -> None:
         _tabular_file_name("notes", "application/pdf")
     # And the rebuild routes an extensionless name through it.
     assert _rebuild(semantic_id="Q3 Budget").semantic_identifier == "Q3 Budget"
+
+
+class _FakeTarget:
+    def __init__(self, index: int) -> None:
+        self.document = SimpleNamespace(id=f"doc-{index:02d}")
+        self.connector_id = 1
+        self.credential_id = 1
+        self.file_type = "text/csv"
+
+
+def _run_against(index_names: list[str], pages_before_the_end: int) -> Any:
+    """Runs the scan with `get_current_search_settings` answering in turn."""
+    names = chain(index_names, repeat(index_names[-1]))
+    pages = 0
+
+    def settings(_db_session: object) -> SimpleNamespace:
+        return SimpleNamespace(index_name=next(names), id=1)
+
+    def targets(*args: Any, **kwargs: Any) -> list[_FakeTarget]:  # noqa: ARG001
+        nonlocal pages
+        pages += 1
+        # A short page ends the scan, as a real one does at the table's end.
+        return [
+            _FakeTarget(i) for i in range(16 if pages < pages_before_the_end else 3)
+        ]
+
+    def batch(
+        targets: list[_FakeTarget],
+        **kwargs: Any,  # noqa: ARG001
+    ) -> tuple[int, list[str]]:
+        return len(targets), []
+
+    module = "onyx.background.indexing.run_tabular_rechunk"
+    with (
+        patch(f"{module}.get_current_search_settings", settings),
+        patch(f"{module}.get_oversized_tabular_documents", targets),
+        patch(f"{module}._rechunk_batch", batch),
+        patch(f"{module}.get_session_with_current_tenant"),
+        patch(f"{module}.DefaultIndexingEmbedder"),
+        patch(f"{module}.build_opensearch_document_index"),
+    ):
+        result = run_tabular_rechunk(
+            tenant_id="t", after_doc_id=None, on_batch=lambda: None
+        )
+    return result, pages
+
+
+def test_the_scan_stops_when_the_live_index_is_swapped() -> None:
+    """An INSTANT swap retires the index this run holds. Writing on would
+    replace chunks in the index being dropped while lowering the shared
+    chunk_count, stranding the new live index oversized and unselectable.
+    """
+    result, pages = _run_against(["idx-a", "idx-a", "idx-a", "idx-b"], 99)
+
+    assert pages == 2
+    # Not "complete": the pass has to be resumable, not marked done.
+    assert not result.finished
+    assert result.last_document_id == "doc-15"
+
+
+def test_an_undisturbed_scan_still_runs_to_the_end() -> None:
+    result, pages = _run_against(["idx-a"], pages_before_the_end=3)
+    assert pages == 3
+    assert result.finished

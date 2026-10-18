@@ -35,8 +35,8 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 
-# Outlives one run so a crashed worker's claim expires; extended after each
-# batch, since one batch can outlast the budget under provider throttling.
+# Outlives one run so a crashed worker's claim expires. Extended per batch,
+# since one batch can outlast the budget under provider throttling.
 _LOCK_TIMEOUT_S = TABULAR_RECHUNK_TIME_BUDGET_S + 5 * 60
 # Bounded so a permanently broken document cannot rescan for ever.
 _MAX_PASSES = 3
@@ -78,13 +78,12 @@ def _blocked_reason(db_session: Session) -> str | None:
 
     search_settings = get_active_search_settings(db_session)
     if search_settings.secondary is not None:
-        # The pipeline writes to the secondary whenever a FUTURE exists,
-        # leaving the live index on the old chunks.
+        # The pipeline writes to the secondary whenever a FUTURE exists.
         return "a reindex is in flight"
-    # Only while an INSTANT swap is still backfilling: the port copies chunks
-    # boundary for boundary over finished work. Without the source-id check
-    # this blocks for ever, because "pending work" means a cc_pair has no
-    # settled port attempt - the normal state.
+    # Only while an INSTANT swap is backfilling, since the port copies chunks
+    # boundary for boundary. The source-id check is load-bearing: "pending
+    # work" alone means a cc_pair has no settled port attempt - the normal
+    # state - so without it this blocks for ever.
     if search_settings.primary.port_backfill_source_id is not None and (
         port_backfill_has_pending_work(db_session, search_settings.primary.id)
     ):
@@ -153,8 +152,7 @@ def run_tabular_rechunk_tick(tenant_id: str) -> int | None:
             on_batch=extend_lock,
         )
 
-        # Re-read: the run took minutes, so write onto current state rather
-        # than a stale copy.
+        # The run took minutes; write onto current state, not a stale copy.
         progress = load_progress()
         progress.cursor = result.last_document_id
         progress.documents_indexed += result.documents_indexed

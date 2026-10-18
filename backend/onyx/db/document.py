@@ -338,10 +338,9 @@ def get_oversized_tabular_documents(
     Left out: documents whose raw file was never stored, because only a crawl
     can rebuild their sections, and documents whose cc-pairs are all DELETING.
     """
-    # One row per document, the lowest cc-pair winning, as any of them would
-    # write the same chunks. A LATERAL rather than DISTINCT ON, which would
-    # order by (id, connector_id, credential_id) over the join and so could
-    # not use the ordered scan the cursor depends on.
+    # One row per document, lowest cc-pair winning, as any of them would write
+    # the same chunks. A LATERAL, not DISTINCT ON: that would order the join by
+    # (id, connector_id, credential_id) and lose the ordered scan.
     cc_pair = (
         select(
             DocumentByConnectorCredentialPair.connector_id,
@@ -383,8 +382,7 @@ def get_oversized_tabular_documents(
             DbDocument.chunk_count > chunk_count_above,
             DbDocument.file_id.isnot(None),
             or_(
-                # A Drive-exported spreadsheet keeps its original name, which
-                # often has no extension, so the stored file's type decides.
+                # A Drive sheet's name often has no extension; its type does.
                 FileRecord.file_type.in_(sorted(OnyxMimeTypes.TABULAR_MIME_TYPES)),
                 *[
                     func.lower(DbDocument.semantic_id).like(f"%{extension}")
