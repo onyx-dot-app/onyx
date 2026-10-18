@@ -304,7 +304,7 @@ export default function CodeInterpreterPage() {
                             onErrorHover={handleErrorHover}
                           />
                           <CardActions
-                            disabled={isLoading}
+                            disabled={isLoading || isReconnecting}
                             isReconnecting={isReconnecting}
                             onDisconnect={() => setShowDisconnectModal(true)}
                             onReconnect={() => void handleToggle(true)}

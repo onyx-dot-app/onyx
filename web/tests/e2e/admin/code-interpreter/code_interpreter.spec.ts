@@ -297,8 +297,8 @@ test.describe("Code Interpreter Admin Page", () => {
     // Error popover should not be visible initially
     await expect(page.getByText("Code Interpreter Error")).not.toBeVisible();
 
-    // Hover over the status icon — sibling of the status label
-    const statusIcon = statusText.locator("..").locator(".cursor-pointer");
+    // Hover over the status, which opens the error popover
+    const statusIcon = page.getByRole("button", { name: "Unhealthy" });
     await statusIcon.hover();
 
     // Error popover should appear with the title and error description
@@ -329,8 +329,11 @@ test.describe("Code Interpreter Admin Page", () => {
     const statusText = page.getByText("Connection Lost");
     await expect(statusText).toBeVisible({ timeout: 10000 });
 
-    // Hover over the status icon — sibling of the status label
-    const statusIcon = statusText.locator("..").locator(".cursor-pointer");
+    // Hover over the status, which opens the error popover
+    const statusIcon = page.getByRole("button", {
+      name: "Connection Lost",
+      exact: true,
+    });
     await statusIcon.hover();
 
     // Error popover should show the connection lost title and error
@@ -358,9 +361,9 @@ test.describe("Code Interpreter Admin Page", () => {
     const statusText = page.getByText("Connected");
     await expect(statusText).toBeVisible({ timeout: 10000 });
 
-    // The status icon wrapper should not have cursor-pointer when healthy
+    // A healthy status is not a popover trigger
     await expect(
-      statusText.locator("..").locator(".cursor-pointer")
+      page.getByRole("button", { name: "Connected", exact: true })
     ).toHaveCount(0);
   });
 });
