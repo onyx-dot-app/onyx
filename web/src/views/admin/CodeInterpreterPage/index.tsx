@@ -82,21 +82,19 @@ function CheckingStatus() {
 
 interface ConnectionStatusProps {
   status: CodeInterpreterHealthStatus | undefined;
-  error: string | undefined;
   isLoading: boolean;
+  /** Called when the pointer enters or leaves a failed status. */
+  onErrorHover: (hovered: boolean) => void;
 }
 
-function ConnectionStatus({ status, error, isLoading }: ConnectionStatusProps) {
+/** The status in the card's corner. A failed status is the trigger of the
+ * page's error popover, which opens on hover. */
+function ConnectionStatus({
+  status,
+  isLoading,
+  onErrorHover,
+}: ConnectionStatusProps) {
   const t = useTranslations("admin.codeInterpreter");
-  const [isErrorOpen, setIsErrorOpen] = useState(false);
-  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
-    },
-    []
-  );
 
   if (isLoading || !status) {
     return <CheckingStatus />;
@@ -115,23 +113,6 @@ function ConnectionStatus({ status, error, isLoading }: ConnectionStatusProps) {
     />
   );
 
-  // The error card stays open while the pointer is on the status or the card,
-  // and closes a second after it leaves both.
-  function handleErrorHover(hovered: boolean) {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current);
-      closeTimeoutRef.current = null;
-    }
-    if (hovered) {
-      setIsErrorOpen(true);
-      return;
-    }
-    closeTimeoutRef.current = setTimeout(() => {
-      setIsErrorOpen(false);
-      closeTimeoutRef.current = null;
-    }, 1000);
-  }
-
   return (
     <Section
       flexDirection="row"
@@ -142,38 +123,15 @@ function ConnectionStatus({ status, error, isLoading }: ConnectionStatusProps) {
       {status === "healthy" ? (
         statusContent
       ) : (
-        <Popover open={isErrorOpen} onOpenChange={setIsErrorOpen}>
-          <Popover.Trigger asChild>
-            <div
-              className="cursor-pointer"
-              onMouseEnter={() => handleErrorHover(true)}
-              onMouseLeave={() => handleErrorHover(false)}
-            >
-              {statusContent}
-            </div>
-          </Popover.Trigger>
-          <Popover.Content
-            align="end"
-            width="md"
-            onMouseEnter={() => handleErrorHover(true)}
-            onMouseLeave={() => handleErrorHover(false)}
+        <Popover.Trigger asChild>
+          <div
+            className="cursor-pointer"
+            onMouseEnter={() => onErrorHover(true)}
+            onMouseLeave={() => onErrorHover(false)}
           >
-            <Section padding={1}>
-              <Content
-                sizePreset="main-ui"
-                variant="section"
-                icon={SvgXOctagon}
-                color="danger"
-                title={
-                  status === "connection_lost"
-                    ? t("errorCard.connectionLost.title")
-                    : t("errorCard.generic.title")
-                }
-                description={error}
-              />
-            </Section>
-          </Popover.Content>
-        </Popover>
+            {statusContent}
+          </div>
+        </Popover.Trigger>
       )}
     </Section>
   );
@@ -188,6 +146,33 @@ export default function CodeInterpreterPage() {
   const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isErrorOpen, setIsErrorOpen] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasError = !!status && status !== "healthy";
+
+  useEffect(
+    () => () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    },
+    []
+  );
+
+  // The error popover stays open while the pointer is on the status or the
+  // popover, and closes a second after it leaves both.
+  function handleErrorHover(hovered: boolean) {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    if (hovered) {
+      setIsErrorOpen(true);
+      return;
+    }
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsErrorOpen(false);
+      closeTimeoutRef.current = null;
+    }, 1000);
+  }
 
   async function handleToggle(enabled: boolean) {
     setIsReconnecting(enabled);
@@ -219,59 +204,88 @@ export default function CodeInterpreterPage() {
 
       <SettingsLayouts.Body>
         {isEnabled || isLoading ? (
-          <Hoverable.Root
-            group="code-interpreter/Card"
-            interaction={showDisconnectModal ? "hover" : "rest"}
-          >
-            <SelectCard state="filled" padding={2} rounding={4}>
-              <Card.Header>
-                <ContentAction
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgTerminal}
-                  title={t("card.title")}
-                  description={t("card.description")}
-                  padding={2}
-                  rightChildren={
-                    <Section alignItems="end" gap={0}>
-                      <ConnectionStatus
-                        status={status}
-                        error={error}
-                        isLoading={isLoading}
-                      />
-                      <div className="px-1 pb-1">
-                        <Section
-                          flexDirection="row"
-                          justifyContent="end"
-                          gap={1}
-                        >
-                          <Disabled disabled={isLoading}>
-                            <Hoverable.Item group="code-interpreter/Card">
+          <Popover open={hasError && isErrorOpen} onOpenChange={setIsErrorOpen}>
+            <Hoverable.Root
+              group="code-interpreter/Card"
+              interaction={showDisconnectModal ? "hover" : "rest"}
+            >
+              {/* The error popover opens under the whole card, not the status. */}
+              <Popover.Anchor>
+                <SelectCard state="filled" padding={2} rounding={4}>
+                  <Card.Header>
+                    <ContentAction
+                      sizePreset="main-ui"
+                      variant="section"
+                      icon={SvgTerminal}
+                      title={t("card.title")}
+                      description={t("card.description")}
+                      padding={2}
+                      rightChildren={
+                        <Section alignItems="end" gap={0}>
+                          <ConnectionStatus
+                            status={status}
+                            isLoading={isLoading}
+                            onErrorHover={handleErrorHover}
+                          />
+                          <div className="px-1 pb-1">
+                            <Section
+                              flexDirection="row"
+                              justifyContent="end"
+                              gap={1}
+                            >
+                              <Disabled disabled={isLoading}>
+                                <Hoverable.Item group="code-interpreter/Card">
+                                  <Button
+                                    prominence="tertiary"
+                                    size="md"
+                                    icon={SvgUnplug}
+                                    onClick={() => setShowDisconnectModal(true)}
+                                    tooltip={t("card.disconnectButton.tooltip")}
+                                  />
+                                </Hoverable.Item>
+                              </Disabled>
                               <Button
+                                disabled={isLoading}
                                 prominence="tertiary"
                                 size="md"
-                                icon={SvgUnplug}
-                                onClick={() => setShowDisconnectModal(true)}
-                                tooltip={t("card.disconnectButton.tooltip")}
+                                icon={SvgRefreshCw}
+                                onClick={refetch}
+                                tooltip={t("card.refreshButton.tooltip")}
                               />
-                            </Hoverable.Item>
-                          </Disabled>
-                          <Button
-                            disabled={isLoading}
-                            prominence="tertiary"
-                            size="md"
-                            icon={SvgRefreshCw}
-                            onClick={refetch}
-                            tooltip={t("card.refreshButton.tooltip")}
-                          />
+                            </Section>
+                          </div>
                         </Section>
-                      </div>
-                    </Section>
+                      }
+                    />
+                  </Card.Header>
+                </SelectCard>
+              </Popover.Anchor>
+            </Hoverable.Root>
+            <Popover.Content
+              align="end"
+              width="md"
+              // A hover popover must not take focus from the page.
+              onOpenAutoFocus={(event) => event.preventDefault()}
+              onCloseAutoFocus={(event) => event.preventDefault()}
+              onMouseEnter={() => handleErrorHover(true)}
+              onMouseLeave={() => handleErrorHover(false)}
+            >
+              <Section padding={1}>
+                <Content
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgXOctagon}
+                  color="danger"
+                  title={
+                    status === "connection_lost"
+                      ? t("errorCard.connectionLost.title")
+                      : t("errorCard.generic.title")
                   }
+                  description={error}
                 />
-              </Card.Header>
-            </SelectCard>
-          </Hoverable.Root>
+              </Section>
+            </Popover.Content>
+          </Popover>
         ) : (
           <SelectCard
             state="empty"
