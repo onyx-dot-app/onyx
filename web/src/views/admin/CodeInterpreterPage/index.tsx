@@ -269,7 +269,7 @@ export default function CodeInterpreterPage() {
             </Hoverable.Root>
             <Popover.Content
               align="end"
-              width={50}
+              width={60}
               padding={2}
               gap={2}
               // A hover popover must not take focus from the page.
