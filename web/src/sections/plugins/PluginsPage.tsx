@@ -36,6 +36,8 @@ import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
 import { useSettings } from "@/lib/settings/hooks";
 
+const route = ADMIN_ROUTES.PLUGINS;
+
 function PluginListError({
   title,
   onRetry,
@@ -250,8 +252,9 @@ export default function PluginsPage() {
 
   return (
     <div className={styles.directory}>
-      <SettingsLayouts.Root width="lg">
+      <SettingsLayouts.Root>
         <SettingsLayouts.Header
+          icon={route.icon}
           title={t("title")}
           description={t("description")}
           stackActionsOnMobile
