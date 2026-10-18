@@ -124,10 +124,22 @@ function ConnectionStatus({
         statusContent
       ) : (
         <Popover.Trigger asChild>
+          {/* Keyboard users reach the error details too: focus opens them like
+              hover does, and Enter or Space toggles them. */}
           <div
-            className="cursor-pointer"
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer rounded-08 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04"
             onMouseEnter={() => onErrorHover(true)}
             onMouseLeave={() => onErrorHover(false)}
+            onFocus={() => onErrorHover(true)}
+            onBlur={() => onErrorHover(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.currentTarget.click();
+              }
+            }}
           >
             {statusContent}
           </div>
