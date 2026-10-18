@@ -173,7 +173,9 @@ function Text({
     textPosition,
     maxLines === 1 && "truncate",
     maxLines && maxLines > 1 && "overflow-hidden",
-    strikethrough && "line-through"
+    // A thickness relative to the font size: the font's default line is
+    // about 1px at every size and looks weak on heavier titles.
+    strikethrough && "line-through decoration-[0.125em]"
   );
 
   const style =
