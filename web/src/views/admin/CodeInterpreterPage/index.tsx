@@ -337,28 +337,16 @@ export default function CodeInterpreterPage() {
                 isReconnecting ? (
                   <CheckingStatus />
                 ) : (
-                  <Section flexDirection="row" justifyContent="end" gap={1}>
-                    <Button
-                      prominence="tertiary"
-                      rightIcon={SvgArrowExchange}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleToggle(true);
-                      }}
-                    >
-                      {t("card.reconnectButton.label")}
-                    </Button>
-                    <Button
-                      prominence="tertiary"
-                      size="md"
-                      icon={SvgRefreshCw}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handleToggle(true);
-                      }}
-                      tooltip={t("card.refreshButton.tooltip")}
-                    />
-                  </Section>
+                  <Button
+                    prominence="tertiary"
+                    rightIcon={SvgArrowExchange}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleToggle(true);
+                    }}
+                  >
+                    {t("card.reconnectButton.label")}
+                  </Button>
                 )
               }
             />
