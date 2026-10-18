@@ -103,10 +103,6 @@ export type OpalStrings = {
   selectSearchPlaceholder: string;
   /** The name of an `IconTooltip`, read when it takes focus. */
   iconTooltipLabel: string;
-  /** The title of `SearchNoResults`. */
-  searchNoResultsTitle: string;
-  /** The description of `SearchNoResults`. */
-  searchNoResultsDescription: string;
   keyValueKey: string;
   keyValueValue: string;
   keyValueAddLine: string;
@@ -221,9 +217,6 @@ export const defaultOpalStrings: OpalStrings = {
   selectInvalidOption: "Please select a valid option from the list",
   selectSearchPlaceholder: "Search",
   iconTooltipLabel: "More information",
-  searchNoResultsTitle: "No items match that search",
-  searchNoResultsDescription:
-    "Try refining your search or search for something else.",
   keyValueKey: "Key",
   keyValueValue: "Value",
   keyValueAddLine: "Add Line",

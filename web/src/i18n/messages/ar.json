@@ -13909,6 +13909,13 @@
         "projectId": "mashrue-vertex",
         "location": "global"
       }
+    },
+    "searchField": {
+      "placeholder": "ابحث أو اضغط \"/\" للتركيز..."
+    },
+    "searchNoResults": {
+      "title": "لا توجد عناصر تطابق هذا البحث",
+      "description": "حاول تحسين بحثك أو ابحث عن شيء آخر."
     }
   },
   "craft": {
@@ -15709,10 +15716,6 @@
     "tabs": {
       "scrollLeft": "تمرير التبويبات لليسار",
       "scrollRight": "تمرير التبويبات لليمين"
-    },
-    "searchNoResults": {
-      "title": "لا توجد عناصر تطابق هذا البحث",
-      "description": "حاول تحسين بحثك أو ابحث عن شيء آخر."
     }
   },
   "settings": {

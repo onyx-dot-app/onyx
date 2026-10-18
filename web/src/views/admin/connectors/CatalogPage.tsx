@@ -11,9 +11,16 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { Content, SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { useCallback, useDeferredValue, useMemo, useState } from "react";
-import { InputTypeIn, Text } from "@opal/components";
-import { useGridNavigation, useSearchField } from "@opal/hooks";
+import {
+  useCallback,
+  useDeferredValue,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Text } from "@opal/components";
+import { SearchField, type SearchFieldHandle } from "@/lib/common/components";
+import { useGridNavigation } from "@opal/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import { FederatedConnectorDetail } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -83,11 +90,7 @@ export default function ConnectorsPage() {
   const settings = useSettings();
   const { appName } = settings;
 
-  // Focused on arrival; Escape clears and then leaves; "/" comes back.
-  const search = useSearchField({
-    value: rawSearchTerm,
-    onChange: setSearchTerm,
-  });
+  const searchRef = useRef<SearchFieldHandle>(null);
 
   const filterSources = useCallback(
     (sources: SourceMetadata[]) => {
@@ -155,23 +158,22 @@ export default function ConnectorsPage() {
   }, [popularSources, resultIds, searchTerm]);
 
   // Arrows move between cards; leaving the top row, Escape, or typing
-  // returns to search. "/" is left to the hotkey above.
+  // returns to search. "/" is left to the search field's hotkey.
   const { ref: catalogRef, focusFirst } = useGridNavigation({
     itemSelector: "[data-source-card]",
     onExit: (direction) => {
-      if (direction === "up") search.focus();
+      if (direction === "up") searchRef.current?.focus();
     },
-    onEscape: () => search.focus(),
+    onEscape: () => searchRef.current?.focus(),
     onTypeAhead: (character) => {
       if (character === "/") return false;
-      search.focus(rawSearchTerm + character);
+      searchRef.current?.focus(rawSearchTerm + character);
     },
   });
 
-  // Escape is the search field's; Enter or ArrowDown moves to the first card.
+  // Enter or ArrowDown moves to the first card.
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    search.onKeyDown(e);
-    if (e.defaultPrevented || e.nativeEvent.isComposing) return;
+    if (e.nativeEvent.isComposing) return;
     if ((e.key === "Enter" || e.key === "ArrowDown") && focusFirst()) {
       e.preventDefault();
     }
@@ -180,13 +182,11 @@ export default function ConnectorsPage() {
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header icon={route.icon} title={adminRouteTitle(route)}>
-        <InputTypeIn
-          type="text"
-          searchIcon
+        <SearchField
+          ref={searchRef}
           placeholder={t("search.placeholder")}
-          ref={search.ref}
           value={rawSearchTerm} // keep the input bound to immediate state
-          onChange={(event) => setSearchTerm(event.target.value)}
+          onChange={setSearchTerm}
           onKeyDown={handleSearchKeyDown}
         />
       </SettingsLayouts.Header>

@@ -2,8 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { InputTypeIn } from "@opal/components";
-import { useSearchField } from "@opal/hooks";
+import { SearchField } from "@/lib/common/components";
 
 interface PluginDirectoryToolbarProps {
   searchLabel: string;
@@ -24,19 +23,14 @@ export default function PluginDirectoryToolbar({
   filters,
 }: PluginDirectoryToolbarProps) {
   const t = useTranslations("actions.plugins");
-  const search = useSearchField({ value: query, onChange: onQueryChange });
 
   return (
     // Search grows 2:1 against the filter tabs, as on the Agents page.
     <div className="flex flex-row items-center gap-2">
       <div className="min-w-0 flex-2">
-        <InputTypeIn
-          ref={search.ref}
-          searchIcon
-          clearButton
+        <SearchField
           value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={search.onKeyDown}
+          onChange={onQueryChange}
           // The placeholder names the hotkey; the field's name stays short.
           placeholder={t("search.hotkeyPlaceholder")}
           aria-label={searchLabel}

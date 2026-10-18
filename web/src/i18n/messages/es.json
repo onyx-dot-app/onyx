@@ -13909,6 +13909,13 @@
         "projectId": "mi-proyecto-vertex",
         "location": "global"
       }
+    },
+    "searchField": {
+      "placeholder": "Busca o pulsa \"/\" para enfocar..."
+    },
+    "searchNoResults": {
+      "title": "Ningún elemento coincide con esa búsqueda",
+      "description": "Intenta refinar tu búsqueda o busca otra cosa."
     }
   },
   "craft": {
@@ -15709,10 +15716,6 @@
     "tabs": {
       "scrollLeft": "Desplazar pestañas a la izquierda",
       "scrollRight": "Desplazar pestañas a la derecha"
-    },
-    "searchNoResults": {
-      "title": "Ningún elemento coincide con esa búsqueda",
-      "description": "Intenta refinar tu búsqueda o busca otra cosa."
     }
   },
   "settings": {

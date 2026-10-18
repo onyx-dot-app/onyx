@@ -401,6 +401,3 @@ export {
   EndOfList,
   type EndOfListProps,
 } from "@opal/components/end-of-list/components";
-
-/* SearchNoResults */
-export { SearchNoResults } from "@opal/components/search-no-results/components";

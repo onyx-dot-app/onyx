@@ -13909,6 +13909,13 @@
         "projectId": "meu-projeto-vertex",
         "location": "global"
       }
+    },
+    "searchField": {
+      "placeholder": "Pesquise ou pressione \"/\" para focar..."
+    },
+    "searchNoResults": {
+      "title": "Nenhum item corresponde a essa pesquisa",
+      "description": "Tente refinar sua pesquisa ou pesquise outra coisa."
     }
   },
   "craft": {
@@ -15709,10 +15716,6 @@
     "tabs": {
       "scrollLeft": "Rolar abas para a esquerda",
       "scrollRight": "Rolar abas para a direita"
-    },
-    "searchNoResults": {
-      "title": "Nenhum item corresponde a essa pesquisa",
-      "description": "Tente refinar sua pesquisa ou pesquise outra coisa."
     }
   },
   "settings": {

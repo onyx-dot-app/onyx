@@ -13909,6 +13909,13 @@
         "projectId": "nae-vertex-peurojekteu",
         "location": "global"
       }
+    },
+    "searchField": {
+      "placeholder": "검색하거나 \"/\"를 눌러 포커스..."
+    },
+    "searchNoResults": {
+      "title": "해당 검색과 일치하는 항목이 없습니다",
+      "description": "검색어를 구체화하거나 다른 항목을 검색해 보세요."
     }
   },
   "craft": {
@@ -15709,10 +15716,6 @@
     "tabs": {
       "scrollLeft": "탭을 왼쪽으로 스크롤",
       "scrollRight": "탭을 오른쪽으로 스크롤"
-    },
-    "searchNoResults": {
-      "title": "해당 검색과 일치하는 항목이 없습니다",
-      "description": "검색어를 구체화하거나 다른 항목을 검색해 보세요."
     }
   },
   "settings": {

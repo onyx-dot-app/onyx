@@ -13909,6 +13909,13 @@
         "projectId": "wode-vertex-xiangmu",
         "location": "global"
       }
+    },
+    "searchField": {
+      "placeholder": "搜索或按 \"/\" 聚焦..."
+    },
+    "searchNoResults": {
+      "title": "没有与该搜索匹配的项目",
+      "description": "请尝试细化搜索，或搜索其他内容。"
     }
   },
   "craft": {
@@ -15709,10 +15716,6 @@
     "tabs": {
       "scrollLeft": "向左滚动标签",
       "scrollRight": "向右滚动标签"
-    },
-    "searchNoResults": {
-      "title": "没有与该搜索匹配的项目",
-      "description": "请尝试细化搜索，或搜索其他内容。"
     }
   },
   "settings": {

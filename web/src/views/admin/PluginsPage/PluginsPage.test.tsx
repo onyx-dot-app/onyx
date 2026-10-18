@@ -451,7 +451,7 @@ test("filters by description and URL and clears a search without losing either r
   ).toBeVisible();
   await user.clear(search);
   await user.type(search, "missing");
-  expect(screen.getByText(messages.opal.searchNoResults.title)).toBeVisible();
+  expect(screen.getByText(messages.common.searchNoResults.title)).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "View all plugins" })
   ).not.toBeInTheDocument();

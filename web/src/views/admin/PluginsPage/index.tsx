@@ -3,13 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  Dropdown,
-  SearchNoResults,
-  Tabs,
-  Text,
-} from "@opal/components";
+import { Button, Dropdown, Tabs, Text } from "@opal/components";
+import { SearchNoResults } from "@/lib/common/components";
 import type { RichStr } from "@opal/types";
 import { markdown } from "@opal/utils";
 import {
