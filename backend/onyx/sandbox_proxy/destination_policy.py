@@ -4,20 +4,25 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
 from collections.abc import Iterable, Sequence
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urlsplit
 
-from onyx.sandbox_proxy.models import DestinationPolicyConfig, IPNetwork
+from onyx.sandbox_proxy.models import (
+    DestinationOrigin,
+    DestinationPolicyConfig,
+    IPNetwork,
+)
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.sandbox_proxy.sandbox_identity.resolution import (
     PeerAddress,
     SandboxIdentityResolver,
     source_ip,
 )
-from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.models import SSRFProtectionLevel, outbound_ssrf_params
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
@@ -45,12 +50,55 @@ def _embedded_address(address: IPAddress) -> IPAddress:
     return address
 
 
+def _parse_allowed_origin(url: str) -> DestinationOrigin:
+    url = url.strip()
+    parsed = urlsplit(url)
+    if (
+        not parsed.hostname
+        or not re.fullmatch(
+            r"(?:\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9._-]+)(?::[0-9]+)?", parsed.netloc
+        )
+        or parsed.path not in {"", "/"}
+        or "?" in url
+        or "#" in url
+        or any(character.isspace() for character in url)
+    ):
+        raise ValueError(
+            "Expected an HTTP(S) origin without credentials, path, query, or fragment"
+        )
+    validate_outbound_http_url(
+        url,
+        allow_private_network=True,
+        block_loopback_and_link_local=True,
+        resolve_dns=False,
+    )
+    port = (
+        parsed.port
+        if parsed.port is not None
+        else (443 if parsed.scheme == "https" else 80)
+    )
+    if not 1 <= port <= 65535:
+        raise ValueError("Expected a port between 1 and 65535")
+    return DestinationOrigin(scheme=parsed.scheme, host=parsed.hostname, port=port)
+
+
 def parse_destination_policy(
-    api_url: str, internal_cidrs: Iterable[str] = ()
+    api_url: str,
+    internal_cidrs: Iterable[str] = (),
+    allowed_internal_urls: Iterable[str] = (),
 ) -> DestinationPolicyConfig:
     networks: tuple[IPNetwork, ...] = tuple(
         ipaddress.ip_network(cidr.strip(), strict=True) for cidr in internal_cidrs
     )
+    origins: list[DestinationOrigin] = []
+    for index, url in enumerate(allowed_internal_urls):
+        try:
+            origins.append(_parse_allowed_origin(url))
+        except (ValueError, SSRFException) as exc:
+            raise ValueError(
+                f"Invalid SANDBOX_PROXY_ALLOWED_INTERNAL_URLS entry {index + 1}; "
+                "use an HTTP(S) origin such as http://mcp.internal:8000"
+            ) from exc
     parsed: SplitResult = urlsplit(api_url)
     api_port: int | None = None
     if parsed.hostname and parsed.scheme in {"http", "https"}:
@@ -60,7 +108,10 @@ def parse_destination_policy(
             else (443 if parsed.scheme == "https" else 80)
         )
     return DestinationPolicyConfig(
-        api_host=parsed.hostname, api_port=api_port, internal_networks=networks
+        api_host=parsed.hostname,
+        api_port=api_port,
+        internal_networks=networks,
+        allowed_internal_origins=tuple(origins),
     )
 
 
@@ -89,8 +140,8 @@ def resolve_destination(
 ) -> tuple[str, ...] | None:
     """Validate existing upstream addresses, or resolve DNS once for a new connection.
 
-    Internal MCP access requires source identity, exact origin, and tenant SSRF permission.
-    Missing context denies the exception. Public and Onyx destinations need no MCP lookup.
+    Operator-listed origins permit private addresses with the shared targeted-block floor.
+    Other internal MCP origins require source identity, access, and tenant SSRF permission.
     """
     host = host.strip().lower()
     if not host or not 1 <= port <= 65535:
@@ -130,27 +181,33 @@ def resolve_destination(
     if is_api or not any(is_internal(config, address) for address in addresses):
         return resolved
 
-    if identity is None or mcp_resolver is None or scheme not in {"http", "https"}:
-        return None
-    try:
-        src_ip = source_ip(peer)
-        if src_ip is None:
+    if any(
+        origin.scheme == scheme and origin.host == host and origin.port == port
+        for origin in config.allowed_internal_origins
+    ):
+        params = outbound_ssrf_params(SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK)
+    else:
+        if identity is None or mcp_resolver is None or scheme not in {"http", "https"}:
             return None
-        sandbox = identity.resolve_sandbox(src_ip)
-        if sandbox is None or not mcp_resolver.allows_destination(
-            sandbox, scheme, host, port
-        ):
-            return None
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
         try:
-            params = outbound_ssrf_params(
-                get_security_settings(allow_fallback=False).ssrf_protection_level
-            )
-        finally:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-    except Exception:
-        logger.exception("mcp_destination_error host=%s port=%s", host, port)
-        return None
+            src_ip = source_ip(peer)
+            if src_ip is None:
+                return None
+            sandbox = identity.resolve_sandbox(src_ip)
+            if sandbox is None or not mcp_resolver.allows_destination(
+                sandbox, scheme, host, port
+            ):
+                return None
+            token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
+            try:
+                params = outbound_ssrf_params(
+                    get_security_settings(allow_fallback=False).ssrf_protection_level
+                )
+            finally:
+                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        except Exception:
+            logger.exception("mcp_destination_error host=%s port=%s", host, port)
+            return None
 
     if not params.allow_private_network:
         return None

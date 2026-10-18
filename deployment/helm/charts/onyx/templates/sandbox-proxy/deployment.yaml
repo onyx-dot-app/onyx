@@ -128,6 +128,8 @@ spec:
               value: {{ .Values.sandboxProxy.allowGlobalClients | default false | quote }}
             - name: SANDBOX_PROXY_INTERNAL_CIDRS
               value: {{ .Values.sandboxProxy.internalCIDRs | default list | join "," | quote }}
+            - name: SANDBOX_PROXY_ALLOWED_INTERNAL_URLS
+              value: {{ .Values.sandboxProxy.allowedInternalURLs | default list | join "," | quote }}
             - name: SANDBOX_PROXY_LISTEN_PORT
               value: {{ $proxyPort | quote }}
             - name: SANDBOX_PROXY_HEALTHZ_PORT

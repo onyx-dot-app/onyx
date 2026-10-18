@@ -11,12 +11,23 @@ from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
+class DestinationOrigin(BaseModel):
+    """An exact HTTP origin permitted by the deployment operator."""
+
+    model_config = ConfigDict(frozen=True)
+
+    scheme: str
+    host: str
+    port: int
+
+
 class DestinationPolicyConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     api_host: str | None
     api_port: int | None
     internal_networks: tuple[IPNetwork, ...]
+    allowed_internal_origins: tuple[DestinationOrigin, ...] = ()
 
 
 class InjectionContext(BaseModel):

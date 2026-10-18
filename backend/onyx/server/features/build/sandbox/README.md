@@ -359,6 +359,37 @@ Raw TCP forwarding is disabled; CONNECT does not bypass HTTP path, credential, o
 The proxy must have a network route and network-policy access to these servers.
 Standard NAT64 addresses with embedded private IPv4 destinations are also blocked.
 
+### Allow specific internal URLs
+
+Set `sandboxProxy.allowedInternalURLs` to permit specific private origins through the proxy:
+
+```yaml
+sandboxProxy:
+  allowedInternalURLs:
+    - "http://signoz-mcp.signoz-mcp.svc.cluster.local:8000"
+```
+
+For Docker Compose, set the equivalent comma-separated variable in `.env`:
+
+```dotenv
+SANDBOX_PROXY_ALLOWED_INTERNAL_URLS=http://mcp.internal:8000,https://api.internal
+```
+
+Each entry matches an exact scheme, hostname, and port. HTTP defaults to port 80; HTTPS defaults to 443.
+An optional trailing slash is accepted. Paths, queries, fragments, credentials, and wildcards are rejected at startup.
+The exception covers all paths on each listed origin, across all Craft sandboxes and tenants.
+It overrides the proxy's private-address restriction, including `internalCIDRs`, independently of tenant SSRF settings.
+Loopback, link-local, unspecified, and cloud-metadata destinations remain blocked, including resolved and embedded addresses.
+DNS address pinning, sandbox identity, app policies, MCP access, and credential checks still apply.
+Unmatched HTTP requests to listed origins can pass through without an app policy.
+
+Enable SigNoz MCP for Craft and retain its MCP tool policies.
+Permit proxy egress to the destination in Kubernetes NetworkPolicy and provide a network route.
+The URL setting does not create network-policy rules or change backend MCP discovery settings.
+Restart the proxy after changing the environment variable. Helm changes roll out the proxy Deployment.
+
+### Network environment variables
+
 Configure these settings through Helm. The chart supplies `SANDBOX_PROXY_LISTEN_HOST`,
 `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS`, and `SANDBOX_LISTEN_HOST` to the relevant containers.
 `SANDBOX_LISTEN_HOST` controls OpenCode, the sidecar, and generated app previews together.

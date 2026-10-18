@@ -94,6 +94,7 @@ time.
 | `SANDBOX_PROXY_LISTEN_HOST` | `configs.py` | Proxy and health listener; defaults to `0.0.0.0`. Helm `sandboxProxy.listenHost: "::"` enables IPv6 listeners. |
 | `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS` | `configs.py` | Defaults to `false`. Enable through `sandboxProxy.allowGlobalClients` for global IPv6 pod addresses, with restricted proxy ingress. Known sandbox identity remains required. |
 | `SANDBOX_PROXY_INTERNAL_CIDRS` | `configs.py` | Comma-separated internal ranges, including global IPv6 VPC, pod, Service, node, and connected-network ranges. The proxy denies destinations in these ranges. |
+| `SANDBOX_PROXY_ALLOWED_INTERNAL_URLS` | `configs.py` | Comma-separated exact HTTP(S) origins. Helm: `sandboxProxy.allowedInternalURLs`. Permits private egress to these origins across all sandboxes. |
 | `SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA` | `configs.py` | mitmproxy upstream cert verification mode. |
 | `SANDBOX_BACKEND` (`SandboxBackend.KUBERNETES`/`DOCKER`) | `configs.py` | Selects `K8sSecretCAStore`/`K8sInformerLookup` vs. `FileCAStore`/`DockerEventsLookup` (`sandbox_proxy/certificate_authority/bootstrap.py:build_ca_store`, `sandbox_proxy/sandbox_identity/resolution.py:build_ip_lookup`). |
 | `SANDBOX_PROXY_CA_SECRET`, `SANDBOX_PROXY_CA_CONFIGMAP`, `SANDBOX_PROXY_NAMESPACE` | `configs.py` | K8s CA persistence and cross-namespace projection targets (`certificate_authority/kubernetes.py`). |
@@ -112,6 +113,11 @@ Craft-enabled MCP servers also permit their exact scheme, host, and port for
 users with access in the sandbox tenant. The resolver caches access for 30 seconds.
 Lookup failures deny access. The tenant’s SSRF Protection setting applies to the addresses used for the connection.
 This exception uses `get_security_settings(allow_fallback=False)`; failed reads cannot substitute environment defaults.
+Operator-listed internal URLs form a separate exception, independent of tenant SSRF settings and MCP registration.
+Entries match exact scheme, host, and port. Paths, queries, fragments, credentials, and wildcards fail startup validation.
+Listed origins permit all paths and override `internalCIDRs`. Unmatched HTTP requests can pass through without an app policy.
+Resolved and embedded loopback, link-local, unspecified, and cloud-metadata addresses remain blocked.
+The allowlist does not grant MCP access or change credential and tool-policy checks.
 Raw TCP forwarding is disabled. Path, credential, and action checks still apply.
 MCP requests cannot upgrade to WebSocket or other protocols that bypass HTTP action checks.
 Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
@@ -202,10 +208,11 @@ sandbox process (opencode / a tool call)
      resolve_destination applies one policy across all three hooks.
      For new connections, it resolves DNS once. For reused connections, it checks
      their addresses. Public addresses and ONYX_SERVER_URL's exact host:port pass.
-     Other addresses require an accessible Craft MCP origin.
+      Other addresses require an operator-listed origin or an accessible Craft MCP origin.
      CONNECT checks HTTPS; requests check their scheme. Upstream sockets check TLS
      or the accepted CONNECT origin before allowing internal MCP addresses.
-     For internal addresses, resolve_destination identifies the source sandbox,
+      Operator-listed origins use the shared private-network validator with loopback and link-local blocking.
+      For other internal addresses, resolve_destination identifies the source sandbox,
      checks exact MCP origin access, and reads tenant SSRF settings without fallback.
      resolve_destination applies these settings to the original DNS answers,
      including embedded IPv4, with the shared URL validator.
@@ -667,6 +674,7 @@ they can never disagree about which server owns a request; see
 
 | If your change... | Also check |
 |---|---|
+| changes destination exceptions | All three proxy hooks, reused connections, address pinning, exact origin matching, Helm/Compose configuration, and `backend/tests/unit/sandbox_proxy/test_allowed_internal_urls.py` |
 | adds a new external app (built-in or custom) | `resolve_app_for_url`'s regex/glob correctness for the new `upstream_url_patterns` (a bad regex is silently skipped, per `[[craft-admin]]`); the app's catalog (`external_apps/providers/`) and default per-action policies; whether the app needs a skill association |
 | changes URL/MCP matching (`resolve_app_for_url`, `mcp_matching.py:match_request`, `recognize_actions`) | both `ExternalAppRequestEvaluator` and any credential resolver that independently re-derives attribution (`MCPServerResolver.resolve` re-parses instead of trusting the gate's cache, deliberately); the ambiguous-match fail-closed paths (`AmbiguousMCPTargetError`) |
 | changes the default for unmatched requests (whole-domain `ASK`, MCP default `ASK`, or the off-catalog pass-through) | §5 item 5 of this document; `[[craft-admin]]`'s "general internet egress is not admin-approved" invariant; every existing connected app's behavior for actions outside its catalog |

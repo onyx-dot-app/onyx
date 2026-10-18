@@ -66,7 +66,7 @@ def test_invalid_internal_cidr_fails_at_startup(cidr: str) -> None:
         parse_destination_policy("", [cidr])
 
 
-def _mock_dns(
+def mock_destination_dns(
     monkeypatch: pytest.MonkeyPatch,
     addresses: list[str],
     *,
@@ -96,7 +96,7 @@ def _mock_dns(
 def test_public_dns_preserves_all_validated_answers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _mock_dns(monkeypatch, ["2606:4700:4700::1111", "8.8.8.8"])
+    mock_destination_dns(monkeypatch, ["2606:4700:4700::1111", "8.8.8.8"])
     assert resolve_destination(
         parse_destination_policy(""), " SERVICE.EXAMPLE ", 443
     ) == (
@@ -112,7 +112,7 @@ def test_public_dns_preserves_all_validated_answers(
 def test_empty_invalid_or_mixed_dns_fails_closed(
     monkeypatch: pytest.MonkeyPatch, addresses: list[str]
 ) -> None:
-    _mock_dns(monkeypatch, addresses)
+    mock_destination_dns(monkeypatch, addresses)
     assert (
         resolve_destination(parse_destination_policy(""), "service.example", 443)
         is None
@@ -148,7 +148,7 @@ def test_invalid_destination_fails_closed(host: str, port: int) -> None:
 def test_api_exception_requires_exact_host_and_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _mock_dns(monkeypatch, ["2600:ffff:ffff::99"])
+    mock_destination_dns(monkeypatch, ["2600:ffff:ffff::99"])
     policy = parse_destination_policy(
         "https://service.example/api", ["2600:ffff:ffff::/64"]
     )
@@ -160,7 +160,7 @@ def test_api_exception_requires_exact_host_and_port(
 
 
 def test_internal_cidr_blocks_mixed_public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mock_dns(monkeypatch, ["8.8.8.8", "2600:ffff:ffff::99"])
+    mock_destination_dns(monkeypatch, ["8.8.8.8", "2600:ffff:ffff::99"])
     assert (
         resolve_destination(
             parse_destination_policy("", ["2600:ffff:ffff::/64"]),
@@ -174,7 +174,7 @@ def test_internal_cidr_blocks_mixed_public_dns(monkeypatch: pytest.MonkeyPatch) 
 def test_api_exception_does_not_allow_dns_alias(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _mock_dns(monkeypatch, ["10.0.0.1"], expected_host="alias.example")
+    mock_destination_dns(monkeypatch, ["10.0.0.1"], expected_host="alias.example")
     assert (
         resolve_destination(
             parse_destination_policy("http://service.example"), "alias.example", 80
