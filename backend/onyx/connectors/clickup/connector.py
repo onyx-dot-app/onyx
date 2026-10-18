@@ -124,11 +124,7 @@ class ClickupConnector(LoadConnector, PollConnector):
             sections=[
                 TextSection(
                     link=task["url"],
-                    text=(
-                        task["markdown_description"]
-                        if "markdown_description" in task
-                        else task.get("description", "")
-                    ),
+                    text=task.get("markdown_description") or task.get("description") or "",
                 )
             ],
             metadata={
