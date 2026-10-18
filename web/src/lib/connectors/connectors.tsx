@@ -2164,7 +2164,6 @@ export const connectorConfigs: Record<
     values: [
       {
         type: "text",
-        query: "Enter the Seafile base URL:",
         label: "Base URL",
         name: "base_url",
         optional: false,
@@ -2173,7 +2172,6 @@ export const connectorConfigs: Record<
       },
       {
         type: "list",
-        query: "Enter Seafile library/repo IDs to index:",
         label: "Library IDs",
         name: "repo_ids",
         optional: false,
@@ -2182,7 +2180,6 @@ export const connectorConfigs: Record<
       },
       {
         type: "list",
-        query: "Enter path prefixes to index:",
         label: "Path Prefixes",
         name: "path_prefixes",
         optional: true,
@@ -2194,7 +2191,6 @@ export const connectorConfigs: Record<
     advanced_values: [
       {
         type: "list",
-        query: "Enter allowed file extensions:",
         label: "Allowed Extensions",
         name: "allowed_extensions",
         optional: true,
@@ -2218,7 +2214,6 @@ export const connectorConfigs: Record<
       },
       {
         type: "number",
-        query: "Enter max file size in bytes:",
         label: "Max File Size Bytes",
         name: "max_file_size_bytes",
         optional: true,

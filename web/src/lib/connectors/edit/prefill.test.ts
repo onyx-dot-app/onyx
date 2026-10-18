@@ -9,6 +9,7 @@ import {
   type CCPairFullInfo,
 } from "@/lib/connectors/types";
 import { ValidSources } from "@/lib/connectors/types/source";
+import { isEditableSource } from "@/lib/connectors/edit/editable";
 import type { AccessType } from "@/lib/types";
 
 const CREDENTIAL_ID = 7;
@@ -78,6 +79,49 @@ function githubPair(
 }
 
 const configuration = connectorConfigs[ValidSources.GitHub];
+
+describe("Seafile connector edits", () => {
+  it("uses the shared edit plan and keeps unchanged settings", () => {
+    const config = {
+      base_url: "https://seafile.example.com",
+      repo_ids: ["library-1"],
+      path_prefixes: ["/docs"],
+      allowed_extensions: [".pdf"],
+      max_file_size_bytes: 20_971_520,
+    };
+    const ccPair = githubPair(config);
+    ccPair.connector.source = ValidSources.Seafile;
+    ccPair.credential.source = ValidSources.Seafile;
+    const seafileConfiguration = connectorConfigs[ValidSources.Seafile];
+    const initialValues = editInitialValues(
+      ValidSources.Seafile,
+      seafileConfiguration,
+      ccPair,
+      []
+    );
+
+    expect(isEditableSource(ValidSources.Seafile)).toBe(true);
+    expect(initialValues.repo_ids).toEqual(["library-1"]);
+    expect(
+      buildEditProposal({
+        values: initialValues,
+        initialValues,
+        configuration: seafileConfiguration,
+        ccPair,
+        credentialId: CREDENTIAL_ID,
+      }).connector_specific_config
+    ).toEqual(config);
+    expect(
+      buildEditProposal({
+        values: { ...initialValues, repo_ids: ["library-2"] },
+        initialValues,
+        configuration: seafileConfiguration,
+        ccPair,
+        credentialId: CREDENTIAL_ID,
+      }).connector_specific_config
+    ).toEqual({ ...config, repo_ids: ["library-2"] });
+  });
+});
 
 function proposalFor(
   ccPair: CCPairFullInfo,

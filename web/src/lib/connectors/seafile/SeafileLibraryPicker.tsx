@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { TextArrayField } from "@/components/Field";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 import { Button } from "@opal/components";
 import { SvgLoader, SvgRefreshCw } from "@opal/icons";
 import { useFormikContext } from "formik";
@@ -17,7 +17,7 @@ interface SeafileLibrary {
 }
 
 interface SeafileLibraryPickerProps {
-  currentCredential: Credential<any> | null;
+  currentCredential: (CredentialValues & { id?: number }) | null;
   label: string;
   description: string;
 }
