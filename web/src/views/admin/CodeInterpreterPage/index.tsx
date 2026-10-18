@@ -16,7 +16,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
 import { Button, Popover, SelectCard } from "@opal/components";
 import { Card, Content, ContentAction } from "@opal/layouts";
-import { Disabled, Hoverable } from "@opal/core";
+import { Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import useCodeInterpreter, {
@@ -69,13 +69,17 @@ function CheckingStatus() {
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={1}
       padding={2}
     >
-      <Text mainUiAction text03>
-        {t("status.checking.label")}
-      </Text>
-      <IconLoader />
+      <Content
+        sizePreset="main-ui"
+        variant="body"
+        orientation="reverse"
+        width="fit"
+        icon={IconLoader}
+        title={t("status.checking.label")}
+        color="muted"
+      />
     </Section>
   );
 }
@@ -257,20 +261,19 @@ export default function CodeInterpreterPage() {
                               justifyContent="end"
                               gap={1}
                             >
-                              <Disabled disabled={isLoading}>
-                                <Hoverable.Item group="code-interpreter/Card">
-                                  <Button
-                                    prominence="tertiary"
-                                    size="md"
-                                    icon={SvgUnplug}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setShowDisconnectModal(true);
-                                    }}
-                                    tooltip={t("card.disconnectButton.tooltip")}
-                                  />
-                                </Hoverable.Item>
-                              </Disabled>
+                              <Hoverable.Item group="code-interpreter/Card">
+                                <Button
+                                  disabled={isLoading}
+                                  prominence="tertiary"
+                                  size="md"
+                                  icon={SvgUnplug}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setShowDisconnectModal(true);
+                                  }}
+                                  tooltip={t("card.disconnectButton.tooltip")}
+                                />
+                              </Hoverable.Item>
                               <Button
                                 disabled={isLoading}
                                 prominence="tertiary"
