@@ -158,6 +158,7 @@ export default function CodeInterpreterPage() {
   const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasError = !!status && status !== "healthy";
@@ -187,6 +188,15 @@ export default function CodeInterpreterPage() {
     }, 1000);
   }
 
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
   async function handleToggle(enabled: boolean) {
     setIsReconnecting(enabled);
     try {
@@ -200,7 +210,7 @@ export default function CodeInterpreterPage() {
         return;
       }
       setShowDisconnectModal(false);
-      refetch();
+      void refetch();
     } finally {
       setIsReconnecting(false);
     }
@@ -266,8 +276,8 @@ export default function CodeInterpreterPage() {
                                 disabled={isLoading}
                                 prominence="tertiary"
                                 size="md"
-                                icon={SvgRefreshCw}
-                                onClick={refetch}
+                                icon={isRefreshing ? IconLoader : SvgRefreshCw}
+                                onClick={handleRefresh}
                                 tooltip={t("card.refreshButton.tooltip")}
                               />
                             </Section>
