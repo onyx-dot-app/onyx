@@ -181,7 +181,7 @@ export const OpenPopoverTrigger: Story = {
             Closed
           </Button>
         </Popover.Trigger>
-        <Popover.Content width="md">
+        <Popover.Content width={50}>
           <div className="p-2">Menu</div>
         </Popover.Content>
       </Popover>
@@ -191,7 +191,7 @@ export const OpenPopoverTrigger: Story = {
             Open
           </Button>
         </Popover.Trigger>
-        <Popover.Content width="md">
+        <Popover.Content width={50}>
           <div className="p-2">Menu</div>
         </Popover.Content>
       </Popover>

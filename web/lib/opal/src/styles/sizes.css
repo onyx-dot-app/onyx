@@ -43,6 +43,8 @@
   --block-width-contextual-menu-medium-large: 17.5rem;
   --block-width-contextual-menu-large: 20rem;
   --block-width-contextual-menu-extra-large: 22.5rem;
+  --block-width-contextual-menu-2x-large: 30rem;
+  --block-width-contextual-menu-3x-large: 40rem;
 
   --block-width-flash-message-small: 20rem;
   --block-width-flash-message-medium: 30rem;

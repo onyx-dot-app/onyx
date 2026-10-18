@@ -965,7 +965,7 @@ const AppInputBar = React.memo(
                   side="top"
                   align="start"
                   onOpenAutoFocus={(e) => e.preventDefault()}
-                  width="xl"
+                  width={70}
                 >
                   <Popover.Menu>
                     {[
