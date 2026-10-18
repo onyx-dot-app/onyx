@@ -3731,6 +3731,32 @@
         "placeholder": "从列表中选择{label}或输入"
       },
       "connectors": {
+          "seafile": {
+            "description": "索引 Seafile 资料库中的文件。",
+            "subtext": "选择或输入此连接器应索引的 Seafile 资料库。",
+            "fields": {
+              "base_url": {
+                "label": "基础 URL",
+                "description": "自托管 Seafile 的 URL，例如 https://seafile.example.com"
+              },
+              "repo_ids": {
+                "label": "资料库 ID",
+                "description": "选择或输入此连接器应索引的 Seafile 资料库。"
+              },
+              "path_prefixes": {
+                "label": "路径前缀",
+                "description": "每个资料库内的路径。保留 / 可索引整个资料库。"
+              },
+              "allowed_extensions": {
+                "label": "允许的扩展名",
+                "description": "此连接器应索引的文件扩展名。"
+              },
+              "max_file_size_bytes": {
+                "label": "最大文件大小（字节）",
+                "description": "超过此限制的文件将被跳过。"
+              }
+            }
+          },
         "shared": {
           "fields": {
             "include_attachments": {

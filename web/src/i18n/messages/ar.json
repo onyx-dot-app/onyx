@@ -3731,6 +3731,32 @@
         "placeholder": "اختر {label} من القائمة أو أدخله"
       },
       "connectors": {
+          "seafile": {
+            "description": "فهرسة الملفات من مكتبات Seafile.",
+            "subtext": "حدد أو أدخل مكتبات Seafile التي يجب فهرستها.",
+            "fields": {
+              "base_url": {
+                "label": "الرابط الأساسي",
+                "description": "رابط Seafile المستضاف ذاتيًا، مثل https://seafile.example.com"
+              },
+              "repo_ids": {
+                "label": "معرّفات المكتبات",
+                "description": "حدد أو أدخل مكتبات Seafile التي يجب فهرستها."
+              },
+              "path_prefixes": {
+                "label": "بادئات المسار",
+                "description": "المسارات داخل كل مكتبة. اترك / لفهرسة المكتبة كاملة."
+              },
+              "allowed_extensions": {
+                "label": "الامتدادات المسموح بها",
+                "description": "امتدادات الملفات التي يجب على هذا الموصل فهرستها."
+              },
+              "max_file_size_bytes": {
+                "label": "الحد الأقصى لحجم الملف بالبايت",
+                "description": "سيتم تخطي الملفات التي تتجاوز هذا الحد."
+              }
+            }
+          },
         "shared": {
           "fields": {
             "include_attachments": {

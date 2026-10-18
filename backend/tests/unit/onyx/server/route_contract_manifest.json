@@ -598,6 +598,7 @@
   "POST /manage/admin/connector/file/upload": "manage:connectors +scope",
   "POST /manage/admin/connector/indexing-status": "manage:connectors +scope",
   "POST /manage/admin/connector/run-once": "manage:connectors +scope",
+  "POST /manage/admin/connector/seafile/libraries": "manage:connectors",
   "POST /manage/admin/connector/{connector_id}/files/update": "manage:connectors +scope",
   "POST /manage/admin/credential/{credential_id}/binding-check": "manage:connectors +scope",
   "POST /manage/admin/credential/{credential_id}/capability-check": "manage:connectors +scope",

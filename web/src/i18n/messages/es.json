@@ -3731,6 +3731,32 @@
         "placeholder": "Elige {label} de la lista o escríbelo"
       },
       "connectors": {
+          "seafile": {
+            "description": "Indexa archivos de bibliotecas de Seafile.",
+            "subtext": "Selecciona o introduce las bibliotecas de Seafile que se deben indexar.",
+            "fields": {
+              "base_url": {
+                "label": "URL base",
+                "description": "URL de tu Seafile autohospedado, p. ej. https://seafile.example.com"
+              },
+              "repo_ids": {
+                "label": "ID de bibliotecas",
+                "description": "Selecciona o introduce las bibliotecas de Seafile que se deben indexar."
+              },
+              "path_prefixes": {
+                "label": "Prefijos de ruta",
+                "description": "Rutas dentro de cada biblioteca. Usa / para indexar toda la biblioteca."
+              },
+              "allowed_extensions": {
+                "label": "Extensiones permitidas",
+                "description": "Extensiones de archivo que debe indexar este conector."
+              },
+              "max_file_size_bytes": {
+                "label": "Tamaño máximo en bytes",
+                "description": "Los archivos que superen este límite se omiten."
+              }
+            }
+          },
         "shared": {
           "fields": {
             "include_attachments": {

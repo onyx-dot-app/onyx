@@ -3731,6 +3731,32 @@
         "placeholder": "Pick {label} from the list, or type one"
       },
       "connectors": {
+          "seafile": {
+            "description": "Index files from Seafile libraries.",
+            "subtext": "Select or enter the Seafile libraries this connector should index.",
+            "fields": {
+              "base_url": {
+                "label": "Base URL",
+                "description": "Your self-hosted Seafile URL, e.g. https://seafile.example.com"
+              },
+              "repo_ids": {
+                "label": "Library IDs",
+                "description": "Select or enter the Seafile libraries this connector should index."
+              },
+              "path_prefixes": {
+                "label": "Path Prefixes",
+                "description": "Paths inside each library. Leave as / to index each configured library."
+              },
+              "allowed_extensions": {
+                "label": "Allowed Extensions",
+                "description": "File extensions this connector should index."
+              },
+              "max_file_size_bytes": {
+                "label": "Max File Size Bytes",
+                "description": "Files larger than this limit are skipped."
+              }
+            }
+          },
         "shared": {
           "fields": {
             "include_attachments": {

@@ -2158,40 +2158,36 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   seafile: {
-    description: "Configure Seafile connector",
-    subtext:
-      "Use a dedicated Seafile service account with read access only to the libraries and paths you want Onyx to index. Generate or copy that user's Web API auth token from Seafile; self-hosted instances may need ENABLE_GET_AUTH_TOKEN_BY_SESSION enabled in seahub_settings.py before the token appears in user settings.",
+    description: "connectors.seafile.description",
+    subtext: "connectors.seafile.subtext",
     values: [
       {
         type: "text",
-        label: "Base URL",
+        label: "connectors.seafile.fields.base_url.label",
         name: "base_url",
         optional: false,
-        description:
-          "Your self-hosted Seafile URL, e.g. https://seafile.example.com",
+        description: "connectors.seafile.fields.base_url.description",
       },
       {
         type: "list",
-        label: "Library IDs",
+        label: "connectors.seafile.fields.repo_ids.label",
         name: "repo_ids",
         optional: false,
-        description:
-          "Library IDs appear in Seafile library URLs as /lib/<library-id>/.... Add each library the service account can read.",
+        description: "connectors.seafile.fields.repo_ids.description",
       },
       {
         type: "list",
-        label: "Path Prefixes",
+        label: "connectors.seafile.fields.path_prefixes.label",
         name: "path_prefixes",
         optional: true,
         default: ["/"],
-        description:
-          "Optional paths inside each library, such as /docs. Leave as / to index each configured library.",
+        description: "connectors.seafile.fields.path_prefixes.description",
       },
     ],
     advanced_values: [
       {
         type: "list",
-        label: "Allowed Extensions",
+        label: "connectors.seafile.fields.allowed_extensions.label",
         name: "allowed_extensions",
         optional: true,
         default: [
@@ -2210,16 +2206,16 @@ export const connectorConfigs: Record<
           ".pptx",
           ".xlsx",
         ],
-        description: "Text-like files plus PDF, DOCX, PPTX, and XLSX.",
+        description: "connectors.seafile.fields.allowed_extensions.description",
       },
       {
         type: "number",
-        label: "Max File Size Bytes",
+        label: "connectors.seafile.fields.max_file_size_bytes.label",
         name: "max_file_size_bytes",
         optional: true,
         default: 20971520,
         description:
-          "Files larger than this limit are skipped instead of indexed.",
+          "connectors.seafile.fields.max_file_size_bytes.description",
       },
     ],
   },
