@@ -142,13 +142,13 @@ Unset, the panel sits flush against the list.
 
 Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/components/tabs) props except `className` / `style`.
 
-| Prop            | Type                                   | Default       | Description                            |
-| --------------- | -------------------------------------- | ------------- | -------------------------------------- |
-| `variant`       | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group |
+| Prop            | Type                                   | Default       | Description                                                          |
+| --------------- | -------------------------------------- | ------------- | -------------------------------------------------------------------- |
+| `variant`       | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group                               |
 | `gap`           | `Spacing`                              | —             | Space between the tab list and the panel (`N / 4` rem); unset, flush |
-| `defaultValue`  | `string`                               | —             | Initially active tab (uncontrolled)    |
-| `value`         | `string`                               | —             | Controlled active tab                  |
-| `onValueChange` | `(value: string) => void`              | —             | Called when active tab changes         |
+| `defaultValue`  | `string`                               | —             | Initially active tab (uncontrolled)                                  |
+| `value`         | `string`                               | —             | Controlled active tab                                                |
+| `onValueChange` | `(value: string) => void`              | —             | Called when active tab changes                                       |
 
 ### `Tabs.List`
 
@@ -159,16 +159,16 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 
 ### `Tabs.Trigger`
 
-| Prop          | Type                                     | Default      | Description                            |
-| ------------- | ---------------------------------------- | ------------ | -------------------------------------- |
-| `value`       | `string`                                 | **required** | Tab value                              |
-| `children`    | `string \| RichStr`                      | **required** | The label; always rendered as `Content` |
-| `description` | `string \| RichStr`                      | —            | Smaller text below the label; contained tabs only, other variants ignore it |
-| `icon`        | `FunctionComponent<IconProps>`           | —            | Icon before the label                  |
-| `tooltip`     | `string`                                 | —            | Tooltip on hover                       |
-| `tooltipSide` | `"top" \| "bottom" \| "start" \| "end"` | `"top"`      | Tooltip placement; `start`/`end` follow the text direction |
-| `disabled`    | `boolean`                                | —            | Disables the tab (tooltip still shows) |
-| `isLoading`   | `boolean`                                | —            | Shows a spinner after the label        |
+| Prop          | Type                                    | Default      | Description                                                                 |
+| ------------- | --------------------------------------- | ------------ | --------------------------------------------------------------------------- |
+| `value`       | `string`                                | **required** | Tab value                                                                   |
+| `children`    | `string \| RichStr`                     | **required** | The label; always rendered as `Content`                                     |
+| `description` | `string \| RichStr`                     | —            | Smaller text below the label; contained tabs only, other variants ignore it |
+| `icon`        | `FunctionComponent<IconProps>`          | —            | Icon before the label                                                       |
+| `tooltip`     | `string \| RichStr`                     | —            | Tooltip on hover, also when disabled; inline markdown via `markdown()`      |
+| `tooltipSide` | `"top" \| "bottom" \| "start" \| "end"` | `"top"`      | Tooltip placement; `start`/`end` follow the text direction                  |
+| `disabled`    | `boolean`                               | —            | Disables the tab (tooltip still shows)                                      |
+| `isLoading`   | `boolean`                               | —            | Shows a spinner after the label                                             |
 
 ### `Tabs.Content`
 

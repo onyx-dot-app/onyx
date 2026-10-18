@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, Tabs, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
+import { markdown } from "@opal/utils";
 import {
   ContentAction,
   IllustrationContent,
@@ -110,6 +111,7 @@ type PluginDialog =
 
 export default function PluginsPage() {
   const t = useTranslations("actions.plugins");
+  const tSidebar = useTranslations("sidebar");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
@@ -281,8 +283,18 @@ export default function PluginsPage() {
                       <Tabs.Trigger
                         key={value}
                         value={value}
-                        // Apps need Craft and full admin: shown, not hidden.
+                        // Apps need Craft and full admin: shown, not hidden,
+                        // with the admin sidebar's upgrade tooltip.
                         disabled={value === "external-app" && !canManageApps}
+                        tooltip={
+                          value === "external-app" && !canManageApps
+                            ? markdown(
+                                tSidebar(
+                                  "adminSidebar.businessOrEnterpriseOnly.tooltip"
+                                )
+                              )
+                            : undefined
+                        }
                       >
                         {value === "all"
                           ? t("filters.all")

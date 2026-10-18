@@ -275,8 +275,8 @@ interface TabsTriggerProps extends WithoutStyles<
   children: string | RichStr;
   /** Smaller text below the label. Contained tabs only; other variants ignore it. */
   description?: string | RichStr;
-  /** Tooltip shown on hover. */
-  tooltip?: string;
+  /** Tooltip shown on hover, also when disabled. Supports inline markdown via `markdown()`. */
+  tooltip?: string | RichStr;
   /** Side where the tooltip appears. @default "top" */
   tooltipSide?: TooltipSide;
   /** Icon rendered before the label. */
