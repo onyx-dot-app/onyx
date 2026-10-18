@@ -35,22 +35,26 @@ type StatusLabelKey =
 
 const STATUS_CONFIG: Record<
   CodeInterpreterHealthStatus,
-  { labelKey: StatusLabelKey; icon: typeof SvgCheckCircle; iconColor: string }
+  {
+    labelKey: StatusLabelKey;
+    icon: typeof SvgCheckCircle;
+    color: "success" | "danger";
+  }
 > = {
   healthy: {
     labelKey: "status.healthy.label",
     icon: SvgCheckCircle,
-    iconColor: "text-status-success-05!",
+    color: "success",
   },
   unhealthy: {
     labelKey: "status.unhealthy.label",
     icon: SvgXOctagon,
-    iconColor: "text-status-error-05!",
+    color: "danger",
   },
   connection_lost: {
     labelKey: "status.connectionLost.label",
     icon: SvgXOctagon,
-    iconColor: "text-status-error-05!",
+    color: "danger",
   },
 };
 
@@ -94,7 +98,7 @@ function ConnectionStatus({
     return <CheckingStatus />;
   }
 
-  const { labelKey, icon: Icon, iconColor } = STATUS_CONFIG[status];
+  const { labelKey, icon, color } = STATUS_CONFIG[status];
   const hasError = status !== "healthy";
 
   return (
@@ -102,18 +106,22 @@ function ConnectionStatus({
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={1}
       padding={2}
     >
-      <Text mainUiAction text03>
-        {t(labelKey)}
-      </Text>
       <div
         onMouseEnter={() => hasError && onIconHover(true)}
         onMouseLeave={() => onIconHover(false)}
         className={cn(hasError && "cursor-pointer")}
       >
-        <Icon size={16} className={iconColor} />
+        <Content
+          sizePreset="main-ui"
+          variant="body"
+          orientation="reverse"
+          width="fit"
+          icon={icon}
+          title={t(labelKey)}
+          color={color}
+        />
       </div>
     </Section>
   );
