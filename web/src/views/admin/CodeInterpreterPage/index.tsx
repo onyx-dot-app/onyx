@@ -149,6 +149,7 @@ export default function CodeInterpreterPage() {
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasError = !!status && status !== "healthy";
+  const isConnectionLost = status === "connection_lost";
 
   useEffect(
     () => () => {
@@ -211,13 +212,18 @@ export default function CodeInterpreterPage() {
             >
               {/* The error popover opens under the whole card, not the status. */}
               <Popover.Anchor>
-                <SelectCard state="filled" padding={2} rounding={4}>
+                <SelectCard
+                  state={isConnectionLost ? "empty" : "filled"}
+                  padding={2}
+                  rounding={4}
+                >
                   <Card.Header>
                     <ContentAction
                       sizePreset="main-ui"
                       variant="section"
                       icon={SvgTerminal}
                       title={t("card.title")}
+                      strikethrough={isConnectionLost}
                       description={t("card.description")}
                       padding={2}
                       rightChildren={
@@ -298,6 +304,7 @@ export default function CodeInterpreterPage() {
               variant="section"
               icon={SvgTerminal}
               title={t("card.disconnectedTitle")}
+              strikethrough
               description={t("card.description")}
               padding={2}
               rightChildren={
