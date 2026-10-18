@@ -155,6 +155,54 @@ function ConnectionStatus({
   );
 }
 
+interface CardActionsProps {
+  disabled: boolean;
+  isReconnecting: boolean;
+  onDisconnect: () => void;
+  onReconnect: () => void;
+}
+
+/** The card's disconnect and refresh (reconnect) buttons. */
+function CardActions({
+  disabled,
+  isReconnecting,
+  onDisconnect,
+  onReconnect,
+}: CardActionsProps) {
+  const t = useTranslations("admin.codeInterpreter");
+
+  return (
+    <div className="px-1 pb-1">
+      <Section flexDirection="row" justifyContent="end" gap={1}>
+        <Hoverable.Item group="code-interpreter/Card">
+          <Button
+            disabled={disabled}
+            prominence="tertiary"
+            size="md"
+            icon={SvgUnplug}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDisconnect();
+            }}
+            tooltip={t("card.disconnectButton.tooltip")}
+          />
+        </Hoverable.Item>
+        <Button
+          disabled={disabled}
+          prominence="tertiary"
+          size="md"
+          icon={isReconnecting ? IconLoader : SvgRefreshCw}
+          onClick={(event) => {
+            event.stopPropagation();
+            onReconnect();
+          }}
+          tooltip={t("card.refreshButton.tooltip")}
+        />
+      </Section>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -255,40 +303,12 @@ export default function CodeInterpreterPage() {
                             isLoading={isLoading}
                             onErrorHover={handleErrorHover}
                           />
-                          <div className="px-1 pb-1">
-                            <Section
-                              flexDirection="row"
-                              justifyContent="end"
-                              gap={1}
-                            >
-                              <Hoverable.Item group="code-interpreter/Card">
-                                <Button
-                                  disabled={isLoading}
-                                  prominence="tertiary"
-                                  size="md"
-                                  icon={SvgUnplug}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setShowDisconnectModal(true);
-                                  }}
-                                  tooltip={t("card.disconnectButton.tooltip")}
-                                />
-                              </Hoverable.Item>
-                              <Button
-                                disabled={isLoading}
-                                prominence="tertiary"
-                                size="md"
-                                icon={
-                                  isReconnecting ? IconLoader : SvgRefreshCw
-                                }
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleToggle(true);
-                                }}
-                                tooltip={t("card.refreshButton.tooltip")}
-                              />
-                            </Section>
-                          </div>
+                          <CardActions
+                            disabled={isLoading}
+                            isReconnecting={isReconnecting}
+                            onDisconnect={() => setShowDisconnectModal(true)}
+                            onReconnect={() => void handleToggle(true)}
+                          />
                         </Section>
                       }
                     />
@@ -323,37 +343,48 @@ export default function CodeInterpreterPage() {
             </Popover.Content>
           </Popover>
         ) : (
-          <SelectCard
-            state="empty"
-            padding={2}
-            rounding={4}
-            onClick={() => handleToggle(true)}
-          >
-            <ContentAction
-              sizePreset="main-ui"
-              variant="section"
-              icon={SvgTerminal}
-              title={t("card.disconnectedTitle")}
-              description={t("card.description")}
+          <Hoverable.Root group="code-interpreter/Card" interaction="rest">
+            <SelectCard
+              state="empty"
               padding={2}
-              rightChildren={
-                isReconnecting ? (
-                  <CheckingStatus />
-                ) : (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowExchange}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleToggle(true);
-                    }}
-                  >
-                    {t("card.reconnectButton.label")}
-                  </Button>
-                )
-              }
-            />
-          </SelectCard>
+              rounding={4}
+              onClick={() => handleToggle(true)}
+            >
+              <ContentAction
+                sizePreset="main-ui"
+                variant="section"
+                icon={SvgTerminal}
+                title={t("card.disconnectedTitle")}
+                description={t("card.description")}
+                padding={2}
+                rightChildren={
+                  isReconnecting ? (
+                    <Section alignItems="end" gap={0}>
+                      <CheckingStatus />
+                      {/* "Checking…" already shows the loader. */}
+                      <CardActions
+                        disabled
+                        isReconnecting={false}
+                        onDisconnect={() => setShowDisconnectModal(true)}
+                        onReconnect={() => void handleToggle(true)}
+                      />
+                    </Section>
+                  ) : (
+                    <Button
+                      prominence="tertiary"
+                      rightIcon={SvgArrowExchange}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleToggle(true);
+                      }}
+                    >
+                      {t("card.reconnectButton.label")}
+                    </Button>
+                  )
+                }
+              />
+            </SelectCard>
+          </Hoverable.Root>
         )}
       </SettingsLayouts.Body>
 
