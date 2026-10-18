@@ -200,7 +200,7 @@ class ClickupConnector(LoadConnector, PollConnector):
             for task in response["tasks"]:
                 try:
                     document = self._build_document_from_task(task)
-                except Exception:
+                except (KeyError, TypeError, ValueError):
                     logger.exception(
                         f"Failed to process Clickup task {task.get('id')!r}; "
                         "skipping it."
