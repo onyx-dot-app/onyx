@@ -282,6 +282,7 @@ export default function CodeInterpreterPage() {
                   variant="section"
                   icon={SvgXOctagon}
                   color="danger"
+                  titleColor="text-04"
                   title={
                     status === "connection_lost"
                       ? t("errorCard.connectionLost.title")
