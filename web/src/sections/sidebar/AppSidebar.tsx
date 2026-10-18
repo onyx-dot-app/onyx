@@ -274,7 +274,7 @@ export default function AppSidebar() {
     !isOnyxCraftEnabled &&
     combinedSettingsData?.onyx_craft_requires_upgrade === true;
   // Gated like a Business admin page: below that tier the tab is disabled.
-  const isCraftTierLocked = !useTierAtLeast(Tier.BUSINESS);
+  const hasCraftTier = useTierAtLeast(Tier.BUSINESS);
 
   // Fetch notifications for build mode intro
   const { notifications, refresh: mutateNotifications } = useNotifications({
@@ -638,7 +638,7 @@ export default function AppSidebar() {
           {(isOnyxCraftEnabled || isOnyxCraftUpsell) && (
             <div data-testid="AppSidebar/build">
               <Disabled
-                disabled={isCraftTierLocked}
+                disabled={!hasCraftTier}
                 // Only admins can open billing, so others are told to ask one.
                 tooltip={
                   isAdmin
@@ -650,11 +650,11 @@ export default function AppSidebar() {
               >
                 <SidebarTab
                   icon={SvgDevKit}
-                  href={isCraftTierLocked ? undefined : CRAFT_PATH}
+                  href={hasCraftTier ? CRAFT_PATH : undefined}
                   onClick={
-                    isCraftTierLocked
-                      ? undefined
-                      : () => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)
+                    hasCraftTier
+                      ? () => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)
+                      : undefined
                   }
                   rightChildren={
                     isOnyxCraftUpsell ? (
