@@ -73,7 +73,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           }
           onClose={onClose}
         />
-        <Modal.Body twoTone>
+        <Modal.Body>
           <GeneralLayouts.Section gap={4}>{children}</GeneralLayouts.Section>
         </Modal.Body>
         <Modal.Footer>

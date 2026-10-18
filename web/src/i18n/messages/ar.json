@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "حذف"
-        },
-        "title": "حذف خادم MCP"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "حذف"
-        },
-        "title": "حذف إجراء OpenAPI"
+        }
       },
       "method": {
         "noSummary": "لا يوجد ملخص"
@@ -1150,6 +1148,9 @@
           "title": "لم يتم العثور على إضافات"
         },
         "externalAppsError": "تعذر تحميل التطبيقات"
+      },
+      "deleteModal": {
+        "title": "حذف *{name}*"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {لن تُحذف أي مهارات مخصصة مرتبطة.} one {سيُحتفظ بمهارة مخصصة مرتبطة واحدة، وستُفصل عن هذا التطبيق وتُعطّل للجميع.} other {سيُحتفظ بـ # مهارات مخصصة مرتبطة، وستُفصل عن هذا التطبيق وتُعطّل للجميع.}}",
           "submit": {
             "label": "حذف التطبيق"
-          },
-          "title": "حذف “{name}”؟"
+          }
         },
         "toasts": {
           "deleteFailed": "فشل حذف \"{name}\"",

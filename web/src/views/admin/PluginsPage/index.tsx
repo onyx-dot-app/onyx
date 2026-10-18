@@ -29,10 +29,10 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import PluginCard from "@/views/admin/PluginsPage/PluginCard";
 import PluginAddCatalogModal, {
   type PluginCreation,
-} from "@/sections/plugins/PluginAddCatalogModal";
+} from "@/views/admin/PluginsPage/components/PluginAddCatalogModal";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
-import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
-import MCPPluginSetupModal from "@/sections/actions/modals/MCPPluginSetupModal";
+import CreateCustomAppModal from "@/views/admin/PluginsPage/components/CreateCustomAppModal";
+import MCPPluginSetupModal from "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal";
 import OpenAPIPluginCreateModal from "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";

@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
-import PluginAddCatalogModal from "@/sections/plugins/PluginAddCatalogModal";
+import PluginAddCatalogModal from "@/views/admin/PluginsPage/components/PluginAddCatalogModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   BuiltInExternalAppDescriptor,
@@ -161,9 +161,6 @@ test.each(["mcp", "external-app"] as const)(
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("data-position", "top");
     expect(dialog).toHaveAttribute("data-width", "lg");
-    expect(dialog.querySelector(".opal-modal-body")).toHaveAttribute(
-      "data-two-tone"
-    );
     const custom = within(dialog).getByRole("button", {
       name: kind === "mcp" ? "Add custom MCP server" : "Custom app",
     });

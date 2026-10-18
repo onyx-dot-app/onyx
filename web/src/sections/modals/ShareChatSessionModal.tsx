@@ -179,7 +179,7 @@ export default function ShareChatSessionModal({
           description={t("header.description")}
           onClose={onClose}
         />
-        <Modal.Body twoTone>
+        <Modal.Body>
           <Section
             justifyContent="start"
             alignItems="stretch"

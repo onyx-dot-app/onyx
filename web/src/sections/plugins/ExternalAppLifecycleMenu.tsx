@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@opal/utils";
+import { cn, markdown } from "@opal/utils";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
@@ -117,7 +117,7 @@ export default function ExternalAppLifecycleMenu({
       {confirm && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={t("card.deleteModal.title", { name: app.name })}
+          title={markdown(tp("deleteModal.title", { name: app.name }))}
           description={t("card.deleteModal.description")}
           onClose={pending ? undefined : () => setConfirm(false)}
           submit={

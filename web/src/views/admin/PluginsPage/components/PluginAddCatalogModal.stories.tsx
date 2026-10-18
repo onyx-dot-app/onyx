@@ -8,7 +8,7 @@ import type {
   BuiltInExternalAppDescriptor,
   ExternalAppType,
 } from "@/app/craft/v1/apps/registry";
-import PluginAddCatalogModal from "@/sections/plugins/PluginAddCatalogModal";
+import PluginAddCatalogModal from "@/views/admin/PluginsPage/components/PluginAddCatalogModal";
 
 const providers: { app_type: ExternalAppType; name: string }[] = [
   { app_type: "SLACK", name: "Slack" },

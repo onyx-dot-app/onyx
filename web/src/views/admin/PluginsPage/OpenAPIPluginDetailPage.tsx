@@ -13,15 +13,11 @@ import {
 } from "@opal/components";
 import { Content, InputVertical, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
-import { SvgActions } from "@opal/icons";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { can } from "@/lib/permissions/resource-actions";
 import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
 import { updateCustomTool } from "@/lib/plugins/openapi/svc";
-import {
-  extractMethodSpecsFromDefinition,
-  getActionIcon,
-} from "@/lib/tools/utils";
+import { extractMethodSpecsFromDefinition } from "@/lib/tools/utils";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import AddOpenAPIActionModal from "@/views/admin/PluginsPage/components/AddOpenAPIActionModal";
 import OpenAPIAuthenticationModal from "@/views/admin/PluginsPage/components/OpenAPIAuthenticationModal";
@@ -29,9 +25,10 @@ import type { OpenAPIAuthFormValues } from "@/lib/plugins/openapi/types";
 import { saveOpenApiAuthentication } from "@/lib/plugins/openapi/workflow";
 import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
-import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
+import MCPFormActions from "@/views/admin/PluginsPage/components/mcp/MCPFormActions";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
+import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
 interface OpenAPIPluginDetailPageProps {
   toolId: number;
@@ -332,7 +329,7 @@ export default function OpenAPIPluginDetailPage({
         {!guard.confirmationOpen && (
           <Modal.Header
             title={tool?.name ?? t("plugins.openapi.detailsTitle")}
-            icon={tool ? getActionIcon(serverUrl, tool.name) : SvgActions}
+            icon={PLUGIN_KIND_ICONS.openapi}
             description={
               serverUrl ||
               tool?.description ||
@@ -342,7 +339,7 @@ export default function OpenAPIPluginDetailPage({
           />
         )}
         <div className={guard.confirmationOpen ? "hidden" : "contents"}>
-          <Modal.Body twoTone={false} alignItems="stretch">
+          <Modal.Body alignItems="stretch">
             {!tool && isLoading ? (
               <IconLoader />
             ) : !tool ? (

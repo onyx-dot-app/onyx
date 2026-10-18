@@ -10,7 +10,7 @@ import {
   act,
 } from "@tests/setup/test-utils";
 import PluginsPage from "@/views/admin/PluginsPage";
-import type MCPPluginSetupModal from "@/sections/actions/modals/MCPPluginSetupModal";
+import type MCPPluginSetupModal from "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal";
 import type OpenAPIPluginCreateModal from "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal";
 import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
@@ -39,31 +39,34 @@ jest.mock("@/lib/permissions/hooks", () => ({
     isScopedManager: permission !== "admin" && mockScopedManager,
   }),
 }));
-jest.mock("@/sections/actions/modals/MCPPluginSetupModal", () => ({
-  __esModule: true,
-  default: function MockMCPModal(
-    props: ComponentProps<typeof MCPPluginSetupModal>
-  ) {
-    return props.open ? (
-      <div role="dialog" aria-label="MCP setup">
-        <input
-          aria-label="Server URL"
-          readOnly
-          value={props.initialUrl ?? ""}
-        />
-        <input
-          aria-label="Server name"
-          readOnly
-          value={props.initialName ?? ""}
-        />
-        <button onClick={() => props.onCompleted(mockServer)}>
-          Complete setup
-        </button>
-        <button onClick={props.onClose}>Close</button>
-      </div>
-    ) : null;
-  },
-}));
+jest.mock(
+  "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal",
+  () => ({
+    __esModule: true,
+    default: function MockMCPModal(
+      props: ComponentProps<typeof MCPPluginSetupModal>
+    ) {
+      return props.open ? (
+        <div role="dialog" aria-label="MCP setup">
+          <input
+            aria-label="Server URL"
+            readOnly
+            value={props.initialUrl ?? ""}
+          />
+          <input
+            aria-label="Server name"
+            readOnly
+            value={props.initialName ?? ""}
+          />
+          <button onClick={() => props.onCompleted(mockServer)}>
+            Complete setup
+          </button>
+          <button onClick={props.onClose}>Close</button>
+        </div>
+      ) : null;
+    },
+  })
+);
 jest.mock(
   "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal",
   () => ({

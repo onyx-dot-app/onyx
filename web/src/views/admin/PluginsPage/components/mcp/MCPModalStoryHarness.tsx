@@ -4,12 +4,12 @@ import { Button, Modal, MessageCard } from "@opal/components";
 import { IconLoader } from "@opal/loaders";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import MCPAuthenticationPage from "@/sections/actions/modals/MCPAuthenticationPage";
-import MCPServerDetailsPage from "@/sections/actions/modals/MCPServerDetailsPage";
+import MCPAuthenticationPage from "@/views/admin/PluginsPage/components/mcp/MCPAuthenticationPage";
+import MCPServerDetailsPage from "@/views/admin/PluginsPage/components/mcp/MCPServerDetailsPage";
 import { ToastProvider } from "@opal/layouts";
 import { UserProvider } from "@/providers/UserProvider";
-import MCPServerDetailPage from "@/sections/actions/MCPServerDetailPage";
-import MCPPluginSetupModal from "@/sections/actions/modals/MCPPluginSetupModal";
+import MCPPluginDetailPage from "@/views/admin/PluginsPage/MCPPluginDetailPage";
+import MCPPluginSetupModal from "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
@@ -537,7 +537,7 @@ function ModalCanvas({
   kind: "auth" | "add" | "detail";
   scenario: MCPStoryScenario;
 }) {
-  if (kind === "detail") return <MCPServerDetailPage serverId={42} />;
+  if (kind === "detail") return <MCPPluginDetailPage serverId={42} />;
   if (kind === "add" && !scenario.edit) return <SetupModalCanvas />;
   return <SavedEditorCanvas kind={kind} />;
 }
@@ -559,7 +559,7 @@ export function MCPModalStory({
 function SetupModalCanvas() {
   const [open, setOpen] = useState(true);
   const [completed, setCompleted] = useState(false);
-  if (completed) return <MCPServerDetailPage serverId={42} />;
+  if (completed) return <MCPPluginDetailPage serverId={42} />;
   return (
     <>
       <div className="p-6">

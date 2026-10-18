@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "削除"
-        },
-        "title": "MCP サーバーを削除"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "削除"
-        },
-        "title": "OpenAPI アクションを削除"
+        }
       },
       "method": {
         "noSummary": "概要はありません"
@@ -1150,6 +1148,9 @@
           "title": "プラグインが見つかりません"
         },
         "externalAppsError": "アプリを読み込めませんでした"
+      },
+      "deleteModal": {
+        "title": "*{name}* を削除"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {削除される関連カスタムスキルはありません。} one {関連するカスタムスキル # 件は保持されますが、このアプリとのリンクが解除され、全員に対して無効になります。} other {関連するカスタムスキル # 件は保持されますが、このアプリとのリンクが解除され、全員に対して無効になります。}}",
           "submit": {
             "label": "アプリを削除"
-          },
-          "title": "「{name}」を削除しますか？"
+          }
         },
         "toasts": {
           "deleteFailed": "「{name}」を削除できませんでした",

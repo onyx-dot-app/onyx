@@ -4,7 +4,7 @@ import {
   MCPModalStory,
   storyServer,
   type MCPStoryScenario,
-} from "@/sections/actions/modals/MCPModalStoryHarness";
+} from "@/views/admin/PluginsPage/components/mcp/MCPModalStoryHarness";
 import messages from "@/i18n/messages/en.json";
 const copy = messages.actions.addMcpModal;
 const meta = {

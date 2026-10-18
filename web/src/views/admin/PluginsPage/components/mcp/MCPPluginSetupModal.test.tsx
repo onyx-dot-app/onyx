@@ -19,7 +19,7 @@ import {
   MCPTransportType,
   type MCPSetupProbeResult,
 } from "@/lib/mcp/types";
-import MCPPluginSetupModal from "@/sections/actions/modals/MCPPluginSetupModal";
+import MCPPluginSetupModal from "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal";
 import messages from "@/i18n/messages/en.json";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";

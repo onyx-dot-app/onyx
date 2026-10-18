@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "删除"
-        },
-        "title": "删除 MCP 服务器"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "删除"
-        },
-        "title": "删除 OpenAPI 操作"
+        }
       },
       "method": {
         "noSummary": "未提供摘要"
@@ -1150,6 +1148,9 @@
           "title": "未找到插件"
         },
         "externalAppsError": "无法加载应用"
+      },
+      "deleteModal": {
+        "title": "删除 *{name}*"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {不会删除任何关联的自定义技能。} one {将保留 # 个关联的自定义技能，解除与此应用的关联，并对所有人禁用。} other {将保留 # 个关联的自定义技能，解除与此应用的关联，并对所有人禁用。}}",
           "submit": {
             "label": "删除应用"
-          },
-          "title": "删除“{name}”？"
+          }
         },
         "toasts": {
           "deleteFailed": "删除“{name}”失败",

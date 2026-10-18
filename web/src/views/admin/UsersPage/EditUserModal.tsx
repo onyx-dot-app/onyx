@@ -150,7 +150,7 @@ export default function EditUserModal({
           }
           onClose={isSubmitting ? undefined : onClose}
         />
-        <Modal.Body twoTone>
+        <Modal.Body>
           <Section padding={0} height="auto" alignItems="stretch">
             <Section
               gap={2}

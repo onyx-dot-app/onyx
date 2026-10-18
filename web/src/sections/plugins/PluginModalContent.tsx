@@ -12,7 +12,6 @@ export default function PluginModalContent(props: PluginModalContentProps) {
       {...props}
       width="md"
       height="fit"
-      position="top"
       preventAccidentalClose={false}
     />
   );

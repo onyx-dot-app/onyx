@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "Supprimer"
-        },
-        "title": "Supprimer le serveur MCP"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "Supprimer"
-        },
-        "title": "Supprimer l'action OpenAPI"
+        }
       },
       "method": {
         "noSummary": "Aucun résumé fourni"
@@ -1150,6 +1148,9 @@
           "title": "Aucun plugin trouvé"
         },
         "externalAppsError": "Impossible de charger les applications"
+      },
+      "deleteModal": {
+        "title": "Supprimer *{name}*"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {Aucune compétence personnalisée associée ne sera supprimée.} one {# compétence personnalisée associée sera conservée, dissociée de cette application et désactivée pour tout le monde.} other {# compétences personnalisées associées seront conservées, dissociées de cette application et désactivées pour tout le monde.}}",
           "submit": {
             "label": "Supprimer l'application"
-          },
-          "title": "Supprimer “{name}” ?"
+          }
         },
         "toasts": {
           "deleteFailed": "Échec de la suppression de \"{name}\"",

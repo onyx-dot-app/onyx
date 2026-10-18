@@ -1,7 +1,7 @@
 "use client";
 import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
-import type { MCPAuthFormValues } from "@/sections/actions/modals/types";
+import type { MCPAuthFormValues } from "@/views/admin/PluginsPage/components/mcp/types";
 import { FormField } from "@/refresh-components/form/FormField";
 import { Section } from "@opal/layouts";
 import { Collapsible, Divider, InputSingleSelect } from "@opal/components";
@@ -10,7 +10,7 @@ import {
   MCPAuthenticationPerformer,
   MCPTransportType,
 } from "@/lib/mcp/types";
-import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
+import { PerUserAuthConfig } from "@/views/admin/PluginsPage/components/mcp/PerUserAuthConfig";
 interface MCPAdvancedFieldsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

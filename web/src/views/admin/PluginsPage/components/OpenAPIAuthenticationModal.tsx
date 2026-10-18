@@ -44,8 +44,9 @@ import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { SvgArrowLeft } from "@opal/icons";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
-import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
-import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
+import MCPFormActions from "@/views/admin/PluginsPage/components/mcp/MCPFormActions";
+import MCPFormDirtyObserver from "@/views/admin/PluginsPage/components/mcp/MCPFormDirtyObserver";
+import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
 interface OpenAPIAuthenticationModalProps {
   presentation?: "modal" | "inline";
@@ -425,7 +426,6 @@ export default function OpenAPIAuthenticationModal({
               <MCPFormDirtyObserver onDirtyChange={onDirtyChange} />
             )}
             <Modal.Body
-              twoTone={false}
               padding={presentation === "inline" ? 0 : 6}
               alignItems="stretch"
             >
@@ -878,6 +878,7 @@ export default function OpenAPIAuthenticationModal({
       <PluginModalContent skipOverlay={skipOverlay}>
         <Modal.Header
           padding={4}
+          icon={PLUGIN_KIND_ICONS.openapi}
           title={title}
           description={description ?? t("openApiAuthModal.header.description")}
           onClose={saving ? undefined : onClose}

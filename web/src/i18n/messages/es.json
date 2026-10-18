@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "Eliminar"
-        },
-        "title": "Eliminar el servidor MCP"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "Eliminar"
-        },
-        "title": "Eliminar la acción de OpenAPI"
+        }
       },
       "method": {
         "noSummary": "No se proporcionó ningún resumen"
@@ -1150,6 +1148,9 @@
           "title": "No se encontraron plugins"
         },
         "externalAppsError": "No se pudieron cargar las apps"
+      },
+      "deleteModal": {
+        "title": "Eliminar *{name}*"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {No se eliminará ninguna habilidad personalizada asociada.} one {# habilidad personalizada asociada se conservará, se desvinculará de esta app y se desactivará para todos.} other {# habilidades personalizadas asociadas se conservarán, se desvincularán de esta app y se desactivarán para todos.}}",
           "submit": {
             "label": "Eliminar la app"
-          },
-          "title": "¿Eliminar “{name}”?"
+          }
         },
         "toasts": {
           "deleteFailed": "No se pudo eliminar \"{name}\"",

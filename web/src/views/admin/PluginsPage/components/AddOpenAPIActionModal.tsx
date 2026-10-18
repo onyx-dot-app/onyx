@@ -30,7 +30,8 @@ import { SvgActions, SvgBracketCurly } from "@opal/icons";
 import { getActionIcon } from "@/lib/tools/utils";
 import { EmptyMessageCard } from "@opal/components";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
-import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
+import MCPFormDirtyObserver from "@/views/admin/PluginsPage/components/mcp/MCPFormDirtyObserver";
+import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
 interface AddOpenAPIActionModalProps {
   onViewTools?: () => void;
@@ -251,13 +252,13 @@ function FormContent({
       {presentation === "modal" && (
         <Modal.Header
           padding={4}
+          icon={PLUGIN_KIND_ICONS.openapi}
           title={title ?? modalTitle}
           onClose={handleClose}
         />
       )}
 
       <Modal.Body
-        twoTone={false}
         padding={presentation === "inline" ? 0 : 6}
         gap={4}
         alignItems="stretch"

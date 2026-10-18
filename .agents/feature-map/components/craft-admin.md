@@ -12,8 +12,8 @@
 `web/src/app/admin/craft/access/page.tsx`, `web/src/app/admin/craft/apps/page.tsx`,
 `web/src/app/admin/craft/preferences/page.tsx`,
 `web/src/views/admin/CraftPage/`, `web/src/views/admin/CraftPreferencesPage/`,
-`web/src/sections/plugins/ExternalAppPluginDetail.tsx`,
-`web/src/sections/plugins/PluginAddCatalogModal.tsx`,
+`web/src/views/admin/PluginsPage/ExternalAppPluginDetailPage.tsx`,
+`web/src/views/admin/PluginsPage/components/PluginAddCatalogModal.tsx`,
 `backend/onyx/server/features/build/api.py`, `build/utils.py`,
 `backend/onyx/server/features/build/external_apps/api.py`,
 `backend/onyx/db/external_app.py`, `backend/onyx/db/gated_app.py`,
@@ -67,7 +67,7 @@ the existing payload; managed-app credentials remain hidden and unchanged.
 New drafts close without a discard confirmation. Existing saved edits keep
 their confirmation in the same frame, without a width or position change.
 Creation still advances to the existing optional skills step after persistence.
-`web/src/sections/plugins/CraftAppSetupModal.stories.tsx` covers built-in,
+`web/src/views/admin/PluginsPage/components/CreateCustomAppModal.stories.tsx` covers built-in,
 managed, and custom configuration, permissions, and skills states.
 
 On **Preferences**, the admin sets a workspace default model for Craft
@@ -85,7 +85,7 @@ those org instructions are appended to.
 |---|---|---|
 | `/admin/craft/access` | `CraftPage` (`web/src/views/admin/CraftPage/index.tsx`) | `Permission.FULL_ADMIN_PANEL_ACCESS`; hidden in the sidebar unless `FeatureFlags.craftAvailable` |
 | `/admin/craft/apps` | Redirect to `/admin/plugins`, preserving external-app edit links | same |
-| `/admin/plugins/external-app/[appId]` | `ExternalAppPluginDetail` | `Permission.FULL_ADMIN_PANEL_ACCESS` |
+| `/admin/plugins/external-app/[appId]` | `ExternalAppPluginDetailPage` | `Permission.FULL_ADMIN_PANEL_ACCESS` |
 | `/admin/craft/preferences` | `CraftPreferencesPage` (`web/src/views/admin/CraftPreferencesPage/index.tsx`) | same |
 
 All three carry `requiredTier: null` (`web/src/lib/admin-routes.ts:159-186`): visibility is not tied

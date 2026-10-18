@@ -57,7 +57,7 @@ flow opens. Single-screen modals can keep the default `Modal.Content` overlay.
 
 ## Modal.Body
 
-`twoTone` (default `true`) gives the body the gray `tint-01` background separating it from header and footer. Scrolls when the card height caps.
+The body always has the gray `tint-01` background that separates it from the header and footer. Scrolls when the card height caps.
 
 ## Modal.Footer
 

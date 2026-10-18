@@ -195,7 +195,7 @@ export default function ActionPolicyEditorModal({
               icon={icon}
               onClose={requestClose}
             />
-            <Modal.Body twoTone={false} alignItems="stretch">
+            <Modal.Body alignItems="stretch">
               <div className="flex flex-col gap-3">
                 <CraftAppEditorTabs
                   value={tab}

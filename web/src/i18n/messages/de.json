@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "Löschen"
-        },
-        "title": "MCP-Server löschen"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "Löschen"
-        },
-        "title": "OpenAPI-Aktion löschen"
+        }
       },
       "method": {
         "noSummary": "Keine Zusammenfassung angegeben"
@@ -1150,6 +1148,9 @@
           "title": "Keine Plugins gefunden"
         },
         "externalAppsError": "Apps konnten nicht geladen werden"
+      },
+      "deleteModal": {
+        "title": "*{name}* löschen"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {Es werden keine zugehörigen benutzerdefinierten Skills gelöscht.} one {# zugehöriger benutzerdefinierter Skill bleibt erhalten, wird von dieser App getrennt und für alle deaktiviert.} other {# zugehörige benutzerdefinierte Skills bleiben erhalten, werden von dieser App getrennt und für alle deaktiviert.}}",
           "submit": {
             "label": "App löschen"
-          },
-          "title": "„{name}“ löschen?"
+          }
         },
         "toasts": {
           "deleteFailed": "\"{name}\" konnte nicht gelöscht werden",

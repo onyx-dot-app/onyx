@@ -8,7 +8,7 @@ import {
   type MCPServer,
   type MCPAuthTemplate,
 } from "@/lib/mcp/types";
-import type { MCPAuthFormValues } from "@/sections/actions/modals/types";
+import type { MCPAuthFormValues } from "@/views/admin/PluginsPage/components/mcp/types";
 
 function getTransportFromUrl(url: string): MCPTransportType {
   try {

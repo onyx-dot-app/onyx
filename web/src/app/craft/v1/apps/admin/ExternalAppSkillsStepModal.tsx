@@ -145,7 +145,7 @@ export default function ExternalAppSkillsStepModal({
                 if (!isSaving) unsavedChanges.requestLeave(onClose);
               }}
             />
-            <Modal.Body twoTone={false} alignItems="stretch" padding={6}>
+            <Modal.Body alignItems="stretch" padding={6}>
               <div className="flex flex-col gap-3">
                 <AssociatedSkillsEditor
                   app={app}

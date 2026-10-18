@@ -12,7 +12,7 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
-import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
+import CreateCustomAppModal from "@/views/admin/PluginsPage/components/CreateCustomAppModal";
 import * as externalAppsService from "@/app/craft/services/externalAppsService";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
@@ -97,7 +97,7 @@ describe("CreateCustomAppModal", () => {
     fireEvent.change(name, { target: { value: "Draft" } });
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("data-width", "md");
-    expect(dialog).toHaveAttribute("data-position", "top");
+    expect(dialog).toHaveAttribute("data-position", "center");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(
@@ -116,7 +116,7 @@ describe("CreateCustomAppModal", () => {
       name: "Discard unsaved changes?",
     });
     expect(confirmation).toHaveAttribute("data-width", "md");
-    expect(confirmation).toHaveAttribute("data-position", "top");
+    expect(confirmation).toHaveAttribute("data-position", "center");
   });
 
   beforeEach(() => {

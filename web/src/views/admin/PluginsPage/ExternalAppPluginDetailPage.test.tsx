@@ -7,9 +7,9 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import { useSWRConfig } from "swr";
-import ExternalAppPluginDetail from "@/sections/plugins/ExternalAppPluginDetail";
+import ExternalAppPluginDetailPage from "@/views/admin/PluginsPage/ExternalAppPluginDetailPage";
 import type ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
-import type CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
+import type CreateCustomAppModal from "@/views/admin/PluginsPage/components/CreateCustomAppModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   ExternalAppAdminResponse,
@@ -52,7 +52,7 @@ jest.mock("@/app/craft/v1/apps/admin/ConfigureProviderModal", () => {
     },
   };
 });
-jest.mock("@/app/craft/v1/apps/admin/CreateCustomAppModal", () => {
+jest.mock("@/views/admin/PluginsPage/components/CreateCustomAppModal", () => {
   const { useState } = jest.requireActual<typeof import("react")>("react");
   return {
     __esModule: true,
@@ -110,7 +110,7 @@ test("does not fetch Craft app data from a direct link when Craft is disabled", 
   mockFullAdmin = true;
   mockCraftAvailable = false;
   const network = jest.spyOn(global, "fetch");
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(network).not.toHaveBeenCalled();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
@@ -122,7 +122,7 @@ function BackgroundRefresh({ resource }: { resource: string }) {
 
 test("does not fetch any external app admin data before full admin authorization", () => {
   const network = jest.spyOn(global, "fetch");
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(network).not.toHaveBeenCalled();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
@@ -136,7 +136,7 @@ test("opens custom editing without requesting or waiting for provider options", 
         ? new Response(JSON.stringify([app]))
         : new Promise<Response>(() => {})
     );
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(await screen.findByRole("dialog", { name: app.name })).toBeVisible();
   expect(network.mock.calls).toEqual([[SWR_KEYS.buildExternalAppsAdmin]]);
 });
@@ -155,10 +155,10 @@ test("retries app-list failure into the custom editor", async () => {
     }
     return new Response(JSON.stringify([]));
   });
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(await screen.findByText("Apps could not load")).toBeVisible();
   const dialog = screen.getByRole("dialog");
-  expect(dialog).toHaveAttribute("data-position", "top");
+  expect(dialog).toHaveAttribute("data-position", "center");
   expect(dialog).toHaveAttribute("data-width", "md");
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Retry" }));
@@ -173,7 +173,7 @@ test("closes the modal after app-list failure", async () => {
       async () =>
         new Response(JSON.stringify({ detail: "Unavailable" }), { status: 503 })
     );
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(await screen.findByText("Apps could not load")).toBeVisible();
   expect(screen.getByRole("dialog", { name: "Craft Apps" })).toBeVisible();
   const user = setupUser();
@@ -187,7 +187,7 @@ test("keeps loading in a closable modal without requesting provider options befo
   const network = jest
     .spyOn(global, "fetch")
     .mockImplementation(() => new Promise<Response>(() => {}));
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(screen.getByRole("dialog", { name: "Craft Apps" })).toBeVisible();
   expect(screen.getByRole("status", { name: "Loading" })).toBeVisible();
   expect(network.mock.calls).toEqual([[SWR_KEYS.buildExternalAppsAdmin]]);
@@ -201,7 +201,7 @@ test("keeps a missing app in a closable modal without requesting provider option
   const network = jest
     .spyOn(global, "fetch")
     .mockResolvedValue(new Response(JSON.stringify([])));
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(await screen.findByText("No plugins found")).toBeVisible();
   expect(screen.getByRole("dialog", { name: "Craft Apps" })).toBeVisible();
   expect(network.mock.calls).toEqual([[SWR_KEYS.buildExternalAppsAdmin]]);
@@ -219,7 +219,7 @@ test("waits for built-in provider options inside the modal", async () => {
         ? new Response(JSON.stringify([slackApp]))
         : new Promise<Response>(() => {})
     );
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   await waitFor(() =>
     expect(network.mock.calls).toEqual([
       [SWR_KEYS.buildExternalAppsAdmin],
@@ -245,7 +245,7 @@ test("keeps an unavailable built-in provider in a closable modal", async () => {
           )
         )
     );
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(await screen.findByText("provider unavailable")).toBeVisible();
   expect(screen.getByRole("dialog", { name: "Craft Apps" })).toBeVisible();
   const user = setupUser();
@@ -268,7 +268,7 @@ test("retries both resources after built-in provider options fail", async () => 
           })
         : new Response(JSON.stringify([slack]));
     });
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(await screen.findByText("Apps could not load")).toBeVisible();
   expect(screen.getByRole("dialog", { name: "Craft Apps" })).toBeVisible();
   const user = setupUser();
@@ -292,7 +292,7 @@ test("reuses the custom editor for the selected ID and refreshes records after s
           JSON.stringify(String(input).endsWith("options") ? [] : [app])
         )
     );
-  render(<ExternalAppPluginDetail appId={7} />);
+  render(<ExternalAppPluginDetailPage appId={7} />);
   expect(await screen.findByRole("dialog", { name: app.name })).toBeVisible();
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Save" }));
@@ -344,7 +344,7 @@ test.each([
     });
     render(
       <>
-        <ExternalAppPluginDetail appId={7} />
+        <ExternalAppPluginDetailPage appId={7} />
         <BackgroundRefresh resource={resource} />
       </>,
       { swrConfig: { onError } }
@@ -390,7 +390,7 @@ test.each(["apps", "descriptors"])(
     });
     render(
       <>
-        <ExternalAppPluginDetail appId={7} />
+        <ExternalAppPluginDetailPage appId={7} />
         <BackgroundRefresh resource={resource} />
       </>,
       { swrConfig: { onError } }

@@ -9,14 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslations } from "next-intl";
-import type { MCPAuthFormValues } from "@/sections/actions/modals/types";
+import type { MCPAuthFormValues } from "@/views/admin/PluginsPage/components/mcp/types";
 import {
   getMCPAuthInitialValues,
   getAuthTemplateForMethod,
   prepareMCPAuthPayload,
   MCPAuthValidationError,
   validateMCPAuthCredentials,
-} from "@/sections/actions/modals/mcpAuthForm";
+} from "@/views/admin/PluginsPage/components/mcp/mcpAuthForm";
 import { mcpOAuthReturnHref } from "@/lib/plugins/routes";
 import { useUser } from "@/providers/UserProvider";
 import {
@@ -46,7 +46,7 @@ import {
   MCPServer,
   type MCPSetupRecommendation,
 } from "@/lib/mcp/types";
-import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
+import { PerUserAuthConfig } from "@/views/admin/PluginsPage/components/mcp/PerUserAuthConfig";
 import {
   discoverMCPOAuth,
   MCPOAuthError,
@@ -56,13 +56,13 @@ import {
   startMCPAdminOAuth,
   upsertMCPServer,
 } from "@/lib/mcp/svc";
-import { MCPOAuthFields } from "@/sections/actions/modals/MCPOAuthFields";
-import { MCPApiTokenFields } from "@/sections/actions/modals/MCPApiTokenFields";
-import { MCPAdvancedFields } from "@/sections/actions/modals/MCPAdvancedFields";
+import { MCPOAuthFields } from "@/views/admin/PluginsPage/components/mcp/MCPOAuthFields";
+import { MCPApiTokenFields } from "@/views/admin/PluginsPage/components/mcp/MCPApiTokenFields";
+import { MCPAdvancedFields } from "@/views/admin/PluginsPage/components/mcp/MCPAdvancedFields";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
 
-import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
-import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
+import MCPFormActions from "@/views/admin/PluginsPage/components/mcp/MCPFormActions";
+import MCPFormDirtyObserver from "@/views/admin/PluginsPage/components/mcp/MCPFormDirtyObserver";
 
 interface MCPAuthenticationPageBaseProps {
   active: boolean;

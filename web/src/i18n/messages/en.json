@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "Delete"
-        },
-        "title": "Delete MCP server"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "Delete"
-        },
-        "title": "Delete OpenAPI action"
+        }
       },
       "method": {
         "noSummary": "No summary provided"
@@ -1150,6 +1148,9 @@
           "title": "No plugins found"
         },
         "externalAppsError": "Apps could not load"
+      },
+      "deleteModal": {
+        "title": "Delete *{name}*"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {No associated custom skills will be deleted.} one {# associated custom skill will be kept, unlinked from this app, and disabled for everyone.} other {# associated custom skills will be kept, unlinked from this app, and disabled for everyone.}}",
           "submit": {
             "label": "Delete app"
-          },
-          "title": "Delete “{name}”?"
+          }
         },
         "toasts": {
           "deleteFailed": "Failed to delete \"{name}\"",

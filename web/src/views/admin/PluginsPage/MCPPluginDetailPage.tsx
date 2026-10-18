@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import { Button, MessageCard, Modal, Tabs } from "@opal/components";
 import { toast } from "@opal/layouts";
-import { SvgServer } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
@@ -22,9 +21,8 @@ import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import { can } from "@/lib/permissions/resource-actions";
 import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import { refreshMCPServerTools, updateMCPServerStatus } from "@/lib/mcp/svc";
-import { getActionIcon } from "@/lib/tools/utils";
-import MCPServerDetailsPage from "@/sections/actions/modals/MCPServerDetailsPage";
-import MCPAuthenticationPage from "@/sections/actions/modals/MCPAuthenticationPage";
+import MCPServerDetailsPage from "@/views/admin/PluginsPage/components/mcp/MCPServerDetailsPage";
+import MCPAuthenticationPage from "@/views/admin/PluginsPage/components/mcp/MCPAuthenticationPage";
 import MCPServerToolsEditor from "@/sections/actions/MCPServerToolsEditor";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
@@ -33,8 +31,9 @@ import {
   clearMcpChatEnableIntent,
   verifyMcpChatEnableIntent,
 } from "@/sections/actions/mcpChatEnableIntent";
+import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
-interface MCPServerDetailPageProps {
+interface MCPPluginDetailPageProps {
   serverId: number;
 }
 
@@ -44,9 +43,9 @@ function parseDetailTab(value: string | null): DetailTab {
   return value === "authentication" || value === "tools" ? value : "server";
 }
 
-export default function MCPServerDetailPage({
+export default function MCPPluginDetailPage({
   serverId,
-}: MCPServerDetailPageProps) {
+}: MCPPluginDetailPageProps) {
   const t = useTranslations("actions");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -382,9 +381,6 @@ export default function MCPServerDetailPage({
     />
   );
   const title = server?.name ?? t("mcpDetail.configuration");
-  const icon = server
-    ? getActionIcon(server.server_url, server.name) || SvgServer
-    : SvgServer;
 
   return (
     <>
@@ -396,14 +392,12 @@ export default function MCPServerDetailPage({
       >
         <PluginModalContent>
           <Modal.Header
-            icon={icon}
+            icon={PLUGIN_KIND_ICONS.mcp}
             title={title}
             description={server?.server_url}
             onClose={close}
           />
-          <Modal.Body twoTone={false} alignItems="stretch">
-            {body}
-          </Modal.Body>
+          <Modal.Body alignItems="stretch">{body}</Modal.Body>
           <Modal.Footer justifyContent="between" padding={4}>
             <div
               ref={setFooterTarget}

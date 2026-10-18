@@ -16,7 +16,7 @@ import {
 import { toast } from "@opal/layouts";
 import { SvgSettings, SvgTrash, SvgUnplug } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import { cn } from "@opal/utils";
+import { cn, markdown } from "@opal/utils";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { deleteMCPServer, updateMCPServer } from "@/lib/mcp/svc";
@@ -519,10 +519,8 @@ function ActivePluginLifecycleMenu({
             icon={deleting ? SvgTrash : SvgUnplug}
             title={
               deleting
-                ? t(
-                    plugin.kind === "mcp"
-                      ? "mcpCard.deleteModal.title"
-                      : "openApiCard.deleteModal.title"
+                ? markdown(
+                    t("plugins.deleteModal.title", { name: resource.name })
                   )
                 : t(`plugins.disableConfirmation.${disableScope}Title`, {
                     name: resource.name,
@@ -532,7 +530,7 @@ function ActivePluginLifecycleMenu({
               if (!busy) setConfirmation(null);
             }}
           />
-          <Modal.Body twoTone={false}>
+          <Modal.Body>
             <Text as="p" color="text-03">
               {!deleting
                 ? t(`plugins.disableConfirmation.${disableScope}Description`, {

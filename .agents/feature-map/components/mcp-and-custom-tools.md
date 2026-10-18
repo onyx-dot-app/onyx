@@ -40,9 +40,11 @@ The App catalog reads installed apps through the same native SWR key. Failed
 installed-app reads show retry rather than an endless loader. Custom app
 editing does not request provider options. Loading and error routes retain
 the modal shell and close control.
-Plugin setup and editors share `PluginModalContent` for medium, top-anchored
-forms. MCP and Craft App catalogs use standard top-anchored Opal `Modal.Content`
-with its two-tone body. Both use `PluginCatalogCard` for suggested/provider
+Plugin setup and editors share `PluginModalContent` for medium, centered
+forms. Their headers use the plugin type's icon from `PLUGIN_KIND_ICONS`
+(`web/src/lib/plugins/constants.ts`), which the type tags also use. MCP and
+Craft App catalogs use standard top-anchored Opal `Modal.Content`. Every Opal
+modal body is two-tone. Both use `PluginCatalogCard` for suggested/provider
 and custom choices. There is no separate custom-app footer.
 Craft App setup editors share a combined Configuration/credentials pane, with
 Permissions and Skills tabs only where supported. Their logo/name headers,
@@ -202,8 +204,8 @@ Schema editing remains on one step.
 Review shows one divided list of actions, with method badges and endpoint paths beside each summary.
 Creation and details render `web/src/sections/plugins/OpenAPIEndpointList.tsx`, keeping endpoint typography,
 method badges, spacing, and responsive behavior identical.
-Creation schema and authentication modals use the same top-anchored, single-tone
-surface as MCP setup. Admin detail tabs embed those same forms without headers
+Creation schema and authentication modals use the same centered surface as
+MCP setup. Admin detail tabs embed those same forms without headers
 or nested dialogs, and portal only the active form's save action to the footer.
 Drafts survive tab switches. Successful inline saves clear dirty state; pending
 saves block navigation. The inline Authentication Method has no divider.
@@ -312,7 +314,7 @@ live health. Details own configuration, authentication, tool availability, and p
 `web/src/app/admin/plugins/layout.tsx` keeps the directory behind both MCP and OpenAPI detail modals,
 including hard links and OAuth returns. Closing returns to Plugins, not browser history.
 
-`web/src/sections/actions/MCPServerDetailPage.tsx` has three filled tabs:
+`web/src/views/admin/PluginsPage/MCPPluginDetailPage.tsx` has three filled tabs:
 Server configuration, Authentication, and Tools. All forms are inline. Tab changes
 retain drafts, and route navigation asks before discarding any unsaved edits.
 The `tab` query parameter links directly to each section. Saving server details
@@ -337,7 +339,7 @@ dropdown. Recommended tags stay attached to detected defaults. Headers, transpor
 and manual OAuth endpoints remain under Advanced settings.
 
 New servers open a modal from Plugins, rendered by
-`web/src/sections/actions/modals/MCPPluginSetupModal.tsx`. The modal has one continuous surface without a timeline. Footer buttons own navigation.
+`web/src/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal.tsx`. The modal has one continuous surface without a timeline. Footer buttons own navigation.
 Server contains name and URL inputs. Description remains editable on the server detail page.
 Connection combines authentication and access.
 Both steps use the same content insets. The footer uses an explicit Back button.
@@ -396,7 +398,7 @@ Business and the enterprise backend. Scoped managers must select at least one
 managed group. These grants control attaching tools to agents; they do not change
 access to custom agents that already use those tools. Default Chat still checks
 server access before showing tools or resolving credentials.
-`web/src/sections/actions/modals/MCPServerDetailsPage.tsx` owns the Access Control
+`web/src/views/admin/PluginsPage/components/mcp/MCPServerDetailsPage.tsx` owns the Access Control
 selector and its group validation.
 
 Each admin installed plugin row has a disconnect dropdown and a separate trash
@@ -521,7 +523,7 @@ signing in, and loading tools are separate stages.
 The form reads fresh settings on each opening and keeps edits separate from
 cache refreshes. Authentication saves use that loaded server snapshot, so stale
 card metadata cannot overwrite a newer name, URL, or description.
-Discovery recommendations wait for the current check and preserve explicit setup choices. `web/src/sections/actions/modals/mcpAuthForm.ts` owns initial values, header placeholders, and
+Discovery recommendations wait for the current check and preserve explicit setup choices. `web/src/views/admin/PluginsPage/components/mcp/mcpAuthForm.ts` owns initial values, header placeholders, and
 request construction. `MCPOAuthFields.tsx`, `MCPApiTokenFields.tsx`, and
 `MCPAdvancedFields.tsx` own their respective form sections. Shared API-key headers must
 retain the `{api_key}` placeholder before saving. Changing authentication settings
@@ -557,8 +559,8 @@ inline, not a broken turn.
 | Route | Page | Content component |
 |---|---|---|
 | `/admin/plugins` | `web/src/app/admin/plugins/page.tsx` | `PluginsPage` (`web/src/views/admin/PluginsPage/index.tsx`) |
-| `/admin/plugins?add=mcp` | Plugins directory | `MCPPluginSetupModal` (`web/src/sections/actions/modals/MCPPluginSetupModal.tsx`) |
-| `/admin/plugins/mcp/[serverId]` | `web/src/app/admin/plugins/mcp/[serverId]/page.tsx` | `MCPServerDetailPage` (`web/src/sections/actions/MCPServerDetailPage.tsx`) |
+| `/admin/plugins?add=mcp` | Plugins directory | `MCPPluginSetupModal` (`web/src/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal.tsx`) |
+| `/admin/plugins/mcp/[serverId]` | `web/src/app/admin/plugins/mcp/[serverId]/page.tsx` | `MCPPluginDetailPage` (`web/src/views/admin/PluginsPage/MCPPluginDetailPage.tsx`) |
 | `/admin/plugins/openapi/[toolId]` | `web/src/app/admin/plugins/openapi/[toolId]/page.tsx` | `OpenAPIPluginDetailPage` (`web/src/views/admin/PluginsPage/OpenAPIPluginDetailPage.tsx`) |
 | `/admin/mcp-actions`, `/admin/mcp-actions/new`, `/admin/mcp-actions/[serverId]`, `/admin/openapi-actions` | Existing route files | Query-preserving redirects through `web/src/lib/plugins/routes.ts` |
 
@@ -1041,12 +1043,12 @@ each operation and consumes state before exchanging the authorization code.
 ### Tests
 
 Storybook covers setup, saved settings, access control, discovery, validation,
-and failure states. See `web/src/sections/actions/modals/MCPModalStories.md`
+and failure states. See `web/src/views/admin/PluginsPage/components/mcp/MCPModalStories.md`
 for the state inventory and preview links. Fixtures intercept requests locally.
 
 ```bash
 # Frontend setup, retry, credential scope, and OAuth service regressions
-cd web && bun run test --runInBand src/sections/actions/modals/MCPPluginSetupModal.test.tsx src/sections/actions/modals/MCPAuthenticationPage.test.tsx src/sections/actions/modals/MCPServerDetailsPage.test.tsx src/views/admin/PluginsPage/PluginsPage.test.tsx src/lib/mcp/svc.test.ts --testTimeout=30000
+cd web && bun run test --runInBand src/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal.test.tsx src/views/admin/PluginsPage/components/mcp/MCPAuthenticationPage.test.tsx src/views/admin/PluginsPage/components/mcp/MCPServerDetailsPage.test.tsx src/views/admin/PluginsPage/PluginsPage.test.tsx src/lib/mcp/svc.test.ts --testTimeout=30000
 
 # Playwright e2e: MCP server creation, OAuth connect, per-user API key, group access
 cd web && bun run playwright tests/e2e/mcp/mcp_oauth_flow.spec.ts

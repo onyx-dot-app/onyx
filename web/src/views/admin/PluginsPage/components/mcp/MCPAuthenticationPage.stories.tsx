@@ -4,7 +4,7 @@ import {
   MCPModalStory,
   storyServer,
   type MCPStoryScenario,
-} from "@/sections/actions/modals/MCPModalStoryHarness";
+} from "@/views/admin/PluginsPage/components/mcp/MCPModalStoryHarness";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,

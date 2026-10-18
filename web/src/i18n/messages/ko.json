@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "삭제"
-        },
-        "title": "MCP 서버 삭제"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "삭제"
-        },
-        "title": "OpenAPI 액션 삭제"
+        }
       },
       "method": {
         "noSummary": "요약이 제공되지 않음"
@@ -1150,6 +1148,9 @@
           "title": "플러그인을 찾을 수 없음"
         },
         "externalAppsError": "앱을 불러오지 못했습니다"
+      },
+      "deleteModal": {
+        "title": "*{name}* 삭제"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {삭제되는 연결된 사용자 지정 스킬은 없습니다.} one {연결된 사용자 지정 스킬 #개는 유지되지만, 이 앱과의 연결이 끊기고 모든 사용자에게 비활성화됩니다.} other {연결된 사용자 지정 스킬 #개는 유지되지만, 이 앱과의 연결이 끊기고 모든 사용자에게 비활성화됩니다.}}",
           "submit": {
             "label": "앱 삭제"
-          },
-          "title": "“{name}”을(를) 삭제할까요?"
+          }
         },
         "toasts": {
           "deleteFailed": "\"{name}\" 삭제에 실패했습니다",

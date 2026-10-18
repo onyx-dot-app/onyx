@@ -67,6 +67,7 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
+  src/lib/common: 100
   src/lib/connectors: 99.1
   src/lib/constants: 100
   src/lib/credentials: 98.9
@@ -127,11 +128,11 @@ packages:
   src/sections/model-selector: 99.6
   src/sections/oauth-provider: 100
   src/sections/onboarding: 99.8
-  src/sections/plugins: 99.9
+  src/sections/plugins: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.3
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
-  src/views/admin: 98.7
+  src/views/admin: 98.8
   types: 100

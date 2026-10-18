@@ -1,7 +1,7 @@
 "use client";
 import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
-import type { MCPAuthFormValues } from "@/sections/actions/modals/types";
+import type { MCPAuthFormValues } from "@/views/admin/PluginsPage/components/mcp/types";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputSwitchField } from "@opal/form";
 import { Content, InputHorizontal, Section } from "@opal/layouts";

@@ -423,8 +423,7 @@
         },
         "submitButton": {
           "label": "Excluir"
-        },
-        "title": "Excluir servidor MCP"
+        }
       }
     },
     "mcpOauthCallback": {
@@ -610,8 +609,7 @@
         },
         "submitButton": {
           "label": "Excluir"
-        },
-        "title": "Excluir ação OpenAPI"
+        }
       },
       "method": {
         "noSummary": "Nenhum resumo fornecido"
@@ -1150,6 +1148,9 @@
           "title": "Nenhum plugin encontrado"
         },
         "externalAppsError": "Não foi possível carregar os apps"
+      },
+      "deleteModal": {
+        "title": "Excluir *{name}*"
       }
     },
     "mcpSetup": {
@@ -5699,8 +5700,7 @@
           "retainedSkills": "{count, plural, =0 {Nenhuma habilidade personalizada associada será excluída.} one {# habilidade personalizada associada será mantida, desvinculada deste aplicativo e desativada para todos.} other {# habilidades personalizadas associadas serão mantidas, desvinculadas deste aplicativo e desativadas para todos.}}",
           "submit": {
             "label": "Excluir aplicativo"
-          },
-          "title": "Excluir “{name}”?"
+          }
         },
         "toasts": {
           "deleteFailed": "Falha ao excluir \"{name}\"",

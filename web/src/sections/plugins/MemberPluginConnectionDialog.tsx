@@ -121,7 +121,7 @@ function ConnectionForm({
           description={t("description")}
           onClose={close}
         />
-        <Modal.Body twoTone={false} alignItems="stretch">
+        <Modal.Body alignItems="stretch">
           <Text as="p" font="main-ui-body" color="text-03">
             {connectionDescription()}
           </Text>

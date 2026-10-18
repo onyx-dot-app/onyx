@@ -3,7 +3,7 @@ import { expect, userEvent, within, waitFor } from "storybook/test";
 import {
   MCPSetupModalStory,
   storyServer,
-} from "@/sections/actions/modals/MCPModalStoryHarness";
+} from "@/views/admin/PluginsPage/components/mcp/MCPModalStoryHarness";
 import messages from "@/i18n/messages/en.json";
 
 const copy = messages.actions.mcpSetup;

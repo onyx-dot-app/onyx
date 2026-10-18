@@ -179,7 +179,7 @@ export default function EditServiceAccountModal({
           description={apiKey.api_key_display}
           onClose={isSubmitting ? undefined : onClose}
         />
-        <Modal.Body twoTone>
+        <Modal.Body>
           <Section padding={0} height="auto" alignItems="stretch">
             <Section
               gap={2}

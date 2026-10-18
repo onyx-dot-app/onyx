@@ -64,9 +64,7 @@ export const MinimalHeader: Story = {
       {(close) => (
         <Modal.Content width="sm">
           <Modal.Header title="Preview" onClose={close} />
-          <Modal.Body twoTone={false}>
-            Minimal header variant without an icon.
-          </Modal.Body>
+          <Modal.Body>Minimal header variant without an icon.</Modal.Body>
         </Modal.Content>
       )}
     </ModalHarness>

@@ -44,14 +44,15 @@ import {
   type MCPSetupRecommendation,
   type MCPProbeProgress,
 } from "@/lib/mcp/types";
-import MCPAuthenticationPage from "@/sections/actions/modals/MCPAuthenticationPage";
+import MCPAuthenticationPage from "@/views/admin/PluginsPage/components/mcp/MCPAuthenticationPage";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import {
   MCPAccessControl,
   validateMCPAccess,
-} from "@/sections/actions/modals/MCPServerDetailsPage";
-import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
-import styles from "@/sections/actions/modals/MCPPluginSetupModal.module.css";
+} from "@/views/admin/PluginsPage/components/mcp/MCPServerDetailsPage";
+import MCPFormActions from "@/views/admin/PluginsPage/components/mcp/MCPFormActions";
+import styles from "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal.module.css";
+import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
 interface ProbeStages {
   contacting_server?: MCPProbeProgress["state"];
@@ -241,6 +242,7 @@ function MCPSetupSession({
         <div className="contents">
           <Modal.Header
             padding={4}
+            icon={PLUGIN_KIND_ICONS.mcp}
             title={
               step === "connection" && connection
                 ? t("mcpSetup.connectTo", { name: connection.name })
@@ -248,7 +250,7 @@ function MCPSetupSession({
             }
             onClose={leave}
           />
-          <Modal.Body twoTone={false} padding={0} gap={0} alignItems="stretch">
+          <Modal.Body padding={0} gap={0} alignItems="stretch">
             {authorityLoading ? (
               <Section padding={6}>
                 <IconLoader />

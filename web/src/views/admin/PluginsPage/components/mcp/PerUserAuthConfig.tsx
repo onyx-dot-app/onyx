@@ -10,8 +10,8 @@ import { InputTypeIn } from "@opal/components";
 import { Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { richNodes } from "@opal/utils";
-import type { MCPAuthFormValues } from "@/sections/actions/modals/types";
-import { getRequiredHeaderFields } from "@/sections/actions/modals/mcpAuthForm";
+import type { MCPAuthFormValues } from "@/views/admin/PluginsPage/components/mcp/types";
+import { getRequiredHeaderFields } from "@/views/admin/PluginsPage/components/mcp/mcpAuthForm";
 
 // Rendered verbatim inside the help copy. Kept as ICU arguments so the braces
 // are not parsed as message placeholders.

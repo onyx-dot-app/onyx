@@ -5,7 +5,7 @@ import { SWRConfig, type State } from "swr";
 import { Button } from "@opal/components";
 import { ToastProvider } from "@opal/layouts";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
-import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
+import CreateCustomAppModal from "@/views/admin/PluginsPage/components/CreateCustomAppModal";
 import type {
   BuiltInExternalAppDescriptor,
   ExternalAppAdminResponse,

@@ -16,17 +16,18 @@ import type {
   BuiltInExternalAppDescriptor,
 } from "@/app/craft/v1/apps/registry";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
-import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
+import CreateCustomAppModal from "@/views/admin/PluginsPage/components/CreateCustomAppModal";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import { useSettings } from "@/lib/settings/hooks";
+import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
-interface ExternalAppPluginDetailProps {
+interface ExternalAppPluginDetailPageProps {
   appId: number;
 }
 
-export default function ExternalAppPluginDetail({
+export default function ExternalAppPluginDetailPage({
   appId,
-}: ExternalAppPluginDetailProps) {
+}: ExternalAppPluginDetailPageProps) {
   const { isGlobalHolder } = usePermissionAuthority(
     Permission.FULL_ADMIN_PANEL_ACCESS
   );
@@ -36,7 +37,9 @@ export default function ExternalAppPluginDetail({
   ) : null;
 }
 
-function AuthorizedExternalAppDetail({ appId }: ExternalAppPluginDetailProps) {
+function AuthorizedExternalAppDetail({
+  appId,
+}: ExternalAppPluginDetailPageProps) {
   const router = useRouter();
   const t = useTranslations("actions.plugins");
   const tApps = useTranslations("admin.externalApps");
@@ -83,8 +86,12 @@ function AuthorizedExternalAppDetail({ appId }: ExternalAppPluginDetailProps) {
   return (
     <Modal open onOpenChange={(open) => !open && close()}>
       <PluginModalContent>
-        <Modal.Header title={t("kind.external-app")} onClose={close} />
-        <Modal.Body twoTone={false} alignItems="stretch">
+        <Modal.Header
+          icon={PLUGIN_KIND_ICONS["external-app"]}
+          title={t("kind.external-app")}
+          onClose={close}
+        />
+        <Modal.Body alignItems="stretch">
           {hasError ? (
             <div className="flex w-full flex-col items-center gap-3">
               <IllustrationContent title={t("state.externalAppsError")} />

@@ -17,7 +17,7 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
-import MCPAuthenticationPage from "@/sections/actions/modals/MCPAuthenticationPage";
+import MCPAuthenticationPage from "@/views/admin/PluginsPage/components/mcp/MCPAuthenticationPage";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,

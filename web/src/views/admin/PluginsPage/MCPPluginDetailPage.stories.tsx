@@ -3,7 +3,7 @@ import { expect, userEvent, within } from "storybook/test";
 import {
   MCPModalStory,
   storyServer,
-} from "@/sections/actions/modals/MCPModalStoryHarness";
+} from "@/views/admin/PluginsPage/components/mcp/MCPModalStoryHarness";
 import { MCPServerStatus } from "@/lib/mcp/types";
 import messages from "@/i18n/messages/en.json";
 

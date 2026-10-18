@@ -444,13 +444,10 @@ function ModalHeader({
 
 interface ModalBodyProps extends WithoutStyles<SectionProps> {
   ref?: React.Ref<HTMLDivElement>;
-  /** Gray body background separating it from the header/footer. */
-  twoTone?: boolean;
 }
 
 function ModalBody({
   ref,
-  twoTone = true,
   children,
   /*
    * Defaulted here rather than written before the spread below: a spread
@@ -465,11 +462,7 @@ function ModalBody({
   ...props
 }: ModalBodyProps) {
   return (
-    <div
-      ref={ref}
-      className="opal-modal-body"
-      {...(twoTone && { "data-two-tone": "" })}
-    >
+    <div ref={ref} className="opal-modal-body">
       <Section
         height={height}
         padding={padding}

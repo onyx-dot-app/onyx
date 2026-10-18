@@ -15,7 +15,7 @@ import {
 import MCPServerDetailsPage, {
   MCPAccessControl,
   validateMCPAccess,
-} from "@/sections/actions/modals/MCPServerDetailsPage";
+} from "@/views/admin/PluginsPage/components/mcp/MCPServerDetailsPage";
 import { renderHook } from "@testing-library/react";
 import * as UserProvider from "@/providers/UserProvider";
 import { Permission } from "@/lib/types";

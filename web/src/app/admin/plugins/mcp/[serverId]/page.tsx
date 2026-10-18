@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { parsePluginId } from "@/lib/plugins/routes";
-import MCPServerDetailPage from "@/sections/actions/MCPServerDetailPage";
+import MCPPluginDetailPage from "@/views/admin/PluginsPage/MCPPluginDetailPage";
 
 export default async function Page({
   params,
@@ -10,5 +10,5 @@ export default async function Page({
   const { serverId: value } = await params;
   const serverId = parsePluginId(value);
   if (serverId === null) notFound();
-  return <MCPServerDetailPage key={serverId} serverId={serverId} />;
+  return <MCPPluginDetailPage key={serverId} serverId={serverId} />;
 }

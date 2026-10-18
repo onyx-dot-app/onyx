@@ -39,8 +39,8 @@ import {
 import GroupShareList from "@/lib/connectors/components/GroupShareList";
 import { Section } from "@opal/layouts";
 
-import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
-import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
+import MCPFormActions from "@/views/admin/PluginsPage/components/mcp/MCPFormActions";
+import MCPFormDirtyObserver from "@/views/admin/PluginsPage/components/mcp/MCPFormDirtyObserver";
 
 interface MCPServerDetailsPageProps {
   active: boolean;

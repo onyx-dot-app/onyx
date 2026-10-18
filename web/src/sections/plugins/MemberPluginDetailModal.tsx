@@ -269,7 +269,7 @@ export default function MemberPluginDetailModal({
             </div>
           )}
         </Modal.Header>
-        <Modal.Body twoTone={false} alignItems="stretch">
+        <Modal.Body alignItems="stretch">
           {confirming ? (
             <>
               {plugin.kind === "openapi" && (

@@ -26,9 +26,6 @@ interface ConfirmationModalProps {
 
   /** Runs when the modal closes (composed via `useModalClose`). */
   onClose?: () => void;
-
-  /** Gray body background separating it from the header and footer. */
-  twoTone?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +46,6 @@ function ConfirmationModalLayout({
   submit,
   hideCancel,
   onClose: externalOnClose,
-  twoTone = true,
 }: ConfirmationModalProps) {
   const modalClose = useModalClose(externalOnClose);
   const closedRef = React.useRef(false);
@@ -74,7 +70,7 @@ function ConfirmationModalLayout({
           description={description}
           onClose={canClose ? onClose : undefined}
         />
-        <Modal.Body twoTone={twoTone}>
+        <Modal.Body>
           {typeof children === "string" ? (
             <Text as="p" color="text-03">
               {children}

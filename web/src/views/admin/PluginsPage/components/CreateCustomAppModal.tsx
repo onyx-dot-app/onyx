@@ -17,10 +17,7 @@ import { InputKeyValue, InputList, type KeyValue } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
-import {
-  getAppTypeLogo,
-  type ExternalAppAdminResponse,
-} from "@/app/craft/v1/apps/registry";
+import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {
   createCustomExternalApp,
   updateExternalApp,
@@ -41,6 +38,7 @@ import {
 } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 import { externalAppDisplayUrl } from "@/lib/plugins/externalAppDisplayUrl";
+import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
 interface CreateCustomAppModalProps {
   onClose: () => void;
@@ -283,12 +281,12 @@ export default function CreateCustomAppModal({
         ) : (
           <>
             <Modal.Header
-              icon={getAppTypeLogo("CUSTOM")}
+              icon={PLUGIN_KIND_ICONS["external-app"]}
               title={existingApp?.name ?? t("createTitle")}
               description={externalAppDisplayUrl(upstreamPatterns) || undefined}
               onClose={requestClose}
             />
-            <Modal.Body twoTone={false} alignItems="stretch">
+            <Modal.Body alignItems="stretch">
               <CraftAppEditorTabs
                 value={tab}
                 onValueChange={setTab}

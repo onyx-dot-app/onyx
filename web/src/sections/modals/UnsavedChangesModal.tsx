@@ -42,7 +42,7 @@ export function UnsavedChangesModalContent({
         title={t("header.title")}
         onClose={onCancel}
       />
-      <Modal.Body twoTone={false}>
+      <Modal.Body>
         <Text as="p" color="text-03">
           {t("body.description")}
         </Text>

@@ -6,7 +6,7 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
-import MCPServerDetailPage from "@/sections/actions/MCPServerDetailPage";
+import MCPPluginDetailPage from "@/views/admin/PluginsPage/MCPPluginDetailPage";
 import {
   MCPAuthenticationType,
   MCPServerStatus,
@@ -66,71 +66,77 @@ jest.mock("@/lib/mcp/svc", () => ({
   updateMCPServerStatus: jest.fn(),
   deleteMCPServer: jest.fn(),
 }));
-jest.mock("@/sections/actions/modals/MCPServerDetailsPage", () => ({
-  __esModule: true,
-  default: function MockDetails({
-    server,
-    onDirtyChange,
-    onSaved,
-    readOnly,
-  }: {
-    server: MCPServer;
-    readOnly?: boolean;
-    onDirtyChange: (dirty: boolean) => void;
-    onSaved: (server: MCPServer) => Promise<void>;
-  }) {
-    return (
-      <div>
-        <input
-          disabled={readOnly}
-          aria-label="Server draft"
-          defaultValue={server.name}
-          onChange={() => onDirtyChange(true)}
-        />
-        <button
-          disabled={readOnly}
-          onClick={() => {
-            onDirtyChange(false);
-            void onSaved(server);
-          }}
-        >
-          Save server draft
-        </button>
-      </div>
-    );
-  },
-}));
-jest.mock("@/sections/actions/modals/MCPAuthenticationPage", () => ({
-  __esModule: true,
-  default: function MockAuth({
-    onDirtyChange,
-    onTriggerFetchTools,
-    onComplete,
-  }: {
-    onDirtyChange: (dirty: boolean) => void;
-    onTriggerFetchTools: (serverId: number) => Promise<void>;
-    onComplete: () => void;
-  }) {
-    return (
-      <div>
-        <input
-          aria-label="Authentication draft"
-          onChange={() => onDirtyChange(true)}
-        />
-        <button
-          onClick={async () => {
-            try {
-              await onTriggerFetchTools(7);
-              onComplete();
-            } catch {}
-          }}
-        >
-          Authenticate server
-        </button>
-      </div>
-    );
-  },
-}));
+jest.mock(
+  "@/views/admin/PluginsPage/components/mcp/MCPServerDetailsPage",
+  () => ({
+    __esModule: true,
+    default: function MockDetails({
+      server,
+      onDirtyChange,
+      onSaved,
+      readOnly,
+    }: {
+      server: MCPServer;
+      readOnly?: boolean;
+      onDirtyChange: (dirty: boolean) => void;
+      onSaved: (server: MCPServer) => Promise<void>;
+    }) {
+      return (
+        <div>
+          <input
+            disabled={readOnly}
+            aria-label="Server draft"
+            defaultValue={server.name}
+            onChange={() => onDirtyChange(true)}
+          />
+          <button
+            disabled={readOnly}
+            onClick={() => {
+              onDirtyChange(false);
+              void onSaved(server);
+            }}
+          >
+            Save server draft
+          </button>
+        </div>
+      );
+    },
+  })
+);
+jest.mock(
+  "@/views/admin/PluginsPage/components/mcp/MCPAuthenticationPage",
+  () => ({
+    __esModule: true,
+    default: function MockAuth({
+      onDirtyChange,
+      onTriggerFetchTools,
+      onComplete,
+    }: {
+      onDirtyChange: (dirty: boolean) => void;
+      onTriggerFetchTools: (serverId: number) => Promise<void>;
+      onComplete: () => void;
+    }) {
+      return (
+        <div>
+          <input
+            aria-label="Authentication draft"
+            onChange={() => onDirtyChange(true)}
+          />
+          <button
+            onClick={async () => {
+              try {
+                await onTriggerFetchTools(7);
+                onComplete();
+              } catch {}
+            }}
+          >
+            Authenticate server
+          </button>
+        </div>
+      );
+    },
+  })
+);
 jest.mock("@/sections/actions/MCPServerToolsEditor", () => ({
   __esModule: true,
   default: function MockTools({
@@ -187,7 +193,7 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 test("keeps lifecycle controls on the Plugins directory, not detail", async () => {
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Server draft" });
   expect(
     screen.queryByRole("button", {
@@ -218,7 +224,7 @@ test("offers read-only details when edit permission is absent", async () => {
           ? fetchWithFixtures(input, init)
           : json({})
     );
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Server draft" });
   expect(
     screen.queryByRole("switch", {
@@ -243,7 +249,7 @@ test("renders not-found feedback without retry for an absent server", async () =
     .mockImplementation(async () =>
       json({ detail: "Not found" }, { status: 404 })
     );
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   expect(
     await screen.findByText(messages.actions.mcpDetail.notFound)
   ).toBeVisible();
@@ -253,7 +259,7 @@ test("renders not-found feedback without retry for an absent server", async () =
 });
 
 test("rejects an invalid route ID without making a server request", async () => {
-  render(<MCPServerDetailPage serverId={NaN} />);
+  render(<MCPPluginDetailPage serverId={NaN} />);
   expect(screen.getByText(messages.actions.mcpDetail.notFound)).toBeVisible();
   expect(
     jest
@@ -263,7 +269,7 @@ test("rejects an invalid route ID without making a server request", async () => 
 });
 
 test("closes the detail modal to the directory without adding a history entry", async () => {
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Server draft" });
   expect(screen.getByRole("dialog")).toBeVisible();
   await setupUser().click(screen.getByRole("button", { name: "Close" }));
@@ -272,7 +278,7 @@ test("closes the detail modal to the directory without adding a history entry", 
 });
 
 test("guards modal close when server settings contain a draft", async () => {
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   const user = setupUser();
   await user.type(
     await screen.findByRole("textbox", { name: "Server draft" }),
@@ -291,7 +297,7 @@ test("guards modal close when server settings contain a draft", async () => {
 });
 
 test("guards modal close for tool drafts and allows canceling discard", async () => {
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   const user = setupUser();
   await user.click(
     await screen.findByRole("tab", {
@@ -320,9 +326,9 @@ test("loads tools once after OAuth return and preserves other query values", asy
   mockSearchParams = new URLSearchParams(
     "trigger_fetch=true&message=oauth_connected&filter=one&filter=two"
   );
-  const { rerender } = render(<MCPServerDetailPage serverId={7} />);
+  const { rerender } = render(<MCPPluginDetailPage serverId={7} />);
   await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledWith(7));
-  rerender(<MCPServerDetailPage serverId={7} />);
+  rerender(<MCPPluginDetailPage serverId={7} />);
   await waitFor(() =>
     expect(mockReplace).toHaveBeenCalledWith(
       "/admin/plugins/mcp/7?message=oauth_connected&filter=one&filter=two&tab=tools",
@@ -336,7 +342,7 @@ test("loads tools once after OAuth return and preserves other query values", asy
 test("query flags alone cannot enable discovered tools for main Chat", async () => {
   mockSearchParams = new URLSearchParams("trigger_fetch=true&enable_chat=true");
   jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledWith(7));
   expect(mockUpdateTools).not.toHaveBeenCalled();
 });
@@ -347,7 +353,7 @@ test("consumes an explicit Enable proof once after same-tab OAuth return", async
     `trigger_fetch=true&enable_chat=true&enable_chat_intent=${token}`
   );
   jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
-  const view = render(<MCPServerDetailPage serverId={7} />);
+  const view = render(<MCPPluginDetailPage serverId={7} />);
   await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledWith([81], true));
   expect(
     consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
@@ -357,7 +363,7 @@ test("consumes an explicit Enable proof once after same-tab OAuth return", async
     { scroll: false }
   );
   view.unmount();
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledTimes(2));
   expect(mockUpdateTools).toHaveBeenCalledTimes(1);
 });
@@ -370,7 +376,7 @@ test("keeps the enable request after OAuth-return discovery fails", async () => 
   jest
     .mocked(refreshMCPServerTools)
     .mockRejectedValueOnce(new Error("Unauthenticated"));
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledTimes(1));
   expect(mockUpdateTools).not.toHaveBeenCalled();
   expect(mockReplace).toHaveBeenLastCalledWith(
@@ -395,7 +401,7 @@ test.each(["wrong user", "wrong server", "expired"])(
       `trigger_fetch=true&enable_chat=true&enable_chat_intent=${token}`
     );
     jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
-    render(<MCPServerDetailPage serverId={7} />);
+    render(<MCPPluginDetailPage serverId={7} />);
     await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledWith(7));
     expect(mockUpdateTools).not.toHaveBeenCalled();
   }
@@ -408,10 +414,10 @@ test("does not apply a previous user's intent after an account change during dis
   );
   const discovery = deferred<ToolSnapshot[]>();
   jest.mocked(refreshMCPServerTools).mockReturnValue(discovery.promise);
-  const view = render(<MCPServerDetailPage serverId={7} />);
+  const view = render(<MCPPluginDetailPage serverId={7} />);
   await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledWith(7));
   mockUserId = "another-user";
-  view.rerender(<MCPServerDetailPage serverId={7} />);
+  view.rerender(<MCPPluginDetailPage serverId={7} />);
   await act(async () => discovery.resolve([discoveredTool]));
   expect(mockUpdateTools).not.toHaveBeenCalled();
 });
@@ -423,7 +429,7 @@ test("enables discovered tools after in-place authentication succeeds", async ()
   );
   jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
   const user = setupUser();
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await user.click(
     await screen.findByRole("button", { name: "Authenticate server" })
   );
@@ -442,7 +448,7 @@ test("keeps the enable request for a retry after the Chat update fails", async (
   jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
   mockUpdateTools.mockRejectedValueOnce(new Error("Update failed"));
   const user = setupUser();
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   const authenticate = await screen.findByRole("button", {
     name: "Authenticate server",
   });
@@ -462,7 +468,7 @@ test("does not enable tools when opening authentication is cancelled", async () 
     `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
   );
   const user = setupUser();
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Authentication draft" });
   await user.click(screen.getByRole("button", { name: "Close" }));
   expect(mockReplace).toHaveBeenCalledWith("/admin/plugins");
@@ -477,7 +483,7 @@ test("ordinary authentication does not enable main Chat", async () => {
   mockSearchParams = new URLSearchParams("tab=authentication");
   jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
   const user = setupUser();
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await user.click(
     await screen.findByRole("button", { name: "Authenticate server" })
   );
@@ -495,7 +501,7 @@ test("keeps the enable request for a retry after authentication discovery fails"
     .mockRejectedValueOnce(new Error("Unauthenticated"))
     .mockResolvedValue([discoveredTool]);
   const user = setupUser();
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   const authenticate = await screen.findByRole("button", {
     name: "Authenticate server",
   });
@@ -514,7 +520,7 @@ test("ignores forged enable intent without full admin authority", async () => {
   mockFullAdmin = false;
   mockSearchParams = new URLSearchParams("trigger_fetch=true&enable_chat=true");
   jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalled());
   expect(mockUpdateTools).not.toHaveBeenCalled();
 });
@@ -524,7 +530,7 @@ test("preserves unrelated query values when selecting a tab", async () => {
     "tab=server&message=oauth_connected&filter=one&filter=two"
   );
   const user = setupUser();
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await user.click(
     await screen.findByRole("tab", {
       name: messages.actions.mcpDetail.authentication,
@@ -552,7 +558,7 @@ test("blocks editing and tool controls throughout OAuth discovery", async () => 
         finishDiscovery = () => resolve([]);
       })
   );
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   const edit = await screen.findByRole("tab", {
     name: messages.actions.mcpDetail.configuration,
   });
@@ -570,7 +576,7 @@ test("blocks editing and tool controls throughout OAuth discovery", async () => 
 
 test("server edit permission alone cannot change default Chat settings", async () => {
   mockFullAdmin = false;
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Server draft" });
   expect(
     screen.queryByRole("switch", {
@@ -590,7 +596,7 @@ test("server edit permission alone cannot change default Chat settings", async (
 });
 
 test("retains server and authentication drafts across inline tabs", async () => {
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   const user = setupUser();
   const name = await screen.findByRole("textbox", { name: "Server draft" });
   await user.type(name, " changed");
@@ -623,7 +629,7 @@ test("retains server and authentication drafts across inline tabs", async () => 
 });
 
 test("saving server configuration keeps the editor open and clears its draft guard", async () => {
-  render(<MCPServerDetailPage serverId={7} />);
+  render(<MCPPluginDetailPage serverId={7} />);
   const user = setupUser();
   await user.type(
     await screen.findByRole("textbox", { name: "Server draft" }),
