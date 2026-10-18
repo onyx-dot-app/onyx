@@ -51,6 +51,7 @@ from onyx.indexing.indexing_pipeline import (
     run_indexing_pipeline,
 )
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
+from onyx.natural_language_processing.embedding_rate_limit import EmbeddingWaitTotals
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.model_server_models import Embedding
@@ -79,6 +80,9 @@ class CharTokenizer(BaseTokenizer):
 
 class _EmbeddingModelStub:
     tokenizer = CharTokenizer()
+
+    def __init__(self) -> None:
+        self.wait_totals = EmbeddingWaitTotals()
 
 
 class DeterministicIndexingEmbedder(IndexingEmbedder):
