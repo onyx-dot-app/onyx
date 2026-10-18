@@ -14,7 +14,7 @@ import {
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
-import { Button, SelectCard } from "@opal/components";
+import { Button, Popover, SelectCard } from "@opal/components";
 import { Card, Content, ContentAction } from "@opal/layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
@@ -23,7 +23,6 @@ import useCodeInterpreter, {
   type CodeInterpreterHealthStatus,
 } from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/views/admin/CodeInterpreterPage/svc";
-import { cn } from "@opal/utils";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;
 
@@ -83,23 +82,55 @@ function CheckingStatus() {
 
 interface ConnectionStatusProps {
   status: CodeInterpreterHealthStatus | undefined;
+  error: string | undefined;
   isLoading: boolean;
-  onIconHover: (hovered: boolean) => void;
 }
 
-function ConnectionStatus({
-  status,
-  isLoading,
-  onIconHover,
-}: ConnectionStatusProps) {
+function ConnectionStatus({ status, error, isLoading }: ConnectionStatusProps) {
   const t = useTranslations("admin.codeInterpreter");
+  const [isErrorOpen, setIsErrorOpen] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    },
+    []
+  );
 
   if (isLoading || !status) {
     return <CheckingStatus />;
   }
 
   const { labelKey, icon, color } = STATUS_CONFIG[status];
-  const hasError = status !== "healthy";
+  const statusContent = (
+    <Content
+      sizePreset="main-ui"
+      variant="body"
+      orientation="reverse"
+      width="fit"
+      icon={icon}
+      title={t(labelKey)}
+      color={color}
+    />
+  );
+
+  // The error card stays open while the pointer is on the status or the card,
+  // and closes a second after it leaves both.
+  function handleErrorHover(hovered: boolean) {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    if (hovered) {
+      setIsErrorOpen(true);
+      return;
+    }
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsErrorOpen(false);
+      closeTimeoutRef.current = null;
+    }, 1000);
+  }
 
   return (
     <Section
@@ -108,21 +139,42 @@ function ConnectionStatus({
       alignItems="center"
       padding={2}
     >
-      <div
-        onMouseEnter={() => hasError && onIconHover(true)}
-        onMouseLeave={() => onIconHover(false)}
-        className={cn(hasError && "cursor-pointer")}
-      >
-        <Content
-          sizePreset="main-ui"
-          variant="body"
-          orientation="reverse"
-          width="fit"
-          icon={icon}
-          title={t(labelKey)}
-          color={color}
-        />
-      </div>
+      {status === "healthy" ? (
+        statusContent
+      ) : (
+        <Popover open={isErrorOpen} onOpenChange={setIsErrorOpen}>
+          <Popover.Trigger asChild>
+            <div
+              className="cursor-pointer"
+              onMouseEnter={() => handleErrorHover(true)}
+              onMouseLeave={() => handleErrorHover(false)}
+            >
+              {statusContent}
+            </div>
+          </Popover.Trigger>
+          <Popover.Content
+            align="end"
+            width="md"
+            onMouseEnter={() => handleErrorHover(true)}
+            onMouseLeave={() => handleErrorHover(false)}
+          >
+            <Section padding={1}>
+              <Content
+                sizePreset="main-ui"
+                variant="section"
+                icon={SvgXOctagon}
+                color="danger"
+                title={
+                  status === "connection_lost"
+                    ? t("errorCard.connectionLost.title")
+                    : t("errorCard.generic.title")
+                }
+                description={error}
+              />
+            </Section>
+          </Popover.Content>
+        </Popover>
+      )}
     </Section>
   );
 }
@@ -134,26 +186,8 @@ function ConnectionStatus({
 export default function CodeInterpreterPage() {
   const t = useTranslations("admin.codeInterpreter");
   const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
-  const isHealthy = status === "healthy";
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
-  const [showErrorMenu, setShowErrorMenu] = useState(false);
-  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function handleErrorHover(hovered: boolean) {
-    if (fadeTimeoutRef.current) {
-      clearTimeout(fadeTimeoutRef.current);
-      fadeTimeoutRef.current = null;
-    }
-    if (hovered) {
-      setShowErrorMenu(true);
-    } else {
-      fadeTimeoutRef.current = setTimeout(() => {
-        setShowErrorMenu(false);
-        fadeTimeoutRef.current = null;
-      }, 1000);
-    }
-  }
 
   async function handleToggle(enabled: boolean) {
     setIsReconnecting(enabled);
@@ -210,8 +244,8 @@ export default function CodeInterpreterPage() {
                     <Section alignItems="end" gap={0}>
                       <ConnectionStatus
                         status={status}
+                        error={error}
                         isLoading={isLoading}
-                        onIconHover={handleErrorHover}
                       />
                       <div className="px-1 pb-1">
                         <Section
@@ -278,35 +312,6 @@ export default function CodeInterpreterPage() {
               }
             />
           </SelectCard>
-        )}
-        {showErrorMenu && !isHealthy && (
-          <Section
-            flexDirection="row"
-            justifyContent="end"
-            onMouseEnter={() => handleErrorHover(true)}
-            onMouseLeave={() => handleErrorHover(false)}
-          >
-            <div className="w-[15rem]">
-              <SelectCard state="filled" padding={2} rounding={4}>
-                <Content
-                  icon={(props) => (
-                    <SvgXOctagon
-                      {...props}
-                      className={cn(props.className, "text-status-error-05!")}
-                    />
-                  )}
-                  title={
-                    status === "connection_lost"
-                      ? t("errorCard.connectionLost.title")
-                      : t("errorCard.generic.title")
-                  }
-                  description={error}
-                  variant="section"
-                  sizePreset="main-ui"
-                />
-              </SelectCard>
-            </div>
-          </Section>
         )}
       </SettingsLayouts.Body>
 
