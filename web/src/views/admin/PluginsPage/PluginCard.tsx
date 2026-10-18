@@ -13,6 +13,7 @@ import PluginLifecycleMenu from "@/sections/plugins/PluginLifecycleMenu";
 import { Content, ContentAction } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { MCPConnectionStatus } from "@/lib/mcp/types";
+import { PLUGIN_KIND_TAGS } from "@/lib/plugins/constants";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -22,13 +23,6 @@ const NESTED_CONTROLS = "button, a, [role='menuitem'], [role='menu']";
 interface PluginCardProps {
   plugin: InstalledPlugin;
 }
-
-// The plugin types are product names, so they are not translated.
-const KIND_SUFFIX: Record<InstalledPlugin["kind"], string> = {
-  mcp: "(MCP)",
-  openapi: "(OpenAPI)",
-  "external-app": "(Craft)",
-};
 
 const HOVER_GROUP = "PluginCard";
 
@@ -115,7 +109,7 @@ export default function PluginCard({ plugin }: PluginCardProps) {
         <ContentAction
           icon={icon}
           title={resource.name}
-          suffix={KIND_SUFFIX[plugin.kind]}
+          tag={PLUGIN_KIND_TAGS[plugin.kind]}
           description={description}
           titleMaxLines={1}
           descriptionMaxLines={1}

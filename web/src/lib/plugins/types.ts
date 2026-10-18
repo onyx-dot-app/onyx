@@ -7,6 +7,9 @@ export type InstalledPlugin =
   | { kind: "openapi"; tool: ToolSnapshot }
   | { kind: "external-app"; app: ExternalAppAdminResponse };
 
+/** A plugin's type: an MCP server, an OpenAPI tool, or a Craft app. */
+export type PluginKind = InstalledPlugin["kind"];
+
 export type PluginReference =
   | { kind: "mcp"; id: MCPServer["id"] }
   | { kind: "openapi"; id: ToolSnapshot["id"] }
