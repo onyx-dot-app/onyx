@@ -31,7 +31,7 @@ import PluginAddCatalogModal, {
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
 import MCPPluginSetupModal from "@/sections/actions/modals/MCPPluginSetupModal";
-import OpenAPIPluginCreateModal from "@/sections/plugins/OpenAPIPluginCreateModal";
+import OpenAPIPluginCreateModal from "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
 import { useSettings } from "@/lib/settings/hooks";
@@ -250,12 +250,7 @@ export default function PluginsPage() {
     );
   }
 
-  const kindOptions = [
-    "all",
-    "mcp",
-    "openapi",
-    ...(canManageApps ? (["external-app"] as const) : []),
-  ] as const;
+  const kindOptions = ["all", "mcp", "openapi", "external-app"] as const;
 
   return (
     <div className={styles.directory}>
@@ -283,7 +278,12 @@ export default function PluginsPage() {
                 >
                   <Tabs.List aria-label={t("filters.label")}>
                     {kindOptions.map((value) => (
-                      <Tabs.Trigger key={value} value={value}>
+                      <Tabs.Trigger
+                        key={value}
+                        value={value}
+                        // Apps need Craft and full admin: shown, not hidden.
+                        disabled={value === "external-app" && !canManageApps}
+                      >
                         {value === "all"
                           ? t("filters.all")
                           : value === "external-app"

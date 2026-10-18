@@ -34,6 +34,10 @@ import {
   MASKED_OAUTH_CREDENTIAL,
   type OAuthConfigFields,
 } from "@/lib/oauth/config";
+import type {
+  AuthMethod,
+  OpenAPIAuthFormValues,
+} from "@/lib/plugins/openapi/types";
 import OAuthPKCESupport from "@/sections/actions/oauth/OAuthPKCESupport";
 import OAuthConnectionCheck from "@/sections/actions/oauth/OAuthConnectionCheck";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
@@ -42,13 +46,6 @@ import { SvgArrowLeft } from "@opal/icons";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
 import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
-
-export type AuthMethod = "oauth" | "custom-header" | "pt-oauth" | "none";
-
-export interface OpenAPIAuthFormValues extends OAuthConfigFields {
-  authMethod: AuthMethod;
-  headers: KeyValue[];
-}
 
 interface OpenAPIAuthenticationModalProps {
   presentation?: "modal" | "inline";

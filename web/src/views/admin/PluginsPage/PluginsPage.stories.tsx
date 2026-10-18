@@ -4,7 +4,7 @@ import { expect, userEvent, within } from "storybook/test";
 import { SWRConfig, type State } from "swr";
 import { ToastProvider } from "@opal/layouts";
 import { UserProvider } from "@/providers/UserProvider";
-import PluginsPage from "@/sections/plugins/PluginsPage";
+import PluginsPage from "@/views/admin/PluginsPage";
 import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { Permission } from "@/lib/types";

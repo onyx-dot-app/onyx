@@ -3,9 +3,9 @@ import {
   MASKED_OAUTH_CREDENTIAL,
   oauthConfigRequest,
 } from "@/lib/oauth/config";
-import { updateCustomTool } from "@/lib/tools/svc";
+import { updateCustomTool } from "@/lib/plugins/openapi/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
-import type { OpenAPIAuthFormValues } from "@/sections/actions/modals/OpenAPIAuthenticationModal";
+import type { OpenAPIAuthFormValues } from "@/lib/plugins/openapi/types";
 
 export async function saveOpenApiAuthentication({
   tool,

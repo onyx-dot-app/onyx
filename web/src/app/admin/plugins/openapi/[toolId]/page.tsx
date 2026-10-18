@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { parsePluginId } from "@/lib/plugins/routes";
-import OpenAPIPluginDetailPage from "@/sections/plugins/OpenAPIPluginDetailPage";
+import OpenAPIPluginDetailPage from "@/views/admin/PluginsPage/OpenAPIPluginDetailPage";
 
 export default async function Page({
   params,

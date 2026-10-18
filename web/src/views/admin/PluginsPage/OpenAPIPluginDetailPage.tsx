@@ -17,17 +17,16 @@ import { SvgActions } from "@opal/icons";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { can } from "@/lib/permissions/resource-actions";
 import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
-import { updateCustomTool } from "@/lib/tools/svc";
+import { updateCustomTool } from "@/lib/plugins/openapi/svc";
 import {
   extractMethodSpecsFromDefinition,
   getActionIcon,
 } from "@/lib/tools/utils";
 import type { ToolSnapshot } from "@/lib/tools/types";
-import AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
-import OpenAPIAuthenticationModal, {
-  type OpenAPIAuthFormValues,
-} from "@/sections/actions/modals/OpenAPIAuthenticationModal";
-import { saveOpenApiAuthentication } from "@/sections/plugins/openApiWorkflow";
+import AddOpenAPIActionModal from "@/views/admin/PluginsPage/components/AddOpenAPIActionModal";
+import OpenAPIAuthenticationModal from "@/views/admin/PluginsPage/components/OpenAPIAuthenticationModal";
+import type { OpenAPIAuthFormValues } from "@/lib/plugins/openapi/types";
+import { saveOpenApiAuthentication } from "@/lib/plugins/openapi/workflow";
 import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import MCPFormActions from "@/sections/actions/modals/MCPFormActions";

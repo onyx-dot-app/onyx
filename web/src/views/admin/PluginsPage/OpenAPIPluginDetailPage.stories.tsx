@@ -5,7 +5,7 @@ import { SWRConfig, type State } from "swr";
 import { ToastProvider } from "@opal/layouts";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/utils";
-import OpenAPIPluginDetailPage from "@/sections/plugins/OpenAPIPluginDetailPage";
+import OpenAPIPluginDetailPage from "@/views/admin/PluginsPage/OpenAPIPluginDetailPage";
 import messages from "@/i18n/messages/en.json";
 
 const tool: ToolSnapshot = {

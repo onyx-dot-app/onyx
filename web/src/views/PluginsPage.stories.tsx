@@ -10,7 +10,7 @@ import {
   MCPAuthenticationType,
 } from "@/lib/mcp/types";
 import { Permission } from "@/lib/types";
-import MemberPluginsPage from "@/sections/plugins/MemberPluginsPage";
+import MemberPluginsPage from "@/views/PluginsPage";
 import {
   jsonResponse,
   memberServer,

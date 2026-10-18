@@ -7,7 +7,7 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
-import OpenAPIPluginCreateModal from "@/sections/plugins/OpenAPIPluginCreateModal";
+import OpenAPIPluginCreateModal from "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal";
 import type { ToolSnapshot } from "@/lib/tools/types";
 
 let mockFullAdmin = false;

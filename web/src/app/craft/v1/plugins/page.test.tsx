@@ -1,7 +1,7 @@
 import { render, screen } from "@tests/setup/test-utils";
 import Page from "@/app/craft/v1/plugins/page";
 
-jest.mock("@/sections/plugins/MemberPluginsPage", () => ({
+jest.mock("@/views/PluginsPage", () => ({
   __esModule: true,
   default: ({ surface }: { surface: string }) => (
     <div data-testid="directory" data-surface={surface} />

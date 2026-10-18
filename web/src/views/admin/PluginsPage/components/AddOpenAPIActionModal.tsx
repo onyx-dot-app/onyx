@@ -20,7 +20,7 @@ import {
   validateToolDefinition,
   createCustomTool,
   updateCustomTool,
-} from "@/lib/tools/svc";
+} from "@/lib/plugins/openapi/svc";
 import debounce from "lodash/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@opal/components";

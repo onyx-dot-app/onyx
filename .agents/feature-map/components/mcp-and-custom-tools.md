@@ -233,7 +233,7 @@ count, enabled state, and loading/retry feedback. Review skills opens the
 existing app-filtered skills page; no admin metadata or policies are fetched.
 Craft must be enabled before skills or launch actions appear. Apps needing
 authentication show Connect account instead of Open in Craft.
-`web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, review,
+`web/src/views/admin/PluginsPage/components/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, review,
 Back navigation, authorization choices and draft retention, invalid JSON, validation failure/pending, saving, creation failure/success,
 and closing/reopening a discarded draft. Network fixtures remain local to each story.
 Explore offers official remote endpoints for Slack, HubSpot, Asana, Linear, Notion,
@@ -556,10 +556,10 @@ inline, not a broken turn.
 
 | Route | Page | Content component |
 |---|---|---|
-| `/admin/plugins` | `web/src/app/admin/plugins/page.tsx` | `PluginsPage` (`web/src/sections/plugins/PluginsPage.tsx`) |
+| `/admin/plugins` | `web/src/app/admin/plugins/page.tsx` | `PluginsPage` (`web/src/views/admin/PluginsPage/index.tsx`) |
 | `/admin/plugins?add=mcp` | Plugins directory | `MCPPluginSetupModal` (`web/src/sections/actions/modals/MCPPluginSetupModal.tsx`) |
 | `/admin/plugins/mcp/[serverId]` | `web/src/app/admin/plugins/mcp/[serverId]/page.tsx` | `MCPServerDetailPage` (`web/src/sections/actions/MCPServerDetailPage.tsx`) |
-| `/admin/plugins/openapi/[toolId]` | `web/src/app/admin/plugins/openapi/[toolId]/page.tsx` | `OpenAPIPluginDetailPage` (`web/src/sections/plugins/OpenAPIPluginDetailPage.tsx`) |
+| `/admin/plugins/openapi/[toolId]` | `web/src/app/admin/plugins/openapi/[toolId]/page.tsx` | `OpenAPIPluginDetailPage` (`web/src/views/admin/PluginsPage/OpenAPIPluginDetailPage.tsx`) |
 | `/admin/mcp-actions`, `/admin/mcp-actions/new`, `/admin/mcp-actions/[serverId]`, `/admin/openapi-actions` | Existing route files | Query-preserving redirects through `web/src/lib/plugins/routes.ts` |
 
 ### HTTP endpoints, MCP (`backend/onyx/server/features/mcp/api.py`, prefixes `/mcp` and `/admin/mcp`)
@@ -1046,7 +1046,7 @@ for the state inventory and preview links. Fixtures intercept requests locally.
 
 ```bash
 # Frontend setup, retry, credential scope, and OAuth service regressions
-cd web && bun run test --runInBand src/sections/actions/modals/MCPPluginSetupModal.test.tsx src/sections/actions/modals/MCPAuthenticationPage.test.tsx src/sections/actions/modals/MCPServerDetailsPage.test.tsx src/sections/plugins/PluginsPage.test.tsx src/lib/mcp/svc.test.ts --testTimeout=30000
+cd web && bun run test --runInBand src/sections/actions/modals/MCPPluginSetupModal.test.tsx src/sections/actions/modals/MCPAuthenticationPage.test.tsx src/sections/actions/modals/MCPServerDetailsPage.test.tsx src/views/admin/PluginsPage/PluginsPage.test.tsx src/lib/mcp/svc.test.ts --testTimeout=30000
 
 # Playwright e2e: MCP server creation, OAuth connect, per-user API key, group access
 cd web && bun run playwright tests/e2e/mcp/mcp_oauth_flow.spec.ts

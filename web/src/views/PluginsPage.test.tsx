@@ -8,7 +8,7 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
-import MemberPluginsPage from "@/sections/plugins/MemberPluginsPage";
+import MemberPluginsPage from "@/views/PluginsPage";
 import {
   jsonResponse,
   memberServer,

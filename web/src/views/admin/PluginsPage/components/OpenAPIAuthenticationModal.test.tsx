@@ -7,7 +7,7 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
-import OpenAPIAuthenticationModal from "@/sections/actions/modals/OpenAPIAuthenticationModal";
+import OpenAPIAuthenticationModal from "@/views/admin/PluginsPage/components/OpenAPIAuthenticationModal";
 
 beforeEach(() => {
   jest.spyOn(global, "fetch").mockImplementation(async (input) => {

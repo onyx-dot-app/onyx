@@ -5,7 +5,7 @@ import { SWRConfig, type State } from "swr";
 import { Button, Text } from "@opal/components";
 import { ToastProvider } from "@opal/layouts";
 import type { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
-import OpenAPIPluginCreateModal from "@/sections/plugins/OpenAPIPluginCreateModal";
+import OpenAPIPluginCreateModal from "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal";
 import messages from "@/i18n/messages/en.json";
 
 const copy = messages.actions;

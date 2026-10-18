@@ -7,13 +7,12 @@ import { useSWRConfig } from "swr";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
-import AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
-import OpenAPIAuthenticationModal, {
-  type OpenAPIAuthFormValues,
-} from "@/sections/actions/modals/OpenAPIAuthenticationModal";
-import { createCustomTool, updateCustomTool } from "@/lib/tools/svc";
+import AddOpenAPIActionModal from "@/views/admin/PluginsPage/components/AddOpenAPIActionModal";
+import OpenAPIAuthenticationModal from "@/views/admin/PluginsPage/components/OpenAPIAuthenticationModal";
+import type { OpenAPIAuthFormValues } from "@/lib/plugins/openapi/types";
+import { createCustomTool, updateCustomTool } from "@/lib/plugins/openapi/svc";
 import { can } from "@/lib/permissions/resource-actions";
-import { saveOpenApiAuthentication } from "@/sections/plugins/openApiWorkflow";
+import { saveOpenApiAuthentication } from "@/lib/plugins/openapi/workflow";
 
 type SchemaDraft = Parameters<typeof createCustomTool>[0];
 type CreationStep =

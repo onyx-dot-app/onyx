@@ -9,9 +9,9 @@ import {
   within,
   act,
 } from "@tests/setup/test-utils";
-import PluginsPage from "@/sections/plugins/PluginsPage";
+import PluginsPage from "@/views/admin/PluginsPage";
 import type MCPPluginSetupModal from "@/sections/actions/modals/MCPPluginSetupModal";
-import type OpenAPIPluginCreateModal from "@/sections/plugins/OpenAPIPluginCreateModal";
+import type OpenAPIPluginCreateModal from "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal";
 import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { SUGGESTED_MCP_PLUGINS } from "@/lib/plugins/catalog";
@@ -64,18 +64,21 @@ jest.mock("@/sections/actions/modals/MCPPluginSetupModal", () => ({
     ) : null;
   },
 }));
-jest.mock("@/sections/plugins/OpenAPIPluginCreateModal", () => ({
-  __esModule: true,
-  default: function MockOpenAPIModal(
-    props: ComponentProps<typeof OpenAPIPluginCreateModal>
-  ) {
-    return props.open ? (
-      <div role="dialog" aria-label="OpenAPI setup">
-        <button onClick={() => props.onCreated(7)}>Create action</button>
-      </div>
-    ) : null;
-  },
-}));
+jest.mock(
+  "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal",
+  () => ({
+    __esModule: true,
+    default: function MockOpenAPIModal(
+      props: ComponentProps<typeof OpenAPIPluginCreateModal>
+    ) {
+      return props.open ? (
+        <div role="dialog" aria-label="OpenAPI setup">
+          <button onClick={() => props.onCreated(7)}>Create action</button>
+        </div>
+      ) : null;
+    },
+  })
+);
 
 const mockServer: MCPServer = {
   connection_status: null,
@@ -192,9 +195,7 @@ test("Craft-disabled admins see only Chat plugins and never request Craft apps",
   render(<PluginsPage />);
   await screen.findByRole("link", { name: "Manage Workspace MCP" });
   expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
-  expect(
-    screen.queryByRole("tab", { name: "Craft Apps" })
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Craft Apps" })).toBeDisabled();
   expect(
     screen.queryByRole("link", { name: "Manage Workspace service" })
   ).not.toBeInTheDocument();
@@ -336,9 +337,7 @@ test("never requests external admin records or provider options for scoped actio
   const network = mockNetwork();
   render(<PluginsPage />);
   await screen.findByRole("link", { name: "Manage Workspace MCP" });
-  expect(
-    screen.queryByRole("tab", { name: "Craft Apps" })
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Craft Apps" })).toBeDisabled();
   await setupUser().click(screen.getByRole("button", { name: copy.add.label }));
   expect(
     screen.queryByRole("menuitem", { name: copy.kind["external-app"] })

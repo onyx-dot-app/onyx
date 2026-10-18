@@ -12,7 +12,7 @@ import type { ToolSnapshot } from "@/lib/tools/types";
 import { ToastProvider, toast } from "@opal/layouts";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import OpenAPIPluginDetailPage from "@/sections/plugins/OpenAPIPluginDetailPage";
+import OpenAPIPluginDetailPage from "@/views/admin/PluginsPage/OpenAPIPluginDetailPage";
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();

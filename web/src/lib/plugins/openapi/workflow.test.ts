@@ -1,6 +1,6 @@
-import { saveOpenApiAuthentication } from "@/sections/plugins/openApiWorkflow";
+import { saveOpenApiAuthentication } from "@/lib/plugins/openapi/workflow";
 import type { ToolSnapshot } from "@/lib/tools/types";
-import type { OpenAPIAuthFormValues } from "@/sections/actions/modals/OpenAPIAuthenticationModal";
+import type { OpenAPIAuthFormValues } from "@/lib/plugins/openapi/types";
 
 const tool: ToolSnapshot = {
   id: 42,

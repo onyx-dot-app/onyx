@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import PluginsPage from "@/sections/plugins/PluginsPage";
+import PluginsPage from "@/views/admin/PluginsPage";
 
 export default function PluginsLayout({ children }: { children: ReactNode }) {
   return (

@@ -10,7 +10,7 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
-import AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
+import AddOpenAPIActionModal from "@/views/admin/PluginsPage/components/AddOpenAPIActionModal";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import type { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 
