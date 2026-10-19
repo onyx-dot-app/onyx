@@ -241,6 +241,24 @@ test("pending account status stays checking instead of offering a missing-accoun
   ).toBeVisible();
 });
 
+function expectDialogWheelAllowed() {
+  const body = screen.getByRole("dialog").querySelector(".opal-modal-body");
+  if (!(body instanceof HTMLElement)) throw new Error("Missing dialog body");
+  // jsdom has no layout, but Radix's real scroll-lock listener still runs.
+  body.style.overflowY = "auto";
+  Object.defineProperties(body, {
+    scrollHeight: { configurable: true, value: 1000 },
+    clientHeight: { configurable: true, value: 200 },
+  });
+  const wheel = new WheelEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    deltaY: 100,
+  });
+  body.dispatchEvent(wheel);
+  expect(wheel.defaultPrevented).toBe(false);
+}
+
 test("connecting from details replaces the detail dialog and dismissing leaves no dialog", async () => {
   network({
     servers: [
@@ -253,11 +271,13 @@ test("connecting from details replaces the detail dialog and dismissing leaves n
   expect(screen.getByRole("dialog", { name: /^Linear/ })).toBeVisible();
   const backdrop = document.querySelector(".opal-modal-overlay");
   expect(backdrop).not.toBeNull();
+  expectDialogWheelAllowed();
   await user.click(screen.getByRole("button", { name: "Connect" }));
   expect(document.querySelectorAll(".opal-modal-overlay")).toHaveLength(1);
   expect(document.querySelector(".opal-modal-overlay")).toBe(backdrop);
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   expect(screen.getByRole("dialog", { name: /^Connect Linear/ })).toBeVisible();
+  expectDialogWheelAllowed();
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });

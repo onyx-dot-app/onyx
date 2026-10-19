@@ -112,6 +112,7 @@ Plugin modal headers show descriptions instead of URLs, for members and admins.
 Member Connection tabs separate description and authentication from availability switches with a divider.
 Craft Apps have no stored description, so their headers use the localized Craft availability summary. Member details never fetch admin app records or show URL patterns.
 Member directory detail and connection dialogs share one persistent backdrop, so switching screens does not restart its fade-in.
+The backdrop and active content use the same Radix dialog root, so its scroll lock permits wheel and touch events inside the modal. Standalone callers wrap the shared content in their own dialog root.
 The Connection tab starts with a status card: green when connected, yellow when setup is needed, and gray when checking or unavailable.
 Connected cards include secondary readiness text. External apps show a separate Issues card with a yellow dot when associated skills are disabled. Review skills opens the Skills tab.
 The connection card provides Connect when the user can authenticate. Workspace setup remains distinct from personal authentication.

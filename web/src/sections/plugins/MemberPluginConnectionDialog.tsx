@@ -28,7 +28,7 @@ type ConnectionAttempt =
   | { kind: "pending" }
   | { kind: "error"; reason: MemberPluginConnectionError["reason"] };
 
-function ConnectionForm({
+export function MemberPluginConnectionContent({
   plugin,
   agentId,
   surface,
@@ -115,80 +115,86 @@ function ConnectionForm({
   }
 
   return (
-    <Modal open onOpenChange={(open) => !open && close()}>
-      <Modal.Content
-        width="sm"
-        position="top"
-        preventAccidentalClose={false}
-        skipOverlay={skipOverlay}
-      >
-        <Modal.Header
-          icon={SvgPlug}
-          title={t("title", { name })}
-          description={t("description")}
-          onClose={close}
-        />
-        <Modal.Body twoTone={false} alignItems="stretch">
-          <Text as="p" font="main-ui-body" color="text-03">
-            {connectionDescription()}
-          </Text>
-          <form
-            id={formId}
-            onSubmit={(event) => void connect(event)}
-            className="flex flex-col gap-4"
-          >
-            {fields.map((field, index) => (
-              <InputVertical
-                key={field}
-                title={field}
-                withLabel={`${formId}-${index}`}
-              >
-                <InputPasswordTypeIn
-                  id={`${formId}-${index}`}
-                  name={field}
-                  required
-                  disabled={pending}
-                  value={credentials[field] ?? ""}
-                  onChange={(event) => {
-                    setCredentials((current) => ({
-                      ...current,
-                      [field]: event.target.value,
-                    }));
-                    if (attempt.kind === "error") setAttempt({ kind: "idle" });
-                  }}
-                />
-              </InputVertical>
-            ))}
-            {attempt.kind === "error" && (
-              <div role="alert">
-                <Text as="p" font="secondary-body" color="status-error-05">
-                  {t(`errors.${attempt.reason}`)}
-                </Text>
-              </div>
-            )}
-          </form>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button prominence="secondary" onClick={close}>
-            {t(canConnect ? "cancel" : "done")}
-          </Button>
-          {canConnect && (
-            <Button
-              type="submit"
-              form={formId}
-              disabled={
-                pending || fields.some((field) => !credentials[field]?.trim())
-              }
-              rightIcon={usesOAuth ? SvgExternalLink : undefined}
+    <Modal.Content
+      onEscapeKeyDown={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onPointerDownOutside={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      width="sm"
+      position="top"
+      preventAccidentalClose={false}
+      skipOverlay={skipOverlay}
+    >
+      <Modal.Header
+        icon={SvgPlug}
+        title={t("title", { name })}
+        description={t("description")}
+        onClose={close}
+      />
+      <Modal.Body twoTone={false} alignItems="stretch">
+        <Text as="p" font="main-ui-body" color="text-03">
+          {connectionDescription()}
+        </Text>
+        <form
+          id={formId}
+          onSubmit={(event) => void connect(event)}
+          className="flex flex-col gap-4"
+        >
+          {fields.map((field, index) => (
+            <InputVertical
+              key={field}
+              title={field}
+              withLabel={`${formId}-${index}`}
             >
-              {t(pending ? "connecting" : usesOAuth ? "continue" : "connect", {
-                name,
-              })}
-            </Button>
+              <InputPasswordTypeIn
+                id={`${formId}-${index}`}
+                name={field}
+                required
+                disabled={pending}
+                value={credentials[field] ?? ""}
+                onChange={(event) => {
+                  setCredentials((current) => ({
+                    ...current,
+                    [field]: event.target.value,
+                  }));
+                  if (attempt.kind === "error") setAttempt({ kind: "idle" });
+                }}
+              />
+            </InputVertical>
+          ))}
+          {attempt.kind === "error" && (
+            <div role="alert">
+              <Text as="p" font="secondary-body" color="status-error-05">
+                {t(`errors.${attempt.reason}`)}
+              </Text>
+            </div>
           )}
-        </Modal.Footer>
-      </Modal.Content>
-    </Modal>
+        </form>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button prominence="secondary" onClick={close}>
+          {t(canConnect ? "cancel" : "done")}
+        </Button>
+        {canConnect && (
+          <Button
+            type="submit"
+            form={formId}
+            disabled={
+              pending || fields.some((field) => !credentials[field]?.trim())
+            }
+            rightIcon={usesOAuth ? SvgExternalLink : undefined}
+          >
+            {t(pending ? "connecting" : usesOAuth ? "continue" : "connect", {
+              name,
+            })}
+          </Button>
+        )}
+      </Modal.Footer>
+    </Modal.Content>
   );
 }
 
@@ -199,6 +205,11 @@ export default function MemberPluginConnectionDialog({
   if (!open) return null;
   const reference = memberPluginReference(props.plugin);
   return (
-    <ConnectionForm key={`${reference.kind}-${reference.id}`} {...props} />
+    <Modal open>
+      <MemberPluginConnectionContent
+        key={`${reference.kind}-${reference.id}`}
+        {...props}
+      />
+    </Modal>
   );
 }

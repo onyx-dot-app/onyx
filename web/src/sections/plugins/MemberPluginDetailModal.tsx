@@ -203,7 +203,17 @@ function ExternalAppSkillRecovery({
   );
 }
 
-export default function MemberPluginDetailModal({
+export default function MemberPluginDetailModal(
+  props: MemberPluginDetailModalProps
+) {
+  return (
+    <Modal open={props.open}>
+      <MemberPluginDetailContent {...props} />
+    </Modal>
+  );
+}
+
+export function MemberPluginDetailContent({
   plugin,
   surface = "all",
   open,
@@ -525,384 +535,398 @@ export default function MemberPluginDetailModal({
 
   if (guard.confirmationOpen) {
     return (
-      <Modal open={open} onOpenChange={(next) => !next && guard.cancelLeave()}>
-        <PluginModalContent skipOverlay={skipOverlay}>
-          <UnsavedChangesModalContent
-            onCancel={guard.cancelLeave}
-            onDiscard={guard.discardAndLeave}
-          />
-        </PluginModalContent>
-      </Modal>
+      <PluginModalContent
+        skipOverlay={skipOverlay}
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+          guard.cancelLeave();
+        }}
+        onPointerDownOutside={(event) => {
+          event.preventDefault();
+          guard.cancelLeave();
+        }}
+      >
+        <UnsavedChangesModalContent
+          onCancel={guard.cancelLeave}
+          onDiscard={guard.discardAndLeave}
+        />
+      </PluginModalContent>
     );
   }
 
+  function dismiss() {
+    if (saving) return;
+    if (skillConflict) setSkillConflict(null);
+    else if (preview) setPreview(null);
+    else close();
+  }
+
   return (
-    <Modal
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && !saving) {
-          if (skillConflict) setSkillConflict(null);
-          else if (preview) setPreview(null);
-          else close();
-        }
+    <PluginModalContent
+      skipOverlay={skipOverlay}
+      onEscapeKeyDown={(event) => {
+        event.preventDefault();
+        dismiss();
+      }}
+      onPointerDownOutside={(event) => {
+        event.preventDefault();
+        dismiss();
       }}
     >
-      <PluginModalContent skipOverlay={skipOverlay}>
-        {skillConflict ? (
-          <>
-            <Modal.Header
-              title={switchCopy("title", { name: skillConflict.name })}
-              description={switchCopy("description", {
-                name: skillConflict.name,
-              })}
-              onClose={saving ? undefined : () => setSkillConflict(null)}
-            />
-            <Modal.Body>
-              <Text>{switchCopy("body")}</Text>
-              {saveError && (
-                <Text role="alert" color="status-error-05">
-                  {saveError}
-                </Text>
-              )}
-            </Modal.Body>
-            <Modal.Footer>
-              <Button
-                prominence="secondary"
-                disabled={saving}
-                onClick={() => setSkillConflict(null)}
-              >
-                {actions("mcpSetup.back")}
-              </Button>
-              <Button
-                disabled={saving}
-                onClick={() => void saveChanges(skillConflict.id)}
-              >
-                {switchCopy(saving ? "submit.pendingLabel" : "submit.label")}
-              </Button>
-            </Modal.Footer>
-          </>
-        ) : preview ? (
-          <SkillPreviewContent
-            skillId={preview.id}
-            fallbackTitle={preview.name}
-            unavailableReason={preview.unavailable_reason}
-            closeLabel={actions("mcpSetup.back")}
-            onClose={() => setPreview(null)}
+      {skillConflict ? (
+        <>
+          <Modal.Header
+            title={switchCopy("title", { name: skillConflict.name })}
+            description={switchCopy("description", {
+              name: skillConflict.name,
+            })}
+            onClose={saving ? undefined : () => setSkillConflict(null)}
           />
-        ) : (
-          <>
-            <Modal.Header
-              icon={icon}
-              title={confirming ? t("detail.disconnectTitle", { name }) : name}
-              description={
-                confirming ? t("detail.disconnectDescription") : description
-              }
-              onClose={close}
-              gap={!confirming ? 1 : undefined}
-            />
-            <Modal.Body twoTone={false} alignItems="stretch">
-              {confirming ? (
-                <>
-                  {plugin.kind === "openapi" && (
-                    <Text as="p" font="main-ui-body" color="text-03">
-                      {t("detail.oauthDisconnectWarning")}
+          <Modal.Body>
+            <Text>{switchCopy("body")}</Text>
+            {saveError && (
+              <Text role="alert" color="status-error-05">
+                {saveError}
+              </Text>
+            )}
+          </Modal.Body>
+          <Modal.Footer>
+            <Button
+              prominence="secondary"
+              disabled={saving}
+              onClick={() => setSkillConflict(null)}
+            >
+              {actions("mcpSetup.back")}
+            </Button>
+            <Button
+              disabled={saving}
+              onClick={() => void saveChanges(skillConflict.id)}
+            >
+              {switchCopy(saving ? "submit.pendingLabel" : "submit.label")}
+            </Button>
+          </Modal.Footer>
+        </>
+      ) : preview ? (
+        <SkillPreviewContent
+          skillId={preview.id}
+          fallbackTitle={preview.name}
+          unavailableReason={preview.unavailable_reason}
+          closeLabel={actions("mcpSetup.back")}
+          onClose={() => setPreview(null)}
+        />
+      ) : (
+        <>
+          <Modal.Header
+            icon={icon}
+            title={confirming ? t("detail.disconnectTitle", { name }) : name}
+            description={
+              confirming ? t("detail.disconnectDescription") : description
+            }
+            onClose={close}
+            gap={!confirming ? 1 : undefined}
+          />
+          <Modal.Body twoTone={false} alignItems="stretch">
+            {confirming ? (
+              <>
+                {plugin.kind === "openapi" && (
+                  <Text as="p" font="main-ui-body" color="text-03">
+                    {t("detail.oauthDisconnectWarning")}
+                  </Text>
+                )}
+                {action.kind === "disconnectError" && (
+                  <div role="alert">
+                    <Text color="status-error-05">
+                      {t("detail.disconnectFailed")}
                     </Text>
-                  )}
-                  {action.kind === "disconnectError" && (
-                    <div role="alert">
-                      <Text color="status-error-05">
-                        {t("detail.disconnectFailed")}
-                      </Text>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <MemberDetailTabs
-                    enabled={hasTabs}
-                    secondaryTab={
-                      plugin.kind === "external-app" ? "skills" : "tools"
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <MemberDetailTabs
+                  enabled={hasTabs}
+                  secondaryTab={
+                    plugin.kind === "external-app" ? "skills" : "tools"
+                  }
+                  tab={activeTab}
+                  onTabChange={(next) => {
+                    if (!pending) {
+                      setTab(next);
                     }
-                    tab={activeTab}
-                    onTabChange={(next) => {
-                      if (!pending) {
-                        setTab(next);
-                      }
-                    }}
-                    availableActions={
-                      showApprovals ? (
-                        <div className="flex flex-col gap-4">
-                          {policyApp ? (
-                            <MemberMCPToolsList
-                              tools={policyApp.actions
-                                .filter(
-                                  (item) => item.effective_policy !== "DENY"
-                                )
-                                .map((item) => ({
-                                  id: item.action_id,
-                                  name: item.normalised_name,
-                                  display_name: item.normalised_name,
-                                  description: item.description,
-                                }))}
-                            />
-                          ) : (
-                            policyLoadState
-                          )}
-                        </div>
-                      ) : undefined
-                    }
-                    approvalsLoading={!policyApp && !policyLoadError}
-                    approvals={
-                      showApprovals ? (
-                        <div className="flex flex-col gap-4">
-                          {policyApp ? (
-                            <PolicyEditor
-                              showTitle={false}
-                              items={policyApp.actions.map((item) => ({
+                  }}
+                  availableActions={
+                    showApprovals ? (
+                      <div className="flex flex-col gap-4">
+                        {policyApp ? (
+                          <MemberMCPToolsList
+                            tools={policyApp.actions
+                              .filter(
+                                (item) => item.effective_policy !== "DENY"
+                              )
+                              .map((item) => ({
                                 id: item.action_id,
                                 name: item.normalised_name,
+                                display_name: item.normalised_name,
                                 description: item.description,
-                                defaultPolicy: item.editable
-                                  ? item.workspace_policy
-                                  : item.effective_policy,
-                                editable: item.editable,
-                                lockReason: item.lock_reason ?? undefined,
                               }))}
-                              policies={policies}
-                              onChange={setPolicies}
-                              onReset={() => setPolicies({})}
-                              resetLabel={approvalCopy("resetAll")}
-                              disabled={
-                                saving || !policyApp.users_can_manage_policies
-                              }
+                          />
+                        ) : (
+                          policyLoadState
+                        )}
+                      </div>
+                    ) : undefined
+                  }
+                  approvalsLoading={!policyApp && !policyLoadError}
+                  approvals={
+                    showApprovals ? (
+                      <div className="flex flex-col gap-4">
+                        {policyApp ? (
+                          <PolicyEditor
+                            showTitle={false}
+                            items={policyApp.actions.map((item) => ({
+                              id: item.action_id,
+                              name: item.normalised_name,
+                              description: item.description,
+                              defaultPolicy: item.editable
+                                ? item.workspace_policy
+                                : item.effective_policy,
+                              editable: item.editable,
+                              lockReason: item.lock_reason ?? undefined,
+                            }))}
+                            policies={policies}
+                            onChange={setPolicies}
+                            onReset={() => setPolicies({})}
+                            resetLabel={approvalCopy("resetAll")}
+                            disabled={
+                              saving || !policyApp.users_can_manage_policies
+                            }
+                          />
+                        ) : (
+                          policyLoadState
+                        )}
+                      </div>
+                    ) : undefined
+                  }
+                  connection={
+                    <>
+                      <Card border="solid" padding={4}>
+                        <div className="flex items-center justify-between gap-4">
+                          <div
+                            role="status"
+                            className="flex min-w-0 flex-1 items-center gap-3"
+                          >
+                            <span
+                              aria-hidden
+                              className={cn(
+                                "size-2 shrink-0 rounded-full",
+                                connection.kind === "connected"
+                                  ? "bg-status-success-05"
+                                  : canConnect ||
+                                      connection.kind === "unconfigured"
+                                    ? "bg-status-warning-05"
+                                    : "bg-text-03"
+                              )}
                             />
-                          ) : (
-                            policyLoadState
-                          )}
-                        </div>
-                      ) : undefined
-                    }
-                    connection={
-                      <>
-                        <Card border="solid" padding={4}>
-                          <div className="flex items-center justify-between gap-4">
-                            <div
-                              role="status"
-                              className="flex min-w-0 flex-1 items-center gap-3"
-                            >
-                              <span
-                                aria-hidden
-                                className={cn(
-                                  "size-2 shrink-0 rounded-full",
-                                  connection.kind === "connected"
-                                    ? "bg-status-success-05"
-                                    : canConnect ||
-                                        connection.kind === "unconfigured"
-                                      ? "bg-status-warning-05"
-                                      : "bg-text-03"
-                                )}
-                              />
-                              <div className="flex min-w-0 flex-col gap-1">
-                                <Text font="main-ui-action">
-                                  {connectionTitle}
+                            <div className="flex min-w-0 flex-col gap-1">
+                              <Text font="main-ui-action">
+                                {connectionTitle}
+                              </Text>
+                              {connection.kind === "connected" && (
+                                <Text font="secondary-body" color="text-03">
+                                  {t("detail.readyDescription")}
                                 </Text>
-                                {connection.kind === "connected" && (
+                              )}
+                              {connection.kind === "connected" &&
+                                (connection.ownership === "workspace" ||
+                                  connection.ownership === "session") && (
                                   <Text font="secondary-body" color="text-03">
-                                    {t("detail.readyDescription")}
+                                    {connectionLabel}
                                   </Text>
                                 )}
-                                {connection.kind === "connected" &&
-                                  (connection.ownership === "workspace" ||
-                                    connection.ownership === "session") && (
-                                    <Text font="secondary-body" color="text-03">
-                                      {connectionLabel}
-                                    </Text>
-                                  )}
-                              </div>
                             </div>
-                            {canDisconnect && (
-                              <Button
-                                prominence="secondary"
-                                disabled={pending}
-                                onClick={() =>
-                                  guard.requestLeave(() =>
-                                    setAction({ kind: "confirmDisconnect" })
-                                  )
-                                }
-                              >
-                                {t("detail.disconnect")}
-                              </Button>
-                            )}
-                            {canConnect && (
-                              <Button
-                                disabled={pending}
-                                onClick={() => guard.requestLeave(onConnect)}
-                              >
-                                {t("connection.connect")}
-                              </Button>
-                            )}
                           </div>
-                        </Card>
-                        {plugin.kind !== "external-app" &&
-                          (surface !== "craft" ||
-                            (plugin.kind === "mcp" && craftEnabled)) && (
-                            <Divider
-                              paddingParallel={0}
-                              paddingPerpendicular={0}
-                            />
+                          {canDisconnect && (
+                            <Button
+                              prominence="secondary"
+                              disabled={pending}
+                              onClick={() =>
+                                guard.requestLeave(() =>
+                                  setAction({ kind: "confirmDisconnect" })
+                                )
+                              }
+                            >
+                              {t("detail.disconnect")}
+                            </Button>
                           )}
-                        {plugin.kind === "mcp" && (
-                          <MemberMCPPreferences
-                            server={plugin.server}
-                            surface={surface}
-                            values={preferences}
-                            onChange={(changes) =>
-                              setPreferences((current) => ({
-                                ...current,
-                                ...changes,
-                              }))
-                            }
-                            disabled={pending}
-                          />
-                        )}
-                        {plugin.kind === "openapi" && (
-                          <>
-                            {surface !== "craft" && (
-                              <MemberOpenAPIPreferences
-                                tool={openAPITool ?? plugin.tool}
-                                values={preferences}
-                                onChange={(changes) =>
-                                  setPreferences((current) => ({
-                                    ...current,
-                                    ...changes,
-                                  }))
-                                }
-                                disabled={pending}
-                              />
-                            )}
-                          </>
-                        )}
-                        {plugin.kind === "external-app" &&
-                          craftEnabled &&
-                          connection.kind === "connected" && (
-                            <ExternalAppSkillRecovery
-                              appId={plugin.app.id}
-                              onReview={() => setTab("skills")}
-                            />
-                          )}
-                      </>
-                    }
-                    capabilities={
-                      hasTabs &&
-                      (surface !== "craft" || plugin.kind === "external-app") &&
-                      (plugin.kind === "external-app" ? (
-                        <MemberCraftAppSkills
-                          appId={plugin.app.id}
-                          onPreview={setPreview}
-                          changes={skillChanges}
-                          onChange={changeSkill}
-                          disabled={pending}
-                        />
-                      ) : plugin.kind === "mcp" ? (
-                        <MemberMCPToolsList tools={plugin.tools} />
-                      ) : (
-                        <div className="flex flex-col gap-4">
-                          <InputTypeIn
-                            searchIcon
-                            value={endpointSearch}
-                            onChange={(event) =>
-                              setEndpointSearch(event.target.value)
-                            }
-                            placeholder={actions("mcpTools.search")}
-                            aria-label={actions("mcpTools.search")}
-                          />
-
-                          <Text font="secondary-body" color="text-03">
-                            {t("detail.toolCount", {
-                              count: visibleEndpoints.length,
-                            })}
-                          </Text>
-
-                          {visibleEndpoints.length ? (
-                            <OpenAPIEndpointList methods={visibleEndpoints} />
-                          ) : (
-                            <Text font="secondary-body" color="text-03">
-                              {endpoints.length
-                                ? actions("toolsList.empty.searchMessage")
-                                : t("detail.noTools")}
-                            </Text>
+                          {canConnect && (
+                            <Button
+                              disabled={pending}
+                              onClick={() => guard.requestLeave(onConnect)}
+                            >
+                              {t("connection.connect")}
+                            </Button>
                           )}
                         </div>
-                      ))
-                    }
-                  />
-                  {saveError && (
-                    <Text role="alert" color="status-error-05">
-                      {saveError}
-                    </Text>
-                  )}
-                </>
-              )}
-            </Modal.Body>
-            <Modal.Footer wrap>
-              {confirming ? (
-                <>
-                  <Button
-                    prominence="secondary"
-                    disabled={pending}
-                    onClick={() => setAction({ kind: "details" })}
-                  >
-                    {t("detail.cancel")}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    disabled={pending}
-                    onClick={() => void disconnect()}
-                  >
-                    {t(pending ? "detail.disconnecting" : "detail.disconnect")}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  {plugin.kind === "external-app" &&
-                    craftEnabled &&
-                    activeTab === "skills" && (
-                      <div className="flex flex-1">
-                        <Button
-                          prominence="tertiary"
-                          href={`/craft/v1/skills?externalAppId=${plugin.app.id}`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            reviewSkills();
-                          }}
-                        >
-                          {craftCopy("reviewSkillsButton")}
-                        </Button>
+                      </Card>
+                      {plugin.kind !== "external-app" &&
+                        (surface !== "craft" ||
+                          (plugin.kind === "mcp" && craftEnabled)) && (
+                          <Divider
+                            paddingParallel={0}
+                            paddingPerpendicular={0}
+                          />
+                        )}
+                      {plugin.kind === "mcp" && (
+                        <MemberMCPPreferences
+                          server={plugin.server}
+                          surface={surface}
+                          values={preferences}
+                          onChange={(changes) =>
+                            setPreferences((current) => ({
+                              ...current,
+                              ...changes,
+                            }))
+                          }
+                          disabled={pending}
+                        />
+                      )}
+                      {plugin.kind === "openapi" && (
+                        <>
+                          {surface !== "craft" && (
+                            <MemberOpenAPIPreferences
+                              tool={openAPITool ?? plugin.tool}
+                              values={preferences}
+                              onChange={(changes) =>
+                                setPreferences((current) => ({
+                                  ...current,
+                                  ...changes,
+                                }))
+                              }
+                              disabled={pending}
+                            />
+                          )}
+                        </>
+                      )}
+                      {plugin.kind === "external-app" &&
+                        craftEnabled &&
+                        connection.kind === "connected" && (
+                          <ExternalAppSkillRecovery
+                            appId={plugin.app.id}
+                            onReview={() => setTab("skills")}
+                          />
+                        )}
+                    </>
+                  }
+                  capabilities={
+                    hasTabs &&
+                    (surface !== "craft" || plugin.kind === "external-app") &&
+                    (plugin.kind === "external-app" ? (
+                      <MemberCraftAppSkills
+                        appId={plugin.app.id}
+                        onPreview={setPreview}
+                        changes={skillChanges}
+                        onChange={changeSkill}
+                        disabled={pending}
+                      />
+                    ) : plugin.kind === "mcp" ? (
+                      <MemberMCPToolsList tools={plugin.tools} />
+                    ) : (
+                      <div className="flex flex-col gap-4">
+                        <InputTypeIn
+                          searchIcon
+                          value={endpointSearch}
+                          onChange={(event) =>
+                            setEndpointSearch(event.target.value)
+                          }
+                          placeholder={actions("mcpTools.search")}
+                          aria-label={actions("mcpTools.search")}
+                        />
+
+                        <Text font="secondary-body" color="text-03">
+                          {t("detail.toolCount", {
+                            count: visibleEndpoints.length,
+                          })}
+                        </Text>
+
+                        {visibleEndpoints.length ? (
+                          <OpenAPIEndpointList methods={visibleEndpoints} />
+                        ) : (
+                          <Text font="secondary-body" color="text-03">
+                            {endpoints.length
+                              ? actions("toolsList.empty.searchMessage")
+                              : t("detail.noTools")}
+                          </Text>
+                        )}
                       </div>
-                    )}
-                  <Button
-                    prominence="secondary"
-                    disabled={pending}
-                    onClick={close}
-                  >
-                    {t("detail.cancel")}
-                  </Button>
-                  <Button
-                    disabled={
-                      pending ||
-                      !dirty ||
-                      (policiesDirty && !policyApp?.users_can_manage_policies)
-                    }
-                    onClick={() => void saveChanges()}
-                  >
-                    {approvalCopy("save")}
-                  </Button>
-                </>
-              )}
-            </Modal.Footer>
-          </>
-        )}
-      </PluginModalContent>
-    </Modal>
+                    ))
+                  }
+                />
+                {saveError && (
+                  <Text role="alert" color="status-error-05">
+                    {saveError}
+                  </Text>
+                )}
+              </>
+            )}
+          </Modal.Body>
+          <Modal.Footer wrap>
+            {confirming ? (
+              <>
+                <Button
+                  prominence="secondary"
+                  disabled={pending}
+                  onClick={() => setAction({ kind: "details" })}
+                >
+                  {t("detail.cancel")}
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={pending}
+                  onClick={() => void disconnect()}
+                >
+                  {t(pending ? "detail.disconnecting" : "detail.disconnect")}
+                </Button>
+              </>
+            ) : (
+              <>
+                {plugin.kind === "external-app" &&
+                  craftEnabled &&
+                  activeTab === "skills" && (
+                    <div className="flex flex-1">
+                      <Button
+                        prominence="tertiary"
+                        href={`/craft/v1/skills?externalAppId=${plugin.app.id}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          reviewSkills();
+                        }}
+                      >
+                        {craftCopy("reviewSkillsButton")}
+                      </Button>
+                    </div>
+                  )}
+                <Button
+                  prominence="secondary"
+                  disabled={pending}
+                  onClick={close}
+                >
+                  {t("detail.cancel")}
+                </Button>
+                <Button
+                  disabled={
+                    pending ||
+                    !dirty ||
+                    (policiesDirty && !policyApp?.users_can_manage_policies)
+                  }
+                  onClick={() => void saveChanges()}
+                >
+                  {approvalCopy("save")}
+                </Button>
+              </>
+            )}
+          </Modal.Footer>
+        </>
+      )}
+    </PluginModalContent>
   );
 }

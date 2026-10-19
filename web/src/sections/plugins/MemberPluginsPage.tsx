@@ -26,8 +26,8 @@ import {
 } from "@/lib/plugins/member";
 import type { PluginReference } from "@/lib/plugins/types";
 import PluginRowLayout from "@/sections/plugins/PluginRowLayout";
-import MemberPluginDetailModal from "@/sections/plugins/MemberPluginDetailModal";
-import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
+import { MemberPluginDetailContent } from "@/sections/plugins/MemberPluginDetailModal";
+import { MemberPluginConnectionContent } from "@/sections/plugins/MemberPluginConnectionDialog";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
 import { useExternalAppsWithSkillIssues } from "@/lib/externalApps/hooks";
@@ -500,7 +500,7 @@ export default function MemberPluginsPage({
       <Modal open={Boolean(activePlugin && dialog)}>
         <Modal.Backdrop />
         {activePlugin && dialog?.kind === "details" && (
-          <MemberPluginDetailModal
+          <MemberPluginDetailContent
             key={`${dialog.reference.kind}-${dialog.reference.id}`}
             plugin={activePlugin}
             surface={surface}
@@ -516,10 +516,10 @@ export default function MemberPluginsPage({
           />
         )}
         {activePlugin && dialog?.kind === "connect" && (
-          <MemberPluginConnectionDialog
+          <MemberPluginConnectionContent
+            key={`${dialog.reference.kind}-${dialog.reference.id}`}
             plugin={activePlugin}
             surface={surface}
-            open
             skipOverlay
             onClose={closeDialog}
             onConnected={() => {
