@@ -1818,13 +1818,14 @@ class _PermissionUserEmailsCheck(_ConfluenceCheck):
                 summary="Cannot read space permissions",
                 description="Read space permissions reports why.",
             ) from e
-        users = [
-            subjects[0]
+        # A user with several grants counts once.
+        users = {
+            subjects[0].get("accountId"): subjects[0]
             for permission in permissions
             if (subjects := _cloud_subjects(permission, "user"))
             and subjects[0].get("accountType") != _APP_USER_TYPE
-        ]
-        return sum(1 for user in users if user.get("email")), len(users)
+        }
+        return sum(1 for user in users.values() if user.get("email")), len(users)
 
     def _sample_dc(
         self, context: CapabilityCheckContext, space_key: str
@@ -2051,8 +2052,9 @@ class _GroupMembershipCheck(_GroupSyncCheck):
                 summary="No users to sample",
                 description="List users reports why.",
             )
+        sample = users[:_SAMPLE_PERMISSION_USERS]
         try:
-            for user in users[:_SAMPLE_PERMISSION_USERS]:
+            for user in sample:
                 if next(gateway.list_user_groups(user_id=user.user_id), None):
                     return CheckOutput(summary="Read the groups of a listed user")
         except HTTPError as e:
@@ -2071,7 +2073,11 @@ class _GroupMembershipCheck(_GroupSyncCheck):
         raise InconclusiveValidationError(
             "The first listed users are in no group, so Onyx cannot verify that "
             f"group memberships are readable. {hint}",
-            summary=f"First {_SAMPLE_PERMISSION_USERS} users are in no group",
+            summary=(
+                "The listed user is in no group"
+                if len(sample) == 1
+                else f"First {len(sample)} users are in no group"
+            ),
             description=(
                 f"The reads worked, but the sampled users have no groups.\n{need}"
             ),

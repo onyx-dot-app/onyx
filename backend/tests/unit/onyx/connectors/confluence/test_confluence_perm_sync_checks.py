@@ -567,6 +567,29 @@ def test_cloud_permission_emails_read_the_first_user_of_each_permission() -> Non
         _run("confluence_permission_user_emails", _context(gateway))
 
 
+def test_cloud_permission_emails_count_each_user_once() -> None:
+    gateway = _gateway()
+    gateway.get_space_permissions.side_effect = None
+    gateway.get_space_permissions.return_value = [
+        {
+            "operation": {"operation": operation, "targetType": "space"},
+            "subjects": {"user": {"results": [user]}},
+        }
+        for operation in ("read", "create")
+        for user in (
+            {"accountId": "a-1", "accountType": "atlassian", "email": "a@x.io"},
+            {"accountId": "b-1", "accountType": "atlassian"},
+        )
+    ]
+
+    output = _CHECKS_BY_ID["confluence_permission_user_emails"].run(_context(gateway))
+
+    assert output is not None
+    assert output.summary == "1 of 2 users show an email"
+    (advisory,) = output.advisories
+    assert advisory.message.startswith("1 users without")
+
+
 @pytest.mark.parametrize(
     "version,variant,user",
     [
@@ -747,6 +770,16 @@ def test_group_membership_without_groups_is_incomplete() -> None:
             "confluence_group_membership",
             _context(gateway, credential_json=_OAUTH_CREDENTIAL),
         )
+
+
+def test_group_membership_names_the_users_it_checked() -> None:
+    gateway = _gateway()
+    gateway.list_user_groups.side_effect = lambda **_: iter([])
+
+    with pytest.raises(InconclusiveValidationError) as raised:
+        _run("confluence_group_membership", _context(gateway))
+
+    assert raised.value.summary == "First 2 users are in no group"
 
 
 def test_cloud_group_users_without_emails_fail() -> None:
