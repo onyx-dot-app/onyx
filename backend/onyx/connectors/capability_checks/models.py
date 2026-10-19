@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from functools import cached_property
 from typing import Annotated, Any, Generic, Literal
-from urllib.parse import urlparse
+from urllib.parse import urlsplit
 
 import requests
 from pydantic import (
@@ -255,12 +255,14 @@ def _safe_location(url: str) -> str:
     string and fragment can hold secrets. A URL that does not parse is
     replaced whole."""
     try:
-        parsed = urlparse(url)
+        parsed = urlsplit(url)
         port = parsed.port
         host = parsed.hostname or ""
     except ValueError:
         return _UNPARSABLE_URL
-    return f"{host}{f':{port}' if port else ''}{parsed.path}"
+    # Any segment can carry `;params`, such as a session id.
+    path = "/".join(segment.split(";", 1)[0] for segment in parsed.path.split("/"))
+    return f"{host}{f':{port}' if port else ''}{path}"
 
 
 def _request_line(method: str | None, url: str | None) -> str | None:

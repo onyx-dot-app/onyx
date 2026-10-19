@@ -179,3 +179,14 @@ def test_a_url_that_does_not_parse_is_replaced() -> None:
     assert detail is not None and detail.stack_trace is not None
     assert "[URL]" in detail.stack_trace
     assert "token=t" not in detail.stack_trace
+
+
+def test_parameters_of_every_path_segment_are_removed() -> None:
+    detail = _detail(
+        RuntimeError("Tried https://api.example.com/a;jsessionid=s1/b;token=s2/c")
+    )
+
+    assert detail is not None and detail.stack_trace is not None
+    assert "api.example.com/a/b/c" in detail.stack_trace
+    assert "s1" not in detail.stack_trace
+    assert "s2" not in detail.stack_trace
