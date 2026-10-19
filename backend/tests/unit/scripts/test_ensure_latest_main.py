@@ -514,24 +514,26 @@ def _load_hook() -> ModuleType:
 
 
 def test_ssh_command_extends_the_configured_one(
-    checkout: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     hook = _load_hook()
+    configured: dict[str, str | None] = {"core.sshCommand": None}
+    # No git process runs: `_git` answers the one `git config` lookup from a dict.
+    monkeypatch.setattr(
+        hook, "_git", lambda _repo, *args: configured.get(args[-1]), raising=True
+    )
     monkeypatch.delenv("GIT_SSH_COMMAND", raising=False)
     monkeypatch.delenv("GIT_SSH", raising=False)
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    ssh_env = hook._ssh_env
     batch = "-o BatchMode=yes -o ConnectTimeout=10"
 
-    assert ssh_env(checkout) == {"GIT_SSH_COMMAND": f"ssh {batch}"}
+    assert hook._ssh_env(tmp_path) == {"GIT_SSH_COMMAND": f"ssh {batch}"}
 
-    _git(checkout, "config", "core.sshCommand", "ssh -i /keys/work")
-    assert ssh_env(checkout) == {"GIT_SSH_COMMAND": f"ssh -i /keys/work {batch}"}
+    configured["core.sshCommand"] = "ssh -i /keys/work"
+    assert hook._ssh_env(tmp_path) == {"GIT_SSH_COMMAND": f"ssh -i /keys/work {batch}"}
 
     monkeypatch.setenv("GIT_SSH_COMMAND", "wrapper --flag")
-    assert ssh_env(checkout) == {"GIT_SSH_COMMAND": f"wrapper --flag {batch}"}
+    assert hook._ssh_env(tmp_path) == {"GIT_SSH_COMMAND": f"wrapper --flag {batch}"}
 
     monkeypatch.delenv("GIT_SSH_COMMAND")
     monkeypatch.setenv("GIT_SSH", "/usr/local/bin/my-ssh")
-    assert ssh_env(checkout) == {}
+    assert hook._ssh_env(tmp_path) == {}
