@@ -1,8 +1,23 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Tag, Text } from "@opal/components";
+import { Tag, Text, type TagColor } from "@opal/components";
 import type { MethodSpec } from "@/lib/tools/types";
+
+type OpenApiMethodColor = Extract<TagColor, "green" | "red" | "blue">;
+
+/** An HTTP method's color: green for reads, red for deletes, blue otherwise. */
+export function openApiMethodColor(method: string): OpenApiMethodColor {
+  const verb = method.toUpperCase();
+  return verb === "GET" ? "green" : verb === "DELETE" ? "red" : "blue";
+}
+
+/** The CSS color of each method color, for elements that are not a `Tag`. */
+export const OPENAPI_METHOD_CSS_COLORS: Record<OpenApiMethodColor, string> = {
+  green: "var(--theme-green-05)",
+  red: "var(--status-error-05)",
+  blue: "var(--theme-blue-05)",
+};
 
 interface OpenAPIMethodPathProps {
   method: Pick<MethodSpec, "method" | "path">;
@@ -10,14 +25,13 @@ interface OpenAPIMethodPathProps {
 
 /** An action's HTTP method tag and its endpoint path. */
 export function OpenAPIMethodPath({ method }: OpenAPIMethodPathProps) {
-  const verb = method.method.toUpperCase();
   return (
-    <div className="flex min-w-0 items-start gap-2">
+    <div className="flex min-w-0 flex-col items-end gap-1">
       <Tag
-        title={verb}
-        color={verb === "GET" ? "green" : verb === "DELETE" ? "red" : "blue"}
+        title={method.method.toUpperCase()}
+        color={openApiMethodColor(method.method)}
       />
-      <Text font="main-ui-mono" color="text-03" wordWrap="wrap-anywhere">
+      <Text font="secondary-mono" color="text-03" wordWrap="wrap-anywhere">
         {method.path}
       </Text>
     </div>
