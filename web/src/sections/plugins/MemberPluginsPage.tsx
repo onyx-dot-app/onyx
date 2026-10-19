@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, SelectCard, Text, Tooltip } from "@opal/components";
+import { Button, Modal, SelectCard, Text, Tooltip } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
 import {
@@ -24,15 +24,16 @@ import {
   useMemberPlugins,
   type MemberPlugin,
 } from "@/lib/plugins/member";
-import { memberPluginChatHref } from "@/lib/plugins/chat";
 import type { PluginReference } from "@/lib/plugins/types";
 import PluginRowLayout from "@/sections/plugins/PluginRowLayout";
 import MemberPluginDetailModal from "@/sections/plugins/MemberPluginDetailModal";
 import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
+import { useExternalAppsWithSkillIssues } from "@/lib/externalApps/hooks";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import { CRAFT_PATH } from "@/app/craft/v1/constants";
+
+import { memberPluginStatus } from "@/lib/plugins/sort";
 
 type MemberPluginDialog =
   | { kind: "details"; reference: PluginReference; initialTab?: "approvals" }
@@ -42,21 +43,28 @@ type MemberPluginDialog =
 function PluginConnectionStatus({
   plugin,
   onOpen,
+  hasSkillIssues = false,
 }: {
   plugin: MemberPlugin;
   onOpen: () => void;
+  hasSkillIssues?: boolean;
 }) {
   const t = useTranslations("actions.memberPlugins");
+  const skillCopy = useTranslations("craft.apps.page.status");
   const connection = plugin.connection;
   const needsAuth =
     connection.kind === "oauth" || connection.kind === "credentials";
-  const label = needsAuth
-    ? t("filters.needsSignIn")
-    : connection.kind === "connected"
-      ? t(
-          `status.${connection.ownership === "user" ? "connected" : connection.ownership}`
-        )
-      : t(`status.${connection.kind}`);
+  const skillWarning = connection.kind === "connected" && hasSkillIssues;
+  const status = memberPluginStatus(plugin, hasSkillIssues);
+  const label = skillWarning
+    ? skillCopy("skillWarningSummary")
+    : needsAuth
+      ? t("filters.needsSignIn")
+      : connection.kind === "connected"
+        ? t(
+            `status.${connection.ownership === "user" ? "connected" : connection.ownership}`
+          )
+        : t(`status.${connection.kind}`);
 
   function StatusIcon({ className }: IconProps) {
     return (
@@ -64,9 +72,9 @@ function PluginConnectionStatus({
         aria-hidden
         className={cn(
           "block size-3 rounded-full",
-          needsAuth
+          status === "issues"
             ? "bg-status-warning-05"
-            : connection.kind === "connected"
+            : status === "active"
               ? "bg-status-success-05"
               : "bg-text-03",
           className
@@ -99,10 +107,12 @@ function PluginConnectionStatus({
 
 function MemberPluginRow({
   plugin,
+  hasSkillIssues,
   onDetails,
   onConnect,
 }: {
   plugin: MemberPlugin;
+  hasSkillIssues: boolean;
   onDetails: () => void;
   onConnect: () => void;
 }) {
@@ -166,7 +176,11 @@ function MemberPluginRow({
             <Text font="secondary-body" color="text-03">
               {t(`kind.${plugin.kind}`)}
             </Text>
-            <PluginConnectionStatus plugin={plugin} onOpen={onDetails} />
+            <PluginConnectionStatus
+              plugin={plugin}
+              onOpen={onDetails}
+              hasSkillIssues={hasSkillIssues}
+            />
             <Button
               icon={connectable ? SvgPlus : SvgChevronRight}
               size="sm"
@@ -206,6 +220,14 @@ export default function MemberPluginsPage({
   const [filter, setFilter] = useState(initialFilter);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<MemberPluginDialog>(null);
+  const appsWithSkillIssues = useExternalAppsWithSkillIssues(
+    plugins.some(
+      (plugin) =>
+        plugin.kind === "external-app" && plugin.connection.kind === "connected"
+    )
+  );
+  const hasSkillIssues = (plugin: MemberPlugin) =>
+    plugin.kind === "external-app" && appsWithSkillIssues.has(plugin.app.id);
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = plugins.filter((plugin) => {
     if (
@@ -316,20 +338,8 @@ export default function MemberPluginsPage({
     });
   }, [connectIntent, plugins, policyIntent]);
 
-  function show(
-    plugin: MemberPlugin,
-    kind: "details" | "connect",
-    approvals = false
-  ) {
-    setDialog(
-      kind === "details"
-        ? {
-            kind,
-            reference: memberPluginReference(plugin),
-            initialTab: approvals ? "approvals" : undefined,
-          }
-        : { kind, reference: memberPluginReference(plugin) }
-    );
+  function show(plugin: MemberPlugin, kind: "details" | "connect") {
+    setDialog({ kind, reference: memberPluginReference(plugin) });
   }
 
   return (
@@ -436,6 +446,7 @@ export default function MemberPluginsPage({
                       <MemberPluginRow
                         key={`${reference.kind}-${reference.id}`}
                         plugin={plugin}
+                        hasSkillIssues={hasSkillIssues(plugin)}
                         onDetails={() => show(plugin, "details")}
                         onConnect={() => show(plugin, "connect")}
                       />
@@ -486,41 +497,38 @@ export default function MemberPluginsPage({
           </div>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
-      {activePlugin && dialog?.kind === "details" && (
-        <MemberPluginDetailModal
-          key={`${dialog.reference.kind}-${dialog.reference.id}`}
-          plugin={activePlugin}
-          surface={surface}
-          initialTab={dialog.initialTab}
-          open
-          onClose={closeDialog}
-          onConnect={() => show(activePlugin, "connect")}
-          onOpenInCraft={() => router.push(CRAFT_PATH)}
-          onUseInChat={() => {
-            const reference = memberPluginReference(activePlugin);
-            if (reference.kind === "external-app") return;
-            router.push(
-              memberPluginChatHref(reference, searchParams.get("returnTo"))
-            );
-          }}
-          onDisconnected={() => {
-            closeDialog();
-            void refresh();
-          }}
-        />
-      )}
-      {activePlugin && dialog?.kind === "connect" && (
-        <MemberPluginConnectionDialog
-          plugin={activePlugin}
-          surface={surface}
-          open
-          onClose={closeDialog}
-          onConnected={() => {
-            show(activePlugin, "details", activePlugin.kind !== "openapi");
-            void refresh();
-          }}
-        />
-      )}
+      <Modal open={Boolean(activePlugin && dialog)}>
+        <Modal.Backdrop />
+        {activePlugin && dialog?.kind === "details" && (
+          <MemberPluginDetailModal
+            key={`${dialog.reference.kind}-${dialog.reference.id}`}
+            plugin={activePlugin}
+            surface={surface}
+            initialTab={dialog.initialTab}
+            open
+            skipOverlay
+            onClose={closeDialog}
+            onConnect={() => show(activePlugin, "connect")}
+            onDisconnected={() => {
+              closeDialog();
+              void refresh();
+            }}
+          />
+        )}
+        {activePlugin && dialog?.kind === "connect" && (
+          <MemberPluginConnectionDialog
+            plugin={activePlugin}
+            surface={surface}
+            open
+            skipOverlay
+            onClose={closeDialog}
+            onConnected={() => {
+              show(activePlugin, "details");
+              void refresh();
+            }}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

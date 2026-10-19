@@ -914,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "Craft Apps"
+        "external-app": "Craft App"
       },
       "row": {
         "view": "View {name}",
@@ -954,13 +954,15 @@
         "emptyDescription": "Try another connection filter or ask your workspace admin to add a plugin."
       },
       "detail": {
+        "issuesTitle": "Issues",
+        "readyDescription": "You can start using this plugin.",
         "connection": "Connection",
         "tools": "Tools",
         "toolCount": "{count, plural, one {# tool} other {# tools}}",
         "noTools": "No visible tools are stored for this plugin.",
         "connect": "Connect account",
         "useInChat": "Use in Chat",
-        "disconnect": "Disconnect account",
+        "disconnect": "Disconnect",
         "disconnectTitle": "Disconnect {name}?",
         "disconnectDescription": "This removes your account connection. Workspace availability stays the same.",
         "oauthDisconnectWarning": "This account connection is shared by all plugins and apps that use the same OAuth configuration. Disconnecting removes your connection from all of them.",
@@ -1005,18 +1007,20 @@
         "showAll": "View all plugins"
       },
       "defaults": {
-        "chat": "Enable in main Chat by default",
-        "craft": "Enable in Craft by default",
-        "chatDescription": "Applies to default Chat. Custom agents keep their own tool settings.",
-        "craftDescription": "Use this MCP in your Craft sessions.",
+        "chat": "Enable in default Chat",
+        "craft": "Enable in Craft",
+        "chatDescription": "Make this plugin available in your chats without a custom agent.",
+        "craftDescription": "Make this plugin available in your Craft sessions and scheduled tasks. Your organization’s tool permissions still apply.",
         "unavailable": "Your admin has disabled this plugin for {surface}.",
-        "saveFailed": "Could not save your plugin defaults. Try again."
+        "saveFailed": "Could not save your plugin defaults. Try again.",
+        "chatUnavailable": "Your admin has disabled this plugin for {surface}. Custom agents configured with this plugin may still use it."
       },
       "openapi": {
         "chatOnly": "Chat only",
         "chatOnlyDescription": "This plugin is available in Chat, not Craft."
       },
       "appSkills": {
+        "preview": "Preview",
         "search": "Search skills",
         "count": "{count, plural, one {# skill} other {# skills}}",
         "empty": "No skills are associated with this app.",
@@ -14279,7 +14283,8 @@
           "connectedNeedsSkills": "Connected · not all associated skills are enabled",
           "notAvailable": "Not available for your account — ask an admin",
           "skillWarningAriaLabel": "Skill setup required",
-          "skillWarningTooltip": "Not all associated skills are enabled. This app may not work correctly."
+          "skillWarningTooltip": "Not all associated skills are enabled. This app may not work correctly.",
+          "skillWarningSummary": "Not all associated skills are enabled."
         }
       },
       "policyEditor": {

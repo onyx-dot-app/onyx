@@ -914,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "Aplicativos do Craft"
+        "external-app": "Aplicativo Craft"
       },
       "row": {
         "view": "Ver {name}",
@@ -954,13 +954,15 @@
         "emptyDescription": "Tente outro filtro de conexão ou peça ao administrador do seu espaço de trabalho para adicionar um plugin."
       },
       "detail": {
+        "issuesTitle": "Problemas",
+        "readyDescription": "Você já pode começar a usar este plugin.",
         "connection": "Conexão",
         "tools": "Ferramentas",
         "toolCount": "{count, plural, one {# ferramenta} other {# ferramentas}}",
         "noTools": "Não há ferramentas visíveis salvas para este plugin.",
         "connect": "Conectar conta",
         "useInChat": "Usar no Chat",
-        "disconnect": "Desconectar conta",
+        "disconnect": "Desconectar",
         "disconnectTitle": "Desconectar {name}?",
         "disconnectDescription": "Isso remove a conexão da sua conta. A disponibilidade no espaço de trabalho permanece igual.",
         "oauthDisconnectWarning": "Todos os plugins e aplicativos que usam a mesma configuração OAuth compartilham esta conexão de conta. Desconectar remove sua conexão de todos eles.",
@@ -1005,18 +1007,20 @@
         "showAll": "Ver todos os plugins"
       },
       "defaults": {
-        "chat": "Ativar no chat principal por padrão",
-        "craft": "Ativar no Craft por padrão",
-        "chatDescription": "Aplica-se ao chat padrão. Os agentes personalizados mantêm suas próprias configurações de ferramentas.",
-        "craftDescription": "Usar este MCP nas suas sessões do Craft.",
+        "chat": "Ativar no Chat padrão",
+        "craft": "Ativar no Craft",
+        "chatDescription": "Disponibilize este plugin nas suas conversas sem um agente personalizado.",
+        "craftDescription": "Disponibilize este plugin nas suas sessões do Craft e tarefas agendadas. As permissões de ferramentas da sua organização continuam em vigor.",
         "unavailable": "Seu administrador desativou este plugin para {surface}.",
-        "saveFailed": "Não foi possível salvar seus padrões de plugins. Tente novamente."
+        "saveFailed": "Não foi possível salvar seus padrões de plugins. Tente novamente.",
+        "chatUnavailable": "Seu administrador desativou este plugin para {surface}. Agentes personalizados configurados com este plugin ainda podem usá-lo."
       },
       "openapi": {
         "chatOnly": "Somente Chat",
         "chatOnlyDescription": "Este plugin está disponível no Chat, não no Craft."
       },
       "appSkills": {
+        "preview": "Prévia",
         "search": "Buscar habilidades",
         "count": "{count, plural, one {# habilidade} other {# habilidades}}",
         "empty": "Nenhuma habilidade está associada a este aplicativo.",
@@ -14279,7 +14283,8 @@
           "connectedNeedsSkills": "Conectado · nem todas as habilidades associadas estão habilitadas",
           "notAvailable": "Não disponível para sua conta: fale com um administrador",
           "skillWarningAriaLabel": "Configuração de habilidades necessária",
-          "skillWarningTooltip": "Nem todas as habilidades associadas estão habilitadas. Este app pode não funcionar corretamente."
+          "skillWarningTooltip": "Nem todas as habilidades associadas estão habilitadas. Este app pode não funcionar corretamente.",
+          "skillWarningSummary": "Nem todas as habilidades associadas estão habilitadas."
         }
       },
       "policyEditor": {

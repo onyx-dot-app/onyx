@@ -24,7 +24,7 @@ export const memberPluginMessages = {
       },
       kind: {
         ...englishMessages.actions.memberPlugins.kind,
-        "external-app": "App",
+        "external-app": "Craft App",
       },
       externalApp: {
         description: "Use your account in Craft.",

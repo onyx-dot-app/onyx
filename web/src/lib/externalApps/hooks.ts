@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import isEqual from "lodash/isEqual";
+import useUserSkills from "@/hooks/useUserSkills";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 
 export function useSyncedAssociatedSkillIds(
@@ -23,4 +24,24 @@ export function useSyncedAssociatedSkillIds(
   }, [persistedSkillIds]);
 
   return [selectedSkillIds, setSelectedSkillIds] as const;
+}
+
+export function useExternalAppsWithSkillIssues(enabled = true): Set<number> {
+  const { data } = useUserSkills(enabled);
+  return useMemo(
+    () =>
+      new Set(
+        [...(data?.builtins ?? []), ...(data?.customs ?? [])].flatMap(
+          (skill) =>
+            skill.external_app && !skill.enabled
+              ? [skill.external_app.external_app_id]
+              : []
+        )
+      ),
+    [data]
+  );
+}
+
+export function useExternalAppSkillIssues(appId: number): boolean {
+  return useExternalAppsWithSkillIssues().has(appId);
 }

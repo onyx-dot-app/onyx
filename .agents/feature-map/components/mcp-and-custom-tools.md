@@ -90,7 +90,7 @@ The member directory uses `/mcp/servers`, `/tool`, and the caller's OAuth token
 status. Craft-enabled members also see external apps from `/build/apps`.
 It does not use admin listing endpoints. All, Connected, and Needs sign-in
 filters distinguish account state without separating services by protocol.
-Workspace credentials and no-auth services count as connected.
+Workspace credentials and no-auth services count as connected. Connected external apps with disabled associated skills show a yellow directory indicator with an explanatory tooltip. Card type labels use the singular Craft App.
 Loading and failed account-status checks remain distinct from missing credentials.
 Connected and needs-auth cards omit the extra connection text line; the dot and
 its tooltip retain account status. Setup errors and unavailable states remain visible.
@@ -108,12 +108,14 @@ Main-app MCP details use the shared modal shell with Connection and Tools tabs.
 The Tools tab uses a searchable read-only list. Tool names and descriptions are
 searchable. Admin and member rows show descriptions directly below tool names,
 matching external-app action rows without cards or disclosure controls.
-The server URL appears once in the modal header, not in a second metadata row.
-Craft App details use that row for safe service origins from the member `service_urls` response.
-Missing origins omit the URL. Member details never fetch admin app records or show URL patterns.
-MCP connection status appears beside that URL: green when connected, orange when
-sign-in is needed, and gray for unavailable states. The Connection tab has no
-duplicate status row; personal account disconnect remains a separate action.
+Plugin modal headers show descriptions instead of URLs, for members and admins.
+Member Connection tabs separate description and authentication from availability switches with a divider.
+Craft Apps have no stored description, so their headers use the localized Craft availability summary. Member details never fetch admin app records or show URL patterns.
+Member directory detail and connection dialogs share one persistent backdrop, so switching screens does not restart its fade-in.
+The Connection tab starts with a status card: green when connected, yellow when setup is needed, and gray when checking or unavailable.
+Connected cards include secondary readiness text. External apps show a separate Issues card with a yellow dot when associated skills are disabled. Review skills opens the Skills tab.
+The connection card provides Connect when the user can authenticate. Workspace setup remains distinct from personal authentication.
+Personal account connections show Disconnect in the connection card. It opens the existing confirmation flow.
 Tool descriptions use secondary body text and wrap within the row.
 Admin and member tools both render `web/src/sections/plugins/MCPToolRow.tsx`.
 Admin enable/policy controls use its control slot.
@@ -239,8 +241,7 @@ Personal Craft App details use Connection/Skills tabs with the same header
 status, scrollable modal body, and footer layout. They omit the duplicate account
 table and header subtitle. `web/src/sections/plugins/MemberCraftAppSkills.tsx`
 reads only the caller's skills, filters by external-app ID, and shows search,
-count, enabled state, and loading/retry feedback. Review skills opens the
-existing app-filtered skills page; no admin metadata or policies are fetched.
+count, preview, per-user enable switches, and loading/retry feedback. Preview reuses the rendered skill instructions within the same modal and backdrop. Back or Escape returns to Skills without losing drafts. Switches remain drafts until Save and respect skill toggle permissions. Cancel discards drafts. Each successful save updates the shared skill cache; retries retain only unsaved changes. The footer links to the app-filtered skills page; no admin metadata is fetched.
 Craft must be enabled before skills or launch actions appear. Apps needing
 authentication show Connect account instead of Open in Craft.
 `web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, workspace availability,
@@ -433,7 +434,8 @@ later admin disable choices. Individual member sign-ins never change org setting
 Member MCP details separate personal account connections from personal default
 Chat/Craft preferences. Both switches use the same Opal InputSwitch row pattern
 as admin settings and remain bounded by workspace availability. Switching off
-keeps credentials. Account disconnect is a distinct Connection-tab action.
+keeps credentials. Labels match admin availability controls; descriptions specify the member’s own chats, Craft sessions, and scheduled tasks.
+Toggle rows use full-width ContentAction layouts, with text left and switches right. Account disconnect is a distinct Connection-tab action.
 No preference row means both personal defaults are enabled. Default Chat opt-out
 does not affect custom agents. Craft opt-out also applies to live proxy calls and
 scheduled-task availability. Personal-disabled servers remain in member catalogs.
@@ -441,7 +443,13 @@ scheduled-task availability. Personal-disabled servers remain in member catalogs
 `PATCH /mcp/server/{server_id}/preferences` updates only supplied fields, then
 restamps that user's Craft sessions when needed. Member DTOs expose separate
 `user_enabled_in_chat` and `user_enabled_in_craft` flags. The frontend updates
-existing scoped SWR caches optimistically and rolls back failed saves.
+existing scoped SWR caches optimistically on Save and rolls back failed saves.
+Member switches are local form drafts. Cancel checks unsaved changes; Save persists preferences and approval drafts.
+The modal footer uses Cancel and Save instead of Chat or Craft launch actions.
+Member plugin Tools views place Available tools and Approval settings in nested tabs when Craft approvals are available.
+External apps retain a separate Skills tab. Approval links open Tools > Approval settings directly.
+Personal approval drafts survive tab changes and write only on Save.
+Opening the plugin modal preloads approval settings, before Tools is selected. If a tab switch must wait, the available list stays visible with a tab spinner.
 The personal directory dot describes account state, not workspace availability:
 green means connected, orange means credentials are needed, gray means unavailable.
 Ordinary discovery of an existing server does not change availability.

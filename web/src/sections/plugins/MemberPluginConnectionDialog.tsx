@@ -18,6 +18,7 @@ interface MemberPluginConnectionDialogProps {
   agentId?: number;
   surface?: "all" | "chat" | "craft";
   open: boolean;
+  skipOverlay?: boolean;
   onClose: () => void;
   onConnected: () => void;
 }
@@ -31,6 +32,7 @@ function ConnectionForm({
   plugin,
   agentId,
   surface,
+  skipOverlay = false,
   onClose,
   onConnected,
 }: Omit<MemberPluginConnectionDialogProps, "open">) {
@@ -114,7 +116,12 @@ function ConnectionForm({
 
   return (
     <Modal open onOpenChange={(open) => !open && close()}>
-      <Modal.Content width="sm" position="top" preventAccidentalClose={false}>
+      <Modal.Content
+        width="sm"
+        position="top"
+        preventAccidentalClose={false}
+        skipOverlay={skipOverlay}
+      >
         <Modal.Header
           icon={SvgPlug}
           title={t("title", { name })}

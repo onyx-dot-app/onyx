@@ -207,7 +207,6 @@ const meta = {
     },
     onClose: () => undefined,
     onConnect: () => undefined,
-    onUseInChat: () => undefined,
     onDisconnected: () => undefined,
   },
 } satisfies Meta<typeof MemberPluginDetailModal>;

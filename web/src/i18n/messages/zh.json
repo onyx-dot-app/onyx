@@ -914,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "Craft 应用"
+        "external-app": "Craft 应用程序"
       },
       "row": {
         "view": "查看{name}",
@@ -954,13 +954,15 @@
         "emptyDescription": "请尝试其他连接筛选条件，或请工作区管理员添加插件。"
       },
       "detail": {
+        "issuesTitle": "问题",
+        "readyDescription": "你可以开始使用此插件。",
         "connection": "连接",
         "tools": "工具",
         "toolCount": "{count, plural, other {#个工具}}",
         "noTools": "此插件尚未保存可见的工具。",
         "connect": "连接账户",
         "useInChat": "在聊天中使用",
-        "disconnect": "断开账户连接",
+        "disconnect": "断开连接",
         "disconnectTitle": "断开{name}的连接？",
         "disconnectDescription": "此操作将移除您的账户连接。工作区可用性保持不变。",
         "oauthDisconnectWarning": "使用相同OAuth配置的所有插件和应用会共享此账户连接。断开连接将移除您与所有这些插件和应用的连接。",
@@ -1005,18 +1007,20 @@
         "showAll": "查看所有插件"
       },
       "defaults": {
-        "chat": "在主聊天中默认启用",
-        "craft": "在 Craft 中默认启用",
-        "chatDescription": "适用于默认聊天。自定义智能体保留各自的工具设置。",
-        "craftDescription": "在你的 Craft 会话中使用此 MCP。",
+        "chat": "在默认聊天中启用",
+        "craft": "在 Craft 中启用",
+        "chatDescription": "在您未使用自定义智能体的聊天中提供此插件。",
+        "craftDescription": "在您的 Craft 会话和计划任务中提供此插件。您组织的工具权限仍然适用。",
         "unavailable": "管理员已在 {surface} 中禁用此插件。",
-        "saveFailed": "无法保存你的插件默认设置。请重试。"
+        "saveFailed": "无法保存你的插件默认设置。请重试。",
+        "chatUnavailable": "管理员已在 {surface} 中禁用此插件。 配置了此插件的自定义智能体仍可能使用它。"
       },
       "openapi": {
         "chatOnly": "仅限 Chat",
         "chatOnlyDescription": "此插件可用于 Chat，不能用于 Craft。"
       },
       "appSkills": {
+        "preview": "预览",
         "search": "搜索技能",
         "count": "{count, plural, one {# 个技能} other {# 个技能}}",
         "empty": "此应用没有关联的技能。",
@@ -14279,7 +14283,8 @@
           "connectedNeedsSkills": "已连接 · 并非所有关联技能都已启用",
           "notAvailable": "您的账户不可用，请咨询管理员",
           "skillWarningAriaLabel": "需要设置技能",
-          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。"
+          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。",
+          "skillWarningSummary": "并非所有关联技能都已启用。"
         }
       },
       "policyEditor": {
