@@ -4,7 +4,6 @@ import { memo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { Disabled, Hoverable } from "@opal/core";
@@ -15,7 +14,7 @@ import {
   SvgSettings,
 } from "@opal/icons";
 import { ModelIcon } from "@/lib/languageModels/components";
-import { Button } from "@opal/components";
+import { Button, OverflowText } from "@opal/components";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -85,9 +84,14 @@ function LLMProviderCardInner({
               <Text as="p" text04 mainUiAction>
                 {title}
               </Text>
-              <Truncated text03 secondaryBody>
+              <OverflowText
+                as="p"
+                textPosition="text-start"
+                font="secondary-body"
+                color="text-03"
+              >
                 {subtitle}
-              </Truncated>
+              </OverflowText>
             </div>
           </div>
           {isConnected ? (

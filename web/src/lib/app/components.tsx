@@ -1,11 +1,11 @@
 "use client";
 
+import { OverflowText } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { DEFAULT_LOGO_SIZE_PX } from "@/lib/constants";
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
 import { IconProps } from "@opal/types";
 
@@ -94,7 +94,14 @@ export function FoldableLogo({
           /* H3 text is 4px larger (28px) than the Logo icon (24px), so negative margin hack. */
           <div className="flex flex-1 flex-col -mt-0.5">
             {opts.includeName && (
-              <Truncated headingH3>{applicationName}</Truncated>
+              <OverflowText
+                as="p"
+                textPosition="text-start"
+                font="heading-h3"
+                color="text-05"
+              >
+                {applicationName ?? ""}
+              </OverflowText>
             )}
             {/* Wait for settings so a hidden tagline never flashes. */}
             {!isLoading && !hide_onyx_branding && (
