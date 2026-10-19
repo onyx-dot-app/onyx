@@ -6,8 +6,7 @@ tests pin registration, verdicts, and the error type and scope hint an admin
 sees on a refusal.
 """
 
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -36,42 +35,20 @@ from onyx.connectors.hubspot.capability_checks import (
 )
 from onyx.connectors.hubspot.config import HubSpotObjectType
 from onyx.connectors.hubspot.connector import HubSpotConnector
-from onyx.connectors.hubspot.models import HubSpotPage, HubSpotRecord, HubSpotUser
-from onyx.connectors.hubspot.source_operations import (
-    USERS_PAGE_SIZE,
-    HubSpotApiError,
-    HubSpotSourceOperations,
-)
+from onyx.connectors.hubspot.models import HubSpotPage, HubSpotRecord
+from onyx.connectors.hubspot.source_operations import USERS_PAGE_SIZE
 from onyx.db.enums import AccessType
+from tests.unit.onyx.connectors.hubspot.hubspot_check_helpers import (
+    api_refusal,
+    healthy_gateway,
+    make_record,
+)
 
-MOMENT = datetime(2024, 6, 6, tzinfo=timezone.utc)
 _CHECKS_BY_ID: dict[str, CapabilityCheck] = {
     check.check_id: check
     for check in build_hubspot_indexing_checks()
     + build_hubspot_doc_permission_sync_checks()
 }
-
-
-def _record(record_id: str) -> HubSpotRecord:
-    return HubSpotRecord(id=record_id, created_at=MOMENT, updated_at=MOMENT)
-
-
-def _refusal(operation: str, status: int) -> HubSpotApiError:
-    return HubSpotApiError(operation, status, None, "")
-
-
-def _gateway() -> MagicMock:
-    """A healthy portal with one record of each type, one note and one user."""
-    gateway: MagicMock = create_autospec(HubSpotSourceOperations, instance=True)
-    gateway.get_portal_id.return_value = "46399533"
-    gateway.list_records.return_value = HubSpotPage(items=[_record("1")])
-    gateway.search_records.return_value = HubSpotPage(items=[_record("1")])
-    gateway.read_records.return_value = [_record("1")]
-    gateway.list_associations.return_value = HubSpotPage(items=["9"])
-    gateway.list_users.return_value = HubSpotPage(items=[HubSpotUser(id=7)])
-    gateway.get_user.return_value = HubSpotUser(id=7, email="ada@example.com")
-    gateway.get_record_viewers.return_value = {"1": {7}}
-    return gateway
 
 
 def _context(
@@ -106,7 +83,7 @@ def test_named_checks_replace_both_fallbacks() -> None:
 @pytest.mark.usefixtures("enable_ee")
 def test_a_healthy_portal_passes_every_capability() -> None:
     results = run_capability_checks(
-        get_capability_checks(DocumentSource.HUBSPOT), _context(_gateway())
+        get_capability_checks(DocumentSource.HUBSPOT), _context(healthy_gateway())
     )
 
     assert {r.check_id: r.status for r in results} == dict.fromkeys(
@@ -123,8 +100,8 @@ def test_a_healthy_portal_passes_every_capability() -> None:
 
 
 def test_a_rejected_token_is_an_invalid_credential() -> None:
-    gateway: MagicMock = _gateway()
-    gateway.get_portal_id.side_effect = _refusal("portal info", 401)
+    gateway: MagicMock = healthy_gateway()
+    gateway.get_portal_id.side_effect = api_refusal("portal info", 401)
 
     with pytest.raises(CredentialInvalidError):
         _run("hubspot_token", _context(gateway))
@@ -140,8 +117,8 @@ def test_a_rejected_token_is_an_invalid_credential() -> None:
 def test_a_missing_read_scope_names_the_scope(
     object_type: HubSpotObjectType, scope: str
 ) -> None:
-    gateway: MagicMock = _gateway()
-    gateway.list_records.side_effect = _refusal(f"{object_type} listing", 403)
+    gateway: MagicMock = healthy_gateway()
+    gateway.list_records.side_effect = api_refusal(f"{object_type} listing", 403)
 
     with pytest.raises(InsufficientPermissionsError, match=scope):
         _run(f"hubspot_{object_type.value}_readable", _context(gateway))
@@ -155,7 +132,7 @@ def test_a_missing_read_scope_names_the_scope(
 def test_a_read_check_applies_only_to_configured_types(
     object_types: list[str], applies: set[str]
 ) -> None:
-    context = _context(_gateway(), object_types=object_types)
+    context = _context(healthy_gateway(), object_types=object_types)
     assert context.form_state is not None
 
     applying = {
@@ -173,14 +150,14 @@ def _deny_tickets(
     variant: HubSpotObjectType, **_: object
 ) -> HubSpotPage[HubSpotRecord]:
     if variant == HubSpotObjectType.TICKETS:
-        raise _refusal("tickets listing", 403)
-    return HubSpotPage(items=[_record("1")])
+        raise api_refusal("tickets listing", 403)
+    return HubSpotPage(items=[make_record("1")])
 
 
 def test_an_optional_check_samples_past_a_denied_type() -> None:
     """The read check already fails for the denied type, so the associations
     check samples the next type instead of adding a second failed row."""
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
     gateway.list_records.side_effect = _deny_tickets
 
     _run("hubspot_associations", _context(gateway))
@@ -194,31 +171,31 @@ def test_an_optional_check_samples_past_a_denied_type() -> None:
 
 
 def test_an_optional_check_with_every_type_denied_is_inconclusive() -> None:
-    gateway: MagicMock = _gateway()
-    gateway.list_records.side_effect = _refusal("tickets listing", 403)
+    gateway: MagicMock = healthy_gateway()
+    gateway.list_records.side_effect = api_refusal("tickets listing", 403)
 
     with pytest.raises(InconclusiveValidationError):
         _run("hubspot_associations", _context(gateway))
 
 
 def test_a_missing_users_scope_names_it() -> None:
-    gateway: MagicMock = _gateway()
-    gateway.list_users.side_effect = _refusal("user listing", 403)
+    gateway: MagicMock = healthy_gateway()
+    gateway.list_users.side_effect = api_refusal("user listing", 403)
 
     with pytest.raises(InsufficientPermissionsError, match="settings.users.read"):
         _run("hubspot_users", _context(gateway))
 
 
 def test_an_outage_is_not_a_missing_scope() -> None:
-    gateway: MagicMock = _gateway()
-    gateway.get_record_viewers.side_effect = _refusal("record viewers", 503)
+    gateway: MagicMock = healthy_gateway()
+    gateway.get_record_viewers.side_effect = api_refusal("record viewers", 503)
 
     with pytest.raises(UnexpectedValidationError):
         _run("hubspot_record_viewers", _context(gateway))
 
 
 def test_viewers_are_probed_on_a_record_of_a_configured_type() -> None:
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
 
     _run("hubspot_record_viewers", _context(gateway, object_types=["companies"]))
 
@@ -234,7 +211,7 @@ def test_viewers_are_probed_on_a_record_of_a_configured_type() -> None:
     ["hubspot_associations", "hubspot_notes", "hubspot_record_viewers"],
 )
 def test_an_empty_portal_has_nothing_to_probe(check_id: str) -> None:
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
     gateway.list_records.return_value = HubSpotPage(items=[])
 
     with pytest.raises(NothingToCheckError):
@@ -246,7 +223,7 @@ def test_an_empty_portal_has_nothing_to_probe(check_id: str) -> None:
 
 
 def test_a_record_without_notes_is_inconclusive() -> None:
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
     gateway.list_associations.return_value = HubSpotPage(items=[])
 
     with pytest.raises(InconclusiveValidationError):
@@ -268,7 +245,7 @@ def _connector(gateway: MagicMock) -> HubSpotConnector:
 
 
 def test_perm_sync_validation_probes_viewers_on_the_configured_types() -> None:
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
 
     validate_perm_sync(_connector(gateway))
 
@@ -281,15 +258,15 @@ def test_perm_sync_validation_probes_viewers_on_the_configured_types() -> None:
 
 
 def test_perm_sync_validation_fails_on_a_missing_users_scope() -> None:
-    gateway: MagicMock = _gateway()
-    gateway.list_users.side_effect = _refusal("user listing", 403)
+    gateway: MagicMock = healthy_gateway()
+    gateway.list_users.side_effect = api_refusal("user listing", 403)
 
     with pytest.raises(InsufficientPermissionsError, match="settings.users.read"):
         validate_perm_sync(_connector(gateway))
 
 
 def test_perm_sync_validation_passes_on_an_empty_portal() -> None:
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
     gateway.list_records.return_value = HubSpotPage(items=[])
 
     validate_perm_sync(_connector(gateway))
