@@ -256,7 +256,14 @@ def populate_sla_metadata(
     metadata_dict["sla_names"] = [m.name for m in sla_metrics]
     any_breached = any(m.breached is True for m in sla_metrics)
     metadata_dict["sla_breached"] = str(any_breached).lower()
-    metadata_dict["sla_status"] = "BREACHED" if any_breached else "MET"
+    if any_breached:
+        metadata_dict["sla_status"] = "BREACHED"
+    elif any("IN_PROGRESS" in (m.status or "") for m in sla_metrics):
+        metadata_dict["sla_status"] = "IN_PROGRESS"
+    elif any("PAUSED" in (m.status or "") for m in sla_metrics):
+        metadata_dict["sla_status"] = "PAUSED"
+    else:
+        metadata_dict["sla_status"] = "MET"
     summaries: list[str] = []
     for m in sla_metrics:
         summaries.append(f"{m.name}: {m.status}")

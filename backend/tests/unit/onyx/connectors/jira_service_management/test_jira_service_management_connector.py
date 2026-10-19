@@ -658,7 +658,7 @@ def test_build_jql_query_combinations() -> None:
     jql = conn_scoped.build_jql_query(start=1742000000, end=1742086400)
     assert 'project IN ("ITSM", "HRSD")' in jql
     assert '"Customer Request Type" IN ("Get IT help", "Report a system problem")' in jql
-    assert 'updated >= "2025/03/15 00:53"' in jql
+    assert "updated >= 1742000000000" in jql
     assert jql.endswith("ORDER BY updated ASC, key ASC")
 
     # Custom JQL with ORDER BY preserved
@@ -707,7 +707,7 @@ def test_load_from_checkpoint_indexes_full_jsm_ticket_with_sla_comments_changelo
         final_checkpoint = stop.value
 
     assert final_checkpoint.has_more is False
-    assert "ITSM-101" in final_checkpoint.seen_issue_keys
+    assert final_checkpoint.seen_issue_keys == []
 
     hierarchy_nodes = [x for x in emitted if isinstance(x, HierarchyNode)]
     docs = [x for x in emitted if isinstance(x, Document)]
@@ -826,6 +826,7 @@ def test_fallback_to_customer_requests_when_jql_forbidden() -> None:
         "isLastPage": True,
         "values": [req],
     }
+    mock_client.get_issue.return_value = {"key": "ITSM-500", "fields": {"labels": []}}
     mock_client.get_request_comments.return_value = []
 
     batches = list(connector.load_from_state())

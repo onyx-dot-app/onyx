@@ -49,7 +49,11 @@ class JiraServiceManagementClient:
         timeout: int = DEFAULT_TIMEOUT_SECONDS,
         session: requests.Session | None = None,
     ) -> None:
-        raw_base = base_url.rstrip("/")
+        raw_base = (base_url or "").strip().rstrip("/")
+        if not raw_base.startswith("https://"):
+            raise JiraServiceManagementClientError(
+                "Jira Service Management Base URL must use HTTPS ('https://')."
+            )
         if scoped_token:
             resolved_url = scoped_url(raw_base, "jira")
             self.base_url = (resolved_url or raw_base).rstrip("/")
@@ -88,7 +92,6 @@ class JiraServiceManagementClient:
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("https://", adapter)
-        session.mount("http://", adapter)
 
         headers: dict[str, str] = {
             "Accept": "application/json",
@@ -208,7 +211,11 @@ class JiraServiceManagementClient:
             }
             data = self._get_json(path, params=query_params)
             values = data.get("values")
-            if not isinstance(values, list) or not values:
+            if not isinstance(values, list):
+                raise JiraServiceManagementClientError(
+                    f"Malformed JSM pagination response from {path}: expected 'values' list."
+                )
+            if not values:
                 break
 
             for item in values:
@@ -499,7 +506,11 @@ class JiraServiceManagementClient:
             try:
                 data = self._get_json("/rest/api/3/search/jql", params=params)
                 issues = data.get("issues")
-                if isinstance(issues, list):
+                if not isinstance(issues, list):
+                    raise JiraServiceManagementClientError(
+                        "Malformed JQL response from /rest/api/3/search/jql: expected 'issues' list."
+                    )
+                if True:
                     # If /rest/api/3/search/jql returned full issues with fields, use them directly;
                     # if it returned id-only stubs, bulkfetch or fetch full issues.
                     hydrated_issues = self._ensure_hydrated_issues(
@@ -530,7 +541,11 @@ class JiraServiceManagementClient:
 
         data = self._get_json("/rest/api/2/search", params=search_params)
         raw_issues = data.get("issues")
-        issues_list = [i for i in raw_issues if isinstance(i, dict)] if isinstance(raw_issues, list) else []
+        if not isinstance(raw_issues, list):
+            raise JiraServiceManagementClientError(
+                "Malformed JQL response from /rest/api/2/search: expected 'issues' list."
+            )
+        issues_list = [i for i in raw_issues if isinstance(i, dict)]
         total = data.get("total")
         new_offset = effective_start + len(issues_list)
         has_more = (
@@ -563,21 +578,30 @@ class JiraServiceManagementClient:
         if not issue_ids_or_keys:
             return issues
 
+        by_id_or_key: dict[str, dict[str, Any]] = {}
         try:
             body: dict[str, Any] = {"issueIdsOrKeys": issue_ids_or_keys}
             if requested_fields and requested_fields != ["*all"]:
                 body["fields"] = requested_fields
             bulk_data = self._post_json("/rest/api/3/issue/bulkfetch", json_body=body)
             bulk_issues = bulk_data.get("issues")
-            if isinstance(bulk_issues, list) and bulk_issues:
-                return [i for i in bulk_issues if isinstance(i, dict)]
+            if isinstance(bulk_issues, list):
+                for item in bulk_issues:
+                    if isinstance(item, dict):
+                        item_id = str(item.get("id") or "").strip()
+                        item_key = str(item.get("key") or "").strip()
+                        if item_id:
+                            by_id_or_key[item_id] = item
+                        if item_key:
+                            by_id_or_key[item_key] = item
         except JiraServiceManagementClientError:
             pass
 
         hydrated: list[dict[str, Any]] = []
+        fields_param = ",".join(requested_fields)
         for key in issue_ids_or_keys:
-            try:
-                hydrated.append(self.get_issue(key, fields=",".join(requested_fields)))
-            except JiraServiceManagementClientError as exc:
-                logger.warning(f"Failed to fetch issue {key}: {exc}")
+            if key in by_id_or_key:
+                hydrated.append(by_id_or_key[key])
+            else:
+                hydrated.append(self.get_issue(key, fields=fields_param))
         return hydrated

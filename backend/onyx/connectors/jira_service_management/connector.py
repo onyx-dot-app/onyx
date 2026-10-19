@@ -97,8 +97,7 @@ def _escape_jql_string(value: str) -> str:
 
 
 def _seconds_to_jql_str(seconds: SecondsSinceUnixEpoch) -> str:
-    dt = datetime.fromtimestamp(seconds, tz=timezone.utc)
-    return dt.strftime("%Y/%m/%d %H:%M")
+    return str(int(seconds * 1000))
 
 
 class JiraServiceManagementConnector(
@@ -187,6 +186,10 @@ class JiraServiceManagementConnector(
             else None
         )
 
+        if not self.jira_service_management_base_url or not self.jira_service_management_base_url.startswith("https://"):
+            raise ConnectorValidationError(
+                "Jira Service Management Base URL must start with 'https://'."
+            )
         self._client = JiraServiceManagementClient(
             base_url=self.jira_service_management_base_url,
             api_token=str(api_token).strip(),
@@ -216,12 +219,9 @@ class JiraServiceManagementConnector(
         return self._client
 
     def validate_connector_settings(self) -> None:
-        if not self.jira_service_management_base_url or not (
-            self.jira_service_management_base_url.startswith("http://")
-            or self.jira_service_management_base_url.startswith("https://")
-        ):
+        if not self.jira_service_management_base_url or not self.jira_service_management_base_url.startswith("https://"):
             raise ConnectorValidationError(
-                "Jira Service Management Base URL must start with 'http://' or 'https://'."
+                "Jira Service Management Base URL must start with 'https://'."
             )
 
         try:
@@ -344,13 +344,10 @@ class JiraServiceManagementConnector(
     def _discover_service_desks(self) -> None:
         if self._discovery_done:
             return
-        try:
-            for raw in self.client.list_service_desks():
-                info = self._parse_service_desk_info(raw)
-                if info:
-                    self._register_service_desk(info)
-        except JiraServiceManagementClientError as exc:
-            logger.warning(f"Could not list JSM service desks via /rest/servicedeskapi/servicedesk: {exc}")
+        for raw in self.client.list_service_desks():
+            info = self._parse_service_desk_info(raw)
+            if info:
+                self._register_service_desk(info)
         self._discovery_done = True
 
     def _resolve_target_service_desk_ids(self) -> list[str]:
@@ -371,11 +368,7 @@ class JiraServiceManagementConnector(
         wanted = set(self.queue_ids)
         queues: list[ServiceDeskQueueInfo] = []
         for sd_id in target_desk_ids:
-            try:
-                raw_queues = self.client.list_queues(sd_id)
-            except JiraServiceManagementClientError as exc:
-                logger.warning(f"Failed to list queues for service desk {sd_id}: {exc}")
-                continue
+            raw_queues = self.client.list_queues(sd_id)
             for raw_q in raw_queues:
                 q_id = str(raw_q.get("id", "")).strip()
                 if q_id in wanted:
@@ -415,9 +408,9 @@ class JiraServiceManagementConnector(
             if base_jql:
                 clauses.append(f"({base_jql})")
             if start is not None:
-                clauses.append(f'updated >= "{_seconds_to_jql_str(start)}"')
+                clauses.append(f"updated >= {_seconds_to_jql_str(start)}")
             if end is not None:
-                clauses.append(f'updated <= "{_seconds_to_jql_str(end)}"')
+                clauses.append(f"updated <= {_seconds_to_jql_str(end)}")
 
             combined = " AND ".join(clauses)
             if order_by_clause:
@@ -432,7 +425,16 @@ class JiraServiceManagementConnector(
         if self.service_desk_ids:
             for sd_id in self.service_desk_ids:
                 sd = self._service_desks_by_id.get(sd_id)
-                if sd and sd.project_key and sd.project_key not in project_keys:
+                if sd is None:
+                    raw_sd = self.client.get_service_desk(sd_id)
+                    sd = self._parse_service_desk_info(raw_sd)
+                    if sd:
+                        self._register_service_desk(sd)
+                if not sd or not sd.project_key:
+                    raise ConnectorValidationError(
+                        f"Could not resolve project key for configured service_desk_id '{sd_id}'."
+                    )
+                if sd.project_key not in project_keys:
                     project_keys.append(sd.project_key)
 
         if len(project_keys) == 1:
@@ -456,9 +458,9 @@ class JiraServiceManagementConnector(
                 clauses.append(f'"Customer Request Type" IN ({quoted_rts})')
 
         if start is not None:
-            clauses.append(f'updated >= "{_seconds_to_jql_str(start)}"')
+            clauses.append(f"updated >= {_seconds_to_jql_str(start)}")
         if end is not None:
-            clauses.append(f'updated <= "{_seconds_to_jql_str(end)}"')
+            clauses.append(f"updated <= {_seconds_to_jql_str(end)}")
 
         where_part = " AND ".join(clauses)
         if where_part:
@@ -471,16 +473,53 @@ class JiraServiceManagementConnector(
 
     def _should_skip_issue(self, issue: dict[str, Any]) -> str | None:
         """Return a reason string if the issue should be skipped, else None."""
+        if not self.labels_to_skip:
+            return None
         fields = issue.get("fields")
         if not isinstance(fields, dict):
-            return None
+            fields = {}
+            issue["fields"] = fields
         labels = fields.get("labels")
-        if isinstance(labels, list) and self.labels_to_skip:
-            matched = [
-                str(lbl) for lbl in labels if str(lbl) in self.labels_to_skip
-            ]
-            if matched:
-                return f"Skipped due to label(s): {', '.join(matched)}"
+        if not isinstance(labels, list):
+            issue_key = str(issue.get("key") or issue.get("id") or "").strip()
+            if not issue_key:
+                return "Skipped because issue key and labels could not be established"
+            fetched = self.client.get_issue(issue_key, fields="labels")
+            fetched_fields = fetched.get("fields") if isinstance(fetched.get("fields"), dict) else {}
+            labels = fetched_fields.get("labels")
+            if not isinstance(labels, list):
+                return f"Skipped {issue_key} because authoritative labels could not be retrieved"
+            fields["labels"] = labels
+        matched = [
+            str(lbl) for lbl in labels if str(lbl) in self.labels_to_skip
+        ]
+        if matched:
+            return f"Skipped due to label(s): {', '.join(matched)}"
+        return None
+
+    def _resolve_issue_request_type_name(
+        self,
+        issue: dict[str, Any],
+        jsm_request: dict[str, Any] | None = None,
+    ) -> str | None:
+        fields = issue.get("fields") if isinstance(issue.get("fields"), dict) else {}
+        if jsm_request and isinstance(jsm_request.get("requestType"), dict):
+            name = jsm_request["requestType"].get("name")
+            if name:
+                return str(name)
+        for val in fields.values():
+            if isinstance(val, dict) and isinstance(val.get("requestType"), dict):
+                name = val["requestType"].get("name")
+                if name:
+                    return str(name)
+        issue_key = str(issue.get("key") or issue.get("id") or "").strip()
+        if issue_key and jsm_request is None:
+            try:
+                req = self.client.get_customer_request(issue_key, expand=["requestType"])
+                if isinstance(req.get("requestType"), dict) and req["requestType"].get("name"):
+                    return str(req["requestType"]["name"])
+            except JiraServiceManagementClientError:
+                pass
         return None
 
     def _build_hierarchy_node(
@@ -759,9 +798,9 @@ class JiraServiceManagementConnector(
                     break
 
         # Filter by configured request_types if set and we matched via queue or fallback
-        if self.request_types and not self.jql_query and request_type_name:
+        if self.request_types and not self.jql_query:
             normalized_wanted = {rt.lower() for rt in self.request_types}
-            if request_type_name.lower() not in normalized_wanted:
+            if not request_type_name or request_type_name.lower() not in normalized_wanted:
                 return None
 
         status_name: str | None = None
@@ -1156,27 +1195,20 @@ class JiraServiceManagementConnector(
         current_q = queues[checkpoint.current_queue_idx]
         sd_id = current_q.service_desk_id or ""
 
-        try:
-            data = self.client._get_json(
-                f"/rest/servicedeskapi/servicedesk/{sd_id}/queue/{current_q.id}/issue",
-                params={
-                    "start": checkpoint.start_at,
-                    "limit": self.batch_size,
-                },
+        data = self.client._get_json(
+            f"/rest/servicedeskapi/servicedesk/{sd_id}/queue/{current_q.id}/issue",
+            params={
+                "start": checkpoint.start_at,
+                "limit": self.batch_size,
+            },
+        )
+        raw_issues = data.get("values")
+        if not isinstance(raw_issues, list):
+            raise JiraServiceManagementClientError(
+                f"Malformed queue response for queue {current_q.id}: expected 'values' list."
             )
-            raw_issues = data.get("values")
-            issues = (
-                [i for i in raw_issues if isinstance(i, dict)]
-                if isinstance(raw_issues, list)
-                else []
-            )
-            is_last_page = data.get("isLastPage", len(issues) < self.batch_size)
-        except JiraServiceManagementClientError as exc:
-            logger.warning(
-                f"Failed to fetch issues from queue {current_q.id} (service desk {sd_id}): {exc}"
-            )
-            issues = []
-            is_last_page = True
+        issues = [i for i in raw_issues if isinstance(i, dict)]
+        is_last_page = data.get("isLastPage", len(issues) < self.batch_size)
 
         for issue in issues:
             issue_key = str(issue.get("key") or issue.get("id") or "").strip()
@@ -1220,7 +1252,6 @@ class JiraServiceManagementConnector(
                 )
 
         next_checkpoint = checkpoint.model_copy(deep=True)
-        next_checkpoint.seen_issue_keys = list(seen_keys)
 
         if is_last_page or not issues:
             next_checkpoint.current_queue_idx += 1
@@ -1258,9 +1289,9 @@ class JiraServiceManagementConnector(
                 next_page_token=checkpoint.next_page_token,
             )
         except JiraServiceManagementClientError as exc:
-            if exc.status_code in (401, 403) and not self.jql_query:
+            if exc.status_code == 403 and not self.jql_query:
                 logger.info(
-                    "JQL search returned 403/401; falling back to /rest/servicedeskapi/request"
+                    "JQL search returned 403; falling back to /rest/servicedeskapi/request"
                 )
                 return (
                     yield from self._load_from_customer_requests_checkpoint(
@@ -1325,25 +1356,50 @@ class JiraServiceManagementConnector(
         None,
         JiraServiceManagementCheckpoint,
     ]:
+        target_desk_ids = self._resolve_target_service_desk_ids()
+        if (self.service_desk_ids or self.project_key) and not target_desk_ids:
+            raise ConnectorValidationError(
+                "Could not resolve target Service Desk IDs for configured scope."
+            )
+        if target_desk_ids and checkpoint.current_service_desk_idx >= len(target_desk_ids):
+            next_cp = checkpoint.model_copy(deep=True)
+            next_cp.has_more = False
+            return next_cp
+
+        current_desk_id = (
+            target_desk_ids[checkpoint.current_service_desk_idx]
+            if target_desk_ids
+            else None
+        )
+        allowed_desk_ids = set(target_desk_ids) if target_desk_ids else None
+
         params: dict[str, Any] = {
             "start": checkpoint.start_at,
             "limit": self.batch_size,
             "expand": "serviceDesk,requestType,participant,status,sla,comment,attachment",
         }
-        if self.service_desk_ids and len(self.service_desk_ids) == 1:
-            params["serviceDeskId"] = self.service_desk_ids[0]
+        if current_desk_id:
+            params["serviceDeskId"] = current_desk_id
 
         data = self.client._get_json("/rest/servicedeskapi/request", params=params)
         raw_reqs = data.get("values")
-        requests_list = (
-            [r for r in raw_reqs if isinstance(r, dict)]
-            if isinstance(raw_reqs, list)
-            else []
-        )
+        if not isinstance(raw_reqs, list):
+            raise JiraServiceManagementClientError(
+                "Malformed customer request response: expected 'values' list."
+            )
+        requests_list = [r for r in raw_reqs if isinstance(r, dict)]
         is_last_page = data.get("isLastPage", len(requests_list) < self.batch_size)
-        seen_keys = set(checkpoint.seen_issue_keys)
+        seen_keys: set[str] = set()
 
         for req in requests_list:
+            req_desk_id = (
+                str(req.get("serviceDeskId")).strip()
+                if req.get("serviceDeskId") is not None
+                else None
+            )
+            if allowed_desk_ids is not None and req_desk_id not in allowed_desk_ids:
+                continue
+
             issue_key = str(req.get("issueKey") or req.get("issueId") or "").strip()
             if not issue_key or issue_key in seen_keys:
                 continue
@@ -1362,9 +1418,13 @@ class JiraServiceManagementConnector(
                 if end and ts > end:
                     continue
 
+            stub_issue: dict[str, Any] = {"key": issue_key, "fields": {}}
+            if self._should_skip_issue(stub_issue):
+                continue
+
             try:
                 doc = self._convert_issue_to_document(
-                    issue={"key": issue_key, "fields": {}},
+                    issue=stub_issue,
                     jsm_request=req,
                 )
                 if doc is not None:
@@ -1383,9 +1443,15 @@ class JiraServiceManagementConnector(
                 )
 
         next_checkpoint = checkpoint.model_copy(deep=True)
-        next_checkpoint.seen_issue_keys = list(seen_keys)
         if is_last_page or not requests_list:
-            next_checkpoint.has_more = False
+            if target_desk_ids:
+                next_checkpoint.current_service_desk_idx += 1
+                next_checkpoint.start_at = 0
+                next_checkpoint.has_more = (
+                    next_checkpoint.current_service_desk_idx < len(target_desk_ids)
+                )
+            else:
+                next_checkpoint.has_more = False
         else:
             next_checkpoint.start_at += len(requests_list)
             next_checkpoint.has_more = True
@@ -1459,11 +1525,20 @@ class JiraServiceManagementConnector(
                     project_key=sd.project_key if sd else self.project_key,
                     project_name=sd.project_name if sd else None,
                 )
+                normalized_wanted = (
+                    {rt.lower() for rt in self.request_types}
+                    if self.request_types
+                    else None
+                )
                 for issue in self.client.iter_queue_issues(
                     q.service_desk_id, q.id, limit=self.batch_size
                 ):
                     if self._should_skip_issue(issue):
                         continue
+                    if normalized_wanted is not None:
+                        rt_name = self._resolve_issue_request_type_name(issue)
+                        if not rt_name or rt_name.lower() not in normalized_wanted:
+                            continue
                     issue_key = str(issue.get("key") or issue.get("id") or "").strip()
                     if not issue_key:
                         continue

@@ -1,6 +1,7 @@
 import os
 import time
 
+from dotenv import dotenv_values
 import pytest
 
 from onyx.configs.constants import DocumentSource
@@ -8,14 +9,24 @@ from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
 from onyx.connectors.models import Document, HierarchyNode
+from tests.utils.aws_secrets import _DOTENV_PATH
+
+
+def _resolve_test_env(key: str) -> str | None:
+    val = os.environ.get(key)
+    if val:
+        return val
+    dotenv = dotenv_values(_DOTENV_PATH)
+    resolved = dotenv.get(key)
+    return str(resolved) if resolved else None
 
 
 @pytest.fixture
 def jsm_connector() -> JiraServiceManagementConnector:
-    base_url = os.environ.get("JIRA_SERVICE_MANAGEMENT_BASE_URL")
-    user_email = os.environ.get("JIRA_SERVICE_MANAGEMENT_USER_EMAIL")
-    api_token = os.environ.get("JIRA_SERVICE_MANAGEMENT_API_TOKEN")
-    project_key = os.environ.get("JIRA_SERVICE_MANAGEMENT_PROJECT_KEY")
+    base_url = _resolve_test_env("JIRA_SERVICE_MANAGEMENT_BASE_URL")
+    user_email = _resolve_test_env("JIRA_SERVICE_MANAGEMENT_USER_EMAIL")
+    api_token = _resolve_test_env("JIRA_SERVICE_MANAGEMENT_API_TOKEN")
+    project_key = _resolve_test_env("JIRA_SERVICE_MANAGEMENT_PROJECT_KEY")
 
     if not base_url or not api_token:
         pytest.skip(
