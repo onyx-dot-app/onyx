@@ -46,6 +46,8 @@ type PortRequest struct {
 	Name string
 	// Preferred is the port scanned first when no lease exists.
 	Preferred int
+	// Replace selects a new preferred port instead of retaining an old lease.
+	Replace bool
 	// Fixed is a port already bound by this worktree's own running
 	// container or process. It is recorded as is and not probed.
 	Fixed int
@@ -146,7 +148,7 @@ func choosePort(req PortRequest, current int, foreign, claimed map[int]bool) (in
 	if req.Fixed > 0 {
 		return req.Fixed, nil
 	}
-	if current > 0 && !claimed[current] && !neverLease[current] && !foreign[current] && bindable(current) {
+	if !req.Replace && current > 0 && !claimed[current] && !neverLease[current] && !foreign[current] && bindable(current) {
 		return current, nil
 	}
 	if req.Preferred <= 0 {

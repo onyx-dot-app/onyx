@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +15,38 @@ import (
 	"testing"
 	"time"
 )
+
+func TestWebDevHelpDoesNotStartServices(t *testing.T) {
+	for _, args := range [][]string{
+		{"dev", "--help"}, {"dev", "-h"}, {"dev", "--", "--help"},
+		{"dev", "--port", "3100", "--help"}, {"dev", "--hostname", "localhost", "-h"},
+	} {
+		for _, mounted := range []bool{false, true} {
+			name := strings.Join(args, " ")
+			if mounted {
+				name = "ods web " + name
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Chdir(t.TempDir())
+				cmd := NewWebCommand()
+				invocation := args
+				if mounted {
+					cmd = NewRootCommand()
+					invocation = append([]string{"web"}, args...)
+				}
+				var output bytes.Buffer
+				cmd.SetOut(&output)
+				cmd.SetArgs(invocation)
+				if err := cmd.Execute(); err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(output.String(), "Usage:") {
+					t.Fatalf("missing help: %s", output.String())
+				}
+			})
+		}
+	}
+}
 
 func writeFile(t *testing.T, path string, content string) {
 	t.Helper()
@@ -209,8 +245,9 @@ func TestRunWebScript_forwardsScriptArgs(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"script only", []string{"dev"}, []string{"run", "dev"}},
+		{"script only", []string{"build"}, []string{"run", "build"}},
 		{"flags get a separator", []string{"test", "--watch"}, []string{"run", "test", "--", "--watch"}},
+		{"other script help is forwarded", []string{"test", "--help"}, []string{"run", "test", "--", "--help"}},
 		{"separator is not repeated", []string{"test", "--", "--watch"}, []string{"run", "test", "--", "--watch"}},
 	}
 	for _, c := range cases {
@@ -255,6 +292,18 @@ func TestPrepareWebDir_installsAndBuildsLibsInOrder(t *testing.T) {
 	}
 	if got, want := string(stamp), hex.EncodeToString(sum[:])+"\n"; got != want {
 		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestPrepareWebDir_canceledContextSkipsPreparation(t *testing.T) {
+	webDir, calls := devtoolFreshWebDir(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := prepareWebDirOutputContext(ctx, webDir, io.Discard); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", err)
+	}
+	if got := devtoolCalls(t, calls); len(got) != 0 {
+		t.Fatalf("canceled preparation ran commands: %v", got)
 	}
 }
 

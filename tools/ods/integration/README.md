@@ -21,13 +21,13 @@ cd "$(git rev-parse --show-toplevel)/tools/ods"
 go test -tags integration ./integration -run TestStackLiveLifecycle -count=1 -timeout 90m -v
 ```
 
-The test checks distinct projects and ports, database isolation, concurrent startup, process reuse,
+The harness explicitly uses the global `--isolated` option. The test checks distinct projects and ports, database isolation, concurrent startup, process reuse,
 stop and start, occupied-port recovery, and data preservation after container recreation.
 Unset configuration skips the test, so the normal unit suite does not start Docker.
 
 The test runs `stack down` during cleanup. Docker volumes and durable port leases remain.
 Set `ODS_STACK_KEEP_RUNNING=1` to leave the stacks available for browser tests.
-Get the current frontend URL with `ods stack status --json` in each worktree.
+Get the current frontend URL with `"$ODS_STACK_LIVE_BINARY" --isolated stack status --json` in each worktree.
 Never assume port 3000 after the occupied-port test.
 
 Run browser tests only after the lifecycle test finishes.
@@ -58,6 +58,6 @@ The worker test uploads a small text file and waits for indexed chunks without m
 The first embedding request can download model weights and take several minutes.
 Cleanup requests file deletion. The test does not assert that asynchronous deletion finishes.
 
-After browser tests, run `ods stack down` in both worktrees.
+After browser tests, run `"$ODS_STACK_LIVE_BINARY" --isolated stack down` in both worktrees.
 Stop only the mock LLM server that you started for this run.
 Do not prune shared Docker volumes or stop other worktrees.

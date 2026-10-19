@@ -61,12 +61,17 @@ exit 0
 		t.Fatal(err)
 	}
 	calls["alembic"] = alembic + ".env"
+	python := devstack.PythonExecutable(root)
+	writeFile(t, python, "#!/bin/sh\nexit 10\n")
+	if err := os.Chmod(python, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	return root, calls
 }
 
 func TestStackProvider_infraPortsAndEnv(t *testing.T) {
 	root, _ := stackTestRepo(t)
-	stack, provider := openStack()
+	stack, provider := openStack(nil)
 	if stack.Root != root || stack.Project != devstack.ProjectName(root) {
 		t.Fatalf("stack %+v", stack)
 	}
@@ -104,7 +109,7 @@ func TestStackProvider_infraPortsAndEnv(t *testing.T) {
 
 func TestStackProvider_composeUpWritesPortsAndExcludesLocalModel(t *testing.T) {
 	root, calls := stackTestRepo(t)
-	stack, provider := openStack()
+	stack, provider := openStack(nil)
 
 	ports := map[string]int{"POSTGRES_HOST_PORT": 5555, "REDIS_HOST_PORT": 6380, "web": 3000}
 	if err := provider.ComposeUp(context.Background(), ports, devstack.Options{LocalModelServer: true}); err != nil {
@@ -161,7 +166,7 @@ func TestStackProvider_composeUpWritesPortsAndExcludesLocalModel(t *testing.T) {
 
 func TestStackProvider_prepareAndMigrate(t *testing.T) {
 	_, calls := stackTestRepo(t)
-	_, provider := openStack()
+	_, provider := openStack(nil)
 
 	if err := provider.Prepare(context.Background()); err != nil {
 		t.Fatal(err)
@@ -184,7 +189,7 @@ func TestStackProvider_prepareAndMigrate(t *testing.T) {
 
 func TestStackProvider_prepareReportsMissingTool(t *testing.T) {
 	root, _ := stackTestRepo(t)
-	_, provider := openStack()
+	_, provider := openStack(nil)
 	if err := os.Remove(filepath.Join(filepath.Dir(os.Getenv("PATH")), filepath.Base(os.Getenv("PATH")), "bun")); err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +250,7 @@ func TestPrintStackStatus(t *testing.T) {
 
 func TestRunStackLogs(t *testing.T) {
 	root, calls := stackTestRepo(t)
-	stack, _ := openStack()
+	stack, _ := openStack(nil)
 	if err := runStackLogs(stack, nil, 10, false); err == nil || !strings.Contains(err.Error(), "no dev stack") {
 		t.Errorf("logs without state: %v", err)
 	}
@@ -297,7 +302,7 @@ func TestStackCommands_lifecycleWithFakeService(t *testing.T) {
 	root, _ := stackTestRepo(t)
 	// The only service is a worker with no port, run by a fake interpreter
 	// that just stays alive.
-	writeFile(t, filepath.Join(root, ".venv", "bin", "python"), "#!/bin/sh\nexec /bin/sleep 300\n")
+	writeFile(t, filepath.Join(root, ".venv", "bin", "python"), "#!/bin/sh\nif [ \"$1\" = -c ]; then exit 10; fi\nexec /bin/sleep 300\n")
 	if err := os.Chmod(filepath.Join(root, ".venv", "bin", "python"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +312,7 @@ func TestStackCommands_lifecycleWithFakeService(t *testing.T) {
     {"name": "Celery primary", "type": "debugpy", "request": "launch", "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py", "cwd": "${workspaceFolder}/backend", "args": ["-A", "primary"]}
   ]
 }`)
-	stack, _ := openStack()
+	stack, _ := openStack(nil)
 	t.Cleanup(func() {
 		_ = stack.Stop(context.Background(), devstack.Options{StopTimeout: 2 * time.Second, LockWait: 10 * time.Second})
 	})

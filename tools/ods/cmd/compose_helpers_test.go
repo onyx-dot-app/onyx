@@ -11,7 +11,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
@@ -57,8 +57,9 @@ func composeCalls(t *testing.T, bin, name string) []string {
 // it the working directory, and returns its root as git reports it.
 func composeRepo(t *testing.T) string {
 	t.Helper()
-	docker.SetProjectFlags("")
-	t.Cleanup(func() { docker.SetProjectFlags("") })
+	project, isolated := rootProject, rootIsolated
+	rootProject, rootIsolated = "", false
+	t.Cleanup(func() { rootProject, rootIsolated = project, isolated })
 
 	// Keep git away from the developer's config (for example commit signing).
 	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
@@ -79,6 +80,13 @@ func composeRepo(t *testing.T) string {
 
 	resolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
+		t.Fatal(err)
+	}
+	stack, err := devstack.Open(resolved, "ods-proj", devstack.Shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stack.WriteState(&devstack.State{Phase: devstack.PhaseStopped}); err != nil {
 		t.Fatal(err)
 	}
 	return resolved

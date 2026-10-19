@@ -32,6 +32,7 @@ type Provider interface {
 	ComposeDown(ctx context.Context) error
 	// Migrate runs the database migrations with env.
 	Migrate(ctx context.Context, env []string) error
+	MigrationsPending(ctx context.Context, env []string) (bool, error)
 	// Plan resolves the services to run. env carries the shell environment
 	// and the stack's own overrides, which every service gets.
 	Plan(root string, ports map[string]int, env Env, opts Options) ([]Spec, error)
@@ -79,12 +80,18 @@ func (o Options) WithDefaults() Options {
 // Up prepares the worktree, starts infrastructure, migrates, and starts or
 // reconciles the application services, then waits for readiness.
 func (s *Stack) Up(ctx context.Context, p Provider, opts Options) (*Status, error) {
+	if s.Mode == Frontend {
+		return nil, fmt.Errorf("use 'ods web dev' to launch the frontend")
+	}
 	return s.run(ctx, p, opts, true)
 }
 
 // Start starts or reconciles the application services against the
 // infrastructure that Up already started.
 func (s *Stack) Start(ctx context.Context, p Provider, opts Options) (*Status, error) {
+	if s.Mode == Frontend {
+		return nil, fmt.Errorf("use 'ods web dev' to launch the frontend")
+	}
 	return s.run(ctx, p, opts, false)
 }
 
@@ -104,8 +111,63 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra b
 	if err != nil {
 		return nil, err
 	}
+	if st != nil {
+		if st.Project != s.Project {
+			if !s.ProjectExplicit {
+				s.Project = st.Project
+			} else if st.Phase != PhaseStopped || !infra {
+				return nil, fmt.Errorf("stop project %s from %s before selecting another project", st.Project, st.Root)
+			}
+		}
+	}
+	if st == nil && s.Mode == Shared {
+		if err := s.selectLegacyProject(); err != nil {
+			return nil, err
+		}
+	}
+	releaseLocal, err := s.lockFrontendCheckout(ctx, opts.LockWait)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseLocal()
+	if s.Mode != Frontend {
+		release, err := s.LockInfrastructure(ctx, opts.LockWait)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+	}
+	if s.Mode == Shared && st != nil && st.Root != s.Root {
+		if !infra {
+			return nil, s.ownerError(st)
+		}
+		if err := s.stopServices(opts.StopTimeout); err != nil {
+			return nil, err
+		}
+		st, err = s.ReadState()
+		if err != nil {
+			return nil, err
+		}
+	}
+	previewPort, err := s.stopFrontendPreview(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
 	if st == nil {
+		if s.Mode == Shared {
+			lockedProject := s.Project
+			if err := s.selectLegacyProject(); err != nil {
+				return nil, err
+			}
+			if s.Project != lockedProject {
+				return nil, fmt.Errorf("existing project changed during startup; retry 'ods stack up'")
+			}
+		}
 		st = &State{Ports: map[string]int{}}
+	}
+	st.Root = s.Root
+	if previewPort > 0 {
+		st.Ports["web"] = previewPort
 	}
 	if st.Profile != "" && st.Profile != opts.Profile {
 		log.Infof("Switching profile from %s to %s", st.Profile, opts.Profile)
@@ -136,7 +198,14 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra b
 	} else if len(st.Ports) == 0 {
 		return nil, s.fail(st, errors.New("no infrastructure ports recorded; run `ods stack up` first"))
 	}
-	requests = append(requests, p.AppPorts(opts)...)
+	appRequests := p.AppPorts(opts)
+	for i, req := range appRequests {
+		if req.Name == "web" && previewPort > 0 {
+			appRequests[i].Preferred = previewPort
+			appRequests[i].Replace = true
+		}
+	}
+	requests = append(requests, appRequests...)
 	if err := s.leasePorts(st, requests); err != nil {
 		return nil, s.fail(st, err)
 	}
@@ -157,12 +226,23 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra b
 	}
 
 	if infra {
-		st.Phase = PhaseMigrating
-		if err := s.WriteState(st); err != nil {
-			return nil, err
+		migrationEnv := env.With(fileEnv)
+		pending, err := p.MigrationsPending(ctx, migrationEnv)
+		if err != nil {
+			return nil, s.fail(st, fmt.Errorf("check migrations: %w", err))
 		}
-		if err := p.Migrate(ctx, env.With(fileEnv)); err != nil {
-			return nil, s.fail(st, fmt.Errorf("migrations: %w", err))
+		if pending {
+			if err := s.stopServices(opts.StopTimeout); err != nil {
+				return nil, err
+			}
+			st.Services = nil
+			st.Phase = PhaseMigrating
+			if err := s.WriteState(st); err != nil {
+				return nil, err
+			}
+			if err := p.Migrate(ctx, migrationEnv); err != nil {
+				return nil, s.fail(st, fmt.Errorf("migrations: %w", err))
+			}
 		}
 	}
 
@@ -175,7 +255,13 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra b
 		if err != nil {
 			return nil, s.fail(st, err)
 		}
-		busy, err := s.reconcile(st, specs, opts.StopTimeout)
+		var prepare func(Spec) error
+		if hook, ok := p.(interface {
+			PrepareService(context.Context, Spec) error
+		}); ok {
+			prepare = func(sp Spec) error { return hook.PrepareService(ctx, sp) }
+		}
+		busy, err := s.reconcile(st, specs, opts.StopTimeout, prepare)
 		if err != nil {
 			return nil, s.fail(st, err)
 		}
@@ -275,7 +361,11 @@ func (s *Stack) leasePorts(st *State, requests []PortRequest) error {
 			}
 		}
 	}
-	ports, err := s.Registry.Lease(s.Root, requests)
+	leaseRoot := s.Root
+	if s.Mode != Isolated {
+		leaseRoot = s.StateDir
+	}
+	ports, err := s.Registry.Lease(leaseRoot, requests)
 	if err != nil {
 		return err
 	}
@@ -316,40 +406,21 @@ func (s *Stack) serviceEnv(p Provider, ports map[string]int, opts Options) (Env,
 	if err != nil {
 		return Env{}, nil, err
 	}
-	overrides := map[string]string{
-		"POSTGRES_HOST":              "localhost",
-		"REDIS_HOST":                 "localhost",
-		"OPENSEARCH_HOST":            "localhost",
-		"MODEL_SERVER_HOST":          "localhost",
-		"INDEXING_MODEL_SERVER_HOST": "localhost",
-	}
-	for k, v := range values {
-		overrides[k] = v
-	}
+	envPorts := make(map[string]int, len(ports))
 	for name, port := range ports {
-		switch name {
-		case "web":
-			overrides["PORT"] = fmt.Sprint(port)
-			overrides["WEB_DOMAIN"] = fmt.Sprintf("http://localhost:%d", port)
-		case "api":
-			overrides["INTERNAL_URL"] = fmt.Sprintf("http://localhost:%d", port)
-		case "mcp":
-			overrides["MCP_SERVER_PORT"] = fmt.Sprint(port)
-			overrides["MCP_INTERNAL_URL"] = fmt.Sprintf("http://localhost:%d", port)
-		case "model":
-			if opts.LocalModelServer {
-				overrides["MODEL_SERVER_PORT"] = fmt.Sprint(port)
-			}
+		if name != "model" || opts.LocalModelServer {
+			envPorts[name] = port
 		}
 	}
-	return Env{Base: environ(), Overrides: mapToEnv(overrides)}, fileEnv, nil
+	env := HostServiceEnv(envPorts)
+	return env, fileEnv, nil
 }
 
 // reconcile makes the running services match specs. A record whose process
 // is current and whose spec hash is unchanged is kept; every other record is
 // stopped and its spec started. It returns the names of ports that a new
 // service could not bind because the port is busy.
-func (s *Stack) reconcile(st *State, specs []Spec, stopTimeout time.Duration) ([]string, error) {
+func (s *Stack) reconcile(st *State, specs []Spec, stopTimeout time.Duration, prepare func(Spec) error) ([]string, error) {
 	wanted := map[string]Spec{}
 	for _, sp := range specs {
 		wanted[sp.Slug] = sp
@@ -406,6 +477,11 @@ func (s *Stack) reconcile(st *State, specs []Spec, stopTimeout time.Duration) ([
 			busy = append(busy, sp.Slug)
 			continue
 		}
+		if prepare != nil {
+			if err := prepare(sp); err != nil {
+				return nil, err
+			}
+		}
 		rec, err := startService(sp, filepath.Join(s.LogDir(), sp.Slug+".log"))
 		if err != nil {
 			return nil, err
@@ -436,6 +512,9 @@ func (s *Stack) Stop(ctx context.Context, opts Options) error {
 		return err
 	}
 	defer unlock()
+	if err := s.checkOwner(); err != nil {
+		return err
+	}
 	return s.stopServices(opts.StopTimeout)
 }
 
@@ -462,6 +541,24 @@ func (s *Stack) stopServices(timeout time.Duration) error {
 	return err
 }
 
+func (s *Stack) ownerError(st *State) error {
+	return fmt.Errorf("shared stack is owned by %s; run this command there, or run 'ods stack up' here to switch checkouts", st.Root)
+}
+
+func (s *Stack) checkOwner() error {
+	st, err := s.ReadState()
+	if err != nil {
+		return err
+	}
+	if st != nil && st.Project != s.Project {
+		return fmt.Errorf("recorded project is %s, not %s; stop the recorded stack before switching projects with 'ods stack up'", st.Project, s.Project)
+	}
+	if s.Mode == Shared && st != nil && st.Root != s.Root {
+		return s.ownerError(st)
+	}
+	return nil
+}
+
 // Down stops the services and the infrastructure. Volumes and port leases
 // are kept so the next Up reuses them.
 func (s *Stack) Down(ctx context.Context, p Provider, opts Options) error {
@@ -471,8 +568,25 @@ func (s *Stack) Down(ctx context.Context, p Provider, opts Options) error {
 		return err
 	}
 	defer unlock()
+	if err := s.checkOwner(); err != nil {
+		return err
+	}
+	st, err := s.ReadState()
+	if err != nil || st == nil {
+		return err
+	}
+	if s.Mode != Frontend {
+		release, err := s.LockInfrastructure(ctx, opts.LockWait)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	if err := s.stopServices(opts.StopTimeout); err != nil {
 		return err
+	}
+	if s.Mode == Frontend {
+		return nil
 	}
 	return p.ComposeDown(ctx)
 }
@@ -480,12 +594,18 @@ func (s *Stack) Down(ctx context.Context, p Provider, opts Options) error {
 // Restart stops the services and starts them again against the running
 // infrastructure.
 func (s *Stack) Restart(ctx context.Context, p Provider, opts Options) (*Status, error) {
+	if s.Mode == Frontend {
+		return nil, fmt.Errorf("use 'ods web dev' to launch the frontend")
+	}
 	opts = opts.WithDefaults()
 	unlock, err := s.Lock(ctx, "stack restart", opts.LockWait)
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
+	if err := s.checkOwner(); err != nil {
+		return nil, err
+	}
 	if err := s.stopServices(opts.StopTimeout); err != nil {
 		return nil, err
 	}
@@ -553,8 +673,8 @@ func (s *Stack) status(st *State, probe bool) *Status {
 // statusCtx computes the live status. Health probes are bounded by ctx.
 func (s *Stack) statusCtx(ctx context.Context, st *State, probe bool) *Status {
 	out := &Status{
-		Root:     s.Root,
-		Project:  s.Project,
+		Root:     st.Root,
+		Project:  st.Project,
 		Profile:  st.Profile,
 		Phase:    st.Phase,
 		Ports:    st.Ports,

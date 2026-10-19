@@ -175,13 +175,23 @@ func LaunchPlan(root string, launch *Launch, ports map[string]int, env Env, opts
 		} else if limited && !allowedSet[c.Name] {
 			continue
 		}
-		sp, err := Translate(root, c, ports, env)
+		sp, err := ResolveService(root, launch, Slugify(c.Name), ports, env)
 		if err != nil {
 			return nil, err
 		}
 		specs = append(specs, sp)
 	}
 	return specs, nil
+}
+
+// ResolveService builds the same service specification for stack and direct commands.
+func ResolveService(root string, launch *Launch, slug string, ports map[string]int, env Env) (Spec, error) {
+	for _, configuration := range launch.Configurations {
+		if Slugify(configuration.Name) == slug {
+			return Translate(root, configuration, ports, env)
+		}
+	}
+	return Spec{}, fmt.Errorf("launch.json has no service %q", slug)
 }
 
 var workspaceVar = regexp.MustCompile(`\$\{workspace(?:Folder|Root)\}`)

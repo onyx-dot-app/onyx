@@ -42,11 +42,12 @@ func NewStackCommand() *cobra.Command {
 migrations, and the application services from .vscode/launch.json as
 background processes.
 
-Every worktree gets its own Compose project, its own host ports, and its own
-state under its git metadata (git rev-parse --git-path ods-stack). Port leases
-are shared across worktrees in ` + filepath.Join(paths.DataDir(), "stack") + `
-so a worktree keeps its ports across restarts. A lifecycle command takes the
-worktree's lock, so two agents running "up" at once converge on one stack.
+By default, worktrees share infrastructure and one active application checkout.
+Running "up" from another checkout stops the previous app before migrations.
+Use --isolated for separate infrastructure. Use "ods web dev" for a frontend
+against an existing healthy API, or "ods backend api" for an interactive API.
+All entry points share service planning and process launchers. Lifecycle locks keep
+concurrent commands safe. Port leases live in ` + filepath.Join(paths.DataDir(), "stack") + `.
 
 Profiles:
   minimal  Web Server and API Server
@@ -89,7 +90,7 @@ func newStackLifecycleCommand(name, short string) *cobra.Command {
 		Short: short,
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, provider := openStack()
+			stack, provider := openStack(cmd)
 			ctx := context.Background()
 			var status *devstack.Status
 			var err error
@@ -141,7 +142,7 @@ func newStackStopCommand(name, short string) *cobra.Command {
 		Short: short,
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, provider := openStack()
+			stack, provider := openStack(cmd)
 			var err error
 			if name == "down" {
 				err = stack.Down(context.Background(), provider, opts.Options)
@@ -166,7 +167,7 @@ func newStackStatusCommand() *cobra.Command {
 		Short: "Show the services, ports, URLs and health (exit 0 ready, 2 not ready, 1 no stack)",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, _ := openStack()
+			stack, _ := openStack(cmd)
 			status, err := stack.Status()
 			if err != nil {
 				log.Fatal(err)
@@ -197,7 +198,7 @@ func newStackLogsCommand() *cobra.Command {
 		Short: "Show service logs (names as in `ods stack status`)",
 		Args:  cobra.ArbitraryArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, _ := openStack()
+			stack, _ := openStack(cmd)
 			if err := runStackLogs(stack, args, lines, follow); err != nil {
 				log.Fatal(err)
 			}
@@ -215,7 +216,7 @@ func newStackPlanCommand() *cobra.Command {
 		Short: "Print the services a profile would run, without starting them",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, provider := openStack()
+			stack, provider := openStack(cmd)
 			st, err := stack.ReadState()
 			if err != nil {
 				log.Fatal(err)
@@ -238,18 +239,21 @@ func newStackPlanCommand() *cobra.Command {
 }
 
 // openStack resolves the stack of the current worktree and its provider.
-// The Compose project is unique per worktree unless --project overrides it.
-func openStack() (*devstack.Stack, *stackProvider) {
+// Shared mode is the default; flags select isolated or frontend state.
+func openStack(cmd *cobra.Command) (*devstack.Stack, *stackProvider) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
 	}
-	stack, err := devstack.Open(cwd, flagProjectName())
+	mode := devstack.Shared
+	if rootIsolated {
+		mode = devstack.Isolated
+	}
+	stack, err := devstack.Open(cwd, flagProjectName(), mode)
 	if err != nil {
 		log.Fatal(err)
 	}
 	stack.Registry = &devstack.Registry{Dir: filepath.Join(paths.DataDir(), "stack")}
-	docker.SetProjectFlags(stack.Project)
 	return stack, &stackProvider{stack: stack}
 }
 
@@ -263,6 +267,7 @@ func printStackStatus(status *devstack.Status, asJSON bool) {
 		return
 	}
 	fmt.Printf("project: %s\nprofile: %s\nphase:   %s\nready:   %t\n", status.Project, status.Profile, status.Phase, status.Ready)
+	fmt.Printf("checkout: %s\n", status.Root)
 	names := make([]string, 0, len(status.URLs))
 	for name := range status.URLs {
 		names = append(names, name)
@@ -413,7 +418,7 @@ func (p *stackProvider) ComposeUp(ctx context.Context, ports map[string]int, opt
 			}
 		}
 	}
-	if err := runCompose("dev", composeOpts); err != nil {
+	if err := runComposeTarget("dev", composeOpts, devstack.Target{Root: p.stack.Root, Project: p.stack.Project}); err != nil {
 		return err
 	}
 	// The dev stack runs the object store only.
@@ -421,7 +426,15 @@ func (p *stackProvider) ComposeUp(ctx context.Context, ports map[string]int, opt
 }
 
 func (p *stackProvider) ComposeDown(context.Context) error {
-	return runCompose("dev", &ComposeOptions{Down: true})
+	return runComposeTarget("dev", &ComposeOptions{Down: true}, devstack.Target{Root: p.stack.Root, Project: p.stack.Project})
+}
+
+func (p *stackProvider) PrepareService(ctx context.Context, sp devstack.Spec) error {
+	return prepareAPIService(ctx, sp)
+}
+
+func (p *stackProvider) MigrationsPending(ctx context.Context, env []string) (bool, error) {
+	return alembic.MigrationsPending(ctx, p.stack.Root, env)
 }
 
 // Migrate runs alembic with the stack's explicit database host and port.

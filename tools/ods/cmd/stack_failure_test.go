@@ -4,11 +4,14 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,11 +51,18 @@ func runStackCommandExit(t *testing.T, args ...string) (stdout, stderr string, c
 func stackFailureRepo(t *testing.T, python, launch string) string {
 	t.Helper()
 	root, _ := stackTestRepo(t)
+	python = strings.Replace(python, "#!/bin/sh\n", "#!/bin/sh\nif [ \"$1\" = -c ]; then exit 10; fi\n", 1)
 	writeFile(t, filepath.Join(root, ".venv", "bin", "python"), python)
 	if err := os.Chmod(filepath.Join(root, ".venv", "bin", "python"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(root, ".vscode", "launch.json"), launch)
+	stack, _ := openStack(nil)
+	t.Cleanup(func() {
+		if err := stack.Stop(context.Background(), devstack.Options{StopTimeout: time.Second, LockWait: time.Second}); err != nil {
+			t.Errorf("fixture cleanup: %v", err)
+		}
+	})
 	return root
 }
 
