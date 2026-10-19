@@ -378,15 +378,13 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self, error_kind: CheckErrorKind, form_run: bool
     ) -> CapabilityCheckStatus:
         """The status of a check that raised an error of ``error_kind``."""
-        if error_kind in TRANSIENT_ERROR_KINDS:
-            if (
-                form_run
-                and self.fails_when_unreachable
-                and error_kind in _UNREACHABLE_ERROR_KINDS
-            ):
-                return CapabilityCheckStatus.FAILED
-            return CapabilityCheckStatus.INCOMPLETE
-        return CapabilityCheckStatus.FAILED
+        if error_kind not in TRANSIENT_ERROR_KINDS or (
+            form_run
+            and self.fails_when_unreachable
+            and error_kind in _UNREACHABLE_ERROR_KINDS
+        ):
+            return CapabilityCheckStatus.FAILED
+        return CapabilityCheckStatus.INCOMPLETE
 
     @abstractmethod
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
