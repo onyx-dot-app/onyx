@@ -77,6 +77,7 @@ function FederatedRow({ connector }: FederatedRowProps) {
         <Content
           icon={getSourceMetadata(connector.source).icon}
           title={connector.name}
+          titleMaxLines={1}
           sizePreset="main-ui"
           variant="section"
           tag={{ title: t("federated.tag"), color: "gray" }}

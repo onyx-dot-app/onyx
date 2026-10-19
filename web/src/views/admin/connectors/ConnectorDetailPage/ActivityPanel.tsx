@@ -293,9 +293,8 @@ export default function ActivityPanel({
     </Section>
   );
 
-  // Beside the main column the panel stretches to the column's height without
-  // adding to it (size containment), so a long list scrolls inside the card
-  // and a short one keeps its own height.
+  // Beside the main column the panel stretches to the column's height under size
+  // containment, so a long list scrolls inside the card and a short one stays short.
   return (
     <Section
       justifyContent="start"

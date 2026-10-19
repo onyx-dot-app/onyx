@@ -218,14 +218,16 @@ export default function ConnectorRow({
                     height="fit"
                     className="min-w-0 flex-1"
                   >
+                    {/* The link spans the column so the clamped title truncates at its edge. */}
                     {canOperate ? (
                       <Link
                         href={`/admin/connector/${row.cc_pair_id}`}
-                        className="hover:underline"
+                        className="w-full min-w-0 hover:underline"
                       >
                         <Content
                           icon={getSourceMetadata(row.source).icon}
                           title={row.name}
+                          titleMaxLines={1}
                           sizePreset="main-ui"
                           variant="section"
                         />
@@ -234,6 +236,7 @@ export default function ConnectorRow({
                       <Content
                         icon={getSourceMetadata(row.source).icon}
                         title={row.name}
+                        titleMaxLines={1}
                         sizePreset="main-ui"
                         variant="section"
                       />
