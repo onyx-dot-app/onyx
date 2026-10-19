@@ -39,6 +39,30 @@ it("shows nothing on hover while suppressed", async () => {
   });
 });
 
+it("keeps an enclosing tooltip open while hovering a suppressed one", async () => {
+  const user = userEvent.setup();
+  render(
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <Tooltip tooltip="Outer">
+        <div>
+          <span>Edge</span>
+          <Tooltip tooltip="Inner" suppressed>
+            <span>Label</span>
+          </Tooltip>
+        </div>
+      </Tooltip>
+    </TooltipPrimitive.Provider>
+  );
+
+  await user.hover(screen.getByText("Edge"));
+  await screen.findByRole("tooltip");
+  await user.hover(screen.getByText("Label"));
+
+  await waitFor(() => {
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Outer");
+  });
+});
+
 it("uses the current theme for neutral tooltips", async () => {
   const user = userEvent.setup();
   render(
