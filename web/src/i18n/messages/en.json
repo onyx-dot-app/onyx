@@ -2163,6 +2163,14 @@
       }
     },
     "chatPreferences": {
+      "decisionModel": {
+        "title": "Decision model",
+        "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
+        "clear": "Clear",
+        "notConfigured": "Not configured",
+        "saved": "Decision model updated",
+        "saveFailed": "Failed to update decision model"
+      },
       "chatNaming": {
         "description": "Model used to name chat sessions. Defaults to each session's model.",
         "resetButton": {
@@ -7644,10 +7652,16 @@
             "label": "More Models"
           },
           "refetch": {
+            "label": "Refresh models",
             "errorToast": "Failed to fetch models"
           },
           "row": {
             "defaultLabel": "Default Model",
+            "decisionTag": {
+              "label": "Decision",
+              "decisionOnly": "Decision model. Not available in the chat model picker.",
+              "chatAndDecision": "Supports both chat and decision tasks."
+            },
             "renameButton": {
               "tooltip": "Rename"
             },

@@ -5,12 +5,40 @@
       "jev-latest": {
         "name": "TypeSafe Jev (System One)",
         "mode": "decisions",
+        "supports_decisions": true,
         "modalities": {"input": ["text"], "output": ["decisions"]}
+      },
+      "jev-preview": {
+        "name": "TypeSafe Jev Preview (System One)",
+        "mode": "decisions",
+        "supports_decisions": true,
+        "modalities": {"input": ["text"], "output": ["decisions"]}
+      }
+    }
+  },
+  "zoom_ai": {
+    "models": {
+      "zoom-decisions": {
+        "name": "Zoom Decisions",
+        "mode": "decisions",
+        "supports_decisions": true,
+        "modalities": {"input": ["text", "image"], "output": ["decisions"]}
+      },
+      "zoom-decisions-pro": {
+        "name": "Zoom Decisions Pro",
+        "mode": "decisions",
+        "supports_decisions": true,
+        "modalities": {"input": ["text", "image"], "output": ["decisions"]}
       }
     }
   },
   "openai": {
     "models": {
+      "gpt-6-luna": {
+        "name": "GPT-6 Luna",
+        "mode": "chat",
+        "supports_decisions": true
+      },
       "gpt-5-chat": {
         "name": "GPT-5 Chat",
         "cost": {"input": 1.25, "output": 10.0, "cache_read": 0.125},

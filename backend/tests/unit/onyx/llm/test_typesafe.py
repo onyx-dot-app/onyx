@@ -8,10 +8,14 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES, LlmProviderNames
 from onyx.llm.factory import get_llm
 from onyx.llm.model_catalog import iter_models
-from onyx.llm.well_known_providers.typesafe import check_typesafe_connection
+from onyx.llm.well_known_providers.typesafe import (
+    check_typesafe_connection,
+    fetch_typesafe_models,
+)
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
+    TypeSafeModelsRequest,
 )
 from onyx.server.manage.llm.models import (
     TestLLMRequest as LLMTestRequest,
@@ -82,7 +86,7 @@ def test_connection_handles_timeout() -> None:
 
 
 @pytest.mark.parametrize(
-    "key,model", [(None, "jev-latest"), (" ", "jev-latest"), ("key", "gpt-5")]
+    "key,model", [(None, "jev-latest"), (" ", "jev-latest"), ("key", "")]
 )
 def test_connection_rejects_invalid_configuration(key: str | None, model: str) -> None:
     with patch("onyx.llm.well_known_providers.typesafe.httpx.Client") as client:
@@ -93,7 +97,7 @@ def test_connection_rejects_invalid_configuration(key: str | None, model: str) -
 
 def test_catalog_registers_decision_provider_without_chat_models() -> None:
     assert LlmProviderNames.TYPESAFE in WELL_KNOWN_PROVIDER_NAMES
-    assert iter_models("typesafe", mode="decisions") == ["jev-latest"]
+    assert iter_models("typesafe", mode="decisions") == ["jev-latest", "jev-preview"]
     assert iter_models("typesafe", mode="chat") == []
 
 
@@ -106,11 +110,24 @@ def test_configuration_has_no_auto_mode_or_model_rows() -> None:
         LLMProviderUpsertRequest(
             provider="typesafe",
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="jev-latest", is_visible=True)
+                ModelConfigurationUpsertRequest(
+                    name="jev-latest", is_visible=True, supports_chat=True
+                )
             ],
         )
-    with pytest.raises(ValidationError, match="chat model configuration"):
-        LLMProviderUpsertRequest(provider="typesafe", keep_existing_models=True)
+    request = LLMProviderUpsertRequest(
+        provider="typesafe",
+        keep_existing_models=True,
+        model_configurations=[
+            ModelConfigurationUpsertRequest(
+                name="jev-preview",
+                is_visible=True,
+                supports_decisions=True,
+                supports_chat=False,
+            )
+        ],
+    )
+    assert request.model_configurations[0].name == "jev-preview"
 
 
 def test_typesafe_cannot_construct_chat_client() -> None:
@@ -121,6 +138,66 @@ def test_typesafe_cannot_construct_chat_client() -> None:
             max_input_tokens=100,
             deployment_name=None,
         )
+
+
+def test_discovery_parses_native_model_names() -> None:
+    with patch("onyx.llm.well_known_providers.typesafe.httpx.Client") as client:
+        get = client.return_value.__enter__.return_value.get
+        get.return_value.json.return_value = {
+            "models": [
+                {
+                    "name": "jev-latest",
+                    "description": "Latest",
+                    "release_date": "2026-01-01",
+                },
+                {"name": "jev-preview", "description": "Preview"},
+            ]
+        }
+        assert [model.name for model in fetch_typesafe_models("secret")] == [
+            "jev-latest",
+            "jev-preview",
+        ]
+        get.assert_called_once_with(
+            "https://api.typesafe.ai/v1/models",
+            headers={"Authorization": "Bearer secret"},
+        )
+
+
+def test_discovery_uses_saved_credentials_and_syncs_decision_models() -> None:
+    from onyx.llm.well_known_providers.models import TypeSafeModel
+    from onyx.server.manage.llm import api
+
+    stored = MagicMock(provider="typesafe")
+    stored.api_key.get_value.return_value = "saved-secret"
+    with (
+        patch.object(api, "fetch_existing_llm_provider_by_id", return_value=stored),
+        patch.object(
+            api,
+            "fetch_typesafe_models",
+            return_value=[TypeSafeModel(name="jev-preview")],
+        ) as fetch,
+        patch.object(api, "_sync_fetched_models") as sync,
+    ):
+        models = api.get_typesafe_available_models(
+            TypeSafeModelsRequest(provider_id=7), MagicMock(), MagicMock()
+        )
+        fetch.assert_called_once_with("saved-secret")
+        assert models[0].name == "jev-preview"
+        assert models[0].supports_decisions is True
+        assert models[0].supports_chat is False
+        assert sync.call_args.kwargs["models"][0].supports_chat is False
+
+
+def test_discovery_rejects_another_provider_before_reading_credentials() -> None:
+    from onyx.server.manage.llm import api
+
+    stored = MagicMock(provider="openai")
+    with patch.object(api, "fetch_existing_llm_provider_by_id", return_value=stored):
+        with pytest.raises(OnyxError, match="requires a TypeSafe"):
+            api.get_typesafe_available_models(
+                TypeSafeModelsRequest(provider_id=7), MagicMock(), MagicMock()
+            )
+    stored.api_key.get_value.assert_not_called()
 
 
 def test_update_cannot_reuse_another_providers_key() -> None:

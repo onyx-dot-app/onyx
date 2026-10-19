@@ -59,6 +59,8 @@ type CustomModelConfiguration = Pick<
   | "max_input_tokens"
   | "supports_image_input"
   | "supports_reasoning"
+  | "supports_chat"
+  | "supports_decisions"
   | "supported_reasoning_efforts"
   | "reasoning_effort_max"
   | "reasoning_effort_default"
@@ -297,6 +299,8 @@ export default function CustomModal({
         max_input_tokens: mc.max_input_tokens ?? null,
         supports_image_input: mc.supports_image_input,
         supports_reasoning: mc.supports_reasoning,
+        supports_chat: mc.supports_chat,
+        supports_decisions: mc.supports_decisions,
         supported_reasoning_efforts: mc.supported_reasoning_efforts,
         reasoning_effort_max: mc.reasoning_effort_max,
         reasoning_effort_default: mc.reasoning_effort_default,
@@ -312,6 +316,8 @@ export default function CustomModal({
         supports_image_input: false,
         supports_reasoning: false,
         supported_reasoning_efforts: undefined,
+        supports_chat: undefined,
+        supports_decisions: undefined,
         reasoning_effort_max: null,
         reasoning_effort_default: null,
         temperature_default: null,
@@ -370,6 +376,8 @@ export default function CustomModal({
             max_input_tokens: mc.max_input_tokens ?? null,
             supports_image_input: mc.supports_image_input,
             supports_reasoning: mc.supports_reasoning,
+            supports_chat: mc.supports_chat,
+            supports_decisions: mc.supports_decisions,
             supported_reasoning_efforts: mc.supported_reasoning_efforts,
             reasoning_effort_max: mc.reasoning_effort_max,
             reasoning_effort_default: mc.reasoning_effort_default,

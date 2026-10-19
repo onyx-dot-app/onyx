@@ -132,7 +132,7 @@ def _catalog() -> dict[str, dict[str, Any]]:
             logger.exception("Failed to load catalog file %s", path)
 
     # Hand-maintained entries fill upstream gaps (models.dev prunes deprecated
-    # generations). Supplement entries never override synced data.
+    # generations). Only explicit decision eligibility overrides synced data.
     if _SUPPLEMENT_PATH.exists():
         try:
             supplement = json.loads(_SUPPLEMENT_PATH.read_text())
@@ -143,6 +143,10 @@ def _catalog() -> dict[str, dict[str, Any]]:
                 for model_id, entry in (section.get("models") or {}).items():
                     if model_id not in target["models"]:
                         target["models"][model_id] = entry
+                    elif "supports_decisions" in entry:
+                        target["models"][model_id]["supports_decisions"] = entry[
+                            "supports_decisions"
+                        ]
                     if provider == "bedrock":
                         for region in _BEDROCK_REGION_PREFIXES:
                             target["aliases"].setdefault(
@@ -162,6 +166,23 @@ def _catalog() -> dict[str, dict[str, Any]]:
 
 def provider_names() -> list[str]:
     return sorted(_catalog())
+
+
+def model_supports_decisions(provider: str, model_name: str) -> bool:
+    """Decision eligibility is explicit and scoped to the serving provider."""
+    name = model_name.removeprefix(f"{provider}/")
+    entry = _vendored_model_entry(provider, name)
+    return bool(entry and entry.get("supports_decisions") is True)
+
+
+def model_supports_chat(provider: str, model_name: str) -> bool:
+    name = model_name.removeprefix(f"{provider}/")
+    entry = _vendored_model_entry(provider, name)
+    if entry is not None:
+        return _catalog_mode(entry, name) in CHAT_MODES
+    if provider in {"typesafe", "zoom_ai"}:
+        return False
+    return _mode_from_name(name) in CHAT_MODES
 
 
 # Modes a catalog entry can serve a chat request under — entries in any

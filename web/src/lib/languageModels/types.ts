@@ -21,6 +21,8 @@ export interface ModelConfiguration {
   max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   /**
    * Effort levels this model tells apart, ascending, as resolved by the
    * backend that builds the request. Absent from an older backend, in which
@@ -167,6 +169,8 @@ export interface OllamaModelResponse {
 }
 
 export interface OpenRouterModelResponse {
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   name: string;
   display_name: string;
   max_input_tokens: number | null;
@@ -401,6 +405,7 @@ export interface LLMOptionGroup {
 }
 
 export interface FilterModelConfigurationsOptions {
+  includeDecisionOnly?: boolean;
   /** Drop models an admin hid from users. Defaults to true. */
   visibleOnly?: boolean;
   /** Keep only models that accept image input. */

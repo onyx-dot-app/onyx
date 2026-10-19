@@ -2163,6 +2163,14 @@
       }
     },
     "chatPreferences": {
+      "decisionModel": {
+        "title": "판단 모델",
+        "description": "향후 분류 및 검토 기능에 사용할 모델을 선택하세요. Onyx는 아직 이 모델을 사용하지 않습니다.",
+        "clear": "해제",
+        "notConfigured": "설정되지 않음",
+        "saved": "판단 모델이 업데이트되었습니다",
+        "saveFailed": "판단 모델을 업데이트하지 못했습니다"
+      },
       "chatNaming": {
         "description": "채팅 세션의 이름을 생성하는 모델입니다. 기본적으로 각 세션의 모델을 사용합니다.",
         "resetButton": {
@@ -7644,10 +7652,16 @@
             "label": "모델 더 보기"
           },
           "refetch": {
+            "label": "모델 새로고침",
             "errorToast": "모델을 가져오지 못했습니다"
           },
           "row": {
             "defaultLabel": "기본 모델",
+            "decisionTag": {
+              "label": "판단",
+              "decisionOnly": "판단 모델입니다. 채팅 모델 선택기에는 표시되지 않습니다.",
+              "chatAndDecision": "채팅과 판단 작업을 모두 지원합니다."
+            },
             "renameButton": {
               "tooltip": "이름 변경"
             },

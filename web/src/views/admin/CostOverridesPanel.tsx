@@ -145,9 +145,11 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
             <InputTypeIn value={modelLabel} variant="readOnly" />
           ) : (
             <SimpleModelSelector
+              includeDecisionOnly
               nullable
               providers={filterModelConfigurations(llmProviders ?? [], {
                 visibleOnly: false,
+                includeDecisionOnly: true,
               })}
               value={modelConfigId}
               grouped={!hideProviderGrouping}

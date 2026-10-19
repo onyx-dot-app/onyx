@@ -3,6 +3,7 @@ import {
   buildModelSelectOptions,
   filterModelConfigurations,
   findDefaultModelDisplayName,
+  findLlmOptionById,
   fromSelectValue,
   llmOptionKey,
   toSelectValue,
@@ -98,6 +99,50 @@ describe("buildLlmOptions", () => {
 });
 
 describe("filterModelConfigurations", () => {
+  it("excludes decision-only models from chat while retaining dual-capability models", () => {
+    const providers = [
+      makeProvider(1, "OpenAI", "openai", [
+        {
+          ...makeModelConfiguration(1, "decisions"),
+          supports_chat: false,
+          supports_decisions: true,
+        },
+        {
+          ...makeModelConfiguration(2, "dual"),
+          supports_chat: true,
+          supports_decisions: true,
+        },
+        makeModelConfiguration(3, "chat"),
+      ]),
+    ];
+    expect(
+      filterModelConfigurations(providers, {
+        keep: 1,
+      })[0]?.model_configurations.map((model) => model.id)
+    ).toEqual([2, 3]);
+    expect(
+      buildLlmOptions(providers, "decisions", true).map(
+        (model) => model.modelConfigurationId
+      )
+    ).toEqual([2, 3]);
+    expect(
+      filterModelConfigurations(providers, {
+        includeDecisionOnly: true,
+      })[0]?.model_configurations.map((model) => model.id)
+    ).toEqual([1, 2, 3]);
+    expect(findLlmOptionById(providers, 1)?.modelName).toBe("decisions");
+    expect(
+      buildModelSelectOptions(providers, { grouped: false }).map((option) =>
+        "value" in option ? option.value : null
+      )
+    ).toEqual(["2", "3"]);
+    expect(
+      buildModelSelectOptions(providers, {
+        grouped: false,
+        includeDecisionOnly: true,
+      }).map((option) => ("value" in option ? option.value : null))
+    ).toEqual(["1", "2", "3"]);
+  });
   const providers: ModelOptionProvider[] = [
     {
       id: 1,

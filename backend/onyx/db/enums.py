@@ -685,6 +685,7 @@ class LLMModelFlowType(str, PyEnum):
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
     SEARCH_SELECTION = "search_selection"
+    DECISION = "decision"
     CRAFT = "craft"
 
 

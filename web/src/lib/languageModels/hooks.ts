@@ -16,12 +16,25 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "@/lib/languageModels/types";
 import type {
+  DefaultModel,
   CustomProviderOption,
   DefaultLlmReference,
   LlmDefaults,
   ModelConfigurationPage,
   ModelPaging,
 } from "@/lib/languageModels/types";
+
+export function useDecisionModel() {
+  const { data, error, mutate } = useSWR<
+    { model: DefaultModel | null; providers: RawLLMProviderView[] },
+    Error
+  >(SWR_KEYS.decisionModel, errorHandlingFetcher);
+  const providers = useMemo(
+    () => (data ? enrichViews(data.providers) : undefined),
+    [data]
+  );
+  return { model: data?.model ?? null, providers, error, refetch: mutate };
+}
 
 // ---------------------------------------------------------------------------
 // Raw API shapes — local to this module, never exposed to consumers.

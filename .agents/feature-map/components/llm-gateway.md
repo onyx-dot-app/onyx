@@ -251,8 +251,10 @@ id, loads that `LLMProviderModel` through
 same access check [[llm-providers]] documents; no persona context, so a
 persona-restricted provider is excluded even if otherwise public), then
 looks for a `ModelConfiguration` on that provider matching `model_name` and
-`is_visible == True`. Any failure (malformed id, provider not found or not
-accessible, model not visible) raises the same
+`is_visible == True` and `supports_chat == True`. Decision-only models are
+excluded from both the catalog and resolution. Models supporting both chat
+and decisions remain available. Any failure (malformed id, provider not found
+or not accessible, model not visible or chat-capable) raises the same
 `OnyxErrorCode.NOT_FOUND` **without falling back to a default model**.
 `model_catalog.py:build_gateway_model_catalog` builds the id strings
 `GET /gateway/v1/models` returns, so a caller listing models and then calling

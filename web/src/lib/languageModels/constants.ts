@@ -188,6 +188,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
 // ─── Model icons ─────────────────────────────────────────────────────────────
 
 export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
+  [LLMProviderName.TYPESAFE]: SvgTypeSafe,
   [LLMProviderName.OPENAI]: SvgOpenAI,
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,

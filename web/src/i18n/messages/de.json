@@ -2163,6 +2163,14 @@
       }
     },
     "chatPreferences": {
+      "decisionModel": {
+        "title": "Entscheidungsmodell",
+        "description": "Wählen Sie ein Modell für künftige Klassifizierungs- und Prüffunktionen. Onyx verwendet dieses Modell noch nicht.",
+        "clear": "Löschen",
+        "notConfigured": "Nicht konfiguriert",
+        "saved": "Entscheidungsmodell aktualisiert",
+        "saveFailed": "Entscheidungsmodell konnte nicht aktualisiert werden"
+      },
       "chatNaming": {
         "description": "Modell zum Benennen von Chats. Standardmäßig wird das Modell der jeweiligen Sitzung verwendet.",
         "resetButton": {
@@ -7644,10 +7652,16 @@
             "label": "Weitere Modelle"
           },
           "refetch": {
+            "label": "Modelle aktualisieren",
             "errorToast": "Die Modelle konnten nicht abgerufen werden"
           },
           "row": {
             "defaultLabel": "Standardmodell",
+            "decisionTag": {
+              "label": "Entscheidung",
+              "decisionOnly": "Entscheidungsmodell. Nicht in der Chat-Modellauswahl verfügbar.",
+              "chatAndDecision": "Unterstützt Chat- und Entscheidungsaufgaben."
+            },
             "renameButton": {
               "tooltip": "Umbenennen"
             },

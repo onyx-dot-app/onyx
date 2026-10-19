@@ -50,11 +50,7 @@ type EmittedModelConfigurationId<Nullable extends boolean> =
   Nullable extends true ? number | null : number;
 
 export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
-  /**
-   * The model configurations to offer, grouped by provider. Nothing is
-   * filtered here: pass the list you want shown, trimmed with
-   * `filterModelConfigurations` when needed.
-   */
+  includeDecisionOnly?: boolean;
   providers: ModelOptionProvider[];
   /** The chosen model configuration id; null shows the placeholder. */
   value: number | null;
@@ -101,6 +97,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   onChange,
   nullable,
   grouped = true,
+  includeDecisionOnly = false,
   globalDefault,
   disabled,
   placeholder,
@@ -112,6 +109,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     const models = buildModelSelectOptions(providers, {
       grouped,
       providerNames,
+      includeDecisionOnly,
     });
     if (!globalDefault) return models;
     return [
@@ -123,7 +121,14 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       },
       ...models,
     ];
-  }, [providers, grouped, globalDefault, t, providerNames]);
+  }, [
+    providers,
+    grouped,
+    globalDefault,
+    t,
+    providerNames,
+    includeDecisionOnly,
+  ]);
 
   // Server search only when nothing loaded matches. The query is remembered
   // so a merged page, which changes `modelPaging`, does not re-run it.

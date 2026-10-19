@@ -2,23 +2,56 @@
 
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
+import { useFormikContext } from "formik";
 import { Text } from "@opal/components";
 import { InputDivider, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
+  type LLMProviderView,
 } from "@/lib/languageModels/types";
+import { fetchTypeSafeModels } from "@/lib/languageModels/svc";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import {
   buildValidationSchema,
   useInitialValues,
+  withFetchedModels,
+  type BaseLLMFormValues,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import {
   APIKeyField,
   DisplayNameField,
   ModalWrapper,
+  ModelSelectionField,
 } from "@/sections/modals/languageModels/shared";
+
+function TypeSafeModels({
+  existingLlmProvider,
+}: {
+  existingLlmProvider?: LLMProviderView;
+}) {
+  const { values, setValues } = useFormikContext<BaseLLMFormValues>();
+  async function fetchModels(signal: AbortSignal) {
+    const models = await fetchTypeSafeModels({
+      api_key:
+        existingLlmProvider && values.api_key === existingLlmProvider.api_key
+          ? undefined
+          : values.api_key,
+      provider_id: existingLlmProvider?.id,
+      signal,
+    });
+    await setValues(withFetchedModels(models));
+  }
+  return (
+    <ModelSelectionField
+      shouldShowAutoUpdateToggle={false}
+      onRefetch={
+        values.api_key || existingLlmProvider ? fetchModels : undefined
+      }
+    />
+  );
+}
 
 export default function TypeSafeModal({
   existingLlmProvider,
@@ -36,8 +69,6 @@ export default function TypeSafeModal({
   const initialValues = {
     ...providerValues,
     is_auto_mode: false,
-    model_configurations: [],
-    test_model_name: "jev-latest",
   };
   const onClose = () => onOpenChange?.(false);
 
@@ -79,6 +110,8 @@ export default function TypeSafeModal({
       <APIKeyField providerName="TypeSafe AI" />
       <InputDivider />
       <DisplayNameField />
+      <InputDivider />
+      <TypeSafeModels existingLlmProvider={existingLlmProvider} />
     </ModalWrapper>
   );
 }

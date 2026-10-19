@@ -34,6 +34,7 @@ from onyx.llm.constants import (
     LlmProviderNames,
 )
 from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
@@ -381,9 +382,38 @@ def _stored_max_input_tokens(
     return max_input_tokens
 
 
+def _model_protocol_flows(
+    provider: str,
+    name: str,
+    stored_flows: set[LLMModelFlowType],
+    discovered_decision_models: dict[str, bool] | None,
+) -> set[LLMModelFlowType]:
+    decision_capable = model_supports_decisions(provider, name)
+    chat_capable = model_supports_chat(provider, name)
+    if provider in {"openrouter", "typesafe"}:
+        if (
+            discovered_decision_models is not None
+            and name in discovered_decision_models
+        ):
+            decision_capable = True
+            chat_capable = discovered_decision_models[name]
+        elif LLMModelFlowType.DECISION in stored_flows:
+            decision_capable = True
+            chat_capable = LLMModelFlowType.CHAT in stored_flows
+    return {
+        flow
+        for flow, supported in (
+            (LLMModelFlowType.DECISION, decision_capable),
+            (LLMModelFlowType.CHAT, chat_capable),
+        )
+        if supported
+    }
+
+
 def upsert_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
+    discovered_decision_models: dict[str, bool] | None = None,
 ) -> LLMProviderView:
     existing_llm_provider: LLMProviderModel | None = None
     if llm_provider_upsert_request.id:
@@ -457,7 +487,12 @@ def upsert_llm_provider(
     for mc_request in llm_provider_upsert_request.model_configurations:
         existing_mc = existing_by_name.get(mc_request.name)
         stored_flows = set(existing_mc.llm_model_flow_types) if existing_mc else set()
-        merged: set[LLMModelFlowType] = set()
+        merged = _model_protocol_flows(
+            llm_provider_upsert_request.provider,
+            mc_request.name,
+            stored_flows,
+            discovered_decision_models,
+        )
         for capability_flow, sent in (
             (LLMModelFlowType.VISION, mc_request.supports_image_input),
             (LLMModelFlowType.REASONING, mc_request.supports_reasoning),
@@ -498,7 +533,11 @@ def upsert_llm_provider(
             )
         if (
             held_flows
-            - {LLMModelFlowType.CHAT_NAMING, LLMModelFlowType.SEARCH_SELECTION}
+            - {
+                LLMModelFlowType.CHAT_NAMING,
+                LLMModelFlowType.SEARCH_SELECTION,
+                LLMModelFlowType.DECISION,
+            }
             and mc.is_visible
             and not requested_visibility.get(name, True)
         ):
@@ -509,8 +548,10 @@ def upsert_llm_provider(
         # Dropping a capability deletes the flow row that represents it, so a
         # model holding that flow's default must keep it.
         for capability_flow in (
+            LLMModelFlowType.CHAT,
             LLMModelFlowType.VISION,
             LLMModelFlowType.REASONING,
+            LLMModelFlowType.DECISION,
         ):
             if (
                 capability_flow in held_flows
@@ -531,8 +572,7 @@ def upsert_llm_provider(
 
     new_models: list[NewModelConfiguration] = []
     for model_config in llm_provider_upsert_request.model_configurations:
-        supported_flows = [LLMModelFlowType.CHAT]
-        supported_flows.extend(merged_capabilities.get(model_config.name, set()))
+        supported_flows = list(merged_capabilities[model_config.name])
 
         existing = existing_by_name.get(model_config.name)
         if existing:
@@ -651,7 +691,9 @@ def sync_model_configurations(
     if not provider:
         raise ValueError(f"LLM Provider with id={provider_id} not found")
 
-    if provider.provider == LlmProviderNames.TYPESAFE:
+    if provider.provider == LlmProviderNames.TYPESAFE and any(
+        model.supports_chat for model in models
+    ):
         raise ValueError("TypeSafe AI does not support chat model discovery")
 
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
@@ -662,7 +704,9 @@ def sync_model_configurations(
         existing = existing_by_name.get(model.name)
         if existing is None:
             # Insert new model with is_visible=False (user must explicitly enable)
-            supported_flows = [LLMModelFlowType.CHAT]
+            supported_flows = [LLMModelFlowType.CHAT] if model.supports_chat else []
+            if model.supports_decisions:
+                supported_flows.append(LLMModelFlowType.DECISION)
             if model.supports_image_input:
                 supported_flows.append(LLMModelFlowType.VISION)
             if model.supports_reasoning:
@@ -689,6 +733,20 @@ def sync_model_configurations(
         # TODO(ENG-4233): durable admin flow removals.
         existing_flows = set(existing.llm_model_flow_types)
         missing_flows: list[LLMModelFlowType] = []
+        if model.supports_decisions and LLMModelFlowType.DECISION not in existing_flows:
+            missing_flows.append(LLMModelFlowType.DECISION)
+        if (
+            model.supports_decisions
+            and not model.supports_chat
+            and LLMModelFlowType.CHAT in existing_flows
+        ):
+            db_session.execute(
+                delete(LLMModelFlow).where(
+                    LLMModelFlow.model_configuration_id == existing.id,
+                    LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
+                )
+            )
+            upgraded_count += 1
         if model.supports_image_input and LLMModelFlowType.VISION not in existing_flows:
             missing_flows.append(LLMModelFlowType.VISION)
         if (
@@ -1357,6 +1415,9 @@ def update_default_pointer_model(
             f"Model '{model_name}' is not a valid model for provider_id={provider_id}"
         )
 
+    if LLMModelFlowType.CHAT not in model_config.llm_model_flow_types:
+        raise ValueError("This task requires a chat-capable model")
+
     create_new_flow_mapping__no_commit(
         db_session=db_session,
         model_configuration_id=model_config.id,
@@ -1418,6 +1479,15 @@ def update_no_default_search_selection_provider(db_session: Session) -> None:
     db_session.commit()
 
 
+def clear_decision_model(db_session: Session) -> None:
+    db_session.execute(
+        update(LLMModelFlow)
+        .where(LLMModelFlow.llm_model_flow_type == LLMModelFlowType.DECISION)
+        .values(is_default=False)
+    )
+    db_session.commit()
+
+
 def update_default_contextual_model(
     db_session: Session,
     enable_contextual_rag: bool,
@@ -1435,6 +1505,9 @@ def update_default_contextual_model(
     model_config = db_session.get(ModelConfiguration, model_configuration_id)
     if not model_config:
         raise ValueError(f"model_configuration id={model_configuration_id} not found")
+
+    if LLMModelFlowType.CHAT not in model_config.llm_model_flow_types:
+        raise ValueError("Contextual Retrieval requires a chat model")
 
     add_model_to_flow(
         db_session=db_session,
@@ -1504,6 +1577,16 @@ def sync_auto_mode_models(
         ).all()
     }
 
+    for existing in existing_models.values():
+        if (
+            model_supports_decisions(provider.provider, existing.name)
+            and LLMModelFlowType.DECISION not in existing.llm_model_flow_types
+        ):
+            create_new_flow_mapping__no_commit(
+                db_session, existing.id, LLMModelFlowType.DECISION
+            )
+            changes += 1
+
     # Add or update models from GitHub config
     for model_config in recommended_visible_models:
         if model_config.name in existing_models:
@@ -1526,7 +1609,11 @@ def sync_auto_mode_models(
                 db_session=db_session,
                 llm_provider_id=provider.id,
                 model_name=model_config.name,
-                supported_flows=[LLMModelFlowType.CHAT],
+                supported_flows=list(
+                    _model_protocol_flows(
+                        provider.provider, model_config.name, set(), None
+                    )
+                ),
                 is_visible=True,
                 max_input_tokens=None,
                 display_name=model_config.display_name,
@@ -1575,7 +1662,11 @@ def sync_auto_mode_models(
                 LLMModelFlow.model_configuration_id == ModelConfiguration.id,
                 LLMModelFlow.is_default == True,  # noqa: E712
                 LLMModelFlow.llm_model_flow_type.not_in(
-                    [LLMModelFlowType.CHAT_NAMING, LLMModelFlowType.SEARCH_SELECTION]
+                    [
+                        LLMModelFlowType.CHAT_NAMING,
+                        LLMModelFlowType.SEARCH_SELECTION,
+                        LLMModelFlowType.DECISION,
+                    ]
                 ),
             )
             .exists()
@@ -1802,6 +1893,7 @@ def update_model_configuration__no_commit(
     # deployment default each one carries goes with it.
     reconciled_flows = {
         LLMModelFlowType.CHAT,
+        LLMModelFlowType.DECISION,
         LLMModelFlowType.VISION,
         LLMModelFlowType.REASONING,
     }
@@ -1854,6 +1946,12 @@ def _update_default_model__no_commit(
 
     model_config, new_default = result
 
+    if (
+        flow_type != LLMModelFlowType.DECISION
+        and LLMModelFlowType.CHAT not in model_config.llm_model_flow_types
+    ):
+        raise ValueError("Chat task defaults require a chat model")
+
     # Clear existing default and set in an atomic operation
     db_session.execute(
         update(LLMModelFlow)
@@ -1868,6 +1966,7 @@ def _update_default_model__no_commit(
     if flow_type not in {
         LLMModelFlowType.CHAT_NAMING,
         LLMModelFlowType.SEARCH_SELECTION,
+        LLMModelFlowType.DECISION,
     }:
         model_config.is_visible = True
 

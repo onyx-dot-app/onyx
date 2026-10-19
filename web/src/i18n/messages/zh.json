@@ -2163,6 +2163,14 @@
       }
     },
     "chatPreferences": {
+      "decisionModel": {
+        "title": "决策模型",
+        "description": "选择用于未来分类和审核功能的模型。Onyx 尚未使用此模型。",
+        "clear": "清除",
+        "notConfigured": "未配置",
+        "saved": "决策模型已更新",
+        "saveFailed": "无法更新决策模型"
+      },
       "chatNaming": {
         "description": "用于为对话会话命名的模型。默认使用各会话自身的模型。",
         "resetButton": {
@@ -7644,10 +7652,16 @@
             "label": "更多模型"
           },
           "refetch": {
+            "label": "刷新模型",
             "errorToast": "获取模型失败"
           },
           "row": {
             "defaultLabel": "默认模型",
+            "decisionTag": {
+              "label": "决策",
+              "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
+              "chatAndDecision": "支持聊天和决策任务。"
+            },
             "renameButton": {
               "tooltip": "重命名"
             },

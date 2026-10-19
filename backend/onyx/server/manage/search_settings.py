@@ -1017,10 +1017,16 @@ def validate_contextual_rag_model(
         return
     from onyx.db.models import ModelConfiguration
 
-    if not db_session.get(ModelConfiguration, model_configuration_id):
+    model = db_session.get(ModelConfiguration, model_configuration_id)
+    if model is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"model_configuration id={model_configuration_id} not found",
+        )
+    if LLMModelFlowType.CHAT not in model.llm_model_flow_types:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Contextual Retrieval requires a chat model",
         )
 
 

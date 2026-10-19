@@ -3,7 +3,11 @@ from pydantic import ValidationError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.well_known_providers.models import TypeSafeDecisionResponse
+from onyx.llm.well_known_providers.models import (
+    TypeSafeDecisionResponse,
+    TypeSafeModel,
+    TypeSafeModelsResponse,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 
@@ -15,7 +19,7 @@ def check_typesafe_connection(api_key: str | None, model: str) -> None:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR, "TypeSafe AI requires an API key"
         )
-    if model != TYPESAFE_TEST_MODEL:
+    if not model.strip():
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR, "Unsupported TypeSafe AI test model"
         )
@@ -51,4 +55,20 @@ def check_typesafe_connection(api_key: str | None, model: str) -> None:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "TypeSafe AI did not return a valid decision. Check connectivity and try again.",
+        ) from None
+
+
+def fetch_typesafe_models(api_key: str) -> list[TypeSafeModel]:
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=False) as client:
+            response = client.get(
+                "https://api.typesafe.ai/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            response.raise_for_status()
+            return TypeSafeModelsResponse.model_validate(response.json()).models
+    except (httpx.HTTPError, ValueError):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Unable to discover TypeSafe AI models. Check the API key and model access.",
         ) from None

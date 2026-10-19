@@ -13,6 +13,7 @@ export async function refreshLlmProviderCaches(
     mutate(SWR_KEYS.adminLlmProvidersPaged),
     mutate(SWR_KEYS.llmProviders),
     mutate(SWR_KEYS.llmRouterModels),
+    mutate(SWR_KEYS.decisionModel),
     mutate(
       (key) =>
         typeof key === "string" &&

@@ -19,6 +19,7 @@ from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     ModelConfigurationWindow,
     can_user_access_llm_provider,
+    clear_decision_model,
     fetch_default_model,
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
@@ -52,6 +53,12 @@ from onyx.llm.constants import (
     WELL_KNOWN_PROVIDER_NAMES,
     LlmProviderNames,
 )
+from onyx.llm.decisions.client import DecisionClient
+from onyx.llm.decisions.models import (
+    DecisionProvider,
+    DecisionRequest,
+    PredicateQuestion,
+)
 from onyx.llm.factory import (
     get_default_llm,
     get_llm,
@@ -62,6 +69,7 @@ from onyx.llm.model_capabilities import (
     get_bedrock_token_limit,
     model_is_reasoning_model,
 )
+from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
 from onyx.llm.utils import (
     get_llm_contextual_cost,
     is_sensitive_custom_config_key,
@@ -83,13 +91,17 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     WellKnownLLMProviderDescriptor,
     fetch_available_well_known_llms,
 )
-from onyx.llm.well_known_providers.typesafe import check_typesafe_connection
+from onyx.llm.well_known_providers.typesafe import (
+    check_typesafe_connection,
+    fetch_typesafe_models,
+)
 from onyx.server.manage.llm.models import (
     BedrockFinalModelResponse,
     BedrockModelsRequest,
     BifrostFinalModelResponse,
     BifrostModelsRequest,
     CustomProviderOption,
+    DecisionModelResponse,
     DefaultModel,
     LitellmFinalModelResponse,
     LitellmModelDetails,
@@ -118,6 +130,7 @@ from onyx.server.manage.llm.models import (
     PortkeyModelsRequest,
     SyncModelEntry,
     TestLLMRequest,
+    TypeSafeModelsRequest,
     VercelAIGatewayFinalModelResponse,
     VercelAIGatewayModelsRequest,
     VisionProviderResponse,
@@ -143,6 +156,7 @@ from onyx.server.settings.store import (
     settings_write_lock,
     store_settings,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -430,7 +444,7 @@ def fetch_custom_provider_names(
                 value=name,
                 label=PROVIDER_DISPLAY_NAMES.get(name, name.replace("_", " ").title()),
             )
-            for name in litellm.models_by_provider.keys()
+            for name in set(litellm.models_by_provider) | {"typesafe", "zoom_ai"}
             if name not in well_known
         ),
         key=lambda o: o.label.lower(),
@@ -509,6 +523,51 @@ def test_llm_configuration(
 
     if test_llm_request.provider == LlmProviderNames.TYPESAFE:
         check_typesafe_connection(test_api_key, test_llm_request.model)
+        return
+
+    decision_only = model_supports_decisions(
+        test_llm_request.provider, test_llm_request.model
+    ) and not model_supports_chat(test_llm_request.provider, test_llm_request.model)
+    if (
+        test_llm_request.provider == "openrouter"
+        and test_llm_request.supports_decisions
+    ):
+        discovered = _get_openrouter_models_response(
+            test_llm_request.api_base or "https://openrouter.ai/api/v1",
+            test_api_key,
+            decisions_only=True,
+        )
+        decision_only = any(
+            (details := OpenRouterModelDetails.model_validate(item)).id
+            == test_llm_request.model
+            and details.supports_decisions
+            and not details.supports_chat
+            for item in discovered.get("data", [])
+        )
+    if decision_only:
+        try:
+            DecisionClient(
+                provider=DecisionProvider(test_llm_request.provider),
+                model=test_llm_request.model,
+                api_key=test_api_key or "",
+                api_base=test_llm_request.api_base,
+            ).decide(
+                DecisionRequest(
+                    input="The sky is blue.",
+                    questions=[
+                        PredicateQuestion(
+                            name="check", instructions="Does the input mention the sky?"
+                        )
+                    ],
+                ),
+                flow=LLMFlow.MODEL_VALIDATION,
+            )
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning("Decision model validation failed", exc_info=True)
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Decision model validation failed. Check the provider credentials and model.",
+            ) from e
         return
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
@@ -590,6 +649,7 @@ def list_llm_providers(
                 default_chat_naming_model,
                 default_search_selection_model,
                 default_craft_model,
+                fetch_default_model(db_session, LLMModelFlowType.DECISION),
             ],
         )
         if page_models
@@ -765,14 +825,7 @@ def put_llm_provider(
                 OnyxErrorCode.VALIDATION_ERROR,
                 f"Invalid persona IDs: {', '.join(map(str, missing_personas))}",
             )
-        # Remove duplicates while preserving order
-        seen: set[int] = set()
-        deduplicated_personas: list[int] = []
-        for persona_id in persona_ids:
-            if persona_id not in seen:
-                seen.add(persona_id)
-                deduplicated_personas.append(persona_id)
-        llm_provider_upsert_request.personas = deduplicated_personas
+        llm_provider_upsert_request.personas = list(dict.fromkeys(persona_ids))
 
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed
@@ -816,9 +869,32 @@ def put_llm_provider(
         ]
 
     try:
+        discovered_decision_models = None
+        if llm_provider_upsert_request.provider == LlmProviderNames.TYPESAFE:
+            discovered_decision_models = {
+                model.name: False
+                for model in fetch_typesafe_models(
+                    llm_provider_upsert_request.api_key or ""
+                )
+            }
+        if llm_provider_upsert_request.provider == "openrouter" and any(
+            model.supports_decisions
+            for model in llm_provider_upsert_request.model_configurations
+        ):
+            discovered = _get_openrouter_models_response(
+                llm_provider_upsert_request.api_base or "https://openrouter.ai/api/v1",
+                llm_provider_upsert_request.api_key,
+                decisions_only=True,
+            )
+            discovered_decision_models = {}
+            for item in discovered.get("data", []):
+                details = OpenRouterModelDetails.model_validate(item)
+                if details.supports_decisions:
+                    discovered_decision_models[details.id] = details.supports_chat
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
             db_session=db_session,
+            discovered_decision_models=discovered_decision_models,
         )
 
         # If newly enabling Auto mode, sync models immediately from GitHub config
@@ -1007,6 +1083,60 @@ def clear_default_search_selection(
     invalidate_provider_listing_cache()
 
 
+@admin_router.get("/decision-model")
+def get_decision_model_configuration(
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> DecisionModelResponse:
+    models_by_provider: dict[int, list[ModelConfiguration]] = defaultdict(list)
+    for model in fetch_existing_models(db_session, [LLMModelFlowType.DECISION]):
+        if model.llm_provider.provider in DecisionProvider:
+            models_by_provider[model.llm_provider_id].append(model)
+    providers = []
+    for models in models_by_provider.values():
+        view = LLMProviderView.from_model(
+            models[0].llm_provider, model_configurations=models, include_api_key=False
+        )
+        _mask_provider_credentials(view)
+        providers.append(view)
+    return DecisionModelResponse(
+        model=DefaultModel.from_model_config(
+            fetch_default_model(db_session, LLMModelFlowType.DECISION)
+        ),
+        providers=providers,
+    )
+
+
+@admin_router.post("/decision-model")
+def set_decision_model(
+    model: DefaultModel,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    provider = fetch_existing_llm_provider_by_id(model.provider_id, db_session)
+    if provider is None or provider.provider not in DecisionProvider:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Provider does not support decision requests",
+        )
+    try:
+        update_default_model(
+            db_session, model.provider_id, model.model_name, LLMModelFlowType.DECISION
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+    invalidate_provider_listing_cache()
+
+
+@admin_router.delete("/decision-model")
+def delete_decision_model(
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    clear_decision_model(db_session)
+    invalidate_provider_listing_cache()
+
+
 @admin_router.get("/auto-config")
 def get_auto_config(
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
@@ -1040,6 +1170,8 @@ def get_vision_capable_providers(
     providers_by_id: dict[int, LLMProviderView] = {}
 
     for vision_model in vision_models:
+        if LLMModelFlowType.CHAT not in vision_model.llm_model_flow_types:
+            continue
         provider_id = vision_model.llm_provider.id
         provider_models[provider_id].append(vision_model.name)
         # Only create the view once per provider
@@ -1122,7 +1254,11 @@ def _build_provider_descriptors(
     return [
         LLMProviderDescriptor.from_model(
             provider,
-            windows[provider.id].model_configurations,
+            [
+                model
+                for model in windows[provider.id].model_configurations
+                if LLMModelFlowType.CHAT in model.llm_model_flow_types
+            ],
             windows[provider.id].next_offset,
         )
         for provider in providers
@@ -1172,7 +1308,13 @@ def list_llm_provider_models(
         db_session, [provider_id], offset=offset, name_query=query
     )[provider_id]
     return ModelConfigurationPage.from_model(
-        provider, window.model_configurations, window.next_offset
+        provider,
+        [
+            model
+            for model in window.model_configurations
+            if can_manage_llms or LLMModelFlowType.CHAT in model.llm_model_flow_types
+        ],
+        window.next_offset,
     )
 
 
@@ -1291,6 +1433,7 @@ def get_valid_model_names_for_persona(
                 model_config.name
                 for model_config in llm_provider_model.model_configurations
                 if model_config.is_visible
+                and LLMModelFlowType.CHAT in model_config.llm_model_flow_types
             )
 
     return valid_models
@@ -1320,7 +1463,11 @@ def get_valid_model_configuration_ids_for_persona(
             llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             for model_config in llm_provider_model.model_configurations:
-                if model_config.is_visible and model_config.id is not None:
+                if (
+                    model_config.is_visible
+                    and model_config.id is not None
+                    and LLMModelFlowType.CHAT in model_config.llm_model_flow_types
+                ):
                     valid_ids.add(model_config.id)
     return valid_ids
 
@@ -1815,10 +1962,14 @@ def get_ollama_available_models(
     return sorted_results
 
 
-def _get_openrouter_models_response(api_base: str, api_key: str | None) -> dict:
+def _get_openrouter_models_response(
+    api_base: str, api_key: str | None, *, decisions_only: bool = False
+) -> dict:
     """Perform GET to OpenRouter /models and return parsed JSON."""
     cleaned_api_base = api_base.strip().rstrip("/")
     url = f"{cleaned_api_base}/models"
+    if decisions_only:
+        url += "?output_modalities=decisions"
     headers: dict[str, str] = {
         # Optional headers recommended by OpenRouter for attribution
         "HTTP-Referer": "https://onyx.app",
@@ -1837,6 +1988,57 @@ def _get_openrouter_models_response(api_base: str, api_key: str | None) -> dict:
         )
 
 
+@admin_router.post("/typesafe/available-models")
+def get_typesafe_available_models(
+    request: TypeSafeModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[OpenRouterFinalModelResponse]:
+    api_key = request.api_key
+    if request.provider_id is not None:
+        provider = fetch_existing_llm_provider_by_id(request.provider_id, db_session)
+        if provider is None or provider.provider != LlmProviderNames.TYPESAFE:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Model discovery requires a TypeSafe AI provider",
+            )
+        if provider.api_key:
+            stored_key = provider.api_key.get_value(apply_mask=False)
+            if not api_key or api_key == _mask_string(stored_key):
+                api_key = stored_key
+    if not api_key or not api_key.strip():
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, "TypeSafe AI requires an API key"
+        )
+    results = [
+        OpenRouterFinalModelResponse(
+            name=model.name,
+            display_name=model.name,
+            max_input_tokens=None,
+            supports_image_input=False,
+            supports_chat=False,
+            supports_decisions=True,
+        )
+        for model in fetch_typesafe_models(api_key)
+    ]
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=model.name,
+                    display_name=model.display_name,
+                    supports_chat=False,
+                    supports_decisions=True,
+                )
+                for model in results
+            ],
+            source_label="TypeSafe AI",
+        )
+    return results
+
+
 @admin_router.post("/openrouter/available-models")
 def get_openrouter_available_models(
     request: OpenRouterModelsRequest,
@@ -1848,6 +2050,14 @@ def get_openrouter_available_models(
     Parses id, name (display), context_length, and architecture.input_modalities.
     """
 
+    if request.provider_id is not None:
+        provider = fetch_existing_llm_provider_by_id(request.provider_id, db_session)
+        if provider is None or provider.provider != LlmProviderNames.OPENROUTER:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Model discovery requires an OpenRouter provider",
+            )
+
     api_key = _resolve_api_key(
         request.api_key, request.provider_id, request.api_base, db_session
     )
@@ -1855,8 +2065,26 @@ def get_openrouter_available_models(
     response_json = _get_openrouter_models_response(
         api_base=request.api_base, api_key=api_key
     )
+    try:
+        decision_json = _get_openrouter_models_response(
+            api_base=request.api_base, api_key=api_key, decisions_only=True
+        )
+    except OnyxError:
+        logger.warning(
+            "OpenRouter decision discovery unavailable; returning the chat catalog"
+        )
+        decision_json = {"data": []}
 
     data = response_json.get("data", [])
+    decision_data = decision_json.get("data", [])
+    if isinstance(data, list) and isinstance(decision_data, list):
+        data = list(
+            {
+                item["id"]: item
+                for item in [*data, *decision_data]
+                if isinstance(item, dict) and "id" in item
+            }.values()
+        )
     if not isinstance(data, list) or len(data) == 0:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
@@ -1886,6 +2114,8 @@ def get_openrouter_available_models(
                     display_name=display_name,
                     max_input_tokens=context_length,
                     supports_image_input=model_details.supports_image_input,
+                    supports_chat=model_details.supports_chat,
+                    supports_decisions=model_details.supports_decisions,
                     is_router=model_details.is_router,
                 )
             )
@@ -1914,6 +2144,8 @@ def get_openrouter_available_models(
                     display_name=r.display_name,
                     max_input_tokens=r.max_input_tokens,
                     supports_image_input=r.supports_image_input,
+                    supports_chat=r.supports_chat,
+                    supports_decisions=r.supports_decisions,
                     is_router=r.is_router,
                 )
                 for r in sorted_results

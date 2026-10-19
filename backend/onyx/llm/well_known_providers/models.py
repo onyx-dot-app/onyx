@@ -43,3 +43,12 @@ class TypeSafeDecisionAnswers(BaseModel):
 
 class TypeSafeDecisionResponse(BaseModel):
     answers: TypeSafeDecisionAnswers
+
+
+class TypeSafeModel(BaseModel):
+    name: str = Field(min_length=1)
+    description: str | None = None
+
+
+class TypeSafeModelsResponse(BaseModel):
+    models: list[TypeSafeModel]

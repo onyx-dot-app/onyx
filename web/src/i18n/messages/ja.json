@@ -2163,6 +2163,14 @@
       }
     },
     "chatPreferences": {
+      "decisionModel": {
+        "title": "判断モデル",
+        "description": "今後の分類・レビュー機能に使用するモデルを選択します。Onyx はまだこのモデルを使用しません。",
+        "clear": "解除",
+        "notConfigured": "未設定",
+        "saved": "判断モデルを更新しました",
+        "saveFailed": "判断モデルを更新できませんでした"
+      },
       "chatNaming": {
         "description": "チャットセッションの名前を付けるモデルです。既定では各セッションのモデルを使用します。",
         "resetButton": {
@@ -7644,10 +7652,16 @@
             "label": "モデルをもっと見る"
           },
           "refetch": {
+            "label": "モデルを更新",
             "errorToast": "モデルを取得できませんでした"
           },
           "row": {
             "defaultLabel": "デフォルトモデル",
+            "decisionTag": {
+              "label": "判断",
+              "decisionOnly": "判断モデルです。チャットのモデル選択には表示されません。",
+              "chatAndDecision": "チャットと判断の両方のタスクに対応しています。"
+            },
             "renameButton": {
               "tooltip": "名前を変更"
             },
