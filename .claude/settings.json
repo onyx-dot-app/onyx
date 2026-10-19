@@ -59,7 +59,8 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/component_catalog_on_new_file.py\"",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "Point new web components at the component catalog"
           }
         ]
       }
