@@ -69,50 +69,55 @@ async function confirmDeletion() {
   await user.click(screen.getByTestId("confirm-delete-task"));
 }
 
-test("replaces the deleted detail URL and removes the task from the cached overview", async () => {
-  const fetchSpy = mockRequests(
-    Promise.resolve(new Response(null, { status: 204 }))
-  );
-  const { rerender } = render(<ScheduledTasksListPage />);
-  await screen.findByText(task.name);
-  rerender(<ScheduledTaskDetailPage />);
-  await confirmDeletion();
-  await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(TASKS_PATH));
-  expect(mockPush).not.toHaveBeenCalled();
-  expect(fetchSpy).toHaveBeenCalledWith(SWR_KEYS.scheduledTask(task.id), {
-    method: "DELETE",
+// Deletion
+describe("deletion", () => {
+  test("replaces the deleted detail URL and removes the task from the cached overview", async () => {
+    const fetchSpy = mockRequests(
+      Promise.resolve(new Response(null, { status: 204 }))
+    );
+    const { rerender } = render(<ScheduledTasksListPage />);
+    await screen.findByText(task.name);
+    rerender(<ScheduledTaskDetailPage />);
+    await confirmDeletion();
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(TASKS_PATH));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledWith(SWR_KEYS.scheduledTask(task.id), {
+      method: "DELETE",
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    rerender(<ScheduledTasksListPage />);
+    expect(await screen.findByText("Other task")).toBeInTheDocument();
+    expect(screen.queryByText(task.name)).not.toBeInTheDocument();
   });
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-  rerender(<ScheduledTasksListPage />);
-  expect(await screen.findByText("Other task")).toBeInTheDocument();
-  expect(screen.queryByText(task.name)).not.toBeInTheDocument();
-});
+  test("waits for deletion before leaving the detail page", async () => {
+    const deletion = deferred<Response>();
+    mockRequests(deletion.promise);
+    render(<ScheduledTaskDetailPage />);
+    await confirmDeletion();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId("confirm-delete-task")).toBeDisabled();
+    deletion.resolve(new Response(null, { status: 204 }));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(TASKS_PATH));
+  });
 
-test("waits for deletion before leaving the detail page", async () => {
-  const deletion = deferred<Response>();
-  mockRequests(deletion.promise);
-  render(<ScheduledTaskDetailPage />);
-  await confirmDeletion();
-  expect(mockReplace).not.toHaveBeenCalled();
-  expect(mockPush).not.toHaveBeenCalled();
-  expect(screen.getByTestId("confirm-delete-task")).toBeDisabled();
-  deletion.resolve(new Response(null, { status: 204 }));
-  await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(TASKS_PATH));
-});
-
-test("keeps the detail page and allows retry when deletion fails", async () => {
-  mockRequests(
-    Promise.resolve(
-      new Response(JSON.stringify({ detail: "Delete failed" }), { status: 500 })
-    )
-  );
-  render(<ScheduledTaskDetailPage />);
-  await confirmDeletion();
-  await waitFor(() =>
-    expect(screen.getByTestId("confirm-delete-task")).toBeEnabled()
-  );
-  expect(screen.getByRole("dialog")).toBeInTheDocument();
-  expect(mockReplace).not.toHaveBeenCalled();
-  expect(mockPush).not.toHaveBeenCalled();
+  test("keeps the detail page and allows retry when deletion fails", async () => {
+    mockRequests(
+      Promise.resolve(
+        new Response(JSON.stringify({ detail: "Delete failed" }), {
+          status: 500,
+        })
+      )
+    );
+    render(<ScheduledTaskDetailPage />);
+    await confirmDeletion();
+    await waitFor(() =>
+      expect(screen.getByTestId("confirm-delete-task")).toBeEnabled()
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
 });
