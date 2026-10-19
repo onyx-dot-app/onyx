@@ -18,6 +18,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
+    reindex_failure,
     time_str_to_utc,
 )
 from onyx.connectors.exceptions import (
@@ -30,6 +31,7 @@ from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     GenerateSlimDocumentOutput,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -436,6 +438,7 @@ class JiraConnector(
     CheckpointedConnectorWithPermSync[JiraConnectorCheckpoint],
     SlimConnector,
     SlimConnectorWithPermSync,
+    Resolver,
 ):
     slim_listing_honors_indexing_start = True
 
@@ -704,65 +707,9 @@ class JiraConnector(
             nextPageToken=new_checkpoint.cursor,
             ids_done=new_checkpoint.ids_done,
         ):
-            issue_key = _issue_key(issue)
-            try:
-                # Get project info for hierarchy
-                project = get_issue_field(issue, _FIELD_PROJECT)
-                project_key = project[_FIELD_KEY] if project else None
-                project_name = project.get("name") if project else None
-
-                # Yield hierarchy nodes BEFORE the document (parent-before-child)
-                if project_key:
-                    # 1. Yield project hierarchy node (if not already yielded)
-                    yield from self._yield_project_hierarchy_node(
-                        project_key, project_name, seen_hierarchy_node_ids
-                    )
-
-                    # 2. If parent is an Epic, yield hierarchy node for it
-                    parent = get_issue_field(issue, _FIELD_PARENT)
-                    if parent:
-                        yield from self._yield_parent_hierarchy_node_if_epic(
-                            parent, project_key, seen_hierarchy_node_ids
-                        )
-
-                    # 3. If this issue IS an Epic, yield it as hierarchy node
-                    if self._is_epic(issue):
-                        yield from self._yield_epic_hierarchy_node(
-                            issue, project_key, seen_hierarchy_node_ids
-                        )
-
-                # Determine parent hierarchy node ID for the document
-                parent_hierarchy_raw_node_id = (
-                    self._get_parent_hierarchy_raw_node_id(issue, project_key)
-                    if project_key
-                    else None
-                )
-
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
-                    issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
-                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-                ):
-                    # Add permission information to the document if requested
-                    if include_permissions:
-                        document.external_access = self._get_project_permissions(
-                            project_key,  # ty: ignore[invalid-argument-type]
-                            add_prefix=True,  # Indexing path - prefix here
-                        )
-                    yield document
-
-            except Exception as e:
-                yield ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=build_jira_url(self.jira_base, issue_key),
-                        document_link=build_jira_url(self.jira_base, issue_key),
-                    ),
-                    failure_message=f"Failed to process Jira issue: {str(e)}",
-                    exception=e,
-                )
-
+            yield from self._yield_issue(
+                issue, seen_hierarchy_node_ids, include_permissions
+            )
             current_offset += 1
 
         # Update checkpoint with seen hierarchy nodes
@@ -774,6 +721,139 @@ class JiraConnector(
         )
 
         return new_checkpoint
+
+    def _yield_issue(
+        self,
+        issue: JiraIssue,
+        seen_hierarchy_node_ids: set[str],
+        include_permissions: bool,
+    ) -> Generator[Document | HierarchyNode | ConnectorFailure, None, None]:
+        """The issue's hierarchy nodes, parents first, then its document. An
+        issue the label or size rules skip yields its nodes but no document."""
+        issue_key = _issue_key(issue)
+        try:
+            project = get_issue_field(issue, _FIELD_PROJECT)
+            project_key = project[_FIELD_KEY] if project else None
+            project_name = project.get("name") if project else None
+
+            if project_key:
+                yield from self._yield_project_hierarchy_node(
+                    project_key, project_name, seen_hierarchy_node_ids
+                )
+                parent = get_issue_field(issue, _FIELD_PARENT)
+                if parent:
+                    yield from self._yield_parent_hierarchy_node_if_epic(
+                        parent, project_key, seen_hierarchy_node_ids
+                    )
+                if self._is_epic(issue):
+                    yield from self._yield_epic_hierarchy_node(
+                        issue, project_key, seen_hierarchy_node_ids
+                    )
+
+            parent_hierarchy_raw_node_id = (
+                self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                if project_key
+                else None
+            )
+
+            if document := process_jira_issue(
+                jira_base_url=self.jira_base,
+                issue=issue,
+                comment_email_blacklist=self.comment_email_blacklist,
+                labels_to_skip=self.labels_to_skip,
+                parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            ):
+                if include_permissions:
+                    document.external_access = self._get_project_permissions(
+                        project_key,  # ty: ignore[invalid-argument-type]
+                        add_prefix=True,  # Indexing path - prefix here
+                    )
+                yield document
+
+        except Exception as e:
+            yield ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=build_jira_url(self.jira_base, issue_key),
+                    document_link=build_jira_url(self.jira_base, issue_key),
+                ),
+                failure_message=f"Failed to process Jira issue: {str(e)}",
+                exception=e,
+            )
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Reads each failed issue again by the key that ends its URL, which is
+        its document id. Cloud takes every key in one bulk fetch, Server searches
+        each key. An issue Jira does not return, or one the label and size rules
+        skip, stays a failure."""
+        prefix = build_jira_url(self.jira_base, "")
+        targets: dict[str, DocumentFailure] = {}
+        for error in errors:
+            failed = error.failed_document
+            if failed is None:
+                continue
+            key = failed.document_id.removeprefix(prefix)
+            if key == failed.document_id or not key or "/" in key:
+                yield reindex_failure(failed, "Not an issue URL of this Jira")
+                continue
+            targets[key] = failed
+        if not targets:
+            return
+
+        try:
+            issues = self._fetch_issues_by_key(list(targets))
+        except Exception as e:
+            logger.warning("Jira targeted reindex fetch failed: %s", e)
+            for failed in targets.values():
+                yield reindex_failure(failed, str(e), e)
+            return
+
+        settled: set[str] = set()
+        seen_hierarchy_node_ids: set[str] = set()
+        for issue in issues:
+            # A moved issue comes back under its new key, which no target named.
+            if _issue_key(issue) not in targets:
+                logger.warning(
+                    "Jira returned %s for a targeted reindex that did not ask for it",
+                    _issue_key(issue),
+                )
+                continue
+            failed = targets[_issue_key(issue)]
+            for item in self._yield_issue(
+                issue, seen_hierarchy_node_ids, include_permissions
+            ):
+                if isinstance(item, Document):
+                    settled.add(item.id)
+                elif isinstance(item, ConnectorFailure):
+                    settled.add(failed.document_id)
+                    item = reindex_failure(failed, item.failure_message, item.exception)
+                yield item
+        for failed in targets.values():
+            if failed.document_id not in settled:
+                yield reindex_failure(
+                    failed,
+                    "Jira did not return the issue, or the label and size rules skip it",
+                )
+
+    def _fetch_issues_by_key(self, keys: list[str]) -> list[JiraIssue]:
+        if is_cloud_gateway(self.source_operations):
+            return self.source_operations.bulk_fetch_issues(issue_ids=keys)
+        # Server rejects a whole search over an unknown key, so each key searches
+        # alone, and one key's error leaves the others' issues in place.
+        issues: list[JiraIssue] = []
+        for key in keys:
+            try:
+                issues.extend(
+                    self.source_operations.search_issues(
+                        jql=f'key = "{key}"', start_at=0, max_results=1
+                    )
+                )
+            except Exception as e:
+                logger.warning("Jira search for %s failed: %s", key, e)
+        return issues
 
     def update_checkpoint_for_next_run(
         self,

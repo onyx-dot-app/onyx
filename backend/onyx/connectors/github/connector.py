@@ -1,5 +1,6 @@
 import copy
 import os
+import re
 from collections.abc import Callable, Generator, Iterator
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -13,6 +14,7 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import reindex_failure
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -48,6 +50,7 @@ from onyx.connectors.interfaces import (
     ConnectorFailure,
     GenerateSlimDocumentOutput,
     IndexingHeartbeatInterface,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -332,6 +335,20 @@ def _utc(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=timezone.utc) if value else None
 
 
+# A document id is the object's web URL: a pull request, an issue, or a file at
+# a branch. The branch of a file URL is split off against the connector's branch,
+# since a branch name may itself contain slashes.
+_DOCUMENT_URL = re.compile(
+    r"^https?://[^/]+/(?P<owner>[^/]+)/(?P<repo>[^/]+)/"
+    r"(?:(?P<kind>pull|issues)/(?P<number>\d+)|blob/.+)$"
+)
+
+
+def _file_url(repo: GitHubRepository, branch: str, path: str) -> str:
+    """A file's web URL, which is its document id."""
+    return f"{repo.html_url}/blob/{branch}/{path}"
+
+
 def _convert_pr_to_document(
     pull_request: GitHubPullRequest,
     repo_external_access: ExternalAccess | None,
@@ -484,7 +501,7 @@ def _convert_file_to_document(
     owner_name = parts[0] if parts else ""
     repo_name = parts[1] if len(parts) > 1 else repo_full_name
 
-    html_url = f"{repo.html_url}/blob/{branch}/{path}"
+    html_url = _file_url(repo, branch, path)
     _, extension = os.path.splitext(path)
 
     # NOTE: GitHub's tree API does not expose per-file modification times without
@@ -574,6 +591,7 @@ class GithubConnector(
     CheckpointedConnectorWithPermSync[GithubConnectorCheckpoint],
     SlimConnector,
     SlimConnectorWithPermSync,
+    Resolver,
 ):
     def __init__(
         self,
@@ -633,6 +651,100 @@ class GithubConnector(
                 logger.debug("Error getting profile for user %s", login)
                 self._user_cache[login] = None
         return self._user_cache[login]
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Reads each failed pull request, issue or file again from its web
+        URL, which is its document id. A file is read at the connector's
+        branch, so one indexed from another branch stays a failure."""
+        repos: dict[str, tuple[GitHubRepository, ExternalAccess | None]] = {}
+        for error in errors:
+            failed = error.failed_document
+            if failed is None:
+                continue
+            try:
+                yield self._reindex_target(
+                    failed.document_id, repos, include_permissions
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to resolve GitHub target %s: %s", failed.document_id, e
+                )
+                yield reindex_failure(failed, str(e), e)
+
+    def _reindex_target(
+        self,
+        url: str,
+        repos: dict[str, tuple[GitHubRepository, ExternalAccess | None]],
+        include_permissions: bool,
+        attempt_num: int = 0,
+    ) -> Document:
+        try:
+            return self._reindex_document(url, repos, include_permissions)
+        except GitHubRateLimitError:
+            if attempt_num >= _MAX_NUM_RATE_LIMIT_RETRIES:
+                raise
+            sleep_after_rate_limit_exception(self.source_operations)
+            return self._reindex_target(
+                url, repos, include_permissions, attempt_num + 1
+            )
+
+    def _reindex_document(
+        self,
+        url: str,
+        repos: dict[str, tuple[GitHubRepository, ExternalAccess | None]],
+        include_permissions: bool,
+    ) -> Document:
+        match = _DOCUMENT_URL.match(url)
+        if match is None:
+            raise ValueError(f"Not a GitHub document URL: {url}")
+        full_name = f"{match['owner']}/{match['repo']}"
+        if full_name not in repos:
+            repo = self.source_operations.get_repository(
+                owner=match["owner"], name=match["repo"]
+            )
+            repos[full_name] = (
+                repo,
+                get_external_access_permission(repo) if include_permissions else None,
+            )
+        repo, access = repos[full_name]
+        if match["kind"] == "pull":
+            document = _convert_pr_to_document(
+                self.source_operations.get_pull_request(
+                    repo_full_name=full_name, number=int(match["number"])
+                ),
+                access,
+                self._lookup_user,
+            )
+        elif match["kind"] == "issues":
+            document = _convert_issue_to_document(
+                self.source_operations.get_issue(
+                    repo_full_name=full_name, number=int(match["number"])
+                ),
+                access,
+                self._lookup_user,
+            )
+        else:
+            document = self._reindex_file(repo, url, access)
+        if document.id != url:
+            raise ValueError(f"GitHub now serves this document as {document.id}")
+        return document
+
+    def _reindex_file(
+        self, repo: GitHubRepository, url: str, access: ExternalAccess | None
+    ) -> Document:
+        branch = self._resolve_branch(repo)
+        prefix = _file_url(repo, branch, "")
+        if not url.startswith(prefix):
+            raise ValueError(f"The file is not on the connector's branch {branch!r}")
+        path = url[len(prefix) :]
+        content_text = _decode_file_content(self._fetch_file_content(repo, path))
+        if content_text is None:
+            raise ValueError(f"Non-text or undecodable file: {path}")
+        return _convert_file_to_document(repo, path, content_text, access, branch)
 
     def get_github_repo(self, attempt_num: int = 0) -> GitHubRepository:
         if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
@@ -938,7 +1050,7 @@ class GithubConnector(
         checkpoint.curr_page += 1
 
         for path in batch:
-            html_url = f"{repo.html_url}/blob/{branch}/{path}"
+            html_url = _file_url(repo, branch, path)
             if is_slim:
                 yield Document(
                     id=html_url,

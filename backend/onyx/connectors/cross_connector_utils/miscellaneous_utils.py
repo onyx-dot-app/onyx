@@ -10,7 +10,12 @@ from dateutil.parser import parse
 
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
 from onyx.configs.constants import IGNORE_FOR_QA, DocumentSource
-from onyx.connectors.models import BasicExpertInfo, OnyxMetadata
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorFailure,
+    DocumentFailure,
+    OnyxMetadata,
+)
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import is_valid_email
@@ -18,6 +23,17 @@ from onyx.utils.text_processing import is_valid_email
 T = TypeVar("T")
 U = TypeVar("U")
 logger = setup_logger()
+
+
+def reindex_failure(
+    failed: DocumentFailure, message: str, exception: Exception | None = None
+) -> ConnectorFailure:
+    """A targeted reindex's failure for one target, keyed on the target's own id."""
+    return ConnectorFailure(
+        failed_document=failed,
+        failure_message=f"Failed to resolve during targeted reindex: {message}",
+        exception=exception,
+    )
 
 
 def time_str_to_utc(datetime_str: str) -> datetime:

@@ -21,6 +21,7 @@ from onyx.configs.app_configs import (
     SLACK_NUM_THREADS,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import reindex_failure
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -34,6 +35,7 @@ from onyx.connectors.interfaces import (
     CredentialsProviderInterface,
     GenerateSlimDocumentOutput,
     NormalizationResult,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnectorWithPermSync,
 )
@@ -301,8 +303,19 @@ def get_latest_message_time(thread: ThreadType) -> datetime:
     return datetime.fromtimestamp(max_ts, tz=timezone.utc)
 
 
+_DOC_ID_SEPARATOR = "__"
+
+
 def _build_doc_id(channel_id: str, thread_ts: str) -> str:
-    return f"{channel_id}__{thread_ts}"
+    return f"{channel_id}{_DOC_ID_SEPARATOR}{thread_ts}"
+
+
+def _split_doc_id(document_id: str) -> tuple[str, str]:
+    """The channel id and root timestamp a document id is built from."""
+    channel_id, separator, thread_ts = document_id.partition(_DOC_ID_SEPARATOR)
+    if not separator or not channel_id or not thread_ts:
+        raise ValueError(f"Not a Slack document id: {document_id!r}")
+    return channel_id, thread_ts
 
 
 def _channel_team_id(channel: ChannelType) -> str | None:
@@ -666,6 +679,21 @@ def _get_messages(
     return messages, has_more
 
 
+def _filter_thread(
+    thread: ThreadType,
+    msg_filter_func: Callable[[MessageType], SlackMessageFilterReason | None],
+) -> tuple[ThreadType, SlackMessageFilterReason | None]:
+    """The messages the filter keeps, and the last reason it dropped one."""
+    kept: ThreadType = []
+    reason: SlackMessageFilterReason | None = None
+    for message in thread:
+        if dropped := msg_filter_func(message):
+            reason = dropped
+            continue
+        kept.append(message)
+    return kept, reason
+
+
 def _message_to_doc(
     message: MessageType,
     slack_client: SlackSourceOperations,
@@ -697,16 +725,7 @@ def _message_to_doc(
         thread = get_thread(
             slack_client=slack_client, channel=channel, thread_id=thread_ts
         )
-
-        # we'll just set and use the last filter reason if
-        # we bomb out later
-        filtered_thread = []
-        for message in thread:
-            filter_reason = msg_filter_func(message)
-            if filter_reason:
-                continue
-
-            filtered_thread.append(message)
+        filtered_thread, filter_reason = _filter_thread(thread, msg_filter_func)
     else:
         filter_reason = msg_filter_func(message)
         if filter_reason:
@@ -917,6 +936,7 @@ class SlackConnector(
     SlimConnectorWithPermSync,
     CredentialsConnector,
     CheckpointedConnectorWithPermSync[SlackCheckpoint],
+    Resolver,
 ):
     # A thread whose root is older than `start` is indexed through a newer
     # broadcast reply, but the slim listing lists only the reply.
@@ -1169,6 +1189,78 @@ class SlackConnector(
             team_id_to_url=self.grid_team_id_to_url,
             team_id_to_user_emails=(self.grid_team_id_to_user_emails),
         )
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Reads each failed thread again by the channel id and root timestamp
+        its document id is built from, keeping the messages the indexing filter
+        keeps. A thread the filter empties, or Slack no longer returns, stays a
+        failure."""
+        if self.slack_client is None or self.text_cleaner is None:
+            raise ConnectorMissingCredentialError("Slack")
+        self._ensure_workspace_metadata()
+        # A channel enters the cache only once its access is known, so a failed
+        # lookup is retried by the next target in that channel.
+        channels: dict[str, tuple[ChannelType, ExternalAccess | None]] = {}
+        for error in errors:
+            failed = error.failed_document
+            if failed is None:
+                continue
+            try:
+                channel_id, thread_ts = _split_doc_id(failed.document_id)
+                if channel_id not in channels:
+                    channel = _get_channel_by_id(self.slack_client, channel_id)
+                    if not _join_channel_or_skip(self.slack_client, channel):
+                        raise ValueError(
+                            f"Slack refuses the bot's join to #{channel['name']}"
+                        )
+                    access = (
+                        get_channel_access(
+                            slack_client=self.slack_client,
+                            channel=channel,
+                            user_cache=self.user_cache,
+                            team_id_to_user_emails=self.grid_team_id_to_user_emails,
+                        )
+                        if include_permissions
+                        else None
+                    )
+                    channels[channel_id] = (channel, access)
+                    yield _channel_to_hierarchy_node(
+                        channel,
+                        access,
+                        self.workspace_url,
+                        team_id_to_url=self.grid_team_id_to_url,
+                    )
+                channel, access = channels[channel_id]
+                thread = get_thread(self.slack_client, channel, thread_ts)
+                if not thread:
+                    raise ValueError("Slack no longer returns this thread")
+                kept, filter_reason = _filter_thread(thread, self.msg_filter_func)
+                if not kept:
+                    raise ValueError(
+                        f"The indexing filter drops this thread: {filter_reason.value if filter_reason else 'empty'}"
+                    )
+                document = thread_to_doc(
+                    channel=channel,
+                    thread=kept,
+                    slack_cleaner=self.text_cleaner,
+                    slack_client=self.slack_client,
+                    user_cache=self.user_cache,
+                    channel_access=access,
+                    team_id_to_url=self.grid_team_id_to_url,
+                )
+                # The filter can drop the root, which moves the id to the first kept reply.
+                if document.id != failed.document_id:
+                    raise ValueError(f"Slack now indexes this thread as {document.id}")
+                yield document
+            except Exception as e:
+                logger.warning(
+                    "Failed to resolve Slack target %s: %s", failed.document_id, e
+                )
+                yield reindex_failure(failed, str(e), e)
 
     def _load_from_checkpoint(
         self,
