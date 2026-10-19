@@ -1,8 +1,10 @@
 """Error details: the HTTP response an error carries, without the query
 string, and a stack trace only when the cause is unknown."""
 
+import pytest
 import requests
 
+from onyx.connectors.capability_checks import models
 from onyx.connectors.capability_checks.models import (
     MAX_RESPONSE_EXCERPT_CHARS,
     CheckErrorDetail,
@@ -190,3 +192,25 @@ def test_parameters_of_every_path_segment_are_removed() -> None:
     assert "api.example.com/a/b/c" in detail.stack_trace
     assert "s1" not in detail.stack_trace
     assert "s2" not in detail.stack_trace
+
+
+def test_a_secret_at_the_redaction_bound_is_not_kept_in_part(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Redacting the long URL makes the text short, so the bound reaches the
+    # excerpt.
+    monkeypatch.setattr(models, "_MAX_REDACTED_BODY_CHARS", 1000)
+    secret = "sk-secret-value-that-is-long"
+    prefix = "https://api.example.com/x?q=" + "a" * 966 + " "
+    # The bound splits the secret.
+    assert len(prefix) == 995
+    body = prefix + secret
+    try:
+        raise UnexpectedValidationError("Bad.") from SourceApiError(
+            "HTTP 500", status_code=500, body=body
+        )
+    except UnexpectedValidationError as error:
+        detail = check_error_detail(error, CheckErrorKind.INVALID, [secret])
+
+    assert detail is not None and detail.response_excerpt is not None
+    assert detail.response_excerpt == "api.example.com/x "

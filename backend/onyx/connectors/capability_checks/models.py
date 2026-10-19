@@ -227,7 +227,7 @@ _UNKNOWN_CAUSE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
 MAX_RESPONSE_EXCERPT_CHARS: int = 500
 MAX_STACK_TRACE_CHARS: int = 4000
 # How much of a response body is redacted before the excerpt is cut from it.
-# Far past the excerpt, so a secret cut at this bound never reaches it.
+# Redaction can shorten the text, so this bound can reach the excerpt.
 _MAX_REDACTED_BODY_CHARS: int = 64 * 1024
 # A URL anywhere in a text, with any scheme. Each match is rebuilt by
 # ``_safe_location``, the parser the request line uses too.
@@ -293,6 +293,25 @@ def _scrubbed(text: str, secrets: Iterable[str]) -> str:
     return scrub_sensitive_values(without_urls, secrets)
 
 
+def _cut_for_redaction(text: str, secrets: list[str]) -> str:
+    """``text`` cut to the redaction bound, and before any secret that the
+    bound would split: a partial secret does not match redaction."""
+    cut = _MAX_REDACTED_BODY_CHARS
+    if len(text) <= cut:
+        return text
+    for secret in secrets:
+        if not secret:
+            continue
+        start = text.find(
+            secret,
+            max(_MAX_REDACTED_BODY_CHARS - len(secret) + 1, 0),
+            _MAX_REDACTED_BODY_CHARS + len(secret) - 1,
+        )
+        if start != -1:
+            cut = min(cut, start)
+    return text[:cut]
+
+
 def _http_detail(error: BaseException) -> CheckErrorDetail | None:
     """The HTTP response of the first error in the chain that has one, with
     the whole body: ``check_error_detail`` redacts it, then cuts it. The
@@ -335,7 +354,7 @@ def check_error_detail(
     detail = _http_detail(error) or CheckErrorDetail()
     if detail.response_excerpt is not None:
         detail.response_excerpt = _scrubbed(
-            detail.response_excerpt[:_MAX_REDACTED_BODY_CHARS], secrets
+            _cut_for_redaction(detail.response_excerpt, secrets), secrets
         )[:MAX_RESPONSE_EXCERPT_CHARS]
     if error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
         trace = _scrubbed("".join(traceback.format_exception(error)), secrets)
