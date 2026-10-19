@@ -124,13 +124,7 @@
     },
     "addMcpModal": {
       "addHeader": {
-        "description": "Verbinden Sie einen MCP-Server (Model Context Protocol), um benutzerdefinierte Aktionen hinzuzufügen.",
         "title": "MCP-Server hinzufügen"
-      },
-      "authStatus": {
-        "apiTokenDescription": "API-Token konfiguriert",
-        "connectedDescription": "Verbunden",
-        "title": "Authentifiziert & verbunden"
       },
       "cancelButton": {
         "label": "Abbrechen"
@@ -140,16 +134,6 @@
         "suffix": "optional",
         "title": "Beschreibung"
       },
-      "disconnectButton": {
-        "tooltip": "Server trennen"
-      },
-      "editConfigsButton": {
-        "label": "Verbindungseinstellungen"
-      },
-      "manageHeader": {
-        "description": "Aktualisieren Sie die Konfiguration Ihres MCP-Servers und verwalten Sie die Authentifizierung.",
-        "title": "MCP-Server verwalten"
-      },
       "name": {
         "placeholder": "z. B. Linear",
         "required": "Der Servername ist erforderlich",
@@ -157,19 +141,13 @@
       },
       "serverUrl": {
         "invalid": "Muss eine gültige URL sein",
-        "required": "Die Server-URL ist erforderlich",
         "title": "MCP-Server-URL"
       },
       "submitButton": {
-        "addLabel": "Server hinzufügen",
-        "addingLabel": "Wird hinzugefügt...",
         "saveLabel": "Änderungen speichern",
         "savingLabel": "Wird gespeichert..."
       },
       "toasts": {
-        "createFailed": "Der MCP-Server konnte nicht erstellt werden",
-        "serverCreated": "MCP-Server erfolgreich erstellt",
-        "serverUpdated": "MCP-Server erfolgreich aktualisiert",
         "updateFailed": "Der MCP-Server konnte nicht aktualisiert werden"
       },
       "access": {
@@ -192,27 +170,13 @@
         "planTag": "Business",
         "planNote": "Gruppenzugriff erfordert einen Business-Tarif."
       },
-      "craft": {
-        "title": "In Craft verfügbar",
-        "description": "Benutzer können in Craft auf diesen MCP-Server zugreifen."
-      },
       "defaultChat": {
-        "title": "Im Standardchat von Onyx verfügbar",
-        "description": "Wenn deaktiviert, müssen Benutzer diesen Server einem benutzerdefinierten Agenten hinzufügen, um ihn im Chat zu verwenden."
+        "title": "Im Standardchat von Onyx verfügbar"
       }
     },
     "addOpenApiModal": {
       "addHeader": {
-        "description": "Fügen Sie ein OpenAPI-Schema hinzu, um benutzerdefinierte Aktionen zu ergänzen.",
         "title": "OpenAPI-Aktion hinzufügen"
-      },
-      "authStatus": {
-        "configuredTitle": "Authentifizierung konfiguriert",
-        "enabledTitle": "Authentifiziert & aktiviert",
-        "headersDescription": "Benutzerdefinierte Authentifizierungs-Header konfiguriert",
-        "oauthDescription": "OAuth-Authentifizierung konfiguriert",
-        "oauthNamedDescription": "OAuth über {name} verbunden",
-        "passthroughDescription": "Passthrough-Authentifizierung aktiviert"
       },
       "cancelButton": {
         "label": "Abbrechen"
@@ -227,15 +191,10 @@
         "subDescription": "Geben Sie ein OpenAPI-Schema an, das die APIs definiert, die Sie im Rahmen dieser Aktion bereitstellen möchten. Sie können die Platzhalter `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` und `USER_EMAIL` an beliebiger Stelle im Schema verwenden (z. B. Server-URL, Pfade, Standardwerte von Parametern). Sie werden beim Aufruf durch die Werte der aktuellen Anfrage ersetzt. Mehr über [OpenAPI-Aktionen]({docsUrl}) erfahren.",
         "title": "Definition des OpenAPI-Schemas"
       },
-      "disableButton": {
-        "tooltip": "Aktion deaktivieren"
-      },
       "editConfigsButton": {
-        "disabledTooltip": "Nur der Ersteller der Aktion oder ein Administrator kann die Authentifizierung verwalten",
-        "label": "Konfiguration bearbeiten"
+        "disabledTooltip": "Nur der Ersteller der Aktion oder ein Administrator kann die Authentifizierung verwalten"
       },
       "editHeader": {
-        "description": "Aktualisieren Sie das OpenAPI-Schema für diese Aktion.",
         "title": "OpenAPI-Aktion bearbeiten"
       },
       "empty": {
@@ -247,9 +206,6 @@
       },
       "method": {
         "noSummary": "Keine Zusammenfassung angegeben"
-      },
-      "serverUrl": {
-        "description": "Im Schema gefundene URL. Verbinden Sie sich nur mit Servern, denen Sie vertrauen."
       },
       "submitButton": {
         "addLabel": "Aktion hinzufügen",
@@ -460,9 +416,6 @@
       }
     },
     "mcpCard": {
-      "card": {
-        "ariaLabel": "MCP-Serverkarte {title}"
-      },
       "deleteModal": {
         "body": {
           "confirmation": "Möchten Sie diesen MCP-Server wirklich löschen?",
@@ -472,27 +425,6 @@
           "label": "Löschen"
         },
         "title": "MCP-Server löschen"
-      },
-      "lastRefreshed": {
-        "label": "Tools zuletzt aktualisiert {time}"
-      },
-      "refreshToolsButton": {
-        "ariaLabel": "Tools aktualisieren",
-        "tooltip": "Tools aktualisieren"
-      },
-      "setupIncomplete": {
-        "label": "Einrichtung unvollständig.",
-        "actionHint": "Einrichtung unvollständig. Klicken Sie, um die Einrichtung abzuschließen."
-      },
-      "status": {
-        "ready": "Bereit · {count, plural, one {# Tool} other {# Tools}}",
-        "incomplete": "Einrichtung unvollständig",
-        "loading": "Tools werden geladen",
-        "disconnected": "Getrennt"
-      },
-      "authenticationButton": {
-        "tooltip": "Authentifizierung konfigurieren",
-        "ariaLabel": "Authentifizierung für {serverName} konfigurieren"
       }
     },
     "mcpOauthCallback": {
@@ -554,25 +486,10 @@
       },
       "toasts": {
         "deleteFailed": "Der MCP-Server konnte nicht gelöscht werden",
-        "disableAllFailed": "Es konnten nicht alle Tools deaktiviert werden",
         "disconnectFailed": "Der MCP-Server konnte nicht getrennt werden",
-        "enableAllFailed": "Es konnten nicht alle Tools aktiviert werden",
         "fetchToolsFailed": "Die Tools konnten nicht abgerufen werden: {error}",
-        "noToolsToDisable": "Keine Tools zum Deaktivieren",
         "reconnectFailed": "Der MCP-Server konnte nicht erneut verbunden werden",
-        "refreshToolsFailed": "Die Tools konnten nicht aktualisiert werden",
-        "renameFailed": "Der MCP-Server konnte nicht umbenannt werden",
-        "serverDeleted": "MCP-Server erfolgreich gelöscht",
-        "serverDisconnected": "MCP-Server erfolgreich getrennt",
-        "serverReconnected": "MCP-Server erfolgreich erneut verbunden",
-        "serverRenamed": "MCP-Server erfolgreich umbenannt",
-        "toolDisabled": "Tool erfolgreich deaktiviert",
-        "toolEnabled": "Tool erfolgreich aktiviert",
-        "toolUpdateFailed": "Das Tool konnte nicht aktualisiert werden",
-        "toolsDisabled": "{count, plural, one {# Tool erfolgreich deaktiviert} other {# Tools erfolgreich deaktiviert}}",
-        "toolsEnabled": "{count, plural, one {# Tool erfolgreich aktiviert} other {# Tools erfolgreich aktiviert}}",
-        "toolsFetched": "Tools geladen",
-        "toolsRefreshed": "Tools erfolgreich aktualisiert"
+        "serverDeleted": "MCP-Server erfolgreich gelöscht"
       }
     },
     "openApiAuthModal": {
@@ -708,27 +625,15 @@
       "addButton": {
         "label": "OpenAPI-Aktion hinzufügen"
       },
-      "authModal": {
-        "authenticateTitle": "{name} authentifizieren",
-        "defaultTitle": "OpenAPI-Aktion authentifizieren",
-        "updateTitle": "Authentifizierung für {name} aktualisieren"
-      },
       "empty": {
         "description": "Fügen Sie benutzerdefinierte Aktionen aus OpenAPI-Schemas hinzu."
       },
       "toasts": {
-        "actionRenamed": "OpenAPI-Aktion erfolgreich umbenannt",
-        "authHeadersSaved": "Authentifizierungs-Header von {name} erfolgreich gespeichert.",
-        "authPassthroughSaved": "Authentifizierungs-Passthrough von {name} erfolgreich gespeichert.",
         "authSaveFailed": "Die Authentifizierungseinstellungen konnten nicht gespeichert werden.",
         "authSaved": "Authentifizierung von {name} erfolgreich gespeichert.",
-        "authUpdated": "Authentifizierung von {name} erfolgreich aktualisiert.",
         "deleteFailed": "Das Tool konnte nicht gelöscht werden.",
-        "deleteUnexpectedError": "Beim Löschen des Tools ist ein unerwarteter Fehler aufgetreten.",
         "disconnectFailed": "Die OpenAPI-Aktion konnte nicht getrennt werden.",
-        "renameFailed": "Die OpenAPI-Aktion konnte nicht umbenannt werden",
-        "toolDeleted": "{name} erfolgreich gelöscht.",
-        "toolDisconnected": "{name} wurde getrennt."
+        "toolDeleted": "{name} erfolgreich gelöscht."
       }
     },
     "perUserAuth": {
@@ -1027,15 +932,11 @@
       },
       "detail": {
         "connection": "Verbindung",
-        "serverUrl": "Server-URL",
         "tools": "Werkzeuge",
         "toolCount": "{count, plural, one {# Werkzeug} other {# Werkzeuge}}",
-        "toolsDescription": "Verfügbare Werkzeuge dieses Workspace-Plugins.",
         "noTools": "Für dieses Plugin sind keine sichtbaren Werkzeuge gespeichert.",
         "connect": "Konto verbinden",
         "useInChat": "Im Chat verwenden",
-        "chatDisabled": "Dieses Plugin ist für den Haupt-Chat nicht aktiviert. Ein Workspace-Administrator kann seine Verfügbarkeit ändern.",
-        "chatUnknown": "Die Verfügbarkeit im Haupt-Chat konnte nicht bestätigt werden.",
         "disconnect": "Konto trennen",
         "disconnectTitle": "{name} trennen?",
         "disconnectDescription": "Dadurch wird Ihre Kontoverbindung entfernt. Die Workspace-Verfügbarkeit bleibt gleich.",
@@ -1156,19 +1057,14 @@
           "viewTools": "Tools anzeigen",
           "saveToUpdate": "Speichere die Änderungen, um die Tools zu aktualisieren."
         },
-        "reviewTitle": "{name} prüfen",
         "createTitle": "OpenAPI-Plugin hinzufügen",
         "detailDescription": "Verwalten Sie diese API und die Tools für Ihre Agenten.",
         "detailsTitle": "Plugin-Details",
         "schemaTitle": "OpenAPI-Schema",
-        "editSchema": "Schema bearbeiten",
         "notFound": "Plugin nicht gefunden",
         "loadFailed": "Dieses Plugin konnte nicht geladen werden",
         "unavailable": "Dieses Plugin wurde möglicherweise gelöscht oder Sie haben keinen Zugriff.",
         "readOnly": "Sie können dieses Plugin anzeigen. Ihr Konto kann seine Einstellungen nicht ändern.",
-        "disableTitle": "{name} deaktivieren?",
-        "disableDescription": "Agenten können dieses Plugin nicht mehr verwenden. Sie können es wieder aktivieren.",
-        "deleteTitle": "{name} löschen?",
         "deleteDescription": "Dadurch werden das OpenAPI-Plugin und seine Konfiguration dauerhaft gelöscht."
       },
       "title": "Plugins",
@@ -1295,12 +1191,8 @@
     },
     "mcpTools": {
       "title": "Tools",
-      "description": "Wählen Sie verfügbare Tools und legen Sie ihre Berechtigungen fest.",
       "enabledTab": "Verfügbare Tools",
       "policiesTab": "Craft-Berechtigungen",
-      "enabledDescription": "Wählen Sie die Tools aus, die Benutzer in Onyx verwenden können.",
-      "policiesDescription": "Legen Sie fest, wann Craft vor der Verwendung eines Tools um Zustimmung fragt.",
-      "back": "Authentifizierung",
       "refresh": "Tools aktualisieren",
       "loadError": "Tools konnten nicht geladen werden",
       "saveError": "Tool-Einstellungen konnten nicht gespeichert werden",
@@ -1309,17 +1201,11 @@
     },
     "mcpDetail": {
       "configuration": "Serverkonfiguration",
-      "editConfiguration": "Serverkonfiguration bearbeiten",
       "authentication": "Authentifizierung",
-      "editAuthentication": "Authentifizierung bearbeiten",
-      "availability": "Verfügbarkeit",
-      "edit": "Bearbeiten",
       "loadError": "MCP-Server konnte nicht geladen werden",
       "notFound": "MCP-Server nicht gefunden",
       "unavailable": "Dieser Server wurde möglicherweise gelöscht, oder Sie haben keinen Zugriff.",
       "retry": "Erneut versuchen",
-      "restrictedAccess": "{groups, plural, one {# Gruppe} other {# Gruppen}} · {users, plural, one {# Benutzer} other {# Benutzer}}",
-      "authenticationIncomplete": "Die Authentifizierung ist nicht konfiguriert.",
       "availabilitySaved": "Verfügbarkeit aktualisiert"
     }
   },
@@ -5801,24 +5687,11 @@
           "description": "Fügen Sie eine App hinzu, um sie allen in Ihrer Organisation zur Verfügung zu stellen.",
           "title": "Noch keine Apps"
         },
-        "panel": {
-          "blurb": "Einmal für die gesamte Organisation konfiguriert. Bearbeiten Sie eine App, um gemeinsame Anmeldedaten, Aktionsrichtlinien und zugehörige Skills festzulegen."
-        },
         "tab": {
-          "label": "Apps",
-          "labelWithCount": "Apps · {count, number}"
+          "label": "Apps"
         }
       },
       "card": {
-        "actionsButton": {
-          "ariaLabel": "Aktionen für {name}"
-        },
-        "availableInCraft": {
-          "label": "In Craft verfügbar"
-        },
-        "customTag": {
-          "label": "Benutzerdefiniert"
-        },
         "deleteAction": {
           "label": "Löschen"
         },
@@ -5828,34 +5701,12 @@
           "submit": {
             "label": "App löschen"
           },
-          "submitting": {
-            "label": "Wird gelöscht…"
-          },
           "title": "„{name}“ löschen?"
-        },
-        "editAction": {
-          "label": "Bearbeiten"
         },
         "toasts": {
           "deleteFailed": "\"{name}\" konnte nicht gelöscht werden",
-          "disableFailed": "\"{name}\" konnte nicht deaktiviert werden",
           "enableFailed": "\"{name}\" konnte nicht aktiviert werden"
-        },
-        "toggle": {
-          "disableAriaLabel": "{name} deaktivieren",
-          "enableAriaLabel": "{name} aktivieren"
         }
-      },
-      "facts": {
-        "actions": "{count, plural, one {# Aktion} other {# Aktionen}}",
-        "customSkills": "{count, plural, one {# benutzerdefinierter Skill} other {# benutzerdefinierte Skills}}",
-        "noCredentials": "keine Anmeldedaten",
-        "noCustomSkills": "keine benutzerdefinierten Skills",
-        "orgCredentialsSet": "Anmeldedaten der Organisation festgelegt",
-        "perUserCredentials": "Anmeldedaten pro Benutzer",
-        "providedByOnyx": "von Onyx bereitgestellt",
-        "tools": "{count, plural, one {# Tool} other {# Tools}}",
-        "upstreamPatterns": "{count, plural, one {# Upstream-Muster} other {# Upstream-Muster}}"
       },
       "loading": {
         "label": "Wird geladen…"
@@ -5863,33 +5714,16 @@
       "mcpServers": {
         "empty": {
           "description": "Verbinden Sie einen Server unter Aktionen und aktivieren Sie ihn dann hier für Ihre Organisation.",
-          "openActionsButton": {
-            "label": "Aktionen öffnen"
-          },
           "title": "Noch keine MCP-Server"
         },
-        "manageInActionsButton": {
-          "label": "Unter Aktionen verwalten"
-        },
-        "panel": {
-          "blurb": "Aktivieren Sie einen Server, damit Mitglieder mit Zugriff dessen Tools in Craft verwenden können. Bearbeiten Sie ihn, um die Genehmigungsrichtlinie für jedes Tool festzulegen. Serververbindungen und Zugriff werden unter Aktionen verwaltet."
-        },
         "tab": {
-          "label": "MCP-Server",
-          "labelWithCount": "MCP-Server · {count, number}"
+          "label": "MCP-Server"
         }
       },
       "page": {
-        "addAppButton": {
-          "label": "App hinzufügen"
-        },
-        "backToCraftButton": {
-          "label": "Zurück zu Craft"
-        },
         "description": "Richten Sie die Apps ein, die der Craft-Agent Ihrer Organisation verwenden kann. Jedes Mitglied verbindet sein eigenes Konto auf der Apps-Seite von Craft."
       },
       "warnings": {
-        "invalidSkill": "ungültiger Skill",
         "providerUnavailable": "Anbieter nicht verfügbar"
       }
     },
@@ -14290,45 +14124,18 @@
         "title": "App wird verbunden"
       },
       "page": {
-        "connectButton": "Verbinden",
-        "connectingButton": "Weiterleitung…",
-        "disconnectButton": "Trennen",
         "empty": {
           "description": "Für deine Organisation sind noch keine Apps oder MCP-Server konfiguriert.",
           "title": "Noch nichts zu verbinden"
         },
-        "errors": {
-          "disconnectFailed": "Trennen fehlgeschlagen",
-          "startAuthFailed": "Autorisierung konnte nicht gestartet werden"
-        },
         "header": {
           "description": "Verbinde die Tools, die Onyx Craft während der Arbeit als Kontext nutzen kann.",
-          "manageButton": "Apps verwalten",
-          "searchPlaceholder": "Apps suchen...",
           "title": "Apps"
-        },
-        "kinds": {
-          "app": {
-            "blurb": "Integrationen, die Onyx direkt unterstützt. Jede bringt Skills mit, die Craft die Nutzung beibringen: Starte hier.",
-            "empty": "Für deine Organisation sind noch keine Apps konfiguriert.",
-            "emptyTitle": "Noch keine Apps",
-            "tabLabel": "Apps · {count}"
-          },
-          "mcp": {
-            "blurb": "Server, die ein Administrator für Craft freigegeben hat. Wenn ein Server persönliche Zugangsdaten erfordert, verbinden Sie vor der Tool-Nutzung Ihr eigenes Konto.",
-            "empty": "Es wurden noch keine MCP-Server für Craft verfügbar gemacht.",
-            "emptyTitle": "Noch keine MCP-Server",
-            "tabLabel": "MCP-Server · {count}"
-          }
         },
         "loading": {
           "label": "Wird geladen…"
         },
         "reviewSkillsButton": "Skills überprüfen",
-        "search": {
-          "noMatchesDescription": "Nichts hier entspricht deiner Suche.",
-          "noMatchesTitle": "Keine Treffer"
-        },
         "status": {
           "connected": "Verbunden",
           "connectedNeedsSkills": "Verbunden · nicht alle verknüpften Skills sind aktiviert",
