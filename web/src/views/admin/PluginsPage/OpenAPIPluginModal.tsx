@@ -462,7 +462,7 @@ export default function OpenAPIPluginModal({
                 value={tab}
                 onValueChange={selectTab}
                 variant="contained"
-                gap={6}
+                gap={4}
               >
                 <Tabs.List>
                   <Tabs.Trigger value="server" disabled={busy || isAdd}>
@@ -486,131 +486,123 @@ export default function OpenAPIPluginModal({
                   keepMounted
                   hidden={tab !== "server"}
                 >
-                  <div className="h-[min(24rem,45dvh)] overflow-y-auto">
-                    {!tool ? null : canEdit ? (
-                      <MetadataEditor
-                        key={tool.id}
-                        tool={tool}
-                        active={tab === "server"}
-                        footerTarget={footerTarget}
-                        onBusyChange={setBusy}
-                        onDirtyChange={setMetadataDirty}
-                        onSave={saveMetadata}
-                      />
-                    ) : (
-                      <Content
-                        sizePreset="main-ui"
-                        variant="section"
-                        title={tool.name}
-                        description={
-                          tool.description || t("plugins.openapi.readOnly")
-                        }
-                      />
-                    )}
-                  </div>
+                  {!tool ? null : canEdit ? (
+                    <MetadataEditor
+                      key={tool.id}
+                      tool={tool}
+                      active={tab === "server"}
+                      footerTarget={footerTarget}
+                      onBusyChange={setBusy}
+                      onDirtyChange={setMetadataDirty}
+                      onSave={saveMetadata}
+                    />
+                  ) : (
+                    <Content
+                      sizePreset="main-ui"
+                      variant="section"
+                      title={tool.name}
+                      description={
+                        tool.description || t("plugins.openapi.readOnly")
+                      }
+                    />
+                  )}
                 </Tabs.Content>
                 <Tabs.Content
                   value="schema"
                   keepMounted
                   hidden={tab !== "schema"}
                 >
-                  <div className="h-[min(24rem,45dvh)] overflow-y-auto">
-                    {visited.has("schema") &&
-                      (!tool ? (
-                        <AddOpenAPIActionModal
-                          presentation="inline"
-                          active={tab === "schema"}
-                          footerTarget={footerTarget}
-                          onBusyChange={setBusy}
-                          onDirtyChange={setSchemaDirty}
-                          onDefinitionChange={clearDraft}
-                          onConfigureAuthentication={(next) => {
-                            setDraft(next);
-                            showTab("authentication");
-                          }}
-                        />
-                      ) : canEdit ? (
-                        <AddOpenAPIActionModal
-                          presentation="inline"
-                          active={tab === "schema"}
-                          footerTarget={footerTarget}
-                          onBusyChange={setBusy}
-                          onDirtyChange={setSchemaDirty}
-                          existingTool={tool}
-                          onViewTools={() => selectTab("tools")}
-                          onUpdate={async () => {
-                            await mutateOpenApiTools();
-                          }}
-                        />
-                      ) : (
-                        <InputTextArea
-                          value={JSON.stringify(tool.definition, null, 2)}
-                          variant="disabled"
-                          rows={12}
-                          aria-label={t("plugins.openapi.schemaTitle")}
-                        />
-                      ))}
-                  </div>
+                  {visited.has("schema") &&
+                    (!tool ? (
+                      <AddOpenAPIActionModal
+                        presentation="inline"
+                        active={tab === "schema"}
+                        footerTarget={footerTarget}
+                        onBusyChange={setBusy}
+                        onDirtyChange={setSchemaDirty}
+                        onDefinitionChange={clearDraft}
+                        onConfigureAuthentication={(next) => {
+                          setDraft(next);
+                          showTab("authentication");
+                        }}
+                      />
+                    ) : canEdit ? (
+                      <AddOpenAPIActionModal
+                        presentation="inline"
+                        active={tab === "schema"}
+                        footerTarget={footerTarget}
+                        onBusyChange={setBusy}
+                        onDirtyChange={setSchemaDirty}
+                        existingTool={tool}
+                        onViewTools={() => selectTab("tools")}
+                        onUpdate={async () => {
+                          await mutateOpenApiTools();
+                        }}
+                      />
+                    ) : (
+                      <InputTextArea
+                        value={JSON.stringify(tool.definition, null, 2)}
+                        variant="disabled"
+                        rows={12}
+                        aria-label={t("plugins.openapi.schemaTitle")}
+                      />
+                    ))}
                 </Tabs.Content>
                 <Tabs.Content
                   value="authentication"
                   keepMounted
                   hidden={tab !== "authentication"}
                 >
-                  <div className="h-[min(24rem,45dvh)] overflow-y-auto">
-                    {visited.has("authentication") &&
-                      (!tool ? (
-                        <OpenAPIAuthenticationModal
-                          presentation="inline"
-                          active={tab === "authentication"}
-                          footerTarget={footerTarget}
-                          onBusyChange={setBusy}
-                          onDirtyChange={setAuthDirty}
-                          isOpen
-                          title={t("mcpDetail.authentication")}
-                          entityName={draft?.name}
-                          allowNoAuthentication
-                          allowPristineSubmit
-                          defaultMethod="none"
-                          onClose={closeDetail}
-                          submitLabel={t(
-                            "addOpenApiModal.submitButton.addLabel"
-                          )}
-                          onConnect={create}
-                        />
-                      ) : canAuthenticate ? (
-                        <OpenAPIAuthenticationModal
-                          key={authenticationFormKey}
-                          presentation="inline"
-                          active={tab === "authentication"}
-                          footerTarget={footerTarget}
-                          onBusyChange={setBusy}
-                          onDirtyChange={setAuthDirty}
-                          isOpen
-                          title={t("mcpDetail.authentication")}
-                          allowNoAuthentication
-                          defaultMethod={authMethod}
-                          onClose={closeDetail}
-                          submitLabel={t(
-                            "addOpenApiModal.submitButton.saveLabel"
-                          )}
-                          oauthConfigId={tool.oauth_config_id ?? null}
-                          initialHeaders={tool.custom_headers}
-                          passthroughOAuthEnabled={tool.passthrough_auth}
-                          onConnect={saveAuthentication}
-                        />
-                      ) : (
-                        <Content
-                          sizePreset="main-ui"
-                          variant="section"
-                          title={t("mcpDetail.authentication")}
-                          description={authDescription}
-                        />
-                      ))}
-                  </div>
+                  {visited.has("authentication") &&
+                    (!tool ? (
+                      <OpenAPIAuthenticationModal
+                        presentation="inline"
+                        active={tab === "authentication"}
+                        footerTarget={footerTarget}
+                        onBusyChange={setBusy}
+                        onDirtyChange={setAuthDirty}
+                        isOpen
+                        title={t("mcpDetail.authentication")}
+                        entityName={draft?.name}
+                        allowNoAuthentication
+                        allowPristineSubmit
+                        defaultMethod="none"
+                        onClose={closeDetail}
+                        submitLabel={t("addOpenApiModal.submitButton.addLabel")}
+                        onConnect={create}
+                      />
+                    ) : canAuthenticate ? (
+                      <OpenAPIAuthenticationModal
+                        key={authenticationFormKey}
+                        presentation="inline"
+                        active={tab === "authentication"}
+                        footerTarget={footerTarget}
+                        onBusyChange={setBusy}
+                        onDirtyChange={setAuthDirty}
+                        isOpen
+                        title={t("mcpDetail.authentication")}
+                        allowNoAuthentication
+                        defaultMethod={authMethod}
+                        onClose={closeDetail}
+                        submitLabel={t(
+                          "addOpenApiModal.submitButton.saveLabel"
+                        )}
+                        oauthConfigId={tool.oauth_config_id ?? null}
+                        initialHeaders={tool.custom_headers}
+                        passthroughOAuthEnabled={tool.passthrough_auth}
+                        onConnect={saveAuthentication}
+                      />
+                    ) : (
+                      <Content
+                        sizePreset="main-ui"
+                        variant="section"
+                        title={t("mcpDetail.authentication")}
+                        description={authDescription}
+                      />
+                    ))}
                 </Tabs.Content>
                 <Tabs.Content value="tools">
-                  <div className="flex h-[min(24rem,45dvh)] flex-col gap-4 overflow-y-auto">
+                  <div className="flex flex-col gap-4">
                     <InputTypeIn
                       searchIcon
                       value={toolSearch}
