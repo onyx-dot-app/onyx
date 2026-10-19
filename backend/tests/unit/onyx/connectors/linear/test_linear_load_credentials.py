@@ -11,6 +11,7 @@ import requests
 
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.linear.source_operations import (
+    LinearRateLimitError,
     LinearTokenRefreshError,
     refresh_oauth_token,
 )
@@ -109,6 +110,22 @@ def test_a_refused_refresh_carries_the_status(mock_request: MagicMock) -> None:
 
     assert raised.value.status_code == 400
     assert raised.value.body == "invalid_grant"
+
+
+@patch("onyx.utils.retry_wrapper.requests.request")
+def test_a_rate_limited_refresh_is_a_rate_limit_and_not_retried(
+    mock_request: MagicMock,
+) -> None:
+    response = requests.Response()
+    response.status_code = 429
+    response._content = b"rate limited"
+    mock_request.return_value = response
+
+    with pytest.raises(LinearRateLimitError) as raised:
+        refresh_oauth_token({"refresh_token": _REFRESH_TOKEN_VALUE})
+
+    assert raised.value.status_code == 429
+    mock_request.assert_called_once()
 
 
 def test_an_api_key_is_sent_as_is() -> None:

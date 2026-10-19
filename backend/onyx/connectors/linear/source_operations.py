@@ -349,6 +349,7 @@ def refresh_oauth_token(credentials: dict[str, Any]) -> dict[str, Any]:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             backoff=0,
             delay=0.1,
+            retry_if=_is_retryable_refresh_error,
         )
     except requests.HTTPError as e:
         if e.response is None:
@@ -366,7 +367,23 @@ def refresh_oauth_token(credentials: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _refresh_error(response: requests.Response) -> LinearTokenRefreshError:
+def _is_retryable_refresh_error(error: BaseException) -> bool:
+    # An immediate retry cannot pass a rate limit.
+    return not (
+        isinstance(error, requests.HTTPError)
+        and error.response is not None
+        and error.response.status_code == _RATE_LIMITED_STATUS
+    )
+
+
+def _refresh_error(response: requests.Response) -> LinearApiError:
+    if response.status_code == _RATE_LIMITED_STATUS:
+        return LinearRateLimitError(
+            f"Linear rate limited the token refresh: {response.text}",
+            status_code=response.status_code,
+            body=response.text,
+            url=_LINEAR_TOKEN_URL,
+        )
     return LinearTokenRefreshError(
         f"Failed to refresh token: {response.text}",
         status_code=response.status_code,
