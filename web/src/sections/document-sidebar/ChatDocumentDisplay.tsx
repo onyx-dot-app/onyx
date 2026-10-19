@@ -1,4 +1,4 @@
-import { OverflowText } from "@opal/components";
+import { OverflowText, Text } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SvgTag } from "@opal/icons";
@@ -9,8 +9,7 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction, useMemo } from "react";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { cn, richNodes } from "@opal/utils";
 
 interface DocumentMetadataBlockProps {
   modal?: boolean;
@@ -108,8 +107,16 @@ export default function ChatDocumentDisplay({
         <DocumentMetadataBlock modal={modal} document={document} />
       )}
 
-      <Text as="p" className="line-clamp-2 text-start" secondaryBody text03>
-        {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
+      <Text
+        as="p"
+        font="secondary-body"
+        color="text-03"
+        maxLines={2}
+        textPosition="text-start"
+      >
+        {richNodes(
+          buildDocumentSummaryDisplay(document.match_highlights, document.blurb)
+        )}
       </Text>
     </button>
   );

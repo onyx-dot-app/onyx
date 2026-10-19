@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Text from "@/refresh-components/texts/Text";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
@@ -19,6 +18,7 @@ import {
   InputTypeIn,
   LineItemButton,
   OverflowText,
+  Text,
 } from "@opal/components";
 import {
   SvgArrowLeft,
@@ -137,8 +137,8 @@ export function KnowledgeSearchSidebar({
         onClick={() => onSourceFilterClick(null)}
         rightChildren={
           totalCount > 0 ? (
-            <Text mainUiAction className="text-action-selection-05">
-              {totalCount}
+            <Text font="main-ui-action" color="action-selection-05">
+              {String(totalCount)}
             </Text>
           ) : undefined
         }
@@ -159,8 +159,8 @@ export function KnowledgeSearchSidebar({
               onClick={() => onSourceFilterClick(cs.source)}
               rightChildren={
                 count > 0 ? (
-                  <Text mainUiAction className="text-action-selection-05">
-                    {count}
+                  <Text font="main-ui-action" color="action-selection-05">
+                    {String(count)}
                   </Text>
                 ) : undefined
               }
@@ -210,7 +210,7 @@ export function KnowledgeSearchResultsPanel({
         aria-label="search-empty-state"
       >
         <SvgSearch size={32} className="stroke-text-04" />
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {t("search.prompt.description")}
         </Text>
       </GeneralLayouts.Section>
@@ -224,7 +224,7 @@ export function KnowledgeSearchResultsPanel({
         justifyContent="center"
         aria-label="search-loading"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {t("search.loading.description")}
         </Text>
       </GeneralLayouts.Section>
@@ -239,7 +239,7 @@ export function KnowledgeSearchResultsPanel({
         gap={2}
         aria-label="search-error"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {t("search.error.description")}
         </Text>
       </GeneralLayouts.Section>
@@ -264,7 +264,7 @@ export function KnowledgeSearchResultsPanel({
         gap={2}
         aria-label="search-no-results"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {activeSourceFilter
             ? t("search.noResultsInSource.description", {
                 source: getSourceMetadata(activeSourceFilter).displayName,
@@ -277,12 +277,12 @@ export function KnowledgeSearchResultsPanel({
         <TableLayouts.TableRow>
           <TableLayouts.CheckboxCell />
           <TableLayouts.TableCell flex>
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {t("table.columns.name.header")}
             </Text>
           </TableLayouts.TableCell>
           <TableLayouts.TableCell width={8}>
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {t("table.columns.sources.header")}
             </Text>
           </TableLayouts.TableCell>
@@ -456,7 +456,7 @@ export function KnowledgeSearchResultsPanel({
           justifyContent="center"
           className="absolute inset-0 z-10"
         >
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("search.stale.description")}
           </Text>
         </GeneralLayouts.Section>
