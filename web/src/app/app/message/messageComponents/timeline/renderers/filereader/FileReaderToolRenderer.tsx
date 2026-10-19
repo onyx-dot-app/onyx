@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { Card } from "@opal/components";
+import { Card, Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import {
   PacketType,
@@ -13,7 +13,6 @@ import {
 } from "@/app/app/message/messageComponents/interfaces";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 
 interface FileReaderState {
   fileName: string | null;
@@ -111,10 +110,10 @@ export const FileReaderToolRenderer: MessageRenderer<
                 gap={2}
                 height="fit"
               >
-                <Text as="span" mainUiAction text02>
+                <Text font="main-ui-action" color="text-02" as="span">
                   {state.fileName}
                 </Text>
-                <Text as="span" mainUiMuted text04>
+                <Text font="main-ui-muted" color="text-04" as="span">
                   {t("fileReader.charRange.label", charRange)}
                 </Text>
               </Section>
@@ -126,14 +125,12 @@ export const FileReaderToolRenderer: MessageRenderer<
                   rounding={4}
                 >
                   <Section alignItems="start" height="fit" gap={1}>
-                    <Text as="span" secondaryMono text04>
-                      {state.previewStart}
-                      {state.previewEnd && "\u2026"}
+                    <Text font="secondary-mono" color="text-04" as="span">
+                      {`${state.previewStart}${state.previewEnd ? "\u2026" : ""}`}
                     </Text>
                     {state.previewEnd && (
-                      <Text as="span" secondaryMono text04>
-                        {"\u2026"}
-                        {state.previewEnd}
+                      <Text font="secondary-mono" color="text-04" as="span">
+                        {`\u2026${state.previewEnd}`}
                       </Text>
                     )}
                   </Section>

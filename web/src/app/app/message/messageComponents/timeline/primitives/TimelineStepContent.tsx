@@ -1,9 +1,8 @@
 import React, { FunctionComponent } from "react";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import { SvgFold, SvgExpand, SvgXOctagon } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 
 export interface TimelineStepContentProps {
@@ -44,8 +43,8 @@ export function TimelineStepContent({
       {!hideHeader && header && (
         <div className="flex items-center justify-between h-(--timeline-step-header-height) ps-1">
           <div className="pt-(--timeline-step-top-padding) ps-(--timeline-common-text-padding) w-full">
-            <Text as="p" mainUiMuted text04>
-              {header}
+            <Text font="main-ui-muted" color="text-04" as="p">
+              {richNodes(header)}
             </Text>
           </div>
 

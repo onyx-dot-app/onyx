@@ -1,8 +1,8 @@
 "use client";
 
-import { InputSwitch } from "@opal/components";
+import { InputSwitch, Text } from "@opal/components";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
-import Text from "@/refresh-components/texts/Text";
+import RefreshText from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -26,11 +26,11 @@ interface SettingRowProps {
 const SettingRow = ({ label, description, children }: SettingRowProps) => (
   <div className="flex justify-between items-center py-3">
     <div className="flex flex-col gap-0.5">
-      <Text mainUiBody text04>
+      <Text font="main-ui-body" color="text-04">
         {label}
       </Text>
       {description && (
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {description}
         </Text>
       )}
@@ -69,7 +69,7 @@ const BackgroundThumbnail = ({
     >
       {isNone ? (
         <div className="absolute inset-0 bg-background flex items-center justify-center">
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("nrf.settingsPanel.backgroundNone.label")}
           </Text>
         </div>
@@ -184,7 +184,7 @@ export const SettingsPanel = ({
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-background-tint-02">
                 <SvgSettings className="w-5 h-5 stroke-text-03" />
               </div>
-              <Text headingH3 text04>
+              <Text font="heading-h3" color="text-04">
                 {t("nrf.settingsPanel.header.title")}
               </Text>
             </div>
@@ -211,9 +211,13 @@ export const SettingsPanel = ({
         <div className="px-6 pb-8 flex flex-col gap-8">
           {/* General Section */}
           <section className="flex flex-col gap-3">
-            <Text secondaryAction text03 className="uppercase tracking-wider">
+            <RefreshText
+              secondaryAction
+              text03
+              className="uppercase tracking-wider"
+            >
               {t("nrf.settingsPanel.generalSection.title")}
-            </Text>
+            </RefreshText>
             <div className="flex flex-col gap-1 bg-background-tint-01 rounded-2xl px-4">
               <SettingRow
                 label={t("nrf.settingsPanel.newTabToggle.label", { appName })}
@@ -228,9 +232,13 @@ export const SettingsPanel = ({
 
           {/* Background Section */}
           <section className="flex flex-col gap-3">
-            <Text secondaryAction text03 className="uppercase tracking-wider">
+            <RefreshText
+              secondaryAction
+              text03
+              className="uppercase tracking-wider"
+            >
               {t("nrf.settingsPanel.backgroundSection.title")}
-            </Text>
+            </RefreshText>
             <div className="grid grid-cols-3 gap-2">
               {CHAT_BACKGROUND_OPTIONS.map((bg) => (
                 <BackgroundThumbnail

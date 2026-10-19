@@ -1,8 +1,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn, clickOnKeyDown } from "@opal/utils";
 
@@ -30,7 +29,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
 
   const label = (
     <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-      <Text as="p" mainUiAction text03>
+      <Text font="main-ui-action" color="text-03" as="p">
         {t("interruptedThinking.label")}
       </Text>
     </div>

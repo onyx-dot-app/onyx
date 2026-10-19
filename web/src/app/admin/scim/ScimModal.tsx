@@ -2,9 +2,8 @@ import { useTranslations } from "next-intl";
 import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
-import { Button, InputTextArea } from "@opal/components";
+import { Button, InputTextArea, Text } from "@opal/components";
 import { useFocusOnMount } from "@opal/hooks";
-import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
 import { BasicModalFooter, Modal } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -64,7 +63,7 @@ export default function ScimModal({
           }
         >
           <Section alignItems="start" gap={2}>
-            <Text as="p" text03>
+            <Text font="main-ui-body" color="text-03" as="p">
               {t("modal.regenerate.description")}
             </Text>
           </Section>

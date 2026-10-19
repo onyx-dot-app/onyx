@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import {
@@ -23,7 +22,7 @@ import {
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import { LinkButton, MessageCard } from "@opal/components";
+import { LinkButton, MessageCard, Text } from "@opal/components";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
@@ -75,7 +74,7 @@ function FooterLinks({
     <Section flexDirection="row" justifyContent="center" gap={4} height="auto">
       {onActivateLicense && !hideLicenseLink && (
         <>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("footer.licenseKeyPrompt.label")}
           </Text>
           <LinkButton onClick={onActivateLicense} external={false}>

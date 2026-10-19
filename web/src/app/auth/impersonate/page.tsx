@@ -1,5 +1,6 @@
 "use client";
 
+import { Text } from "@opal/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 
 import { useRouter } from "next/navigation";
@@ -8,7 +9,6 @@ import * as Yup from "yup";
 import { toast } from "@opal/layouts";
 import { TextFormField } from "@/components/Field";
 import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { useTranslations } from "next-intl";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
@@ -58,9 +58,16 @@ export default function ImpersonatePage() {
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
         <div className="w-full flex flex-col items-center justify-center">
-          <Text as="p" headingH3 className="mb-6 text-center">
-            {t("impersonate.heading.title")}
-          </Text>
+          <div className="mb-6">
+            <Text
+              as="p"
+              font="heading-h3"
+              color="text-05"
+              textPosition="text-center"
+            >
+              {t("impersonate.heading.title")}
+            </Text>
+          </div>
         </div>
 
         <Formik
@@ -91,9 +98,16 @@ export default function ImpersonatePage() {
           )}
         </Formik>
 
-        <Text as="p" mainUiMuted text03 className="mt-4 text-center px-4">
-          {t("impersonate.adminNote.text")}
-        </Text>
+        <div className="mt-4 px-4">
+          <Text
+            as="p"
+            font="main-ui-muted"
+            color="text-03"
+            textPosition="text-center"
+          >
+            {t("impersonate.adminNote.text")}
+          </Text>
+        </div>
       </div>
     </AuthFlowContainer>
   );

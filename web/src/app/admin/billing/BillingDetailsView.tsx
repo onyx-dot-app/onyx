@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { markdown } from "@opal/utils";
+import { markdown, richNodes } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import { Button, MessageCard } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, MessageCard, Text } from "@opal/components";
+import RefreshText from "@/refresh-components/texts/Text";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { InputNumber } from "@opal/components";
 import {
@@ -311,10 +311,10 @@ function SubscriptionCard({
       >
         <Section gap={1} alignItems="start" height="auto" width="auto">
           <PlanIcon className="w-5 h-5" />
-          <Text headingH3Muted text04>
+          <Text font="heading-h3-muted" color="text-04">
             {planName}
           </Text>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {subtitle}
           </Text>
         </Section>
@@ -326,7 +326,7 @@ function SubscriptionCard({
           width="fit"
         >
           {isManualLicenseOnly ? (
-            <Text secondaryBody text03 className="text-end">
+            <RefreshText secondaryBody text03 className="text-end">
               {t.rich("subscription.managedBySales.text", {
                 br: () => <br />,
                 link: (chunks) => (
@@ -338,7 +338,7 @@ function SubscriptionCard({
                   </a>
                 ),
               })}
-            </Text>
+            </RefreshText>
           ) : disabled ? (
             <Button
               disabled={isReconnecting}
@@ -546,7 +546,7 @@ function SeatsCard({
                 )}
               </InputErrorText>
             ) : seatDifference !== 0 ? (
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 {isAdding
                   ? t("seats.delta.added", { count: seatCount })
                   : t("seats.delta.removed", { count: seatCount })}
@@ -554,9 +554,9 @@ function SeatsCard({
             ) : null}
 
             {error && (
-              <Text secondaryBody className="billing-error-text">
+              <RefreshText secondaryBody className="billing-error-text">
                 {error}
-              </Text>
+              </RefreshText>
             )}
           </Section>
         </div>
@@ -569,30 +569,34 @@ function SeatsCard({
           height="auto"
         >
           {isAdding ? (
-            <Text secondaryBody text03>
-              {t.rich("seats.billing.added", {
-                count: seatCount,
-                value: (chunks) => (
-                  <Text secondaryBody text04>
-                    {chunks}
-                  </Text>
-                ),
-              })}
+            <Text font="secondary-body" color="text-03">
+              {richNodes(
+                t.rich("seats.billing.added", {
+                  count: seatCount,
+                  value: (chunks) => (
+                    <Text font="secondary-body" color="text-04">
+                      {richNodes(chunks)}
+                    </Text>
+                  ),
+                })
+              )}
             </Text>
           ) : isRemoving ? (
-            <Text secondaryBody text03>
-              {t.rich("seats.billing.removed", {
-                count: seatCount,
-                date: nextBillingDate,
-                value: (chunks) => (
-                  <Text secondaryBody text04>
-                    {chunks}
-                  </Text>
-                ),
-              })}
+            <Text font="secondary-body" color="text-03">
+              {richNodes(
+                t.rich("seats.billing.removed", {
+                  count: seatCount,
+                  date: nextBillingDate,
+                  value: (chunks) => (
+                    <Text font="secondary-body" color="text-04">
+                      {richNodes(chunks)}
+                    </Text>
+                  ),
+                })
+              )}
             </Text>
           ) : (
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {t("seats.billing.unchanged")}
             </Text>
           )}
@@ -620,10 +624,10 @@ function SeatsCard({
         height="auto"
       >
         <Section gap={1} alignItems="start" height="auto" width="auto">
-          <Text mainContentMuted text04>
+          <Text font="main-content-muted" color="text-04">
             {t("seats.total.label", { count: totalSeats })}
           </Text>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("seats.breakdown.label", {
               used: usedSeats,
               pending: pendingSeats,
@@ -688,7 +692,9 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
   return (
     <div className="billing-payment-section">
       <Section alignItems="start" height="auto" width="full">
-        <Text mainContentEmphasis>{t("payment.section.title")}</Text>
+        <Text font="main-content-emphasis" color="text-05">
+          {t("payment.section.title")}
+        </Text>
         <Section flexDirection="row" gap={2} alignItems="stretch" height="auto">
           <Card className="billing-payment-card">
             <Section
