@@ -13,6 +13,17 @@
             "statusMessage": "Add the repo .venv to PATH"
           }
         ]
+      },
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/ensure_latest_main.py\"",
+            "timeout": 45,
+            "statusMessage": "Check that the branch has the latest main"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -35,6 +46,12 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/pre_commit_on_stop.py\"",
             "timeout": 60,
             "statusMessage": "Record the files this turn starts with"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/ensure_latest_main.py\"",
+            "timeout": 30,
+            "statusMessage": "Check that the branch has the latest main"
           }
         ]
       }
