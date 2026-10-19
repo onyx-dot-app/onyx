@@ -89,12 +89,12 @@ export class AdminMcpServersPage {
   }): Promise<void> {
     await this.page.getByRole("button", { name: "Back", exact: true }).click();
     await this.nameInput.fill(details.name);
-    await this.page
-      .getByRole("button", { name: "Continue", exact: true })
-      .click();
     if (details.group) {
       await this.restrictToGroup(details.group);
     }
+    await this.page
+      .getByRole("button", { name: "Continue", exact: true })
+      .click();
   }
 
   async restrictToGroup(group: string): Promise<void> {
