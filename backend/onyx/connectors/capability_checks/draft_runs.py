@@ -47,6 +47,8 @@ from onyx.connectors.capability_checks.models import (
     CheckNotRunReason,
     CheckStep,
     CredentialCapability,
+    TwoStepEntry,
+    TwoStepRow,
     compute_capability_verdicts,
     parse_known_findings,
 )
@@ -56,8 +58,6 @@ from onyx.connectors.capability_checks.runner import (
     run_order,
 )
 from onyx.connectors.capability_checks.two_step import (
-    TwoStepEntry,
-    TwoStepRow,
     two_step_rows,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash

@@ -874,3 +874,49 @@ class DraftCheckActions(BaseModel):
     skip_check_ids: list[str] = []
     # Runs next: this check and the checks it depends on go first.
     start_check_id: str | None = None
+
+
+class TwoStepEntry(BaseModel):
+    """What the row rules read of one check: a result, or a draft state."""
+
+    check_id: str
+    row_id: str
+    step: CheckStep | None = None
+    # None while the check is pending or running.
+    status: CapabilityCheckStatus | None
+    applicable: bool = True
+    partial: bool = False
+    error_kind: CheckErrorKind | None = None
+    not_run_reason: CheckNotRunReason | None = None
+    summary: str | None = None
+
+    @classmethod
+    def of_result(cls, result: CapabilityCheckResult) -> "TwoStepEntry":
+        return cls(
+            check_id=result.check_id,
+            row_id=result.row_id or result.check_id,
+            step=result.step,
+            status=result.status,
+            applicable=result.applicable,
+            partial=result.partial,
+            error_kind=result.error_kind,
+            not_run_reason=result.not_run_reason,
+            summary=result.summary,
+        )
+
+
+class TwoStepRow(BaseModel):
+    """How a two-step row shows. The row takes the state, line, description,
+    details and findings of ``shown_check_id``, with two exceptions:
+    ``counting`` makes it In progress, and ``caveat`` adds a caveat to the
+    parent's Successful row. ``summary`` is the row's line in every case."""
+
+    row_id: str
+    parent_check_id: str
+    step_check_id: str
+    shown_check_id: str
+    # The step runs after the parent passed.
+    counting: bool = False
+    summary: str | None = None
+    # The step did not finish.
+    caveat: str | None = None

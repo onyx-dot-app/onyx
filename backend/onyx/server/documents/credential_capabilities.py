@@ -31,13 +31,13 @@ from onyx.connectors.capability_checks.findings_setting import (
 from onyx.connectors.capability_checks.models import (
     CredentialCapabilityReport,
     DraftCheckActions,
+    TwoStepRow,
 )
 from onyx.connectors.capability_checks.stored_run_progress import (
     StoredRunProgress,
     load_stored_run_progress,
 )
 from onyx.connectors.capability_checks.two_step import (
-    TwoStepRow,
     two_step_rows_of_results,
 )
 from onyx.connectors.credential_families import is_credential_usable_for_source

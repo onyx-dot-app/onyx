@@ -22,9 +22,9 @@ from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CredentialCapabilityReport,
+    TwoStepRow,
 )
 from onyx.connectors.capability_checks.two_step import (
-    TwoStepRow,
     two_step_rows_of_results,
 )
 from onyx.connectors.connector_config import CredentialBinding

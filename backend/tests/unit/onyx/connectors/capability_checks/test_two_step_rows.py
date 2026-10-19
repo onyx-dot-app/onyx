@@ -23,12 +23,12 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CheckStep,
     CredentialCapability,
+    TwoStepEntry,
+    TwoStepRow,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.capability_checks.two_step import (
-    TwoStepEntry,
-    TwoStepRow,
     two_step_row,
     two_step_rows_of_results,
     validate_step_links,
