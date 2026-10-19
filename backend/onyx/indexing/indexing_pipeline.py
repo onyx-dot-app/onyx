@@ -1601,6 +1601,8 @@ def index_doc_batch(
                     enrichment=enricher,
                     db_session=db_session,
                     index_to_secondary=index_to_secondary,
+                    failed_document_ids=embedding_failed_doc_ids
+                    | _get_failed_doc_ids(write_failures),
                 )
 
             # Persist content hash only for documents confirmed written to the
