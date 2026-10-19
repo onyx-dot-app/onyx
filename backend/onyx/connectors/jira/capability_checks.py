@@ -23,7 +23,6 @@ from typing import Any, NoReturn
 from urllib.parse import urlparse
 
 import requests
-from pydantic import BaseModel
 
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
@@ -31,6 +30,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
@@ -95,13 +95,6 @@ def _gateway(context: CapabilityCheckContext) -> JiraSourceOperations:
     return gateway
 
 
-class _RowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    summary: str
-    description: str
-
-
 def _project_key(config: JiraConnectorConfig) -> str:
     return (config.project_key or "").strip()
 
@@ -150,12 +143,12 @@ def _raise_for_api_error(
     error: JiraApiError,
     *,
     denied: str,
-    denied_row: _RowText | None = None,
-    scope_row: _RowText | None = None,
+    denied_row: CheckRowText | None = None,
+    scope_row: CheckRowText | None = None,
     not_found: str | None = None,
-    not_found_row: _RowText | None = None,
+    not_found_row: CheckRowText | None = None,
     bad_request: str | None = None,
-    bad_request_row: _RowText | None = None,
+    bad_request_row: CheckRowText | None = None,
 ) -> NoReturn:
     """Maps a Jira API error onto the validation-exception family. ``denied``
     explains a 403 (or a scoped token without the scope) for this probe; each
@@ -165,7 +158,7 @@ def _raise_for_api_error(
     # Callers' texts can end in a full stop; the mapper adds its own.
     denied = denied.rstrip(".")
     if status == 401 and _SCOPE_MISMATCH_TEXT in (error.body or ""):
-        scope_row = scope_row or _RowText(
+        scope_row = scope_row or CheckRowText(
             summary="Token lacks a scope for this API",
             description=(
                 "The token signs in but lacks the scope this call needs. "
@@ -447,7 +440,7 @@ class _SiteAuthCheck(_JiraCheck):
                 "The credential signs in, but Jira does not let its account use "
                 "Jira on this site. Give the account Jira product access"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Account has no Jira access on this site",
                 description=(
                     "The token signs in, but its account cannot use Jira on this "
@@ -455,7 +448,7 @@ class _SiteAuthCheck(_JiraCheck):
                 ),
             ),
             scope_row=(
-                _RowText(
+                CheckRowText(
                     summary="Token lacks the read:jira-work scope",
                     description=(
                         "The token signs in but lacks the scope this call needs. "
@@ -469,7 +462,7 @@ class _SiteAuthCheck(_JiraCheck):
             not_found=(
                 f"Jira has no REST API at {config.jira_base_url}. Check the site URL"
             ),
-            not_found_row=_RowText(
+            not_found_row=CheckRowText(
                 summary="No Jira API at this URL",
                 description=(
                     "Jira Base URL does not point to a Jira REST API. (HTTP 404)\n"
@@ -506,7 +499,7 @@ class _ProjectsVisibleCheck(_JiraCheck):
                     scope=_INDEXING_SCOPE,
                     user_permission="Browse Projects",
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Account cannot list projects",
                     description=f"Jira refused the project list. (HTTP 403)\n{need}",
                 ),
@@ -565,7 +558,7 @@ class _ConfiguredProjectCheck(_JiraCheck):
                 _raise_for_api_error(
                     e,
                     denied=f"The credential cannot read the project `{project_key}`",
-                    denied_row=_RowText(
+                    denied_row=CheckRowText(
                         summary=f"Account cannot read {project_key}",
                         description=(
                             "Jira refused access to the selected project. "
@@ -669,7 +662,7 @@ class _JqlQueryCheck(_JiraCheck):
             _raise_for_api_error(
                 e,
                 denied="The credential cannot search Jira issues",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Account cannot search issues",
                     description=(
                         "Jira refused the issue search. (HTTP 403)\n"
@@ -677,7 +670,7 @@ class _JqlQueryCheck(_JiraCheck):
                     ),
                 ),
                 bad_request="Jira rejected the JQL query",
-                bad_request_row=_RowText(
+                bad_request_row=CheckRowText(
                     summary="Jira rejected the query",
                     description=(
                         f"Jira cannot run the JQL query: {_error_detail(e)} "
@@ -740,7 +733,7 @@ class _IssueReadCheck(_JiraCheck):
             _raise_for_api_error(
                 e,
                 denied=f"The credential cannot search Jira issues. {hint}",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Account cannot search issues",
                     description=f"Jira refused the issue search. (HTTP 403)\n{need}",
                 ),
@@ -831,14 +824,14 @@ _GROUP_ACCESS_NEED = (
     "global permission."
 )
 _EMAIL_NEED = "Ask users to make their email visible to anyone."
-_PERMISSION_SYNC_SCOPE_ROW = _RowText(
+_PERMISSION_SYNC_SCOPE_ROW = CheckRowText(
     summary="Token lacks a permission sync scope",
     description=(
         "The token signs in but lacks the scope this call needs. (HTTP 401)\n"
         "Add the read:jira-user and manage:jira-configuration scopes."
     ),
 )
-_USER_SCOPE_ROW = _RowText(
+_USER_SCOPE_ROW = CheckRowText(
     summary="Token lacks the read:jira-user scope",
     description=(
         "The token signs in but lacks the scope this call needs. (HTTP 401)\n"
@@ -910,7 +903,7 @@ def _probe_project_key(
         _raise_for_api_error(
             e,
             denied="The credential cannot list Jira projects",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Account cannot list projects",
                 description="Jira refused the project list. (HTTP 403)",
             ),
@@ -954,7 +947,7 @@ def _read_permission_scheme(
                 "The credential cannot read the permission scheme of the project "
                 f"`{project_key}`. {_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Account cannot read permission schemes",
                 description=(
                     f"Synced issues in {project_key} would get no access. "
@@ -967,7 +960,7 @@ def _read_permission_scheme(
                 f"`{project_key}` to this credential. "
                 f"{_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
-            not_found_row=_RowText(
+            not_found_row=CheckRowText(
                 summary=f"No permission scheme for {project_key}",
                 description=(
                     f"Jira did not return the permission scheme of {project_key} "
@@ -1128,7 +1121,7 @@ def _read_role(
                 f"The credential cannot read the roles of the project "
                 f"`{project_key}`. {_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Account cannot read project roles",
                 description=(
                     f"Users with access through roles in {project_key} would get "
@@ -1141,7 +1134,7 @@ def _read_role(
                 f"`{project_key}` to this credential. "
                 f"{_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
-            not_found_row=_RowText(
+            not_found_row=CheckRowText(
                 summary="Project role not found",
                 description=(
                     f"Jira did not return role {role_id} of {project_key} to this "
@@ -1306,7 +1299,7 @@ class _PermissionUserEmailsCheck(_JiraCheck):
                         "The credential cannot read Jira users. "
                         f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
                     ),
-                    denied_row=_RowText(
+                    denied_row=CheckRowText(
                         summary="Account cannot read users",
                         description=(
                             f"Jira refused user details. (HTTP 403)\n{_GROUP_ACCESS_NEED}"
@@ -1396,11 +1389,11 @@ def _list_groups(
                 "The credential cannot list Jira groups. "
                 f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Account cannot list groups",
                 description=f"Jira refused the group list. (HTTP 403)\n{_GROUP_ACCESS_NEED}",
             ),
-            scope_row=_RowText(
+            scope_row=CheckRowText(
                 summary="Token lacks a group sync scope",
                 description=_PERMISSION_SYNC_SCOPE_ROW.description,
             ),
@@ -1454,14 +1447,14 @@ def _sample_group_members(
                     f"The credential cannot read the members of the group "
                     f"`{group_name}`. {_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Account cannot read group members",
                     description=(
                         f"Jira refused the members of {group_name}. (HTTP 403)\n"
                         f"{_GROUP_ACCESS_NEED}"
                     ),
                 ),
-                scope_row=_RowText(
+                scope_row=CheckRowText(
                     summary="Token lacks the read:jira-user scope",
                     description=(
                         "The token signs in but lacks the scope this call needs. "
@@ -1473,7 +1466,7 @@ def _sample_group_members(
                     "Jira has no group-member API (GET /group/member, Jira 6.0+). "
                     "Upgrade Jira"
                 ),
-                not_found_row=_RowText(
+                not_found_row=CheckRowText(
                     summary="Jira has no group member API",
                     description=(
                         "This Jira version has no group-member API (Jira 6.0+). "
