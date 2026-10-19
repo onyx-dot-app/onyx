@@ -346,10 +346,14 @@ def _http_detail(error: BaseException) -> CheckErrorDetail | None:
 
 
 def check_error_detail(
-    error: Exception, error_kind: CheckErrorKind, secrets: Iterable[str]
+    error: Exception,
+    error_kind: CheckErrorKind,
+    secrets: Iterable[str],
+    keep_trace: bool = False,
 ) -> CheckErrorDetail | None:
     """The detail of a check's exception: the HTTP response it carries, and a
-    stack trace when the cause is unknown. None when it has neither. URL query
+    stack trace when the cause is unknown or ``keep_trace`` is set. None when
+    it has neither. URL query
     strings and every value of ``secrets`` (the run's credential values) are
     removed from the response and the trace before either is cut to size,
     so a cut cannot leave part of a secret."""
@@ -359,7 +363,7 @@ def check_error_detail(
         detail.response_excerpt = _scrubbed(
             _cut_for_redaction(detail.response_excerpt, secrets), secrets
         )[:MAX_RESPONSE_EXCERPT_CHARS]
-    if error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
+    if keep_trace or error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
         trace = _scrubbed("".join(traceback.format_exception(error)), secrets)
         detail.stack_trace = trace[-MAX_STACK_TRACE_CHARS:]
     return detail if detail != CheckErrorDetail() else None

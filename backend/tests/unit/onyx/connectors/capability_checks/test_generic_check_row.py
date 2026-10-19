@@ -166,6 +166,25 @@ def test_description_names_the_http_status() -> None:
     assert result.error_detail.request == "api.example.com/2.0/folders/0"
 
 
+def test_a_narrowed_error_keeps_its_stack_trace() -> None:
+    """The row text of a legacy probe's error is inferred, so support can still
+    read the original stack trace, even for a known kind such as rejected."""
+    try:
+        raise ConnectorValidationError("settings failed") from _http_error(401)
+    except ConnectorValidationError as e:
+        error = e
+
+    # Under test.
+    result = _run(error)
+
+    # Postcondition.
+    assert result.error_kind == CheckErrorKind.REJECTED
+    assert result.error_detail is not None
+    assert result.error_detail.stack_trace is not None
+    assert "settings failed" in result.error_detail.stack_trace
+    assert "token=secret" not in result.error_detail.stack_trace
+
+
 def test_error_with_its_own_row_keeps_it() -> None:
     # Precondition.
     error = UnexpectedValidationError(

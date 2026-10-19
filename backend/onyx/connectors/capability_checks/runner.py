@@ -185,8 +185,13 @@ def _safe_error_detail(
     """The error's detail, or None when building it fails: a detail is for
     support, and must never fail the run."""
     try:
+        # A fallback check's row text is inferred from an untyped legacy
+        # error, so its stack trace stays available whatever the kind.
         return check_error_detail(
-            error, error_kind, credential_strings(context.credential_json)
+            error,
+            error_kind,
+            credential_strings(context.credential_json),
+            keep_trace=check.is_fallback,
         )
     except Exception:
         logger.exception(
