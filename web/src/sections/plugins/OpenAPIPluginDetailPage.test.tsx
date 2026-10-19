@@ -196,6 +196,42 @@ async function findToolsPreview() {
 }
 
 describe("detail modal", () => {
+  test("saving metadata preserves availability changed by another administrator", async () => {
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const user = setupUser();
+    const name = await screen.findByRole("textbox", { name: "Name" });
+    await user.clear(name);
+    await user.type(name, "Updated API");
+    tool = { ...tool, enabled: false };
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual(
+      expect.objectContaining({
+        path: "/api/admin/tool/custom/42",
+        body: expect.objectContaining({ name: "Updated API" }),
+      })
+    );
+    expect(tool.enabled).toBe(false);
+  });
+
+  test("workspace availability is a draft until Save", async () => {
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const user = setupUser();
+    const availability = await screen.findByRole("switch", {
+      name: "Enable for workspace",
+    });
+    await user.click(availability);
+    expect(writes).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(writes).toContainEqual({
+        path: "/api/admin/tool/status",
+        method: "PATCH",
+        body: { tool_ids: [42], enabled: false },
+      })
+    );
+  });
+
   test.each(["metadata", "schema", "authentication"] as const)(
     "guards %s drafts in the same frame and retains them when staying",
     async (editor) => {
@@ -315,7 +351,7 @@ describe("detail modal", () => {
       "aria-selected",
       "true"
     );
-    expect(dialog).toHaveAccessibleDescription("https://releases.example.com");
+    expect(dialog).toHaveAccessibleDescription("Read release status");
     expect(screen.queryByText("listReleases")).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "OpenAPI schema" }));
     expect(await screen.findByText("1 tool detected")).toBeVisible();

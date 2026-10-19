@@ -1045,9 +1045,13 @@
         "manageAvailability": "ワークスペースでの利用可否を管理",
         "more": "その他の操作",
         "disableChat": "メインチャットで無効にする",
-        "enableChat": "メインチャットで有効にする",
+        "enableChat": "デフォルトのチャットで有効にする",
         "disableCraft": "Craftで無効にする",
-        "enableCraft": "Craftで有効にする"
+        "enableCraft": "Craftで有効にする",
+        "chatDescription": "カスタムエージェントを使わないチャットでこのプラグインを利用可能にします。アクセス制御は引き続き適用されます。",
+        "mcpCraftDescription": "Craft でこのプラグインを利用可能にします。アクセス制御とツールの権限は引き続き適用されます。",
+        "craftAppDescription": "Craft でこのアプリを利用可能にします。接続と承認の要件は引き続き適用されます。",
+        "workspaceDescription": "チャットとカスタムエージェントでこのプラグインの実行を許可します。既存のアクセスと認証の要件は引き続き適用されます。"
       },
       "craftApp": {
         "tabs": {
@@ -1127,6 +1131,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Craft アプリ",
         "manage": {
           "label": "{name} を管理"
         },
@@ -1206,15 +1211,16 @@
     "mcpTools": {
       "title": "ツール",
       "enabledTab": "利用可能なツール",
-      "policiesTab": "Craft の権限",
+      "policiesTab": "承認設定",
       "refresh": "ツールを更新",
       "loadError": "ツールを読み込めませんでした",
       "saveError": "ツールの設定を保存できませんでした",
       "refreshError": "ツールを更新できませんでした",
-      "search": "ツールを検索"
+      "search": "ツールを検索",
+      "enabledCount": "有効なツール: {total} 個中 {enabled} 個"
     },
     "mcpDetail": {
-      "configuration": "サーバー設定",
+      "configuration": "設定",
       "authentication": "認証",
       "loadError": "MCPサーバーを読み込めませんでした",
       "notFound": "MCPサーバーが見つかりません",

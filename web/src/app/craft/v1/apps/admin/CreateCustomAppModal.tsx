@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import isEqual from "lodash/isEqual";
 import {
   Button,
+  Divider,
   InputTypeIn,
   MessageCard,
   Modal,
@@ -17,6 +18,7 @@ import { InputKeyValue, InputList, type KeyValue } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import { UserManagementSwitch } from "@/sections/actions/PolicyEditor";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
 import {
   getAppTypeLogo,
@@ -41,7 +43,6 @@ import {
   skillEditUrlForApp,
 } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
-import { externalAppDisplayUrl } from "@/lib/plugins/externalAppDisplayUrl";
 
 interface CreateCustomAppModalProps {
   onClose: () => void;
@@ -76,12 +77,14 @@ export default function CreateCustomAppModal({
   existingApp,
 }: CreateCustomAppModalProps) {
   const t = useTranslations("craft.apps.customApp");
+  const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
   const policyText = useTranslations("craft.actionPolicies");
   const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
     existingApp?.users_can_manage_policies ?? true
   );
   const tApps = useTranslations("craft.apps");
   const isEdit = existingApp !== null;
+  const [enabled, setEnabled] = useState(existingApp?.enabled ?? true);
   const nameId = useId();
   const router = useRouter();
   // Focus the name field for new apps only; edits keep the natural tab order.
@@ -118,7 +121,8 @@ export default function CreateCustomAppModal({
       new Set(existingApp.associated_skills.map((skill) => skill.id))
     );
   const configDirty = existingApp
-    ? usersCanManagePolicies !== existingApp.users_can_manage_policies ||
+    ? enabled !== existingApp.enabled ||
+      usersCanManagePolicies !== existingApp.users_can_manage_policies ||
       name !== existingApp.name ||
       associationDirty ||
       !isEqual(upstreamPatterns, existingApp.upstream_url_patterns) ||
@@ -165,6 +169,7 @@ export default function CreateCustomAppModal({
     try {
       if (existingApp) {
         await updateExternalApp(existingApp.id, {
+          enabled,
           users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
@@ -176,6 +181,7 @@ export default function CreateCustomAppModal({
         onClose();
       } else {
         const created = await createCustomExternalApp({
+          enabled,
           users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
@@ -293,7 +299,7 @@ export default function CreateCustomAppModal({
             <Modal.Header
               icon={getAppTypeLogo("CUSTOM")}
               title={existingApp?.name ?? t("createTitle")}
-              description={externalAppDisplayUrl(upstreamPatterns) || undefined}
+              description={pluginCopy("craftOnlyDescription")}
               onClose={requestClose}
             />
             <Modal.Body twoTone={false} alignItems="stretch">
@@ -336,6 +342,12 @@ export default function CreateCustomAppModal({
                         placeholder={t("placeholders.allowedUrl")}
                       />
                     </div>
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    <PluginAvailabilitySwitch
+                      enabled={enabled}
+                      onChange={setEnabled}
+                      disabled={isSaving}
+                    />
                     <UserManagementSwitch
                       value={usersCanManagePolicies}
                       onChange={setUsersCanManagePolicies}

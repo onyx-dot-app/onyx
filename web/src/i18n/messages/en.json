@@ -1045,9 +1045,13 @@
         "manageAvailability": "Manage workspace availability",
         "more": "More actions",
         "disableChat": "Disable for main Chat",
-        "enableChat": "Enable for main Chat",
+        "enableChat": "Enable in default Chat",
         "disableCraft": "Disable for Craft",
-        "enableCraft": "Enable for Craft"
+        "enableCraft": "Enable for Craft",
+        "chatDescription": "Make this plugin available in chats without a custom agent. Access controls still apply.",
+        "mcpCraftDescription": "Make this plugin available in Craft. Access controls and tool permissions still apply.",
+        "craftAppDescription": "Make this app available in Craft. Connection and approval requirements still apply.",
+        "workspaceDescription": "Allow this plugin to run in Chat and custom agents. Existing access and authentication requirements still apply."
       },
       "craftApp": {
         "tabs": {
@@ -1127,6 +1131,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Craft App",
         "manage": {
           "label": "Manage {name}"
         },
@@ -1206,15 +1211,16 @@
     "mcpTools": {
       "title": "Tools",
       "enabledTab": "Available tools",
-      "policiesTab": "Craft permissions",
+      "policiesTab": "Approval settings",
       "refresh": "Refresh tools",
       "loadError": "Could not load tools",
       "saveError": "Could not save tool settings",
       "refreshError": "Could not refresh tools",
-      "search": "Search tools"
+      "search": "Search tools",
+      "enabledCount": "Tools enabled: {enabled} of {total}"
     },
     "mcpDetail": {
-      "configuration": "Server configuration",
+      "configuration": "Configuration",
       "authentication": "Authentication",
       "loadError": "Could not load MCP server",
       "notFound": "MCP server not found",

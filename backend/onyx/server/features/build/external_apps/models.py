@@ -22,6 +22,7 @@ class CreateBuiltInExternalAppRequest(BaseModel):
     from ``app_type``; admins don't supply it. New apps are enabled by default.
     """
 
+    enabled: bool = True
     name: str
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
@@ -38,6 +39,7 @@ class CreateCustomExternalAppRequest(BaseModel):
 
     users_can_manage_policies: bool = True
 
+    enabled: bool = True
     name: str
     upstream_url_patterns: list[str]
     auth_template: dict[str, str]

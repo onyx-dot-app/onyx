@@ -31,7 +31,6 @@ import {
   skillEditUrlForApp,
 } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
-import { externalAppDisplayUrl } from "@/lib/plugins/externalAppDisplayUrl";
 
 // Field key for the instance name; prefixed so it can never collide with a
 // descriptor-declared credential key.
@@ -54,8 +53,10 @@ export default function ConfigureProviderModal({
   existingApp,
 }: ConfigureProviderModalProps) {
   const t = useTranslations("craft.apps.configureProvider");
+  const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
   const tApps = useTranslations("craft.apps");
   const router = useRouter();
+  const [enabled, setEnabled] = useState(existingApp?.enabled ?? true);
   const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
     existingApp?.users_can_manage_policies ?? true
   );
@@ -126,9 +127,10 @@ export default function ConfigureProviderModal({
     policies: Record<string, ActionPolicy>
   ) {
     if (managed && existingApp) {
-      // Managed: only policies are persisted; a partial PATCH leaves the rest.
+      // Keep Onyx-managed credentials unchanged.
       await updateExternalApp(existingApp.id, {
         action_policies: policies,
+        enabled,
         users_can_manage_policies: usersCanManagePolicies,
         ...associationPatch,
       });
@@ -144,6 +146,7 @@ export default function ConfigureProviderModal({
         upstream_url_patterns: descriptor.upstream_url_patterns,
         auth_template: descriptor.auth_template,
         action_policies: policies,
+        enabled,
         users_can_manage_policies: usersCanManagePolicies,
       };
       if (existingApp) {
@@ -229,18 +232,19 @@ export default function ConfigureProviderModal({
           : undefined
       }
       alternateContentConfirmationOpen={upload.confirmationOpen}
+      enabled={enabled}
+      onEnabledChange={setEnabled}
       usersCanManagePolicies={usersCanManagePolicies}
       onUsersCanManagePoliciesChange={setUsersCanManagePolicies}
       isAdditionalContentDirty={
+        enabled !== (existingApp?.enabled ?? true) ||
         existingAssociationDirty ||
         usersCanManagePolicies !==
           (existingApp?.users_can_manage_policies ?? true)
       }
       onClose={upload.isOpen ? upload.requestDismiss : onClose}
       title={existingApp?.name ?? descriptor.name}
-      displayUrl={externalAppDisplayUrl(
-        existingApp?.upstream_url_patterns ?? descriptor.upstream_url_patterns
-      )}
+      description={pluginCopy("craftOnlyDescription")}
       icon={getAppTypeLogo(descriptor.app_type)}
       authenticationInstructions={
         managed ? undefined : descriptor.setup_instructions

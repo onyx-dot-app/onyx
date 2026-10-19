@@ -147,6 +147,7 @@ const server: MCPServer = {
   connection_status: null,
   id: 7,
   name: "Example MCP",
+  description: "Manage workspace projects.",
   server_url: "https://example.com/mcp",
   owner: "admin",
   auth_type: MCPAuthenticationType.NONE,
@@ -182,11 +183,15 @@ beforeEach(() => {
   mockUpdateTools.mockResolvedValue(undefined);
   jest.mocked(refreshMCPServerTools).mockResolvedValue([]);
   jest.mocked(updateMCPServerStatus).mockResolvedValue();
-  jest.spyOn(global, "fetch").mockImplementation(async () => json(server));
+  jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (input) =>
+      String(input).includes("/tools/snapshots") ? json([]) : json(server)
+    );
 });
 afterEach(() => jest.restoreAllMocks());
 
-test("keeps lifecycle controls on the Plugins directory, not detail", async () => {
+test("shows configuration without a lifecycle menu", async () => {
   render(<MCPServerDetailPage serverId={7} />);
   await screen.findByRole("textbox", { name: "Server draft" });
   expect(
@@ -202,7 +207,7 @@ test("keeps lifecycle controls on the Plugins directory, not detail", async () =
   ).not.toBeInTheDocument();
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
-    server.server_url
+    server.description
   );
 });
 

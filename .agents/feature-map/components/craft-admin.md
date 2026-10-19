@@ -46,6 +46,9 @@ Bulk changes affect matching editable actions. Default restores each catalog pol
 Personal and task editors reuse this control, with a workspace-reset callback.
 Workspace-disabled actions remain locked and explain the restriction on hover.
 The MCP tools editor retains its bulk selector; each tool defaults to Ask.
+MCP Configuration places the user approval-settings switch below workspace availability.
+It saves with server configuration. The Tools tab saves only tool availability and action policies.
+
 Policy rows keep controls on the right. Names and descriptions wrap within the
 remaining width so the full text stays visible without hover or expansion.
 On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
@@ -58,14 +61,16 @@ Tabs follow the MCP flow: Configuration, Authentication, then Tools.
 Configuration includes identity and URL patterns where applicable. Authentication contains credentials and custom headers.
 Tools contains action policies. Existing skill associations remain in a fourth Skills tab.
 Per-action policy controls stay visible; there is no Advanced disclosure.
-Built-in and custom apps show the user-management switch in Configuration.
+Built-in and custom apps show Enable for Craft above the user-management switch in Configuration.
+Availability saves with the configuration and defaults on during setup.
+External-app directory indicators are read-only; availability has no separate row menu.
 Custom apps have no action catalog, so Tools does not invent per-action controls.
 The user-management switch defaults on and saves with the app configuration.
 For existing apps, changing only this switch enables Save and activates the unsaved-change guard.
 The modal fits the active panel content and scrolls at the 80dvh height limit (or the available viewport space, if smaller);
 parents own the drafts and selected tab, including across skill-upload cancellation.
-The header shows the app logo, name, and the same clean service origin as its
-directory card, using MCP's modal padding and tab spacing.
+The header shows the app logo, name, and a localized Craft availability summary.
+It uses MCP's modal padding and tab spacing.
 `web/src/lib/plugins/externalAppDisplayUrl.ts` formats literal HTTP origins for
 display; it never rewrites stored proxy URL-matching patterns. Complex host
 regexes do not produce a fabricated service URL.

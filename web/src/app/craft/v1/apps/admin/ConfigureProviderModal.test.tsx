@@ -111,7 +111,31 @@ function renderExistingProvider(onClose = jest.fn()) {
 }
 
 describe("ConfigureProviderModal", () => {
-  it("shows the saved service origin in its header without regex syntax", () => {
+  it("saves Craft availability above user permissions", async () => {
+    jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue(APP);
+    renderExistingProvider();
+    const availability = screen.getByRole("switch", {
+      name: "Enable for Craft",
+    });
+    const permissions = screen.getByRole("switch", {
+      name: "Let users manage approval settings",
+    });
+    expect(
+      availability.compareDocumentPosition(permissions) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    fireEvent.click(availability);
+    expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        APP.id,
+        expect.objectContaining({ enabled: false })
+      )
+    );
+  });
+
+  it("shows an app description instead of the saved service URL", () => {
     render(
       <ConfigureProviderModal
         onClose={jest.fn()}
@@ -123,11 +147,18 @@ describe("ConfigureProviderModal", () => {
         }}
       />
     );
-    expect(screen.getAllByText("https://api.linear.app")[0]).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "This app is available in Craft. Main Chat does not support it."
+      )[0]
+    ).toBeVisible();
+    expect(
+      screen.queryByText("https://api.linear.app")
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("https://api\\.linear\\.app/.*")).toBeNull();
   });
 
-  it("shows the descriptor origin before creation", () => {
+  it("shows an app description before creation", () => {
     render(
       <ConfigureProviderModal
         onClose={jest.fn()}
@@ -136,7 +167,12 @@ describe("ConfigureProviderModal", () => {
         existingApp={null}
       />
     );
-    expect(screen.getAllByText("https://slack.com")[0]).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "This app is available in Craft. Main Chat does not support it."
+      )[0]
+    ).toBeVisible();
+    expect(screen.queryByText("https://slack.com")).not.toBeInTheDocument();
   });
 
   it("separates configuration and authentication and retains edits across tabs", async () => {
@@ -235,6 +271,7 @@ describe("ConfigureProviderModal", () => {
         upstream_url_patterns: ["https://slack.com/api/.*"],
         auth_template: { Authorization: "Bearer {token}" },
         action_policies: {},
+        enabled: true,
         users_can_manage_policies: true,
         organization_credentials: { token: "updated-token" },
       })
@@ -271,6 +308,7 @@ describe("ConfigureProviderModal", () => {
           app_type: "SLACK",
           upstream_url_patterns: DESCRIPTOR.upstream_url_patterns,
           auth_template: DESCRIPTOR.auth_template,
+          enabled: true,
           users_can_manage_policies: true,
           organization_credentials: {},
           action_policies: {},
@@ -317,6 +355,7 @@ describe("ConfigureProviderModal", () => {
       expect(externalAppsService.createBuiltInExternalApp).toHaveBeenCalledWith(
         expect.objectContaining({
           upstream_url_patterns: perAccountDescriptor.upstream_url_patterns,
+          enabled: true,
           users_can_manage_policies: true,
           organization_credentials: { subdomain: "acme" },
         })

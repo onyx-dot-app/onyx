@@ -221,10 +221,11 @@ New tasks start with all apps off. Disabled editable rows show the switch withou
 Enabled rows show action counts and Manage actions; actions do not expand inline.
 When creating a task, first enable starts with current personal choices. Existing tasks keep their saved choices, including an empty map that defaults to Ask.
 Disabling preserves saved choices; re-enabling restores them. Later personal edits do not change saved task choices.
-Manage actions opens a modal for one app. Search narrows the visible actions; each row has Auto-approve, Ask, and Disabled buttons.
+Manage actions opens a modal for one app. Search narrows the visible actions.
+Each row has Auto-approve, Ask, and Disabled buttons.
 Bulk controls affect only visible editable actions. Reset all to workspace defaults affects every
 editable action in that app, regardless of search. Workspace-locked choices remain unchanged.
-The matching-action count sits on the left; Set permissions aligns on the right.
+The filtered tool count, including locked tools, sits on the left; Set permissions aligns on the right.
 Its menu offers Auto-approve, Ask, Disabled, and a separated workspace reset action. Personal and task modals share the editor in `web/src/sections/actions/PolicyEditor.tsx`.
 Save changes is available only after a policy changes. It copies choices into the task form draft.
 Closing a changed modal asks the user to discard changes or keep editing.

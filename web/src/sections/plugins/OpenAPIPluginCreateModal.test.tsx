@@ -35,9 +35,13 @@ const definition = {
 
 afterEach(() => jest.restoreAllMocks());
 
-test.each([{ customHeaders: [] }, { customHeaders: null }])(
-  "attaches a full admin's new action to default Chat with $customHeaders headers",
-  async ({ customHeaders }) => {
+test.each([
+  { customHeaders: [], enabled: true },
+  { customHeaders: null, enabled: true },
+  { customHeaders: [], enabled: false },
+])(
+  "creates a full admin's action with enabled=$enabled and $customHeaders headers",
+  async ({ customHeaders, enabled }) => {
     mockFullAdmin = true;
     const user = setupUser();
     const onCreated = jest.fn();
@@ -55,7 +59,14 @@ test.each([{ customHeaders: [] }, { customHeaders: null }])(
         return new Response(
           JSON.stringify(
             created
-              ? [{ id: 42, name: "Release API", custom_headers: customHeaders }]
+              ? [
+                  {
+                    id: 42,
+                    enabled,
+                    name: "Release API",
+                    custom_headers: customHeaders,
+                  },
+                ]
               : []
           )
         );
@@ -78,8 +89,23 @@ test.each([{ customHeaders: [] }, { customHeaders: null }])(
       target: { value: JSON.stringify(definition) },
     });
     await user.click(screen.getByRole("button", { name: "Continue" }));
+    const availability = await screen.findByRole("switch", {
+      name: "Enable for workspace",
+    });
+    expect(availability).toBeChecked();
+    if (!enabled) await user.click(availability);
     await user.click(await screen.findByRole("button", { name: "Add Action" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
+    expect(writes).toContainEqual({
+      path: "/api/admin/tool/custom",
+      body: expect.objectContaining({ enabled }),
+    });
+    if (!enabled) {
+      expect(
+        writes.some((write) => write.path === "/api/admin/default-assistant")
+      ).toBe(false);
+      return;
+    }
     expect(writes).toContainEqual({
       path: "/api/admin/default-assistant",
       body: { tool_ids: [99, 42] },
@@ -110,7 +136,9 @@ test.each(["mounted", "disposed"])(
       if (path === "/api/admin/tool/custom") {
         createBody = JSON.parse(String(init?.body));
         created = true;
-        return new Response(JSON.stringify({ id: 42, name: "Release API" }));
+        return new Response(
+          JSON.stringify({ id: 42, enabled: true, name: "Release API" })
+        );
       }
       throw new Error(`Unexpected request ${path}`);
     });
@@ -138,6 +166,7 @@ test.each(["mounted", "disposed"])(
     await user.click(await screen.findByRole("button", { name: "Add Action" }));
     await waitFor(() =>
       expect(createBody).toEqual({
+        enabled: true,
         name: "Release API",
         definition,
         custom_headers: [],
@@ -155,6 +184,7 @@ test.each(["mounted", "disposed"])(
           JSON.stringify([
             {
               id: 42,
+              enabled: true,
               name: "Release API",
               custom_headers: [],
               passthrough_auth: false,
@@ -217,6 +247,7 @@ test("keeps OAuth settings through Back and saves them only on final creation", 
             ? [
                 {
                   id: 42,
+                  enabled: true,
                   name: "Release API",
                   permissions: { authenticate: true },
                 },
@@ -231,7 +262,9 @@ test("keeps OAuth settings through Back and saves them only on final creation", 
     writes.push({ path, body: JSON.parse(String(init?.body)) });
     if (path === "/api/admin/tool/custom") {
       created = true;
-      return new Response(JSON.stringify({ id: 42, name: "Release API" }));
+      return new Response(
+        JSON.stringify({ id: 42, enabled: true, name: "Release API" })
+      );
     }
     if (path === "/api/admin/oauth-config/create")
       return new Response(JSON.stringify({ id: 99 }));

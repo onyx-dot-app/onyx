@@ -1045,9 +1045,13 @@
         "manageAvailability": "워크스페이스 가용성 관리",
         "more": "추가 작업",
         "disableChat": "기본 채팅에서 비활성화",
-        "enableChat": "기본 채팅에서 활성화",
+        "enableChat": "기본 채팅에서 사용하도록 설정",
         "disableCraft": "Craft에서 비활성화",
-        "enableCraft": "Craft에서 활성화"
+        "enableCraft": "Craft에서 활성화",
+        "chatDescription": "사용자 지정 에이전트가 없는 채팅에서 이 플러그인을 사용할 수 있게 합니다. 액세스 제어는 계속 적용됩니다.",
+        "mcpCraftDescription": "Craft에서 이 플러그인을 사용할 수 있게 합니다. 액세스 제어와 도구 권한은 계속 적용됩니다.",
+        "craftAppDescription": "Craft에서 이 앱을 사용할 수 있게 합니다. 연결 및 승인 요구 사항은 계속 적용됩니다.",
+        "workspaceDescription": "채팅 및 사용자 지정 에이전트에서 이 플러그인을 실행할 수 있게 합니다. 기존 액세스 및 인증 요구 사항은 계속 적용됩니다."
       },
       "craftApp": {
         "tabs": {
@@ -1127,6 +1131,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Craft 앱",
         "manage": {
           "label": "{name} 관리"
         },
@@ -1206,15 +1211,16 @@
     "mcpTools": {
       "title": "도구",
       "enabledTab": "사용 가능한 도구",
-      "policiesTab": "Craft 권한",
+      "policiesTab": "승인 설정",
       "refresh": "도구 새로 고침",
       "loadError": "도구를 불러올 수 없습니다",
       "saveError": "도구 설정을 저장할 수 없습니다",
       "refreshError": "도구를 새로 고칠 수 없습니다",
-      "search": "도구 검색"
+      "search": "도구 검색",
+      "enabledCount": "활성화된 도구: {total}개 중 {enabled}개"
     },
     "mcpDetail": {
-      "configuration": "서버 설정",
+      "configuration": "설정",
       "authentication": "인증",
       "loadError": "MCP 서버를 불러올 수 없습니다",
       "notFound": "MCP 서버를 찾을 수 없습니다",

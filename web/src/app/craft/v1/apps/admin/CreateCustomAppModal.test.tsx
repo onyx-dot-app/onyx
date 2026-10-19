@@ -85,6 +85,32 @@ function renderExistingApp({
 }
 
 describe("CreateCustomAppModal", () => {
+  it("saves Craft availability above user permissions", async () => {
+    jest
+      .mocked(externalAppsService.updateExternalApp)
+      .mockResolvedValue(CUSTOM_APP);
+    renderExistingApp();
+    const availability = screen.getByRole("switch", {
+      name: "Enable for Craft",
+    });
+    const permissions = screen.getByRole("switch", {
+      name: "Let users manage approval settings",
+    });
+    expect(
+      availability.compareDocumentPosition(permissions) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    fireEvent.click(availability);
+    expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        CUSTOM_APP.id,
+        expect.objectContaining({ enabled: false })
+      )
+    );
+  });
+
   it("labels the name and discards a new draft from the close button", () => {
     const onClose = jest.fn();
     render(
@@ -108,7 +134,12 @@ describe("CreateCustomAppModal", () => {
 
   it("keeps the editor shell stable during discard confirmation", () => {
     renderExistingApp();
-    expect(screen.getAllByText("https://api.acme.test")[0]).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "This app is available in Craft. Main Chat does not support it."
+      )[0]
+    ).toBeVisible();
+    expect(screen.queryByText("https://api.acme.test")).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Draft" },
     });
@@ -204,6 +235,7 @@ describe("CreateCustomAppModal", () => {
         name: "Acme CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        enabled: true,
         users_can_manage_policies: true,
         organization_credentials: {},
       });
@@ -252,6 +284,7 @@ describe("CreateCustomAppModal", () => {
         name: "Updated CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        enabled: true,
         users_can_manage_policies: true,
         organization_credentials: {},
       })
@@ -311,6 +344,7 @@ describe("CreateCustomAppModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
       expect(externalAppsService.createCustomExternalApp).toHaveBeenCalledWith({
+        enabled: true,
         users_can_manage_policies: true,
         name: "Reports API",
         upstream_url_patterns: ["https://reports.internal/*"],
@@ -368,6 +402,7 @@ describe("CreateCustomAppModal", () => {
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: { Authorization: "Bearer {api_key}" },
         organization_credentials: { api_key: "sk-original-secret+/=" },
+        enabled: true,
         users_can_manage_policies: true,
       })
     );
@@ -482,6 +517,7 @@ describe("CreateCustomAppModal", () => {
         name: "Acme CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        enabled: true,
         users_can_manage_policies: true,
         organization_credentials: {},
         associated_skill_ids: ["skill-a"],

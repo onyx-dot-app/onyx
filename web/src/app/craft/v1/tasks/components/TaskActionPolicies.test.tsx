@@ -314,7 +314,7 @@ it("keeps hundreds of actions out of the form and applies filtered edits only af
   expect(screen.queryByText("Read record 199")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Manage actions" }));
   await user.type(
-    screen.getByRole("textbox", { name: "Search actions" }),
+    screen.getByRole("textbox", { name: "Search tools" }),
     "Send messages"
   );
   expect(screen.queryByText("Read record 199")).not.toBeInTheDocument();
@@ -327,7 +327,7 @@ it("keeps hundreds of actions out of the form and applies filtered edits only af
   ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Manage actions" }));
   await user.type(
-    screen.getByRole("textbox", { name: "Search actions" }),
+    screen.getByRole("textbox", { name: "Search tools" }),
     "Send messages"
   );
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
@@ -356,12 +356,12 @@ it("searches actions and keeps workspace-disabled actions out of bulk edits", as
   );
   await user.click(screen.getByRole("button", { name: "Manage actions" }));
   await user.type(
-    screen.getByRole("textbox", { name: "Search actions" }),
+    screen.getByRole("textbox", { name: "Search tools" }),
     "Delete messages"
   );
   expect(screen.queryByText("Send messages")).not.toBeInTheDocument();
   expect(screen.getByText("Delete messages")).toBeInTheDocument();
-  expect(screen.getByText("0 matching editable actions")).toBeInTheDocument();
+  expect(screen.getByText("1 tool")).toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
   expect(screen.getByRole("option", { name: "Auto-approve" })).toHaveAttribute(
     "aria-disabled",
@@ -397,7 +397,7 @@ it("resets all editable actions to workspace defaults even when search hides the
   );
   await user.click(screen.getByRole("button", { name: "Manage actions" }));
   await user.type(
-    screen.getByRole("textbox", { name: "Search actions" }),
+    screen.getByRole("textbox", { name: "Search tools" }),
     "Send messages"
   );
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));

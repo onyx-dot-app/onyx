@@ -1045,9 +1045,13 @@
         "manageAvailability": "إدارة الإتاحة في مساحة العمل",
         "more": "المزيد من الإجراءات",
         "disableChat": "تعطيل في الدردشة الرئيسية",
-        "enableChat": "تفعيل في الدردشة الرئيسية",
+        "enableChat": "تفعيل في الدردشة الافتراضية",
         "disableCraft": "تعطيل في Craft",
-        "enableCraft": "تفعيل في Craft"
+        "enableCraft": "تفعيل في Craft",
+        "chatDescription": "إتاحة هذه الإضافة في المحادثات التي لا تستخدم وكيلًا مخصصًا. تظل ضوابط الوصول سارية.",
+        "mcpCraftDescription": "إتاحة هذه الإضافة في Craft. تظل ضوابط الوصول وأذونات الأدوات سارية.",
+        "craftAppDescription": "إتاحة هذا التطبيق في Craft. تظل متطلبات الاتصال والموافقة سارية.",
+        "workspaceDescription": "السماح بتشغيل هذه الإضافة في الدردشة والوكلاء المخصصين. تظل متطلبات الوصول والمصادقة الحالية سارية."
       },
       "craftApp": {
         "tabs": {
@@ -1127,6 +1131,7 @@
         }
       },
       "row": {
+        "externalAppKind": "تطبيق Craft",
         "manage": {
           "label": "إدارة {name}"
         },
@@ -1206,15 +1211,16 @@
     "mcpTools": {
       "title": "الأدوات",
       "enabledTab": "الأدوات المتاحة",
-      "policiesTab": "أذونات Craft",
+      "policiesTab": "إعدادات الموافقة",
       "refresh": "تحديث الأدوات",
       "loadError": "تعذر تحميل الأدوات",
       "saveError": "تعذر حفظ إعدادات الأدوات",
       "refreshError": "تعذر تحديث الأدوات",
-      "search": "البحث عن أدوات"
+      "search": "البحث عن أدوات",
+      "enabledCount": "الأدوات المفعّلة: {enabled} من {total}"
     },
     "mcpDetail": {
-      "configuration": "إعدادات الخادم",
+      "configuration": "الإعدادات",
       "authentication": "المصادقة",
       "loadError": "تعذر تحميل خادم MCP",
       "notFound": "لم يتم العثور على خادم MCP",

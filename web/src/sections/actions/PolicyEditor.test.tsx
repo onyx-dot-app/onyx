@@ -107,7 +107,7 @@ test("bulk changes only matching editable actions and reset delegates to the own
   );
   const user = setupUser();
   await user.type(
-    screen.getByRole("textbox", { name: "Search actions" }),
+    screen.getByRole("textbox", { name: "Search tools" }),
     "Read"
   );
   expect(

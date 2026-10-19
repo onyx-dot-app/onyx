@@ -489,7 +489,7 @@ function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
       >
         <Modal.Content preventAccidentalClose={false}>
           <Modal.Header
-            title={kind === "auth" ? "Authentication" : "Server configuration"}
+            title={kind === "auth" ? "Authentication" : "Configuration"}
             onClose={close}
           />
           <Modal.Body padding={0}>

@@ -23,14 +23,10 @@ interface PluginRowProps {
 
 function PluginAvailability({
   plugin,
-  onOpen,
   disabled,
-  expanded,
   craftAvailable,
 }: PluginRowProps & {
-  onOpen?: () => void;
   disabled: boolean;
-  expanded: boolean;
   craftAvailable: boolean;
 }) {
   const t = useTranslations("actions.plugins.availability");
@@ -141,10 +137,7 @@ function PluginAvailability({
           icon={StatusIcon}
           aria-label={label}
           aria-describedby={craftLabel ? craftDescriptionId : undefined}
-          onClick={onOpen}
           disabled={disabled}
-          aria-haspopup={onOpen ? "menu" : undefined}
-          aria-expanded={onOpen ? expanded : undefined}
         />
       </Tooltip>
       {craftLabel && (
@@ -185,7 +178,11 @@ export function PluginRow({ plugin }: PluginRowProps) {
       : can(plugin.tool, "edit") || can(plugin.tool, "authenticate"));
 
   return (
-    <div className="relative min-w-0" role="group" aria-label={resource.name}>
+    <div
+      className="relative min-w-0 [&_button]:relative [&_button]:z-10"
+      role="group"
+      aria-label={resource.name}
+    >
       <SelectCard border="none" padding={0}>
         <div className="flex min-w-0 items-center gap-2 pe-3">
           <Link
@@ -193,7 +190,7 @@ export function PluginRow({ plugin }: PluginRowProps) {
             aria-label={t(canManage ? "row.manage.label" : "row.view.label", {
               name: resource.name,
             })}
-            className="block min-w-0 flex-1 rounded-12 focus-visible:outline focus-visible:outline-2"
+            className="block min-w-0 flex-1 rounded-12 after:absolute after:inset-0 after:content-[''] focus-visible:outline focus-visible:outline-2"
           >
             <PluginRowLayout
               icon={icon}
@@ -201,14 +198,17 @@ export function PluginRow({ plugin }: PluginRowProps) {
               description={description}
               action={
                 <Text font="secondary-body" color="text-03">
-                  {t(`kind.${plugin.kind}`)}
+                  {t(
+                    plugin.kind === "external-app"
+                      ? "row.externalAppKind"
+                      : `kind.${plugin.kind}`
+                  )}
                 </Text>
               }
             />
           </Link>
           <PluginLifecycleMenu
             plugin={plugin}
-            craftAvailable={craftAvailable}
             renderStatus={(controls) => (
               <PluginAvailability
                 plugin={plugin}

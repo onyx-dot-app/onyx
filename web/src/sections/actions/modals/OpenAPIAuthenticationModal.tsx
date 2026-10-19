@@ -51,6 +51,7 @@ export interface OpenAPIAuthFormValues extends OAuthConfigFields {
 }
 
 interface OpenAPIAuthenticationModalProps {
+  beforeFields?: React.ReactNode;
   presentation?: "modal" | "inline";
   active?: boolean;
   footerTarget?: HTMLDivElement | null;
@@ -91,6 +92,7 @@ const defaultValues: OpenAPIAuthFormValues = {
 };
 
 export default function OpenAPIAuthenticationModal({
+  beforeFields,
   presentation = "modal",
   active: visible = true,
   footerTarget = null,
@@ -432,6 +434,7 @@ export default function OpenAPIAuthenticationModal({
               padding={presentation === "inline" ? 0 : 6}
               alignItems="stretch"
             >
+              {beforeFields}
               {submissionError && (
                 <Text as="p" mainUiBody className="text-action-text-danger-05">
                   {submissionError}

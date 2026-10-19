@@ -278,6 +278,39 @@ test.each([true, false])(
   }
 );
 
+test.each([false, true])(
+  "setup preserves opted-out surfaces through OAuth=%s",
+  async (oauth) => {
+    craftAvailable = true;
+    if (oauth) probeResponse = async () => oauthResult;
+    toolsResponse = Promise.resolve(new Response(JSON.stringify([{ id: 81 }])));
+    render(<SetupModal />);
+    await openConnection();
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("switch", { name: "Enable in default Chat" })
+    );
+    await user.click(screen.getByRole("switch", { name: "Enable for Craft" }));
+    await user.click(screen.getByRole("button", { name: copy.connect }));
+    await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
+    expect(
+      writes.find((write) => write.path === "/api/admin/default-assistant")
+    ).toBeUndefined();
+    expect(
+      writes.find((write) => write.path === "/api/admin/mcp/server")?.body
+    ).toEqual(expect.objectContaining({ available_in_craft: false }));
+    if (oauth)
+      expect(
+        writes.find((write) => write.path === "/api/admin/mcp/oauth/connect")
+          ?.body
+      ).toEqual(
+        expect.objectContaining({
+          return_path: "/admin/plugins/mcp/7?trigger_fetch=true",
+        })
+      );
+  }
+);
+
 test("first OAuth setup carries the Chat enable intent and enables after already-authenticated discovery", async () => {
   probeResponse = async () => oauthResult;
   toolsResponse = Promise.resolve(new Response(JSON.stringify([{ id: 81 }])));

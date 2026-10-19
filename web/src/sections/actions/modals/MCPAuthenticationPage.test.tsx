@@ -1204,6 +1204,39 @@ test("keeps an explicit automatic choice when discovery finishes late", async ()
 });
 
 describe("inline authentication", () => {
+  test("saved authentication stays clean until an actual field changes", async () => {
+    const configuredServer = { ...server, status: MCPServerStatus.CONNECTED };
+    mockNetwork(configuredServer);
+    const dirty = jest.fn();
+    render(
+      <MCPAuthenticationPage
+        active
+        variant="page"
+        mcpServer={configuredServer}
+        onTriggerFetchTools={async () => {}}
+        onBusyChange={() => {}}
+        onDirtyChange={dirty}
+        onSaved={async () => {}}
+        onComplete={() => {}}
+      />
+    );
+    const save = screen.getByTestId("mcp-auth-connect-button");
+    await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
+    expect(save).toBeDisabled();
+    const user = setupUser();
+    const clientId = screen.getByLabelText(copy.clientId.label, {
+      exact: false,
+    });
+    await user.clear(clientId);
+    await user.type(clientId, "updated-client");
+    await waitFor(() => expect(save).toBeEnabled());
+    expect(dirty).toHaveBeenLastCalledWith(true);
+    await user.clear(clientId);
+    await user.type(clientId, "registered-client");
+    await waitFor(() => expect(save).toBeDisabled());
+    expect(dirty).toHaveBeenLastCalledWith(false);
+  });
+
   test("selecting the active automatic radio preserves the choice without making a dirty draft", async () => {
     const configuredServer = { ...server, admin_credentials: {} };
     const network = mockNetwork(configuredServer);

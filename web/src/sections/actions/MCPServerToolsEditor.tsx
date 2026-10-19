@@ -17,7 +17,6 @@ import {
 import { Section } from "@opal/layouts";
 import MCPToolRow from "@/sections/plugins/MCPToolRow";
 import { SvgRefreshCw } from "@opal/icons";
-import { richNodes } from "@opal/utils";
 import { IconLoader } from "@opal/loaders";
 import { useSettings } from "@/lib/settings/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -28,7 +27,6 @@ import { refreshMCPServerTools, updateMCPServer } from "@/lib/mcp/svc";
 import { updateToolsStatus } from "@/lib/tools/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
-import { UserManagementSwitch } from "@/sections/actions/PolicyEditor";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 
 interface MCPServerToolsEditorProps {
@@ -49,7 +47,6 @@ export default function MCPServerToolsEditor({
   footerTarget = null,
 }: MCPServerToolsEditorProps) {
   const t = useTranslations("actions");
-  const commonCopy = useTranslations("common");
   const policyText = useTranslations("craft.apps.mcpPolicy");
   const policyEditorText = useTranslations("craft.apps.policyEditor");
   const settings = useSettings();
@@ -72,11 +69,6 @@ export default function MCPServerToolsEditor({
   const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({
     ...server.action_policies,
   });
-  const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
-    server.users_can_manage_policies ?? true
-  );
-  const [savedUsersCanManagePolicies, setSavedUsersCanManagePolicies] =
-    useState(server.users_can_manage_policies ?? true);
   const [savedPolicies, setSavedPolicies] = useState(policies);
   const [search, setSearch] = useState("");
   const [policiesView, setPoliciesView] = useState(false);
@@ -90,10 +82,7 @@ export default function MCPServerToolsEditor({
       enabledDraft[tool.id] !== tool.enabled
   );
   const policiesDirty =
-    craftAvailable &&
-    can(server, "edit") &&
-    (!isEqual(policies, savedPolicies) ||
-      usersCanManagePolicies !== savedUsersCanManagePolicies);
+    craftAvailable && can(server, "edit") && !isEqual(policies, savedPolicies);
   const dirty = changedTools.length > 0 || policiesDirty;
   useEffect(() => {
     onDirtyChange(dirty);
@@ -142,11 +131,9 @@ export default function MCPServerToolsEditor({
         );
         await updateMCPServer(server.id, {
           action_policies: currentPolicies,
-          users_can_manage_policies: usersCanManagePolicies,
         });
         setPolicies(currentPolicies);
         setSavedPolicies(currentPolicies);
-        setSavedUsersCanManagePolicies(usersCanManagePolicies);
       }
       await onSaved();
     } catch (cause) {
@@ -192,18 +179,11 @@ export default function MCPServerToolsEditor({
   const canBulkToggle =
     tools.length > 0 && tools.every((tool) => can(tool, "toggle"));
   const toolsContent = (
-    <div className="flex flex-col gap-3">
-      {showPolicies && (
-        <UserManagementSwitch
-          value={usersCanManagePolicies}
-          onChange={setUsersCanManagePolicies}
-          disabled={policyDisabled}
-        />
-      )}
-
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <div className="flex-1 min-w-40">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-40 flex-1">
           <InputTypeIn
+            searchIcon
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("mcpTools.search")}
@@ -231,17 +211,13 @@ export default function MCPServerToolsEditor({
         <div className="grid shrink-0 grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="flex min-h-10 flex-wrap items-center gap-4">
             <Text font="secondary-body" color="text-03">
-              {richNodes(
-                commonCopy.rich("enabledCount.label", {
-                  enabled: enabledCount,
-                  total: tools.length,
-                  value: (chunks) => chunks,
-                })
-              )}
+              {t("memberPlugins.detail.toolCount", {
+                count: visibleTools.length,
+              })}
             </Text>
           </div>
           <div className="flex min-h-10 items-center justify-end">
-            {showPolicies ? (
+            {showPolicies && tools.length > 0 ? (
               <div className="flex items-center gap-2">
                 <Text font="secondary-body" color="text-03">
                   {policyEditorText("permissions.title")}

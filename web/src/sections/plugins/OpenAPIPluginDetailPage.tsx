@@ -17,7 +17,10 @@ import { SvgActions } from "@opal/icons";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { can } from "@/lib/permissions/resource-actions";
 import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
-import { updateCustomTool } from "@/lib/tools/svc";
+import { useSWRConfig } from "swr";
+import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
+import { refreshMemberPluginCaches } from "@/lib/plugins/member";
+import { updateCustomTool, updateToolStatus } from "@/lib/tools/svc";
 import {
   extractMethodSpecsFromDefinition,
   getActionIcon,
@@ -29,6 +32,7 @@ import OpenAPIAuthenticationModal, {
 } from "@/sections/actions/modals/OpenAPIAuthenticationModal";
 import { saveOpenApiAuthentication } from "@/sections/plugins/openApiWorkflow";
 import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
@@ -38,13 +42,17 @@ interface OpenAPIPluginDetailPageProps {
   toolId: number;
 }
 
+type MetadataValues = Partial<
+  Pick<ToolSnapshot, "name" | "description" | "enabled">
+>;
+
 interface MetadataEditorProps {
   tool: ToolSnapshot;
   active: boolean;
   footerTarget: HTMLDivElement | null;
   onBusyChange: (busy: boolean) => void;
   onDirtyChange: (dirty: boolean) => void;
-  onSave: (values: Pick<ToolSnapshot, "name" | "description">) => Promise<void>;
+  onSave: (values: MetadataValues) => Promise<void>;
 }
 
 function MetadataEditor({
@@ -57,15 +65,17 @@ function MetadataEditor({
 }: MetadataEditorProps) {
   const t = useTranslations("actions");
   const fields = useTranslations("agents.editor.general");
-  const [draft, setDraft] = useState<Pick<
-    ToolSnapshot,
-    "name" | "description"
-  > | null>(null);
+  const [draft, setDraft] = useState<MetadataValues | null>(null);
   const name = draft?.name ?? tool.name;
   const description = draft?.description ?? tool.description;
+  const enabled = draft?.enabled ?? tool.enabled;
+  const canEdit = can(tool, "edit");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dirty = name !== tool.name || description !== tool.description;
+  const dirty =
+    name !== tool.name ||
+    description !== tool.description ||
+    enabled !== tool.enabled;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   useEffect(() => {
@@ -77,9 +87,18 @@ function MetadataEditor({
     setPending(true);
     setError(null);
     try {
-      await onSave({ name: name.trim(), description: description.trim() });
+      const values = { ...draft };
+      if (values.name !== undefined) values.name = values.name.trim();
+      if (values.description !== undefined)
+        values.description = values.description.trim();
+      await onSave(values);
       setDraft(null);
     } catch (cause) {
+      toast.error(
+        cause instanceof Error
+          ? cause.message
+          : t("addOpenApiModal.toasts.updateFailed")
+      );
       setError(
         cause instanceof Error && cause.message
           ? cause.message
@@ -97,9 +116,9 @@ function MetadataEditor({
           id="plugin-name"
           value={name}
           onChange={(event) =>
-            setDraft({ name: event.target.value, description })
+            setDraft((current) => ({ ...current, name: event.target.value }))
           }
-          variant={pending ? "disabled" : "primary"}
+          variant={pending || !canEdit ? "disabled" : "primary"}
         />
       </InputVertical>
       <InputVertical
@@ -110,12 +129,25 @@ function MetadataEditor({
           id="plugin-description"
           value={description}
           onChange={(event) =>
-            setDraft({ name, description: event.target.value })
+            setDraft((current) => ({
+              ...current,
+              description: event.target.value,
+            }))
           }
-          variant={pending ? "disabled" : "primary"}
+          variant={pending || !canEdit ? "disabled" : "primary"}
           rows={3}
         />
       </InputVertical>
+      {can(tool, "toggle") && (
+        <PluginAvailabilitySwitch
+          surface="workspace"
+          enabled={enabled}
+          onChange={(value) =>
+            setDraft((current) => ({ ...current, enabled: value }))
+          }
+          disabled={pending}
+        />
+      )}
       {error && (
         <Text as="p" color="status-error-05">
           {error}
@@ -128,12 +160,7 @@ function MetadataEditor({
         submit={
           <Button
             onClick={() => void save()}
-            disabled={
-              pending ||
-              !name.trim() ||
-              (name.trim() === tool.name &&
-                description.trim() === tool.description)
-            }
+            disabled={pending || !name.trim() || !dirty}
           >
             {t(
               pending
@@ -153,6 +180,8 @@ export default function OpenAPIPluginDetailPage({
   const t = useTranslations("actions");
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { mutate } = useSWRConfig();
+  const defaultChat = useDefaultAssistantConfiguration();
   const {
     openApiTools,
     isLoading,
@@ -226,26 +255,52 @@ export default function OpenAPIPluginDetailPage({
     );
   }
 
-  async function saveMetadata(
-    values: Pick<ToolSnapshot, "name" | "description">
-  ) {
-    if (!tool || !can(tool, "edit")) return;
+  async function saveMetadata(values: MetadataValues) {
+    if (!tool) return;
     const tools = await refreshOpenApiTools();
     const currentTool = tools?.find((candidate) => candidate.id === tool.id);
-    if (!currentTool || !can(currentTool, "edit")) {
-      const message = t("addOpenApiModal.toasts.updateFailed");
-      toast.error(message);
-      throw new Error(message);
+    if (!currentTool) throw new Error(t("addOpenApiModal.toasts.updateFailed"));
+    const metadataChanged =
+      (values.name !== undefined && values.name !== currentTool.name) ||
+      (values.description !== undefined &&
+        values.description !== currentTool.description);
+    const availabilityChanged =
+      values.enabled !== undefined && values.enabled !== currentTool.enabled;
+    if (
+      (metadataChanged && !can(currentTool, "edit")) ||
+      (availabilityChanged && !can(currentTool, "toggle"))
+    ) {
+      throw new Error(t("addOpenApiModal.toasts.updateFailed"));
     }
-    const response = await updateCustomTool(currentTool.id, {
-      ...values,
-      oauth_config_id: currentTool.oauth_config_id ?? null,
-    });
-    if (response.error || !response.data)
-      throw new Error(
-        response.error ?? t("addOpenApiModal.toasts.updateFailed")
+    if (
+      availabilityChanged &&
+      values.enabled &&
+      defaultChat.canEdit &&
+      (!defaultChat.data || defaultChat.error)
+    ) {
+      throw new Error(t("addOpenApiModal.toasts.updateFailed"));
+    }
+    if (metadataChanged) {
+      const response = await updateCustomTool(currentTool.id, {
+        name: values.name ?? currentTool.name,
+        description: values.description ?? currentTool.description,
+        oauth_config_id: currentTool.oauth_config_id ?? null,
+      });
+      if (response.error || !response.data)
+        throw new Error(
+          response.error ?? t("addOpenApiModal.toasts.updateFailed")
+        );
+    }
+    if (availabilityChanged) {
+      if (values.enabled && defaultChat.canEdit)
+        await defaultChat.updateTools([currentTool.id], true);
+      await updateToolStatus(
+        currentTool.id,
+        values.enabled ?? currentTool.enabled
       );
+    }
     await mutateOpenApiTools();
+    await refreshMemberPluginCaches(mutate);
     toast.success(t("addOpenApiModal.toasts.actionUpdated"));
   }
 
@@ -335,9 +390,7 @@ export default function OpenAPIPluginDetailPage({
             title={tool?.name ?? t("plugins.openapi.detailsTitle")}
             icon={tool ? getActionIcon(serverUrl, tool.name) : SvgActions}
             description={
-              serverUrl ||
-              tool?.description ||
-              t("plugins.openapi.detailDescription")
+              tool?.description || t("plugins.openapi.detailDescription")
             }
             onClose={closeDetail}
           />
@@ -393,8 +446,8 @@ export default function OpenAPIPluginDetailPage({
                   keepMounted
                   hidden={tab !== "server"}
                 >
-                  <div className="min-w-0">
-                    {canEdit ? (
+                  <div className="flex min-w-0 flex-col gap-6">
+                    {canEdit || can(tool, "toggle") ? (
                       <MetadataEditor
                         key={tool.id}
                         tool={tool}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useEffect } from "react";
+import { useId, useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import {
@@ -9,10 +9,23 @@ import {
   useFormikContext,
   type FormikHelpers,
   type FormikErrors,
+  type FormikProps,
 } from "formik";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { InputHorizontal, InputVertical, toast } from "@opal/layouts";
+import useSWR, { useSWRConfig } from "swr";
+import { useRouter } from "next/navigation";
+import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ToolSnapshot } from "@/lib/tools/types";
+import { can } from "@/lib/permissions/resource-actions";
+import { refreshMemberPluginCaches } from "@/lib/plugins/member";
+import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
+import { mintMcpChatEnableIntent } from "@/sections/actions/mcpChatEnableIntent";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
+import { MCPConnectionStatus, MCPServerStatus } from "@/lib/mcp/types";
 import { updateMCPServer } from "@/lib/mcp/svc";
 import {
   MCPServerUpdateRequest,
@@ -29,7 +42,6 @@ import { IconLoader } from "@opal/loaders";
 import { Permission } from "@/lib/types";
 import {
   Button,
-  Collapsible,
   InputSingleSelect,
   InputTypeIn,
   InputTextArea,
@@ -39,10 +51,18 @@ import {
 import GroupShareList from "@/lib/connectors/components/GroupShareList";
 import { Section } from "@opal/layouts";
 
+import { UserManagementSwitch } from "@/sections/actions/PolicyEditor";
 import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
 import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
 
+interface MCPServerDetailsValues extends MCPServerConfigurationValues {
+  users_can_manage_policies: boolean;
+  // Untouched Chat availability follows the shared configuration cache.
+  enabled_in_chat: boolean | undefined;
+}
+
 interface MCPServerDetailsPageProps {
+  onAuthenticate?: () => void;
   active: boolean;
   variant?: "modal" | "page";
   readOnly?: boolean;
@@ -54,6 +74,7 @@ interface MCPServerDetailsPageProps {
 }
 
 export default function MCPServerDetailsPage({
+  onAuthenticate,
   active,
   variant = "modal",
   readOnly = false,
@@ -64,6 +85,7 @@ export default function MCPServerDetailsPage({
   onDirtyChange,
 }: MCPServerDetailsPageProps) {
   const formId = useId();
+  const formRef = useRef<FormikProps<MCPServerDetailsValues>>(null);
   const t = useTranslations("actions");
   const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => onBusyChange(isSubmitting), [isSubmitting, onBusyChange]);
@@ -71,7 +93,33 @@ export default function MCPServerDetailsPage({
     active && variant === "modal" && !readOnly
   );
 
-  const { userResolution } = useUser();
+  const { user, userResolution } = useUser();
+  const router = useRouter();
+  const { mutate } = useSWRConfig();
+  const defaultChat = useDefaultAssistantConfiguration();
+  const {
+    data: tools,
+    error: toolsError,
+    isLoading: toolsLoading,
+  } = useSWR<ToolSnapshot[], Error>(
+    defaultChat.canEdit
+      ? SWR_KEYS.adminMcpServerToolSnapshots(server.id)
+      : null,
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
+  );
+  const chatEnabled =
+    tools && defaultChat.data
+      ? tools.some((tool) => defaultChat.data?.tool_ids.includes(tool.id))
+      : server.default_chat_enabled === true;
+  const authenticationRequired =
+    server.status === MCPServerStatus.AWAITING_AUTH ||
+    server.connection_status === MCPConnectionStatus.NOT_CONNECTED ||
+    server.connection_status === MCPConnectionStatus.REAUTH_REQUIRED ||
+    tools?.length === 0;
+  const chatReady =
+    !!defaultChat.data && !defaultChat.error && !!tools && !toolsError;
+
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
@@ -83,6 +131,7 @@ export default function MCPServerDetailsPage({
   const authorityReady =
     userResolution === "resolved" &&
     !settings.isLoading &&
+    (!defaultChat.canEdit || (!defaultChat.isLoading && !toolsLoading)) &&
     (readOnly || isGlobalHolder || isScopedManager);
 
   const validationSchema = Yup.object().shape({
@@ -90,7 +139,7 @@ export default function MCPServerDetailsPage({
     description: Yup.string(),
   });
 
-  const initialValues: MCPServerConfigurationValues = {
+  const initialValues: MCPServerDetailsValues = {
     name: server.name,
     description: server.description || "",
     server_url: server.server_url,
@@ -101,6 +150,9 @@ export default function MCPServerDetailsPage({
         : "public",
     groups: server.groups,
     users: server.users,
+    users_can_manage_policies: server.users_can_manage_policies ?? true,
+    available_in_craft: server.available_in_craft === true,
+    enabled_in_chat: undefined,
   };
 
   function hasAccessChanges(values: MCPServerConfigurationValues) {
@@ -112,13 +164,25 @@ export default function MCPServerDetailsPage({
   }
 
   const handleSubmit = async (
-    values: MCPServerConfigurationValues,
-    helpers: FormikHelpers<MCPServerConfigurationValues>
+    values: MCPServerDetailsValues,
+    helpers: FormikHelpers<MCPServerDetailsValues>
   ) => {
-    const accessChanged = hasAccessChanges(values);
+    const baseline = formRef.current?.initialValues;
+    if (!baseline) return;
+    const accessChanged =
+      values.is_public !== baseline.is_public ||
+      !isEqual(new Set(values.groups), new Set(baseline.groups)) ||
+      !isEqual(new Set(values.users), new Set(baseline.users));
+    const chatChanged =
+      values.enabled_in_chat !== undefined &&
+      values.enabled_in_chat !== chatEnabled;
+    const needsAuthentication =
+      chatChanged && values.enabled_in_chat && authenticationRequired;
     if (
       readOnly ||
       !authorityReady ||
+      (chatChanged && (!defaultChat.canEdit || !chatReady)) ||
+      (needsAuthentication && !can(server, "authenticate")) ||
       (accessChanged && !values.is_public && !canRestrict) ||
       (accessChanged &&
         values.access_mode === "groups" &&
@@ -127,11 +191,22 @@ export default function MCPServerDetailsPage({
       return;
     setIsSubmitting(true);
 
-    const payload: MCPServerUpdateRequest = {
-      name: values.name,
-      description: values.description,
-      server_url: server.server_url,
-    };
+    const payload: MCPServerUpdateRequest = {};
+    if (values.name !== baseline.name) payload.name = values.name;
+    if (values.description !== baseline.description)
+      payload.description = values.description;
+    if (
+      settings.onyx_craft_available === true &&
+      values.users_can_manage_policies !== baseline.users_can_manage_policies
+    ) {
+      payload.users_can_manage_policies = values.users_can_manage_policies;
+    }
+    if (
+      settings.onyx_craft_available === true &&
+      values.available_in_craft !== baseline.available_in_craft
+    ) {
+      payload.available_in_craft = values.available_in_craft;
+    }
     if (accessChanged) {
       payload.is_public = values.is_public;
       payload.groups = values.is_public ? [] : values.groups;
@@ -139,13 +214,36 @@ export default function MCPServerDetailsPage({
     }
 
     try {
-      const unchanged =
-        JSON.stringify(values) === JSON.stringify(initialValues);
-      const savedServer = unchanged
-        ? server
-        : await updateMCPServer(server.id, payload);
-      helpers.resetForm({ values });
+      const intent = needsAuthentication
+        ? mintMcpChatEnableIntent({ userId: user?.id, serverId: server.id })
+        : null;
+      if (needsAuthentication && !intent)
+        throw new Error(t("addMcpModal.toasts.updateFailed"));
+      const savedServer = Object.keys(payload).length
+        ? await updateMCPServer(server.id, payload)
+        : server;
+      if (chatChanged && !needsAuthentication && tools) {
+        await defaultChat.updateTools(
+          tools.map((tool) => tool.id),
+          values.enabled_in_chat === true
+        );
+      }
       await onSaved(savedServer);
+      await refreshMemberPluginCaches(mutate);
+      helpers.resetForm({ values: { ...values, enabled_in_chat: undefined } });
+      if (intent) {
+        router.push(
+          withPluginSearchParams(
+            pluginDetailHref({ kind: "mcp", id: server.id }),
+            {
+              tab: "authentication",
+              enable_chat: "true",
+              enable_chat_intent: intent,
+            }
+          )
+        );
+        onAuthenticate?.();
+      }
     } catch (error) {
       console.error("Error updating MCP server:", error);
       toast.error(
@@ -165,7 +263,8 @@ export default function MCPServerDetailsPage({
           <IconLoader />
         </Section>
       ) : (
-        <Formik<MCPServerConfigurationValues>
+        <Formik<MCPServerDetailsValues>
+          innerRef={formRef}
           initialValues={initialValues}
           validationSchema={validationSchema}
           validate={(values) =>
@@ -215,25 +314,23 @@ export default function MCPServerDetailsPage({
                     />
                   </InputVertical>
 
-                  <Collapsible title={t("mcpSetup.details")} defaultOpen>
-                    <InputVertical
-                      withLabel="description"
-                      title={t("addMcpModal.description.title")}
-                      suffix={t("addMcpModal.description.suffix")}
-                    >
-                      <InputTextArea
-                        id="description"
-                        name="description"
-                        value={formikProps.values.description ?? ""}
-                        onChange={formikProps.handleChange}
-                        onBlur={formikProps.handleBlur}
-                        placeholder={t("addMcpModal.description.placeholder")}
-                        rows={2}
-                        autoResize
-                        maxRows={4}
-                      />
-                    </InputVertical>
-                  </Collapsible>
+                  <InputVertical
+                    withLabel="description"
+                    title={t("addMcpModal.description.title")}
+                    suffix={t("addMcpModal.description.suffix")}
+                  >
+                    <InputTextArea
+                      id="description"
+                      name="description"
+                      value={formikProps.values.description ?? ""}
+                      onChange={formikProps.handleChange}
+                      onBlur={formikProps.handleBlur}
+                      placeholder={t("addMcpModal.description.placeholder")}
+                      rows={2}
+                      autoResize
+                      maxRows={4}
+                    />
+                  </InputVertical>
 
                   <div className="w-full border-t border-border-01 pt-6">
                     <MCPAccessControl
@@ -246,6 +343,48 @@ export default function MCPServerDetailsPage({
                 </Section>
               </fieldset>
 
+              {defaultChat.canEdit && (
+                <PluginAvailabilitySwitch
+                  surface="chat"
+                  enabled={formikProps.values.enabled_in_chat ?? chatEnabled}
+                  onChange={(value) =>
+                    void formikProps.setFieldValue(
+                      "enabled_in_chat",
+                      value === chatEnabled ? undefined : value
+                    )
+                  }
+                  disabled={
+                    readOnly ||
+                    isSubmitting ||
+                    !chatReady ||
+                    (!chatEnabled &&
+                      authenticationRequired &&
+                      !can(server, "authenticate"))
+                  }
+                />
+              )}
+              {settings.onyx_craft_available === true && (
+                <PluginAvailabilitySwitch
+                  surface="mcp-craft"
+                  enabled={formikProps.values.available_in_craft === true}
+                  onChange={(value) =>
+                    void formikProps.setFieldValue("available_in_craft", value)
+                  }
+                  disabled={readOnly || isSubmitting}
+                />
+              )}
+              {settings.onyx_craft_available === true && (
+                <UserManagementSwitch
+                  value={formikProps.values.users_can_manage_policies}
+                  onChange={(value) =>
+                    void formikProps.setFieldValue(
+                      "users_can_manage_policies",
+                      value
+                    )
+                  }
+                  disabled={isSubmitting || readOnly}
+                />
+              )}
               {!readOnly && (
                 <MCPFormActions
                   variant={variant}

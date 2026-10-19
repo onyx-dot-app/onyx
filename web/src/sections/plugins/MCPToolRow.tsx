@@ -8,7 +8,7 @@ export default function MCPToolRow({
   tool,
   control,
 }: {
-  tool: ToolSnapshot;
+  tool: Pick<ToolSnapshot, "name" | "display_name" | "description">;
   control?: ReactNode;
 }) {
   return (

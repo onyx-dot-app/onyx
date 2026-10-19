@@ -128,11 +128,15 @@ function mockNetwork({
   openapiStatus = 200,
   empty = false,
   servers = [mockServer],
+  tools = [tool],
+  apps = [externalApp],
 }: {
   mcpStatus?: number;
   openapiStatus?: number;
   empty?: boolean;
   servers?: MCPServer[];
+  tools?: ToolSnapshot[];
+  apps?: ExternalAppAdminResponse[];
 } = {}) {
   return jest.spyOn(global, "fetch").mockImplementation(async (input) => {
     const url = String(input);
@@ -147,7 +151,7 @@ function mockNetwork({
     if (url === "/api/admin/mcp/server/7/tools/snapshots?source=db")
       return new Response(JSON.stringify([tool]));
     if (url === "/api/build/admin/apps")
-      return new Response(JSON.stringify(empty ? [] : [externalApp]));
+      return new Response(JSON.stringify(empty ? [] : apps));
     if (url === "/api/build/admin/apps/built-in/options")
       return new Response(JSON.stringify([]));
     if (url === "/api/admin/mcp/servers")
@@ -165,7 +169,7 @@ function mockNetwork({
           openapiStatus === 200
             ? empty
               ? []
-              : [tool]
+              : tools
             : { detail: "OpenAPI unavailable" }
         ),
         { status: openapiStatus }
@@ -369,7 +373,7 @@ test("keeps the main Chat indicator off when only Craft is enabled", async () =>
   expect(within(tooltip).getByText("On")).toBeVisible();
 });
 
-test("the status circle and disconnect icon open the same availability menu", async () => {
+test("the status circle has no availability menu", async () => {
   mockFullAdmin = true;
   mockNetwork({
     servers: [
@@ -377,33 +381,16 @@ test("the status circle and disconnect icon open the same availability menu", as
     ],
   });
   render(<PluginsPage />);
-  const user = setupUser();
   const status = await screen.findByRole("button", { name: "Chat on" });
-  await user.click(status);
+  expect(status).not.toHaveAttribute("aria-haspopup");
+  await setupUser().click(status);
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   expect(
-    await screen.findByRole("menuitem", { name: /Disable for main Chat/ })
-  ).toBeVisible();
-  expect(
-    screen.getByRole("menuitem", { name: /Disable for Craft/ })
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("menuitem", { name: "Delete" })
-  ).not.toBeInTheDocument();
-  expect(screen.getAllByRole("menu")).toHaveLength(1);
-  await user.keyboard("{Escape}");
-  await user.click(
-    within(screen.getByRole("group", { name: mockServer.name })).getByRole(
+    within(screen.getByRole("group", { name: mockServer.name })).queryByRole(
       "button",
-      {
-        name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
-      }
+      { name: /for workspace|workspace availability/ }
     )
-  );
-  expect(
-    await screen.findByRole("menuitem", { name: /Disable for main Chat/ })
-  ).toBeVisible();
-  expect(screen.getAllByRole("menu")).toHaveLength(1);
-  expect(mockPush).not.toHaveBeenCalled();
+  ).not.toBeInTheDocument();
 });
 
 test.each([true, false])(

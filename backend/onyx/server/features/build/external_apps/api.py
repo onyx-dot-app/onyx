@@ -233,6 +233,7 @@ def create_built_in_external_app(
         upstream_url_patterns=request.upstream_url_patterns,
         auth_template=request.auth_template,
         organization_credentials=request.organization_credentials,
+        enabled=request.enabled,
         action_policies=action_policies,
     )
     if request.users_can_manage_policies is not None:
@@ -369,6 +370,7 @@ def create_custom_external_app(
         upstream_url_patterns=request.upstream_url_patterns,
         auth_template=request.auth_template,
         organization_credentials=request.organization_credentials,
+        enabled=request.enabled,
     )
     replace_workspace_action_policies(
         db_session,

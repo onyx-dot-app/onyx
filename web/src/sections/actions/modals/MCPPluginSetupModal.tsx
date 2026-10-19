@@ -45,6 +45,7 @@ import {
   type MCPProbeProgress,
 } from "@/lib/mcp/types";
 import MCPAuthenticationPage from "@/sections/actions/modals/MCPAuthenticationPage";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import {
   MCPAccessControl,
@@ -108,6 +109,7 @@ function MCPSetupSession({
   const t = useTranslations("actions");
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
+  const [enableChat, setEnableChat] = useState(true);
   const { user, userResolution } = useUser();
   const actor = useRef(user?.id);
   useEffect(() => {
@@ -205,7 +207,10 @@ function MCPSetupSession({
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       if (step === "server") urlInput.current?.focus();
-      else if (step === "connection")
+      else if (
+        step === "connection" &&
+        !connectionPanel.current?.contains(document.activeElement)
+      )
         connectionPanel.current
           ?.querySelector<HTMLElement>('[role="combobox"]')
           ?.focus();
@@ -598,7 +603,9 @@ function MCPSetupSession({
                               server_url: connection.url,
                             }}
                             resolveServer={resolveServer}
-                            enableChatOnConnect={defaultChat.canEdit}
+                            enableChatOnConnect={
+                              defaultChat.canEdit && enableChat
+                            }
                             recommendation={connection.recommendation}
                             canSubmit={
                               details.isValid &&
@@ -627,6 +634,30 @@ function MCPSetupSession({
                                       canRestrict={canRestrict}
                                       disabled={busy}
                                     />
+                                    {defaultChat.canEdit && (
+                                      <PluginAvailabilitySwitch
+                                        surface="chat"
+                                        enabled={enableChat}
+                                        disabled={busy}
+                                        onChange={setEnableChat}
+                                      />
+                                    )}
+                                    {settings.onyx_craft_available === true && (
+                                      <PluginAvailabilitySwitch
+                                        surface="mcp-craft"
+                                        enabled={
+                                          details.values.available_in_craft ===
+                                          true
+                                        }
+                                        disabled={busy}
+                                        onChange={(enabled) =>
+                                          void details.setFieldValue(
+                                            "available_in_craft",
+                                            enabled
+                                          )
+                                        }
+                                      />
+                                    )}
                                   </Section>
                                 </div>
                               </FormikProvider>

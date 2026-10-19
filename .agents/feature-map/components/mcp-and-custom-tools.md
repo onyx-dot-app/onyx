@@ -63,15 +63,23 @@ When Craft is unavailable, admin lists do not fetch Craft Apps or offer their
 creation, filters, or direct-link editors. MCP indicators show Chat only.
 Member defaults, Craft metadata, skills links, and Craft actions require the
 member's Craft entitlement. MCP setup and admin tools retain their deployment gates.
-Admin row actions sit beside the detail link in normal flex flow, without
-absolute positioning or a placeholder spacer.
-Availability controls use workspace enable/disable wording. Disabling an OpenAPI
-plugin requires confirmation that it affects everyone, including custom agents,
-while preserving its settings and credentials.
+Admin row actions sit beside the detail link in normal flex flow.
+The detail link covers the card, including blank space above and below row actions.
+Action buttons remain separate click targets above that link.
+Availability controls use workspace enable/disable wording. Configuration switches are form drafts.
+Save applies availability changes; closing uses the form unsaved-changes guard.
+Disabling an OpenAPI plugin preserves its settings and credentials.
 OpenAPI indicators and lifecycle actions follow global `Tool.enabled`,
 independently of default Chat attachments.
-The sliders action says Disable when all supported surfaces are enabled and Enable when all are disabled.
-Mixed or unknown MCP states say Manage workspace availability. Disabled Craft does not affect this label.
+MCP setup places main Chat and Craft availability switches below access controls. Configuration editors
+show the same workspace controls below access controls. Saving Chat enablement starts authentication when required.
+Directory indicators are read-only; plugin rows no longer open availability menus.
+OpenAPI setup and Configuration expose workspace availability as a switch.
+New actions default on; disabling during setup creates them disabled without attaching them to default Chat.
+MCP copy describes default Chat as chats without a custom agent.
+Descriptions distinguish surface availability from access controls and tool permissions.
+Only full admins can change main Chat defaults. Craft controls follow deployment availability
+and server edit permission. Setup preserves these choices through authentication.
 Member OAuth opens a normal new tab, without popup sizing or window features.
 The correlated callback still closes the sign-in tab and refreshes the original page.
 Its completion screen uses a bounded, centered card with return and close-tab
@@ -146,10 +154,10 @@ At send time, default Chat suppresses forced MCP/OpenAPI choices when personal
 preferences disable them or member metadata is unavailable. Stored per-chat
 choices remain unchanged. Custom agents and built-in forced Search retain their
 existing behavior.
-Full-admin OpenAPI creation and directory Enable attach the action to default
+Enabled full-admin OpenAPI creation and the editor Enable switch attach the action to default
 Chat through `useDefaultAssistantConfiguration`, preserving other tool selections.
-An enabled action missing that attachment still offers Enable. Scoped action
-managers retain status-only controls and cannot change default Chat attachments.
+An already-enabled action does not change its default Chat attachment when other configuration fields save.
+Scoped action managers retain status-only controls and cannot change default Chat attachments.
 Successful lifecycle writes refresh member catalogs and agent rosters. Disconnect
 disables the action globally but retains its agent attachments for later re-enabling.
 Return-intent readiness waits for the selected resource's roster and connection
@@ -161,7 +169,7 @@ checks server access before reading credentials, validating them, or saving them
 
 Main Chat still executes MCP and OpenAPI calls without Craft approval enforcement.
 Member UI does not display read/write policy badges or promise approval before writes.
-Installed rows show a status control between the type label and the row menu.
+Installed rows show a status indicator beside the delete action.
 MCP circles split diagonally: the upper-left half shows main Chat and the lower-right
 half shows Craft. Each half uses the standard success green when enabled and
 neutral gray when disabled, matching member directory indicators.
@@ -398,11 +406,11 @@ managed group. These grants control attaching tools to agents; they do not chang
 access to custom agents that already use those tools. Default Chat still checks
 server access before showing tools or resolving credentials.
 `web/src/sections/actions/modals/MCPServerDetailsPage.tsx` owns the Access Control
-selector and its group validation.
+selector and its group validation. The optional description field always appears below the name, without a collapsible section.
 
-Each admin installed plugin row has a disconnect dropdown and a separate trash
-button for deletion. Clicking its status circle opens the same availability
-dropdown. Delete is not a dropdown item. Controls respect resource permissions,
+Each admin installed plugin row has a read-only availability indicator and a separate
+trash button for deletion. Availability is edited in Configuration.
+Controls respect resource permissions,
 and managed external apps cannot be deleted. MCP deletion confirmation names
 the server and states that its tools are deleted for everyone in the organization.
 Enable for main Chat opens authentication when the server needs sign-in or has no
@@ -434,13 +442,8 @@ existing scoped SWR caches optimistically and rolls back failed saves.
 The personal directory dot describes account state, not workspace availability:
 green means connected, orange means credentials are needed, gray means unavailable.
 Ordinary discovery of an existing server does not change availability.
-MCP menus have independent Chat and Craft actions.
-Organization-wide MCP disable actions show "All users in your organization"
-in the menu and require confirmation. Chat confirmation explains that default
-Chat changes for everyone, while custom agents remain unchanged. Craft
-confirmation explains that Craft changes for everyone, while Chat is unchanged.
-Enabling stays immediate. Cancelling makes no writes. Failed disables retain
-the confirmation for retry. Delete and disable share one confirmation owner.
+MCP Configuration has independent Chat and Craft draft switches. Toggling them makes no API writes.
+Save applies the changes; failed saves retain the draft for retry.
 Main Chat uses the same
 `Persona__Tool` selections as Admin > Chat Preferences. There is no separate
 server flag or schema migration. The page reads
@@ -457,26 +460,25 @@ Refreshing an existing server does not select new tools automatically. Custom
 agent attachments remain unchanged.
 
 The active MCP editor's Save Changes button appears on the right of the sticky modal footer.
-Detail modals contain editing controls only, with no Delete or Disconnect buttons.
-OpenAPI row menus enable or disconnect the action. Delete opens a confirmation
-over the Plugins directory, not over another modal.
+Authentication Save stays disabled for an unchanged, connected server. Initial setup, reconnection, and failed connection retries remain available.
+Admin detail modals contain editing controls only, with no Delete or Disconnect buttons.
+OpenAPI Configuration saves workspace availability. Delete opens a confirmation
+over the Plugins directory.
 
-When deployment settings enable Craft, the row menu includes a Craft action.
+When deployment settings enable Craft, MCP setup and Configuration include a Craft availability switch.
 New servers default to enabled. Existing servers retain their saved setting.
-Availability menu actions save immediately.
+Availability changes save with the form.
 This uses `available_in_craft` and does not change access grants.
 The simple create API accepts this flag atomically; omitted values still default
 to false for other API callers.
 
 The inline `web/src/sections/actions/MCPServerToolsEditor.tsx` has Available tools
-and, when Craft is available, Craft permissions tabs. Enablement and approval policies are drafts until Save changes. Refresh is
+and, when Craft is available, Approval settings tabs. Enablement and approval policies are drafts until Save changes. Refresh is
 disabled while drafts exist. Each completed save batch becomes the new baseline,
 so retrying a partial failure does not repeat successful writes. Tool toggles
 retain per-tool permission checks. Craft policies use raw tool names and retain
-overrides for disabled tools. The Craft permissions tab also lets admins control
-whether users can manage approval settings. This switch defaults on and joins the
-policy draft, dirty guard, and Save changes request. The request sends
-`action_policies` and `users_can_manage_policies` together.
+overrides for disabled tools. Configuration controls whether users can manage approval settings.
+This switch defaults on and saves with the Configuration draft. Tools saves only `action_policies`.
 Tool availability uses `Tool.enabled`; Craft DENY is a separate workspace policy.
 Changing a Craft policy or user-management switch does not change tool availability.
 Both MCP tool views use the shared modal body for scrolling.

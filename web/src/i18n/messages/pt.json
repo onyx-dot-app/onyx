@@ -1045,9 +1045,13 @@
         "manageAvailability": "Gerenciar disponibilidade no espaço de trabalho",
         "more": "Mais ações",
         "disableChat": "Desativar no chat principal",
-        "enableChat": "Ativar no chat principal",
+        "enableChat": "Ativar no Chat padrão",
         "disableCraft": "Desativar no Craft",
-        "enableCraft": "Ativar no Craft"
+        "enableCraft": "Ativar no Craft",
+        "chatDescription": "Disponibilize este plugin em conversas sem um agente personalizado. Os controles de acesso continuam em vigor.",
+        "mcpCraftDescription": "Disponibilize este plugin no Craft. Os controles de acesso e as permissões das ferramentas continuam em vigor.",
+        "craftAppDescription": "Disponibilize este aplicativo no Craft. Os requisitos de conexão e aprovação continuam em vigor.",
+        "workspaceDescription": "Permita a execução deste plugin no Chat e em agentes personalizados. Os requisitos existentes de acesso e autenticação continuam em vigor."
       },
       "craftApp": {
         "tabs": {
@@ -1127,6 +1131,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Aplicativo Craft",
         "manage": {
           "label": "Gerenciar {name}"
         },
@@ -1206,15 +1211,16 @@
     "mcpTools": {
       "title": "Ferramentas",
       "enabledTab": "Ferramentas disponíveis",
-      "policiesTab": "Permissões do Craft",
+      "policiesTab": "Configurações de aprovação",
       "refresh": "Atualizar ferramentas",
       "loadError": "Não foi possível carregar as ferramentas",
       "saveError": "Não foi possível salvar as configurações das ferramentas",
       "refreshError": "Não foi possível atualizar as ferramentas",
-      "search": "Buscar ferramentas"
+      "search": "Buscar ferramentas",
+      "enabledCount": "Ferramentas ativadas: {enabled} de {total}"
     },
     "mcpDetail": {
-      "configuration": "Configuração do servidor",
+      "configuration": "Configuração",
       "authentication": "Autenticação",
       "loadError": "Não foi possível carregar o servidor MCP",
       "notFound": "Servidor MCP não encontrado",

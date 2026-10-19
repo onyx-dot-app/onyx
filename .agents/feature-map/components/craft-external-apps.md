@@ -190,7 +190,9 @@ OpenAPI plugins do not expose this tab: main Chat does not enforce Craft approva
 Connecting an external app or Craft MCP server opens its approval settings after authentication succeeds.
 The Connection tab retains account controls and the existing default-use switches.
 Admin, personal, and task forms share `web/src/sections/actions/PolicyEditor.tsx`.
-Search narrows visible actions. The matching-action count sits on the left; Set permissions aligns on the right.
+Search narrows visible actions.
+All shared approval editors show a plain tool count below search, including locked tools.
+Counts sit on the left; Set permissions aligns on the right.
 This menu offers Auto-approve, Ask, Disabled, and a separated reset action. Each row uses the same Auto-approve, Ask, and Disabled buttons as MCP tools.
 Workspace-disabled controls show a hover tooltip that explains the admin restriction.
 Save stays disabled until a policy changes. Closing with unsaved changes requires discard confirmation.

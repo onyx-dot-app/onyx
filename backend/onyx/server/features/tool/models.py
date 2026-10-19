@@ -93,6 +93,7 @@ class Header(BaseModel):
 
 
 class CustomToolCreate(BaseModel):
+    enabled: bool = True
     name: str
     description: str | None = None
     definition: dict[str, Any]

@@ -1,6 +1,8 @@
+const mockPush = jest.fn();
+
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 import { Form, Formik } from "formik";
@@ -34,6 +36,10 @@ jest.mock("@/providers/UserProvider", () => {
   );
   return { ...actual, useUser: jest.fn(actual.useUser) };
 });
+
+jest.mock("@/sections/actions/mcpChatEnableIntent", () => ({
+  mintMcpChatEnableIntent: jest.fn(() => "test-intent"),
+}));
 
 const initialValues: MCPServerConfigurationValues = {
   name: "Example MCP",
@@ -86,13 +92,24 @@ let serverRecord: MCPServer;
 
 let availableGroups: { id: number; name: string; users: never[] }[];
 let workspaceTier: Tier;
+let craftAvailable = false;
+let defaultToolIds = [42, 99];
 
 function RefreshSettings() {
   const { mutate } = useSWRConfig();
   return (
-    <Button onClick={() => void mutate("/api/settings")}>
-      Refresh settings
-    </Button>
+    <>
+      <Button onClick={() => void mutate("/api/settings")}>
+        Refresh settings
+      </Button>
+      <Button
+        onClick={() =>
+          void mutate("/api/admin/default-assistant/configuration")
+        }
+      >
+        Refresh Chat
+      </Button>
+    </>
   );
 }
 
@@ -105,6 +122,9 @@ beforeEach(() => {
     );
   savedRequests = [];
   workspaceTier = Tier.BUSINESS;
+  craftAvailable = false;
+  defaultToolIds = [42, 99];
+  mockPush.mockClear();
   serverRecord = configuredServer;
   saveResponse = async () => new Response(JSON.stringify(serverRecord));
   availableGroups = [
@@ -113,6 +133,15 @@ beforeEach(() => {
   ];
   jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
+    if (url.includes("/tools/snapshots"))
+      return new Response(JSON.stringify([{ id: 42 }]));
+    if (url === "/api/admin/default-assistant/configuration")
+      return new Response(JSON.stringify({ tool_ids: defaultToolIds }));
+    if (url === "/api/admin/default-assistant") {
+      const payload: unknown = JSON.parse(String(init?.body));
+      savedRequests.push({ url, method: init?.method, payload });
+      return new Response(String(init?.body));
+    }
     if (url.startsWith("/api/admin/mcp/server")) {
       savedRequests.push({
         url,
@@ -122,6 +151,17 @@ beforeEach(() => {
       const payload: unknown = JSON.parse(String(init?.body));
       if (payload && typeof payload === "object") {
         serverRecord = { ...serverRecord };
+        if (
+          "users_can_manage_policies" in payload &&
+          typeof payload.users_can_manage_policies === "boolean"
+        )
+          serverRecord.users_can_manage_policies =
+            payload.users_can_manage_policies;
+        if (
+          "available_in_craft" in payload &&
+          typeof payload.available_in_craft === "boolean"
+        )
+          serverRecord.available_in_craft = payload.available_in_craft;
         if ("name" in payload && typeof payload.name === "string")
           serverRecord.name = payload.name;
         if ("server_url" in payload && typeof payload.server_url === "string")
@@ -133,7 +173,11 @@ beforeEach(() => {
     }
     if (url === "/api/settings")
       return new Response(
-        JSON.stringify({ tier: workspaceTier, ee_features_enabled: true })
+        JSON.stringify({
+          tier: workspaceTier,
+          ee_features_enabled: true,
+          onyx_craft_available: craftAvailable,
+        })
       );
     if (url === "/api/enterprise-settings") return new Response("{}");
     if (url === "/api/manage/admin/user-group")
@@ -324,6 +368,144 @@ describe("inline server configuration", () => {
     return { saved, dirty };
   }
 
+  test("saving metadata preserves Chat availability changed during editing", async () => {
+    const { saved } = renderDetailsPage({
+      permissions: [
+        Permission.MANAGE_ACTIONS,
+        Permission.FULL_ADMIN_PANEL_ACCESS,
+      ],
+    });
+    const user = setupUser();
+    const name = await screen.findByRole("textbox", { name: "Server Name" });
+    await user.clear(name);
+    await user.type(name, "Updated MCP");
+    defaultToolIds = [99];
+    await user.click(screen.getByRole("button", { name: "Refresh Chat" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("switch", { name: "Enable in default Chat" })
+      ).not.toBeChecked()
+    );
+    expect(name).toHaveValue("Updated MCP");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+    expect(savedRequests).toHaveLength(1);
+    expect(savedRequests[0]).toEqual(
+      expect.objectContaining({
+        payload: { name: "Updated MCP" },
+      })
+    );
+  });
+
+  test("availability changes stay in the form until Save", async () => {
+    craftAvailable = true;
+    const { dirty } = renderDetailsPage({
+      permissions: [
+        Permission.MANAGE_ACTIONS,
+        Permission.FULL_ADMIN_PANEL_ACCESS,
+      ],
+      server: { ...configuredServer, available_in_craft: true },
+    });
+    const user = setupUser();
+    const chat = await screen.findByRole("switch", {
+      name: "Enable in default Chat",
+    });
+    const craft = screen.getByRole("switch", { name: "Enable for Craft" });
+    await user.click(chat);
+    await user.click(craft);
+    expect(savedRequests).toEqual([]);
+    expect(mockPush).not.toHaveBeenCalled();
+    await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(true));
+    await user.click(
+      screen.getByRole("button", {
+        name: messages.actions.addMcpModal.submitButton.saveLabel,
+      })
+    );
+    await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
+    expect(savedRequests).toContainEqual(
+      expect.objectContaining({
+        url: "/api/admin/default-assistant",
+        payload: { tool_ids: [99] },
+      })
+    );
+    expect(savedRequests).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({ available_in_craft: false }),
+      })
+    );
+  });
+
+  test("restoring availability leaves the form clean without writes", async () => {
+    craftAvailable = true;
+    const { dirty } = renderDetailsPage({
+      server: { ...configuredServer, available_in_craft: true },
+    });
+    const toggle = await screen.findByRole("switch", {
+      name: "Enable for Craft",
+    });
+    const user = setupUser();
+    await user.click(toggle);
+    await user.click(toggle);
+    await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
+    expect(savedRequests).toEqual([]);
+  });
+
+  test("Chat authentication starts only after saving the draft", async () => {
+    defaultToolIds = [99];
+    renderDetailsPage({
+      permissions: [
+        Permission.MANAGE_ACTIONS,
+        Permission.FULL_ADMIN_PANEL_ACCESS,
+      ],
+      server: {
+        ...configuredServer,
+        status: MCPServerStatus.AWAITING_AUTH,
+        permissions: { edit: true, authenticate: true },
+      },
+    });
+    const user = setupUser();
+    await user.click(
+      await screen.findByRole("switch", { name: "Enable in default Chat" })
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(savedRequests).toEqual([]);
+    await user.click(
+      screen.getByRole("button", {
+        name: messages.actions.addMcpModal.submitButton.saveLabel,
+      })
+    );
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        expect.stringContaining("enable_chat_intent=")
+      )
+    );
+    expect(savedRequests).toEqual([]);
+  });
+
+  test("saves user approval settings from Configuration without replacing tool policies", async () => {
+    craftAvailable = true;
+    const { saved, dirty } = renderDetailsPage();
+    const toggle = await screen.findByRole("switch", {
+      name: "Let users manage approval settings",
+    });
+    expect(toggle).toBeChecked();
+    const user = setupUser();
+    await user.click(toggle);
+    await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(true));
+    await user.click(
+      screen.getByRole("button", {
+        name: messages.actions.addMcpModal.submitButton.saveLabel,
+      })
+    );
+    await waitFor(() => expect(saved).toHaveBeenCalled());
+    expect(savedRequests).toHaveLength(1);
+    expect(savedRequests[0]?.payload).toEqual(
+      expect.objectContaining({ users_can_manage_policies: false })
+    );
+    expect(savedRequests[0]?.payload).not.toHaveProperty("action_policies");
+    await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
+  });
+
   test("metadata edits preserve restricted grants without creating another server", async () => {
     const restricted = {
       ...configuredServer,
@@ -349,8 +531,6 @@ describe("inline server configuration", () => {
         method: "PATCH",
         payload: {
           name: "Updated MCP",
-          description: "Tools for support",
-          server_url: "https://example.com/mcp",
         },
       },
     ]);
@@ -386,8 +566,6 @@ describe("inline server configuration", () => {
           method: "PATCH",
           payload: {
             name: "Example MCP renamed",
-            description: "Tools for support",
-            server_url: configuredServer.server_url,
           },
         },
       ]);
@@ -488,9 +666,7 @@ describe("inline server configuration", () => {
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(savedRequests).toHaveLength(1));
-    expect(savedRequests[0]?.payload).toEqual(
-      expect.objectContaining({ server_url: configuredServer.server_url })
-    );
+    expect(savedRequests[0]?.payload).not.toHaveProperty("server_url");
     expect(saved).toHaveBeenCalledWith(
       expect.objectContaining({ server_url: configuredServer.server_url })
     );

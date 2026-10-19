@@ -21,6 +21,7 @@ async function readErrorDetail(
 }
 
 interface CreateBuiltInExternalAppBody {
+  enabled?: boolean;
   users_can_manage_policies?: boolean;
   name: string;
   app_type: ExternalAppType;
@@ -51,6 +52,7 @@ export async function createBuiltInExternalApp(
 }
 
 interface CreateCustomExternalAppInput {
+  enabled?: boolean;
   users_can_manage_policies?: boolean;
   name: string;
   upstream_url_patterns: string[];
