@@ -331,6 +331,15 @@ def check_error_detail(
     return detail if detail != CheckErrorDetail() else None
 
 
+class CheckRowText(BaseModel):
+    """A row's line and description."""
+
+    model_config = ConfigDict(frozen=True)
+
+    summary: str
+    description: str
+
+
 class CheckNotRunReason(str, Enum):
     """Why a SKIPPED check did not run, when a gate of the run stopped it."""
 

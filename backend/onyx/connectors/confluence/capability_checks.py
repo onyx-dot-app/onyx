@@ -28,7 +28,6 @@ from typing import Any, NoReturn, TypeVar
 from urllib.parse import urlparse
 
 import requests
-from pydantic import BaseModel
 from requests import HTTPError
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
@@ -40,6 +39,7 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
     OptionsFinding,
 )
@@ -194,14 +194,7 @@ def _need(
     return f"Give the token's user {user_permission}."
 
 
-class _RowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    summary: str
-    description: str
-
-
-_REFUSED_ROW = _RowText(
+_REFUSED_ROW = CheckRowText(
     summary="Requests refused or rate limited",
     description="Confluence refused or rate limited every try. (HTTP 403 or 429)",
 )
@@ -223,11 +216,11 @@ def _raise_for_http_error(
     error: HTTPError,
     *,
     denied: str,
-    denied_row: _RowText | None = None,
+    denied_row: CheckRowText | None = None,
     not_found: str | None = None,
-    not_found_row: _RowText | None = None,
+    not_found_row: CheckRowText | None = None,
     bad_request: str | None = None,
-    bad_request_row: _RowText | None = None,
+    bad_request_row: CheckRowText | None = None,
 ) -> NoReturn:
     """Maps a Confluence HTTP error onto the validation-exception family.
     ``denied`` explains a 403 for this probe; each ``*_row`` is the row text
@@ -283,7 +276,7 @@ def _raise_for_http_error(
 
 
 def _raise_for_sample_error(
-    error: HTTPError, *, denied: str, denied_row: _RowText
+    error: HTTPError, *, denied: str, denied_row: CheckRowText
 ) -> NoReturn:
     """Like ``_raise_for_http_error``, for a probe that first samples in-scope
     pages. A rejected scope query is the scope checks' failure, not this one."""
@@ -489,7 +482,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
                     "The credential signs in, but Confluence does not let its "
                     "user use Confluence on this site"
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No Confluence access on this site",
                     description=(
                         "The token is valid, but its user cannot use Confluence "
@@ -501,7 +494,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
                     "URL; a Cloud URL ends in /wiki "
                     "(https://your-domain.atlassian.net/wiki)"
                 ),
-                not_found_row=_RowText(
+                not_found_row=CheckRowText(
                     summary="No Confluence API at the Site URL",
                     description=(
                         "The Site URL does not point to a Confluence API. "
@@ -604,7 +597,7 @@ class _SpacesVisibleCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied=f"The credential cannot list Confluence spaces. {hint}",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to list spaces",
                     description=f"The account cannot list spaces. (HTTP 403)\n{need}",
                 ),
@@ -644,7 +637,7 @@ class _SpaceListingCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied="The credential cannot list Confluence spaces.",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to list spaces",
                     description="The account cannot list spaces. (HTTP 403)",
                 ),
@@ -687,7 +680,7 @@ class _ConfiguredSpaceCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied=f"The credential cannot read the space `{space_key}`",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary=f"No permission to read {space_key}",
                     description=(
                         "The account cannot read the selected space. (HTTP 403)\n"
@@ -746,7 +739,7 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied=f"The credential cannot search for the page `{page_id}`",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to search for the page",
                     description=(
                         "The account cannot search Confluence. (HTTP 403)\n"
@@ -755,7 +748,7 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
                     ),
                 ),
                 bad_request=f"Confluence rejected the page ID `{page_id}`",
-                bad_request_row=_RowText(
+                bad_request_row=CheckRowText(
                     summary="Confluence rejected a page ID",
                     description=(
                         "Confluence did not accept a page ID in a search. "
@@ -837,7 +830,7 @@ class _CqlQueryCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied="The credential cannot run CQL searches",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to run CQL searches",
                     description=(
                         "The account cannot search Confluence. (HTTP 403)\n"
@@ -846,7 +839,7 @@ class _CqlQueryCheck(_ConfluenceCheck):
                     ),
                 ),
                 bad_request="Confluence rejected the CQL query",
-                bad_request_row=_RowText(
+                bad_request_row=CheckRowText(
                     summary="Confluence rejected the CQL Query",
                     description=(
                         "Confluence cannot parse the query. (HTTP 400)\n"
@@ -924,14 +917,14 @@ class _ContentReadCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied=f"The credential cannot search Confluence pages. {hint}",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to search pages",
                     description=(
                         f"The account cannot search Confluence pages. (HTTP 403)\n{need}"
                     ),
                 ),
                 bad_request="Confluence rejected the page query",
-                bad_request_row=_RowText(
+                bad_request_row=CheckRowText(
                     summary="Confluence rejected the page query",
                     description=(
                         "Confluence did not accept the indexing scope query. "
@@ -1004,7 +997,7 @@ class _CommentsReadCheck(_ConfluenceCheck):
             _raise_for_sample_error(
                 e,
                 denied=f"The credential cannot read page comments. {hint}",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to read comments",
                     description=(
                         f"Pages would index without their comments. (HTTP 403)\n{need}"
@@ -1102,7 +1095,7 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
             _raise_for_sample_error(
                 e,
                 denied=f"The credential cannot read attachments. {hint}",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to read attachments",
                     description=(
                         f"The account cannot read attachments. (HTTP 403)\n{need}"
@@ -1167,7 +1160,7 @@ class _UserNamesCheck(_ConfluenceCheck):
             _raise_for_sample_error(
                 e,
                 denied="The credential cannot search Confluence pages",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to search pages",
                     description="The account cannot search Confluence pages. (HTTP 403)",
                 ),
@@ -1183,7 +1176,7 @@ class _UserNamesCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e,
                 denied="The credential cannot read user details",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to read user details",
                     description=(
                         "Mentions and authors would index as Unknown Confluence "
@@ -1294,7 +1287,7 @@ def _probe_space_key(
         _raise_for_http_error(
             e,
             denied="The credential cannot list Confluence spaces",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="No permission to list spaces",
                 description="The account cannot list spaces. (HTTP 403)",
             ),
@@ -1475,7 +1468,7 @@ class _PageRestrictionsReadCheck(_ConfluenceCheck):
                     "The credential cannot read page restrictions. "
                     f"{_restrictions_hint(context, config)}"
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to read restrictions",
                     description=(
                         "Permission sync cannot read who can view each page. "
@@ -1592,8 +1585,8 @@ def _raise_for_space_permission_error(error: HTTPError, *, space_key: str) -> No
     )
 
 
-def _not_space_admin_row(space_key: str, *, status: int) -> _RowText:
-    return _RowText(
+def _not_space_admin_row(space_key: str, *, status: int) -> CheckRowText:
+    return CheckRowText(
         summary=f"Not a space admin of {space_key}",
         description=(
             f"Only a space admin sees who can view a space. (HTTP {status})\n"
@@ -1911,7 +1904,7 @@ def _sample_users(
                 "The credential cannot list Confluence users. "
                 f"{_user_listing_hint(context, config)}"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="No permission to list users",
                 description=(
                     "The account cannot list users. (HTTP 403)\n"
@@ -2018,7 +2011,7 @@ class _GroupMembershipCheck(_GroupSyncCheck):
             _raise_for_http_error(
                 e,
                 denied=f"The credential cannot read group memberships. {hint}",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="No permission to read groups",
                     description=(
                         f"The account cannot read group memberships. (HTTP 403)\n{need}"
