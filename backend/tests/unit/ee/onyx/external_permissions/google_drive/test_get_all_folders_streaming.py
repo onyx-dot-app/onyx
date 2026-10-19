@@ -428,6 +428,37 @@ def test_get_all_folders_aborts_after_too_many_user_failures() -> None:
         )
 
 
+def test_user_failures_are_counted_across_both_passes() -> None:
+    """A user whose owned pass failed and a user whose not-owned pass failed
+    both count toward the same threshold, as they did when one pass covered
+    each user. Counted per pass, neither pass here would exceed half."""
+    users = [f"u{i}@example.com" for i in range(4)]
+    connector = _make_connector(users)
+
+    def listing(**kwargs: Any) -> Iterator[dict[str, Any]]:
+        scope, email = kwargs["scope"], kwargs["user_email"]
+        failing = {
+            (DriveFolderScope.OWNED, users[0]),
+            (DriveFolderScope.NOT_OWNED, users[1]),
+            (DriveFolderScope.NOT_OWNED, users[2]),
+        }
+        if (scope, email) in failing:
+            raise RuntimeError("drive unavailable")
+        return iter([])
+
+    connector.ops.list_folders_with_permissions.side_effect = listing
+
+    with pytest.raises(RuntimeError, match="Too many failed folder fetches"):
+        list(
+            _get_all_folders(
+                google_drive_connector=connector,
+                skip_folders_without_permissions=True,
+                drive_members={},
+                expand_group=_no_groups,
+            )
+        )
+
+
 def test_get_all_folders_enforces_crawl_deadline() -> None:
     """On large domains the crawl skips almost every folder and yields nothing
     for hours, so consumer-side timeouts (checked between yields) never fire —

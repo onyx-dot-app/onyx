@@ -100,10 +100,13 @@ def _run_partitions(
     kind: str,
     deadline: float,
     abort_on_failures: bool = True,
+    failed_keys: set[str] | None = None,
 ) -> Generator[FolderInfo, None, None]:
     """Runs one listing per key. A failed key is skipped; with
-    ``abort_on_failures``, more than half of them failing ends the sync."""
-    failed_count = 0
+    ``abort_on_failures``, more than half of them failing ends the sync.
+    Passes over the same keys share ``failed_keys`` so a key that failed in
+    any of them counts once toward that threshold."""
+    failed = failed_keys if failed_keys is not None else set()
     for key in keys:
         _check_sync_deadline(deadline)
         try:
@@ -125,9 +128,9 @@ def _run_partitions(
                 )
             else:
                 logger.exception("Error getting folders for %s %s", kind, key)
-            failed_count += 1
+            failed.add(key)
 
-            if abort_on_failures and failed_count > _MAX_FAILED_PERCENTAGE * len(keys):
+            if abort_on_failures and len(failed) > _MAX_FAILED_PERCENTAGE * len(keys):
                 raise RuntimeError(
                     f"Too many failed folder fetches during group sync ({kind}s)"
                 )
@@ -291,9 +294,20 @@ def _get_all_folders(
         # Every owner lists before any non-owner: an owner always reads a
         # folder's full ACL, while a non-owner's read can stop at a denial, and
         # the first listing to reach a folder is the one that claims it.
-        yield from _run_partitions(user_emails, _owned_folders, "user", crawl_deadline)
+        failed_users: set[str] = set()
         yield from _run_partitions(
-            user_emails, _visible_folders, "user", crawl_deadline
+            user_emails,
+            _owned_folders,
+            "user",
+            crawl_deadline,
+            failed_keys=failed_users,
+        )
+        yield from _run_partitions(
+            user_emails,
+            _visible_folders,
+            "user",
+            crawl_deadline,
+            failed_keys=failed_users,
         )
 
     if skipped_no_permissions or skipped_already_seen:
