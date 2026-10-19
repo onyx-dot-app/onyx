@@ -7,8 +7,7 @@ import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
 import { SettingsLayouts, toast } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Card } from "@opal/components";
+import { Button, Card, Text } from "@opal/components";
 import { Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import { SvgKey, SvgPlusCircle } from "@opal/icons";
@@ -78,7 +77,7 @@ function DiscordBotContent() {
             description={t("registrationKey.header.description")}
           />
           <Modal.Body>
-            <Text text04 mainUiBody>
+            <Text font="main-ui-body" color="text-04">
               {t("registrationKey.instructions.text")}
             </Text>
             <Card color="transparent" border="solid" rounding={4}>
@@ -87,8 +86,8 @@ function DiscordBotContent() {
                 justifyContent="between"
                 alignItems="center"
               >
-                <Text text03 secondaryMono>
-                  !register {registrationKey}
+                <Text font="secondary-mono" color="text-03">
+                  {`!register ${registrationKey ?? ""}`}
                 </Text>
                 <CopyButton
                   getCopyText={() => `!register ${registrationKey}`}
@@ -106,7 +105,7 @@ function DiscordBotContent() {
             justifyContent="between"
             alignItems="center"
           >
-            <Text mainContentEmphasis text05>
+            <Text font="main-content-emphasis" color="text-05">
               {t("serverConfigs.section.title")}
             </Text>
             <Button

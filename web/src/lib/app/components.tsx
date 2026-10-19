@@ -1,11 +1,10 @@
 "use client";
 
-import { OverflowText } from "@opal/components";
+import { OverflowText, Text } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { DEFAULT_LOGO_SIZE_PX } from "@/lib/constants";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
 import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
 import { IconProps } from "@opal/types";
 
@@ -106,10 +105,10 @@ export function FoldableLogo({
             {/* Wait for settings so a hidden tagline never flashes. */}
             {!isLoading && !hide_onyx_branding && (
               <Text
-                secondaryBody
-                text03
-                className={"line-clamp-1 truncate"}
-                nowrap
+                font="secondary-body"
+                color="text-03"
+                maxLines={1}
+                wordWrap="whitespace-nowrap"
               >
                 {t("logo.poweredBy.label")}
               </Text>

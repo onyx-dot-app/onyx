@@ -1,20 +1,20 @@
 "use client";
 
-import { OverflowText } from "@opal/components";
+import { OverflowText, Text } from "@opal/components";
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { Components } from "react-markdown";
-import Text from "@/refresh-components/texts/Text";
+import RefreshText from "@/refresh-components/texts/Text";
 import { ensureHrefProtocol } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import { SvgOnyxLogo } from "@opal/logos";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 const previewMarkdownComponents = {
   p: ({ children }) => (
-    <Text as="p" text03 figureSmallValue className="my-0! text-center">
+    <RefreshText as="p" text03 figureSmallValue className="my-0! text-center">
       {children}
-    </Text>
+    </RefreshText>
   ),
   a: ({ node, href, className, children, ...rest }) => {
     const fullHref = ensureHrefProtocol(href);
@@ -26,8 +26,8 @@ const previewMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text text03 figureSmallValue>
-          {children}
+        <Text font="figure-small-value" color="text-03">
+          {richNodes(children)}
         </Text>
       </a>
     );
@@ -112,13 +112,13 @@ function PreviewChat({
               highlightTarget === "chat_header" && "bg-highlight-match"
             )}
           >
-            <Text
+            <RefreshText
               figureSmallLabel
               text03
               className="max-w-full whitespace-normal wrap-break-word text-center"
             >
               {chat_header_content}
-            </Text>
+            </RefreshText>
           </div>
         </div>
       </div>
@@ -230,13 +230,13 @@ function PreviewStart({
               )}
             >
               <PreviewLogo logoSrc={logoSrc} size={18} />
-              <Text
+              <RefreshText
                 text04
                 headingH3
                 className="max-w-[260px] whitespace-normal wrap-break-word text-center"
               >
                 {greeting_message}
-              </Text>
+              </RefreshText>
             </div>
             <InputPreview />
           </div>

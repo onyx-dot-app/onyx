@@ -3,7 +3,6 @@
 import { memo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import Text from "@/refresh-components/texts/Text";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { Disabled, Hoverable } from "@opal/core";
@@ -14,7 +13,7 @@ import {
   SvgSettings,
 } from "@opal/icons";
 import { ModelIcon } from "@/lib/languageModels/components";
-import { Button, OverflowText } from "@opal/components";
+import { Button, OverflowText, Text } from "@opal/components";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -81,7 +80,7 @@ function LLMProviderCardInner({
               )}
             </div>
             <div className="min-w-0 flex flex-col justify-center">
-              <Text as="p" text04 mainUiAction>
+              <Text as="p" font="main-ui-action" color="text-04">
                 {title}
               </Text>
               <OverflowText
@@ -117,7 +116,7 @@ function LLMProviderCardInner({
           ) : (
             <div className="flex items-start p-1">
               <div className="flex items-center gap-0.5">
-                <Text as="p" text03 secondaryAction>
+                <Text as="p" font="secondary-action" color="text-03">
                   {t("llmStep.providerCard.connect.label")}
                 </Text>
                 <div className="p-0.5">
