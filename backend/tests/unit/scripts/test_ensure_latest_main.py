@@ -1,7 +1,8 @@
 """The latest-main hook (`.agents/hooks/ensure_latest_main.py`) runs against
-throwaway git repos: it reports the state of a branch at session start, stays quiet
-on later prompts unless the branch is behind, fetches at most once an hour on
-prompts, never changes the working tree, and always exits 0."""
+throwaway git repos: it tells the agent to rebase only when the branch conflicts with
+origin/main or is stale (merge base more than 3 days old) and is silent otherwise,
+fetches at most once an hour on prompts, never changes the working tree, and always
+exits 0."""
 
 import json
 import os
@@ -23,25 +24,43 @@ _GIT_ENV = {
     "GIT_CONFIG_NOSYSTEM": "1",
 }
 _STAMP = "onyx-main-sync-check"
+# The hook's limit is 3 days (`_STALE_AFTER_DAYS`); these sit either side of it.
+_PAST_LIMIT_DAYS = 4
+_WITHIN_LIMIT_DAYS = 2
 
 
-def _git(cwd: Path, *args: str) -> str:
+def _git(cwd: Path, *args: str, **env: str) -> str:
     return subprocess.run(
         ["git", *args],
         cwd=cwd,
-        env=_GIT_ENV,
+        env={**_GIT_ENV, **env},
         capture_output=True,
         text=True,
         check=True,
     ).stdout.strip()
 
 
-def _commit(repo: Path, name: str, content: str = "x\n") -> None:
+def _commit(
+    repo: Path,
+    name: str,
+    content: str = "x\n",
+    age_days: float = 0,
+) -> None:
+    """Commit `name`, dated `age_days` ago (the date the hook's staleness uses)."""
     path = repo / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
+    when = f"{int(time.time() - age_days * 24 * 60 * 60)} +0000"
     _git(repo, "add", name)
-    _git(repo, "commit", "-q", "-m", f"add {name}")
+    _git(
+        repo,
+        "commit",
+        "-q",
+        "-m",
+        f"add {name}",
+        GIT_AUTHOR_DATE=when,
+        GIT_COMMITTER_DATE=when,
+    )
 
 
 def _run(
@@ -62,29 +81,58 @@ def _run(
     return result
 
 
-@pytest.fixture
-def remote(tmp_path: Path) -> Path:
+def _make_remote(tmp_path: Path, age_days: float) -> Path:
     """A bare `origin` with one commit on main, plus a clone that pushes to it."""
     origin = tmp_path / "origin.git"
     _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
     seed = tmp_path / "seed"
     _git(tmp_path, "clone", "-q", str(origin), str(seed))
     _git(seed, "checkout", "-q", "-b", "main")
-    _commit(seed, "a.txt")
+    _commit(seed, "a.txt", age_days=age_days)
     _git(seed, "push", "-q", "origin", "main")
     return seed
 
 
-@pytest.fixture
-def checkout(remote: Path) -> Path:
-    """A clone of origin that is up to date."""
+def _make_checkout(remote: Path) -> Path:
     path = remote.parent / "checkout"
     _git(remote.parent, "clone", "-q", str(remote.parent / "origin.git"), str(path))
     return path
 
 
+@pytest.fixture
+def remote(tmp_path: Path) -> Path:
+    """origin whose main was last committed to just now."""
+    return _make_remote(tmp_path, age_days=0)
+
+
+@pytest.fixture
+def checkout(remote: Path) -> Path:
+    """A clone of origin that is up to date."""
+    return _make_checkout(remote)
+
+
+@pytest.fixture
+def stale_remote(tmp_path: Path) -> Path:
+    """origin whose first main commit is 4 days old (past the 3-day limit)."""
+    return _make_remote(tmp_path, age_days=_PAST_LIMIT_DAYS)
+
+
+@pytest.fixture
+def stale_checkout(stale_remote: Path) -> Path:
+    """A clone of `stale_remote`, up to date but with an old merge base once it diverges."""
+    return _make_checkout(stale_remote)
+
+
 def _push_new_commit(remote: Path, name: str = "b.txt") -> None:
     _commit(remote, name)
+    _git(remote, "push", "-q", "origin", "main")
+
+
+def _make_conflict(checkout: Path, remote: Path) -> None:
+    """`feat` and origin/main both rewrite a.txt, so merging them conflicts."""
+    _git(checkout, "checkout", "-q", "-b", "feat")
+    _commit(checkout, "a.txt", "feat\n")
+    _commit(remote, "a.txt", "main\n")
     _git(remote, "push", "-q", "origin", "main")
 
 
@@ -97,77 +145,140 @@ def _age_stamp(repo: Path, seconds: float) -> None:
     os.utime(_stamp(repo), (then, then))
 
 
-def test_session_start_up_to_date_says_so(checkout: Path) -> None:
-    out = _run(checkout, "SessionStart").stdout
-    assert "includes the latest origin/main" in out
+def test_up_to_date_is_silent(checkout: Path) -> None:
+    assert _run(checkout, "SessionStart").stdout == ""
 
 
-def test_session_start_on_main_behind_says_to_pull(
-    checkout: Path, remote: Path
-) -> None:
+def test_up_to_date_with_an_old_main_is_silent(stale_checkout: Path) -> None:
+    # Main has been quiet for 4 days, but the branch contains all of it.
+    _git(stale_checkout, "checkout", "-q", "-b", "feat")
+    _commit(stale_checkout, "feat.txt")
+    assert _run(stale_checkout, "SessionStart").stdout == ""
+
+
+def test_fresh_and_clean_behind_main_is_silent(checkout: Path, remote: Path) -> None:
     _push_new_commit(remote)
-    out = _run(checkout, "SessionStart").stdout
-    assert "`main` is 1 commit behind origin/main" in out
-    assert "git pull --ff-only origin main" in out
+    assert _run(checkout, "SessionStart").stdout == ""
 
 
-def test_session_start_on_branch_behind_says_to_rebase_and_lists_agent_files(
+def test_fresh_and_clean_branch_behind_main_is_silent(
     checkout: Path, remote: Path
 ) -> None:
     _git(checkout, "checkout", "-q", "-b", "feat")
     _commit(checkout, "feat.txt")
-    _commit(remote, ".agents/feature-map/x.md")
-    _push_new_commit(remote, "c.txt")
-    out = _run(checkout, "SessionStart").stdout
+    _push_new_commit(remote)
+    assert _run(checkout, "SessionStart").stdout == ""
+
+
+def test_merge_base_just_inside_the_limit_is_silent(tmp_path: Path) -> None:
+    remote = _make_remote(tmp_path, age_days=_WITHIN_LIMIT_DAYS)
+    checkout = _make_checkout(remote)
+    _git(checkout, "checkout", "-q", "-b", "feat")
+    _commit(checkout, "feat.txt")
+    _push_new_commit(remote)
+    assert _run(checkout, "SessionStart").stdout == ""
+
+
+def test_stale_branch_says_to_rebase_and_lists_agent_files(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    _git(stale_checkout, "checkout", "-q", "-b", "feat")
+    _commit(stale_checkout, "feat.txt")
+    _commit(stale_remote, ".agents/feature-map/x.md")
+    _push_new_commit(stale_remote, "c.txt")
+    out = _run(stale_checkout, "SessionStart").stdout
     assert "`feat` is 2 commits behind origin/main" in out
+    assert "it is stale" in out
+    assert "4 days ago (more than 3)" in out
+    assert "merge conflicts" not in out
     assert ".agents/feature-map/x.md" in out
     assert "git rebase origin/main" in out
 
 
-def test_hook_never_changes_the_working_tree(checkout: Path, remote: Path) -> None:
-    _git(checkout, "checkout", "-q", "-b", "feat")
-    _commit(checkout, "feat.txt")
-    (checkout / "a.txt").write_text("local edit\n")
-    (checkout / "scratch.txt").write_text("untracked\n")
-    _push_new_commit(remote)
-    head = _git(checkout, "rev-parse", "HEAD")
+def test_stale_main_says_to_pull(stale_checkout: Path, stale_remote: Path) -> None:
+    _push_new_commit(stale_remote)
+    out = _run(stale_checkout, "SessionStart").stdout
+    assert "`main` is 1 commit behind origin/main" in out
+    assert "it is stale" in out
+    assert "git pull --ff-only origin main" in out
 
+
+def test_conflicting_branch_says_to_rebase_even_when_fresh(
+    checkout: Path, remote: Path
+) -> None:
+    _make_conflict(checkout, remote)
     out = _run(checkout, "SessionStart").stdout
+    assert "it has merge conflicts with origin/main" in out
+    assert "it is stale" not in out
+    assert "git rebase origin/main" in out
+
+
+def test_conflicting_and_stale_branch_gives_both_reasons(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    _make_conflict(stale_checkout, stale_remote)
+    out = _run(stale_checkout, "SessionStart").stdout
+    assert "it has merge conflicts with origin/main and it is stale" in out
+
+
+def test_hook_never_changes_the_working_tree(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    _git(stale_checkout, "checkout", "-q", "-b", "feat")
+    _commit(stale_checkout, "feat.txt")
+    (stale_checkout / "a.txt").write_text("local edit\n")
+    (stale_checkout / "scratch.txt").write_text("untracked\n")
+    _push_new_commit(stale_remote)
+    head = _git(stale_checkout, "rev-parse", "HEAD")
+
+    out = _run(stale_checkout, "SessionStart").stdout
 
     assert "uncommitted changes" in out
-    assert _git(checkout, "rev-parse", "HEAD") == head
-    assert _git(checkout, "branch", "--show-current") == "feat"
-    assert (checkout / "a.txt").read_text() == "local edit\n"
-    assert (checkout / "scratch.txt").read_text() == "untracked\n"
+    assert _git(stale_checkout, "rev-parse", "HEAD") == head
+    assert _git(stale_checkout, "branch", "--show-current") == "feat"
+    assert (stale_checkout / "a.txt").read_text() == "local edit\n"
+    assert (stale_checkout / "scratch.txt").read_text() == "untracked\n"
+    assert _git(stale_checkout, "status", "--porcelain", "--untracked-files=no") == (
+        "M a.txt"
+    )
 
 
 def test_session_start_offline_reports_against_last_known_main(
-    checkout: Path, remote: Path
+    stale_checkout: Path, stale_remote: Path
 ) -> None:
-    _push_new_commit(remote)
-    _git(checkout, "fetch", "-q", "origin", "main")
-    _git(checkout, "remote", "set-url", "origin", str(checkout / "missing.git"))
-    out = _run(checkout, "SessionStart").stdout
+    _push_new_commit(stale_remote)
+    _git(stale_checkout, "fetch", "-q", "origin", "main")
+    _git(
+        stale_checkout,
+        "remote",
+        "set-url",
+        "origin",
+        str(stale_checkout / "missing.git"),
+    )
+    out = _run(stale_checkout, "SessionStart").stdout
     assert "Could not fetch origin/main" in out
     assert "`main` is 1 commit behind origin/main" in out
 
 
-def test_session_start_offline_and_current_notes_the_failed_fetch(
-    checkout: Path,
-) -> None:
+def test_session_start_offline_and_current_is_silent(checkout: Path) -> None:
     _git(checkout, "remote", "set-url", "origin", str(checkout / "missing.git"))
-    out = _run(checkout, "SessionStart").stdout
-    assert "Could not fetch origin/main" in out
-    assert "No newer commits known" in out
+    assert _run(checkout, "SessionStart").stdout == ""
 
 
-def test_no_event_is_treated_as_session_start(checkout: Path) -> None:
-    assert "includes the latest origin/main" in _run(checkout).stdout
+def test_no_event_is_treated_as_session_start(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    _push_new_commit(stale_remote)
+    assert "it is stale" in _run(stale_checkout).stdout
 
 
-def test_skip_variable_silences_the_hook(checkout: Path, remote: Path) -> None:
-    _push_new_commit(remote)
-    assert _run(checkout, "SessionStart", ONYX_SKIP_MAIN_SYNC_CHECK="1").stdout == ""
+def test_skip_variable_silences_the_hook(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    _push_new_commit(stale_remote)
+    assert (
+        _run(stale_checkout, "SessionStart", ONYX_SKIP_MAIN_SYNC_CHECK="1").stdout == ""
+    )
 
 
 def test_outside_a_repository_is_silent(tmp_path: Path) -> None:
@@ -189,43 +300,59 @@ def test_prompt_is_silent_when_not_behind(checkout: Path) -> None:
     assert _run(checkout, "UserPromptSubmit").stdout == ""
 
 
-def test_prompt_reports_when_behind_and_fetch_is_due(
+def test_prompt_is_silent_when_behind_but_fresh_and_clean(
     checkout: Path, remote: Path
 ) -> None:
     _push_new_commit(remote)
-    out = _run(checkout, "UserPromptSubmit").stdout
+    assert _run(checkout, "UserPromptSubmit").stdout == ""
+
+
+def test_prompt_reports_when_stale_and_fetch_is_due(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    _push_new_commit(stale_remote)
+    out = _run(stale_checkout, "UserPromptSubmit").stdout
     assert "`main` is 1 commit behind origin/main" in out
     assert "Could not fetch" not in out
 
 
-def test_prompt_fetches_at_most_once_an_hour(checkout: Path, remote: Path) -> None:
-    assert _run(checkout, "UserPromptSubmit").stdout == ""
-    assert _stamp(checkout).exists()
+def test_prompt_reports_a_conflict_when_fetch_is_due(
+    checkout: Path, remote: Path
+) -> None:
+    _make_conflict(checkout, remote)
+    assert "merge conflicts" in _run(checkout, "UserPromptSubmit").stdout
+
+
+def test_prompt_fetches_at_most_once_an_hour(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    assert _run(stale_checkout, "UserPromptSubmit").stdout == ""
+    assert _stamp(stale_checkout).exists()
 
     # A fetch within the hour would see this commit.
-    _push_new_commit(remote)
-    assert _run(checkout, "UserPromptSubmit").stdout == ""
+    _push_new_commit(stale_remote)
+    assert _run(stale_checkout, "UserPromptSubmit").stdout == ""
 
-    _age_stamp(checkout, 2 * 60 * 60)
-    assert "1 commit behind" in _run(checkout, "UserPromptSubmit").stdout
-    assert time.time() - _stamp(checkout).stat().st_mtime < 60
+    _age_stamp(stale_checkout, 2 * 60 * 60)
+    assert "1 commit behind" in _run(stale_checkout, "UserPromptSubmit").stdout
+    assert time.time() - _stamp(stale_checkout).stat().st_mtime < 60
 
 
 def test_prompt_uses_the_cached_main_between_fetches(
-    checkout: Path, remote: Path
+    stale_checkout: Path, stale_remote: Path
 ) -> None:
-    _push_new_commit(remote)
-    _git(checkout, "fetch", "-q", "origin", "main")
-    _stamp(checkout).touch()
-    assert "1 commit behind" in _run(checkout, "UserPromptSubmit").stdout
+    _push_new_commit(stale_remote)
+    _git(stale_checkout, "fetch", "-q", "origin", "main")
+    _stamp(stale_checkout).touch()
+    assert "1 commit behind" in _run(stale_checkout, "UserPromptSubmit").stdout
 
 
 def test_session_start_counts_as_a_fetch_for_the_throttle(
-    checkout: Path, remote: Path
+    stale_checkout: Path, stale_remote: Path
 ) -> None:
-    _run(checkout, "SessionStart")
-    _push_new_commit(remote)
-    assert _run(checkout, "UserPromptSubmit").stdout == ""
+    _run(stale_checkout, "SessionStart")
+    _push_new_commit(stale_remote)
+    assert _run(stale_checkout, "UserPromptSubmit").stdout == ""
 
 
 def test_prompt_offline_tries_once_and_stays_silent(checkout: Path) -> None:

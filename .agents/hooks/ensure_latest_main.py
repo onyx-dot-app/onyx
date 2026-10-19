@@ -2,15 +2,22 @@
 """Session-start hook for coding agents (Claude Code and Codex).
 
 The feature map in `.agents/feature-map/`, the skills and these hooks are only as
-current as the checkout, so an agent on a stale branch works from old context. At
-session start this hook fetches `origin/main`, compares it with HEAD and prints the
-result; when HEAD is missing commits from main, it says how to catch up. Both agents
-add a `SessionStart` hook's stdout to the model's context.
+current as the checkout, and a branch that drifts from main costs a much more
+involved conflict resolution later. At session start this hook fetches `origin/main`
+and tells the agent to rebase on it, but only when the branch has to be updated:
 
-On `UserPromptSubmit` it repeats the check for a session that stays on a stale
-branch, but quietly: it fetches at most once an hour per checkout (the time of the
-last attempt is the mtime of `.git/onyx-main-sync-check`) and prints only when HEAD is
-behind `origin/main`.
+1. it would conflict with `origin/main` (`git merge-tree --write-tree` reports
+   conflicts), or
+2. it is stale: the merge base with `origin/main` is more than `_STALE_AFTER_DAYS`
+   days old.
+
+A branch that is merely a few commits behind, recently, gets no message; neither
+does one that already contains `origin/main`. Both agents add a `SessionStart`
+hook's stdout to the model's context.
+
+On `UserPromptSubmit` it repeats the check for a long session, but fetches at most
+once an hour per checkout (the time of the last attempt is the mtime of
+`.git/onyx-main-sync-check`).
 
 It never changes the working tree: no pull, rebase, merge or checkout. It only
 updates the `origin/main` remote-tracking ref (and FETCH_HEAD), which is what
@@ -34,6 +41,9 @@ _BRANCH = "main"
 _REF = f"{_REMOTE}/{_BRANCH}"
 _FETCH_TIMEOUT_SECONDS = 20
 _PROMPT_FETCH_INTERVAL_SECONDS = 60 * 60
+# A branch whose merge base with origin/main is older than this is stale.
+_STALE_AFTER_DAYS = 3
+_SECONDS_PER_DAY = 24 * 60 * 60
 _STAMP_NAME = "onyx-main-sync-check"
 _GIT_TIMEOUT_SECONDS = 10
 _MAX_LISTED_FILES = 8
@@ -55,6 +65,26 @@ def _git(repo: Path, *args: str) -> str | None:
     except (subprocess.SubprocessError, OSError):
         return None
     return result.stdout.strip()
+
+
+def _would_conflict(repo: Path) -> bool:
+    """True when merging origin/main into HEAD would conflict.
+
+    `git merge-tree --write-tree` exits 1 for conflicts. Any other failure (git
+    older than 2.38, unrelated or shallow history) is not evidence of a conflict.
+    Only objects are written; the index and working tree are untouched.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "merge-tree", "--write-tree", "HEAD", _REF],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return False
+    return result.returncode == 1
 
 
 def _fetch(repo: Path) -> bool:
@@ -141,19 +171,36 @@ def _agent_context_changes(repo: Path, base: str) -> list[str]:
     return out.splitlines() if out else []
 
 
-def _report(repo: Path, fetched: bool | None, quiet: bool) -> str | None:
-    """The message for the agent.
+def _report(repo: Path, fetched: bool | None) -> str | None:
+    """The message for the agent, or None when the branch needs no update.
 
-    `fetched` is None when no fetch was tried. With `quiet`, only a branch that is
-    behind gets a message.
+    `fetched` is None when no fetch was tried.
     """
     if _git(repo, "rev-parse", "--verify", "--quiet", f"{_REF}^{{commit}}") is None:
         return None  # no origin/main to compare with (no remote, not fetched yet)
 
+    if _git(repo, "merge-base", "--is-ancestor", _REF, "HEAD") is not None:
+        return None  # HEAD already contains everything on origin/main: nothing to do
+
+    base = _git(repo, "merge-base", "HEAD", _REF)
+    reasons: list[str] = []
+    if _would_conflict(repo):
+        reasons.append(f"it has merge conflicts with {_REF}")
+    base_time = _git(repo, "show", "-s", "--format=%ct", base) if base else None
+    if base_time and base_time.isdigit():
+        age_seconds = time.time() - int(base_time)
+        if age_seconds > _STALE_AFTER_DAYS * _SECONDS_PER_DAY:
+            reasons.append(
+                f"it is stale: it last synced with {_REF} "
+                f"{int(age_seconds // _SECONDS_PER_DAY)} days ago "
+                f"(more than {_STALE_AFTER_DAYS})"
+            )
+    if not reasons:
+        return None
+
     branch = _git(repo, "branch", "--show-current") or "HEAD (detached)"
     on_main = branch == _BRANCH
     dirty = bool(_git(repo, "status", "--porcelain", "--untracked-files=no"))
-
     stale_note = (
         ""
         if fetched is not False
@@ -164,29 +211,15 @@ def _report(repo: Path, fetched: bool | None, quiet: bool) -> str | None:
         )
     )
 
-    if _git(repo, "merge-base", "--is-ancestor", _REF, "HEAD") is not None:
-        # HEAD already contains everything on origin/main.
-        if quiet:
-            return None
-        if not fetched:
-            return f"[ensure-latest-main] {stale_note}No newer commits known."
-        return f"[ensure-latest-main] `{branch}` includes the latest {_REF}."
-
-    base = _git(repo, "merge-base", "HEAD", _REF)
-    if base is None:
-        # Shallow clone or unrelated history: the commits cannot be counted.
-        behind_text = f"is missing commits from {_REF}"
-        changed: list[str] = []
-    else:
-        behind = int(_git(repo, "rev-list", "--count", f"HEAD..{_REF}") or 0)
-        behind_text = f"is {_plural(behind, 'commit')} behind {_REF}"
-        changed = _agent_context_changes(repo, base)
-
+    behind = int(_git(repo, "rev-list", "--count", f"HEAD..{_REF}") or 0)
     lines = [
-        f"[ensure-latest-main] {stale_note}`{branch}` {behind_text}. Before you start "
-        "work, bring it up to date so the feature map in `.agents/feature-map/` and "
-        "the repo's other agent context are current."
+        f"[ensure-latest-main] {stale_note}`{branch}` is {_plural(behind, 'commit')} "
+        f"behind {_REF} and needs to be rebased on it: {' and '.join(reasons)}. "
+        "Before you start work, update it; a branch kept current avoids a much more "
+        "involved conflict resolution later, and keeps the feature map in "
+        "`.agents/feature-map/` and the repo's other agent context current."
     ]
+    changed = _agent_context_changes(repo, base) if base else []
     if changed:
         shown = ", ".join(changed[:_MAX_LISTED_FILES])
         more = len(changed) - _MAX_LISTED_FILES
@@ -241,7 +274,7 @@ def main() -> int:
             _mark_fetched(repo)
         elif _fetch_due(repo):
             fetched = _fetch(repo)
-        report = _report(repo, fetched, quiet)
+        report = _report(repo, fetched)
     except Exception:  # a session-start hook must never break the session
         return 0
     if report:
