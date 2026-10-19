@@ -414,7 +414,9 @@ function MockEnvironment({
             typeof payload.action_policies === "object"
           ) {
             const policies: Record<string, ActionPolicy> = {};
-            for (const [name, value] of Object.entries(payload.action_policies)) {
+            for (const [name, value] of Object.entries(
+              payload.action_policies
+            )) {
               if (value === "ALWAYS" || value === "ASK" || value === "DENY")
                 policies[name] = value;
             }
