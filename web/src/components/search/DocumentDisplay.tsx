@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SourceIcon } from "../SourceIcon";
 import { WebResultIcon } from "../WebResultIcon";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/app/interfaces";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -154,7 +154,7 @@ export function CompactDocumentCard({
           ) : (
             <SourceIcon sourceType={document.source_type} iconSize={18} />
           )}
-          <Text as="p" text04 className="truncate m-0!">
+          <Text as="p" font="main-ui-body" color="text-04" maxLines={1}>
             {document.semantic_identifier ?? document.document_id}
           </Text>
         </div>
@@ -162,9 +162,10 @@ export function CompactDocumentCard({
         {document.blurb && (
           <Text
             as="p"
-            text03
-            secondaryBody
-            className="line-clamp-2 text-start m-0!"
+            font="secondary-body"
+            color="text-03"
+            maxLines={2}
+            textPosition="text-start"
           >
             {document.blurb}
           </Text>
@@ -174,9 +175,10 @@ export function CompactDocumentCard({
           !isNaN(new Date(document.updated_at).getTime()) && (
             <Text
               as="p"
-              text03
-              figureSmallLabel
-              className="line-clamp-2 text-start m-0!"
+              font="figure-small-label"
+              color="text-03"
+              maxLines={2}
+              textPosition="text-start"
             >
               {t("updated.text", {
                 date: new Date(document.updated_at).toLocaleDateString(locale),

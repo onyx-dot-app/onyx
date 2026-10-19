@@ -22,7 +22,8 @@ import {
 import { InputSingleSelect } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { FormField } from "@/refresh-components/form/FormField";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import RefreshText from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
 import {
   InputKeyValue as KeyValueInput,
@@ -433,25 +434,29 @@ export default function OpenAPIAuthenticationModal({
               alignItems="stretch"
             >
               {submissionError && (
-                <Text as="p" mainUiBody className="text-action-text-danger-05">
+                <RefreshText
+                  as="p"
+                  mainUiBody
+                  className="text-action-text-danger-05"
+                >
                   {submissionError}
-                </Text>
+                </RefreshText>
               )}
               {oauthConfigError && (
                 <div className="mb-3">
-                  <Text
+                  <RefreshText
                     as="p"
                     mainUiBody
                     className="text-action-text-danger-05"
                   >
                     {oauthConfigError}
-                  </Text>
+                  </RefreshText>
                 </div>
               )}
 
               {shouldDisableForm ? (
                 <div className="flex min-h-[220px] items-center justify-center rounded-12 border border-border-01 bg-background-tint-00">
-                  <Text as="p" secondaryBody text03>
+                  <Text as="p" font="secondary-body" color="text-03">
                     {t("openApiAuthModal.loading.label")}
                   </Text>
                 </div>
@@ -736,7 +741,7 @@ export default function OpenAPIAuthenticationModal({
 
                       <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
                         <div className="flex flex-col gap-2 w-full">
-                          <Text
+                          <RefreshText
                             as="p"
                             text03
                             secondaryBody
@@ -749,15 +754,15 @@ export default function OpenAPIAuthenticationModal({
                                 </span>
                               ),
                             })}
-                          </Text>
+                          </RefreshText>
                           <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
-                            <Text
+                            <RefreshText
                               as="p"
                               text04
                               className="font-mono text-[12px] leading-[16px] truncate flex-1"
                             >
                               {redirectUri}
-                            </Text>
+                            </RefreshText>
                             <CopyButton
                               getCopyText={() => redirectUri}
                               tooltip={t(
@@ -774,10 +779,10 @@ export default function OpenAPIAuthenticationModal({
                   {values.authMethod === "custom-header" && (
                     <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
                       <div className="flex flex-col gap-2">
-                        <Text as="p" mainUiAction text04>
+                        <Text as="p" font="main-ui-action" color="text-04">
                           {t("openApiAuthModal.headers.title")}
                         </Text>
-                        <Text as="p" secondaryBody text03>
+                        <Text as="p" font="secondary-body" color="text-03">
                           {t("openApiAuthModal.headers.description")}
                         </Text>
                       </div>

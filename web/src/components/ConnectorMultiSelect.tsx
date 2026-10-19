@@ -6,7 +6,8 @@ import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import RefreshText from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import {
   Button,
@@ -92,9 +93,9 @@ export const ConnectorMultiSelect = ({
             pinned: true,
             render: ({ props }) => (
               <div {...props} className="py-4 px-3">
-                <Text as="p" text03 className="text-center text-xs">
+                <RefreshText as="p" text03 className="text-center text-xs">
                   {message}
-                </Text>
+                </RefreshText>
               </div>
             ),
           },
@@ -130,11 +131,13 @@ export const ConnectorMultiSelect = ({
     <div className="flex flex-col w-full space-y-2 mb-4">
       {label && (
         <Label>
-          <Text>{label}</Text>
+          <Text font="main-ui-body" color="text-05">
+            {label}
+          </Text>
         </Label>
       )}
 
-      <Text as="p" mainUiMuted text03>
+      <Text as="p" font="main-ui-muted" color="text-03">
         {t("documentSetHint.description")}
       </Text>
       <Dropdown open={open} onOpenChange={setOpen}>

@@ -19,7 +19,7 @@ import {
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { Dropdown, FilterButton, LineItemButton } from "@opal/components";
 import { SvgClock, SvgTag } from "@opal/icons";
@@ -276,7 +276,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         {!showEmpty && (
           <div className="flex-1 flex flex-col justify-end gap-3">
             <Section alignItems="start">
-              <Text text03 mainUiMuted>
+              <Text font="main-ui-muted" color="text-03">
                 {t("results.count.label", { count: results.length })}
               </Text>
             </Section>
@@ -341,7 +341,11 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   selectVariant="select-heavy"
                   sizePreset="main-ui"
                   variant="section"
-                  rightChildren={<Text text03>{count}</Text>}
+                  rightChildren={
+                    <Text font="main-ui-body" color="text-03">
+                      {String(count)}
+                    </Text>
+                  }
                 />
               ))}
             </Section>

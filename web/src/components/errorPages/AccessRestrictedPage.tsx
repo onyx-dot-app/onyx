@@ -14,7 +14,8 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useLicense } from "@/hooks/useLicense";
 import { useSettings } from "@/lib/settings/hooks";
 import { ApplicationStatus } from "@/lib/settings/types";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { SvgLock } from "@opal/icons";
 
 const linkClassName =
@@ -100,27 +101,33 @@ export default function AccessRestricted() {
   return (
     <ErrorPageLayout>
       <div className="flex items-center gap-2">
-        <Text headingH2>{t("accessRestricted.heading.title")}</Text>
+        <Text font="heading-h2" color="text-05">
+          {t("accessRestricted.heading.title")}
+        </Text>
         <SvgLock className="stroke-status-error-05 w-6 h-6" />
       </div>
 
-      <Text text03>{initialModalMessage}</Text>
+      <Text font="main-ui-body" color="text-03">
+        {initialModalMessage}
+      </Text>
 
       {isSeatLimitExceeded ? (
         <>
-          <Text text03>
-            {t.rich("accessRestricted.seatLimitAdminHint.text", {
-              userLink: (chunks) => (
-                <Link className={linkClassName} href="/admin/users">
-                  {chunks}
-                </Link>
-              ),
-              billingLink: (chunks) => (
-                <Link className={linkClassName} href="/admin/billing">
-                  {chunks}
-                </Link>
-              ),
-            })}
+          <Text font="main-ui-body" color="text-03">
+            {richNodes(
+              t.rich("accessRestricted.seatLimitAdminHint.text", {
+                userLink: (chunks) => (
+                  <Link className={linkClassName} href="/admin/users">
+                    {chunks}
+                  </Link>
+                ),
+                billingLink: (chunks) => (
+                  <Link className={linkClassName} href="/admin/billing">
+                    {chunks}
+                  </Link>
+                ),
+              })
+            )}
           </Text>
 
           <div className="flex flex-row gap-2">
@@ -131,11 +138,11 @@ export default function AccessRestricted() {
         </>
       ) : NEXT_PUBLIC_CLOUD_ENABLED ? (
         <>
-          <Text text03>
+          <Text font="main-ui-body" color="text-03">
             {t("accessRestricted.updatePayment.description", { appName })}
           </Text>
 
-          <Text text03>
+          <Text font="main-ui-body" color="text-03">
             {t("accessRestricted.manageSubscription.description")}
           </Text>
 
@@ -150,30 +157,36 @@ export default function AccessRestricted() {
             </Button>
           </div>
 
-          {error && <Text className="text-status-error-05">{error}</Text>}
+          {error && (
+            <Text font="main-ui-body" color="status-error-05">
+              {error}
+            </Text>
+          )}
         </>
       ) : (
         <>
-          <Text text03>
+          <Text font="main-ui-body" color="text-03">
             {hadPreviousLicense
               ? t("accessRestricted.renewLicense.description", { appName })
               : t("accessRestricted.obtainLicense.description")}
           </Text>
 
-          <Text text03>
-            {t.rich("accessRestricted.billingAdminHint.text", {
-              hadLicense: hadPreviousLicense ? "true" : "false",
-              billingLink: (chunks) => (
-                <Link className={linkClassName} href="/admin/billing">
-                  {chunks}
-                </Link>
-              ),
-              supportLink: (chunks) => (
-                <a className={linkClassName} href="mailto:support@onyx.app">
-                  {chunks}
-                </a>
-              ),
-            })}
+          <Text font="main-ui-body" color="text-03">
+            {richNodes(
+              t.rich("accessRestricted.billingAdminHint.text", {
+                hadLicense: hadPreviousLicense ? "true" : "false",
+                billingLink: (chunks) => (
+                  <Link className={linkClassName} href="/admin/billing">
+                    {chunks}
+                  </Link>
+                ),
+                supportLink: (chunks) => (
+                  <a className={linkClassName} href="mailto:support@onyx.app">
+                    {chunks}
+                  </a>
+                ),
+              })
+            )}
           </Text>
 
           <div className="flex flex-row gap-2">
@@ -198,17 +211,19 @@ export default function AccessRestricted() {
         </>
       )}
 
-      <Text text03>
-        {t.rich("needHelp.text", {
-          discordLink: (chunks) => (
-            <InlineExternalLink
-              className={linkClassName}
-              href="https://discord.gg/4NA5SbzrWb"
-            >
-              {chunks}
-            </InlineExternalLink>
-          ),
-        })}
+      <Text font="main-ui-body" color="text-03">
+        {richNodes(
+          t.rich("needHelp.text", {
+            discordLink: (chunks) => (
+              <InlineExternalLink
+                className={linkClassName}
+                href="https://discord.gg/4NA5SbzrWb"
+              >
+                {chunks}
+              </InlineExternalLink>
+            ),
+          })
+        )}
       </Text>
     </ErrorPageLayout>
   );

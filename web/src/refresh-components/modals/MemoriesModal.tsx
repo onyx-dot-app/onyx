@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputTextArea, InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import TextSeparator from "@/refresh-components/TextSeparator";
@@ -300,7 +300,7 @@ export default function MemoriesModal({
         <Modal.Body padding={2}>
           {filteredMemories.length === 0 ? (
             <Section alignItems="center" padding={8}>
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 {searchQuery.trim()
                   ? t("empty.noMatches")
                   : t("empty.getStarted")}

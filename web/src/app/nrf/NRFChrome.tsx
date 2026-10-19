@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ensureHrefProtocol } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import type { Components } from "react-markdown";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import RefreshText from "@/refresh-components/texts/Text";
 import { Button, Dropdown, OpenButton } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
@@ -23,9 +24,9 @@ const NRF_FOOTER_HEIGHT_VAR = "--nrf-footer-height";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="p" text03 secondaryAction className="my-0! text-center">
+    <RefreshText as="p" text03 secondaryAction className="my-0! text-center">
       {children}
-    </Text>
+    </RefreshText>
   ),
   a: ({
     href,
@@ -42,8 +43,8 @@ const footerMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text text03 secondaryAction>
-          {children}
+        <Text font="secondary-action" color="text-03">
+          {richNodes(children)}
         </Text>
       </a>
     );
