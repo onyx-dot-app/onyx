@@ -254,7 +254,7 @@ function InputDatePicker({
             {clearable && value && !disabled && (
               <Button
                 icon={SvgX}
-                prominence="internal"
+                prominence="tertiary"
                 size="sm"
                 tooltip={strings.clear}
                 onClick={() => onChange(null)}
@@ -263,7 +263,7 @@ function InputDatePicker({
             <Popover.Trigger asChild>
               <Button
                 icon={SvgCalendar}
-                prominence="internal"
+                prominence="tertiary"
                 size="sm"
                 tooltip={strings.openCalendar}
                 disabled={disabled}

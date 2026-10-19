@@ -14,6 +14,7 @@ import { InputPasswordTypeIn } from "@opal/components";
 interface ControlledPasswordProps {
   initialValue?: string;
   isNonRevealable?: boolean;
+  existingValue?: string;
   placeholder?: string;
   mask?: "asterisk" | "native";
 }
@@ -115,5 +116,74 @@ describe("InputPasswordTypeIn", () => {
     await user.click(screen.getByRole("button", { name: "Show password" }));
     expect(screen.queryByText(MASKED_SECRET)).not.toBeInTheDocument();
     expect(screen.getByTestId("pw")).toHaveAttribute("type", "text");
+  });
+
+  describe("existingValue", () => {
+    const EXISTING = "sk-abcd...wxyz";
+
+    function renderExisting() {
+      render(
+        <ControlledPassword initialValue={EXISTING} existingValue={EXISTING} />
+      );
+      return screen.getByTestId("pw");
+    }
+
+    test("backspace clears the whole existing value", async () => {
+      const user = setupUser();
+      const input = renderExisting();
+
+      await user.type(input, "{Backspace}");
+      expect(input).toHaveValue("");
+    });
+
+    test("typing replaces the existing value with the keystroke", async () => {
+      const user = setupUser();
+      const input = renderExisting();
+
+      await user.type(input, "n");
+      expect(input).toHaveValue("n");
+      await user.type(input, "ew");
+      expect(input).toHaveValue("new");
+    });
+
+    test("pasting replaces the existing value", async () => {
+      const user = setupUser();
+      const input = renderExisting();
+
+      await user.click(input);
+      await user.paste("pasted-key");
+      expect(input).toHaveValue("pasted-key");
+    });
+
+    test("shows the existing value as a tag that cannot be revealed", () => {
+      const input = renderExisting();
+
+      expect(screen.getByText(EXISTING)).toBeInTheDocument();
+      expect(input).toHaveValue("");
+      expect(input).toHaveAttribute("type", "password");
+      expect(
+        screen.getByRole("button", { name: "Value cannot be revealed" })
+      ).toBeDisabled();
+      expect(screen.queryByText("✱".repeat(EXISTING.length))).toBeNull();
+    });
+
+    test("delete clears the whole existing value", async () => {
+      const user = setupUser();
+      const input = renderExisting();
+
+      await user.type(input, "{Delete}");
+      expect(input).toHaveValue("");
+      expect(screen.queryByText(EXISTING)).toBeNull();
+    });
+
+    test("a new value can be revealed and edited normally", async () => {
+      const user = setupUser();
+      const input = renderExisting();
+
+      await user.type(input, "{Backspace}abc{Backspace}");
+      expect(input).toHaveValue("ab");
+      await user.click(screen.getByRole("button", { name: "Show password" }));
+      expect(input).toHaveAttribute("type", "text");
+    });
   });
 });

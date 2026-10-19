@@ -376,7 +376,7 @@ function TagField({
       </div>
       {onClear !== undefined && !disabled && (
         <Button
-          prominence="internal"
+          prominence="tertiary"
           icon={SvgX}
           size="xs"
           tooltip={strings.clear}

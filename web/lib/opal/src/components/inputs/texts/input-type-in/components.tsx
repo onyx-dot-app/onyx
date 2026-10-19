@@ -6,6 +6,7 @@ import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
+import { useOpalStrings } from "@opal/strings";
 import type { InputVariants, WithoutStyles } from "@opal/types";
 
 export interface InputTypeInProps extends WithoutStyles<
@@ -79,6 +80,7 @@ export default function InputTypeIn({
   name,
   ...props
 }: InputTypeInProps) {
+  const strings = useOpalStrings();
   const disabled = variant === "disabled";
   const isReadOnly = readOnly || variant === "readOnly";
 
@@ -139,14 +141,22 @@ export default function InputTypeIn({
         <div className={cn(value === "" && "invisible")}>
           <Button
             icon={SvgX}
+            aria-label={strings.clear}
             disabled={disabled}
             onClick={(event) => {
               event.stopPropagation();
               handleClear();
+              // The button hides once the field is empty; keep focus in the
+              // field rather than losing it to the page.
+              event.currentTarget
+                .closest(".opal-input")
+                ?.querySelector("input")
+                ?.focus();
             }}
             type="button"
-            prominence="internal"
+            prominence="tertiary"
             size="sm"
+            tooltip={strings.clear}
           />
         </div>
       )}

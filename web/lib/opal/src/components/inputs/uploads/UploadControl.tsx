@@ -168,6 +168,7 @@ export default function UploadControl({
             type="button"
             prominence="tertiary"
             size="sm"
+            tooltip={strings.clearFile}
             aria-label={strings.clearFile}
           />
         )}

@@ -240,7 +240,7 @@ function InputTime({
           <div className="opal-input-segmented-actions">
             <Button
               icon={SvgX}
-              prominence="internal"
+              prominence="tertiary"
               size="sm"
               tooltip={strings.clear}
               onClick={() => onChange(null)}

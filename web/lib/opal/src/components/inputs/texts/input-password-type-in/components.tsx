@@ -5,10 +5,11 @@ import {
   Button,
   InputTypeIn,
   type InputTypeInProps,
+  Tag,
   Text,
 } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgEye, SvgEyeClosed } from "@opal/icons";
+import { SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 
 // Backend placeholder pattern - indicates a stored value that can't be revealed
@@ -42,6 +43,13 @@ type InputPasswordTypeInProps = Omit<
    */
   isNonRevealable?: boolean;
   /**
+   * A stored value from the backend, already masked. While `value` equals
+   * it, the field shows it as a tag that cannot be revealed and treats it as
+   * one unit: Backspace or Delete clears it, and typing or pasting replaces
+   * it with the new text. Once edited, the field behaves as usual.
+   */
+  existingValue?: string;
+  /**
    * Masked-state presentation (Figma Input/Type-In masked value).
    * - `"asterisk"` (default): full-size ✱ glyphs while the field is hidden
    *   and idle, drawn by an overlay (native masking can only render browser
@@ -74,13 +82,17 @@ type InputPasswordTypeInProps = Omit<
  * - When revealed, the toggle icon uses action style (more prominent)
  * - When hidden, the toggle icon uses the default tertiary style (muted)
  * - Optional `isNonRevealable` prop to disable reveal (for stored backend values)
+ * - Optional `existingValue` prop: a stored value, shown as a tag, that edits
+ *   replace whole
  */
 function InputPasswordTypeIn({
   ref,
   isNonRevealable = false,
+  existingValue,
   mask = "asterisk",
   value,
   onChange,
+  onKeyDown,
   onFocus,
   onBlur,
   disabled,
@@ -96,8 +108,10 @@ function InputPasswordTypeIn({
 
   const realValue = String(value || "");
   const hasValue = realValue.length > 0;
+  const isExistingValue =
+    existingValue !== undefined && hasValue && realValue === existingValue;
   const effectiveNonRevealable =
-    isNonRevealable || isBackendPlaceholder(realValue);
+    isNonRevealable || isExistingValue || isBackendPlaceholder(realValue);
   const isHidden = !isPasswordVisible || effectiveNonRevealable;
 
   const handleContainerFocus = React.useCallback(() => {
@@ -122,7 +136,29 @@ function InputPasswordTypeIn({
       : strings.showPassword;
 
   const isNativeMask =
-    mask === "native" || leftChildren != null || rightChildren != null;
+    mask === "native" ||
+    isExistingValue ||
+    leftChildren != null ||
+    rightChildren != null;
+
+  // While the tag shows, the input itself is empty: what the user types is
+  // the whole new value, and a deletion clears the existing one.
+  const handleKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (isExistingValue && (e.key === "Backspace" || e.key === "Delete")) {
+        e.preventDefault();
+        onChange?.({
+          target: { value: "", name: props.name ?? "" },
+          currentTarget: { value: "", name: props.name ?? "" },
+          type: "change",
+          bubbles: true,
+          cancelable: true,
+        } as React.ChangeEvent<HTMLInputElement>);
+      }
+      onKeyDown?.(e);
+    },
+    [isExistingValue, onChange, onKeyDown, props.name]
+  );
   // The ✱ presentation only draws while idle. Focus anywhere in the field
   // shows native dots, so the caret tracks real glyph advances while typing.
   const showAsteriskOverlay =
@@ -148,8 +184,9 @@ function InputPasswordTypeIn({
       <InputTypeIn
         ref={ref}
         type={isHidden ? "password" : "text"}
-        value={value}
+        value={isExistingValue ? "" : value}
         onChange={onChange}
+        onKeyDown={handleKeyDown}
         onFocus={onFocus}
         onBlur={onBlur}
         variant={disabled ? "disabled" : error ? "error" : undefined}
@@ -159,7 +196,22 @@ function InputPasswordTypeIn({
         // inputs. Login forms should override with "current-password".
         autoComplete="new-password"
         data-ph-no-capture
-        leftChildren={leftChildren}
+        leftChildren={
+          isExistingValue ? (
+            <>
+              {leftChildren}
+              <Tag
+                icon={SvgKey}
+                title={realValue}
+                color="blue"
+                size="md"
+                truncate
+              />
+            </>
+          ) : (
+            leftChildren
+          )
+        }
         rightChildren={
           // A field inside a <label> gets clicks under the label sent on to
           // the input. A click on a button's icon (not the button itself)
@@ -195,6 +247,7 @@ function InputPasswordTypeIn({
           </div>
         }
         {...props}
+        placeholder={isExistingValue ? undefined : props.placeholder}
       />
       {showAsteriskOverlay && (
         // Left inset = .opal-input border (1px) + padding (5px), and Text's

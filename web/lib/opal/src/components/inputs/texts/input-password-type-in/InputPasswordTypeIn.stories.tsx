@@ -14,6 +14,7 @@ type Story = StoryObj<typeof InputPasswordTypeIn>;
 function Harness(props: {
   initialValue?: string;
   isNonRevealable?: boolean;
+  existingValue?: string;
   placeholder?: string;
   error?: boolean;
   disabled?: boolean;
@@ -46,6 +47,12 @@ export const NativeMask: Story = {
 
 export const NonRevealable: Story = {
   render: () => <Harness initialValue="hunter2-hunter2" isNonRevealable />,
+};
+
+export const ExistingValue: Story = {
+  render: () => (
+    <Harness initialValue="sk-abcd...wxyz" existingValue="sk-abcd...wxyz" />
+  ),
 };
 
 export const AutoDetectedStoredSecret: Story = {

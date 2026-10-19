@@ -56,6 +56,7 @@ function TabsRoot({
   value,
   defaultValue,
   onValueChange,
+  activationMode = "manual",
   ...props
 }: TabsRootProps) {
   // Tracked here as well as in Radix, so each trigger knows whether it is
@@ -70,6 +71,9 @@ function TabsRoot({
     <TabsContext.Provider value={contextValue}>
       <TabsPrimitive.Root
         {...props}
+        // Arrows only move focus, which paints the hover state; Enter or
+        // Space selects.
+        activationMode={activationMode}
         value={activeValue}
         onValueChange={(next) => {
           if (value === undefined) setUncontrolledValue(next);
@@ -95,6 +99,9 @@ interface TabsListProps extends WithoutStyles<
   enableScrollArrows?: boolean;
 }
 
+/** Keys that move focus between tabs. */
+const FOCUS_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "Tab"]);
+
 function TabsList({
   ref,
   rightChildren,
@@ -109,6 +116,13 @@ function TabsList({
   const scrollArrowsRef = useRef<HTMLDivElement>(null);
   const rightChildrenRef = useRef<HTMLDivElement>(null);
   const [rightOffset, setRightOffset] = useState(0);
+  // The focus ring shows from an arrow or the Tab key until a click, Escape, or
+  // focus leaving the list. The browser's `:focus-visible` cannot follow
+  // this: after a click it keeps the ring hidden for the arrows too.
+  const [keyboardFocus, setKeyboardFocus] = useState(false);
+  // Radix moves focus after the key, so the ring waits for that focus and
+  // appears on the next tab, not first on this one.
+  const keyMovedFocusRef = useRef(false);
   const strings = useOpalStrings();
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
@@ -180,7 +194,11 @@ function TabsList({
     <TabsPrimitive.List
       ref={mergeRefs(listRef, ref)}
       data-variant={variant}
+      data-focus-ring={keyboardFocus || undefined}
       className="opal-tabs-list"
+      // Each tab is its own Tab stop (see Tabs.Trigger), so the list is not
+      // one. Radix would otherwise make it the entry point.
+      tabIndex={-1}
       style={
         variant === "contained"
           ? {
@@ -189,6 +207,42 @@ function TabsList({
           : undefined
       }
       {...props}
+      onKeyDown={(event) => {
+        props.onKeyDown?.(event);
+        if (event.key === "Escape") {
+          // Escape leaves the tabs: the tab loses focus, and its ring.
+          keyMovedFocusRef.current = false;
+          setKeyboardFocus(false);
+          if (event.target instanceof HTMLElement) event.target.blur();
+        } else if (FOCUS_KEYS.has(event.key)) {
+          keyMovedFocusRef.current = true;
+        }
+      }}
+      onMouseDown={(event) => {
+        props.onMouseDown?.(event);
+        keyMovedFocusRef.current = false;
+        setKeyboardFocus(false);
+      }}
+      onFocus={(event) => {
+        props.onFocus?.(event);
+        const fromKey = keyMovedFocusRef.current;
+        keyMovedFocusRef.current = false;
+        // A key in the list moved focus, or Tab came in from outside it (the
+        // browser marks that as keyboard focus).
+        if (
+          fromKey ||
+          (!event.currentTarget.contains(event.relatedTarget) &&
+            event.target.matches(":focus-visible"))
+        ) {
+          setKeyboardFocus(true);
+        }
+      }}
+      onBlur={(event) => {
+        props.onBlur?.(event);
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setKeyboardFocus(false);
+        }
+      }}
     >
       {isPill ? (
         <div
@@ -373,7 +427,23 @@ function TabsTrigger({
         disabled={disabled}
         data-variant={variant}
         className="opal-tabs-trigger"
+        // Tab steps through every tab, as well as the arrows.
+        tabIndex={0}
         {...props}
+        onMouseDown={(event) => {
+          props.onMouseDown?.(event);
+          // Safari and Firefox on macOS do not focus a clicked button, and
+          // the arrows move from the focused tab. Only a plain left click,
+          // as Radix selects on: focus selects in automatic mode.
+          if (
+            !disabled &&
+            !event.defaultPrevented &&
+            event.button === 0 &&
+            !event.ctrlKey
+          ) {
+            event.currentTarget.focus();
+          }
+        }}
       >
         {tooltip && !disabled ? (
           <Tooltip tooltip={tooltip} side={tooltipSide}>
