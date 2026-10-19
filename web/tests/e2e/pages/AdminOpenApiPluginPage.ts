@@ -13,8 +13,8 @@ export class AdminOpenApiPluginPage {
   readonly page: Page;
   readonly plugins: AdminPluginsPage;
   readonly detailDialog: Locator;
-  /** The detail URL the last save left, to reopen it afterwards. */
-  private savedDetailUrl: string | null = null;
+  /** The tool `createFromSchema` made, to reopen its modal later. */
+  private toolId: number | null = null;
 
   constructor(page: Page) {
     this.page = page;
@@ -50,10 +50,17 @@ export class AdminOpenApiPluginPage {
     if (!Number.isInteger(toolId))
       throw new Error("OpenAPI plugin create response has no tool ID");
     await expect(dialog).toBeHidden();
-    // The modal is not a route; the one-time `plugin` param opens it.
-    await this.page.goto(`/admin/plugins?plugin=openapi:${toolId}`);
+    this.toolId = toolId;
+    await this.open();
     await this.expectDetail(name);
     return toolId;
+  }
+
+  /** Opens the created tool's modal; the one-time `plugin` param opens it. */
+  async open(): Promise<void> {
+    if (this.toolId === null)
+      throw new Error("No OpenAPI plugin was created to open");
+    await this.page.goto(`/admin/plugins?plugin=openapi:${this.toolId}`);
   }
 
   async expectDetail(name: string): Promise<void> {
@@ -88,7 +95,6 @@ export class AdminOpenApiPluginPage {
       name: "Update",
       exact: true,
     });
-    this.savedDetailUrl = this.page.url();
     await save.click();
     // A successful save closes the modal.
     await expect(dialog).toBeHidden();
@@ -97,7 +103,7 @@ export class AdminOpenApiPluginPage {
   async expectOAuthPersisted(
     settings: Pick<OAuthSettings, "authorizationUrl" | "tokenUrl" | "scopes">
   ): Promise<void> {
-    await this.page.goto(this.savedDetailUrl ?? this.page.url());
+    await this.open();
     const dialog = this.detailDialog;
     await dialog
       .getByRole("tab", { name: "Authentication", exact: true })

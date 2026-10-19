@@ -60,6 +60,8 @@ test("OpenAPI plugin OAuth persists and remains available to agents", async ({
   const plugin = new AdminOpenApiPluginPage(page);
   createdToolId = await plugin.createFromSchema(schema, toolName);
   await plugin.configureOAuth(oauth);
+  // Update closes the modal; reopen it to check the saved settings.
+  await plugin.open();
   await plugin.expectDetail(toolName);
   await plugin.expectOAuthPersisted(oauth);
 

@@ -579,6 +579,7 @@ inline, not a broken turn.
 | `/admin/plugins?add=mcp` | Plugins directory | `MCPPluginSetupModal` (`web/src/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal.tsx`) |
 | `/admin/plugins?plugin=mcp:<id>` | Plugins directory | `MCPPluginDetailPage` (`web/src/views/admin/PluginsPage/MCPPluginDetailPage.tsx`), opened once |
 | `/admin/plugins?plugin=openapi:<id>` | Plugins directory | `OpenAPIPluginModal` (`web/src/views/admin/PluginsPage/OpenAPIPluginModal.tsx`), opened once |
+| `/admin/plugins/[kind]/[id]` | `web/src/app/admin/plugins/[kind]/[id]/page.tsx` | Redirect for old detail links to `/admin/plugins?plugin=<kind>:<id>`, keeping the query; a malformed link goes to `/admin/plugins` |
 | `/admin/mcp-actions`, `/admin/mcp-actions/new`, `/admin/mcp-actions/[serverId]`, `/admin/openapi-actions` | Existing route files | Query-preserving redirects through `web/src/lib/plugins/routes.ts` |
 
 ### HTTP endpoints, MCP (`backend/onyx/server/features/mcp/api.py`, prefixes `/mcp` and `/admin/mcp`)
