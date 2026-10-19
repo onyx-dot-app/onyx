@@ -34,7 +34,7 @@ import {
 import { InputSingleComboBox } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
@@ -169,11 +169,19 @@ function ModelConfigurationList() {
       {models.length > 0 ? (
         <div className={`grid items-center gap-1 ${MODEL_GRID_COLS}`}>
           <div className="pb-1">
-            <Text mainUiAction>{t("custom.modelTable.name.header")}</Text>
+            <Text font="main-ui-action" color="text-05">
+              {t("custom.modelTable.name.header")}
+            </Text>
           </div>
-          <Text mainUiAction>{t("custom.modelTable.displayName.header")}</Text>
-          <Text mainUiAction>{t("custom.modelTable.inputType.header")}</Text>
-          <Text mainUiAction>{t("custom.modelTable.maxTokens.header")}</Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.displayName.header")}
+          </Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.inputType.header")}
+          </Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.maxTokens.header")}
+          </Text>
           <div aria-hidden />
           <div aria-hidden />
 

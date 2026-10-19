@@ -48,7 +48,7 @@ import {
   OPEN_URL_TOOL_ID,
   CODING_AGENT_TOOL_ID,
 } from "@/lib/tools/constants";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import { InputSwitchField } from "@opal/form";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
@@ -1242,8 +1242,12 @@ export default function AgentEditorPage({
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
                       <GeneralLayouts.Section alignItems="start" gap={2}>
-                        <Text>{t("editor.deleteModal.body.warning")}</Text>
-                        <Text>{t("editor.deleteModal.body.confirm")}</Text>
+                        <Text font="main-ui-body" color="text-05">
+                          {t("editor.deleteModal.body.warning")}
+                        </Text>
+                        <Text font="main-ui-body" color="text-05">
+                          {t("editor.deleteModal.body.confirm")}
+                        </Text>
                       </GeneralLayouts.Section>
                     </ConfirmationModalLayout>
                   )}
@@ -1517,7 +1521,7 @@ export default function AgentEditorPage({
                                 )}
                                 icon={SvgTag}
                               />
-                              <Text text03 secondaryBody>
+                              <Text font="secondary-body" color="text-03">
                                 {t("editor.share.labels.description")}
                               </Text>
                             </GeneralLayouts.Section>
@@ -1765,7 +1769,7 @@ export default function AgentEditorPage({
                                 }
                               />
                             </InputVertical>
-                            <Text text03 secondaryBody>
+                            <Text font="secondary-body" color="text-03">
                               {t("editor.advanced.reminders.description")}
                             </Text>
                           </GeneralLayouts.Section>

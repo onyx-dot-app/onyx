@@ -1,6 +1,7 @@
 import { ConfirmationModalLayout as Modal } from "@opal/layouts";
 import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { SvgAlertCircle } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { useTranslations } from "next-intl";
@@ -67,17 +68,19 @@ export function ConfirmEntityModal({
     >
       <div className="flex flex-col gap-4">
         {!removeConfirmationText && (
-          <Text as="p">
-            {t.rich("confirmation.description", {
-              action: actionText,
-              entityName,
-              b: (chunks) => <b>{chunks}</b>,
-            })}
+          <Text as="p" font="main-ui-body" color="text-05">
+            {richNodes(
+              t.rich("confirmation.description", {
+                action: actionText,
+                entityName,
+                b: (chunks) => <b>{chunks}</b>,
+              })
+            )}
           </Text>
         )}
 
         {additionalDetails && (
-          <Text as="p" text03>
+          <Text as="p" font="main-ui-body" color="text-03">
             {additionalDetails}
           </Text>
         )}

@@ -23,7 +23,6 @@ import { InputSingleComboBox } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { InputSwitch } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 // The file's unqualified `Text` is the legacy component, kept for its
 // existing call sites.
@@ -337,9 +336,9 @@ export function ModelAccessField() {
                 sizePreset="main-ui"
                 variant="section"
                 rightChildren={
-                  <Text secondaryBody text03>
+                  <OpalText font="secondary-body" color="text-03">
                     {t("access.admin.sharedNote")}
-                  </Text>
+                  </OpalText>
                 }
                 padding={0}
               />
@@ -550,9 +549,9 @@ function modelRightChildren(
 ): React.ReactNode {
   if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
   return (
-    <Text secondaryBody text03 title={visionTitle}>
+    <OpalText font="secondary-body" color="text-03" title={visionTitle}>
       👁
-    </Text>
+    </OpalText>
   );
 }
 
@@ -707,13 +706,15 @@ function ModelRow({
                     </OpalSection>
                   </Hoverable.Item>
                   {isDefaultModel && (
-                    <Text
-                      secondaryAction
-                      nowrap
-                      className="px-1.5 py-1 text-action-selection-05"
-                    >
-                      {t("models.row.defaultLabel")}
-                    </Text>
+                    <div className="px-1.5 py-1">
+                      <OpalText
+                        font="secondary-action"
+                        color="action-selection-05"
+                        wordWrap="whitespace-nowrap"
+                      >
+                        {t("models.row.defaultLabel")}
+                      </OpalText>
+                    </div>
                   )}
                 </OpalSection>
               }

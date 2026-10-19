@@ -10,7 +10,7 @@ import { Permission } from "@/lib/types";
 import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import { Button, InputTypeIn, Tabs } from "@opal/components";
@@ -36,10 +36,10 @@ function AgentsSection({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Text as="p" headingH3>
+        <Text as="p" font="heading-h3" color="text-05">
           {title}
         </Text>
-        <Text as="p" secondaryBody text03>
+        <Text as="p" font="secondary-body" color="text-03">
           {description}
         </Text>
       </div>
@@ -174,13 +174,11 @@ export default function AgentsNavigationPage() {
       {/* Agents List */}
       <SettingsLayouts.Body>
         {agentCount === 0 ? (
-          <Text
-            as="p"
-            className="w-full h-full flex flex-col items-center justify-center py-12"
-            text03
-          >
-            {t("navigation.empty.description")}
-          </Text>
+          <div className="w-full h-full flex flex-col items-center justify-center py-12">
+            <Text as="p" font="main-ui-body" color="text-03">
+              {t("navigation.empty.description")}
+            </Text>
+          </div>
         ) : (
           <>
             <AgentsSection

@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { AgentButton } from "@/lib/agents/components";
 import { DragEndEvent } from "@dnd-kit/core";
@@ -183,9 +183,11 @@ function RecentsSection({
     >
       <SidebarLayouts.Section title={t("appSidebar.recents.title")}>
         {chatSessions.length === 0 ? (
-          <Text as="p" text01 className="px-3">
-            {t("appSidebar.recents.empty.text")}
-          </Text>
+          <div className="px-3">
+            <Text as="p" font="main-ui-body" color="text-01">
+              {t("appSidebar.recents.empty.text")}
+            </Text>
+          </div>
         ) : (
           <>
             {chatSessions.map((chatSession) => (

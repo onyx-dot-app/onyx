@@ -1,7 +1,7 @@
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgDownload, SvgZoomIn, SvgZoomOut } from "@opal/icons";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 
 interface DownloadButtonProps {
@@ -43,7 +43,7 @@ export function ZoomControls({ zoom, onZoomIn, onZoomOut }: ZoomControlsProps) {
           onClick={onZoomOut}
           tooltip={t("zoomControls.zoomOutTooltip")}
         />
-        <Text mainUiMono text03>
+        <Text font="main-ui-mono" color="text-03">
           {t("zoomControls.level", { zoom })}
         </Text>
         <Button

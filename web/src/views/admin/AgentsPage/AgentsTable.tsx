@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Table, type TableColumn } from "@opal/components";
 import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { PageLoader } from "@opal/loaders";
 import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
@@ -95,7 +95,7 @@ export default function AgentsTable() {
         title: t("table.nameColumn.header"),
         weight: 25,
         cell: (value) => (
-          <Text as="span" mainUiBody text05>
+          <Text as="span" font="main-ui-body" color="text-05">
             {value}
           </Text>
         ),
@@ -106,7 +106,7 @@ export default function AgentsTable() {
         title: t("table.descriptionColumn.header"),
         weight: 35,
         cell: (value) => (
-          <Text as="span" mainUiBody text03>
+          <Text as="span" font="main-ui-body" color="text-03">
             {value || BLANK_CELL}
           </Text>
         ),

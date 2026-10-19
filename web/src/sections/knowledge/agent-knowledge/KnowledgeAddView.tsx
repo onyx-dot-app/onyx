@@ -4,7 +4,7 @@ import { memo } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import type { ConnectedSource } from "@/lib/hierarchy/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { LineItemButton } from "@opal/components";
@@ -63,8 +63,8 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
             aria-label="knowledge-add-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
-                <Text mainUiAction className="text-action-selection-05">
-                  {selectedDocumentSetIds.length}
+                <Text font="main-ui-action" color="action-selection-05">
+                  {String(selectedDocumentSetIds.length)}
                 </Text>
               ) : undefined
             }
@@ -84,8 +84,8 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
           aria-label="knowledge-add-files"
           rightChildren={
             selectedFileIds.length > 0 ? (
-              <Text mainUiAction className="text-action-selection-05">
-                {selectedFileIds.length}
+              <Text font="main-ui-action" color="action-selection-05">
+                {String(selectedFileIds.length)}
               </Text>
             ) : undefined
           }
@@ -94,7 +94,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
 
       {vectorDbEnabled && connectedSources.length > 0 && (
         <>
-          <Text as="p" text03 secondaryBody>
+          <Text as="p" font="secondary-body" color="text-03">
             {t("addView.connectedSources.label")}
           </Text>
           {connectedSources.map((connectedSource) => {
@@ -118,8 +118,8 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
                 aria-label={`knowledge-add-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
-                    <Text mainUiAction className="text-action-selection-05">
-                      {selectionCount}
+                    <Text font="main-ui-action" color="action-selection-05">
+                      {String(selectionCount)}
                     </Text>
                   ) : undefined
                 }

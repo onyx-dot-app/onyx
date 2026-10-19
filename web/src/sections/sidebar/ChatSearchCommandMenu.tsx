@@ -13,7 +13,7 @@ import { useCreateModal } from "@opal/components";
 import { CreateProjectModal } from "@/lib/projects/components";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import useChatSearchOptimistic from "@/lib/sidebar/hooks";
 import {
   SvgEditBig,
@@ -269,16 +269,16 @@ export default function ChatSearchCommandMenu({
                       icon={SvgBubbleText}
                       rightContent={({ isHighlighted }) =>
                         isHighlighted ? (
-                          <Text figureKeystroke text02>
+                          <Text font="figure-keystroke" color="text-02">
                             ↵
                           </Text>
                         ) : (
                           <Text
-                            secondaryBody
-                            text03
+                            font="secondary-body"
+                            color="text-03"
                             data-testid="command-menu-timestamp"
                           >
-                            {timeAgo(chat.time, locale)}
+                            {timeAgo(chat.time, locale) ?? undefined}
                           </Text>
                         )
                       }
@@ -330,16 +330,16 @@ export default function ChatSearchCommandMenu({
                     icon={SvgFolder}
                     rightContent={({ isHighlighted }) =>
                       isHighlighted ? (
-                        <Text figureKeystroke text02>
+                        <Text font="figure-keystroke" color="text-02">
                           ↵
                         </Text>
                       ) : (
                         <Text
-                          secondaryBody
-                          text03
+                          font="secondary-body"
+                          color="text-03"
                           data-testid="command-menu-timestamp"
                         >
-                          {timeAgo(project.time, locale)}
+                          {timeAgo(project.time, locale) ?? undefined}
                         </Text>
                       )
                     }

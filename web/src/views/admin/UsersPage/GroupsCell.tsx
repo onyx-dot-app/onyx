@@ -12,7 +12,7 @@ import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { SvgEdit } from "@opal/icons";
 import { Button, Tag } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
 import { useCanManageGroups } from "@/lib/permissions/hooks";
@@ -168,7 +168,7 @@ export default function GroupsCell({
               ref={containerRef}
               className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 -me-7"
             >
-              <Text as="span" secondaryBody text03>
+              <Text as="span" font="secondary-body" color="text-03">
                 —
               </Text>
             </div>
