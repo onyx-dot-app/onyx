@@ -33,6 +33,49 @@ func serviceRunnerDatabase(t *testing.T, project string, port int) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
+func TestRunServicePreservesForeignSharedOwner(t *testing.T) {
+	for _, stale := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stale-record=%v", stale), func(t *testing.T) {
+			owner, caller := sharedPair(t)
+			mustUp(t, owner, &fakeProvider{services: []string{"api"}})
+			api := servicePID(t, owner, "api")
+			state, err := owner.ReadState()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stale {
+				state.Services[0].StartMarker = "stale-record"
+				if err := owner.WriteState(state); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() {
+					state.Services[0].StartMarker = api.StartMarker
+					if err := owner.WriteState(state); err != nil {
+						t.Error(err)
+					}
+				})
+			}
+			path := filepath.Join(owner.StateDir, stateFileName)
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			target, err := ResolveTarget(caller.Root, "", Shared)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = caller.RunService(context.Background(), target, &Launch{}, "api", ServiceOptions{})
+			if err == nil || !strings.Contains(err.Error(), owner.Root) {
+				t.Fatalf("foreign-owner startup error=%v", err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || !bytes.Equal(before, after) || !isCurrent(api) {
+				t.Fatalf("foreign startup changed owner state or stopped its API: %v", err)
+			}
+		})
+	}
+}
+
 func TestServiceLauncherPreservesForegroundIOAndExitStatus(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "service.log")
 	var stdout, stderr bytes.Buffer
@@ -280,7 +323,7 @@ func TestRunServiceRegistersOneServiceAndAttachesWithoutStoppingIt(t *testing.T)
 	}
 	launch := &Launch{Configurations: []LaunchConfig{{
 		Name: "API Server", Type: "node", Request: "launch", Cwd: s.Root,
-		RuntimeExecutable: executable, Args: []string{"--port", "8080"}, Env: map[string]string{fakeServiceEnv: "1"},
+		RuntimeExecutable: executable, Args: []string{"--port", "8080"}, Env: map[string]string{fakeServiceEnv: "1", "TMUX_PANE": "%1", "GEN_AI_API_KEY": "original"},
 	}}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -316,8 +359,10 @@ func TestRunServiceRegistersOneServiceAndAttachesWithoutStoppingIt(t *testing.T)
 	output := make(serviceOutput, 1)
 	attached := make(chan error, 1)
 	preparations := 0
+	attachLaunch := &Launch{Configurations: append([]LaunchConfig(nil), launch.Configurations...)}
+	attachLaunch.Configurations[0].Env = map[string]string{fakeServiceEnv: "1", "TMUX_PANE": "%2", "GEN_AI_API_KEY": "original"}
 	go func() {
-		attached <- s.RunService(attachCtx, target, launch, "api", ServiceOptions{
+		attached <- s.RunService(attachCtx, target, attachLaunch, "api", ServiceOptions{
 			IO: ServiceIO{Stdout: output},
 			BeforeStart: func(context.Context, Spec) error {
 				preparations++
@@ -344,6 +389,10 @@ func TestRunServiceRegistersOneServiceAndAttachesWithoutStoppingIt(t *testing.T)
 	}
 	if err := s.RunService(context.Background(), target, launch, "api", ServiceOptions{Args: []string{"changed"}}); err == nil || !strings.Contains(err.Error(), "another configuration") {
 		t.Fatalf("changed args error=%v", err)
+	}
+	attachLaunch.Configurations[0].Env["GEN_AI_API_KEY"] = "changed"
+	if err := s.RunService(context.Background(), target, attachLaunch, "api", ServiceOptions{}); err == nil || !strings.Contains(err.Error(), "another configuration") {
+		t.Fatalf("changed application environment error=%v", err)
 	}
 	cancel()
 	select {
