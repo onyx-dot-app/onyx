@@ -82,7 +82,7 @@ Repeat the profile and local-model flag with `start` or `restart`. Use `up` to c
 - Legacy datasets are preserved. If several exist at first shared startup, select the intended one with `--project`; never choose by timestamps. Stop its legacy stack with `--isolated` before adoption.
 - Legacy discovery reads saved `ods stack` state. Compose-only setups need their previous `--project NAME` explicitly. Use `ods --project NAME stack up` to save that shared selection before using the default commands.
 - Project ownership is durable. An explicit project collision fails, including in isolated mode. Select a different project for independent infrastructure.
-- ODS persists port assignments and changes them only when necessary. Read status again after a restart.
+- ODS keeps a stack's ports while it runs. `stop` and `down` release them, and a stopped stack's leases can go to another stack. Read status again after a restart or start.
 - The selected stack lock coordinates lifecycle changes. Shared handoffs serialize; isolated stacks can start independently.
 - Foreground services and full stacks use the same service specifications and process launchers. A full stack replaces a same-checkout preview and retains its port.
 - Database operations target exact project containers and use state/project locks. Do not work around a target conflict or another checkout's ownership guard.
@@ -131,3 +131,20 @@ Stop the worktree's application processes and infrastructure:
 Normal shutdown preserves volumes. Delete database, index, or object-store data only when the user explicitly requests a reset.
 
 After shutdown, inspect status to confirm the targeted stack stopped. Check that another running worktree remains available when testing isolation.
+
+## Find and stop old stacks
+
+List every stack on the machine from any directory:
+
+```bash
+"$ODS" stack ls --all
+```
+
+An `orphaned` stack has no worktree any more. Stop it, and release its ports, with:
+
+```bash
+"$ODS" stack down --project NAME
+```
+
+Stop other stacks with `stack down` in their root. Add `--isolated` for an isolated stack.
+Do not use `--force` or `stack prune` on stacks that other agents may still use, unless the user asks.

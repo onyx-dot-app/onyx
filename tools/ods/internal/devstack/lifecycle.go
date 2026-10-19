@@ -162,6 +162,9 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra b
 			if s.Project != lockedProject {
 				return nil, fmt.Errorf("existing project changed during startup; retry 'ods stack up'")
 			}
+			if err := s.releaseLegacyLeases(); err != nil {
+				return nil, err
+			}
 		}
 		st = &State{Ports: map[string]int{}}
 	}
@@ -356,16 +359,15 @@ func (s *Stack) leasePorts(st *State, requests []PortRequest) error {
 			}
 			// A port stays fixed only while this stack's own process group
 			// holds it; a port lost to another process is leased again.
-			if port > 0 && portHeldByGroup(port, rec.PGID) {
-				requests[i].Fixed = port
+			if port > 0 {
+				requests[i].Running = true
+				if portHeldByGroup(port, rec.PGID) {
+					requests[i].Fixed = port
+				}
 			}
 		}
 	}
-	leaseRoot := s.Root
-	if s.Mode != Isolated {
-		leaseRoot = s.StateDir
-	}
-	ports, err := s.Registry.Lease(leaseRoot, requests)
+	ports, err := s.Registry.LeaseFor(s.leaseRoot(), s.StateDir, requests)
 	if err != nil {
 		return err
 	}
@@ -373,6 +375,43 @@ func (s *Stack) leasePorts(st *State, requests []PortRequest) error {
 		st.Ports[name] = port
 	}
 	return s.WriteState(st)
+}
+
+// leaseRoot is the owner key of the stack's port leases: the checkout for
+// an isolated stack, the state directory otherwise.
+func (s *Stack) leaseRoot() string {
+	if s.Mode == Isolated {
+		return s.Root
+	}
+	return s.StateDir
+}
+
+// releaseLeases drops the stack's application port leases, and with infra
+// also its Compose host port leases.
+func (s *Stack) releaseLeases(st *State, infra bool) error {
+	if s.Registry == nil {
+		return nil
+	}
+	if infra {
+		return s.Registry.Release(s.leaseRoot())
+	}
+	return s.Registry.ReleaseNames(s.leaseRoot(), appLeaseNames(st))
+}
+
+// appLeaseNames lists the leased application ports of st, such as web, api
+// and *-metrics, without the Compose host ports.
+func appLeaseNames(st *State) []string {
+	if st == nil {
+		return nil
+	}
+	var names []string
+	for name := range st.Ports {
+		if !isInfraLease(name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Env is the layered environment of a service: Base is the shell, and
@@ -515,7 +554,14 @@ func (s *Stack) Stop(ctx context.Context, opts Options) error {
 	if err := s.checkOwner(); err != nil {
 		return err
 	}
-	return s.stopServices(opts.StopTimeout)
+	if err := s.stopServices(opts.StopTimeout); err != nil {
+		return err
+	}
+	st, err := s.ReadState()
+	if err != nil {
+		return err
+	}
+	return s.releaseLeases(st, false)
 }
 
 func (s *Stack) stopServices(timeout time.Duration) error {
@@ -585,10 +631,16 @@ func (s *Stack) Down(ctx context.Context, p Provider, opts Options) error {
 	if err := s.stopServices(opts.StopTimeout); err != nil {
 		return err
 	}
+	if err := s.releaseLeases(st, false); err != nil {
+		return err
+	}
 	if s.Mode == Frontend {
 		return nil
 	}
-	return p.ComposeDown(ctx)
+	if err := p.ComposeDown(ctx); err != nil {
+		return err
+	}
+	return s.releaseLeases(st, true)
 }
 
 // Restart stops the services and starts them again against the running

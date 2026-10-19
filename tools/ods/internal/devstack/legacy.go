@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -147,6 +148,47 @@ func (s *Stack) selectLegacyProject() error {
 		st := candidate.State
 		if st.Project == s.Project && len(st.Services) > 0 && st.Phase != PhaseStopped {
 			return fmt.Errorf("existing project %s is managed by the legacy stack in %s; run 'ods stack stop --isolated' there before reusing its data", st.Project, st.Root)
+		}
+	}
+	return nil
+}
+
+// releaseLegacyLeases drops the port leases of the stopped legacy isolated
+// stacks of this repository when shared mode adopts their data. A stack
+// with a live process group keeps every lease; one whose containers still
+// run keeps its Compose host port leases.
+func (s *Stack) releaseLegacyLeases() error {
+	if s.Registry == nil {
+		return nil
+	}
+	legacy, err := s.legacyStates()
+	if err != nil {
+		return err
+	}
+	for _, candidate := range legacy {
+		st := candidate.State
+		if st.Phase != PhaseStopped || st.Root == "" || anyGroupAlive(st.Services) {
+			continue
+		}
+		running, err := projectContainersRunning(st.Project)
+		if err != nil || running {
+			names := appLeaseNames(st)
+			leases, err := s.Registry.Leases()
+			if err != nil {
+				return err
+			}
+			for _, l := range leases {
+				if l.Root == st.Root && !isInfraLease(l.Name) && !slices.Contains(names, l.Name) {
+					names = append(names, l.Name)
+				}
+			}
+			if err := s.Registry.ReleaseNames(st.Root, names); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := s.Registry.Release(st.Root); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -258,7 +258,7 @@ The stack uses the same service specifications and process launchers as
 `ods web dev` and `ods backend`. It does not invoke those commands through a shell.
 
 ```shell
-ods stack <up|start|restart|stop|down|status|logs|plan> [flags]
+ods stack <up|start|restart|stop|down|status|ls|prune|logs|plan> [flags]
 ```
 
 By default, worktrees of one repository share Postgres, Redis, search, object
@@ -297,8 +297,17 @@ for backend changes and OAuth callback tests. `stack status` does not include
 standalone frontend previews. Starting the full stack in the same checkout
 replaces its preview with the managed frontend and retains its port.
 
-Durable port leases live in `~/.local/share/onyx-dev/stack/ports.json`.
-A leased port that something else took is replaced on the next start.
+Port leases live in `~/.local/share/onyx-dev/stack/ports.json`. A stack keeps
+its ports while it runs. `stop` releases the application ports (web, API, MCP,
+model server and metrics) and keeps the infrastructure ports, because the
+containers still bind them. `down` releases every lease. When shared mode adopts
+a stopped legacy isolated stack, ODS releases that stack's leases first. A lease
+of another stack is reclaimed when that stack's state is stopped or missing, none
+of its process groups is alive, and, for a `*_HOST_PORT` lease, its Compose
+project has no running container. A stack that does not run moves down to the
+lowest free port from the preferred one (3000 for web, 8080 for the API). A leased
+port that something else took is replaced on the next start, so read the status
+again after a restart.
 
 `up` takes the selected stack's lifecycle lock, so two agents running `up` at the
 same time converge on one stack: the second waits and then finds everything
@@ -329,8 +338,7 @@ configuration's `envFile` and `env`, and the stack's hosts and ports on top
 `PORT`, `WEB_DOMAIN`, `INTERNAL_URL`, `MCP_SERVER_PORT`, `MCP_INTERNAL_URL`,
 `MODEL_SERVER_PORT`). `stop` signals only the groups it started, checked by
 pid, group and start time, and waits for every descendant to exit before it
-forgets a service. `down` also stops the Compose containers; volumes and port
-leases are kept.
+forgets a service. `down` also stops the Compose containers; volumes are kept.
 
 **Profiles** (`--profile`):
 
@@ -377,6 +385,40 @@ They exit 3 when another lifecycle command still held the worktree lock after
 A service without a health check must stay alive for five seconds before the
 stack counts as ready, so a crash on startup is reported rather than hidden.
 
+**Find and stop old stacks:**
+
+`ods stack ls [--json] [--all] [--orphaned]` lists every dev stack on the
+machine, from any directory. It reads Docker, the project owner records in
+`~/.local/share/onyx-dev/stack/projects`, the stack state in each repository's
+Git directory, and the port leases. It takes no locks and changes nothing. If
+Docker is unavailable, it prints a warning and lists the stacks from their saved
+state.
+
+| Status | Meaning |
+|--------|---------|
+| `orphaned` | No worktree owns the stack: its checkout or Compose directory is gone, or the directory is no longer a git worktree |
+| `active` | Application processes run |
+| `app-stopped` | Containers run, and `ods stack stop` stopped the application |
+| `infra-only` | Containers run, and no application process does |
+| `stopped` | Nothing runs (with `--all`) |
+| `stale-lease` | Port leases that no stack uses (with `--all`) |
+
+By default `ls` shows stacks with a running process or container. `--all` adds
+stopped stacks, and `--orphaned` shows only orphaned stacks. `--json` prints an
+array with the project, root, branch, mode, profile, phase, application and
+container counts, web URL, age, status, leases and errors. The exit code is 3
+when `--orphaned` finds an orphan, and 1 when no source could be read.
+
+`ods stack down --project NAME` and `ods stack stop --project NAME` work from any
+directory, also when the checkout is gone. They find the project through its owner
+record and saved state, or else through its Docker labels. They stop the recorded
+processes, and `down` runs `docker compose -p NAME down` (volumes are kept),
+releases the stack's port leases, and removes the owner record of an orphan. They
+refuse a stack that still runs in an existing worktree unless you add `--force`.
+`ods stack prune` runs `down --project` for every orphaned stack after a
+confirmation (`--yes` skips it). `--volumes` also deletes their Docker volumes,
+after a separate confirmation.
+
 **Examples:**
 
 ```shell
@@ -397,6 +439,11 @@ ods stack down
 
 # See what a profile would run
 ods stack plan --profile full
+
+# List every stack on the machine, and stop the ones whose worktree is gone
+ods stack ls --all
+ods stack down --project fast-mode-93732ec3
+ods stack prune
 ```
 
 ### `object-store migrate` - Move a Dev MinIO's Files to the Object Store

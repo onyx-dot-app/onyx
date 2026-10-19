@@ -49,6 +49,10 @@ against an existing healthy API, or "ods backend api" for an interactive API.
 All entry points share service planning and process launchers. Lifecycle locks keep
 concurrent commands safe. Port leases live in ` + filepath.Join(paths.DataDir(), "stack") + `.
 
+"ls" lists every stack on the machine from any directory and flags orphaned
+stacks whose worktree is gone. "stop" and "down" with --project NAME act on
+that project from any directory, also when its checkout no longer exists.
+
 Profiles:
   minimal  Web Server and API Server
   default  minimal plus the primary, light, beat, docfetching, docprocessing
@@ -64,7 +68,10 @@ Examples:
   ods stack status --json
   ods stack logs api --follow
   ods stack stop
-  ods stack down`,
+  ods stack down
+  ods stack ls --all
+  ods stack down --project NAME   # a stack whose worktree is gone
+  ods stack prune`,
 	}
 
 	cmd.AddCommand(newStackLifecycleCommand("up", "Set up the worktree, start infrastructure, migrate and start the services"))
@@ -73,6 +80,8 @@ Examples:
 	cmd.AddCommand(newStackStopCommand("stop", "Stop the services, keep the infrastructure"))
 	cmd.AddCommand(newStackStopCommand("down", "Stop the services and the infrastructure (volumes are kept)"))
 	cmd.AddCommand(newStackStatusCommand())
+	cmd.AddCommand(newStackLsCommand())
+	cmd.AddCommand(newStackPruneCommand())
 	cmd.AddCommand(newStackLogsCommand())
 	cmd.AddCommand(newStackPlanCommand())
 	return cmd
@@ -137,11 +146,22 @@ func newStackLifecycleCommand(name, short string) *cobra.Command {
 
 func newStackStopCommand(name, short string) *cobra.Command {
 	opts := &stackOptions{}
+	var force bool
 	cmd := &cobra.Command{
 		Use:   name,
 		Short: short,
-		Args:  cobra.NoArgs,
+		Long: short + `.
+
+With --project NAME, the command resolves the project from its owner record,
+its saved state, or its Docker labels, so it works from any directory and
+when the checkout is gone. It refuses a stack that still runs in an existing
+worktree unless --force is set.`,
+		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
+			if project := flagProjectName(); project != "" && !projectInCheckout(project) {
+				runProjectLifecycle(name, project, devstack.ProjectOptions{StopTimeout: opts.StopTimeout, LockWait: opts.LockWait, Force: force})
+				return
+			}
 			stack, provider := openStack(cmd)
 			var err error
 			if name == "down" {
@@ -157,6 +177,7 @@ func newStackStopCommand(name, short string) *cobra.Command {
 	}
 	cmd.Flags().DurationVar(&opts.StopTimeout, "timeout", 20*time.Second, "Grace period before a service is killed")
 	cmd.Flags().DurationVar(&opts.LockWait, "lock-wait", 10*time.Minute, "How long to wait for another lifecycle command on this worktree")
+	cmd.Flags().BoolVar(&force, "force", false, "With --project, also stop a stack that runs in an existing worktree")
 	return cmd
 }
 
