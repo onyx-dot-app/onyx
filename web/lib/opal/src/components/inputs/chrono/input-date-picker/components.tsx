@@ -251,6 +251,7 @@ function InputDatePicker({
           </div>
 
           <div
+            role="presentation"
             className="opal-input-segmented-actions"
             // Escape on an action returns focus to the field's first segment.
             onKeyDown={(event) => {
