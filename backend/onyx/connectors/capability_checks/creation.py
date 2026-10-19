@@ -315,6 +315,24 @@ def _run_checks_within_budget(
     return finished, frozenset(unfinished)
 
 
+def _defer_dependents_of_unfinished(
+    checks: list[CapabilityCheck[Any]],
+    finished: list[CapabilityCheckResult],
+    unfinished: frozenset[str],
+) -> tuple[list[CapabilityCheckResult], frozenset[str]]:
+    """Moves each check that depends, directly or not, on an unfinished check
+    to the unfinished checks: its result came before its dependency's, so it
+    neither blocks the pairing nor goes into a report."""
+    deferred: set[str] = set(unfinished)
+    for check in run_order(checks):
+        if deferred.intersection(check.depends_on):
+            deferred.add(check.check_id)
+    return (
+        [result for result in finished if result.check_id not in deferred],
+        frozenset(deferred),
+    )
+
+
 def _unfinished_results(
     checks: list[CapabilityCheck[Any]],
     unfinished: frozenset[str],
@@ -521,6 +539,7 @@ def run_named_checks_within_budget(
         for check in checks
         if check.discovery and check.check_id not in reused
     )
+    finished, unfinished = _defer_dependents_of_unfinished(checks, finished, unfinished)
     # The checks ran side by side, so a check whose dependency failed ran
     # anyway: it reports its dependency, not its own failure.
     return NamedCheckRun(
