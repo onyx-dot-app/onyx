@@ -210,8 +210,10 @@ function TabsList({
       onKeyDown={(event) => {
         props.onKeyDown?.(event);
         if (event.key === "Escape") {
+          // Escape leaves the tabs: the tab loses focus, and its ring.
           keyMovedFocusRef.current = false;
           setKeyboardFocus(false);
+          if (event.target instanceof HTMLElement) event.target.blur();
         } else if (FOCUS_KEYS.has(event.key)) {
           keyMovedFocusRef.current = true;
         }
@@ -431,8 +433,14 @@ function TabsTrigger({
         onMouseDown={(event) => {
           props.onMouseDown?.(event);
           // Safari and Firefox on macOS do not focus a clicked button, and
-          // the arrows move from the focused tab.
-          if (!disabled && !event.defaultPrevented) {
+          // the arrows move from the focused tab. Only a plain left click,
+          // as Radix selects on: focus selects in automatic mode.
+          if (
+            !disabled &&
+            !event.defaultPrevented &&
+            event.button === 0 &&
+            !event.ctrlKey
+          ) {
             event.currentTarget.focus();
           }
         }}

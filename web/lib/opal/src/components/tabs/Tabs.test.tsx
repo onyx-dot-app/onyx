@@ -119,8 +119,18 @@ describe("keyboard", () => {
     expect(list).toHaveAttribute("data-focus-ring");
     await user.keyboard("{Escape}");
     expect(list).not.toHaveAttribute("data-focus-ring");
+    expect(screen.getByRole("tab", { name: "OpenAPI" })).not.toHaveFocus();
     fireEvent.mouseDown(mcp);
     expect(list).not.toHaveAttribute("data-focus-ring");
+  });
+
+  it("does not focus a tab on a right click or Ctrl-click", () => {
+    render(<FilterTabs />);
+    const mcp = screen.getByRole("tab", { name: "MCP" });
+    fireEvent.mouseDown(mcp, { button: 2 });
+    expect(mcp).not.toHaveFocus();
+    fireEvent.mouseDown(mcp, { button: 0, ctrlKey: true });
+    expect(mcp).not.toHaveFocus();
   });
 
   it("follows the arrow's direction in a right-to-left layout", async () => {
