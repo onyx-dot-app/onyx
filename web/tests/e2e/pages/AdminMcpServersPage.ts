@@ -269,6 +269,11 @@ export class AdminMcpServersPage {
   // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
 
+  /** Setup closes once the server is created; the one-time `plugin` param reopens it. */
+  async openServer(serverId: number): Promise<void> {
+    await this.page.goto(`/admin/plugins?plugin=mcp:${serverId}`);
+  }
+
   async expectServerDetail(serverName: string): Promise<void> {
     await expect(this.page).toHaveURL(/\/admin\/plugins(?:\?.*)?$/);
     await expect(this.page.getByRole("dialog")).toBeVisible();

@@ -149,6 +149,7 @@ test.describe("Default Agent MCP Integration", () => {
     });
     uiServerId = await adminMcp.connectAndWaitForCreation();
 
+    await adminMcp.openServer(uiServerId);
     await adminMcp.expectServerDetail(uiServerName);
     await adminMcp.refreshTools();
 

@@ -32,7 +32,7 @@ export class AdminPluginsPage {
 
   async openAddMcp(): Promise<void> {
     await this.openAddMenu();
-    await this.page.getByRole("menuitem", { name: "MCP", exact: true }).click();
+    await this.addMenuItem("MCP").click();
     await this.page
       .getByRole("dialog", { name: "MCP", exact: true })
       .getByRole("button", { name: "Add custom MCP server", exact: true })
@@ -41,30 +41,42 @@ export class AdminPluginsPage {
 
   async openAddOpenApi(): Promise<void> {
     await this.openAddMenu();
-    await this.page
-      .getByRole("menuitem", { name: "OpenAPI", exact: true })
-      .click();
+    await this.addMenuItem("OpenAPI").click();
   }
 
-  pluginLink(name: string): Locator {
-    return this.page.getByRole("link", {
-      name: new RegExp(
-        `^(Manage|View) ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`
-      ),
+  /** A New Plugin menu entry; its description is part of its name. */
+  addMenuItem(title: string): Locator {
+    return this.page.getByRole("menuitem", {
+      name: new RegExp(`^${escapeRegExp(title)}( |$)`),
     });
   }
 
+  /** Plugin cards: labelled `<div>`s, so a card's own buttons never match. */
+  private cards(): Locator {
+    return this.page
+      .getByLabel(/^(Manage|View) /)
+      .and(this.page.locator("div"));
+  }
+
+  pluginCard(name: string): Locator {
+    return this.page
+      .getByLabel(new RegExp(`^(Manage|View) ${escapeRegExp(name)}$`))
+      .and(this.page.locator("div"));
+  }
+
   async expectPluginVisible(name: string): Promise<void> {
-    await expect(this.pluginLink(name)).toBeVisible();
+    await expect(this.pluginCard(name)).toBeVisible();
   }
 
   async expectPluginAbsent(name: string | RegExp): Promise<void> {
-    await expect(
-      this.page.getByRole("link").filter({ hasText: name })
-    ).toHaveCount(0);
+    await expect(this.cards().filter({ hasText: name })).toHaveCount(0);
   }
 
   async openPlugin(name: string): Promise<void> {
-    await this.pluginLink(name).click();
+    await this.pluginCard(name).click();
   }
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
