@@ -30,6 +30,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
 )
+from onyx.connectors.google_utils.google_auth import GoogleUnreachableError
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     GoogleCredentialKind,
@@ -157,12 +158,21 @@ def _transport_error(cause: Exception) -> TransportError:
         return error
 
 
+def _token_refresh_error(cause: Exception) -> GoogleUnreachableError:
+    """A token refresh that got no answer, as get_google_creds raises it."""
+    try:
+        raise GoogleUnreachableError("no answer") from _transport_error(cause)
+    except GoogleUnreachableError as error:
+        return error
+
+
 @pytest.mark.parametrize(
     "error",
     [
         _transport_error(requests.ConnectionError("refused")),
         httplib2.ServerNotFoundError("Unable to find the server"),
         ConnectionRefusedError("refused"),
+        _token_refresh_error(requests.ConnectionError("refused")),
     ],
 )
 def test_an_unreachable_google_fails_only_a_form_run(error: Exception) -> None:
@@ -185,6 +195,21 @@ def test_an_unreachable_google_fails_only_a_form_run(error: Exception) -> None:
 def test_a_sign_in_timeout_fails_only_a_form_run(error: Exception) -> None:
     ops = _ops()
     ops.list_files.side_effect = error
+
+    form = _run("google_drive_auth", ops, form_run=True)
+    stored = _run("google_drive_auth", ops)
+
+    assert form.status == CapabilityCheckStatus.FAILED
+    assert stored.status == CapabilityCheckStatus.INCOMPLETE
+    assert form.error_kind == stored.error_kind == CheckErrorKind.TIMEOUT
+    assert form.summary == "Sign-in timed out"
+
+
+def test_a_token_refresh_timeout_reads_as_a_sign_in_timeout() -> None:
+    ops = _ops()
+    ops.authenticate.side_effect = _token_refresh_error(
+        requests.ReadTimeout("read timed out")
+    )
 
     form = _run("google_drive_auth", ops, form_run=True)
     stored = _run("google_drive_auth", ops)
