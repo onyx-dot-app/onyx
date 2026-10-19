@@ -43,6 +43,7 @@ from onyx.server.features.tool.models import (
 )
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
+from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
@@ -50,6 +51,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     validate_openapi_schema,
 )
 from onyx.utils.encryption import is_masked_credential
+from onyx.utils.url import SSRFException
 
 router = APIRouter(prefix="/tool")
 admin_router = APIRouter(prefix="/admin/tool")
@@ -60,6 +62,15 @@ def _validate_tool_definition(definition: dict[str, Any]) -> None:
         validate_openapi_schema(definition)
     except (ValueError, TypeError, KeyError, AttributeError) as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+    server_url = openapi_to_url(definition)
+    try:
+        # No DNS at save time; each call resolves and checks again.
+        validate_custom_tool_url(server_url, resolve_dns=False)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Server URL '{server_url}' is not allowed: {e}",
+        ) from e
 
 
 def _custom_tool_destinations(
