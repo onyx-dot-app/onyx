@@ -34,7 +34,9 @@ export default function TableCell({
       <div
         className={cn(
           "tbl-cell-inner",
-          "flex items-center overflow-hidden",
+          // w-0 + min-w-full: content never widens the column under
+          // `table-layout: auto`, so long text truncates instead.
+          "flex items-center overflow-hidden w-0 min-w-full",
           alignmentJustifyClass[alignment]
         )}
         data-size={resolvedSize}
