@@ -121,17 +121,14 @@ export default function OpenAPIPluginModal({
   const validationSchema = useMemo(
     () =>
       Yup.object({
-        name:
-          isAdd || !canEdit
-            ? Yup.string()
-            : Yup.string().trim().required(t("plugins.openapi.nameRequired")),
+        name: Yup.string(),
         description: Yup.string(),
         definition: Yup.string().required(
           t("addOpenApiModal.definition.required")
         ),
         auth: authSchema,
       }),
-    [isAdd, canEdit, authSchema, t]
+    [authSchema, t]
   );
 
   const initialValues = useMemo<OpenAPIPluginFormValues>(
@@ -139,8 +136,10 @@ export default function OpenAPIPluginModal({
       !tool || !ready
         ? addValues()
         : {
-            name: tool.name,
-            description: tool.description,
+            // The schema holds the real name and description; the fields
+            // hold only the stored overrides.
+            name: tool.name_override ?? "",
+            description: tool.description_override ?? "",
             definition: tool.definition
               ? JSON.stringify(tool.definition, null, 2)
               : "",
@@ -194,9 +193,9 @@ export default function OpenAPIPluginModal({
     if (!schema) throw new Error(t("addOpenApiModal.definition.invalidJson"));
     if (defaultChat.canEdit && (!defaultChat.data || defaultChat.error))
       throw new Error(t("addOpenApiModal.editConfigsButton.disabledTooltip"));
-    const info = schema.definition.info;
-    const name: string = info?.title ?? "";
-    const description: string | undefined = info?.description || undefined;
+    // No overrides: the schema's name and description apply.
+    const name = "";
+    const description = "";
     // A retry after a failed authentication save updates the saved tool.
     const existing =
       savedId.current === null
@@ -279,20 +278,13 @@ export default function OpenAPIPluginModal({
       const schema = schemaChanged ? checkedSchema.current : null;
       if (schemaChanged && !schema)
         throw new Error(t("addOpenApiModal.definition.invalidJson"));
-      const info = schema?.definition.info;
       const payload: Parameters<typeof updateCustomTool>[1] = {
         oauth_config_id: fresh.oauth_config_id ?? null,
+        // Overrides; empty ones fall back to the schema's.
+        name: values.name.trim(),
+        description: values.description.trim(),
       };
       if (schema) payload.definition = schema.definition;
-      // An edited name wins; otherwise a new schema renames the tool.
-      const name: string | undefined = metaChanged
-        ? values.name.trim()
-        : info?.title;
-      const description: string | undefined = metaChanged
-        ? values.description.trim()
-        : info?.description;
-      if (name) payload.name = name;
-      if (metaChanged || description) payload.description = description;
       const response = await updateCustomTool(fresh.id, payload);
       if (response.error || !response.data)
         throw new Error(
@@ -487,6 +479,11 @@ function OpenAPIPluginForm({
           : "openApiAuthModal.authMethod.none.label"
   );
 
+  // The schema's own name and description hint at the defaults.
+  const schemaInfo = (schema.checked?.definition ?? tool?.definition)?.info;
+  const schemaTitle: string | undefined = schemaInfo?.title;
+  const schemaDescription: string | undefined = schemaInfo?.description;
+
   const addOnSchema = isAdd && tab === "schema";
   // The label stays fixed; the button's spinner shows work in progress.
   const primaryLabel = t(
@@ -593,9 +590,11 @@ function OpenAPIPluginForm({
                             "plugins.openapi.displayNameDescription"
                           )}
                           withLabel="name"
+                          suffix="optional"
                         >
                           <InputTypeInField
                             name="name"
+                            placeholder={schemaTitle}
                             variant={busy ? "disabled" : "primary"}
                           />
                         </InputVertical>
@@ -603,14 +602,18 @@ function OpenAPIPluginForm({
                       <InputPadder>
                         <InputVertical
                           title={t("addMcpModal.description.title")}
+                          subDescription={t(
+                            "plugins.openapi.descriptionDescription"
+                          )}
                           withLabel="description"
                           suffix="optional"
                         >
                           <InputTextAreaField
                             name="description"
-                            placeholder={t(
-                              "plugins.openapi.descriptionPlaceholder"
-                            )}
+                            placeholder={
+                              schemaDescription ||
+                              t("plugins.openapi.descriptionPlaceholder")
+                            }
                             variant={busy ? "disabled" : "primary"}
                             rows={3}
                           />

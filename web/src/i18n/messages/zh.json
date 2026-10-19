@@ -1077,14 +1077,14 @@
         "unavailable": "此插件可能已被删除，或你没有访问权限。",
         "readOnly": "你可以查看此插件，但你的账户无法更改其设置。",
         "deleteDescription": "这会永久删除 OpenAPI 插件及其配置。",
-        "nameRequired": "名称为必填项",
         "displayNameTitle": "显示名称",
-        "displayNameDescription": "用于在应用中识别此插件。",
+        "displayNameDescription": "用于在应用中识别此插件。未填写时默认使用架构中的名称。",
         "descriptionPlaceholder": "此插件有什么作用？",
         "tabs": {
           "details": "插件详情",
           "schema": "OpenAPI 架构"
-        }
+        },
+        "descriptionDescription": "未填写时默认使用架构中的描述。"
       },
       "title": "插件",
       "description": "将工具和应用连接到你的工作区。",

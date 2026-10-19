@@ -1077,14 +1077,14 @@
         "unavailable": "Dieses Plugin wurde möglicherweise gelöscht oder Sie haben keinen Zugriff.",
         "readOnly": "Sie können dieses Plugin anzeigen. Ihr Konto kann seine Einstellungen nicht ändern.",
         "deleteDescription": "Dadurch werden das OpenAPI-Plugin und seine Konfiguration dauerhaft gelöscht.",
-        "nameRequired": "Name ist erforderlich",
         "displayNameTitle": "Anzeigename",
-        "displayNameDescription": "Dient zur Identifizierung dieses Plugins in der App.",
+        "displayNameDescription": "Dient zur Identifizierung dieses Plugins in der App. Standardmäßig wird der Name aus dem Schema verwendet, wenn keiner angegeben ist.",
         "descriptionPlaceholder": "Was macht dieses Plugin?",
         "tabs": {
           "details": "Plugin-Details",
           "schema": "OpenAPI-Schema"
-        }
+        },
+        "descriptionDescription": "Standardmäßig wird die Beschreibung aus dem Schema verwendet, wenn keine angegeben ist."
       },
       "title": "Plugins",
       "description": "Verbinde Tools und Apps mit deinem Workspace.",

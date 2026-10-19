@@ -24,10 +24,27 @@ def mask_custom_headers(headers: list[Any] | None) -> list[Any] | None:
     return masked
 
 
+def _openapi_info(tool: Tool) -> dict[str, Any]:
+    """The `info` block of an OpenAPI tool's schema; empty for other tools."""
+    if tool.openapi_schema is None or tool.mcp_server_id is not None:
+        return {}
+    info = tool.openapi_schema.get("info")
+    return info if isinstance(info, dict) else {}
+
+
+def _schema_text(info: dict[str, Any], key: str) -> str:
+    value = info.get(key)
+    return value if isinstance(value, str) else ""
+
+
 class ToolSnapshot(BaseModel):
     id: int
     name: str
     description: str
+    # The stored values before the schema fallback. For an OpenAPI tool,
+    # None means the schema's name or description applies.
+    name_override: str | None = None
+    description_override: str | None = None
     definition: dict[str, Any] | None
     display_name: str
     in_code_tool_id: str | None
@@ -58,14 +75,21 @@ class ToolSnapshot(BaseModel):
     ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
+        # An OpenAPI tool's stored name and description only override its
+        # schema's; empty ones fall back to the schema.
+        info = _openapi_info(tool)
+        name = tool.name or _schema_text(info, "title")
+        description = tool.description or _schema_text(info, "description")
 
         return cls(
             permissions=permissions or {},
             id=tool.id,
-            name=tool.name,
-            description=tool.description or "",
+            name=name,
+            description=description,
+            name_override=tool.name or None,
+            description_override=tool.description or None,
             definition=tool.openapi_schema,
-            display_name=tool.display_name or tool.name,
+            display_name=tool.display_name or name,
             in_code_tool_id=tool.in_code_tool_id,
             custom_headers=mask_custom_headers(tool.custom_headers),
             passthrough_auth=tool.passthrough_auth,

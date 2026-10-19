@@ -1077,14 +1077,14 @@
         "unavailable": "This plugin may have been deleted, or you may not have access.",
         "readOnly": "You can view this plugin. Your account cannot change its settings.",
         "deleteDescription": "This permanently deletes the OpenAPI plugin and its configuration.",
-        "nameRequired": "Name is required",
         "displayNameTitle": "Display Name",
-        "displayNameDescription": "Used to identify this plugin in the app.",
+        "displayNameDescription": "Used to identify this plugin in the app. Defaults to the schema's name if not provided.",
         "descriptionPlaceholder": "What does this plugin do?",
         "tabs": {
           "details": "Plugin Details",
           "schema": "OpenAPI Schema"
-        }
+        },
+        "descriptionDescription": "Defaults to the schema's description if not provided."
       },
       "title": "Plugins",
       "description": "Connect tools and apps to your workspace.",

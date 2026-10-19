@@ -17,6 +17,10 @@ export interface ToolSnapshot {
   name: string;
   display_name: string;
   description: string;
+  // The stored values before the schema fallback. For an OpenAPI tool, null
+  // means the schema's name or description applies.
+  name_override?: string | null;
+  description_override?: string | null;
 
   // only specified for Custom Tools. OpenAPI schema which represents
   // the tool's API.
