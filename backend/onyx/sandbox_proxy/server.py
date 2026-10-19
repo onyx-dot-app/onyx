@@ -48,6 +48,7 @@ from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
     SANDBOX_NAMESPACE,
     SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS,
+    SANDBOX_PROXY_ALLOWED_INTERNAL_URLS,
     SANDBOX_PROXY_HEALTHZ_PORT,
     SANDBOX_PROXY_INTERNAL_CIDRS,
     SANDBOX_PROXY_LISTEN_HOST,
@@ -261,7 +262,12 @@ def _build_destination_policy() -> DestinationPolicyConfig:
         raise ValueError(
             "SANDBOX_PROXY_INTERNAL_CIDRS is required for IPv6 sandbox networking"
         )
-    return parse_destination_policy(ONYX_SERVER_URL, cidrs)
+    allowed_urls = (
+        SANDBOX_PROXY_ALLOWED_INTERNAL_URLS.split(",")
+        if SANDBOX_PROXY_ALLOWED_INTERNAL_URLS.strip()
+        else []
+    )
+    return parse_destination_policy(ONYX_SERVER_URL, cidrs, allowed_urls)
 
 
 def main() -> int:

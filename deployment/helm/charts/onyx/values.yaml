@@ -1927,6 +1927,11 @@ sandboxProxy:
   # Deny sandbox requests to these VPC, pod, Service, and node networks.
   # Required for IPv6 or global clients, including globally routable internal ranges.
   internalCIDRs: []
+  # Exact HTTP(S) origins allowed to reach private addresses from all Craft sandboxes.
+  # Include the scheme and optional port; paths, credentials, and wildcards are rejected.
+  # Example: ["http://signoz-mcp.signoz-mcp.svc.cluster.local:8000"]
+  # App/MCP policies still apply. NetworkPolicy egress must also permit these destinations.
+  allowedInternalURLs: []
   # Allow public IPv6 egress from the proxy; requires internalCIDRs.
   # Enable for IPv6-only clusters. This does not select the sandbox address family.
   # Listeners and Services must use the primary pod IP family; secondary IPv6

@@ -112,8 +112,19 @@ def test_sandbox_processes_share_the_configured_listener(listen_host: str) -> No
         assert listeners == [{"name": "SANDBOX_LISTEN_HOST", "value": listen_host}]
 
 
-def test_default_proxy_preserves_ipv4_without_runtime_egress_flag() -> None:
-    result = render_chart()
+@pytest.mark.parametrize(
+    "allowed_urls", [[], ["http://mcp.internal:8000", "https://[fd00::1234]"]]
+)
+def test_proxy_network_environment(allowed_urls: list[str]) -> None:
+    args = [
+        argument
+        for index, url in enumerate(allowed_urls)
+        for argument in (
+            "--set-string",
+            f"sandboxProxy.allowedInternalURLs[{index}]={url}",
+        )
+    ]
+    result = render_chart(args)
     assert result.returncode == 0, result.stderr
     resources = [resource for resource in yaml.safe_load_all(result.stdout) if resource]
     proxy: dict[str, Any] = next(
@@ -130,4 +141,5 @@ def test_default_proxy_preserves_ipv4_without_runtime_egress_flag() -> None:
     assert env["SANDBOX_PROXY_LISTEN_HOST"] == "0.0.0.0"
     assert env["SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS"] == "false"
     assert env["SANDBOX_PROXY_INTERNAL_CIDRS"] == ""
+    assert env["SANDBOX_PROXY_ALLOWED_INTERNAL_URLS"] == ",".join(allowed_urls)
     assert "SANDBOX_PROXY_EGRESS_ALLOW_IPV6" not in env

@@ -130,3 +130,21 @@ def test_startup_uses_internal_cidrs(monkeypatch: pytest.MonkeyPatch) -> None:
     policy: DestinationPolicyConfig = server._build_destination_policy()
     assert resolve_destination(policy, "2600:ffff::1", 443) is None
     assert resolve_destination(policy, "2606:4700:4700::1111", 443) is not None
+
+
+def test_startup_uses_allowed_internal_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        server,
+        "SANDBOX_PROXY_ALLOWED_INTERNAL_URLS",
+        " http://10.1.2.3:8000 ,https://[fd00::1234] ",
+    )
+    policy = server._build_destination_policy()
+    assert resolve_destination(policy, "10.1.2.3", 8000, scheme="http") == ("10.1.2.3",)
+    assert resolve_destination(policy, "fd00::1234", 443, scheme="https") == (
+        "fd00::1234",
+    )
+    monkeypatch.setattr(
+        server, "SANDBOX_PROXY_ALLOWED_INTERNAL_URLS", "http://10.1.2.3,"
+    )
+    with pytest.raises(ValueError, match="ALLOWED_INTERNAL_URLS entry 2"):
+        server._build_destination_policy()

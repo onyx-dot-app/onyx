@@ -118,6 +118,9 @@ SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS = (
     os.environ.get("SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS", "false").lower() == "true"
 )
 SANDBOX_PROXY_INTERNAL_CIDRS: str = os.environ.get("SANDBOX_PROXY_INTERNAL_CIDRS", "")
+SANDBOX_PROXY_ALLOWED_INTERNAL_URLS: str = os.environ.get(
+    "SANDBOX_PROXY_ALLOWED_INTERNAL_URLS", ""
+)
 
 SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8080"))
 # Env-tunable on Helm only; compose's healthcheck.test hardcodes 8081 (can't
