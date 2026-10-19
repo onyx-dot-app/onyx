@@ -205,11 +205,15 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         result: dict[str, list[int]] = {}
 
         for doc in documents:
-            # A document rebuilt from its stored row carries the resolved id
-            # but not the connector's raw one, so prefer the resolved id and
-            # skip the raw lookup. If neither is set, get_ancestors_from_raw_id
-            # returns just the SOURCE node.
-            if doc.parent_hierarchy_node_id is not None:
+            # The raw id first: resolving it refreshes the cache on a miss,
+            # so it recovers an ancestry docfetching had to fall back on. Its
+            # fallback is the SOURCE node, which reads here as a document that
+            # really sits at the root. Only a document rebuilt from its stored
+            # row has no raw id, and that one carries the resolved id instead.
+            if (
+                doc.parent_hierarchy_raw_node_id is None
+                and doc.parent_hierarchy_node_id is not None
+            ):
                 ancestors = get_ancestors_from_node_id(
                     redis_client=redis_client,
                     source=doc.source,

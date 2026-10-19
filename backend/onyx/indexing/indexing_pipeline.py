@@ -671,11 +671,12 @@ def index_doc_batch_prepare(
     skips both change gates: a retry of a batch whose prepare already committed
     new readers would otherwise see nothing to do.
 
-    `skip_document_row_writes` leaves the Document row, its staged-file
+    `skip_document_row_writes` leaves the upsert below, its staged-file
     promotion and its replaced-blob deletes alone. ONLY for a caller that
     re-processes content it did not fetch and so has nothing newer to write -
     a connector path passing this would silently stop documents updating.
-    Chunk enrichment still reads the live rows, so chunks stay correct."""
+    `post_index` still writes the row's timestamps and chunk count, and chunk
+    enrichment still reads the live rows, so chunks stay correct."""
     documents = sanitize_documents_for_postgres(documents)
 
     # Create a trimmed list of docs that don't have a newer updated at

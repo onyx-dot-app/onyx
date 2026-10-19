@@ -1785,3 +1785,43 @@ def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:
         )
 
     assert update_chunk_count.call_args.kwargs["document_ids"] == ["written"]
+
+
+def test_ancestors_come_from_the_raw_id_whenever_the_document_has_one() -> None:
+    """Docfetching resolves every connector document's node id, falling back to
+    the SOURCE node when the cache misses, and that fallback is indistinguishable
+    from a document that really sits at the root. Resolving the raw id refreshes
+    the cache and recovers the real ancestry, so it wins while it is there."""
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+    crawled = MagicMock(
+        id="crawled",
+        source=DocumentSource.GOOGLE_DRIVE,
+        parent_hierarchy_raw_node_id="folder-abc",
+        # What docfetching fell back to when the raw id missed the cache.
+        parent_hierarchy_node_id=1,
+    )
+    rebuilt = MagicMock(
+        id="rebuilt",
+        source=DocumentSource.GOOGLE_DRIVE,
+        parent_hierarchy_raw_node_id=None,
+        parent_hierarchy_node_id=42,
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.get_redis_client"),
+        patch(f"{module}.get_ancestors_from_raw_id", return_value=[7, 1]) as from_raw,
+        patch(f"{module}.get_ancestors_from_node_id", return_value=[42]) as from_node,
+    ):
+        ancestors = adapter._get_ancestor_ids_for_documents(
+            [crawled, rebuilt], "t", MagicMock()
+        )
+
+    assert ancestors == {"crawled": [7, 1], "rebuilt": [42]}
+    assert from_raw.call_args.kwargs["parent_hierarchy_raw_node_id"] == "folder-abc"
+    assert from_node.call_args.kwargs["node_id"] == 42
