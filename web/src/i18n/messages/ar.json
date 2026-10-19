@@ -210,14 +210,11 @@
         "noSummary": "لا يوجد ملخص"
       },
       "submitButton": {
-        "addLabel": "إضافة إجراء",
-        "addingLabel": "جارٍ الإضافة...",
-        "saveLabel": "حفظ التغييرات",
-        "savingLabel": "جارٍ الحفظ..."
+        "addLabel": "إضافة",
+        "saveLabel": "تحديث"
       },
       "toasts": {
         "actionCreated": "تم إنشاء إجراء OpenAPI بنجاح",
-        "actionUpdated": "تم تحديث إجراء OpenAPI بنجاح",
         "createFailed": "فشل إنشاء إجراء OpenAPI",
         "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI",
         "updateFailed": "فشل تحديث إجراء OpenAPI"
@@ -1073,7 +1070,14 @@
         "unavailable": "قد تكون هذه الإضافة قد حُذفت، أو قد لا تملك صلاحية الوصول.",
         "readOnly": "يمكنك عرض هذه الإضافة، لكن حسابك لا يستطيع تغيير إعداداتها.",
         "deleteDescription": "سيؤدي ذلك إلى حذف إضافة OpenAPI وإعداداتها نهائيًا.",
-        "nameRequired": "الاسم مطلوب"
+        "nameRequired": "الاسم مطلوب",
+        "displayNameTitle": "اسم العرض",
+        "displayNameDescription": "يُستخدم لتمييز هذه الإضافة في التطبيق.",
+        "descriptionPlaceholder": "ماذا تفعل هذه الإضافة؟",
+        "tabs": {
+          "details": "تفاصيل الإضافة",
+          "schema": "مخطط OpenAPI"
+        }
       },
       "title": "الإضافات",
       "description": "اربط الأدوات والتطبيقات بمساحة عملك.",

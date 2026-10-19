@@ -205,20 +205,21 @@ Schema drafts remain fixed for each open editor, even when saved definitions
 refresh. Fresh capability loss removes write fields; a missing record restores
 the fallback. Rejected saves remain visible through errors and toasts.
 Schema editing remains on one step.
-The Tools tab renders `web/src/sections/plugins/OpenAPIEndpointList.tsx`: one divided list of actions,
-with method badges and endpoint paths beside each summary.
+The admin OpenAPI modal has Plugin Details, OpenAPI Schema and Authentication tabs,
+with no separate Tools tab. The Schema tab previews the API and one card per action
+live from the schema text, in add and edit mode. Without edit rights it shows the
+read-only schema above `web/src/sections/plugins/OpenAPIEndpointList.tsx`.
 `OpenAPIPluginModal` holds one Formik form (`OpenAPIPluginFormValues`: name,
 description, schema text, auth) across its tabs. The Schema and Authentication tabs
 render `OpenAPISchemaFields` and `OpenAPIAuthFields`, which have no form of their own.
-One footer button acts: Continue and Add Action in add mode, and Save in edit mode,
-which writes only the parts that changed. The header reads "Add OpenAPI action" or
+One footer button acts: Continue and Add in add mode, and Update in edit mode,
+which writes only the parts that changed and closes the modal without a toast.
+Its label stays fixed; a spinner shows while it works, and it is disabled while
+the form is invalid. The header reads "Add OpenAPI action" or
 "Edit *name*". Drafts survive tab switches.
 Plugin add and edit modals close at once, without an unsaved-changes confirmation.
 Authentication saves reject a changed OAuth link before writing, so stale values
 cannot target a replacement config.
-The inline Schema tab shows validation and a detected-tool count, not endpoints.
-View tools selects the Tools tab; unsaved schemas must be saved first. Creation
-retains its endpoint preview because it has no separate Tools tab.
 Personal OpenAPI details reuse the MCP Connection/Tools tabs and URL/status
 header. Tools use the shared endpoint list, search, count, and empty feedback.
 Personal detail panes use a compact, fixed height across connection and

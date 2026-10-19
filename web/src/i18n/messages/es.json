@@ -210,14 +210,11 @@
         "noSummary": "No se proporcionó ningún resumen"
       },
       "submitButton": {
-        "addLabel": "Añadir la acción",
-        "addingLabel": "Añadiendo...",
-        "saveLabel": "Guardar los cambios",
-        "savingLabel": "Guardando..."
+        "addLabel": "Añadir",
+        "saveLabel": "Actualizar"
       },
       "toasts": {
         "actionCreated": "Acción de OpenAPI creada correctamente",
-        "actionUpdated": "Acción de OpenAPI actualizada correctamente",
         "createFailed": "No se pudo crear la acción de OpenAPI",
         "invalidJson": "El formato JSON de la definición del esquema de OpenAPI no es válido",
         "updateFailed": "No se pudo actualizar la acción de OpenAPI"
@@ -1073,7 +1070,14 @@
         "unavailable": "Este plugin puede haberse eliminado o puede que no tengas acceso.",
         "readOnly": "Puedes ver este plugin. Tu cuenta no puede cambiar su configuración.",
         "deleteDescription": "Esto elimina permanentemente el plugin OpenAPI y su configuración.",
-        "nameRequired": "El nombre es obligatorio"
+        "nameRequired": "El nombre es obligatorio",
+        "displayNameTitle": "Nombre visible",
+        "displayNameDescription": "Se usa para identificar este plugin en la aplicación.",
+        "descriptionPlaceholder": "¿Qué hace este plugin?",
+        "tabs": {
+          "details": "Detalles del plugin",
+          "schema": "Esquema OpenAPI"
+        }
       },
       "title": "Plugins",
       "description": "Conecta herramientas y aplicaciones a tu espacio de trabajo.",

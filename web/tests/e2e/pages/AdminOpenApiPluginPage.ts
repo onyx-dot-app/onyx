@@ -13,6 +13,8 @@ export class AdminOpenApiPluginPage {
   readonly page: Page;
   readonly plugins: AdminPluginsPage;
   readonly detailDialog: Locator;
+  /** The detail URL the last save left, to reopen it afterwards. */
+  private savedDetailUrl: string | null = null;
 
   constructor(page: Page) {
     this.page = page;
@@ -33,9 +35,7 @@ export class AdminOpenApiPluginPage {
       .fill(schema);
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
     // Continue moves the same dialog to its Authentication tab.
-    await dialog
-      .getByRole("button", { name: "Add Action", exact: true })
-      .click();
+    await dialog.getByRole("button", { name: "Add", exact: true }).click();
     await this.expectDetail(name);
     const match = new URL(this.page.url()).pathname.match(/\/openapi\/(\d+)$/);
     if (!match?.[1])
@@ -74,18 +74,19 @@ export class AdminOpenApiPluginPage {
       .fill(settings.clientSecret);
     await dialog.getByLabel(/^Scopes/).fill(settings.scopes);
     const save = dialog.getByRole("button", {
-      name: "Save Changes",
+      name: "Update",
       exact: true,
     });
+    this.savedDetailUrl = this.page.url();
     await save.click();
-    await expect(save).toBeDisabled();
-    await expect(dialog).toBeVisible();
+    // A successful save closes the modal.
+    await expect(dialog).toBeHidden();
   }
 
   async expectOAuthPersisted(
     settings: Pick<OAuthSettings, "authorizationUrl" | "tokenUrl" | "scopes">
   ): Promise<void> {
-    await this.page.reload();
+    await this.page.goto(this.savedDetailUrl ?? this.page.url());
     const dialog = this.detailDialog;
     await dialog
       .getByRole("tab", { name: "Authentication", exact: true })

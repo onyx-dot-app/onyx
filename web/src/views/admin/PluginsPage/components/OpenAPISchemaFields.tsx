@@ -9,7 +9,6 @@ import {
   CopyButton,
   Divider,
   EmptyMessageCard,
-  Text,
 } from "@opal/components";
 import {
   Content,
@@ -33,23 +32,20 @@ import type { OpenApiSchemaCheck } from "@/lib/plugins/openapi/hooks";
 import type { OpenAPIPluginFormValues } from "@/lib/plugins/openapi/types";
 
 interface OpenAPISchemaFieldsProps {
-  /** Add mode previews the API and its actions; edit mode counts them. */
-  isAdd: boolean;
   schema: OpenApiSchemaCheck;
   disabled: boolean;
-  /** Edit mode: opens the Tools tab. */
-  onViewTools?: () => void;
 }
 
-/** The OpenAPI modal's Schema tab: the schema field and what it defines. */
+/**
+ * The OpenAPI modal's Schema tab: the schema field, then the API and the
+ * actions it defines, previewed live from the text.
+ */
 export default function OpenAPISchemaFields({
-  isAdd,
   schema,
   disabled,
-  onViewTools,
 }: OpenAPISchemaFieldsProps) {
   const t = useTranslations("actions");
-  const { values, initialValues, errors, setFieldValue, setFieldError } =
+  const { values, errors, setFieldValue, setFieldError } =
     useFormikContext<OpenAPIPluginFormValues>();
   const { checked } = schema;
 
@@ -125,34 +121,7 @@ export default function OpenAPISchemaFields({
         </InputVertical>
       </InputPadder>
 
-      {!isAdd ? (
-        checked && (
-          <div className="flex items-center justify-between gap-3 p-2">
-            <Text font="secondary-body" color="text-03">
-              {t("plugins.openapi.schemaPreview.detected", {
-                count: checked.methods.length,
-              })}
-            </Text>
-            {onViewTools && (
-              <Button
-                size="sm"
-                prominence="tertiary"
-                disabled={
-                  disabled || values.definition !== initialValues.definition
-                }
-                tooltip={
-                  values.definition !== initialValues.definition
-                    ? t("plugins.openapi.schemaPreview.saveToUpdate")
-                    : undefined
-                }
-                onClick={onViewTools}
-              >
-                {t("plugins.openapi.schemaPreview.viewTools")}
-              </Button>
-            )}
-          </div>
-        )
-      ) : checked && checked.methods.length > 0 ? (
+      {checked && checked.methods.length > 0 ? (
         <>
           <Divider paddingParallel={2} paddingPerpendicular={2} />
           {info?.title && (

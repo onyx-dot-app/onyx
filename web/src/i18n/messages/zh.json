@@ -210,14 +210,11 @@
         "noSummary": "未提供摘要"
       },
       "submitButton": {
-        "addLabel": "添加操作",
-        "addingLabel": "正在添加...",
-        "saveLabel": "保存更改",
-        "savingLabel": "正在保存..."
+        "addLabel": "添加",
+        "saveLabel": "更新"
       },
       "toasts": {
         "actionCreated": "OpenAPI 操作创建成功",
-        "actionUpdated": "OpenAPI 操作更新成功",
         "createFailed": "创建 OpenAPI 操作失败",
         "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
         "updateFailed": "更新 OpenAPI 操作失败"
@@ -1073,7 +1070,14 @@
         "unavailable": "此插件可能已被删除，或你没有访问权限。",
         "readOnly": "你可以查看此插件，但你的账户无法更改其设置。",
         "deleteDescription": "这会永久删除 OpenAPI 插件及其配置。",
-        "nameRequired": "名称为必填项"
+        "nameRequired": "名称为必填项",
+        "displayNameTitle": "显示名称",
+        "displayNameDescription": "用于在应用中识别此插件。",
+        "descriptionPlaceholder": "此插件有什么作用？",
+        "tabs": {
+          "details": "插件详情",
+          "schema": "OpenAPI 架构"
+        }
       },
       "title": "插件",
       "description": "将工具和应用连接到你的工作区。",

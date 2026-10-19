@@ -210,14 +210,11 @@
         "noSummary": "No summary provided"
       },
       "submitButton": {
-        "addLabel": "Add Action",
-        "addingLabel": "Adding...",
-        "saveLabel": "Save Changes",
-        "savingLabel": "Saving..."
+        "addLabel": "Add",
+        "saveLabel": "Update"
       },
       "toasts": {
         "actionCreated": "OpenAPI action created successfully",
-        "actionUpdated": "OpenAPI action updated successfully",
         "createFailed": "Failed to create OpenAPI action",
         "invalidJson": "Invalid JSON format in OpenAPI schema definition",
         "updateFailed": "Failed to update OpenAPI action"
@@ -1073,7 +1070,14 @@
         "unavailable": "This plugin may have been deleted, or you may not have access.",
         "readOnly": "You can view this plugin. Your account cannot change its settings.",
         "deleteDescription": "This permanently deletes the OpenAPI plugin and its configuration.",
-        "nameRequired": "Name is required"
+        "nameRequired": "Name is required",
+        "displayNameTitle": "Display Name",
+        "displayNameDescription": "Used to identify this plugin in the app.",
+        "descriptionPlaceholder": "What does this plugin do?",
+        "tabs": {
+          "details": "Plugin Details",
+          "schema": "OpenAPI Schema"
+        }
       },
       "title": "Plugins",
       "description": "Connect tools and apps to your workspace.",

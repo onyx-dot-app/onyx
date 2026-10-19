@@ -13,14 +13,7 @@ import { Formik, useFormikContext, type FormikHelpers } from "formik";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import useSWR, { useSWRConfig } from "swr";
-import {
-  Button,
-  InputTextArea,
-  InputTypeIn,
-  Modal,
-  Tabs,
-  Text,
-} from "@opal/components";
+import { Button, InputTextArea, Modal, Tabs, Text } from "@opal/components";
 import { Content, InputPadder, InputVertical, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { markdown } from "@opal/utils";
@@ -52,7 +45,7 @@ import OpenAPIAuthFields, {
 } from "@/views/admin/PluginsPage/components/OpenAPIAuthFields";
 import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
-type Tab = "server" | "schema" | "authentication" | "tools";
+type Tab = "server" | "schema" | "authentication";
 
 interface OpenAPIPluginModalProps {
   /** The tool to edit. Without it, the modal adds a new tool. */
@@ -335,7 +328,7 @@ export default function OpenAPIPluginModal({
 
   async function submit(
     values: OpenAPIPluginFormValues,
-    { setStatus, resetForm }: FormikHelpers<OpenAPIPluginFormValues>
+    { setStatus }: FormikHelpers<OpenAPIPluginFormValues>
   ) {
     setStatus(undefined);
     try {
@@ -343,10 +336,7 @@ export default function OpenAPIPluginModal({
         await create(values);
         return;
       }
-      if (await save(values)) {
-        toast.success(t("addOpenApiModal.toasts.actionUpdated"));
-        if (active.current) resetForm({ values });
-      }
+      if ((await save(values)) && active.current) close();
     } catch (cause) {
       const message =
         cause instanceof Error && cause.message
@@ -367,6 +357,7 @@ export default function OpenAPIPluginModal({
       key={isAdd ? "add" : `${tool?.id}:${oauthConfigId}:${ready}`}
       initialValues={initialValues}
       validationSchema={validationSchema}
+      validateOnMount
       onSubmit={submit}
     >
       <OpenAPIPluginForm
@@ -431,11 +422,11 @@ function OpenAPIPluginForm({
   baseline,
 }: OpenAPIPluginFormProps) {
   const t = useTranslations("actions");
-  const fields = useTranslations("agents.editor.general");
   const {
     values,
     initialValues,
     dirty,
+    isValid,
     status,
     isSubmitting,
     setFieldTouched,
@@ -446,7 +437,6 @@ function OpenAPIPluginForm({
     values.definition,
     t("addOpenApiModal.definition.invalidJson")
   );
-  const [toolSearch, setToolSearch] = useState("");
   const busy = isSubmitting || schema.checking;
 
   useEffect(() => {
@@ -456,10 +446,7 @@ function OpenAPIPluginForm({
   function selectTab(value: string) {
     if (
       !busy &&
-      (value === "server" ||
-        value === "schema" ||
-        value === "authentication" ||
-        value === "tools")
+      (value === "server" || value === "schema" || value === "authentication")
     )
       onShowTab(value);
   }
@@ -490,12 +477,6 @@ function OpenAPIPluginForm({
     else if (errors.name) onShowTab("server");
   }
 
-  const methods = extractMethodSpecsFromDefinition(tool?.definition);
-  const filteredMethods = methods.filter((method) =>
-    `${method.name} ${method.summary ?? ""} ${method.path}`
-      .toLowerCase()
-      .includes(toolSearch.trim().toLowerCase())
-  );
   const authDescription = t(
     tool?.oauth_config_id
       ? "openApiAuthModal.authMethod.oauth.label"
@@ -507,26 +488,19 @@ function OpenAPIPluginForm({
   );
 
   const addOnSchema = isAdd && tab === "schema";
-  const primaryLabel = addOnSchema
-    ? t(schema.checking ? "mcpSetup.checking" : "mcpSetup.continue")
-    : isAdd
-      ? t(
-          isSubmitting
-            ? "addOpenApiModal.submitButton.addingLabel"
-            : "addOpenApiModal.submitButton.addLabel"
-        )
-      : t(
-          isSubmitting
-            ? "addOpenApiModal.submitButton.savingLabel"
-            : "addOpenApiModal.submitButton.saveLabel"
-        );
+  // The label stays fixed; the button's spinner shows work in progress.
+  const primaryLabel = t(
+    addOnSchema
+      ? "mcpSetup.continue"
+      : isAdd
+        ? "addOpenApiModal.submitButton.addLabel"
+        : "addOpenApiModal.submitButton.saveLabel"
+  );
   const primaryDisabled =
     busy ||
     (addOnSchema
       ? !values.definition.trim()
-      : isAdd
-        ? !schema.checked
-        : !dirty);
+      : !isValid || (isAdd ? !schema.checked : !dirty));
 
   return (
     <Modal open onOpenChange={(next) => !next && close()}>
@@ -582,19 +556,16 @@ function OpenAPIPluginForm({
               <InputPadder>
                 <Tabs.List>
                   <Tabs.Trigger value="server" disabled={busy || isAdd}>
-                    {t("plugins.openapi.detailsTitle")}
+                    {t("plugins.openapi.tabs.details")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="schema" disabled={busy}>
-                    {t("plugins.openapi.schemaTitle")}
+                    {t("plugins.openapi.tabs.schema")}
                   </Tabs.Trigger>
                   <Tabs.Trigger
                     value="authentication"
                     disabled={busy || (isAdd && !schema.checked)}
                   >
                     {t("mcpDetail.authentication")}
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="tools" disabled={busy || isAdd}>
-                    {t("mcpTools.title")}
                   </Tabs.Trigger>
                 </Tabs.List>
               </InputPadder>
@@ -617,7 +588,10 @@ function OpenAPIPluginForm({
                     <div className="flex flex-col">
                       <InputPadder>
                         <InputVertical
-                          title={fields("name.title")}
+                          title={t("plugins.openapi.displayNameTitle")}
+                          subDescription={t(
+                            "plugins.openapi.displayNameDescription"
+                          )}
                           withLabel="name"
                         >
                           <InputTypeInField
@@ -630,9 +604,13 @@ function OpenAPIPluginForm({
                         <InputVertical
                           title={t("addMcpModal.description.title")}
                           withLabel="description"
+                          suffix="optional"
                         >
                           <InputTextAreaField
                             name="description"
+                            placeholder={t(
+                              "plugins.openapi.descriptionPlaceholder"
+                            )}
                             variant={busy ? "disabled" : "primary"}
                             rows={3}
                           />
@@ -660,22 +638,26 @@ function OpenAPIPluginForm({
               >
                 {visited.has("schema") &&
                   (canEdit ? (
-                    <OpenAPISchemaFields
-                      isAdd={isAdd}
-                      schema={schema}
-                      disabled={busy}
-                      onViewTools={isAdd ? undefined : () => onShowTab("tools")}
-                    />
+                    <OpenAPISchemaFields schema={schema} disabled={busy} />
                   ) : (
                     tool && (
-                      <InputPadder>
-                        <InputTextArea
-                          value={JSON.stringify(tool.definition, null, 2)}
-                          variant="disabled"
-                          rows={12}
-                          aria-label={t("plugins.openapi.schemaTitle")}
-                        />
-                      </InputPadder>
+                      <div className="flex flex-col">
+                        <InputPadder>
+                          <InputTextArea
+                            value={JSON.stringify(tool.definition, null, 2)}
+                            variant="disabled"
+                            rows={12}
+                            aria-label={t("plugins.openapi.tabs.schema")}
+                          />
+                        </InputPadder>
+                        <InputPadder>
+                          <OpenAPIEndpointList
+                            methods={extractMethodSpecsFromDefinition(
+                              tool.definition
+                            )}
+                          />
+                        </InputPadder>
+                      </div>
                     )
                   ))}
               </Tabs.Content>
@@ -703,33 +685,6 @@ function OpenAPIPluginForm({
                     </InputPadder>
                   ))}
               </Tabs.Content>
-
-              <Tabs.Content value="tools">
-                <div className="flex flex-col">
-                  <InputPadder>
-                    <InputTypeIn
-                      searchIcon
-                      value={toolSearch}
-                      onChange={(event) => setToolSearch(event.target.value)}
-                      placeholder={t("mcpTools.search")}
-                      aria-label={t("mcpTools.search")}
-                    />
-                  </InputPadder>
-                  <InputPadder>
-                    {filteredMethods.length ? (
-                      <OpenAPIEndpointList methods={filteredMethods} />
-                    ) : (
-                      <Text as="p" color="text-03">
-                        {t(
-                          toolSearch.trim()
-                            ? "toolsList.empty.searchMessage"
-                            : "toolsList.empty.message"
-                        )}
-                      </Text>
-                    )}
-                  </InputPadder>
-                </div>
-              </Tabs.Content>
             </Tabs>
           )}
         </Modal.Body>
@@ -737,6 +692,7 @@ function OpenAPIPluginForm({
           <Modal.Footer padding={4}>
             <div className="ms-auto flex items-center gap-2">
               <Button
+                icon={busy ? IconLoader : undefined}
                 disabled={primaryDisabled}
                 onClick={() => void primaryAction()}
               >

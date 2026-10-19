@@ -210,14 +210,11 @@
         "noSummary": "概要はありません"
       },
       "submitButton": {
-        "addLabel": "アクションを追加",
-        "addingLabel": "追加中...",
-        "saveLabel": "変更を保存",
-        "savingLabel": "保存中..."
+        "addLabel": "追加",
+        "saveLabel": "更新"
       },
       "toasts": {
         "actionCreated": "OpenAPI アクションを作成しました",
-        "actionUpdated": "OpenAPI アクションを更新しました",
         "createFailed": "OpenAPI アクションの作成に失敗しました",
         "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
         "updateFailed": "OpenAPI アクションの更新に失敗しました"
@@ -1073,7 +1070,14 @@
         "unavailable": "このプラグインは削除されたか、アクセス権がない可能性があります。",
         "readOnly": "このプラグインは表示できますが、設定を変更する権限はありません。",
         "deleteDescription": "OpenAPI プラグインとその設定が完全に削除されます。",
-        "nameRequired": "名前は必須です"
+        "nameRequired": "名前は必須です",
+        "displayNameTitle": "表示名",
+        "displayNameDescription": "アプリ内でこのプラグインを識別するために使われます。",
+        "descriptionPlaceholder": "このプラグインは何をしますか？",
+        "tabs": {
+          "details": "プラグインの詳細",
+          "schema": "OpenAPI スキーマ"
+        }
       },
       "title": "プラグイン",
       "description": "ツールやアプリをワークスペースに接続します。",
