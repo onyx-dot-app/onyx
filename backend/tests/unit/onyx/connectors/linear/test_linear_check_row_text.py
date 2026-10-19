@@ -6,6 +6,8 @@ nothing says."""
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
+import pytest
+
 from ee.onyx.external_permissions.linear.capability_checks import (
     build_linear_doc_permission_sync_checks,
     build_linear_group_sync_checks,
@@ -241,6 +243,7 @@ def test_an_api_error_carries_the_request_and_body() -> None:
     assert result.error_detail.response_excerpt == '{"error": "Server Error"}'
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
     gateway = _gateway()
     gateway.get_viewer.side_effect = LinearRateLimitError(

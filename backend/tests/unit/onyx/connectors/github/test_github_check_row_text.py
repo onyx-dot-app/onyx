@@ -143,6 +143,7 @@ def test_an_unreachable_server_fails_only_a_form_run(
     assert form.error_kind == stored.error_kind == kind
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
     gateway = healthy_gateway()
     gateway.get_token_info.side_effect = GitHubRateLimitError(

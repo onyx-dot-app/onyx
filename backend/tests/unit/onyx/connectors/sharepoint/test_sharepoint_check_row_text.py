@@ -454,6 +454,7 @@ def test_a_client_secret_stops_the_permission_checks() -> None:
     gateway.list_role_assignments.assert_not_called()
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_throttled_listing_stops_the_run() -> None:
     gateway = _healthy()
     gateway.list_site_urls.side_effect = api_refusal(429, "tooManyRequests")
