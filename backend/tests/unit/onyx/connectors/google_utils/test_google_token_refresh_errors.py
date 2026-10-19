@@ -80,6 +80,13 @@ def test_a_timeout_stays_visible_through_the_wrapper() -> None:
     assert is_google_timeout(caught.value)
 
 
+def test_a_server_error_after_retries_raises_unreachable() -> None:
+    error = RefreshError("500 Internal Server Error", retryable=True)
+    with _refresh_raises(error), pytest.raises(GoogleUnreachableError) as caught:
+        get_google_oauth_creds(_EXPIRED_TOKEN, DocumentSource.GOOGLE_DRIVE)
+    assert caught.value.__cause__ is error
+
+
 def test_a_rejected_refresh_still_returns_none() -> None:
     with _refresh_raises(RefreshError("invalid_grant: Token has been revoked.")):
         assert (

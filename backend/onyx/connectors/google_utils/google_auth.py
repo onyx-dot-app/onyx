@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import requests
-from google.auth.exceptions import TransportError
+from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -38,8 +38,8 @@ _TOKEN_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
 
 
 class GoogleUnreachableError(ConnectionError):
-    """A token refresh got no answer from Google, so the credential's state is
-    unknown. The original error is the cause."""
+    """A token refresh got no answer from Google, or only a server error, so
+    the credential's state is unknown. The original error is the cause."""
 
 
 @contextmanager
@@ -49,6 +49,14 @@ def _token_request() -> Iterator[None]:
     except _TOKEN_CONNECTION_ERRORS as e:
         raise GoogleUnreachableError(
             f"Onyx cannot reach Google to refresh the token: {e}"
+        ) from e
+    except RefreshError as e:
+        # google-auth marks a 5xx that outlasted its retries as retryable: the
+        # token endpoint failed, it did not reject the credential.
+        if not e.retryable:
+            raise
+        raise GoogleUnreachableError(
+            f"Google's token endpoint failed to refresh the token: {e}"
         ) from e
 
 
