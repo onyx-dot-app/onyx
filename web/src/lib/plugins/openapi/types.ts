@@ -15,5 +15,7 @@ export interface OpenAPIPluginFormValues {
   description: string;
   /** The schema as the admin typed it. */
   definition: string;
+  /** On for the whole workspace. */
+  enabled: boolean;
   auth: OpenAPIAuthFormValues;
 }

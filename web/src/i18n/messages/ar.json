@@ -1084,7 +1084,11 @@
           "details": "تفاصيل الإضافة",
           "schema": "مخطط OpenAPI"
         },
-        "descriptionDescription": "يُستخدم حقل `description` في المخطط افتراضيًا."
+        "descriptionDescription": "يُستخدم حقل `description` في المخطط افتراضيًا.",
+        "workspaceEnabled": {
+          "title": "التفعيل لمساحة العمل",
+          "description": "يتيح لجميع أعضاء مؤسستك استخدام هذه الإضافة، بما في ذلك في الوكلاء المخصصين."
+        }
       },
       "title": "الإضافات",
       "description": "اربط الأدوات والتطبيقات بمساحة عملك.",
@@ -1093,7 +1097,7 @@
         "placeholder": "البحث عن إضافات"
       },
       "add": {
-        "label": "إضافة",
+        "label": "إضافة جديدة",
         "mcp": "إضافة خادم MCP مخصص",
         "openapi": "إضافة إجراء OpenAPI"
       },

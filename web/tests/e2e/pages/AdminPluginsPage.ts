@@ -9,7 +9,7 @@ export class AdminPluginsPage {
     this.page = page;
     // The empty state repeats the header Add menu.
     this.addButton = page
-      .getByRole("button", { name: "Add", exact: true })
+      .getByRole("button", { name: "New Plugin", exact: true })
       .first();
   }
 

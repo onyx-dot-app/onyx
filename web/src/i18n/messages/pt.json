@@ -1084,7 +1084,11 @@
           "details": "Detalhes do plugin",
           "schema": "Esquema OpenAPI"
         },
-        "descriptionDescription": "Por padrão, o campo `description` do esquema."
+        "descriptionDescription": "Por padrão, o campo `description` do esquema.",
+        "workspaceEnabled": {
+          "title": "Ativar para o espaço de trabalho",
+          "description": "Permite que todos na sua organização usem este plugin, inclusive em agentes personalizados."
+        }
       },
       "title": "Plugins",
       "description": "Conecte ferramentas e aplicativos ao seu espaço de trabalho.",
@@ -1093,7 +1097,7 @@
         "placeholder": "Pesquisar plugins"
       },
       "add": {
-        "label": "Adicionar",
+        "label": "Novo plugin",
         "mcp": "Adicionar servidor MCP personalizado",
         "openapi": "Adicionar ação OpenAPI"
       },

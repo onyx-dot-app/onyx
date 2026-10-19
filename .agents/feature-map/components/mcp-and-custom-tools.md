@@ -67,11 +67,12 @@ Member defaults, Craft metadata, skills links, and Craft actions require the
 member's Craft entitlement. MCP setup and admin tools retain their deployment gates.
 Admin row actions sit beside the detail link in normal flex flow, without
 absolute positioning or a placeholder spacer.
-Availability controls use workspace enable/disable wording. Disabling an OpenAPI
-plugin requires confirmation that it affects everyone, including custom agents,
-while preserving its settings and credentials.
-OpenAPI indicators and lifecycle actions follow global `Tool.enabled`,
-independently of default Chat attachments.
+Availability controls use workspace enable/disable wording. An OpenAPI plugin's
+workspace switch is the "Enable for Workspace" field in its modal's Plugin Details
+tab, saved with Update (and set while adding). Turning it on also adds the plugin to
+the default Chat. Its card's settings button opens that modal instead of a menu.
+OpenAPI indicators follow global `Tool.enabled`, independently of default Chat
+attachments.
 The sliders action says Disable when all supported surfaces are enabled and Enable when all are disabled.
 Mixed or unknown MCP states say Manage workspace availability. Disabled Craft does not affect this label.
 Member OAuth opens a normal new tab, without popup sizing or window features.

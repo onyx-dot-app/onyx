@@ -29,7 +29,6 @@ import { Permission } from "@/lib/types";
 import type { InstalledPlugin } from "@/lib/plugins/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { deleteCustomTool } from "@/lib/plugins/openapi/svc";
-import { updateToolStatus } from "@/lib/tools/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import ExternalAppLifecycleMenu from "@/sections/plugins/ExternalAppLifecycleMenu";
 import { workspaceAvailabilityLabel } from "@/sections/plugins/workspaceAvailability";
@@ -74,6 +73,7 @@ export default function PluginLifecycleMenu({
   size = "sm",
 }: PluginLifecycleMenuProps) {
   const t = useTranslations("actions");
+  const router = useRouter();
   const [activation, setActivation] = useState<
     "availability" | "delete" | null
   >(null);
@@ -95,10 +95,14 @@ export default function PluginLifecycleMenu({
   const availabilityLabel = t(
     `plugins.controls.${workspaceAvailabilityLabel(plugin, craftAvailable)}`
   );
+  // OpenAPI availability lives in the plugin's modal; its gear opens that.
   const hasAvailability =
-    plugin.kind === "openapi"
-      ? can(plugin.tool, "toggle")
-      : isGlobalHolder || can(plugin.server, "edit");
+    plugin.kind === "mcp" && (isGlobalHolder || can(plugin.server, "edit"));
+  const manageLabel = t("plugins.row.manage.label", { name: resource.name });
+  function openPlugin() {
+    if (plugin.kind === "openapi")
+      router.push(pluginDetailHref({ kind: "openapi", id: plugin.tool.id }));
+  }
   if (activation)
     return (
       <ActivePluginLifecycleMenu
@@ -113,9 +117,12 @@ export default function PluginLifecycleMenu({
   return (
     <div className={cn("flex items-center", size === "md" ? "gap-1" : "gap-2")}>
       {renderStatus?.({
-        onOpen: hasAvailability
-          ? () => setActivation("availability")
-          : undefined,
+        onOpen:
+          plugin.kind === "openapi"
+            ? openPlugin
+            : hasAvailability
+              ? () => setActivation("availability")
+              : undefined,
         disabled: false,
         expanded: false,
       })}
@@ -133,7 +140,16 @@ export default function PluginLifecycleMenu({
       ) : (
         <span className={cn("shrink-0", size === "md" ? "size-8" : "size-6")} />
       )}
-      {hasAvailability ? (
+      {plugin.kind === "openapi" ? (
+        <Button
+          size={size}
+          prominence="tertiary"
+          icon={SvgSettings}
+          aria-label={manageLabel}
+          tooltip={manageLabel}
+          onClick={openPlugin}
+        />
+      ) : hasAvailability ? (
         <Button
           size={size}
           prominence="tertiary"
@@ -175,7 +191,7 @@ function ActivePluginLifecycleMenu({
   const { user } = useUser();
   const [open, setOpen] = useState(initialAction === "availability");
   const [confirmation, setConfirmation] = useState<
-    "delete" | "disable-chat" | "disable-craft" | "disable-openapi" | null
+    "delete" | "disable-chat" | "disable-craft" | null
   >(initialAction === "delete" ? "delete" : null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -254,37 +270,6 @@ function ActivePluginLifecycleMenu({
   }
 
   const items: DropdownMenuItem[] = [];
-  if (plugin.kind === "openapi" && can(plugin.tool, "toggle")) {
-    const { tool } = plugin;
-    const enabled = tool.enabled;
-    items.push({
-      kind: "action",
-      id: "availability",
-      icon: SvgUnplug,
-      title: t(
-        enabled ? "plugins.controls.disable" : "plugins.controls.enable"
-      ),
-      description: t("plugins.disableConfirmation.scope"),
-      disabled:
-        busy ||
-        (!enabled &&
-          defaultChat.canEdit &&
-          (!defaultChat.data || !!defaultChat.error)),
-      onSelect: () => {
-        if (enabled) {
-          setOpen(false);
-          setError(null);
-          setConfirmation("disable-openapi");
-          return;
-        }
-        void runWrite(async () => {
-          if (!tool.enabled) await updateToolStatus(tool.id, true);
-          if (defaultChat.canEdit)
-            await defaultChat.updateTools([tool.id], true);
-        }, t("addOpenApiModal.toasts.updateFailed"));
-      },
-    });
-  }
   if (plugin.kind === "mcp") {
     const { server } = plugin;
     const authenticateToEnable =
@@ -417,14 +402,7 @@ function ActivePluginLifecycleMenu({
   }
 
   async function disablePlugin() {
-    if (plugin.kind === "openapi") {
-      if (confirmation !== "disable-openapi" || !can(plugin.tool, "toggle"))
-        return;
-      await runWrite(async () => {
-        await updateToolStatus(plugin.tool.id, false);
-      }, t("addOpenApiModal.toasts.updateFailed"));
-      return;
-    }
+    if (plugin.kind === "openapi") return;
     if (confirmation === "disable-chat") {
       if (
         !defaultChat.canEdit ||
@@ -488,7 +466,23 @@ function ActivePluginLifecycleMenu({
             className={cn("shrink-0", size === "md" ? "size-8" : "size-6")}
           />
         )}
-        {items.length ? (
+        {plugin.kind === "openapi" ? (
+          <Button
+            size={size}
+            prominence="tertiary"
+            icon={SvgSettings}
+            aria-label={t("plugins.row.manage.label", {
+              name: resource.name,
+            })}
+            tooltip={t("plugins.row.manage.label", { name: resource.name })}
+            disabled={busy}
+            onClick={() =>
+              router.push(
+                pluginDetailHref({ kind: "openapi", id: plugin.tool.id })
+              )
+            }
+          />
+        ) : items.length ? (
           <Dropdown open={open} onOpenChange={setOpen} align="end">
             <Dropdown.Trigger asChild>
               <Button
@@ -570,11 +564,9 @@ function ActivePluginLifecycleMenu({
               {t(
                 deleting
                   ? "openApiCard.deleteModal.submitButton.label"
-                  : confirmation === "disable-openapi"
-                    ? "plugins.controls.disable"
-                    : disablingChat
-                      ? "plugins.controls.disableChat"
-                      : "plugins.controls.disableCraft"
+                  : disablingChat
+                    ? "plugins.controls.disableChat"
+                    : "plugins.controls.disableCraft"
               )}
             </Button>
           </Modal.Footer>

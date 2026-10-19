@@ -1084,7 +1084,11 @@
           "details": "Plugin-Details",
           "schema": "OpenAPI-Schema"
         },
-        "descriptionDescription": "Standardmäßig das Feld `description` aus dem Schema."
+        "descriptionDescription": "Standardmäßig das Feld `description` aus dem Schema.",
+        "workspaceEnabled": {
+          "title": "Für Arbeitsbereich aktivieren",
+          "description": "Ermöglicht allen in Ihrer Organisation, dieses Plugin zu verwenden, auch in benutzerdefinierten Agenten."
+        }
       },
       "title": "Plugins",
       "description": "Verbinde Tools und Apps mit deinem Workspace.",
@@ -1093,7 +1097,7 @@
         "placeholder": "Plugins suchen"
       },
       "add": {
-        "label": "Hinzufügen",
+        "label": "Neues Plugin",
         "mcp": "Benutzerdefinierten MCP-Server hinzufügen",
         "openapi": "OpenAPI-Aktion hinzufügen"
       },

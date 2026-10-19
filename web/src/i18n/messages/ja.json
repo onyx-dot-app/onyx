@@ -1084,7 +1084,11 @@
           "details": "プラグインの詳細",
           "schema": "OpenAPI スキーマ"
         },
-        "descriptionDescription": "既定ではスキーマの `description` フィールドです。"
+        "descriptionDescription": "既定ではスキーマの `description` フィールドです。",
+        "workspaceEnabled": {
+          "title": "ワークスペースで有効にする",
+          "description": "組織の全員がこのプラグインを使えるようにします。カスタムエージェントも含みます。"
+        }
       },
       "title": "プラグイン",
       "description": "ツールやアプリをワークスペースに接続します。",
@@ -1093,7 +1097,7 @@
         "placeholder": "プラグインを検索"
       },
       "add": {
-        "label": "追加",
+        "label": "新しいプラグイン",
         "mcp": "カスタム MCP サーバーを追加",
         "openapi": "OpenAPI アクションを追加"
       },

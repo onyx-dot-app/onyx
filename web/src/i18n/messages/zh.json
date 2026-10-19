@@ -1084,7 +1084,11 @@
           "details": "插件详情",
           "schema": "OpenAPI 架构"
         },
-        "descriptionDescription": "默认使用架构中的 `description` 字段。"
+        "descriptionDescription": "默认使用架构中的 `description` 字段。",
+        "workspaceEnabled": {
+          "title": "为工作区启用",
+          "description": "让组织中的所有人都能使用此插件，包括在自定义智能体中。"
+        }
       },
       "title": "插件",
       "description": "将工具和应用连接到你的工作区。",
@@ -1093,7 +1097,7 @@
         "placeholder": "搜索插件"
       },
       "add": {
-        "label": "添加",
+        "label": "新建插件",
         "mcp": "添加自定义 MCP 服务器",
         "openapi": "添加 OpenAPI 操作"
       },

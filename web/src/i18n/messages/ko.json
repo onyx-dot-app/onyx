@@ -1084,7 +1084,11 @@
           "details": "플러그인 세부 정보",
           "schema": "OpenAPI 스키마"
         },
-        "descriptionDescription": "기본값은 스키마의 `description` 필드입니다."
+        "descriptionDescription": "기본값은 스키마의 `description` 필드입니다.",
+        "workspaceEnabled": {
+          "title": "워크스페이스에서 사용",
+          "description": "조직의 모든 사용자가 사용자 지정 에이전트를 포함해 이 플러그인을 사용할 수 있습니다."
+        }
       },
       "title": "플러그인",
       "description": "도구와 앱을 워크스페이스에 연결하세요.",
@@ -1093,7 +1097,7 @@
         "placeholder": "플러그인 검색"
       },
       "add": {
-        "label": "추가",
+        "label": "새 플러그인",
         "mcp": "사용자 지정 MCP 서버 추가",
         "openapi": "OpenAPI 작업 추가"
       },

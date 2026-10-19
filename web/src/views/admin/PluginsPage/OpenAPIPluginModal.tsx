@@ -13,8 +13,22 @@ import { Formik, useFormikContext, type FormikHelpers } from "formik";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import useSWR, { useSWRConfig } from "swr";
-import { Button, InputTextArea, Modal, Tabs, Text } from "@opal/components";
-import { Content, InputPadder, InputVertical, toast } from "@opal/layouts";
+import {
+  Button,
+  Divider,
+  InputTextArea,
+  Modal,
+  Tabs,
+  Text,
+} from "@opal/components";
+import {
+  Content,
+  InputHorizontal,
+  InputPadder,
+  InputVertical,
+  toast,
+} from "@opal/layouts";
+import { InputSwitchField } from "@opal/form";
 import { IconLoader } from "@opal/loaders";
 import { markdown } from "@opal/utils";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -25,6 +39,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
 import { createCustomTool, updateCustomTool } from "@/lib/plugins/openapi/svc";
+import { updateToolStatus } from "@/lib/tools/svc";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/utils";
@@ -61,6 +76,7 @@ function addValues(): OpenAPIPluginFormValues {
     name: "",
     description: "",
     definition: "",
+    enabled: true,
     auth: newOpenApiAuthValues(),
   };
 }
@@ -110,6 +126,7 @@ export default function OpenAPIPluginModal({
   const active = useRef(true);
   const canEdit = isAdd || can(tool, "edit");
   const canAuthenticate = isAdd || can(tool, "authenticate");
+  const canToggle = isAdd || can(tool, "toggle");
   const authSchema = useOpenApiAuthSchema(oauthConfigId !== null);
   const ready =
     isAdd ||
@@ -143,6 +160,7 @@ export default function OpenAPIPluginModal({
             definition: tool.definition
               ? JSON.stringify(tool.definition, null, 2)
               : "",
+            enabled: tool.enabled,
             auth: savedOpenApiAuthValues(tool, oauthConfig.data ?? null),
           },
     // The form takes its values once per key, so later refreshes of the
@@ -193,9 +211,9 @@ export default function OpenAPIPluginModal({
     if (!schema) throw new Error(t("addOpenApiModal.definition.invalidJson"));
     if (defaultChat.canEdit && (!defaultChat.data || defaultChat.error))
       throw new Error(t("addOpenApiModal.editConfigsButton.disabledTooltip"));
-    // No overrides: the schema's name and description apply.
-    const name = "";
-    const description = "";
+    // Overrides; empty ones fall back to the schema's.
+    const name = values.name.trim();
+    const description = values.description.trim();
     // A retry after a failed authentication save updates the saved tool.
     const existing =
       savedId.current === null
@@ -249,7 +267,10 @@ export default function OpenAPIPluginModal({
         pendingOAuthConfigId.current = null;
       await refreshOpenApiTools();
     }
-    if (defaultChat.canEdit) {
+    if (!values.enabled) {
+      await updateToolStatus(created.id, false);
+      await refreshOpenApiTools();
+    } else if (defaultChat.canEdit) {
       await defaultChat.updateTools([created.id], true);
       await refreshOpenApiTools();
     }
@@ -265,7 +286,9 @@ export default function OpenAPIPluginModal({
       (values.name !== base.name || values.description !== base.description);
     const schemaChanged = canEdit && values.definition !== base.definition;
     const authChanged = canAuthenticate && !isEqual(values.auth, base.auth);
-    if (!metaChanged && !schemaChanged && !authChanged) return false;
+    const enabledChanged = canToggle && values.enabled !== base.enabled;
+    if (!metaChanged && !schemaChanged && !authChanged && !enabledChanged)
+      return false;
 
     const fresh: ToolSnapshot | undefined = (await refreshOpenApiTools())?.find(
       (candidate) => candidate.id === toolId
@@ -312,6 +335,16 @@ export default function OpenAPIPluginModal({
       });
       if (values.auth.authMethod === "oauth")
         pendingOAuthConfigId.current = null;
+    }
+
+    if (enabledChanged) {
+      if (!can(fresh, "toggle"))
+        throw new Error(t("addOpenApiModal.toasts.updateFailed"));
+      await updateToolStatus(fresh.id, values.enabled);
+      // Turning a plugin on also offers it in the default Chat.
+      if (values.enabled && defaultChat.canEdit)
+        await defaultChat.updateTools([fresh.id], true);
+      await refreshMemberPluginCaches(mutate);
     }
 
     await mutateOpenApiTools();
@@ -361,6 +394,7 @@ export default function OpenAPIPluginModal({
         onRetry={() => void mutateOpenApiTools()}
         canEdit={canEdit}
         canAuthenticate={canAuthenticate}
+        canToggle={canToggle}
         oauthConfigId={oauthConfigId}
         oauthConfigError={oauthConfig.error !== undefined}
         tab={tab}
@@ -383,6 +417,7 @@ interface OpenAPIPluginFormProps {
   onRetry: () => void;
   canEdit: boolean;
   canAuthenticate: boolean;
+  canToggle: boolean;
   oauthConfigId: number | null;
   oauthConfigError: boolean;
   tab: Tab;
@@ -404,6 +439,7 @@ function OpenAPIPluginForm({
   onRetry,
   canEdit,
   canAuthenticate,
+  canToggle,
   oauthConfigId,
   oauthConfigError,
   tab,
@@ -552,7 +588,7 @@ function OpenAPIPluginForm({
             >
               <InputPadder>
                 <Tabs.List>
-                  <Tabs.Trigger value="server" disabled={busy || isAdd}>
+                  <Tabs.Trigger value="server" disabled={busy}>
                     {t("plugins.openapi.tabs.details")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="schema" disabled={busy}>
@@ -580,57 +616,87 @@ function OpenAPIPluginForm({
                 keepMounted
                 hidden={tab !== "server"}
               >
-                {tool &&
-                  (canEdit ? (
+                {(isAdd || tool) &&
+                  (canEdit || canToggle ? (
                     <div className="flex flex-col">
-                      <InputPadder>
-                        <InputVertical
-                          title={t("plugins.openapi.displayNameTitle")}
-                          subDescription={markdown(
-                            t("plugins.openapi.displayNameDescription")
-                          )}
-                          withLabel="name"
-                          suffix="optional"
-                        >
-                          <InputTypeInField
-                            name="name"
-                            placeholder={schemaTitle}
-                            variant={busy ? "disabled" : "primary"}
+                      {canToggle && (
+                        <>
+                          <InputPadder>
+                            <InputHorizontal
+                              withLabel="enabled"
+                              title={t(
+                                "plugins.openapi.workspaceEnabled.title"
+                              )}
+                              description={t(
+                                "plugins.openapi.workspaceEnabled.description"
+                              )}
+                            >
+                              <InputSwitchField
+                                name="enabled"
+                                disabled={busy}
+                              />
+                            </InputHorizontal>
+                          </InputPadder>
+                          <Divider
+                            paddingParallel={2}
+                            paddingPerpendicular={2}
                           />
-                        </InputVertical>
-                      </InputPadder>
-                      <InputPadder>
-                        <InputVertical
-                          title={t("addMcpModal.description.title")}
-                          subDescription={markdown(
-                            t("plugins.openapi.descriptionDescription")
-                          )}
-                          withLabel="description"
-                          suffix="optional"
-                        >
-                          <InputTextAreaField
-                            name="description"
-                            placeholder={
-                              schemaDescription ||
-                              t("plugins.openapi.descriptionPlaceholder")
-                            }
-                            variant={busy ? "disabled" : "primary"}
-                            rows={3}
-                          />
-                        </InputVertical>
-                      </InputPadder>
+                        </>
+                      )}
+                      {canEdit && (
+                        <>
+                          <InputPadder>
+                            <InputVertical
+                              title={t("plugins.openapi.displayNameTitle")}
+                              subDescription={markdown(
+                                t("plugins.openapi.displayNameDescription")
+                              )}
+                              withLabel="name"
+                              suffix="optional"
+                            >
+                              <InputTypeInField
+                                name="name"
+                                placeholder={schemaTitle}
+                                variant={busy ? "disabled" : "primary"}
+                              />
+                            </InputVertical>
+                          </InputPadder>
+                          <InputPadder>
+                            <InputVertical
+                              title={t("addMcpModal.description.title")}
+                              subDescription={markdown(
+                                t("plugins.openapi.descriptionDescription")
+                              )}
+                              withLabel="description"
+                              suffix="optional"
+                            >
+                              <InputTextAreaField
+                                name="description"
+                                placeholder={
+                                  schemaDescription ||
+                                  t("plugins.openapi.descriptionPlaceholder")
+                                }
+                                variant={busy ? "disabled" : "primary"}
+                                rows={3}
+                              />
+                            </InputVertical>
+                          </InputPadder>
+                        </>
+                      )}
                     </div>
                   ) : (
-                    <InputPadder>
-                      <Content
-                        sizePreset="main-ui"
-                        variant="section"
-                        title={tool.name}
-                        description={
-                          tool.description || t("plugins.openapi.readOnly")
-                        }
-                      />
-                    </InputPadder>
+                    tool && (
+                      <InputPadder>
+                        <Content
+                          sizePreset="main-ui"
+                          variant="section"
+                          title={tool.name}
+                          description={
+                            tool.description || t("plugins.openapi.readOnly")
+                          }
+                        />
+                      </InputPadder>
+                    )
                   ))}
               </Tabs.Content>
 
@@ -691,19 +757,21 @@ function OpenAPIPluginForm({
             </Tabs>
           )}
         </Modal.Body>
-        {(canEdit || canAuthenticate) && !loading && !loadFailed && (
-          <Modal.Footer padding={4}>
-            <div className="ms-auto flex items-center gap-2">
-              <Button
-                icon={busy ? IconLoader : undefined}
-                disabled={primaryDisabled}
-                onClick={() => void primaryAction()}
-              >
-                {primaryLabel}
-              </Button>
-            </div>
-          </Modal.Footer>
-        )}
+        {(canEdit || canAuthenticate || canToggle) &&
+          !loading &&
+          !loadFailed && (
+            <Modal.Footer padding={4}>
+              <div className="ms-auto flex items-center gap-2">
+                <Button
+                  icon={busy ? IconLoader : undefined}
+                  disabled={primaryDisabled}
+                  onClick={() => void primaryAction()}
+                >
+                  {primaryLabel}
+                </Button>
+              </div>
+            </Modal.Footer>
+          )}
       </PluginModalContent>
     </Modal>
   );

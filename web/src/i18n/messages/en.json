@@ -1084,7 +1084,11 @@
           "details": "Plugin Details",
           "schema": "OpenAPI Schema"
         },
-        "descriptionDescription": "Defaults to the schema's `description` field."
+        "descriptionDescription": "Defaults to the schema's `description` field.",
+        "workspaceEnabled": {
+          "title": "Enable for Workspace",
+          "description": "Lets everyone in your organization use this plugin, including in custom agents."
+        }
       },
       "title": "Plugins",
       "description": "Connect tools and apps to your workspace.",
@@ -1093,7 +1097,7 @@
         "placeholder": "Search plugins"
       },
       "add": {
-        "label": "Add",
+        "label": "New Plugin",
         "mcp": "Add custom MCP server",
         "openapi": "Add OpenAPI action"
       },

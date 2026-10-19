@@ -14,13 +14,8 @@ import {
 } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
 import { SvgEmpty, SvgPlugBroken } from "@opal/illustrations";
-import {
-  SvgAlertCircle,
-  SvgChevronDown,
-  SvgServer,
-  SvgCodeFile,
-  SvgPlug,
-} from "@opal/icons";
+import { SvgAlertCircle, SvgPlus } from "@opal/icons";
+import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useInstalledPlugins } from "@/lib/plugins/hooks";
@@ -183,7 +178,7 @@ export default function PluginsPage() {
     return (
       <Dropdown align="end">
         <Dropdown.Trigger asChild>
-          <Button rightIcon={SvgChevronDown}>{t("add.label")}</Button>
+          <Button icon={SvgPlus}>{t("add.label")}</Button>
         </Dropdown.Trigger>
         <Dropdown.Data
           label={t("add.label")}
@@ -193,7 +188,7 @@ export default function PluginsPage() {
                   {
                     kind: "action" as const,
                     id: "mcp",
-                    icon: SvgServer,
+                    icon: PLUGIN_KIND_ICONS.mcp,
                     title: t("kind.mcp"),
                     onSelect: () =>
                       setDialog({ kind: "catalog", catalogKind: "mcp" }),
@@ -201,7 +196,7 @@ export default function PluginsPage() {
                   {
                     kind: "action" as const,
                     id: "openapi",
-                    icon: SvgCodeFile,
+                    icon: PLUGIN_KIND_ICONS.openapi,
                     title: t("kind.openapi"),
                     onSelect: () =>
                       setDialog({
@@ -216,7 +211,7 @@ export default function PluginsPage() {
                   {
                     kind: "action" as const,
                     id: "external-app",
-                    icon: SvgPlug,
+                    icon: PLUGIN_KIND_ICONS["external-app"],
                     title: t("kind.external-app"),
                     onSelect: () =>
                       setDialog({
