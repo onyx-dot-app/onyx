@@ -467,7 +467,6 @@ export function CheckCardView({
             alignItems="stretch"
             height="fit"
             gap={1}
-            className="pt-1"
           >
             {hasRows ? (
               <CheckLineGroups lines={lines} />

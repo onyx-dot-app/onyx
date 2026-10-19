@@ -26,6 +26,19 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
 - Hover-reveal: `Hoverable` from `@opal/core`. If you must hand-write it, add `no-hover:opacity-100`
   so touch devices still show the item.
 - `@opal/core` primitives (`Interactive`, `Disabled`) build components. App code does not use them.
+- Layout: `Section` from `@opal/layouts`, never a `<div>`/`<span>` with `flex`, `inline-flex`,
+  `grid`, `items-*`, `justify-*` or `gap-*` (oxlint `opal/no-layout-div`). `Content`, `ContentAction`,
+  `Card`, `InputHorizontal`/`InputVertical` and `Divider` cover the rest.
+- On `Section`, set spacing and size with props: `gap={n}`, `padding={n}`, `width`, `height`.
+  Section sets `gap` and `padding` as inline styles, so `p-*`, `px-*` and `gap-*` classes are silently
+  ignored (oxlint `opal/no-section-utility-classes`). Use margin classes for asymmetric spacing.
+
+oxlint enforces the import, icon and raw-element rules. Files that broke them when the rules
+landed are in the design-system baseline in `.oxlintrc.json`, where they only warn. Files with
+layout divs when `opal/no-layout-div` landed are in the layout baseline. Remove a file
+from the baseline once it is clean. Never add one. `opal/no-replaced-refresh-import` warns on each
+refresh-components import that Opal replaces. Migrate a file to Opal when you edit it. The
+`.agents/hooks/opal_migrate_on_edit.py` hook reports these problems to the agent after each edit.
 
 ## Rules with a reason
 
