@@ -69,6 +69,7 @@ from onyx.server.documents.models import (
     CCPairRunsResponse,
     ConnectorSnapshot,
     ConnectorUpdateRequest,
+    PruneRunSnapshot,
 )
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -119,12 +120,14 @@ def _prune(
     status: SyncStatus,
     docs_removed: int = 0,
     error_message: str | None = None,
+    docs_failed: int = 0,
 ) -> SyncRecord:
     record = SyncRecord(
         entity_id=cc_pair.id,
         sync_type=SyncType.PRUNING,
         sync_status=status,
         num_docs_synced=docs_removed,
+        num_docs_failed=docs_failed,
         sync_start_time=_T0 + timedelta(minutes=minutes),
         sync_end_time=(
             None
@@ -204,16 +207,20 @@ def _runs(
     kinds: list[CCPairRunKind] | None = None,
     q: str | None = None,
     errors: CCPairRunErrors | None = None,
+    superseded: bool | None = None,
 ) -> CCPairRunsResponse:
     return get_cc_pair_runs(
         cc_pair_id=cc_pair.id,
         page_num=0,
         page_size=10,
         since=None,
+        until=None,
         kinds=kinds,
         status_groups=None,
         q=q,
         errors=errors,
+        superseded=superseded,
+        resolved=None,
         user=user,
         db_session=db_session,
     )
@@ -309,6 +316,24 @@ def test_prunes_and_check_runs_join_the_feed(db_session: Session) -> None:
     assert _order(by_finding) == []
     # Neither kind records document errors.
     assert _order(with_doc_errors) == []
+
+
+def test_a_prune_with_failed_docs_lists_with_the_errors(db_session: Session) -> None:
+    admin = create_test_user(db_session, "history_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session)
+    _prune(db_session, cc_pair, 0, SyncStatus.SUCCESS, docs_removed=5)
+    failed_docs = _prune(
+        db_session, cc_pair, 1, SyncStatus.SUCCESS, docs_removed=3, docs_failed=2
+    )
+
+    with_errors = _runs(db_session, admin, cc_pair, errors=CCPairRunErrors.UNRESOLVED)
+    resolved = _runs(db_session, admin, cc_pair, errors=CCPairRunErrors.RESOLVED)
+
+    assert _order(with_errors) == [(CCPairRunKind.PRUNING, failed_docs.id)]
+    attempt = with_errors.items[0].attempt
+    assert isinstance(attempt, PruneRunSnapshot)
+    assert attempt.docs_failed == 2
+    assert _order(resolved) == []
 
 
 def test_check_run_lifecycle_writes_one_history_row_per_run(

@@ -1,15 +1,18 @@
 "use client";
 
-import { markdown } from "@opal/utils";
+import { cn, markdown } from "@opal/utils";
+import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import { Modal } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CopyButton } from "@opal/components";
-import { Button, Divider } from "@opal/components";
+import { Button } from "@opal/components";
+import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import { can } from "@/lib/permissions/resource-actions";
@@ -18,82 +21,120 @@ import {
   createCustomTool,
   updateCustomTool,
 } from "@/lib/tools/svc";
-import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@opal/components";
-import { Formik, Form, useFormikContext } from "formik";
+import { Formik, Form, useFormikContext, type FormikHelpers } from "formik";
 import * as Yup from "yup";
-import {
-  SvgActions,
-  SvgBracketCurly,
-  SvgCheckCircle,
-  SvgAlertCircle,
-  SvgUnplug,
-} from "@opal/icons";
-import InfoBlock from "@/refresh-components/messages/InfoBlock";
+import { SvgActions, SvgBracketCurly } from "@opal/icons";
 import { getActionIcon } from "@/lib/tools/utils";
-import { Section } from "@/layouts/general-layouts";
 import { EmptyMessageCard } from "@opal/components";
+import useOpenApiTools from "@/hooks/useOpenApiTools";
+import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
 
 interface AddOpenAPIActionModalProps {
+  onViewTools?: () => void;
+  presentation?: "modal" | "inline";
+  footerTarget?: HTMLElement | null;
+  active?: boolean;
+  onBusyChange?: (busy: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  initialDefinition?: ToolSnapshot["definition"];
+  onConfigureAuthentication?: (
+    draft: Parameters<typeof createCustomTool>[0]
+  ) => void;
   skipOverlay?: boolean;
-  onSuccess?: (tool: ToolSnapshot) => void;
-  onUpdate?: (tool: ToolSnapshot) => void;
+  onSuccess?: (tool: ToolSnapshot) => Promise<void> | void;
+  onUpdate?: (tool: ToolSnapshot) => Promise<void> | void;
+  title?: string | RichStr;
   existingTool?: ToolSnapshot | null;
   onClose?: () => void;
-  onEditAuthentication?: (tool: ToolSnapshot) => void;
-  onDisconnectTool?: (tool: ToolSnapshot) => Promise<void> | void;
 }
 
 interface OpenAPIActionFormValues {
   definition: string;
 }
 
+interface CheckedDefinition {
+  rawDefinition: string;
+  definition: NonNullable<ToolSnapshot["definition"]>;
+  methods: MethodSpec[];
+}
+
 function parseJsonWithTrailingCommas(jsonString: string) {
-  // Regular expression to remove trailing commas before } or ]
-  let cleanedJsonString = jsonString.replace(/,\s*([}\]])/g, "$1");
-  // Replace True with true, False with false, and None with null
-  cleanedJsonString = cleanedJsonString
-    .replace(/\bTrue\b/g, "true")
-    .replace(/\bFalse\b/g, "false")
-    .replace(/\bNone\b/g, "null");
-  // Now parse the cleaned JSON string
+  const cleanedJsonString = jsonString.replace(
+    /"(?:\\.|[^"\\])*"|,\s*(?=[}\]])|\b(?:True|False|None)\b/g,
+    (token: string) => {
+      switch (token) {
+        case "True":
+          return "true";
+        case "False":
+          return "false";
+        case "None":
+          return "null";
+        default:
+          return token.startsWith(",") ? "" : token;
+      }
+    }
+  );
   return JSON.parse(cleanedJsonString);
 }
 
-function prettifyDefinition(definition: any) {
-  return JSON.stringify(definition, null, 2);
-}
-
 interface FormContentProps {
+  onViewTools?: () => void;
+  presentation: "modal" | "inline";
+  footerTarget?: HTMLElement | null;
+  active: boolean;
+  onBusyChange?: (busy: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  configureAuthentication?: boolean;
   handleClose: () => void;
   existingTool: ToolSnapshot | null;
-  onEditAuthentication?: (tool: ToolSnapshot) => void;
-  onDisconnectTool?: (tool: ToolSnapshot) => Promise<void> | void;
+  title?: string | RichStr;
 }
 
 function FormContent({
+  onViewTools,
+  presentation,
+  footerTarget,
+  active,
+  onBusyChange,
+  onDirtyChange,
   handleClose,
   existingTool,
-  onEditAuthentication,
-  onDisconnectTool,
+  title,
+  configureAuthentication = false,
 }: FormContentProps) {
   const t = useTranslations("actions");
-  const { values, setFieldValue, setFieldError, dirty, isSubmitting } =
-    useFormikContext<OpenAPIActionFormValues>();
+  const {
+    values,
+    errors,
+    setFieldValue,
+    setFieldError,
+    dirty,
+    isSubmitting,
+    submitForm,
+  } = useFormikContext<OpenAPIActionFormValues>();
 
-  const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
-  const [name, setName] = useState<string | null>(null);
-  const [description, setDescription] = useState<string | undefined>(undefined);
-  const [url, setUrl] = useState<string | undefined>(undefined);
+  const [checkedDefinition, setCheckedDefinition] =
+    useState<CheckedDefinition | null>(null);
+  const validationRequest = useRef(0);
+  const [checking, setChecking] = useState(false);
+  useEffect(() => {
+    onBusyChange?.(isSubmitting || checking);
+    return () => onBusyChange?.(false);
+  }, [isSubmitting, checking, onBusyChange]);
+  const currentDefinition =
+    checkedDefinition?.rawDefinition === values.definition
+      ? checkedDefinition
+      : null;
+  const methodSpecs = currentDefinition?.methods;
+  const name = currentDefinition?.definition.info?.title;
+  const description = currentDefinition?.definition.info?.description;
+  const url = currentDefinition?.definition.servers?.[0]?.url;
+  const PluginIcon = getActionIcon(url ?? "", name ?? "");
 
   const isEditMode = Boolean(existingTool);
-  // Editing auth manages the action's OAuth config (owner-or-admin); gate on the same
-  // server-stamped capability as the card.
-  const canEditAuthentication = existingTool
-    ? can(existingTool, "authenticate")
-    : false;
 
   const handleFormat = useCallback(() => {
     if (!values.definition.trim()) {
@@ -101,8 +142,10 @@ function FormContent({
     }
 
     try {
-      const formatted = prettifyDefinition(
-        parseJsonWithTrailingCommas(values.definition)
+      const formatted = JSON.stringify(
+        parseJsonWithTrailingCommas(values.definition),
+        null,
+        2
       );
       setFieldValue("definition", formatted);
       setFieldError("definition", "");
@@ -116,39 +159,42 @@ function FormContent({
       rawDefinition: string,
       setFieldError: (field: string, message: string) => void
     ) => {
+      const request = ++validationRequest.current;
       if (!rawDefinition.trim()) {
-        setMethodSpecs(null);
+        setCheckedDefinition(null);
         setFieldError("definition", "");
-        return;
+        return false;
       }
 
       try {
         const parsedDefinition = parseJsonWithTrailingCommas(rawDefinition);
-        const derivedName = parsedDefinition?.info?.title;
-        const derivedDescription = parsedDefinition?.info?.description;
-        const derivedUrl = parsedDefinition?.servers?.[0]?.url;
-
-        setName(derivedName);
-        setDescription(derivedDescription);
-        setUrl(derivedUrl);
-
         const response = await validateToolDefinition({
           definition: parsedDefinition,
         });
 
+        if (request !== validationRequest.current) return false;
+
         if (response.error) {
-          setMethodSpecs(null);
+          setCheckedDefinition(null);
           setFieldError("definition", response.error);
+          return false;
         } else {
-          setMethodSpecs(response.data ?? []);
+          setCheckedDefinition({
+            rawDefinition,
+            definition: parsedDefinition,
+            methods: response.data ?? [],
+          });
           setFieldError("definition", "");
+          return true;
         }
       } catch {
-        setMethodSpecs(null);
+        if (request !== validationRequest.current) return false;
+        setCheckedDefinition(null);
         setFieldError(
           "definition",
           t("addOpenApiModal.definition.invalidJson")
         );
+        return false;
       }
     },
     [t]
@@ -162,9 +208,6 @@ function FormContent({
   const modalTitle = isEditMode
     ? t("addOpenApiModal.editHeader.title")
     : t("addOpenApiModal.addHeader.title");
-  const modalDescription = isEditMode
-    ? t("addOpenApiModal.editHeader.description")
-    : t("addOpenApiModal.addHeader.description");
   const primaryButtonLabel = isSubmitting
     ? isEditMode
       ? t("addOpenApiModal.submitButton.savingLabel")
@@ -173,259 +216,260 @@ function FormContent({
       ? t("addOpenApiModal.submitButton.saveLabel")
       : t("addOpenApiModal.submitButton.addLabel");
 
-  const hasOAuthConfig = Boolean(existingTool?.oauth_config_id);
-  const hasCustomHeaders =
-    Array.isArray(existingTool?.custom_headers) &&
-    (existingTool?.custom_headers?.length ?? 0) > 0;
-  const hasPassthroughAuth = Boolean(existingTool?.passthrough_auth);
-  const hasAuthenticationConfigured =
-    hasOAuthConfig || hasCustomHeaders || hasPassthroughAuth;
-  const authenticationDescription = useMemo(() => {
-    if (!existingTool) {
-      return "";
-    }
-    if (hasOAuthConfig) {
-      return existingTool.oauth_config_name
-        ? t("addOpenApiModal.authStatus.oauthNamedDescription", {
-            name: existingTool.oauth_config_name,
-          })
-        : t("addOpenApiModal.authStatus.oauthDescription");
-    }
-    if (hasCustomHeaders) {
-      return t("addOpenApiModal.authStatus.headersDescription");
-    }
-    if (hasPassthroughAuth) {
-      return t("addOpenApiModal.authStatus.passthroughDescription");
-    }
-    return "";
-  }, [existingTool, hasOAuthConfig, hasCustomHeaders, hasPassthroughAuth, t]);
-
-  const showAuthenticationStatus = Boolean(
-    isEditMode && existingTool?.enabled && hasAuthenticationConfigured
-  );
-
-  const handleEditAuthenticationClick = useCallback(() => {
-    if (!existingTool || !onEditAuthentication) {
-      return;
-    }
-    handleClose();
-    onEditAuthentication(existingTool);
-  }, [existingTool, onEditAuthentication, handleClose]);
-
   useEffect(() => {
     if (!values.definition.trim()) {
-      setMethodSpecs(null);
+      setCheckedDefinition(null);
       setFieldError("definition", "");
-      debouncedValidateDefinition.cancel();
-      return () => {
-        debouncedValidateDefinition.cancel();
-      };
+    } else {
+      debouncedValidateDefinition(values.definition, setFieldError);
     }
-
-    debouncedValidateDefinition(values.definition, setFieldError);
 
     return () => {
       debouncedValidateDefinition.cancel();
+      validationRequest.current += 1;
     };
-  }, [
-    values.definition,
-    debouncedValidateDefinition,
-    setFieldError,
-    setMethodSpecs,
-  ]);
+  }, [values.definition, debouncedValidateDefinition, setFieldError]);
+
+  const inlineSave = (
+    <Button
+      disabled={
+        isSubmitting ||
+        checking ||
+        !dirty ||
+        (existingTool !== null && !can(existingTool, "edit"))
+      }
+      type="button"
+      onClick={() => void submitForm()}
+    >
+      {primaryButtonLabel}
+    </Button>
+  );
 
   return (
-    <Form>
-      <Modal.Header
-        icon={SvgActions}
-        title={modalTitle}
-        description={modalDescription}
-        onClose={handleClose}
-      />
+    <Form className="contents">
+      {onDirtyChange && <MCPFormDirtyObserver onDirtyChange={onDirtyChange} />}
+      {presentation === "modal" && (
+        <Modal.Header
+          padding={4}
+          title={title ?? modalTitle}
+          onClose={handleClose}
+        />
+      )}
 
-      <Modal.Body>
-        <InputVertical
-          withLabel="definition"
-          title={t("addOpenApiModal.definition.title")}
-          subDescription={markdown(
-            t("addOpenApiModal.definition.subDescription", {
-              docsUrl: `${DOCS_ADMINS_PATH}/actions/openapi`,
-            })
-          )}
-        >
-          <Hoverable.Root group="definitionField" width="full">
-            <div className="relative w-full">
-              {values.definition.trim() && (
-                <div className="absolute z-100000 top-2 end-2 bg-background-tint-00">
-                  <Hoverable.Item
-                    group="definitionField"
-                    variant="appear-on-hover"
-                  >
-                    <div className="flex">
-                      <CopyButton
-                        prominence="tertiary"
-                        size="sm"
-                        getCopyText={() => values.definition}
-                        tooltip={t("addOpenApiModal.copyButton.tooltip")}
-                      />
-                      <Button
-                        prominence="tertiary"
-                        size="sm"
-                        icon={SvgBracketCurly}
-                        tooltip={t("addOpenApiModal.formatButton.tooltip")}
-                        onClick={handleFormat}
-                      />
-                    </div>
-                  </Hoverable.Item>
-                </div>
-              )}
-              <div className="font-main-ui-mono">
-                <InputTextAreaField
-                  name="definition"
-                  rows={14}
-                  placeholder={t("addOpenApiModal.definition.placeholder")}
-                />
-              </div>
-            </div>
-          </Hoverable.Root>
-        </InputVertical>
-
-        <Divider paddingParallel={0} paddingPerpendicular={0} />
-
-        {methodSpecs && methodSpecs.length > 0 ? (
-          <>
-            {name && (
-              <InfoBlock
-                icon={getActionIcon(url || "", name || "")}
-                title={name}
-                description={description}
-              />
+      <Modal.Body
+        twoTone={false}
+        padding={presentation === "inline" ? 0 : 6}
+        gap={4}
+        alignItems="stretch"
+      >
+        <div className="w-full">
+          <InputVertical
+            withLabel="definition"
+            title={t("addOpenApiModal.definition.title")}
+            subDescription={markdown(
+              t("addOpenApiModal.definition.subDescription", {
+                docsUrl: `${DOCS_ADMINS_PATH}/actions/openapi`,
+              })
             )}
-            {url && (
-              <InfoBlock
-                icon={SvgAlertCircle}
-                title={url || ""}
-                description={t("addOpenApiModal.serverUrl.description")}
-              />
-            )}
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-            <Section gap={2}>
-              {methodSpecs.map((method) => (
-                <ToolItem
-                  key={`${method.method}-${method.path}-${method.name}`}
-                  name={method.name}
-                  description={
-                    method.summary || t("addOpenApiModal.method.noSummary")
-                  }
-                  variant="openapi"
-                  openApiMetadata={{
-                    method: method.method,
-                    path: method.path,
-                  }}
-                />
-              ))}
-            </Section>
-          </>
-        ) : (
-          <EmptyMessageCard
-            sizePreset="main-ui"
-            title={t("addOpenApiModal.empty.title")}
-            icon={SvgActions}
-            description={t("addOpenApiModal.empty.description")}
-          />
-        )}
-
-        {showAuthenticationStatus && (
-          <Section
-            flexDirection="row"
-            justifyContent="between"
-            alignItems="start"
-            gap={4}
           >
-            <Section gap={1} alignItems="start">
-              <Section
-                flexDirection="row"
-                gap={2}
-                alignItems="center"
-                width="fit"
-              >
-                <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-                <Text>
-                  {existingTool?.enabled
-                    ? t("addOpenApiModal.authStatus.enabledTitle")
-                    : t("addOpenApiModal.authStatus.configuredTitle")}
-                </Text>
-              </Section>
-              {authenticationDescription && (
-                <Text secondaryBody text03 className="ps-5">
-                  {authenticationDescription}
-                </Text>
-              )}
-            </Section>
-            <Section
-              flexDirection="row"
-              gap={2}
-              alignItems="center"
-              width="fit"
-            >
-              <Button
-                icon={SvgUnplug}
-                prominence="tertiary"
-                type="button"
-                tooltip={t("addOpenApiModal.disableButton.tooltip")}
-                onClick={() => {
-                  if (!existingTool || !onDisconnectTool) {
-                    return;
+            <Hoverable.Root group="definitionField" width="full">
+              <div className="relative w-full">
+                {values.definition.trim() && (
+                  <div className="absolute z-100000 top-2 end-2 bg-background-tint-00">
+                    <Hoverable.Item
+                      group="definitionField"
+                      variant="appear-on-hover"
+                    >
+                      <div className="flex">
+                        <CopyButton
+                          prominence="tertiary"
+                          size="sm"
+                          getCopyText={() => values.definition}
+                          tooltip={t("addOpenApiModal.copyButton.tooltip")}
+                        />
+                        <Button
+                          prominence="tertiary"
+                          size="sm"
+                          icon={SvgBracketCurly}
+                          disabled={checking || isSubmitting}
+                          aria-label={t("addOpenApiModal.formatButton.tooltip")}
+                          tooltip={t("addOpenApiModal.formatButton.tooltip")}
+                          onClick={handleFormat}
+                        />
+                      </div>
+                    </Hoverable.Item>
+                  </div>
+                )}
+                <div className="font-main-ui-mono">
+                  <InputTextAreaField
+                    name="definition"
+                    variant={checking || isSubmitting ? "disabled" : undefined}
+                    rows={8}
+                    placeholder={t("addOpenApiModal.definition.placeholder")}
+                  />
+                </div>
+              </div>
+            </Hoverable.Root>
+          </InputVertical>
+          {errors.definition && (
+            <Text font="secondary-body" color="status-error-05">
+              {errors.definition}
+            </Text>
+          )}
+        </div>
+        {presentation === "inline" ? (
+          currentDefinition && (
+            <div className="flex items-center justify-between gap-3">
+              <Text font="secondary-body" color="text-03">
+                {t("plugins.openapi.schemaPreview.detected", {
+                  count: currentDefinition.methods.length,
+                })}
+              </Text>
+              {onViewTools && (
+                <Button
+                  size="sm"
+                  prominence="tertiary"
+                  disabled={dirty || checking || isSubmitting}
+                  tooltip={
+                    dirty
+                      ? t("plugins.openapi.schemaPreview.saveToUpdate")
+                      : undefined
                   }
-                  onDisconnectTool(existingTool);
-                }}
+                  onClick={onViewTools}
+                >
+                  {t("plugins.openapi.schemaPreview.viewTools")}
+                </Button>
+              )}
+            </div>
+          )
+        ) : (
+          <div
+            hidden={!isEditMode && !methodSpecs?.length}
+            className={cn(
+              "w-full min-w-0 flex-col gap-4",
+              !isEditMode && !methodSpecs?.length ? "hidden" : "flex"
+            )}
+          >
+            {methodSpecs && methodSpecs.length > 0 ? (
+              <>
+                {name && (
+                  <div className="flex items-start gap-3 py-2">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-12 border border-border-01 bg-background-neutral-00">
+                      <PluginIcon size={24} className="text-text-03" />
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <Text font="main-content-emphasis" color="text-05">
+                        {name}
+                      </Text>
+                      {url && (
+                        <div className="break-all">
+                          <Text font="secondary-body" color="text-03">
+                            {url}
+                          </Text>
+                        </div>
+                      )}
+                      {description && (
+                        <Text font="secondary-body" color="text-03">
+                          {description}
+                        </Text>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <OpenAPIEndpointList methods={methodSpecs} />
+              </>
+            ) : (
+              <EmptyMessageCard
+                sizePreset="main-ui"
+                title={t("addOpenApiModal.empty.title")}
+                icon={SvgActions}
+                description={t("addOpenApiModal.empty.description")}
               />
-              <Button
-                disabled={!onEditAuthentication || !canEditAuthentication}
-                tooltip={
-                  !canEditAuthentication
-                    ? t("addOpenApiModal.editConfigsButton.disabledTooltip")
-                    : undefined
-                }
-                prominence="secondary"
-                type="button"
-                onClick={handleEditAuthenticationClick}
-              >
-                {t("addOpenApiModal.editConfigsButton.label")}
-              </Button>
-            </Section>
-          </Section>
+            )}
+          </div>
         )}
       </Modal.Body>
 
-      <Modal.Footer>
-        <Button
-          disabled={isSubmitting}
-          prominence="secondary"
-          type="button"
-          onClick={handleClose}
-        >
-          {t("addOpenApiModal.cancelButton.label")}
-        </Button>
-        <Button disabled={isSubmitting || !dirty} type="submit">
-          {primaryButtonLabel}
-        </Button>
-      </Modal.Footer>
+      {presentation === "inline" ? (
+        active &&
+        (footerTarget ? createPortal(inlineSave, footerTarget) : inlineSave)
+      ) : (
+        <Modal.Footer padding={6}>
+          <div className="ms-auto flex items-center gap-2">
+            <Button
+              disabled={isSubmitting || checking}
+              prominence="secondary"
+              type="button"
+              onClick={handleClose}
+            >
+              {t("addOpenApiModal.cancelButton.label")}
+            </Button>
+            {!isEditMode ? (
+              <Button
+                type="button"
+                disabled={!values.definition.trim() || checking}
+                onClick={async () => {
+                  setChecking(true);
+                  debouncedValidateDefinition.cancel();
+                  const validation = validateDefinition(
+                    values.definition,
+                    setFieldError
+                  );
+                  const request = validationRequest.current;
+                  try {
+                    if (await validation) await submitForm();
+                  } finally {
+                    if (request === validationRequest.current)
+                      setChecking(false);
+                  }
+                }}
+              >
+                {checking ? t("mcpSetup.checking") : t("mcpSetup.continue")}
+              </Button>
+            ) : (
+              <Button
+                disabled={
+                  isSubmitting ||
+                  (!dirty && !configureAuthentication) ||
+                  (existingTool !== null && !can(existingTool, "edit"))
+                }
+                type="submit"
+              >
+                {configureAuthentication
+                  ? t("mcpSetup.continue")
+                  : primaryButtonLabel}
+              </Button>
+            )}
+          </div>
+        </Modal.Footer>
+      )}
     </Form>
   );
 }
 
-export default function AddOpenAPIActionModal({
+function OpenAPIActionEditor({
+  onViewTools,
+  presentation = "modal",
+  footerTarget,
+  active = true,
+  onBusyChange,
+  onDirtyChange,
   skipOverlay = false,
   onSuccess,
   onUpdate,
   existingTool = null,
   onClose,
-  onEditAuthentication,
-  onDisconnectTool,
-}: AddOpenAPIActionModalProps) {
+  title,
+  initialDefinition,
+  onConfigureAuthentication,
+  modalOpen = false,
+  onModalOpenChange,
+}: AddOpenAPIActionModalProps & {
+  modalOpen?: boolean;
+  onModalOpenChange?: (open: boolean) => void;
+}) {
   const t = useTranslations("actions");
-  const { isOpen, toggle } = useModal();
+  const { refreshOpenApiTools } = useOpenApiTools();
 
   const validationSchema = Yup.object().shape({
     definition: Yup.string().required(t("addOpenApiModal.definition.required")),
@@ -433,12 +477,12 @@ export default function AddOpenAPIActionModal({
 
   const handleModalClose = useCallback(
     (open: boolean) => {
-      toggle(open);
+      onModalOpenChange?.(open);
       if (!open) {
         onClose?.();
       }
     },
-    [toggle, onClose]
+    [onModalOpenChange, onClose]
   );
 
   const handleClose = useCallback(() => {
@@ -447,14 +491,23 @@ export default function AddOpenAPIActionModal({
 
   const initialValues: OpenAPIActionFormValues = useMemo(
     () => ({
-      definition: existingTool?.definition
-        ? prettifyDefinition(existingTool.definition)
-        : "",
+      definition:
+        existingTool?.definition || initialDefinition
+          ? JSON.stringify(
+              existingTool?.definition ?? initialDefinition,
+              null,
+              2
+            )
+          : "",
     }),
-    [existingTool]
+    [existingTool, initialDefinition]
   );
 
-  const handleSubmit = async (values: OpenAPIActionFormValues) => {
+  const handleSubmit = async (
+    values: OpenAPIActionFormValues,
+    { resetForm }: FormikHelpers<OpenAPIActionFormValues>
+  ) => {
+    if (existingTool && !can(existingTool, "edit")) return;
     let parsedDefinition;
     try {
       parsedDefinition = parseJsonWithTrailingCommas(values.definition);
@@ -466,21 +519,28 @@ export default function AddOpenAPIActionModal({
 
     const derivedName = parsedDefinition?.info?.title;
     const derivedDescription = parsedDefinition?.info?.description;
+    if (!existingTool && onConfigureAuthentication) {
+      onConfigureAuthentication({
+        name: derivedName,
+        description: derivedDescription || undefined,
+        definition: parsedDefinition,
+        custom_headers: [],
+        passthrough_auth: false,
+      });
+      return;
+    }
 
     if (existingTool) {
       try {
-        const updatePayload: {
-          name?: string;
-          description?: string;
-          definition: Record<string, any>;
-          custom_headers?: { key: string; value: string }[];
-          passthrough_auth?: boolean;
-          oauth_config_id?: number | null;
-        } = {
+        const tools = await refreshOpenApiTools();
+        const freshTool = tools?.find((tool) => tool.id === existingTool.id);
+        if (!freshTool || !can(freshTool, "edit")) {
+          toast.error(t("addOpenApiModal.toasts.updateFailed"));
+          return;
+        }
+        const updatePayload: Parameters<typeof updateCustomTool>[1] = {
           definition: parsedDefinition,
-          custom_headers: existingTool.custom_headers,
-          passthrough_auth: existingTool.passthrough_auth,
-          oauth_config_id: existingTool.oauth_config_id,
+          oauth_config_id: freshTool.oauth_config_id ?? null,
         };
 
         if (derivedName) {
@@ -497,10 +557,11 @@ export default function AddOpenAPIActionModal({
           toast.error(response.error);
         } else {
           toast.success(t("addOpenApiModal.toasts.actionUpdated"));
-          handleClose();
           if (response.data && onUpdate) {
-            onUpdate(response.data);
+            await onUpdate(response.data);
           }
+          if (presentation === "inline") resetForm({ values });
+          else handleClose();
         }
       } catch (error) {
         console.error("Error updating OpenAPI action:", error);
@@ -522,10 +583,10 @@ export default function AddOpenAPIActionModal({
         toast.error(response.error);
       } else {
         toast.success(t("addOpenApiModal.toasts.actionCreated"));
-        handleClose();
         if (response.data && onSuccess) {
-          onSuccess(response.data);
+          await onSuccess(response.data);
         }
+        handleClose();
       }
     } catch (error) {
       console.error("Error creating OpenAPI action:", error);
@@ -533,23 +594,51 @@ export default function AddOpenAPIActionModal({
     }
   };
 
+  const form = (
+    <Formik
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={handleSubmit}
+    >
+      <FormContent
+        onViewTools={onViewTools}
+        presentation={presentation}
+        footerTarget={footerTarget}
+        active={active}
+        onBusyChange={onBusyChange}
+        onDirtyChange={onDirtyChange}
+        handleClose={handleClose}
+        existingTool={existingTool}
+        title={title}
+        configureAuthentication={!!onConfigureAuthentication}
+      />
+    </Formik>
+  );
+  if (presentation === "inline") return form;
   return (
-    <Modal open={isOpen} onOpenChange={handleModalClose}>
-      <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
-        <Formik
-          initialValues={initialValues}
-          validationSchema={validationSchema}
-          onSubmit={handleSubmit}
-          enableReinitialize
-        >
-          <FormContent
-            handleClose={handleClose}
-            existingTool={existingTool}
-            onEditAuthentication={onEditAuthentication}
-            onDisconnectTool={onDisconnectTool}
-          />
-        </Formik>
-      </Modal.Content>
+    <Modal open={modalOpen} onOpenChange={handleModalClose}>
+      <PluginModalContent skipOverlay={skipOverlay}>{form}</PluginModalContent>
     </Modal>
+  );
+}
+
+function ModalOpenAPIActionEditor(props: AddOpenAPIActionModalProps) {
+  const { isOpen, toggle } = useModal();
+  return (
+    <OpenAPIActionEditor
+      {...props}
+      modalOpen={isOpen}
+      onModalOpenChange={toggle}
+    />
+  );
+}
+
+export default function AddOpenAPIActionModal(
+  props: AddOpenAPIActionModalProps
+) {
+  return props.presentation === "inline" ? (
+    <OpenAPIActionEditor {...props} />
+  ) : (
+    <ModalOpenAPIActionEditor {...props} />
   );
 }

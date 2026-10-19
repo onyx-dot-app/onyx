@@ -9,6 +9,7 @@ server key is stable + identifier-safe.
 from __future__ import annotations
 
 from collections.abc import Generator
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -23,7 +24,11 @@ from onyx.db.enums import (
 from onyx.db.mcp import (
     create_connection_config,
     create_mcp_server__no_commit,
+    get_craft_enabled_mcp_servers,
+    get_mcp_server_user_preferences,
+    get_user_connection_config,
     update_mcp_server__no_commit,
+    upsert_mcp_server_user_preferences__no_commit,
 )
 from onyx.db.models import MCPServer, Tool
 from onyx.server.features.build.sandbox.util.mcp_config import (
@@ -31,8 +36,9 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
 )
 from onyx.server.features.mcp.api import get_craft_mcp_servers_for_user
+from onyx.server.features.mcp.credentials import extract_connection_data
 from onyx.server.features.mcp.models import MCPConnectionData
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @pytest.fixture
@@ -90,6 +96,151 @@ def test_only_craft_enabled_servers_resolved_with_tool_curation(
     assert config.key == f"linear-mcp-{craft.id}"
     # Only disabled tools are tracked; enabled ones ride the wildcard allow.
     assert config.disabled_tools == ("delete_issue",)
+
+
+def test_personal_preferences_are_independent_and_keep_disabled_server_visible(
+    db_session: Session,
+    craft_server: tuple[MCPServer, MCPServer],
+) -> None:
+    craft, _ = craft_server
+    user = create_test_user(db_session, "mcp_preferences")
+    other = create_test_user(db_session, "mcp_preferences_other")
+    try:
+        assert get_mcp_server_user_preferences([craft.id], user.id, db_session) == {}
+        preference = upsert_mcp_server_user_preferences__no_commit(
+            craft.id, user.id, db_session, enabled_in_chat=False
+        )
+        assert (preference.enabled_in_chat, preference.enabled_in_craft) == (
+            False,
+            True,
+        )
+        assert craft.server_url in {
+            s.url for s in resolve_craft_mcp_servers(db_session, user)
+        }
+        preference = upsert_mcp_server_user_preferences__no_commit(
+            craft.id, user.id, db_session, enabled_in_craft=False
+        )
+        assert (preference.enabled_in_chat, preference.enabled_in_craft) == (
+            False,
+            False,
+        )
+        db_session.commit()
+        assert craft.server_url not in {
+            s.url for s in resolve_craft_mcp_servers(db_session, user)
+        }
+        assert craft.server_url in {
+            s.url for s in resolve_craft_mcp_servers(db_session, other)
+        }
+        assert craft.id in {
+            s.id for s in get_craft_enabled_mcp_servers(db_session, None)
+        }
+        response = get_craft_mcp_servers_for_user(db_session, user)
+        visible = next(s for s in response.mcp_servers if s.id == craft.id)
+        assert visible.craft_connected is True
+        assert visible.user_enabled_in_chat is False
+        assert visible.user_enabled_in_craft is False
+        preference = upsert_mcp_server_user_preferences__no_commit(
+            craft.id, user.id, db_session, enabled_in_chat=True
+        )
+        assert (preference.enabled_in_chat, preference.enabled_in_craft) == (
+            True,
+            False,
+        )
+    finally:
+        db_session.rollback()
+        delete_test_user(db_session, user, other)
+        db_session.commit()
+
+
+@pytest.mark.parametrize("persona_id", [0, 5])
+def test_chat_optout_blocks_default_chat_but_preserves_custom_agent(
+    db_session: Session,
+    craft_server: tuple[MCPServer, MCPServer],
+    monkeypatch: pytest.MonkeyPatch,
+    persona_id: int,
+) -> None:
+    from onyx.chat.emitter import Emitter
+    from onyx.llm.interfaces import LLM
+    from onyx.tools import tool_constructor
+    from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
+    from onyx.tools.tool_implementations.search.search_tool import PersonaSearchInfo
+
+    craft, _ = craft_server
+    user = create_test_user(db_session, "mcp_chat_preferences")
+    user.enable_memory_tool = False
+    tool = next(tool for tool in craft.current_actions if tool.enabled)
+    configuration = PersonaToolConfiguration(
+        persona_id=persona_id,
+        persona_name="Test agent",
+        tools=[ToolConfiguration.model_validate(tool)],
+        search=PersonaSearchInfo(
+            document_set_names=[],
+            search_start_date=None,
+            attached_document_ids=[],
+            hierarchy_node_ids=[],
+        ),
+    )
+    monkeypatch.setattr(tool_constructor, "get_current_search_settings", MagicMock())
+    monkeypatch.setattr(tool_constructor, "get_default_document_index", MagicMock())
+    try:
+        upsert_mcp_server_user_preferences__no_commit(
+            craft.id, user.id, db_session, enabled_in_chat=False
+        )
+        result = tool_constructor._construct_tools_impl(
+            configuration,
+            db_session,
+            MagicMock(spec=Emitter),
+            user,
+            MagicMock(spec=LLM),
+            allowed_tool_ids=[tool.id],
+        )
+        assert set(result) == ({tool.id} if persona_id else set())
+        if persona_id:
+            assert result[tool.id][0].name == tool.name
+    finally:
+        db_session.rollback()
+        delete_test_user(db_session, user)
+        db_session.commit()
+
+
+def test_personal_optout_retains_stored_user_credentials(
+    db_session: Session,
+    craft_server: tuple[MCPServer, MCPServer],
+) -> None:
+    craft, _ = craft_server
+    craft.auth_type = MCPAuthenticationType.API_TOKEN
+    craft.auth_performer = MCPAuthenticationPerformer.PER_USER
+    user = create_test_user(db_session, "mcp_retained_credentials")
+    config = create_connection_config(
+        {"headers": {"Authorization": "Bearer test-user-token"}},
+        db_session,
+        mcp_server_id=craft.id,
+        user_email=user.email,
+    )
+    try:
+        upsert_mcp_server_user_preferences__no_commit(
+            craft.id, user.id, db_session, enabled_in_chat=False, enabled_in_craft=False
+        )
+        db_session.commit()
+        retained = get_user_connection_config(craft.id, user.email, db_session)
+        assert retained is not None
+        assert retained.id == config.id
+        assert extract_connection_data(retained, apply_mask=False)["headers"] == {
+            "Authorization": "Bearer test-user-token"
+        }
+        assert craft.id not in {
+            s.server_id for s in resolve_craft_mcp_servers(db_session, user)
+        }
+        upsert_mcp_server_user_preferences__no_commit(
+            craft.id, user.id, db_session, enabled_in_craft=True
+        )
+        assert craft.id in {
+            s.server_id for s in resolve_craft_mcp_servers(db_session, user)
+        }
+    finally:
+        db_session.rollback()
+        delete_test_user(db_session, user)
+        db_session.commit()
 
 
 def test_per_user_server_emitted_only_once_credentials_connected(
@@ -265,7 +416,7 @@ def test_craft_listing_agrees_with_session_emission(
     a server the session never gets, so pin the two together across the auth
     matrix rather than trusting them to stay in sync by hand.
 
-    Asserting each consumer against `user_can_authenticate` directly cannot
+    Asserting each consumer against `user_connection_status` directly cannot
     serve this purpose: both derive from it, so per-consumer assertions would
     pass even if the two consumers drifted apart.
     """

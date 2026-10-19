@@ -1,9 +1,9 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
+import { Button, Pagination } from "@opal/components";
 import {
   Table,
   TableBody,
@@ -15,10 +15,12 @@ import {
 import { InputCheckbox } from "@opal/components";
 import {
   updateConnectorFiles,
-  type ConnectorFileInfo,
+  CONNECTOR_FILES_PAGE_SIZE,
+  type ConnectorFilesResponse,
 } from "@/lib/fileConnector";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -49,21 +51,35 @@ export default function InlineFileManagement({
   const [filesToAdd, setFilesToAdd] = useState<File[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [page, setPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     data: filesResponse,
     isLoading,
     error,
-    mutate: refreshFiles,
-  } = useSWR<{ files: ConnectorFileInfo[] }>(
-    `/api/manage/admin/connector/${connectorId}/files`,
-    errorHandlingFetcher
+  } = useSWR<ConnectorFilesResponse>(
+    SWR_KEYS.connectorFiles(connectorId, page - 1, CONNECTOR_FILES_PAGE_SIZE),
+    errorHandlingFetcher,
     // No refreshInterval: the file list only changes through this component's
-    // own save flow, which calls refreshFiles() explicitly.
+    // own save flow, which revalidates every page explicitly. keepPreviousData
+    // holds the open page in place while the next one loads.
+    { keepPreviousData: true }
   );
 
+  // One page of the connector's files. Removals and additions are tracked by
+  // id across pages, so they survive paging and only land on save.
   const files = filesResponse?.files || [];
+  const totalFilesOnServer = filesResponse?.total_items ?? 0;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalFilesOnServer / CONNECTOR_FILES_PAGE_SIZE)
+  );
+
+  // A save can shrink the list under an open page.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = event.target.files;
@@ -96,9 +112,7 @@ export default function InlineFileManagement({
 
   const handleSaveClick = () => {
     // Validate that we won't remove all files
-    const remainingFiles = files.filter(
-      (file) => !selectedFilesToRemove.has(file.file_id)
-    ).length;
+    const remainingFiles = totalFilesOnServer - selectedFilesToRemove.size;
 
     if (remainingFiles === 0 && filesToAdd.length === 0) {
       toast.error(t("fileManagement.toasts.cannotRemoveAllFiles"));
@@ -126,8 +140,13 @@ export default function InlineFileManagement({
       setSelectedFilesToRemove(new Set());
       setFilesToAdd([]);
 
-      // Refresh data
-      refreshFiles();
+      // A removal or addition shifts the pages after it, so every cached
+      // page of this connector's file list is refreshed, not just the open one.
+      await mutate(
+        (cached) =>
+          typeof cached === "string" &&
+          cached.startsWith(SWR_KEYS.connectorFilesPrefix(connectorId))
+      );
       onRefresh();
     } catch (error) {
       toast.error(
@@ -146,7 +165,7 @@ export default function InlineFileManagement({
     setFilesToAdd([]);
   };
 
-  if (isLoading) {
+  if (isLoading && filesResponse === undefined) {
     return (
       <div className="flex justify-center py-12">
         <IconLoader className="h-6 w-6" />
@@ -162,10 +181,8 @@ export default function InlineFileManagement({
     );
   }
 
-  const currentFiles = files.filter(
-    (file) => !selectedFilesToRemove.has(file.file_id)
-  );
-  const totalFiles = currentFiles.length + filesToAdd.length;
+  const totalFiles =
+    totalFilesOnServer - selectedFilesToRemove.size + filesToAdd.length;
 
   return (
     <>
@@ -212,7 +229,7 @@ export default function InlineFileManagement({
       </div>
 
       {/* File List */}
-      {files.length === 0 && filesToAdd.length === 0 ? (
+      {totalFilesOnServer === 0 && filesToAdd.length === 0 ? (
         <Text as="p" mainUiMuted className="text-center py-8">
           {t("fileManagement.empty.description")}
         </Text>
@@ -326,6 +343,19 @@ export default function InlineFileManagement({
             </Table>
           </div>
         </div>
+      )}
+
+      {totalFilesOnServer > CONNECTOR_FILES_PAGE_SIZE && (
+        <Pagination
+          variant="count"
+          currentPage={page}
+          totalPages={totalPages}
+          pageSize={CONNECTOR_FILES_PAGE_SIZE}
+          totalItems={totalFilesOnServer}
+          onChange={setPage}
+          units={t("fileManagement.units", { count: totalFilesOnServer })}
+          size="sm"
+        />
       )}
 
       {/* Add Files Button (only in edit mode) */}

@@ -1,22 +1,41 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Popover, ShadowDiv, Text } from "@opal/components";
+import {
+  Button,
+  Popover,
+  SelectButton,
+  ShadowDiv,
+  Text,
+} from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgCheckSquare, SvgX } from "@opal/icons";
+import { SvgListCheck, SvgX } from "@opal/icons";
 import type { CapabilityCheckStatus } from "@/lib/connectors/checks/types";
 import type { CheckRunSnapshot } from "@/lib/connectors/types";
+import {
+  NO_CHECKS,
+  useConnectorChecksProgress,
+} from "@/lib/connectors/checks/hooks";
 import { CheckLineGroups } from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 import { checkCount } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
+import {
+  PLACEMENT_PROPS,
+  type PopoverPlacement,
+} from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 
 /** Opens the results of one check run. Place it inside the Popover that holds the content. */
-export function CheckRunTrigger() {
+export interface CheckRunTriggerProps {
+  /** Whether its popover is open. The open trigger shows selected. */
+  open?: boolean;
+}
+export function CheckRunTrigger({ open = false }: CheckRunTriggerProps) {
   const t = useTranslations("admin.connector.runs");
   return (
     <Popover.Trigger asChild>
-      <Button
-        icon={SvgCheckSquare}
-        prominence="tertiary"
+      <SelectButton
+        icon={SvgListCheck}
+        variant="select-light"
+        state={open ? "selected" : "empty"}
         size="xs"
         tooltip={t("actions.checks")}
         aria-label={t("actions.checks")}
@@ -27,14 +46,14 @@ export function CheckRunTrigger() {
 
 export interface CheckRunPopoverContentProps {
   run: CheckRunSnapshot;
-  /** Opens beside a small trigger, such as an activity card's tag, instead of under a row-wide anchor. */
-  beside?: boolean;
+  /** Opens beside or below a card from a small trigger, such as an activity card's tag; unset, under a row-wide anchor. */
+  placement?: PopoverPlacement;
 }
 
 /** The checks of one run grouped by outcome. Under a row it is as wide as the caller's Popover.Anchor. */
 export default function CheckRunPopoverContent({
   run,
-  beside = false,
+  placement,
 }: CheckRunPopoverContentProps) {
   const t = useTranslations("admin.connector.runs.checkResults");
   const tChecks = useTranslations("admin.connectorChecks");
@@ -55,13 +74,17 @@ export default function CheckRunPopoverContent({
       tChecks(part.label, { count: checkCount(run, part.status) })
     );
   const summary = format.list(labels, { type: "unit" });
+  const stateCounts = { ...NO_CHECKS };
+  for (const result of run.check_results) stateCounts[result.status] += 1;
+  // The checks card's ring, for a stored run.
+  const { icon: Ring } = useConnectorChecksProgress(stateCounts, "passed");
 
   return (
     <Popover.Content
-      width={beside ? "3xl" : "trigger"}
-      side={beside ? "left" : undefined}
-      align="start"
-      sideOffset={beside ? undefined : -8}
+      width={placement === undefined ? "trigger" : 160}
+      {...(placement === undefined
+        ? { align: "start", sideOffset: -8 }
+        : PLACEMENT_PROPS[placement])}
       aria-label={t("title")}
     >
       <Section
@@ -93,6 +116,7 @@ export default function CheckRunPopoverContent({
               gap={1}
               height="fit"
             >
+              <Ring size={16} className="shrink-0" />
               <Text font="main-ui-action" color="text-04">
                 {t("title")}
               </Text>

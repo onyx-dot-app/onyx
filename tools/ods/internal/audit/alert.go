@@ -115,7 +115,7 @@ type alertPlan struct {
 	Close []trackedIssue
 }
 
-// SyncAlertsOptions configures SyncAlerts.
+// SyncAlertsOptions configures Sync.
 type SyncAlertsOptions struct {
 	// ResultFiles are JSON results written by `ods audit --format=json` or
 	// `ods audit image --format=json`. Together they must cover every scan, or
@@ -142,12 +142,6 @@ type SyncResult struct {
 	// Failing holds every alert with an unsuppressed blocking finding in this
 	// run, announced or not, with its issue when it has one.
 	Failing []Alert
-}
-
-// SyncAlerts is Sync returning only the alerts to announce.
-func SyncAlerts(opts SyncAlertsOptions) ([]Alert, error) {
-	res, err := Sync(opts)
-	return res.Announce, err
 }
 
 // Sync keeps one open issue per package with an unsuppressed blocking

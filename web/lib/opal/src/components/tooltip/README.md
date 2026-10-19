@@ -12,6 +12,7 @@ off while keeping the trigger mounted.
 
 | Prop            | Type                                     | Default    | Description                                                                                                    |
 | --------------- | ---------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `tone` | `"default" \| "neutral"` | `"default"` | Neutral uses a theme-aware surface and subtle border instead of the fixed dark surface. |
 | `tooltip`       | `ReactNode \| RichStr`                   | —          | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
 | `side`          | `"top" \| "bottom" \| "start" \| "end"`   | `"end"`    | Which side the tooltip appears on. `start`/`end` are logical: in a right-to-left layout `start` is the right side |
 | `align`         | `"start" \| "center" \| "end" \| "follow"` | `"center"` | Alignment along the tooltip's side axis. `follow` slides it to stay level with the pointer, for a tall or wide trigger |
@@ -46,9 +47,10 @@ import { Tooltip } from "@opal/components";
 - `string` and `RichStr` content is rendered via `Text font="secondary-body" color="inherit"`.
 - `ReactNode` content is rendered as-is for custom tooltip layouts.
 - The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap. Text with no spaces, such as a URL, breaks at that edge rather than running past it.
-- The surface is dark in both themes, so content renders inside a `dark` theme scope. Adaptive
+- The default surface is dark in both themes, so content renders inside a `dark` theme scope. Adaptive
   tokens (`text-03` and friends) resolve to their dark values; `text-inverted-*` resolves
   backwards and is wrong here.
+- Neutral tooltips inherit the current theme. Use normal adaptive text colors in their content.
 - There is no controlled `open`. Radix drops any open change that already matches the value it
   was given, so a caller that gates `open` on something other than the hover state stops hearing
   about closes and holds a hover that ended.

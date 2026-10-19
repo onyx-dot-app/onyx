@@ -29,6 +29,7 @@ from onyx.db.models import (
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.registry import PROVIDERS, get_provider_for_app
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.encryption import is_masked_credential
 from onyx.utils.logger import setup_logger
@@ -324,6 +325,11 @@ def create_external_app(
     organization_credentials = resolve_masked_credentials(
         organization_credentials, None
     )
+    provider = PROVIDERS.get(app_type)
+    if provider is not None:
+        upstream_url_patterns = provider.resolve_upstream_url_patterns(
+            organization_credentials, upstream_url_patterns
+        )
     app = ExternalApp(
         name=name,
         app_type=app_type,
@@ -624,12 +630,21 @@ def update_external_app(
         app.upstream_url_patterns = upstream_url_patterns
     if is_set(auth_template):
         app.auth_template = auth_template
-    if is_set(organization_credentials):
-        # Admin responses mask org credentials; restore any masked value the form
-        # echoed back so an unchanged secret isn't overwritten with its mask.
-        app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
-            organization_credentials, app.organization_credentials
+    if is_set(upstream_url_patterns) or is_set(organization_credentials):
+        resolved_credentials = (
+            resolve_masked_credentials(
+                organization_credentials, app.organization_credentials
+            )
+            if is_set(organization_credentials)
+            else app.organization_credentials.get_value(apply_mask=False)
         )
+        provider = get_provider_for_app(app)
+        if provider is not None:
+            app.upstream_url_patterns = provider.resolve_upstream_url_patterns(
+                resolved_credentials, list(app.upstream_url_patterns)
+            )
+        if is_set(organization_credentials):
+            app.organization_credentials = resolved_credentials  # ty: ignore[invalid-assignment]
 
     if is_set(action_policies):
         _write_policies__no_commit(db_session, app, action_policies)

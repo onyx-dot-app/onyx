@@ -94,10 +94,12 @@ VALUES
    now() - interval '3 days');
 INSERT INTO doc_permission_sync_attempt
   (id, connector_credential_pair_id, status, total_docs_synced,
-   docs_with_permission_errors, time_started, time_finished)
+   docs_with_permission_errors, time_started, time_finished, heartbeat_at,
+   last_progress_at)
 VALUES
-  (1, 1, 'SUCCESS', 99, 0, now() - interval '5 minutes', now()),
-  (2, 1, 'IN_PROGRESS', 3, 0, now() - interval '90 days', NULL);
+  (1, 1, 'SUCCESS', 99, 0, now() - interval '5 minutes', now(), NULL, NULL),
+  (2, 1, 'IN_PROGRESS', 3, 0, now() - interval '90 days', NULL, now(),
+   now() - interval '1 minute');
 INSERT INTO external_group_permission_sync_attempt
   (id, connector_credential_pair_id, status, total_users_processed,
    total_groups_processed, total_group_memberships_synced, time_started,
@@ -171,6 +173,9 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
         "port:1",
     }
     assert jobs["permission:2"]["state"] == "in_progress"
+    assert jobs["permission:2"]["last_progress_at"] is not None
+    assert jobs["permission:2"]["last_heartbeat_at"] is not None
+    assert jobs["group:1"]["last_progress_at"] is None
     assert [job for job in jobs if job.startswith("permission:")] == [
         "permission:1",
         "permission:2",

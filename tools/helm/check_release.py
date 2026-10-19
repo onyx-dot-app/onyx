@@ -15,10 +15,21 @@ CHART_DIRS: tuple[str, ...] = (
     "deployment/helm/charts/onyx",
     "deployment/helm/charts/onyx-cnpg-crds",
 )
+MERGE_QUEUE_REF_PREFIX: str = "refs/heads/gh-readonly-queue/"
 
 
 def git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True).strip()
+
+
+def target_branch() -> str:
+    if base_ref := os.environ.get("GITHUB_BASE_REF"):
+        return base_ref
+    # Merge queue refs look like gh-readonly-queue/<target>/pr-<n>-<sha>.
+    ref: str = os.environ.get("GITHUB_REF", "")
+    if ref.startswith(MERGE_QUEUE_REF_PREFIX):
+        return ref.removeprefix(MERGE_QUEUE_REF_PREFIX)
+    return git("branch", "--show-current")
 
 
 def chart_changed(base: str) -> bool:
@@ -78,10 +89,7 @@ def main() -> int:
         # Application release tags do not publish Helm charts.
         if os.environ.get("GITHUB_REF", "").startswith("refs/tags/v"):
             return 0
-        branch: str = os.environ.get("GITHUB_BASE_REF") or git(
-            "branch", "--show-current"
-        )
-        if branch.startswith("release/"):
+        if target_branch().startswith("release/"):
             return 0
         if not chart_changed(args.base):
             return 0

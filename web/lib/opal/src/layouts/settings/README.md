@@ -26,18 +26,20 @@ Headers are only sticky when `actions` is non-empty.
 
 | Prop             | Type                      | Default | Description                                                                                                                                               |
 | ---------------- | ------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `icon`           | `IconFunctionComponent`   | —       | Page icon (required)                                                                                                                                      |
+| `icon`           | `IconFunctionComponent`   | —       | Optional page icon                                                                                                                                      |
 | `moreIcon1`      | `IconFunctionComponent`   | —       | Second icon in the title's icon row (see `Content`)                                                                                                       |
 | `moreIcon2`      | `IconFunctionComponent`   | —       | Third icon in the title's icon row (see `Content`)                                                                                                        |
 | `title`          | `string`                  | —       | Page title (required)                                                                                                                                     |
 | `description`    | `string`                  | —       | Subtitle below the title                                                                                                                                  |
 | `descriptionTag` | `TagProps`                | —       | Tag inline after the description, e.g. a status                                                                                                           |
 | `editable`       | `boolean`                 | `false` | The title can be edited in place (see `Content`)                                                                                                          |
+| `editButton`     | `"hover" \| "rest"`       | `"hover"` | When the editable title shows its pencil: on hover, or at rest too (see `Content`)                                                                      |
 | `onTitleChange`  | `(title: string) => void` | —       | Called when the user commits a title edit                                                                                                                 |
 | `actions`        | `ReactNode[]`             | —       | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
 | `children`       | `ReactNode`               | —       | Content below the title row (e.g. search bar, filters)                                                                                                    |
 | `cancel`         | `boolean \| () => void`   | `false` | Render a secondary Cancel as the first action; `true` goes back in history, a function overrides the destination                                          |
 | `divider`        | `boolean`                 | `false` | Show a horizontal divider at the bottom of the header                                                                                                     |
+| `stackActionsOnMobile` | `boolean`               | `false` | Place actions below the title on a full-width row on narrow screens                                                                                       |
 
 ### Body
 

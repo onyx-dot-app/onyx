@@ -199,7 +199,8 @@ class PostgresCacheBackend(CacheBackend):
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
             _set_statement_timeout(session, self._statement_timeout_ms)
-            value = session.execute(stmt).scalar_one_or_none()
+            # Execute through Core; this session has no ORM objects to synchronize.
+            value = session.connection().execute(stmt).scalar_one_or_none()
             session.commit()
         if value is None:
             return None

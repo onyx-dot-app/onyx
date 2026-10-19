@@ -7,6 +7,7 @@ import type {
 import { Text, type TooltipSide, Tooltip } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
+import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,9 +62,21 @@ function Button({
   tooltipSide = "top",
   responsiveHideText = false,
   disabled,
+  interaction,
   ...interactiveProps
 }: ButtonProps) {
   const isLarge = size === "lg";
+  // Only a popup trigger takes the open look: Popover, Dropdown and Dialog
+  // triggers set `aria-haspopup`, a Collapsible or disclosure toggle sets
+  // `data-state` but opens no popup. An open secondary trigger keeps its rest
+  // fill; the stateless styles give it an outline instead of the hover look.
+  const popup = interactiveProps["aria-haspopup"];
+  const isPopupTrigger =
+    popup !== undefined && popup !== false && popup !== "false";
+  const resolvedInteraction =
+    isPopupTrigger && interactiveProps.prominence !== "secondary"
+      ? resolveTriggerInteraction(interaction, interactiveProps)
+      : interaction;
 
   const labelEl = children ? (
     responsiveHideText ? (
@@ -90,6 +103,7 @@ function Button({
     <Interactive.Stateless
       type={type}
       disabled={disabled}
+      interaction={resolvedInteraction}
       {...interactiveProps}
     >
       <Interactive.Container

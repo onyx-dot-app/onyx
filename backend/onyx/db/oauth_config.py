@@ -2,7 +2,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.models import OAuthConfig, OAuthUserToken, Tool
 from onyx.utils.logger import setup_logger
@@ -22,6 +22,7 @@ def create_oauth_config(
     scopes: list[str] | None,
     additional_params: dict[str, str] | None,
     db_session: Session,
+    supports_pkce: bool = False,
 ) -> OAuthConfig:
     """Create a new OAuth configuration"""
     oauth_config = OAuthConfig(
@@ -32,6 +33,7 @@ def create_oauth_config(
         client_secret=client_secret,
         scopes=scopes,
         additional_params=additional_params,
+        supports_pkce=supports_pkce,
     )
     db_session.add(oauth_config)
     db_session.commit()
@@ -60,6 +62,7 @@ def update_oauth_config(
     client_secret: str | None = None,
     scopes: list[str] | None = None,
     additional_params: dict[str, Any] | None = None,
+    supports_pkce: bool | None = None,
     clear_client_id: bool = False,
     clear_client_secret: bool = False,
 ) -> OAuthConfig:
@@ -95,6 +98,8 @@ def update_oauth_config(
         oauth_config.scopes = scopes
     if additional_params is not None:
         oauth_config.additional_params = additional_params
+    if supports_pkce is not None:
+        oauth_config.supports_pkce = supports_pkce
 
     db_session.commit()
     return oauth_config
@@ -138,7 +143,11 @@ def get_all_user_oauth_tokens(
     """
     Get all user OAuth tokens.
     """
-    stmt = select(OAuthUserToken).where(OAuthUserToken.user_id == user_id)
+    stmt = (
+        select(OAuthUserToken)
+        .where(OAuthUserToken.user_id == user_id)
+        .options(selectinload(OAuthUserToken.oauth_config))
+    )
 
     return list(db_session.scalars(stmt).all())
 

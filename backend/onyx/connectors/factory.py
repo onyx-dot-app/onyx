@@ -587,6 +587,7 @@ def validate_proposed_pairing(
     return ProposedPairingValidation(
         check_results=run.finished_results,
         unfinished_check_ids=run.unfinished_check_ids,
+        unfinished_checks=run.unfinished_checks,
     )
 
 

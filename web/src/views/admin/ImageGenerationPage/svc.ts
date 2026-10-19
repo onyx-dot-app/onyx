@@ -28,16 +28,10 @@ export interface ImageGenerationCredentials {
   custom_config: Record<string, string> | null;
 }
 
-// Creation options - either clone from existing provider or use new credentials
 export interface ImageGenerationConfigCreateOptions {
   imageProviderId: string;
   modelName: string;
   isDefault?: boolean;
-
-  // Option 1: Clone mode - use credentials from existing provider
-  sourceLlmProviderId?: number;
-
-  // Option 2: New credentials mode
   provider?: string;
   apiKey?: string;
   apiBase?: string;
@@ -52,20 +46,12 @@ const IMAGE_GEN_TEST_URL = "/api/admin/image-generation/test";
 
 /**
  * Test API key for image generation provider
- *
- * Two modes:
- * 1. Direct: provider + apiKey provided
- * 2. From existing provider: sourceLlmProviderId provided (backend fetches API key)
  */
 export async function testImageGenerationApiKey(
   modelName: string,
   options: {
-    // Option 1: Direct API key
     provider?: string;
     apiKey?: string;
-    // Option 2: Use existing provider
-    sourceLlmProviderId?: number;
-    // Additional fields
     apiBase?: string;
     apiVersion?: string;
     deploymentName?: string;
@@ -80,7 +66,6 @@ export async function testImageGenerationApiKey(
         model_name: modelName,
         provider: options.provider || null,
         api_key: options.apiKey || null,
-        source_llm_provider_id: options.sourceLlmProviderId || null,
         api_base: options.apiBase || null,
         api_version: options.apiVersion || null,
         deployment_name: options.deploymentName || null,
@@ -148,9 +133,6 @@ export async function createImageGenerationConfig(
       image_provider_id: options.imageProviderId,
       model_name: options.modelName,
       is_default: options.isDefault ?? false,
-      // Clone mode
-      source_llm_provider_id: options.sourceLlmProviderId,
-      // New credentials mode
       provider: options.provider,
       api_key: options.apiKey,
       api_base: options.apiBase,
@@ -171,11 +153,6 @@ export async function createImageGenerationConfig(
 // Update options - same structure but without isDefault
 export interface ImageGenerationConfigUpdateOptions {
   modelName: string;
-
-  // Option 1: Clone mode - use credentials from existing provider
-  sourceLlmProviderId?: number;
-
-  // Option 2: New credentials mode
   provider?: string;
   apiKey?: string;
   apiBase?: string;
@@ -200,9 +177,6 @@ export async function updateImageGenerationConfig(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model_name: options.modelName,
-      // Clone mode
-      source_llm_provider_id: options.sourceLlmProviderId,
-      // New credentials mode
       provider: options.provider,
       api_key: options.apiKey,
       api_base: options.apiBase,

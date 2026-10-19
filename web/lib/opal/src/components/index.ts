@@ -129,6 +129,7 @@ export {
   TAG_COLORS,
   TAG_REMOVE_CLASS,
   type TagProps,
+  type TagVariant,
   type TagColor,
 } from "@opal/components/tag/components";
 
@@ -197,6 +198,9 @@ export {
 export {
   Collapsible,
   type CollapsibleProps,
+  type CollapsibleRootProps,
+  type CollapsibleTriggerProps,
+  type CollapsibleContentProps,
 } from "@opal/components/collapsible/components";
 
 /* MessageCard */
@@ -330,6 +334,7 @@ export {
   type DropdownSide,
 } from "@opal/components/dropdown/types";
 export { useDropdownViews } from "@opal/components/dropdown/context";
+export { SelectChevron } from "@opal/components/inputs/dropdowns/SelectChevron";
 
 /* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
 export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";

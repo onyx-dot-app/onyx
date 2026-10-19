@@ -7,6 +7,7 @@
  * For dynamic keys (e.g. per-ID endpoints), use the builder functions.
  */
 import type {
+  CCPairRunLevel,
   CCPairRunsQuery,
   CCPairThroughputWindow,
   IndexingConnectorsQuery,
@@ -19,12 +20,33 @@ function runsQueryParams(query: CCPairRunsQuery): string {
     page_size: String(query.pageSize),
   });
   if (query.since !== null) params.set("since", query.since);
+  if (query.until !== null) params.set("until", query.until);
   for (const kind of query.kinds ?? []) params.append("kinds", kind);
   for (const group of query.statusGroups ?? []) {
     params.append("status_groups", group);
   }
   if (query.q) params.set("q", query.q);
   if (query.errors !== null) params.set("errors", query.errors);
+  if (query.superseded !== null) {
+    params.set("superseded", String(query.superseded));
+  }
+  if (query.resolved !== null) {
+    params.set("resolved", String(query.resolved));
+  }
+  return params.toString();
+}
+
+function resolvableCountParams(
+  level: CCPairRunLevel | null,
+  q: string,
+  since: string | null,
+  until: string | null
+): string {
+  const params = new URLSearchParams();
+  if (level !== null) params.set("level", level);
+  if (q) params.set("q", q);
+  if (since) params.set("since", since);
+  if (until) params.set("until", until);
   return params.toString();
 }
 
@@ -74,7 +96,6 @@ export const SWR_KEYS = {
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
   llmRouterModels: "/api/admin/llm/router-models",
-  llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
@@ -295,6 +316,8 @@ export const SWR_KEYS = {
 
   // ── MCP Server (per-ID) ───────────────────────────────────────────────────
   adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
+  adminMcpOAuthDiscovery: (id: number) =>
+    ["admin-mcp-oauth-discovery", id] as const,
 
   // ── Document Processing ───────────────────────────────────────────────────
   unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",
@@ -309,6 +332,11 @@ export const SWR_KEYS = {
   // Every stored capability report of one source's credentials.
   credentialCheckReports: (source: string) =>
     `/api/manage/admin/credential/capability-reports?source=${source}`,
+  // Every file-list page of one connector starts with this, so `mutate` can match them all.
+  connectorFilesPrefix: (connectorId: number) =>
+    `/api/manage/admin/connector/${connectorId}/files?`,
+  connectorFiles: (connectorId: number, pageNum: number, pageSize: number) =>
+    `${SWR_KEYS.connectorFilesPrefix(connectorId)}page_num=${pageNum}&page_size=${pageSize}`,
 
   // ── CC-Pairs ──────────────────────────────────────────────────────────────
   ccPair: (ccPairId: string | number) =>
@@ -322,6 +350,16 @@ export const SWR_KEYS = {
     `/api/manage/admin/cc-pair/${ccPairId}/runs?`,
   ccPairRuns: (ccPairId: number, query: CCPairRunsQuery) =>
     `${SWR_KEYS.ccPairRunsPrefix(ccPairId)}${runsQueryParams(query)}`,
+  ccPairResolvableRunsCountPrefix: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/runs/resolvable-count?`,
+  ccPairResolvableRunsCount: (
+    ccPairId: number,
+    level: CCPairRunLevel | null,
+    q: string,
+    since: string | null,
+    until: string | null
+  ) =>
+    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until)}`,
   ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
     `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
 
@@ -343,6 +381,15 @@ export const SWR_KEYS = {
   },
   // Every fleet runs feed query starts with this, so `mutate` can match them all.
   indexMonitoringRunsPrefix: "/api/manage/admin/index-monitoring/runs?",
+  indexMonitoringResolvableRunsCountPrefix:
+    "/api/manage/admin/index-monitoring/runs/resolvable-count?",
+  indexMonitoringResolvableRunsCount: (
+    level: CCPairRunLevel | null,
+    q: string,
+    since: string | null,
+    until: string | null
+  ) =>
+    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until)}`,
   indexMonitoringRuns: (query: CCPairRunsQuery) =>
     `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query)}`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>

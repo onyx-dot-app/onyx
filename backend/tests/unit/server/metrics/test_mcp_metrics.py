@@ -46,7 +46,7 @@ def test_client_records_success_once() -> None:
     with (
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            return_value='{"ok": true}',
         ),
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool."
@@ -99,7 +99,7 @@ def test_client_records_post_call_failure_once() -> None:
         ),
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            return_value='{"ok": true}',
         ),
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool."

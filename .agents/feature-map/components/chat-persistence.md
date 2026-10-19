@@ -90,6 +90,28 @@ data being gone.
 
 ## 3. Data model
 
+Migration `7a03b6e90c12` adds `chat_response_item` for model generations.
+Items use `step_index` to identify their generation. The saved model message defines tool-call order.
+Each generation has at most one model message, and each response has at most one accepted answer.
+Each item requires a model message and generation status. Deleting a response removes its items.
+The unique `(chat_message_id, step_index)` index supports response lookups and step ordering.
+Existing tables, ORM mappings, and writers stay unchanged. Application adoption will start writing these items later.
+
+Migration `6b4e821c0a93` adds `chat_response_checkpoint` without changing existing tables or response items.
+Each checkpoint belongs to one response and is deleted with that response.
+Its `ownership_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
+The runtime revision inside `state` tracks execution changes and serves a separate purpose.
+Current application writers do not use checkpoints yet.
+
+Migration `9d8f310ac672` adds nullable execution metadata to existing chat tables.
+It adds child-session links, response status and failures, and tool results.
+Current writers keep their existing behavior.
+Concurrent indexes avoid blocking writes during index scans.
+If an index build fails, rerunning the migration keeps committed columns and rebuilds invalid indexes.
+The `invoking_tool_call_id` column identifies the completed transactional schema phase.
+Concurrent index operations use a 60-second lock timeout; rerun the migration after resolving blockers.
+These fields are database-only until application adoption adds their ORM mappings and writers.
+
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 
 | Column | Notes |
@@ -105,6 +127,9 @@ data being gone.
 | `current_alternate_model` | |
 | `slack_thread_id` | |
 | `project_id` | FK to `user_project`. |
+| `spawned_by_message_id` | Nullable owning response. Deleting that message cascades through the child session and its messages. |
+| `agent_name` | Nullable child-agent name. |
+| `restoration_config` | Nullable JSONB configuration for restoring the child agent. |
 | `llm_override`, `temperature_override`, `reasoning_effort_override`, `prompt_override` | Per-session overrides; take precedence over the persona but are outranked by per-request overrides. |
 | `time_created`, `time_updated` | |
 
@@ -124,6 +149,9 @@ separate share-link table.
 | `last_summarized_message_id` | Set on a compression-summary message; the last original message it replaces. |
 | `preferred_response_id` | User-message-only: which assistant child (of a multi-model turn) was chosen. `set_preferred_response` (`db/chat.py`) writes this and also advances `latest_child_message_id`. |
 | `model_display_name` | Assistant-message-only, which model produced this row. |
+| `response_status` | Nullable execution status for the whole response. |
+| `response_failure` | Nullable JSONB failure details for the response. |
+| `invoking_tool_call_id` | Nullable tool invocation that supplied a child input. This provenance link uses deferred NO ACTION on deletion. |
 | `request_params` | Requested reasoning effort plus the actual provider kwargs. Attribution, not content: kept even when `persist_content=False` (`chat/save_chat.py:save_chat_turn`). |
 | `reasoning_tokens` | See §5, reasoning attaches forward. |
 | `message` | Text. Blank string for a content-free incognito row. |
@@ -146,10 +174,12 @@ separate share-link table.
 | `parent_tool_call_id` | Set only for a **nested** call (issued by a sub-agent tool, itself a `ToolCall`). Exactly one of `parent_chat_message_id` / `parent_tool_call_id` is non-NULL. |
 | `turn_number` | Same turn number + same parent = called in parallel. Different turn number = called sequentially. |
 | `tab_index` | Ordering within a parallel group, for UI tabs. |
-| `tool_id` | Not a FK; deleting the `Tool` row does not cascade here. |
+| `tool_id` | Nullable for runtime operations without a catalog tool. Not a FK; deleting a catalog tool preserves history. |
+| `operation_status` | Nullable execution status for this tool call. |
 | `tool_call_id` | The provider-facing call id string (must round-trip to the LLM). |
 | `reasoning_tokens` | The reasoning that preceded this call. See §5. |
 | `tool_call_arguments` | JSONB. For a sub-agent, this is the agent's task/instructions. |
+| `result` | Nullable JSONB structured tool result, including content, outcome flags, and application details. |
 | `tool_call_response` | Text. For a sub-agent, this is its final report, not its internal steps (those are the nested `ToolCall` rows). |
 | `tool_call_tokens` | Token count of the arguments only; only top-level rows count toward the session total. |
 | `generated_images` | Image-tool replay data. |
@@ -191,6 +221,8 @@ snapshot.
 ```
 ChatSession
   └─< ChatMessage (parent_message_id → self, tree)
+        ├─< ChatSession (spawned_by_message_id)    owns child session; CASCADE
+        ├── invoking_tool_call_id → ToolCall      child input provenance; deferred NO ACTION
         ├─< ToolCall (parent_chat_message_id)      top-level calls
         │     └─< ToolCall (parent_tool_call_id)    nested/sub-agent calls
         │           └── ToolCall__SearchDoc → SearchDoc
@@ -198,6 +230,10 @@ ChatSession
         ├─< ChatMessageFeedback
         └─< DocumentRetrievalFeedback
 ```
+
+The owning response controls child-session deletion. Removing only its invoking tool fails at commit while child inputs reference it.
+Deleting the owning response or session removes the complete child subtree.
+The invocation constraint checks at commit, after all ownership cascades finish.
 
 ### The message tree
 
@@ -290,6 +326,16 @@ processing fence shows an unfinished stream. The client uses it to reconnect thr
 `resume-stream`.
 
 ---
+
+### 4.3 Naming a session
+
+`chat_backend.py:rename_chat_session` loads the session's history and override,
+then generates its title outside the read session. `get_default_utility_llm(..., flow_type=LLMModelFlowType.CHAT_NAMING)` prefers
+the admin CHAT_NAMING default and returns `None` when it is unset.
+Only then does the endpoint construct and cost-check the session client.
+Configured utility clients receive one provider cost check in the factory.
+Naming keeps its existing rate-limit check and text fallback on failure. Sessions whose
+incognito mode does not persist content skip the naming call.
 
 ## 5. Contracts and invariants
 

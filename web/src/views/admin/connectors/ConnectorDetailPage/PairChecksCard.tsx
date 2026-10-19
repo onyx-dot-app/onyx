@@ -21,42 +21,54 @@ export interface PairChecksCardProps {
   source: ValidSources;
   credentialId: number;
   connectorId: number;
+  /** The pair's first index attempt waits on its checks. */
+  held: boolean;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
 }
 
-/** The pair's stored checks: its own report, else the credential's. Nothing shows until one exists. */
+/**
+ * The pair's stored checks: its own report, else the credential's. It shows
+ * only while the checks run or hold the pair, open while they run.
+ */
 export default function PairChecksCard({
   source,
   credentialId,
   connectorId,
+  held,
   expandRequest = 0,
 }: PairChecksCardProps) {
-  const t = useTranslations("admin.connectorsList.add.account");
+  const tAccount = useTranslations("admin.connectorsList.add.account");
   const { reportFor, rerun } = useCredentialCheckReports(source);
   const report =
     reportFor(credentialId, connectorId) ?? reportFor(credentialId);
-  if (report === null) return null;
+  const running: boolean = report?.run_status === "running";
+  if (report === null || (!held && !running)) return null;
 
-  const results = report.report?.check_results ?? [];
+  const progress = running ? report.progress : null;
+  const results = progress?.check_results ?? report.report?.check_results ?? [];
+  const openChecks = progress?.open_checks ?? [];
   const stateCounts = { ...NO_CHECKS };
   for (const result of results) stateCounts[result.status] += 1;
+  for (const check of openChecks) stateCounts[check.state] += 1;
 
   return (
     <CheckCardView
+      // Remount when a run starts or ends, so the card opens while it runs.
+      key={running ? "running" : "settled"}
       status={RUN_STATUS[report.run_status]}
       results={results}
-      openChecks={[]}
-      inProgressCount={0}
-      expectedCount={0}
+      openChecks={openChecks}
+      inProgressCount={stateCounts.running}
+      expectedCount={stateCounts.pending}
       stateCounts={stateCounts}
-      defaultCollapsed
-      expandRequest={expandRequest}
+      defaultCollapsed={!running}
       onRerun={() => {
         rerun(credentialId, connectorId).catch(() =>
-          toast.error(t("rerunFailed.toast"))
+          toast.error(tAccount("rerunFailed.toast"))
         );
       }}
+      expandRequest={expandRequest}
     />
   );
 }

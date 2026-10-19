@@ -94,6 +94,13 @@ export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
 export type Spacing = number;
 
 /**
+ * A floating panel's width on the Tailwind scale (units of 0.25rem), one of
+ * the `--block-width-contextual-menu-*` steps in sizes.css: 30 is 7.5rem, 160
+ * is 40rem. Dropdown and Popover take the same steps.
+ */
+export type ContextualMenuWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90 | 120 | 160;
+
+/**
  * Shadow depth variants.
  *
  * | Variant  | Effect                          |
@@ -141,6 +148,7 @@ export type CardColor =
   | "transparent"
   | "background-tint-00"
   | "background-tint-01"
+  | "background-tint-02"
   | "status-info-00"
   | "status-success-00"
   | "status-warning-00"

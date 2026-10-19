@@ -13,32 +13,27 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.image_generation import (
     ImageGenerationConfigManager,
 )
-from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
-from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
+from tests.integration.common_utils.test_models import DATestUser
 
 
 @pytest.fixture(scope="module")
-def setup_image_generation_tests() -> tuple[DATestUser, DATestLLMProvider]:
+def setup_image_generation_tests() -> DATestUser:
     """Module-scoped fixture that runs once for all tests in this module.
 
     - Resets DB once at the start of the module
-    - Creates admin user once
-    - Creates LLM provider once (for clone-mode test)
-    - Returns (admin_user, llm_provider) tuple for all tests to use
+    - Creates admin user once, for all tests to use
     """
     reset_all()
-    admin_user = UserManager.create(name="admin_user")
-    llm_provider = LLMProviderManager.create(user_performing_action=admin_user)
-    return admin_user, llm_provider
+    return UserManager.create(name="admin_user")
 
 
 def test_create_image_generation_config(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test creating an image generation config with new credentials."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     config = ImageGenerationConfigManager.create(
         image_provider_id="test-openai-dalle",
@@ -60,37 +55,11 @@ def test_create_image_generation_config(
     )
 
 
-def test_create_image_generation_config_from_provider(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
-) -> None:
-    """Test creating an image generation config by cloning from an existing LLM provider."""
-    admin_user, llm_provider = setup_image_generation_tests
-
-    # Create image generation config from the provider
-    config = ImageGenerationConfigManager.create_from_provider(
-        source_llm_provider_id=llm_provider.id,
-        image_provider_id="test-from-provider",
-        model_name="gpt-image-1",
-        is_default=True,
-        user_performing_action=admin_user,
-    )
-
-    assert config.image_provider_id == "test-from-provider"
-    assert config.model_name == "gpt-image-1"
-    assert config.is_default is True
-
-    # Verify it exists
-    ImageGenerationConfigManager.verify(
-        config=config,
-        user_performing_action=admin_user,
-    )
-
-
 def test_create_duplicate_config_fails(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test that creating a config with an existing image_provider_id fails."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     # Create first config
     ImageGenerationConfigManager.create(
@@ -118,10 +87,10 @@ def test_create_duplicate_config_fails(
 
 
 def test_get_all_configs(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test getting all image generation configs."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     # Create multiple configs
     config1 = ImageGenerationConfigManager.create(
@@ -151,10 +120,10 @@ def test_get_all_configs(
 
 
 def test_get_config_credentials(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test getting credentials for an image generation config."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     test_api_key = "sk-test-credentials-key-12345"
     config = ImageGenerationConfigManager.create(
@@ -179,10 +148,10 @@ def test_get_config_credentials(
 
 
 def test_get_credentials_not_found(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test getting credentials for a non-existent config returns 404."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     response = client.get(
         f"{API_SERVER_URL}/admin/image-generation/config/non-existent-id/credentials",
@@ -193,10 +162,10 @@ def test_get_credentials_not_found(
 
 
 def test_update_config_direct_key_entry(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test updating an image generation config with new direct credentials."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     # Create initial config
     config = ImageGenerationConfigManager.create(
@@ -230,75 +199,11 @@ def test_update_config_direct_key_entry(
     assert credentials["api_key"] == "sk-u****2345"
 
 
-def test_update_config_clone_mode(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
-) -> None:
-    """Test updating an image generation config by cloning from an LLM provider."""
-    admin_user, llm_provider = setup_image_generation_tests
-
-    # Create initial config with direct credentials
-    config = ImageGenerationConfigManager.create(
-        image_provider_id="update-clone-test",
-        model_name="gpt-image-1",
-        provider="openai",
-        api_key="sk-initial-direct-key",
-        user_performing_action=admin_user,
-    )
-
-    assert config.model_name == "gpt-image-1"
-
-    # Update by cloning from LLM provider
-    updated_config = ImageGenerationConfigManager.update(
-        image_provider_id=config.image_provider_id,
-        model_name="gpt-image-1",
-        source_llm_provider_id=llm_provider.id,
-        user_performing_action=admin_user,
-    )
-
-    assert updated_config.image_provider_id == config.image_provider_id
-    assert updated_config.model_name == "gpt-image-1"
-
-    # Verify config still exists and is accessible
-    ImageGenerationConfigManager.verify(
-        config=updated_config,
-        user_performing_action=admin_user,
-    )
-
-
-def test_update_config_source_provider_not_found(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
-) -> None:
-    """Test that updating with non-existent source_llm_provider_id fails."""
-    admin_user, _ = setup_image_generation_tests
-
-    # Create initial config
-    config = ImageGenerationConfigManager.create(
-        image_provider_id="update-bad-source-test",
-        model_name="gpt-image-1",
-        provider="openai",
-        api_key="sk-initial-key",
-        user_performing_action=admin_user,
-    )
-
-    # Try to update with non-existent source provider
-    response = client.put(
-        f"{API_SERVER_URL}/admin/image-generation/config/{config.image_provider_id}",
-        json={
-            "model_name": "gpt-image-1",
-            "source_llm_provider_id": 999999,
-        },
-        headers=admin_user.headers,
-    )
-
-    assert response.status_code == 404
-    assert "not found" in response.json()["detail"]
-
-
 def test_delete_config(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test deleting an image generation config."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     # Create a config
     config = ImageGenerationConfigManager.create(
@@ -330,10 +235,10 @@ def test_delete_config(
 
 
 def test_delete_config_not_found(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test deleting a non-existent config returns 404."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     response = client.delete(
         f"{API_SERVER_URL}/admin/image-generation/config/non-existent-id",
@@ -344,10 +249,10 @@ def test_delete_config_not_found(
 
 
 def test_set_default_config(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test setting a config as the default."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     # Create a config that is not default
     config = ImageGenerationConfigManager.create(
@@ -378,10 +283,10 @@ def test_set_default_config(
 
 
 def test_set_default_clears_previous(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test that setting a new default clears the previous default."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     # Create first config as default
     config1 = ImageGenerationConfigManager.create(
@@ -437,10 +342,10 @@ def test_set_default_clears_previous(
 
 
 def test_set_default_not_found(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test setting a non-existent config as default returns 404."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
     response = client.post(
         f"{API_SERVER_URL}/admin/image-generation/config/non-existent-id/default",
@@ -451,12 +356,12 @@ def test_set_default_not_found(
 
 
 def test_create_config_missing_credentials(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+    setup_image_generation_tests: DATestUser,
 ) -> None:
     """Test that creating a config without credentials fails."""
-    admin_user, _ = setup_image_generation_tests
+    admin_user = setup_image_generation_tests
 
-    # Try to create without api_key/provider or source_llm_provider_id
+    # Try to create without api_key/provider
     response = client.post(
         f"{API_SERVER_URL}/admin/image-generation/config",
         json={
@@ -467,24 +372,4 @@ def test_create_config_missing_credentials(
     )
 
     assert response.status_code == 400
-    assert "No provider or source llm provided" in response.json()["detail"]
-
-
-def test_create_config_source_provider_not_found(
-    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
-) -> None:
-    """Test creating a config with non-existent source_llm_provider_id fails."""
-    admin_user, _ = setup_image_generation_tests
-
-    response = client.post(
-        f"{API_SERVER_URL}/admin/image-generation/config",
-        json={
-            "image_provider_id": "bad-source-test",
-            "model_name": "gpt-image-1",
-            "source_llm_provider_id": 999999,  # Non-existent ID
-        },
-        headers=admin_user.headers,
-    )
-
-    assert response.status_code == 404
-    assert "not found" in response.json()["detail"]
+    assert "No provider provided" in response.json()["detail"]

@@ -5,7 +5,13 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
-import { Button, Text, EmptyMessageCard, Divider } from "@opal/components";
+import {
+  Button,
+  Collapsible,
+  Divider,
+  EmptyMessageCard,
+  Text,
+} from "@opal/components";
 import {
   SvgBarChart,
   SvgWallet,
@@ -15,11 +21,6 @@ import {
   SvgChevronUp,
 } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import { cn } from "@opal/utils";
 import {
   useUserUsage,
@@ -292,13 +293,12 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
             {groups.map(({ provider, models }) => {
               const open = expanded.has(provider);
               return (
-                <Collapsible
+                <Collapsible.Root
                   key={provider}
                   open={open}
                   onOpenChange={() => toggle(provider)}
-                  className="flex flex-col"
                 >
-                  <CollapsibleTrigger className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
+                  <Collapsible.Trigger className="flex w-full flex-row items-center justify-between cursor-pointer select-none py-1.5">
                     <Text font="main-ui-action" color="text-03">
                       {provider}
                     </Text>
@@ -308,8 +308,8 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                         open && "rotate-90"
                       )}
                     />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
+                  </Collapsible.Trigger>
+                  <Collapsible.Content>
                     <Section
                       gap={0}
                       alignItems="stretch"
@@ -347,8 +347,8 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                         </div>
                       ))}
                     </Section>
-                  </CollapsibleContent>
-                </Collapsible>
+                  </Collapsible.Content>
+                </Collapsible.Root>
               );
             })}
           </Section>

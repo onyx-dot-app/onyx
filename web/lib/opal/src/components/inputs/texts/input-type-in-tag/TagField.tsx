@@ -79,6 +79,9 @@ interface TagFieldProps extends TagFieldBaseProps {
   /** Receives the wrapper element (a select's floating reference). */
   rootRef?: (node: HTMLDivElement | null) => void;
 
+  /** The list this field opens is open: it keeps its focused border. */
+  open?: boolean;
+
   /** The text input, when the caller must focus or read it. */
   inputRef?: React.RefObject<HTMLInputElement | null>;
 
@@ -138,6 +141,7 @@ function TagField({
   maxRows = 2,
   focusOnMount = false,
   rootRef,
+  open = false,
   inputRef: inputRefProp,
   onInputKeyDown,
   onEnter,
@@ -288,6 +292,7 @@ function TagField({
       role="presentation"
       className="opal-input opal-input-type-in-tag"
       data-variant={disabled ? "disabled" : variant}
+      data-open={open || undefined}
       data-read-only={readOnly || undefined}
       onKeyDown={handleRootKeyDown}
       onClick={focusField}

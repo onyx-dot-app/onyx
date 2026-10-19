@@ -37,11 +37,13 @@ def _create_cc_pair(
     name: str,
     status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     in_repeated_error_state: bool = False,
+    source: DocumentSource = DocumentSource.GOOGLE_DRIVE,
 ) -> ConnectorCredentialPair:
     owner = create_test_user(db_session, "monitor_list_owner")
+    owner.personal_name = "Monitor List Owner"
     connector = Connector(
         name=f"{prefix} Connector",
-        source=DocumentSource.GOOGLE_DRIVE,
+        source=source,
         input_type=InputType.POLL,
         connector_specific_config={},
         refresh_freq=None,
@@ -110,13 +112,17 @@ def _connectors(
     )
 
 
-def test_pairs_sort_by_bucket_then_name_and_the_filter_keeps_the_counts(
+def test_pairs_sort_by_bucket_then_source_then_name_and_the_filter_keeps_the_counts(
     db_session: Session,
 ) -> None:
     now = datetime.now(timezone.utc)
     prefix = _prefix()
     indexed_b = _create_cc_pair(db_session, prefix, "b indexed")
     indexed_a = _create_cc_pair(db_session, prefix, "a indexed")
+    # Confluence sorts before Google Drive within a bucket, whatever the names say.
+    indexed_z = _create_cc_pair(
+        db_session, prefix, "z indexed", source=DocumentSource.CONFLUENCE
+    )
     indexing = _create_cc_pair(db_session, prefix, "indexing")
     paused = _create_cc_pair(
         db_session, prefix, "paused", ConnectorCredentialPairStatus.PAUSED
@@ -128,6 +134,7 @@ def test_pairs_sort_by_bucket_then_name_and_the_filter_keeps_the_counts(
     canceled = _create_cc_pair(db_session, prefix, "canceled")
     _index_attempt(db_session, indexed_b, IndexingStatus.SUCCESS, now)
     _index_attempt(db_session, indexed_a, IndexingStatus.COMPLETED_WITH_ERRORS, now)
+    _index_attempt(db_session, indexed_z, IndexingStatus.SUCCESS, now)
     _index_attempt(db_session, indexing, IndexingStatus.IN_PROGRESS, now)
     # A paused pair's attempt does not pull it out of the paused bucket.
     _index_attempt(db_session, paused, IndexingStatus.SUCCESS, now)
@@ -143,28 +150,34 @@ def test_pairs_sort_by_bucket_then_name_and_the_filter_keeps_the_counts(
         paused.name,
         canceled.name,
         fresh.name,
+        indexed_z.name,
         indexed_a.name,
         indexed_b.name,
     ]
-    assert response.total_items == 7
+    assert response.total_items == 8
     assert response.status_counts == {
         IndexingConnectorStatus.INDEXING: 1,
         IndexingConnectorStatus.FAILED: 1,
         IndexingConnectorStatus.PAUSED: 1,
         IndexingConnectorStatus.SCHEDULED: 2,
-        IndexingConnectorStatus.INDEXED: 2,
+        IndexingConnectorStatus.INDEXED: 3,
     }
     by_name = {row.name: row for row in response.items}
     assert by_name[fresh.name].latest_index_attempt is None
     assert by_name[canceled.name].queue_position is None
     assert by_name[indexed_a.name].latest_index_attempt is not None
     assert by_name[indexed_a.name].creator_email is not None
+    assert by_name[indexed_a.name].creator_name == "Monitor List Owner"
     assert by_name[indexed_a.name].permissions["operate"] is True
 
     filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.INDEXED)
 
-    assert [row.name for row in filtered.items] == [indexed_a.name, indexed_b.name]
-    assert filtered.total_items == 2
+    assert [row.name for row in filtered.items] == [
+        indexed_z.name,
+        indexed_a.name,
+        indexed_b.name,
+    ]
+    assert filtered.total_items == 3
     assert filtered.status_counts == response.status_counts
 
 

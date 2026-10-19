@@ -23,3 +23,4 @@ With a negative `min`, the value can be typed with a leading minus sign.
 | `suffix`        | `string`                          | —           | Unit text after the value           |
 | `id`            | `string`                          | —           | Input id, for `<label htmlFor>`     |
 | `allowEmpty`    | `boolean`                         | `true`      | When false, blur restores a blank field instead of committing `null` |
+| `plain`         | `boolean`                         | `false`     | A plain type-in field: no steppers, the value in mono, the unit in `text-02` |

@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "{serverName}에 인증하고 연결",
-        "label": "인증"
+        "ariaLabel": "{serverName} 인증 설정",
+        "label": "인증 설정"
       },
       "deleteButton": {
         "ariaLabel": "{serverName} 서버 삭제",
@@ -130,14 +130,13 @@
       "authStatus": {
         "apiTokenDescription": "API token 설정됨",
         "connectedDescription": "연결됨",
-        "oauthDescription": "{owner}에 OAuth로 연결됨",
         "title": "인증 및 연결됨"
       },
       "cancelButton": {
         "label": "취소"
       },
       "description": {
-        "placeholder": "MCP 서버에 대한 자세한 설명",
+        "placeholder": "이 서버로 팀에서 무엇을 할 수 있나요?",
         "suffix": "선택 사항",
         "title": "설명"
       },
@@ -145,21 +144,20 @@
         "tooltip": "서버 연결 해제"
       },
       "editConfigsButton": {
-        "label": "설정 편집"
+        "label": "연결 설정"
       },
       "manageHeader": {
         "description": "MCP 서버 구성을 업데이트하고 인증을 관리합니다.",
         "title": "MCP 서버 관리"
       },
       "name": {
-        "placeholder": "MCP 서버 이름을 입력하세요",
+        "placeholder": "예: Linear",
         "required": "서버 이름은 필수입니다",
         "title": "서버 이름"
       },
       "serverUrl": {
         "invalid": "유효한 URL이어야 합니다",
         "required": "서버 URL은 필수입니다",
-        "subDescription": "신뢰할 수 있는 서버에만 연결하세요. 이 연결로 수행되는 작업과 도구를 최신 상태로 유지하는 책임은 사용자에게 있습니다.",
         "title": "MCP 서버 URL"
       },
       "submitButton": {
@@ -173,6 +171,34 @@
         "serverCreated": "MCP 서버를 만들었습니다",
         "serverUpdated": "MCP 서버를 업데이트했습니다",
         "updateFailed": "MCP 서버를 업데이트하지 못했습니다"
+      },
+      "access": {
+        "title": "액세스 제어",
+        "description": "이 MCP를 사용할 수 있는 사용자를 선택하세요.",
+        "public": {
+          "label": "공개",
+          "description": "조직의 누구나 이 MCP를 사용할 수 있습니다"
+        },
+        "groups": {
+          "label": "사용자 그룹",
+          "description": "선택한 사용자 그룹은 이 MCP를 사용할 수 있습니다.",
+          "placeholder": "사용자 그룹 추가",
+          "required": "사용자 그룹을 하나 이상 선택하세요."
+        },
+        "scoped": {
+          "description": "관리하는 그룹을 하나 이상 선택하세요."
+        },
+        "retainedUsers": "{count, plural, other {사용자 #명과도 직접 공유됩니다.}}",
+        "planTag": "Business",
+        "planNote": "그룹 액세스에는 Business 요금제가 필요합니다."
+      },
+      "craft": {
+        "title": "Craft에서 사용 가능",
+        "description": "사용자가 Craft에서 이 MCP 서버에 접근할 수 있도록 허용합니다."
+      },
+      "defaultChat": {
+        "title": "기본 Onyx 채팅에서 사용 가능",
+        "description": "끄면 사용자가 채팅에서 사용하기 위해 이 서버를 사용자 지정 에이전트에 추가해야 합니다."
       }
     },
     "addOpenApiModal": {
@@ -279,54 +305,48 @@
       "additionalAuthParams": {
         "label": "추가 인증 파라미터(JSON)"
       },
-      "advanced": {
-        "description": "자동 검색 대신 권한 부여 엔드포인트와 token 엔드포인트를 직접 지정하여 알려진 OAuth 공급자를 구성합니다.",
-        "title": "고급"
-      },
       "apiKey": {
         "required": "API token은 필수입니다"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "공유 키(관리자)"
+          "label": "공유 토큰"
         },
         "perUser": {
-          "label": "개별 키(사용자별)"
+          "label": "개인 토큰"
         }
       },
       "authPerformer": {
-        "required": "인증 수행자는 필수입니다"
+        "label": "인증 정보",
+        "required": "개인 또는 공유 자격 증명을 선택하세요."
       },
       "authType": {
         "apiToken": {
-          "description": "사용자별 개별 API 키 또는 조직 전체 공유 API 키를 사용합니다.",
           "label": "API 키"
         },
         "label": "인증 방법",
         "none": {
-          "description": "권장하지 않음",
-          "label": "없음"
+          "label": "인증 없음"
         },
         "oauth": {
-          "description": "각 사용자가 자신의 자격 증명으로 OAuth 인증을 해야 합니다.",
           "label": "OAuth"
         },
         "placeholder": "방법 선택",
         "ptOauth": {
-          "description": "{appName} 인증에 사용된 사용자의 OAuth 액세스 token을 전달합니다.",
           "label": "OAuth 패스스루"
         },
         "required": "인증 유형은 필수입니다"
       },
       "authorizationEndpoint": {
         "label": "권한 부여 엔드포인트",
-        "required": "알려진 공급자 모드에서는 권한 부여 엔드포인트가 필수입니다"
+        "required": "공급자의 권한 부여 엔드포인트를 입력하세요."
       },
       "cancelButton": {
         "label": "취소"
       },
       "clientId": {
-        "label": "클라이언트 ID"
+        "label": "클라이언트 ID",
+        "required": "OAuth 클라이언트 ID를 입력하세요."
       },
       "clientSecret": {
         "label": "클라이언트 시크릿"
@@ -335,25 +355,30 @@
         "additionalParamsInvalid": "추가 인증 파라미터 JSON이 잘못되었습니다",
         "additionalParamsInvalidWithReason": "추가 인증 파라미터 JSON이 잘못되었습니다: {reason}",
         "additionalParamsNotObject": "추가 인증 파라미터는 JSON 객체여야 합니다",
-        "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}",
         "saveAuthFailed": "인증 구성을 저장하지 못했습니다",
-        "saveConfigFailed": "서버 구성을 저장하지 못했습니다"
+        "saveConfigFailed": "서버 구성을 저장하지 못했습니다",
+        "saveStage": "연결 설정을 저장할 수 없습니다",
+        "oauthStage": "로그인을 시작할 수 없습니다",
+        "discoveryStage": "서버 도구를 불러올 수 없습니다",
+        "loadStage": "연결 설정을 불러올 수 없습니다",
+        "clientRegistrationFailed": "클라이언트 자동 등록에 실패했습니다. 자체 OAuth 클라이언트를 사용하거나 공급자의 설정 요구 사항을 확인하세요.",
+        "discoveryFailed": "OAuth 로그인 설정을 찾을 수 없습니다. 서버 URL을 확인하거나 공급자의 엔드포인트를 입력하세요.",
+        "connectionFailed": "OAuth 서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
+        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요."
       },
       "header": {
-        "defaultTitle": "MCP 서버 인증",
-        "description": "MCP 서버를 사용하려면 연결을 인증하세요.",
-        "title": "*{name}* 인증"
-      },
-      "knownProvider": {
-        "hint": "알려진 공급자 모드에서는 엔드포인트 구성이 필요합니다. Google 참조 엔드포인트: 권한 부여 {authorizationEndpoint}, token {tokenEndpoint}."
+        "defaultTitle": "인증 설정",
+        "description": "MCP 서버 인증 설정",
+        "title": "*{name}* 설정"
       },
       "noAuthNotice": {
-        "description": "이 연결에는 인증을 사용하지 않습니다. 이 서버를 신뢰할 수 있는지 확인하세요. 이 연결로 수행되는 작업에 대한 책임은 사용자에게 있습니다.",
-        "title": "이 MCP 서버에 인증 없음"
+        "description": "사용자는 로그인 없이 이 서버를 사용할 수 있습니다. 설정된 사용자 지정 헤더는 계속 전송됩니다.",
+        "title": "인증 필요 없음"
       },
       "oauthInfo": {
-        "discovery": "클라이언트 ID와 시크릿은 선택 사항입니다. 자동 검색 중에 {appName}는 지원되는 경우 Client ID Metadata Document(CIMD)를 사용하고, 지원되지 않으면 Dynamic Client Registration(DCR)으로 대체합니다.",
-        "manualRegistration": "서버가 두 방법을 모두 지원하지 않으면 먼저 서버 공급자에 {appName} 인스턴스를 등록하세요. 액션에 필요한 스코프를 {appName}에 부여하세요."
+        "discovery": "각 사용자는 자신의 계정으로 로그인합니다.",
+        "manualRegistration": "이 리디렉션 URI를 공급자에 등록하세요.",
+        "title": "OAuth 구성"
       },
       "passThroughNotice": {
         "description": "{appName}는 사용자의 OAuth 액세스 token을 Authorization 헤더로 서버에 직접 전달합니다. 서버가 동일한 공급자로 인증을 지원하는지 확인하세요.",
@@ -361,14 +386,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "MCP SDK 챌린지/검색 플로우를 사용합니다(기본값).",
-          "label": "자동 검색"
+          "description": "서버가 공개한 로그인 설정을 읽습니다.",
+          "label": "로그인 엔드포인트 자동 검색"
         },
         "knownProvider": {
-          "description": "구성된 권한 부여/token 엔드포인트를 사용합니다.",
-          "label": "알려진 공급자"
+          "description": "로그인 URL과 토큰 URL을 직접 입력합니다.",
+          "label": "엔드포인트 직접 입력"
         },
-        "label": "공급자 모드",
+        "label": "OAuth 엔드포인트",
         "placeholder": "모드 선택"
       },
       "redirectUri": {
@@ -379,20 +404,55 @@
         "label": "스코프 재정의(쉼표로 구분)"
       },
       "sharedApiKey": {
-        "description": "개인 API 키는 사용하지 마세요. 이 키를 조직의 모든 사용자와 공유해도 되는지 확인하세요.",
+        "description": "이 키는 설정을 테스트하고 액세스 권한이 있는 모든 사용자를 연결하는 데 사용됩니다. 개인 키가 아닌 작업 공간 키를 사용하세요.",
         "label": "API 키",
         "placeholder": "조직의 공유 API 키"
       },
       "submitButton": {
-        "label": "연결",
-        "pendingLabel": "연결하는 중..."
+        "label": "변경 사항 저장",
+        "pendingLabel": "저장 중…"
       },
       "tokenEndpoint": {
         "label": "Token 엔드포인트",
-        "required": "알려진 공급자 모드에서는 token 엔드포인트가 필수입니다"
+        "required": "공급자의 토큰 엔드포인트를 입력하세요."
       },
       "transport": {
-        "required": "전송 방식은 필수입니다"
+        "required": "전송 방식은 필수입니다",
+        "label": "연결 전송 방식",
+        "description": "서버에서 기존 SSE가 필요한 경우가 아니면 Streamable HTTP를 사용하세요. 이 설정은 서버에서 자동 감지되지 않습니다.",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE(기존 방식)"
+      },
+      "advancedSettings": {
+        "title": "고급 설정"
+      },
+      "apiTokenInfo": {
+        "title": "API 키 구성",
+        "description": "각 사용자가 개인 토큰으로 연결할지 모두 공유 토큰을 사용할지 선택하세요."
+      },
+      "oauthSetup": {
+        "label": "OAuth 설정",
+        "automatic": {
+          "label": "자동으로 설정",
+          "description": "서버가 공개한 설정을 사용하여 {appName}이 OAuth 클라이언트를 등록하도록 합니다."
+        },
+        "ownClient": {
+          "label": "자체 OAuth 클라이언트 사용",
+          "description": "공급자의 클라이언트 ID를 입력하세요. 필요한 경우에만 시크릿을 추가하세요."
+        }
+      },
+      "discovery": {
+        "checking": "자동 설정 확인 중…",
+        "supported": "자동 설정을 사용할 수 있습니다",
+        "requiresClient": "이 서버는 클라이언트 자동 등록 지원을 알리지 않습니다. 자체 OAuth 클라이언트를 설정하는 것을 권장합니다. 자동 등록을 시도할 수도 있습니다.",
+        "missing": "서버 URL을 확인하거나 공급자의 로그인 및 토큰 엔드포인트를 입력하세요.",
+        "unreachable": "서버를 사용할 수 없거나 검색 요청이 차단되었을 수 있습니다.",
+        "retry": "다시 확인",
+        "manual": "OAuth 설정 직접 입력",
+        "useOwnClient": "자체 OAuth 클라이언트 사용",
+        "unreachableTitle": "자동 설정을 사용할 수 있는지 확인할 수 없습니다",
+        "missingTitle": "OAuth 엔드포인트를 찾을 수 없습니다",
+        "requiresClientTitle": "자동 설정을 사용할 수 없을 수 있습니다"
       }
     },
     "mcpCard": {
@@ -402,7 +462,7 @@
       "deleteModal": {
         "body": {
           "confirmation": "이 MCP 서버를 삭제하시겠습니까?",
-          "description": "<emphasis>{title}</emphasis>에 연결된 모든 도구가 제거됩니다. 삭제는 되돌릴 수 없습니다."
+          "description": "조직의 모든 사용자에 대해 <emphasis>{title}</emphasis> 및 모든 관련 도구가 삭제됩니다. 삭제는 되돌릴 수 없습니다."
         },
         "submitButton": {
           "label": "삭제"
@@ -415,6 +475,20 @@
       "refreshToolsButton": {
         "ariaLabel": "도구 새로 고침",
         "tooltip": "도구 새로 고침"
+      },
+      "setupIncomplete": {
+        "label": "설정이 완료되지 않았습니다.",
+        "actionHint": "설정이 완료되지 않았습니다. 클릭하여 설정을 완료하세요."
+      },
+      "status": {
+        "ready": "준비됨 · {count, plural, one {도구 #개} other {도구 #개}}",
+        "incomplete": "설정 미완료",
+        "loading": "도구 불러오는 중",
+        "disconnected": "연결 끊김"
+      },
+      "authenticationButton": {
+        "tooltip": "인증 구성",
+        "ariaLabel": "{serverName} 인증 구성"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +567,7 @@
         "toolUpdateFailed": "도구를 업데이트하지 못했습니다",
         "toolsDisabled": "{count, plural, one {도구 #개를 비활성화했습니다} other {도구 #개를 비활성화했습니다}}",
         "toolsEnabled": "{count, plural, one {도구 #개를 활성화했습니다} other {도구 #개를 활성화했습니다}}",
-        "toolsFetched": "연결한 후 도구를 가져왔습니다",
+        "toolsFetched": "도구를 불러왔습니다",
         "toolsRefreshed": "도구를 새로 고쳤습니다"
       }
     },
@@ -554,9 +628,6 @@
       "loading": {
         "label": "기존 구성을 불러오는 중..."
       },
-      "oauthLoginNotice": {
-        "description": "OAuth 패스스루에는 OAuth를 지원하는 로그인 방법(Google 또는 OIDC)이 필요합니다."
-      },
       "passThroughNotice": {
         "description": "{appName}는 사용자의 OAuth 액세스 token을 Authorization 헤더로 서버에 직접 전달합니다. 서버가 동일한 공급자로 인증을 지원하는지 확인하세요.",
         "title": "ID 공급자를 공유하는 서비스에는 패스스루를 사용하세요."
@@ -577,6 +648,34 @@
       "tokenUrl": {
         "label": "Token URL",
         "required": "Token URL은 필수입니다"
+      },
+      "pkce": {
+        "label": "PKCE 사용",
+        "description": "OAuth 제공업체가 S256 챌린지 방식의 PKCE를 지원하는 경우에만 활성화하세요."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "PKCE 지원 여부를 확인하려면 유효한 HTTPS 엔드포인트를 입력하세요.",
+          "checking": "공개된 PKCE 지원 정보를 확인하는 중…",
+          "supported": "제공업체가 S256 PKCE 지원을 명시했습니다.",
+          "unsupported": "제공업체가 S256 PKCE 지원을 명시하지 않았습니다.",
+          "unknown": "PKCE 지원 여부를 확인할 수 없습니다. 설정은 수동으로 선택할 수 있습니다."
+        },
+        "description": "설정이나 토큰을 저장하지 않고 저장되지 않은 설정을 테스트합니다. 제공업체에서 동의하면 이 앱에 계정 접근 권한이 부여될 수 있습니다.",
+        "testing": "연결 테스트 중…",
+        "test": "연결 테스트",
+        "successPkce": "PKCE 매개변수를 사용한 인증에 성공했습니다. 제공업체가 PKCE를 강제한다는 뜻은 아닙니다.",
+        "success": "PKCE 없이 인증에 성공했습니다.",
+        "result": {
+          "blocked": "팝업을 허용하고 다시 시도하세요.",
+          "closed": "테스트 창이 닫혔거나 연결이 끊어졌습니다. 열려 있는 테스트를 완료하거나 다시 시도하세요.",
+          "stale": "설정이 변경되었습니다. 현재 설정을 다시 테스트하세요.",
+          "failed": "인증 테스트에 실패했습니다. 설정을 확인하고 다시 시도하세요.",
+          "denied": "제공업체 인증이 거부되거나 취소되었습니다.",
+          "interrupted": "테스트가 만료되거나 중단되었습니다. 새 테스트를 시작하세요."
+        },
+        "returnToSettings": "결과를 확인하려면 설정 창으로 돌아가세요.",
+        "close": "창 닫기"
       }
     },
     "openApiCard": {
@@ -633,10 +732,8 @@
         "placeholder": "{field} 입력"
       },
       "credentials": {
-        "perUserDescription": "다음 자격 증명은 조직과 공유되지 않습니다.",
-        "perUserTitle": "내 계정 전용",
-        "sharedDescription": "이 값은 조직의 모든 사용자에게 사용됩니다.",
-        "sharedTitle": "조직 공유 값"
+        "perUserDescription": "자신의 자격 증명으로 이 MCP를 테스트하고 도구를 불러오세요. 자격 증명은 자신의 계정에만 저장됩니다.",
+        "sharedDescription": "이 값은 조직의 모든 사용자에게 사용됩니다."
       },
       "headers": {
         "addButton": {
@@ -646,8 +743,8 @@
           "message": "헤더 값 중 하나 이상에 {apiKey} 자리 표시자가 있어야 합니다."
         },
         "keyTitle": "헤더 이름",
-        "label": "인증 헤더",
-        "perUserDescription": "각 사용자가 개별 자격 증명을 입력할 수 있도록 헤더 형식을 지정하세요. <mono>{apiKey}</mono> 또는 <mono>{userEmail}</mono> 같은 자리 표시자를 사용하세요. 사용자에게 자리 표시자의 값을 입력하라는 메시지가 표시됩니다(user_email 제외).",
+        "label": "사용자 지정 헤더",
+        "perUserDescription": "각 사용자의 API 키에는 <mono>{apiKey}</mono>를 사용하세요. <mono>{userEmail}</mono>에는 이메일이 자동으로 입력됩니다. 다른 자리표시자는 사용자에게 값을 요청합니다.",
         "sharedDescription": "조직의 공유 자격 증명과 함께 보낼 헤더의 형식을 지정하세요. 헤더 값 중 하나 이상에 <mono>{apiKey}</mono> 같은 자리 표시자를 사용하세요. 이 자리 표시자는 조직의 공유 키로 대체됩니다.",
         "valueTitle": "헤더 값"
       }
@@ -815,6 +912,411 @@
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
       "mcpServerUrl": "https://mcp-seobeo.com/mcp"
+    },
+    "memberPlugins": {
+      "chat": {
+        "trigger": {
+          "label": "플러그인"
+        },
+        "search": {
+          "placeholder": "플러그인 검색"
+        },
+        "empty": {
+          "text": "이 채팅에서 사용할 수 있는 플러그인이 없습니다.",
+          "searchText": "검색어와 일치하는 플러그인이 없습니다."
+        },
+        "loading": {
+          "label": "플러그인 로딩 중"
+        },
+        "loadError": {
+          "text": "일부 플러그인을 불러오지 못했습니다. 다시 시도하세요."
+        },
+        "retry": {
+          "label": "다시 시도"
+        },
+        "browse": {
+          "label": "플러그인 둘러보기"
+        },
+        "toggle": {
+          "ariaLabel": "이 채팅에서 {name} 사용"
+        },
+        "connect": {
+          "label": "연결"
+        },
+        "connection": {
+          "connected": "연결됨",
+          "workspace": "워크스페이스 연결",
+          "session": "세션 연결",
+          "none": "연결 필요 없음",
+          "oauth": "계정 연결",
+          "credentials": "인증 정보 추가",
+          "checking": "연결 확인 중",
+          "unconfigured": "워크스페이스 설정 필요",
+          "unavailable": "연결을 사용할 수 없음"
+        },
+        "intent": {
+          "unavailable": "이 채팅의 에이전트에서 사용할 수 없는 플러그인입니다.",
+          "invalid": "유효하지 않은 플러그인 링크입니다."
+        }
+      },
+      "oauthComplete": {
+        "success": {
+          "title": "플러그인이 연결되었습니다",
+          "description": "이전 탭으로 돌아가서 계속하세요."
+        },
+        "error": {
+          "title": "연결을 확인하지 못했습니다",
+          "description": "이전 탭으로 돌아가서 다시 연결해 보세요."
+        },
+        "return": {
+          "label": "플러그인으로 돌아가기"
+        },
+        "close": {
+          "label": "탭 닫기"
+        }
+      },
+      "title": "플러그인",
+      "description": "계정을 연결하여 워크스페이스 플러그인을 사용하세요.",
+      "manageWorkspace": "워크스페이스 플러그인 관리",
+      "search": "플러그인 검색",
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Craft 앱"
+      },
+      "row": {
+        "view": "{name} 보기",
+        "connect": "{name} 연결"
+      },
+      "status": {
+        "connected": "연결됨",
+        "workspace": "워크스페이스 연결",
+        "session": "현재 로그인 사용",
+        "none": "사용 준비됨",
+        "oauth": "계정 연결",
+        "credentials": "인증 정보 추가",
+        "unconfigured": "워크스페이스 설정 필요",
+        "checking": "연결 확인 중",
+        "unavailable": "연결을 사용할 수 없음"
+      },
+      "availability": {
+        "label": "{name}의 연결 상태",
+        "chat": "기본 채팅",
+        "craft": "Craft",
+        "on": "켜짐",
+        "off": "꺼짐",
+        "unknown": "알 수 없음"
+      },
+      "state": {
+        "loading": "플러그인 로딩 중",
+        "serversError": "MCP 플러그인을 불러오지 못했습니다.",
+        "toolsError": "플러그인 도구를 불러오지 못했습니다.",
+        "oauthError": "계정 연결을 불러오지 못했습니다.",
+        "retry": "다시 시도",
+        "noResultsTitle": "일치하는 플러그인이 없습니다",
+        "noResultsDescription": "다른 이름이나 설명으로 검색하세요.",
+        "clearSearch": "모든 플러그인 보기",
+        "appsError": "Craft 앱을 불러오지 못했습니다.",
+        "appsLoading": "Craft 앱 불러오는 중",
+        "emptyTitle": "플러그인을 찾을 수 없습니다",
+        "emptyDescription": "다른 연결 필터를 사용하거나 워크스페이스 관리자에게 플러그인 추가를 요청하세요."
+      },
+      "detail": {
+        "connection": "연결",
+        "serverUrl": "서버 URL",
+        "tools": "도구",
+        "toolCount": "{count, plural, other {도구 #개}}",
+        "toolsDescription": "이 워크스페이스 플러그인에서 사용할 수 있는 도구입니다.",
+        "noTools": "이 플러그인에 표시할 수 있는 도구가 저장되어 있지 않습니다.",
+        "connect": "계정 연결",
+        "useInChat": "채팅에서 사용",
+        "chatDisabled": "이 플러그인은 기본 채팅에서 활성화되지 않았습니다. 워크스페이스 관리자가 사용 가능 여부를 변경할 수 있습니다.",
+        "chatUnknown": "기본 채팅에서 사용 가능한지 확인하지 못했습니다.",
+        "disconnect": "계정 연결 해제",
+        "disconnectTitle": "{name}의 연결을 해제할까요?",
+        "disconnectDescription": "계정 연결이 삭제됩니다. 워크스페이스 사용 가능 여부는 유지됩니다.",
+        "oauthDisconnectWarning": "동일한 OAuth 설정을 사용하는 모든 플러그인과 앱이 이 계정 연결을 공유합니다. 연결을 해제하면 모든 해당 플러그인과 앱에서 연결이 삭제됩니다.",
+        "disconnecting": "연결 해제 중...",
+        "disconnectFailed": "계정 연결을 해제하지 못했습니다. 다시 시도하세요.",
+        "cancel": "취소",
+        "close": "완료",
+        "openInCraft": "Craft에서 열기"
+      },
+      "connection": {
+        "title": "{name} 연결",
+        "description": "워크스페이스에서 이 플러그인을 설정했습니다. 계정을 연결하여 사용하세요.",
+        "credentialsDescription": "이 플러그인의 인증 정보를 입력하세요. 계정 연결은 다른 멤버와 별도로 관리됩니다.",
+        "oauthDescription": "계속 진행하여 계정으로 로그인하세요. 제공업체에서 요청된 접근 권한을 표시합니다.",
+        "continue": "{name}(으)로 계속",
+        "connect": "연결",
+        "connecting": "연결 중...",
+        "cancel": "취소",
+        "done": "완료",
+        "workspaceDescription": "워크스페이스에서 이 연결을 제공합니다. 계정을 연결할 필요가 없습니다.",
+        "sessionDescription": "이 플러그인은 현재 로그인을 사용합니다.",
+        "noneDescription": "이 플러그인은 계정 연결이 필요하지 않습니다.",
+        "connectedDescription": "계정이 연결되었습니다.",
+        "unconfiguredDescription": "연결하려면 워크스페이스 관리자가 이 플러그인의 설정을 완료해야 합니다.",
+        "checkingDescription": "연결 상태를 불러오는 중입니다. 완료된 후 다시 시도하세요.",
+        "unavailableDescription": "연결 상태를 불러오지 못했습니다. 플러그인 페이지에서 다시 시도하세요.",
+        "errors": {
+          "popup_blocked": "브라우저에서 로그인 창을 차단했습니다. 팝업을 허용하고 다시 시도하세요.",
+          "cancelled": "로그인이 취소되었습니다. 다시 시도할 수 있습니다.",
+          "timed_out": "로그인 시간이 초과되었습니다. 다시 시도하세요.",
+          "credentials_required": "필요한 인증 정보를 모두 입력하세요.",
+          "unconfigured": "워크스페이스 관리자가 이 플러그인의 설정을 완료해야 합니다.",
+          "not_connected": "계정 연결을 확인하지 못했습니다. 다시 시도하세요.",
+          "request_failed": "연결하지 못했습니다. 다시 시도하세요."
+        }
+      },
+      "filters": {
+        "label": "연결 상태",
+        "all": "전체",
+        "connected": "연결됨",
+        "needsSignIn": "로그인 필요",
+        "showAll": "모든 플러그인 보기"
+      },
+      "defaults": {
+        "chat": "메인 채팅에서 기본적으로 활성화",
+        "craft": "Craft에서 기본적으로 활성화",
+        "chatDescription": "기본 채팅에 적용됩니다. 사용자 지정 에이전트는 자체 도구 설정을 유지합니다.",
+        "craftDescription": "내 Craft 세션에서 이 MCP를 사용합니다.",
+        "unavailable": "관리자가 {surface}에서 이 플러그인을 비활성화했습니다.",
+        "saveFailed": "플러그인 기본 설정을 저장하지 못했습니다. 다시 시도하세요."
+      },
+      "openapi": {
+        "chatOnly": "Chat 전용",
+        "chatOnlyDescription": "이 플러그인은 Chat에서 사용할 수 있으며 Craft에서는 사용할 수 없습니다."
+      },
+      "appSkills": {
+        "search": "스킬 검색",
+        "count": "{count, plural, one {스킬 #개} other {스킬 #개}}",
+        "empty": "이 앱에 연결된 스킬이 없습니다.",
+        "noMatches": "검색과 일치하는 스킬이 없습니다.",
+        "error": "스킬을 불러올 수 없습니다.",
+        "enabled": "활성화됨",
+        "disabled": "비활성화됨",
+        "loading": "스킬 불러오는 중…"
+      },
+      "externalApp": {
+        "description": "Craft에서 계정을 사용하세요.",
+        "craftOnly": "Craft 전용",
+        "craftOnlyDescription": "이 앱은 Craft에서 사용할 수 있습니다. 메인 채팅에서는 지원하지 않습니다."
+      }
+    },
+    "plugins": {
+      "availability": {
+        "mainChat": "기본 Chat",
+        "craft": "Craft",
+        "on": "켜짐",
+        "off": "꺼짐",
+        "unknown": "알 수 없음",
+        "enabled": "활성화됨",
+        "disabled": "비활성화됨",
+        "chatEnabled": "Chat 켜짐",
+        "chatDisabled": "Chat 꺼짐",
+        "chatUnknown": "Chat 상태 알 수 없음",
+        "craftEnabled": "Craft 켜짐",
+        "craftDisabled": "Craft 꺼짐"
+      },
+      "controls": {
+        "disconnect": "워크스페이스에서 활성화 또는 비활성화",
+        "enable": "워크스페이스에서 활성화",
+        "disable": "워크스페이스에서 비활성화",
+        "manageAvailability": "워크스페이스 가용성 관리",
+        "more": "추가 작업",
+        "disableChat": "기본 채팅에서 비활성화",
+        "enableChat": "기본 채팅에서 활성화",
+        "disableCraft": "Craft에서 비활성화",
+        "enableCraft": "Craft에서 활성화"
+      },
+      "craftApp": {
+        "tabs": {
+          "configuration": "설정",
+          "permissions": "권한",
+          "skills": "스킬"
+        }
+      },
+      "disableConfirmation": {
+        "workspaceTitle": "워크스페이스에서 {name}을(를) 비활성화할까요?",
+        "workspaceDescription": "사용자 지정 에이전트를 포함하여 워크스페이스의 모든 사용자에게 {name}이(가) 비활성화됩니다. 저장된 설정과 자격 증명은 유지됩니다. 다시 활성화할 수 있습니다.",
+        "scope": "조직의 모든 사용자",
+        "chatTitle": "메인 채팅에서 {name}을(를) 비활성화할까요?",
+        "chatDescription": "조직의 모든 사용자의 기본 채팅에서 {name}이(가) 제거됩니다. 사용자 지정 에이전트에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다.",
+        "craftTitle": "Craft에서 {name}을(를) 비활성화할까요?",
+        "craftDescription": "조직의 모든 사용자가 Craft에서 {name}을(를) 사용할 수 없게 됩니다. 메인 채팅에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다."
+      },
+      "openapi": {
+        "schemaPreview": {
+          "detected": "{count, plural, one {도구 #개 감지됨} other {도구 #개 감지됨}}",
+          "viewTools": "도구 보기",
+          "saveToUpdate": "변경 사항을 저장하여 도구를 업데이트하세요."
+        },
+        "reviewTitle": "{name} 검토",
+        "createTitle": "OpenAPI 플러그인 추가",
+        "detailDescription": "이 API와 에이전트가 사용할 수 있는 도구를 관리합니다.",
+        "detailsTitle": "플러그인 세부 정보",
+        "schemaTitle": "OpenAPI 스키마",
+        "editSchema": "스키마 편집",
+        "notFound": "플러그인을 찾을 수 없음",
+        "loadFailed": "이 플러그인을 불러올 수 없습니다",
+        "unavailable": "이 플러그인이 삭제되었거나 접근 권한이 없을 수 있습니다.",
+        "readOnly": "이 플러그인을 볼 수 있지만 계정에 설정 변경 권한이 없습니다.",
+        "disableTitle": "{name}을(를) 비활성화할까요?",
+        "disableDescription": "에이전트가 이 플러그인을 사용할 수 없게 됩니다. 나중에 다시 활성화할 수 있습니다.",
+        "deleteTitle": "{name}을(를) 삭제할까요?",
+        "deleteDescription": "OpenAPI 플러그인과 해당 설정을 영구적으로 삭제합니다."
+      },
+      "title": "플러그인",
+      "description": "도구와 앱을 워크스페이스에 연결하세요.",
+      "search": {
+        "placeholder": "플러그인 검색"
+      },
+      "add": {
+        "label": "추가",
+        "mcp": "사용자 지정 MCP 서버 추가",
+        "openapi": "OpenAPI 작업 추가"
+      },
+      "catalog": {
+        "slack": {
+          "summary": "대화를 검색하고 메시지를 보냅니다",
+          "description": "대화를 검색하고 메시지를 보냅니다. 등록된 Slack 앱이 필요합니다."
+        },
+        "hubspot": {
+          "summary": "연락처와 거래를 관리합니다",
+          "description": "연락처와 거래를 관리합니다. HubSpot MCP 커넥터가 필요합니다."
+        },
+        "asana": {
+          "summary": "작업과 프로젝트를 관리합니다",
+          "description": "작업과 프로젝트를 관리합니다. 등록된 OAuth 클라이언트가 필요합니다."
+        },
+        "linear": {
+          "summary": "이슈, 프로젝트, 팀을 관리합니다",
+          "description": "이슈, 프로젝트, 팀을 관리합니다."
+        },
+        "notion": {
+          "summary": "Notion 워크스페이스를 검색하고 업데이트합니다",
+          "description": "Notion 워크스페이스를 검색하고 업데이트합니다."
+        },
+        "sentry": {
+          "summary": "오류와 성능 문제를 조사합니다",
+          "description": "오류와 성능 문제를 조사합니다."
+        },
+        "atlassian": {
+          "summary": "Jira와 Confluence를 사용합니다",
+          "description": "Jira와 Confluence를 사용합니다.",
+          "approvalNote": "Atlassian 조직에서 관리자 승인이 필요할 수 있습니다."
+        },
+        "setupGuide": "설정 가이드",
+        "add": {
+          "label": "{name} 추가"
+        }
+      },
+      "row": {
+        "manage": {
+          "label": "{name} 관리"
+        },
+        "view": {
+          "label": "{name} 보기"
+        }
+      },
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Craft 앱"
+      },
+      "filters": {
+        "label": "플러그인 유형",
+        "all": "전체",
+        "apps": "Craft 앱"
+      },
+      "state": {
+        "mcpError": "MCP 서버를 불러올 수 없습니다.",
+        "listErrorDescription": "플러그인 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
+        "openapiError": "OpenAPI 작업을 불러올 수 없습니다.",
+        "retry": {
+          "label": "다시 시도"
+        },
+        "loading": "플러그인 불러오는 중",
+        "empty": {
+          "title": "설치된 플러그인 없음",
+          "description": "워크스페이스에 플러그인을 추가하세요.",
+          "explore": {
+            "label": "플러그인 둘러보기"
+          }
+        },
+        "noResults": {
+          "title": "플러그인을 찾을 수 없음",
+          "description": "다른 이름, 설명 또는 서버 URL로 검색하세요.",
+          "clear": {
+            "label": "모든 플러그인 보기"
+          }
+        },
+        "externalAppsError": "앱을 불러오지 못했습니다"
+      }
+    },
+    "mcpSetup": {
+      "connectTo": "{name}에 연결",
+      "contactingServer": "서버에 연결 중",
+      "detectingAuthentication": "인증 방식 감지 중",
+      "stagePending": "진행 중",
+      "stageSuccess": "완료",
+      "stageError": "실패",
+      "stageWaiting": "대기 중",
+      "progress": "설정 진행 상황",
+      "serverStep": "서버",
+      "connectionStep": "연결",
+      "permissionDenied": "MCP 서버를 추가할 권한이 없습니다.",
+      "reviewSettings": "연결하기 전에 서버 설정을 확인하세요.",
+      "urlDescription": "서버 URL을 입력하여 연결 및 인증 설정을 감지하세요.",
+      "detectedTransport": "전송: {transport}",
+      "retry": "다시 확인",
+      "authenticationUndetected": "다음 페이지에서 인증 방법을 선택하세요.",
+      "configureManually": "직접 구성",
+      "details": "세부 정보",
+      "checking": "서버 확인 중…",
+      "unreachable": "이 MCP 서버에 연결할 수 없습니다",
+      "retryCheck": "URL과 서버 상태를 확인한 후 다시 시도하세요.",
+      "blocked": "아웃바운드 보안 설정에 의해 차단된 URL입니다.",
+      "publicDetected": "인증이 필요하지 않습니다",
+      "oauthDetected": "OAuth 감지됨",
+      "manualRequired": "인증 방법 직접 선택",
+      "chooseAuthentication": "이 서버의 인증 방법을 확인할 수 없습니다. 아래에서 방법을 선택하세요.",
+      "connect": "연결",
+      "publicDetails": "사용 가능한 도구: {count}개",
+      "serverDetails": "서버 세부 정보",
+      "authentication": "인증",
+      "continue": "계속",
+      "back": "뒤로"
+    },
+    "mcpTools": {
+      "title": "도구",
+      "description": "사용 가능한 도구를 선택하고 권한을 설정하세요.",
+      "enabledTab": "사용 가능한 도구",
+      "policiesTab": "Craft 권한",
+      "enabledDescription": "사용자가 Onyx에서 사용할 수 있는 도구를 선택하세요.",
+      "policiesDescription": "Craft가 각 도구를 사용하기 전에 승인을 요청할 시점을 선택하세요.",
+      "back": "인증",
+      "refresh": "도구 새로 고침",
+      "loadError": "도구를 불러올 수 없습니다",
+      "saveError": "도구 설정을 저장할 수 없습니다",
+      "refreshError": "도구를 새로 고칠 수 없습니다",
+      "search": "도구 검색"
+    },
+    "mcpDetail": {
+      "configuration": "서버 설정",
+      "editConfiguration": "서버 설정 편집",
+      "authentication": "인증",
+      "editAuthentication": "인증 편집",
+      "availability": "사용 가능 위치",
+      "edit": "편집",
+      "loadError": "MCP 서버를 불러올 수 없습니다",
+      "notFound": "MCP 서버를 찾을 수 없습니다",
+      "unavailable": "이 서버가 삭제되었거나 액세스 권한이 없을 수 있습니다.",
+      "retry": "다시 시도",
+      "restrictedAccess": "{groups, plural, one {#개 그룹} other {#개 그룹}} · {users, plural, one {#명 사용자} other {#명 사용자}}",
+      "authenticationIncomplete": "인증이 설정되지 않았습니다.",
+      "availabilitySaved": "사용 설정이 업데이트되었습니다"
     }
   },
   "admin": {
@@ -1037,6 +1539,9 @@
         },
         "lumapps": {
           "description": "인트라넷 페이지와 커뮤니티"
+        },
+        "youtrack": {
+          "description": "이슈 추적 및 프로젝트 관리"
         },
         "canvas": {
           "description": "강좌, 페이지, 공지"
@@ -1754,6 +2259,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "채팅 세션의 이름을 생성하는 모델입니다. 기본적으로 각 세션의 모델을 사용합니다.",
+        "resetButton": {
+          "label": "초기화"
+        },
+        "sessionModel": {
+          "label": "기본 모델 사용"
+        },
+        "title": "채팅 이름 생성 모델"
+      },
+      "searchSelectionModel": {
+        "description": "검색된 문서를 선택하고 확인합니다. 저렴한 모델은 검색 비용을 줄일 수 있지만 답변 품질에 영향을 줄 수 있습니다.",
+        "resetButton": {
+          "label": "초기화"
+        },
+        "sessionModel": {
+          "label": "기본 모델 사용"
+        },
+        "title": "검색 선택 모델"
+      },
+      "taskModels": {
+        "title": "모델 선택",
+        "loadFailed": "작업 모델을 불러오지 못했습니다",
+        "retry": {
+          "label": "다시 시도"
+        },
+        "noProviders": {
+          "title": "언어 모델 공급자를 연결하세요"
+        },
+        "addProvider": {
+          "label": "제공자 추가"
+        }
+      },
       "advanced": {
         "title": "고급 옵션"
       },
@@ -1772,13 +2310,6 @@
       "betaTag": {
         "label": "베타"
       },
-      "chatNaming": {
-        "description": "채팅 세션의 이름을 자동으로 지정하는 데 사용하는 모델입니다. 기본값은 각 세션의 모델입니다. 기본 모델이 동시 요청을 처리할 수 없으면 여기에 작고 빠른 모델을 지정하세요.",
-        "resetButton": {
-          "label": "초기화"
-        },
-        "title": "채팅 이름 지정 모델"
-      },
       "connectors": {
         "empty": {
           "title": "설정된 커넥터 없음"
@@ -1791,6 +2322,10 @@
       "deepResearch": {
         "description": "웹과 연결된 소스 전반을 조사하는 에이전트 기반 리서치 시스템입니다. 질의당 훨씬 많은 token을 사용합니다.",
         "title": "심층 리서치"
+      },
+      "defaultLanguage": {
+        "description": "개인 설정에서 언어를 선택하지 않은 사용자에게 적용되는 UI 언어입니다.",
+        "title": "기본 언어"
       },
       "disableDefaultChat": {
         "description": "사용자가 항상 에이전트에서 시작하도록 강제합니다. 새 채팅은 사용자가 처음 고정한 에이전트에서 생성됩니다. 새 사용자가 쉽게 시작하도록 추천 에이전트를 설정하세요.",
@@ -1932,11 +2467,15 @@
         "title": "Temperature 제어"
       },
       "toasts": {
-        "chatNamingReset": "채팅 이름 지정 모델을 세션 모델로 초기화했습니다",
-        "chatNamingResetFailed": "채팅 이름 지정 모델을 초기화하지 못했습니다",
-        "chatNamingUpdateFailed": "채팅 이름 지정 모델을 업데이트하지 못했습니다",
-        "chatNamingUpdated": "채팅 이름 지정 모델을 업데이트했습니다",
+        "chatNamingUpdated": "채팅 이름 생성 모델이 업데이트되었습니다",
+        "chatNamingReset": "채팅 이름 생성 모델을 기본 모델로 초기화했습니다",
+        "chatNamingUpdateFailed": "채팅 이름 생성 모델을 업데이트하지 못했습니다",
+        "chatNamingResetFailed": "채팅 이름 생성 모델을 초기화하지 못했습니다",
         "providerResolveFailed": "제공자를 확인할 수 없습니다",
+        "searchSelectionReset": "검색 선택 모델을 기본 모델로 초기화했습니다",
+        "searchSelectionResetFailed": "검색 선택 모델을 초기화하지 못했습니다",
+        "searchSelectionUpdateFailed": "검색 선택 모델을 업데이트하지 못했습니다",
+        "searchSelectionUpdated": "검색 선택 모델이 업데이트되었습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "settingsUpdated": "설정을 업데이트했습니다",
         "systemPromptUpdateFailed": "시스템 프롬프트를 업데이트하지 못했습니다",
@@ -2125,7 +2664,8 @@
           "cannotRemoveAllFiles": "커넥터에서 모든 파일을 제거할 수는 없습니다. 필요하면 커넥터를 삭제하세요.",
           "filesUpdated": "파일을 업데이트했습니다! 문서 인덱스는 백그라운드에서 업데이트됩니다. 새 파일은 인덱싱되고 제거된 파일은 검색 결과에서 삭제됩니다.",
           "updateFailed": "파일을 업데이트하지 못했습니다"
-        }
+        },
+        "units": "{count, plural, other {파일}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -2154,7 +2694,8 @@
         "toggle": {
           "description": "선택한 그룹의 멤버로 접근을 제한합니다. 동기화된 권한은 계속 적용됩니다.",
           "title": "그룹으로 접근 제한"
-        }
+        },
+        "managerCount": "{count, plural, other {그룹 관리자 #명}}"
       },
       "invalidState": {
         "description": "이 커넥터는 유효하지 않은 상태입니다. 재인덱싱하기 전에 자격 증명을 업데이트하거나 새 커넥터를 만드세요.",
@@ -2174,18 +2715,17 @@
         "reIndex": {
           "tooltip": {
             "indexing": "인덱싱이 이미 진행 중이면 재인덱싱할 수 없습니다",
-            "invalid": "재인덱싱하기 전에 커넥터 구성을 수정하세요",
-            "paused": "재인덱싱하기 전에 커넥터를 다시 시작하세요"
+            "invalid": "재인덱싱하기 전에 커넥터 구성을 수정하세요"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "인덱싱 일시 중지",
-            "description": "진행 중이거나 예정된 모든 인덱싱 실행과 동기화를 취소합니다."
+            "label": "인덱싱 및 동기화 일시 중지",
+            "description": "진행 중이거나 예정된 인덱싱 실행과 권한 동기화를 취소합니다. 인덱싱된 문서는 최신 상태가 아니게 되지만 계속 검색할 수 있습니다."
           },
           "resume": {
-            "label": "인덱싱 재개",
-            "description": "예약된 인덱싱 실행과 동기화를 다시 허용합니다."
+            "label": "인덱싱 및 동기화 재개",
+            "description": "인덱싱 실행과 권한 동기화를 다시 시작합니다."
           },
           "tooltip": {
             "updating": "상태 업데이트 진행 중"
@@ -2200,7 +2740,11 @@
         },
         "fullReindex": {
           "label": "전체 재인덱싱",
-          "description": "소스의 모든 문서를 다시 인덱싱합니다. 규모에 따라 몇 시간 또는 며칠이 걸릴 수 있습니다."
+          "description": "소스의 모든 문서를 다시 인덱싱합니다. 규모에 따라 **몇 시간 또는 며칠**이 걸릴 수 있습니다."
+        },
+        "startIndexing": {
+          "label": "인덱싱 시작",
+          "description": "커넥터 검사를 건너뛰고 지금 인덱싱합니다."
         }
       },
       "reEnableModal": {
@@ -2217,109 +2761,47 @@
         "perBatch": {
           "empty": "배치별 단계 데이터가 기록되지 않았습니다."
         },
-        "stages": {
-          "batchLoad": {
-            "label": "배치 로드"
+        "buckets": {
+          "fetchSource": {
+            "label": "소스 가져오기"
           },
-          "batchTotal": {
-            "label": "배치 전체"
-          },
-          "batchUnaccounted": {
-            "label": "미분류"
-          },
-          "checkpointLoad": {
-            "label": "체크포인트 로드"
+          "batchPreProcessing": {
+            "label": "배치 전처리"
           },
           "chunking": {
             "label": "청킹"
           },
-          "connectorFetch": {
-            "label": "커넥터 가져오기"
-          },
-          "connectorValidation": {
-            "label": "커넥터 검증"
-          },
-          "contextualRag": {
-            "label": "컨텍스트 기반 RAG"
-          },
-          "coordLockAcquireWait": {
-            "label": "조정 잠금 대기"
-          },
-          "coordinationUpdate": {
-            "label": "조정 업데이트"
-          },
-          "docBatchEnqueue": {
-            "label": "문서 배치 큐 등록"
-          },
-          "docBatchStore": {
-            "label": "문서 배치 저장"
-          },
-          "docDbPrepare": {
-            "label": "문서 DB 준비"
-          },
-          "docLockAcquireWait": {
-            "label": "문서 잠금 획득 대기"
-          },
-          "docprocessingSetup": {
-            "label": "문서 처리 설정"
-          },
           "embedding": {
-            "label": "Embedding"
-          },
-          "enrichmentPrep": {
-            "label": "보강 준비"
-          },
-          "finalization": {
-            "label": "마무리"
-          },
-          "gcCollect": {
-            "label": "가비지 컬렉션"
-          },
-          "hierarchyUpsert": {
-            "label": "계층 업서트"
-          },
-          "imageProcessing": {
-            "label": "이미지 처리"
-          },
-          "permissionValidation": {
-            "label": "권한 검증"
-          },
-          "postIndexDbUpdate": {
-            "label": "인덱싱 후 DB 업데이트"
-          },
-          "queueWait": {
-            "label": "큐 대기"
+            "label": "임베딩"
           },
           "vectorDbWrite": {
             "label": "벡터 DB 쓰기"
           },
-          "embeddingRateLimitWait": {
-            "label": "임베딩 요청 한도 대기",
-            "description": "인덱스 설정에서 지정한 임베딩 요청 한도 때문에 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
-          },
-          "embeddingProviderThrottleWait": {
-            "label": "제공자 제한 대기",
-            "description": "임베딩 제공자가 요청을 제한한 후 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
+          "postProcessing": {
+            "label": "후처리"
           }
         }
       },
       "statusCard": {
         "documentsIndexed": {
-          "label": "인덱싱된 문서"
+          "label": "인덱싱 완료 문서"
         },
         "indexingSpeed": "분당 {speed}개 문서",
+        "indexingSpeedTooltip": "커넥터 생성 이후 분당 인덱싱된 문서 수",
         "lastIndexed": {
           "value": "마지막 인덱싱 {when}"
         },
-        "title": "인덱싱 상태",
+        "statusLine": "인덱싱 상태 - {detail}",
         "documents": {
           "label": "최근 / 전체",
-          "total": "/ {total}"
+          "total": "/ {total}",
+          "totalLabel": "전체"
         },
         "throughput": {
           "ariaLabel": "시간별 인덱싱된 문서",
           "tooltip": "{count, plural, one {문서 #개} other {문서 #개}}",
-          "loadError": "차트를 불러올 수 없습니다."
+          "loadError": "차트를 불러올 수 없습니다.",
+          "rangeFilter": "차트의 이 구간에 생성된 실행"
         },
         "hold": {
           "checks_running": "인덱싱 전 검사 실행 중",
@@ -2347,7 +2829,10 @@
         "targetedReindexFailed": "대상 지정 재인덱싱에 실패했습니다: {message}",
         "targetedReindexSubmitted": "{count, plural, one {문서 #개} other {문서 #개}}에 대해 대상 지정 재인덱싱을 요청했습니다. 문서의 재인덱싱이 끝나면 목록에서 오류가 사라집니다.",
         "checkFrequencyUpdated": "커넥터 검사 주기가 업데이트되었습니다",
-        "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다"
+        "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다",
+        "runResolved": "해결됨으로 표시했습니다.",
+        "runResolveFailed": "해결하지 못했습니다: {message}",
+        "runsResolved": "{count, plural, other {실행 #개}}를 해결됨으로 표시했습니다."
       },
       "backButton": {
         "label": "모든 커넥터"
@@ -2406,7 +2891,9 @@
           "displayName": "• {name}",
           "docsUnit": "{count, plural, other {개 문서}}"
         },
-        "summary": "{realm} • {counts}"
+        "summary": "{realm} • {counts}",
+        "hostPrefix": "{host}: {realm}",
+        "hostType": "{source} 호스트 유형"
       },
       "sharing": {
         "title": "공유 설정",
@@ -2427,12 +2914,25 @@
         "editButton": {
           "label": "접근 권한 편집"
         },
-        "groupsUnavailable": "그룹을 불러오지 못했습니다."
+        "groupsUnavailable": "그룹을 불러오지 못했습니다.",
+        "summaryLine": {
+          "access": "{access}",
+          "accessAndManaged": "{access}; {managed}"
+        }
       },
       "schedule": {
         "refresh": "**{every}**마다 새로 고침",
         "prune": "**{every}**마다 정리",
-        "checks": "**{every}**마다 검사 실행"
+        "checks": "**{every}**마다 검사 실행",
+        "summary": {
+          "refresh": "{refresh}",
+          "prune": "{prune}",
+          "checks": "{checks}",
+          "refreshAndPrune": "{refresh}; {prune}",
+          "refreshAndChecks": "{refresh}; {checks}",
+          "pruneAndChecks": "{prune}; {checks}",
+          "refreshAndPruneAndChecks": "{refresh}; {prune}; {checks}"
+        }
       },
       "runs": {
         "kinds": {
@@ -2448,7 +2948,9 @@
           "queued": "대기 중",
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
-          "finished": "{time} ({minutes, number}분)"
+          "finished": "{time} ({minutes, number}분)",
+          "rateFinished": "분당 {rate}개 문서 ({minutes, number}분)",
+          "membershipRate": "{rate} 멤버십/분"
         },
         "actions": {
           "stages": "단계별 지표 보기",
@@ -2460,12 +2962,15 @@
           "tooltip": "{count, plural, other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}"
         },
+        "newModel": {
+          "label": "새 모델",
+          "tooltip": "현재 모델을 대체할 임베딩 모델로 인덱싱되었습니다."
+        },
         "figures": {
           "indexed": "인덱싱됨",
           "synced": "동기화됨",
-          "memberships": "멤버십",
           "removed": "개 제거됨",
-          "checks": "개 검사 실행됨"
+          "checksRun": "{count, plural, other {#개 검사 실행됨}}"
         },
         "counts": {
           "newDocs": "{count, plural, other {새 문서 #개}}",
@@ -2476,12 +2981,14 @@
           "running": "{count, plural, other {실행 #개 진행 중}}",
           "succeeded": "{count, plural, other {실행 #개 성공}}",
           "failed": "{count, plural, other {실행 #개 실패}}",
+          "canceled": "{count, plural, other {실행 #개 취소됨}}",
           "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
           "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
-          "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
+          "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}",
+          "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
         "search": {
-          "placeholder": "인덱싱 실행 검색..."
+          "placeholder": "인덱싱 실행 검색…"
         },
         "window": {
           "label": "기간",
@@ -2504,9 +3011,11 @@
           "title": "실행 목록을 불러오지 못했습니다."
         },
         "empty": {
-          "title": "아직 실행이 없습니다",
+          "title": "최근 인덱싱 실행이 없습니다",
           "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
-          "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
+          "pastRuns": "{count, plural, other {지난 실행 #개}}",
+          "view": "보기",
+          "viewAria": "{count, plural, other {지난 실행 #개 보기}}"
         },
         "units": "{count, plural, other {실행}}",
         "errorModal": {
@@ -2524,11 +3033,12 @@
           "title": "커넥터 검사",
           "close": "닫기",
           "count": "({count})"
-        }
+        },
+        "showing": "<mono>{total}</mono>개 중 <mono>{from}</mono>~<mono>{to}</mono>개 표시"
       },
       "activity": {
         "search": {
-          "placeholder": "활동 기록 검색..."
+          "placeholder": "활동 기록 검색…"
         },
         "counts": {
           "failures": "{count, plural, other {실패한 실행 #개}}",
@@ -2536,76 +3046,78 @@
         },
         "filter": {
           "label": "표시",
-          "all": "모든 수준",
+          "all": "전체 수준",
           "failures": "실패",
           "errors": "오류",
-          "other": "기타"
-        },
-        "resolved": {
-          "label": "해결됨"
+          "other": "기타",
+          "resolved": "해결됨"
         },
         "groups": {
-          "failures": "{count, plural, other {실패 #개}}",
-          "errors": "{count, plural, other {오류 #개}}",
-          "resolved": "{count, plural, other {해결됨 #개}}",
+          "failures": "{count, plural, =0 {실패} other {실패 #개}}",
+          "errors": "{count, plural, =0 {오류} other {오류 #개}}",
           "other": "기타"
         },
         "title": {
           "indexing": {
-            "failed": "인덱싱 실패",
-            "running": "오류와 함께 인덱싱 진행 중",
-            "stopped": "오류와 함께 인덱싱 중단됨",
-            "errors": "오류와 함께 인덱싱 완료",
-            "resolved": "인덱싱 오류 해결됨",
-            "succeeded": "인덱싱이 성공적으로 완료됨",
-            "inProgress": "인덱싱 진행 중",
-            "canceled": "인덱싱 중지됨"
+            "failed": "인덱싱 실패.",
+            "failedWith": "인덱싱 실패: {reason}.",
+            "running": "오류와 함께 인덱싱 진행 중.",
+            "stopped": "오류와 함께 인덱싱 중단됨.",
+            "errors": "오류와 함께 인덱싱 완료.",
+            "resolved": "인덱싱 오류 해결됨.",
+            "succeeded": "인덱싱이 성공적으로 완료됨.",
+            "inProgress": "인덱싱 진행 중.",
+            "canceled": "인덱싱 중지됨."
           },
           "doc_permission_sync": {
-            "failed": "권한 동기화 실패",
-            "running": "오류와 함께 권한 동기화 중",
-            "stopped": "오류와 함께 권한 동기화 중단됨",
-            "errors": "오류와 함께 권한 동기화됨",
-            "resolved": "권한 동기화 오류 해결됨",
-            "succeeded": "권한 동기화가 성공적으로 완료됨",
-            "inProgress": "권한 동기화 중",
-            "canceled": "권한 동기화 중지됨"
+            "failed": "권한 동기화 실패.",
+            "failedWith": "권한 동기화 실패: {reason}.",
+            "running": "오류와 함께 권한 동기화 중.",
+            "stopped": "오류와 함께 권한 동기화 중단됨.",
+            "errors": "오류와 함께 권한 동기화됨.",
+            "resolved": "권한 동기화 오류 해결됨.",
+            "succeeded": "권한 동기화가 성공적으로 완료됨.",
+            "inProgress": "권한 동기화 중.",
+            "canceled": "권한 동기화 중지됨."
           },
           "group_sync": {
-            "failed": "그룹 멤버십 동기화 실패",
-            "running": "오류와 함께 그룹 멤버십 동기화 중",
-            "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨",
-            "errors": "오류와 함께 그룹 멤버십 동기화됨",
-            "resolved": "그룹 멤버십 동기화 오류 해결됨",
-            "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨",
-            "inProgress": "그룹 멤버십 동기화 중",
-            "canceled": "그룹 동기화 중지됨"
+            "failed": "그룹 멤버십 동기화 실패.",
+            "failedWith": "그룹 멤버십 동기화 실패: {reason}.",
+            "running": "오류와 함께 그룹 멤버십 동기화 중.",
+            "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨.",
+            "errors": "오류와 함께 그룹 멤버십 동기화됨.",
+            "resolved": "그룹 멤버십 동기화 오류 해결됨.",
+            "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨.",
+            "inProgress": "그룹 멤버십 동기화 중.",
+            "canceled": "그룹 동기화 중지됨."
           },
           "pruning": {
-            "failed": "정리 실패",
-            "running": "오류와 함께 정리 진행 중",
-            "stopped": "오류와 함께 정리 중지됨",
-            "errors": "오류와 함께 정리 완료됨",
-            "resolved": "정리 오류 해결됨",
-            "succeeded": "정리가 성공적으로 완료됨",
-            "inProgress": "정리 진행 중",
-            "canceled": "정리 중지됨"
+            "failed": "정리 실패.",
+            "failedWith": "정리 실패: {reason}.",
+            "running": "오류와 함께 정리 진행 중.",
+            "stopped": "오류와 함께 정리 중지됨.",
+            "errors": "오류와 함께 정리 완료됨.",
+            "resolved": "정리 오류 해결됨.",
+            "succeeded": "정리가 성공적으로 완료됨.",
+            "inProgress": "정리 진행 중.",
+            "canceled": "정리 중지됨."
           },
           "checks": {
-            "failed": "커넥터 검사 실패",
-            "running": "오류와 함께 커넥터 검사 진행 중",
-            "stopped": "오류와 함께 커넥터 검사 중지됨",
-            "errors": "오류와 함께 커넥터 검사 완료됨",
-            "resolved": "커넥터 검사 오류 해결됨",
-            "succeeded": "커넥터 검사 통과",
-            "inProgress": "커넥터 검사 진행 중",
-            "canceled": "커넥터 검사 중지됨"
+            "failed": "커넥터 검사 실패.",
+            "failedWith": "커넥터 검사 실패: {reason}.",
+            "running": "오류와 함께 커넥터 검사 진행 중.",
+            "stopped": "오류와 함께 커넥터 검사 중지됨.",
+            "errors": "오류와 함께 커넥터 검사 완료됨.",
+            "resolved": "커넥터 검사 오류 해결됨.",
+            "succeeded": "커넥터 검사 통과.",
+            "inProgress": "커넥터 검사 진행 중.",
+            "canceled": "커넥터 검사 중지됨."
           }
         },
         "description": {
           "indexing": "{count, plural, other {문서 #개 인덱싱됨}}. 실행 시간 {minutes, plural, other {#분}}.",
-          "doc_permission_sync": "{count, plural, other {문서 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
-          "group_sync": "{count, plural, other {멤버십 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
+          "doc_permission_sync": "{count, plural, other {문서 권한 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
+          "group_sync": "{count, plural, other {그룹 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
           "pruning": "{count, plural, one {문서 #개 제거됨} other {문서 #개 제거됨}}. 정리 실행 시간 {minutes, plural, one {#분} other {#분}}.",
           "checks": "{count, plural, one {검사 #개 실행됨} other {검사 #개 실행됨}}. 검사 실행 시간 {minutes, plural, one {#분} other {#분}}.",
           "checksFailed": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}."
@@ -2613,16 +3125,16 @@
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
-          "doc_permission_sync": "{count, plural, other {문서 #개 동기화 실패}}",
+          "doc_permission_sync": "{count, plural, other {문서 #개의 권한 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
-          "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
-          "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}"
+          "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
+          "resolved": "해결됨"
         },
         "more": "더 보기",
         "empty": {
-          "title": "실패나 오류가 없습니다",
-          "resolved": "해결된 오류가 없습니다",
+          "title": "최근 활동이 없습니다",
+          "resolved": "해결된 실행이 없습니다",
           "filtered": "이 검색과 일치하는 항목이 없습니다.",
           "failures": "실패가 없습니다",
           "errors": "오류가 없습니다",
@@ -2634,9 +3146,10 @@
         "docs": {
           "title": "실패한 문서",
           "search": {
-            "placeholder": "파일 검색..."
+            "placeholder": "문서 검색…"
           },
           "resolveAll": "모두 해결",
+          "resolveAllTooltip": "이 실행에서 실패한 모든 문서를 다시 색인",
           "resolveOne": "이 문서 해결",
           "more": "더 보기",
           "less": "접기",
@@ -2646,15 +3159,26 @@
           "open": "문서 열기"
         },
         "trace": {
-          "runId": "실행 ID: {id}",
+          "header": "스택 트레이스 • 실행 ID: {id}",
           "copy": "스택 트레이스 복사"
         },
         "actions": {
           "resolve": "해결"
+        },
+        "resolveAll": {
+          "button": "표시된 항목 모두 해결",
+          "title": "표시된 실행을 모두 해결할까요?",
+          "description": "현재 필터와 일치하는 {count, plural, other {실행 #개}}를 해결됨으로 표시합니다. 상태는 그대로 유지되며 해결됨 아래로 이동합니다.",
+          "fleetDescription": "관리 권한이 있는 커넥터에서 현재 필터와 일치하는 {count, plural, other {실행 #개}}를 해결됨으로 표시합니다. 상태는 그대로 유지되며 해결됨 아래로 이동합니다.",
+          "confirm": "모두 해결"
         }
       },
       "stageDetails": {
         "title": "단계 세부 정보",
+        "heading": {
+          "top": "단계",
+          "bottom": "세부 정보"
+        },
         "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
@@ -2875,6 +3399,9 @@
           },
           "shareLocked": {
             "tooltip": "이 계정을 추가한 사람 또는 공유된 관리자만 사용할 수 있는 사람을 변경할 수 있습니다."
+          },
+          "viewDetails": {
+            "tooltip": "세부 정보 보기"
           }
         },
         "accountUnavailable": {
@@ -3256,6 +3783,19 @@
             "lang": {
               "label": "언어",
               "description": "콘텐츠 제목/본문과 메타데이터 레이블에 사용할 언어입니다 (ISO 639-1, 예: en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "YouTrack 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "YouTrack URL",
+              "description": "YouTrack 주소입니다(예: https://example.youtrack.cloud). YouTrack Server의 경우 컨텍스트 경로를 포함하세요(예: https://example.com/youtrack)."
+            },
+            "projects": {
+              "label": "프로젝트",
+              "description": "인덱싱할 프로젝트의 짧은 이름입니다(예: ABC). 비워 두면 토큰이 읽을 수 있는 모든 프로젝트를 인덱싱합니다."
             }
           }
         },
@@ -4611,6 +5151,7 @@
         "gongBaseUrl": "선택 사항입니다. 미국 외 지역의 데이터는 해당 리전의 호스트를 입력하세요(예: https://[region].api.gong.io).",
         "jiraUserEmail": "Jira Cloud에 필요합니다.",
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
+        "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
@@ -6097,8 +6638,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "새 API 키를 입력하거나 기존 제공업체를 선택하세요",
-          "idle": "새 API 키를 입력하거나 기존 제공업체를 선택하세요.",
+          "idle": "API 키를 입력하세요.",
           "label": "API 키",
           "placeholder": "API 키를 입력하세요",
           "required": "API 키는 필수입니다"
@@ -6143,9 +6683,6 @@
         },
         "editHeader": {
           "title": "{title} 편집"
-        },
-        "invalidProviderSelection": {
-          "message": "잘못된 제공업체 선택입니다"
         },
         "loading": {
           "placeholder": "불러오는 중..."
@@ -6809,15 +7346,16 @@
       "activities": {
         "title": "활동",
         "history": "전체 활동 기록",
-        "viewLogs": "활동 기록 보기",
+        "viewLogs": "로그 보기",
         "panel": {
           "title": "활동 기록",
-          "close": "활동 기록 숨기기"
+          "close": "패널 닫기",
+          "pairTitle": "{name} 활동 기록"
         }
       },
       "list": {
         "search": {
-          "placeholder": "커넥터 검색..."
+          "placeholder": "커넥터 검색…"
         },
         "statusFilter": {
           "label": "상태",
@@ -6848,7 +7386,9 @@
           "manage": "관리",
           "manageFederated": "페더레이션 커넥터 관리",
           "expand": "세부 정보 보기",
-          "collapse": "세부 정보 숨기기"
+          "collapse": "세부 정보 숨기기",
+          "pause": "일시 중지",
+          "resume": "재개"
         },
         "federated": {
           "tag": "페더레이션"
@@ -6860,7 +7400,8 @@
         },
         "loadError": "커넥터를 불러올 수 없습니다.",
         "units": "{count, plural, other {개 커넥터}}"
-      }
+      },
+      "title": "커넥터 인덱싱 상태"
     },
     "languageModels": {
       "availableProviders": {
@@ -7371,6 +7912,7 @@
         "providerDeleteFailed": "제공자를 삭제하지 못했습니다: {message}",
         "providerDeleted": "제공자를 삭제했습니다!",
         "providerLoadFailed": "제공자를 불러올 수 없습니다: {message}",
+        "providerResolveFailed": "제공자를 확인할 수 없습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "settingsUpdated": "설정을 업데이트했습니다",
         "unknownError": "알 수 없는 오류"
@@ -7386,6 +7928,16 @@
           "empty": "라우터 모델을 찾을 수 없습니다. 먼저 게이트웨이 제공자에서 라우터 모델을 활성화하세요.",
           "error": "라우터 모델을 불러오지 못했습니다.",
           "retry": "다시 시도"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "사용자 지정 모델",
+          "companyName": "LiteLLM 호환 공급자"
+        },
+        "openAICompatible": {
+          "productName": "사용자 지정 모델",
+          "companyName": "OpenAI 호환 엔드포인트"
         }
       }
     },
@@ -9010,9 +9562,7 @@
     "status": {
       "badges": {
         "canceled": "취소됨",
-        "completedWithErrors": "오류와 함께 완료됨",
         "deleting": "삭제 중",
-        "error": "오류",
         "failed": "실패",
         "indexed": "인덱싱됨",
         "indexing": "인덱싱 중",
@@ -9028,7 +9578,7 @@
         "pruning": "정리 중",
         "pruned": "정리됨",
         "checking": "검사 중",
-        "passed": "통과",
+        "passed": "완료",
         "failedToRun": "실행 실패"
       }
     },
@@ -9350,9 +9900,6 @@
         "title": "{label} 연결 해제"
       },
       "field": {
-        "optional": {
-          "title": "{label} (선택 사항)"
-        },
         "required": {
           "error": "{label}은(는) 필수 항목입니다"
         }
@@ -10144,7 +10691,7 @@
       "groups": {
         "failed": "실패 {count}개",
         "indeterminate": "미확인 {count}개",
-        "passed": "완료 {count}개",
+        "passed": "성공 {count}개",
         "skipped": "건너뜀 {count}개",
         "running": "실행 중 {count}개",
         "expected": "예정 {count}개"
@@ -10169,7 +10716,7 @@
       },
       "foldButton": {
         "fold": "접기",
-        "expand": "펼치기"
+        "expand": "전체 보기"
       },
       "titleCount": "({complete}/{total})",
       "summary": {
@@ -10183,9 +10730,7 @@
       "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
       "state": {
-        "completed": "검사가 완료되었습니다.",
-        "inProgress": "검사 진행 중...",
-        "waiting": "커넥터 설정을 기다리는 중..."
+        "inProgress": "검사 진행 중..."
       },
       "advisory": {
         "title": "일부 콘텐츠는 인덱싱되지 않습니다.",
@@ -10233,7 +10778,8 @@
         },
         "uploadFailed": {
           "toast": "파일을 업로드할 수 없습니다: {detail}"
-        }
+        },
+        "units": "{count, plural, other {파일}}"
       },
       "planFailed": {
         "toast": "계획을 계산할 수 없습니다: {detail}"
@@ -10267,8 +10813,25 @@
         },
         "validation": {
           "title": "유효성 검사",
-          "blocks": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요.",
-          "warns": "일부 선택 검사에 실패했습니다. 그래도 적용할 수 있습니다.",
+          "unchanged": "검증이 필요한 설정은 변경되지 않았습니다.",
+          "outcome": {
+            "failed": {
+              "title": "검증 실패",
+              "description": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요."
+            },
+            "warnings": {
+              "title": "경고와 함께 검증 통과",
+              "description": "일부 선택 검사가 실패했거나 확인할 수 없었습니다. 그래도 적용할 수 있습니다."
+            },
+            "incomplete": {
+              "title": "검증이 완료되지 않음",
+              "description": "완료된 검사는 통과했습니다. 그래도 적용할 수 있습니다."
+            },
+            "passed": {
+              "title": "검증 통과",
+              "description": "새 설정이 모든 검사를 통과했습니다."
+            }
+          },
           "error": {
             "title": "설정이 유효하지 않습니다"
           }
@@ -11375,6 +11938,40 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "도구에 인증 정보가 필요합니다 ({count})",
+        "tooltip": "일부 도구는 계정을 연결하거나 인증 정보를 추가해야 사용할 수 있습니다."
+      },
+      "modal": {
+        "title": "도구 연결",
+        "description": "Onyx에서 도구를 사용하려면 인증 정보를 추가하세요.",
+        "hint": "도구를 연결하지 않아도 채팅을 계속할 수 있지만, 에이전트의 기능이 제한될 수 있습니다."
+      },
+      "connect": {
+        "label": "연결",
+        "accessibleLabel": "{server} 연결"
+      },
+      "reconnect": {
+        "label": "다시 연결",
+        "accessibleLabel": "{server} 다시 연결"
+      },
+      "connecting": {
+        "label": "연결 중…"
+      },
+      "connected": {
+        "label": "연결됨"
+      },
+      "required": {
+        "label": "인증 정보 필요"
+      },
+      "done": {
+        "label": "완료"
+      },
+      "error": {
+        "description": "연결할 수 없습니다. 다시 시도하세요."
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {파일 처리에 실패하여 제거되었습니다: {names}} other {파일 처리에 실패하여 제거되었습니다: {names}}}"
@@ -11821,6 +12418,9 @@
         "credentials": {
           "text": "자격 증명은 서버에서 검증한 후 안전하게 저장됩니다."
         }
+      },
+      "backButton": {
+        "label": "도구로 돌아가기"
       }
     },
     "messages": {
@@ -13610,7 +14210,7 @@
           }
         },
         "managedDescription": "Onyx에서 제공합니다. 에이전트가 할 수 있는 작업을 구성하세요.",
-        "managedNote": "이 앱은 Onyx에서 제공하며 자격 증명은 자동으로 관리됩니다. 아래에서 에이전트가 할 수 있는 작업을 선택하세요. 사용자는 앱 페이지에서 연결합니다.",
+        "managedNote": "Onyx가 자격 증명을 관리합니다. 권한에서 작업 정책을 설정하세요. 멤버는 플러그인에서 연결합니다.",
         "saveButton": "저장"
       },
       "customApp": {
@@ -13711,7 +14311,7 @@
             "tabLabel": "앱 · {count}"
           },
           "mcp": {
-            "blurb": "관리자가 Craft에 공개한 서버입니다. 필요한 앱이 앱 목록에 없거나 서버 자체의 MCP 도구가 특별히 필요할 때 사용하세요.",
+            "blurb": "관리자가 Craft에서 사용할 수 있도록 설정한 서버입니다. 서버에 개인 자격 증명이 필요한 경우 도구를 사용하기 전에 자신의 계정을 연결하세요.",
             "empty": "Craft에 공개된 MCP 서버가 없습니다.",
             "emptyTitle": "아직 MCP 서버가 없습니다",
             "tabLabel": "MCP 서버 · {count}"
@@ -13734,10 +14334,6 @@
         }
       },
       "policyEditor": {
-        "advanced": {
-          "description": "각 작업에 대해 개별적으로 정책을 설정합니다.",
-          "title": "고급"
-        },
         "cancelButton": "취소",
         "loading": {
           "label": "불러오는 중…"
@@ -13746,7 +14342,8 @@
           "askOption": "묻기",
           "autoApproveOption": "자동 승인",
           "customOption": "사용자 지정",
-          "description": "에이전트가 할 수 있는 작업을 선택하세요. \"묻기\"는 각 작업 실행 전에 채팅에서 확인을 요청하고, \"자동 승인\"은 확인 없이 실행합니다. 작업별 정책은 고급 설정에서 지정하세요.",
+          "defaultOption": "기본값",
+          "description": "에이전트가 할 수 있는 작업을 선택하세요. \"묻기\"는 각 작업 전에 승인을 요청하고, \"자동 승인\"은 확인 없이 실행합니다.",
           "title": "권한"
         },
         "savingButton": "저장 중…"
@@ -14355,6 +14952,9 @@
       "toast": {
         "deleteFailed": "세션을 삭제하지 못했습니다",
         "deleted": "\"{title}\"이(가) 삭제되었습니다."
+      },
+      "plugins": {
+        "label": "플러그인"
       }
     },
     "skillsStale": {
@@ -15208,6 +15808,9 @@
       "sevenDays": "7일",
       "threeMonths": "3개월"
     },
+    "divider": {
+      "viewAll": "전체 보기"
+    },
     "iconTooltip": {
       "label": "자세한 정보"
     },
@@ -15553,7 +16156,8 @@
       "title": "언어",
       "toasts": {
         "updateFailed": "언어 설정을 변경하지 못했습니다"
-      }
+      },
+      "workspaceDefault": "워크스페이스 기본값 ({language})"
     },
     "layout": {
       "header": {
@@ -15830,6 +16434,9 @@
         "llmGateway": {
           "label": "LLM 게이트웨이"
         },
+        "plugins": {
+          "label": "플러그인"
+        },
         "mcpActions": {
           "label": "MCP 액션"
         },
@@ -15955,6 +16562,9 @@
       },
       "searchChats": {
         "label": "채팅 검색"
+      },
+      "plugins": {
+        "label": "플러그인"
       }
     },
     "chatButton": {

@@ -284,7 +284,7 @@ export default function MultiModelSelector({
           model (or completes a replacement at max) must not unmount the pane
           it just opened. Opening at max is still blocked at the entry points:
           the add button hides and pill clicks set replacingIndex. */}
-      <Popover.Content side="top" align="end" width="xl">
+      <Popover.Content side="top" align="end" width={70}>
         <ModelSelectorContent
           onSelect={handleSelect}
           isSelected={isSelected}

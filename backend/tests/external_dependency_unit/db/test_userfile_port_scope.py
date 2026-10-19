@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import UserFileStatus
+from onyx.db.enums import PortAttemptStatus, UserFileStatus
 from onyx.db.models import ConnectorCredentialPair, SearchSettings, User, UserFile
 from onyx.db.port_attempt import (
     count_active_port_attempts,
@@ -22,10 +22,8 @@ from onyx.db.port_attempt import (
     get_latest_port_attempt,
     get_reindex_error_rows,
     get_reindex_progress_counts,
-    mark_port_canceled,
-    mark_port_failed,
     mark_port_in_progress,
-    mark_port_succeeded,
+    mark_port_terminal,
     pause_port_attempt,
 )
 from onyx.db.user_file import (
@@ -173,7 +171,7 @@ def test_user_active_unique_allows_new_after_terminal(
         db_session, None, future_ss_id, port_user_id=port_user.id
     )
     mark_port_in_progress(db_session, first.id)
-    mark_port_succeeded(db_session, first.id)
+    mark_port_terminal(db_session, first.id, PortAttemptStatus.SUCCESS)
     second = create_port_attempt(
         db_session, None, future_ss_id, port_user_id=port_user.id
     )
@@ -305,23 +303,31 @@ def test_reindex_progress_counts_and_errors_both_scopes(
             db_session, create_port_attempt(db_session, cc_in_progress.id, ss.id).id
         )
         cc_completed = make_cc_pair(db_session)
-        mark_port_succeeded(
-            db_session, create_port_attempt(db_session, cc_completed.id, ss.id).id
+        mark_port_terminal(
+            db_session,
+            create_port_attempt(db_session, cc_completed.id, ss.id).id,
+            PortAttemptStatus.SUCCESS,
         )
         cc_failed = make_cc_pair(db_session)
-        mark_port_failed(
+        mark_port_terminal(
             db_session,
             create_port_attempt(db_session, cc_failed.id, ss.id).id,
+            PortAttemptStatus.FAILED,
             error_msg="connector boom",
         )
         cc_canceled = make_cc_pair(db_session)  # CANCELED is settled -> waiting bucket
-        mark_port_canceled(
-            db_session, create_port_attempt(db_session, cc_canceled.id, ss.id).id
+        mark_port_terminal(
+            db_session,
+            create_port_attempt(db_session, cc_canceled.id, ss.id).id,
+            PortAttemptStatus.CANCELED,
         )
         cc_paused = make_cc_pair(db_session)  # auto-paused -> paused bucket
         cc_paused_attempt = create_port_attempt(db_session, cc_paused.id, ss.id)
-        mark_port_failed(
-            db_session, cc_paused_attempt.id, error_msg="connector paused boom"
+        mark_port_terminal(
+            db_session,
+            cc_paused_attempt.id,
+            PortAttemptStatus.FAILED,
+            error_msg="connector paused boom",
         )
         assert pause_port_attempt(db_session, cc_paused_attempt.id) is True
         cc_pairs = [
@@ -337,17 +343,19 @@ def test_reindex_progress_counts_and_errors_both_scopes(
         # Users (per-user scope; a COMPLETED file puts the user in scope).
         u_completed = create_test_user(db_session, "reindexprog")
         _make_user_file(db_session, u_completed.id)
-        mark_port_succeeded(
+        mark_port_terminal(
             db_session,
             create_port_attempt(
                 db_session, None, ss.id, port_user_id=u_completed.id
             ).id,
+            PortAttemptStatus.SUCCESS,
         )
         u_failed = create_test_user(db_session, "reindexprog")
         _make_user_file(db_session, u_failed.id)
-        mark_port_failed(
+        mark_port_terminal(
             db_session,
             create_port_attempt(db_session, None, ss.id, port_user_id=u_failed.id).id,
+            PortAttemptStatus.FAILED,
             error_msg="user boom",
         )
         u_waiting = create_test_user(db_session, "reindexprog")
@@ -357,7 +365,12 @@ def test_reindex_progress_counts_and_errors_both_scopes(
         u_paused_attempt = create_port_attempt(
             db_session, None, ss.id, port_user_id=u_paused.id
         )
-        mark_port_failed(db_session, u_paused_attempt.id, error_msg="user paused boom")
+        mark_port_terminal(
+            db_session,
+            u_paused_attempt.id,
+            PortAttemptStatus.FAILED,
+            error_msg="user paused boom",
+        )
         assert pause_port_attempt(db_session, u_paused_attempt.id) is True
         users = [u_completed, u_failed, u_waiting, u_paused]
 

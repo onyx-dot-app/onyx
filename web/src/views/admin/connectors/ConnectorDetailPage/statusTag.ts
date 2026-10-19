@@ -5,7 +5,8 @@ import {
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgClock,
-  SvgPauseCircle,
+  SvgPause,
+  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import {
@@ -25,7 +26,6 @@ export interface StatusTag {
   labelKey:
     | "deleting"
     | "paused"
-    | "error"
     | "scheduled"
     | "initialIndexing"
     | "invalid"
@@ -34,7 +34,6 @@ export interface StatusTag {
     | "interrupted"
     | "indexed"
     | "failed"
-    | "completedWithErrors"
     | "syncing"
     | "synced"
     | "pruning"
@@ -46,9 +45,8 @@ export interface StatusTag {
 
 const TAGS = {
   deleting: { icon: SvgAlertTriangle, color: "red", labelKey: "deleting" },
-  paused: { icon: SvgPauseCircle, color: "gray", labelKey: "paused" },
-  error: { icon: SvgAlertTriangle, color: "red", labelKey: "error" },
-  scheduled: { icon: SvgClock, color: "gray", labelKey: "scheduled" },
+  paused: { icon: SvgPause, color: "amber", labelKey: "paused" },
+  scheduled: { icon: SvgClock, color: "purple", labelKey: "scheduled" },
   initialIndexing: {
     icon: IconLoader,
     color: "blue",
@@ -56,16 +54,11 @@ const TAGS = {
   },
   invalid: { icon: SvgXOctagon, color: "red", labelKey: "invalid" },
   indexing: { icon: IconLoader, color: "blue", labelKey: "indexing" },
-  canceled: { icon: SvgClock, color: "gray", labelKey: "canceled" },
+  canceled: { icon: SvgXCircle, color: "gray", labelKey: "canceled" },
   // Resumes on its own, so it reads neutral rather than as indexed.
-  interrupted: { icon: SvgClock, color: "gray", labelKey: "interrupted" },
+  interrupted: { icon: SvgXCircle, color: "gray", labelKey: "interrupted" },
   indexed: { icon: SvgCheckCircle, color: "green", labelKey: "indexed" },
   failed: { icon: SvgXOctagon, color: "red", labelKey: "failed" },
-  completedWithErrors: {
-    icon: SvgAlertTriangle,
-    color: "amber",
-    labelKey: "completedWithErrors",
-  },
   syncing: { icon: IconLoader, color: "blue", labelKey: "syncing" },
   synced: { icon: SvgCheckCircle, color: "green", labelKey: "synced" },
   pruning: { icon: IconLoader, color: "blue", labelKey: "pruning" },
@@ -75,7 +68,7 @@ const TAGS = {
   failedToRun: { icon: SvgXOctagon, color: "red", labelKey: "failedToRun" },
 } satisfies Record<StatusTag["labelKey"], StatusTag>;
 
-/** The tag for the pair's own state, else the latest attempt's. A live attempt outranks the sticky error. */
+/** The tag for the pair's own state, else the latest attempt's. A live attempt outranks repeated failures. */
 export function ccPairStatusTag(
   status: ConnectorCredentialPairStatus,
   inRepeatedErrorState: boolean,
@@ -83,8 +76,9 @@ export function ccPairStatusTag(
 ): StatusTag {
   if (status === ConnectorCredentialPairStatus.DELETING) return TAGS.deleting;
   if (status === ConnectorCredentialPairStatus.PAUSED) return TAGS.paused;
+  // Repeated failures read "Failed", the same tag as the pair's row on the status page.
   if (inRepeatedErrorState && lastAttemptStatus !== "in_progress") {
-    return TAGS.error;
+    return TAGS.failed;
   }
   if (status === ConnectorCredentialPairStatus.SCHEDULED) return TAGS.scheduled;
   if (status === ConnectorCredentialPairStatus.INITIAL_INDEXING) {
@@ -185,9 +179,9 @@ export function attemptStatusTag(
     case "in_progress":
       return isSync ? TAGS.syncing : TAGS.indexing;
     case "success":
-      return isSync ? TAGS.synced : TAGS.indexed;
+    // Shares the success tag: the warning count beside it carries the document errors.
     case "completed_with_errors":
-      return TAGS.completedWithErrors;
+      return isSync ? TAGS.synced : TAGS.indexed;
     case "failed":
       return TAGS.failed;
     case "interrupted":

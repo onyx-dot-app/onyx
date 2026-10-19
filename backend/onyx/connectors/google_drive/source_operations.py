@@ -50,9 +50,9 @@ from onyx.connectors.google_utils.google_utils import (
     is_access_denied,
 )
 from onyx.connectors.google_utils.resources import (
-    get_admin_service,
-    get_drive_service,
+    GoogleService,
     get_google_authorized_session,
+    get_google_service,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -379,12 +379,16 @@ class GoogleDriveSourceOperations(SourceOperations):
         )
         clients: dict[str, Any] = vars(local).setdefault("by_user", {})
         if user_email not in clients:
-            clients[user_email] = get_drive_service(self._creds(), user_email)
+            clients[user_email] = get_google_service(
+                GoogleService.DRIVE, self._creds(), user_email
+            )
         return clients[user_email]
 
     def _directory(self) -> Any:
         """The Admin SDK directory service, acting as the primary admin."""
-        return get_admin_service(self._creds(), self._auth().primary_admin_email)
+        return get_google_service(
+            GoogleService.ADMIN, self._creds(), self._auth().primary_admin_email
+        )
 
     def _domain(self) -> str:
         return self._auth().primary_admin_email.split("@")[-1]

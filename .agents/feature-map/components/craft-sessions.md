@@ -85,6 +85,8 @@ the turn pauses and the user sees an approval card; the user can approve or
 reject just that request, or approve it for the rest of the session. Files
 the agent produces appear as artifacts the user can browse, download, or
 (for Markdown) export as a `.docx`.
+An app connection card resolves its pending agent request even when credentials already exist.
+It shows Connected only after the decision endpoint succeeds. Failed decisions remain retryable.
 Passive discoveries update the inventory without adding tabs, opening the panel, or changing selection.
 Explicit resource actions create and select tabs. See [[craft-streaming]] for inventory and revision rules.
 The user's own uploaded library files
@@ -637,9 +639,9 @@ send_message / reconcile_session_llm_config     session/manager.py
 
 Priority, per `llm_config.py:_select_gateway_default`: (1) the session's own
 persisted `agent_provider`/`agent_model`, if still visible and accessible;
-(2) the admin's Craft default (`fetch_default_craft_model`,
+(2) the admin's Craft default (`fetch_default_model(..., LLMModelFlowType.CRAFT)`,
 `LLMModelFlowType.CRAFT`); (3) the admin's chat default
-(`fetch_default_llm_model`); (4) each provider's recommended model
+(`fetch_default_model(..., LLMModelFlowType.CHAT)`); (4) each provider's recommended model
 (`recommended-models.json`); (5) the first visible model of the first
 provider. Per `[[llm-providers]]`, `CRAFT` is a pointer flow that nothing
 populates automatically, so step (2) is frequently empty and step (3) is
@@ -650,6 +652,16 @@ when the resolved config actually changed, tracked via a
 `dispose_pending` cache marker so a crash between writing the file and
 disposing the stale opencode instance is retried on the next turn rather
 than silently leaving the instance on the old config until pod death.
+
+**Automatic naming starts after the first turn is accepted.** The accepted
+`send-message` response guarantees that the user message is committed.
+The frontend store requests `PUT /sessions/{id}/name` with `name: null`.
+The backend names only unnamed sessions and checks the name again under a
+row lock after generation. A successful manual rename takes precedence. Failed
+manual renames leave pending automatic names eligible to update the sidebar. Empty or failed
+model responses use the first message, trimmed to 40 characters. Empty
+sessions reject naming instead of saving a UUID label. The generate-name
+endpoint remains a preview and does not persist its result.
 
 **Session naming does not use this resolution at all.**
 `naming.py:generate_session_name` calls `get_default_llm()` (the workspace

@@ -417,8 +417,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const { savedDraft } = useSavedDraftCredential(connector);
   const checksT = useTranslations("admin.connectorChecks");
 
-  const convertStringToDateTime = (indexingStart: string | null) => {
-    return indexingStart ? new Date(indexingStart) : null;
+  // The picked day at midnight UTC, as the API stores it.
+  const indexingStartIso = (indexingStart: string | null) => {
+    return indexingStart ? new Date(indexingStart).toISOString() : null;
   };
 
   const displayName = getSourceDisplayName(connector) || connector;
@@ -500,7 +501,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
     const advancedConfiguration: any = {
       // The backend stores whole seconds.
       pruneFreq: Math.round((pruneFreq ?? defaultPruneFreqHours) * 3600),
-      indexingStart: convertStringToDateTime(indexingStart),
+      indexingStart: indexingStartIso(indexingStart),
       refreshFreq: Math.round((refreshFreq ?? defaultRefreshFreqMinutes) * 60),
     };
 

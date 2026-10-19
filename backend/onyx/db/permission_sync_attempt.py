@@ -4,10 +4,12 @@ This module contains all CRUD operations for both DocPermissionSyncAttempt
 and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, delete, func, select
+from sqlalchemy import ColumnElement, delete, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
@@ -27,6 +29,39 @@ logger = setup_logger()
 
 # Enough consecutive failures to reach the longest retry delay.
 _GROUP_SYNC_BACKOFF_LOOKBACK = 8
+
+_FAILURE_STATUSES = (PermissionSyncStatus.FAILED, PermissionSyncStatus.CANCELED)
+_OPEN_STATUSES = (PermissionSyncStatus.NOT_STARTED, PermissionSyncStatus.IN_PROGRESS)
+
+_AttemptModel = (
+    type[DocPermissionSyncAttempt] | type[ExternalGroupPermissionSyncAttempt]
+)
+
+
+@dataclass
+class DocPermissionSyncProgress:
+    """Running counts the worker updates in memory. The lease heartbeat writes
+    them, so the attempt row shows progress while the sync runs."""
+
+    total_docs_synced: int = 0
+    docs_with_permission_errors: int = 0
+    last_progress_at: datetime | None = None
+
+
+@dataclass
+class ExternalGroupSyncProgress:
+    """Running counts the worker updates in memory. The lease heartbeat writes
+    them, so the attempt row shows progress while the sync runs."""
+
+    total_users_processed: int = 0
+    total_groups_processed: int = 0
+    total_group_memberships_synced: int = 0
+    last_progress_at: datetime | None = None
+
+
+class PermissionSyncAttemptLostError(RuntimeError):
+    """The attempt is no longer IN_PROGRESS, e.g. the reaper failed it after its
+    lease expired. The worker that ran it must stop."""
 
 
 # =============================================================================
@@ -55,6 +90,165 @@ def create_doc_permission_sync_attempt(
     db_session.commit()
 
     return attempt.id
+
+
+def _get_not_started_attempts_older_than(
+    model: _AttemptModel,
+    db_session: Session,
+    older_than: timedelta,
+) -> dict[int, str | None]:
+    return dict(
+        db_session.execute(
+            select(model.id, model.celery_task_id)
+            .where(model.status == PermissionSyncStatus.NOT_STARTED)
+            .where(model.time_created < func.now() - older_than)
+        )
+        .tuples()
+        .all()
+    )
+
+
+def _fail_not_started_attempts(
+    model: _AttemptModel, db_session: Session, attempt_ids: list[int], reason: str
+) -> list[int]:
+    failed_ids = list(
+        db_session.execute(
+            update(model)
+            .where(model.id.in_(attempt_ids))
+            # A task that started meanwhile keeps its attempt
+            .where(model.status == PermissionSyncStatus.NOT_STARTED)
+            .values(
+                status=PermissionSyncStatus.FAILED,
+                time_started=func.now(),
+                time_finished=func.now(),
+                error_message=reason,
+            )
+            .returning(model.id)
+        ).scalars()
+    )
+    db_session.commit()
+    return failed_ids
+
+
+def get_not_started_doc_permission_sync_attempts_older_than(
+    db_session: Session, older_than: timedelta
+) -> dict[int, str | None]:
+    """celery_task_id by attempt ID, for NOT_STARTED attempts older than this."""
+    return _get_not_started_attempts_older_than(
+        DocPermissionSyncAttempt, db_session, older_than
+    )
+
+
+def fail_not_started_doc_permission_sync_attempts(
+    db_session: Session, attempt_ids: list[int], reason: str
+) -> list[int]:
+    """Fails those of these attempts that are still NOT_STARTED. Returns their IDs."""
+    return _fail_not_started_attempts(
+        DocPermissionSyncAttempt, db_session, attempt_ids, reason
+    )
+
+
+def _try_create_attempt(
+    model: _AttemptModel,
+    connector_credential_pair_id: int,
+    celery_task_id: str,
+    db_session: Session,
+) -> int | None:
+    attempt_id = db_session.execute(
+        pg_insert(model)
+        .values(
+            connector_credential_pair_id=connector_credential_pair_id,
+            status=PermissionSyncStatus.NOT_STARTED,
+            celery_task_id=celery_task_id,
+        )
+        # The only other unique constraint is the primary key
+        .on_conflict_do_nothing()
+        .returning(model.id)
+    ).scalar_one_or_none()
+    db_session.commit()
+    return attempt_id
+
+
+def _open_cc_pair_ids(model: _AttemptModel, db_session: Session) -> set[int]:
+    return {
+        cc_pair_id
+        for cc_pair_id in db_session.scalars(
+            select(model.connector_credential_pair_id).where(
+                model.status.in_(_OPEN_STATUSES)
+            )
+        )
+        if cc_pair_id is not None
+    }
+
+
+def _cancel_open_attempt(
+    model: _AttemptModel,
+    connector_credential_pair_id: int,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    attempt_id = db_session.execute(
+        update(model)
+        .where(model.connector_credential_pair_id == connector_credential_pair_id)
+        .where(model.status.in_(_OPEN_STATUSES))
+        .values(
+            status=PermissionSyncStatus.CANCELED,
+            time_finished=func.now(),
+            error_message=reason,
+        )
+        .returning(model.id)
+    ).scalar_one_or_none()
+    db_session.commit()
+    return attempt_id
+
+
+def try_create_doc_permission_sync_attempt(
+    connector_credential_pair_id: int,
+    celery_task_id: str,
+    db_session: Session,
+) -> int | None:
+    """Creates a NOT_STARTED attempt for a doc permission sync about to be
+    dispatched. Returns None when the cc_pair already has an open attempt: the
+    partial unique index on open attempts is the per-cc_pair sync lock."""
+    return _try_create_attempt(
+        DocPermissionSyncAttempt,
+        connector_credential_pair_id,
+        celery_task_id,
+        db_session,
+    )
+
+
+def get_open_doc_permission_sync_attempt(
+    connector_credential_pair_id: int,
+    db_session: Session,
+) -> DocPermissionSyncAttempt | None:
+    """The NOT_STARTED or IN_PROGRESS attempt of a cc_pair, if any."""
+    return db_session.scalars(
+        select(DocPermissionSyncAttempt)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id
+            == connector_credential_pair_id
+        )
+        .where(DocPermissionSyncAttempt.status.in_(_OPEN_STATUSES))
+    ).one_or_none()
+
+
+def get_cc_pair_ids_with_open_doc_permission_sync_attempt(
+    db_session: Session,
+) -> set[int]:
+    return _open_cc_pair_ids(DocPermissionSyncAttempt, db_session)
+
+
+def cancel_open_doc_permission_sync_attempt(
+    connector_credential_pair_id: int,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    """Marks the open attempt of a cc_pair CANCELED, so another job can proceed.
+    A worker still running it loses its lease and stops. Returns its ID."""
+    return _cancel_open_attempt(
+        DocPermissionSyncAttempt, connector_credential_pair_id, db_session, reason
+    )
 
 
 def get_doc_permission_sync_attempt(
@@ -123,6 +317,7 @@ def mark_doc_permission_sync_attempt_in_progress(
 
         attempt.status = PermissionSyncStatus.IN_PROGRESS
         attempt.time_started = func.now()
+        attempt.heartbeat_at = func.now()
         db_session.commit()
         return attempt
     except Exception:
@@ -159,6 +354,11 @@ def mark_doc_permission_sync_attempt_failed(
             .where(DocPermissionSyncAttempt.id == attempt_id)
             .with_for_update()
         ).scalar_one()
+
+        if attempt.status in _FAILURE_STATUSES:
+            # The reaper or a cancel already closed it; keep that reason.
+            db_session.commit()
+            return
 
         if not attempt.time_started:
             attempt.time_started = func.now()
@@ -202,11 +402,14 @@ def complete_doc_permission_sync_attempt(
             .with_for_update()
         ).scalar_one()
 
-        # Update progress counters
-        attempt.total_docs_synced = (attempt.total_docs_synced or 0) + total_docs_synced
-        attempt.docs_with_permission_errors = (
-            attempt.docs_with_permission_errors or 0
-        ) + docs_with_permission_errors
+        if attempt.status != PermissionSyncStatus.IN_PROGRESS:
+            raise PermissionSyncAttemptLostError(
+                f"Doc permission sync attempt {attempt_id} is {attempt.status}, not IN_PROGRESS"
+            )
+
+        # Final counts replace the running counts the heartbeat wrote
+        attempt.total_docs_synced = total_docs_synced
+        attempt.docs_with_permission_errors = docs_with_permission_errors
 
         # Set final status based on whether there were errors
         if docs_with_permission_errors > 0:
@@ -249,6 +452,76 @@ def create_external_group_sync_attempt(
     db_session.commit()
 
     return attempt.id
+
+
+def get_not_started_external_group_sync_attempts_older_than(
+    db_session: Session, older_than: timedelta
+) -> dict[int, str | None]:
+    """celery_task_id by attempt ID, for NOT_STARTED attempts older than this."""
+    return _get_not_started_attempts_older_than(
+        ExternalGroupPermissionSyncAttempt, db_session, older_than
+    )
+
+
+def fail_not_started_external_group_sync_attempts(
+    db_session: Session, attempt_ids: list[int], reason: str
+) -> list[int]:
+    """Fails those of these attempts that are still NOT_STARTED. Returns their IDs."""
+    return _fail_not_started_attempts(
+        ExternalGroupPermissionSyncAttempt, db_session, attempt_ids, reason
+    )
+
+
+def try_create_external_group_sync_attempt(
+    connector_credential_pair_id: int,
+    celery_task_id: str,
+    db_session: Session,
+) -> int | None:
+    """Creates a NOT_STARTED attempt for a group sync about to be dispatched.
+    Returns None when the cc_pair already has an open attempt: the partial
+    unique index on open attempts is the per-cc_pair sync lock."""
+    return _try_create_attempt(
+        ExternalGroupPermissionSyncAttempt,
+        connector_credential_pair_id,
+        celery_task_id,
+        db_session,
+    )
+
+
+def get_open_external_group_sync_attempt(
+    connector_credential_pair_id: int,
+    db_session: Session,
+) -> ExternalGroupPermissionSyncAttempt | None:
+    """The NOT_STARTED or IN_PROGRESS attempt of a cc_pair, if any."""
+    return db_session.scalars(
+        select(ExternalGroupPermissionSyncAttempt)
+        .where(
+            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
+            == connector_credential_pair_id
+        )
+        .where(ExternalGroupPermissionSyncAttempt.status.in_(_OPEN_STATUSES))
+    ).one_or_none()
+
+
+def get_cc_pair_ids_with_open_external_group_sync_attempt(
+    db_session: Session,
+) -> set[int]:
+    return _open_cc_pair_ids(ExternalGroupPermissionSyncAttempt, db_session)
+
+
+def cancel_open_external_group_sync_attempt(
+    connector_credential_pair_id: int,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    """Marks the open attempt of a cc_pair CANCELED, so another job can proceed.
+    A worker still running it loses its lease and stops. Returns its ID."""
+    return _cancel_open_attempt(
+        ExternalGroupPermissionSyncAttempt,
+        connector_credential_pair_id,
+        db_session,
+        reason,
+    )
 
 
 def get_external_group_sync_attempt(
@@ -337,18 +610,23 @@ def get_external_group_sync_retry_after(
     return last_failed_at + request_retry_delay(failure_count)
 
 
+def source_group_sync_is_cc_pair_agnostic(source: DocumentSource) -> bool:
+    """Whether the source's group sync covers all its pairs in one run."""
+    is_agnostic: bool = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_group_sync_is_cc_pair_agnostic",
+        noop_return_value=False,
+    )(source)
+    return is_agnostic
+
+
 def relevant_external_group_sync_attempts_filter(
     cc_pair_id: int, source: DocumentSource
 ) -> ColumnElement[bool]:
     """A pair's group sync attempts. A source whose group sync covers all its pairs
     logs each run against one pair, so this widens to every pair of that source.
     Two sites of one source therefore share one history."""
-    is_agnostic: bool = fetch_ee_implementation_or_noop(
-        "onyx.external_permissions.sync_params",
-        "source_group_sync_is_cc_pair_agnostic",
-        noop_return_value=False,
-    )(source)
-    if not is_agnostic:
+    if not source_group_sync_is_cc_pair_agnostic(source):
         return (
             ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
             == cc_pair_id
@@ -384,6 +662,7 @@ def mark_external_group_sync_attempt_in_progress(
 
         attempt.status = PermissionSyncStatus.IN_PROGRESS
         attempt.time_started = func.now()
+        attempt.heartbeat_at = func.now()
         db_session.commit()
         return attempt
     except Exception:
@@ -413,6 +692,11 @@ def mark_external_group_sync_attempt_failed(
             .where(ExternalGroupPermissionSyncAttempt.id == attempt_id)
             .with_for_update()
         ).scalar_one()
+
+        if attempt.status in _FAILURE_STATUSES:
+            # The reaper or a cancel already closed it; keep that reason.
+            db_session.commit()
+            return
 
         if not attempt.time_started:
             attempt.time_started = func.now()
@@ -458,16 +742,15 @@ def complete_external_group_sync_attempt(
             .with_for_update()
         ).scalar_one()
 
-        # Update progress counters
-        attempt.total_users_processed = (
-            attempt.total_users_processed or 0
-        ) + total_users_processed
-        attempt.total_groups_processed = (
-            attempt.total_groups_processed or 0
-        ) + total_groups_processed
-        attempt.total_group_memberships_synced = (
-            attempt.total_group_memberships_synced or 0
-        ) + total_group_memberships_synced
+        if attempt.status != PermissionSyncStatus.IN_PROGRESS:
+            raise PermissionSyncAttemptLostError(
+                f"External group sync attempt {attempt_id} is {attempt.status}, not IN_PROGRESS"
+            )
+
+        # Final counts replace the running counts the heartbeat wrote
+        attempt.total_users_processed = total_users_processed
+        attempt.total_groups_processed = total_groups_processed
+        attempt.total_group_memberships_synced = total_group_memberships_synced
 
         # Set final status based on whether there were errors
         if errors_encountered > 0:
@@ -482,6 +765,164 @@ def complete_external_group_sync_attempt(
         db_session.rollback()
         logger.exception("complete_external_group_sync_attempt exceptioned.")
         raise
+
+
+# =============================================================================
+# LEASES
+# =============================================================================
+
+
+def _renew_lease(
+    model: _AttemptModel,
+    attempt_id: int,
+    db_session: Session,
+    progress_values: dict[str, int | datetime | None],
+) -> bool:
+    renewed = db_session.execute(
+        update(model)
+        .where(model.id == attempt_id)
+        .where(model.status == PermissionSyncStatus.IN_PROGRESS)
+        .values(heartbeat_at=func.now(), **progress_values)
+        .returning(model.id)
+    ).first()
+    db_session.commit()
+    return renewed is not None
+
+
+def _lock_if_owned(model: _AttemptModel, attempt_id: int, db_session: Session) -> None:
+    owned = db_session.execute(
+        select(model.id)
+        .where(model.id == attempt_id)
+        .where(model.status == PermissionSyncStatus.IN_PROGRESS)
+        .with_for_update(read=True)
+    ).first()
+    if owned is None:
+        raise PermissionSyncAttemptLostError(
+            f"{model.__name__} {attempt_id} is no longer IN_PROGRESS"
+        )
+
+
+def lock_doc_permission_sync_attempt_if_owned(
+    attempt_id: int, db_session: Session
+) -> None:
+    """Takes a share lock on a running attempt, or raises
+    PermissionSyncAttemptLostError. Call it in the transaction of a sync write:
+    the reaper cannot fail the attempt until that write commits, and a write
+    after the reaper failed it is refused."""
+    _lock_if_owned(DocPermissionSyncAttempt, attempt_id, db_session)
+
+
+def lock_external_group_sync_attempt_if_owned(
+    attempt_id: int, db_session: Session
+) -> None:
+    """Takes a share lock on a running attempt, or raises
+    PermissionSyncAttemptLostError. Call it in the transaction of a sync write:
+    the reaper cannot fail the attempt until that write commits, and a write
+    after the reaper failed it is refused."""
+    _lock_if_owned(ExternalGroupPermissionSyncAttempt, attempt_id, db_session)
+
+
+def renew_doc_permission_sync_attempt_lease(
+    attempt_id: int,
+    db_session: Session,
+    progress: DocPermissionSyncProgress | None = None,
+) -> bool:
+    """Renews the lease of a running attempt and writes its progress. Returns
+    False when the attempt is no longer IN_PROGRESS, which means the caller has
+    lost it."""
+    progress_values: dict[str, int | datetime | None] = {}
+    if progress is not None:
+        progress_values = {
+            "total_docs_synced": progress.total_docs_synced,
+            "docs_with_permission_errors": progress.docs_with_permission_errors,
+            "last_progress_at": progress.last_progress_at,
+        }
+    return _renew_lease(
+        DocPermissionSyncAttempt, attempt_id, db_session, progress_values
+    )
+
+
+def renew_external_group_sync_attempt_lease(
+    attempt_id: int,
+    db_session: Session,
+    progress: ExternalGroupSyncProgress | None = None,
+) -> bool:
+    """Renews the lease of a running attempt and writes its progress. Returns
+    False when the attempt is no longer IN_PROGRESS, which means the caller has
+    lost it."""
+    progress_values: dict[str, int | datetime | None] = {}
+    if progress is not None:
+        progress_values = {
+            "total_users_processed": progress.total_users_processed,
+            "total_groups_processed": progress.total_groups_processed,
+            "total_group_memberships_synced": progress.total_group_memberships_synced,
+            "last_progress_at": progress.last_progress_at,
+        }
+    return _renew_lease(
+        ExternalGroupPermissionSyncAttempt, attempt_id, db_session, progress_values
+    )
+
+
+def _fail_expired_attempts(
+    model: _AttemptModel,
+    db_session: Session,
+    lease_timeout: timedelta,
+    not_started_timeout: timedelta,
+) -> list[int]:
+    now = func.now()
+    last_alive = func.coalesce(model.heartbeat_at, model.time_started)
+    failed_ids = list(
+        db_session.execute(
+            update(model)
+            .where(
+                or_(
+                    (model.status == PermissionSyncStatus.IN_PROGRESS)
+                    & (last_alive < now - lease_timeout),
+                    (model.status == PermissionSyncStatus.NOT_STARTED)
+                    & (model.time_created < now - not_started_timeout),
+                )
+            )
+            .values(
+                status=PermissionSyncStatus.FAILED,
+                time_started=func.coalesce(model.time_started, now),
+                time_finished=now,
+                error_message=(
+                    "The worker running this attempt stopped renewing its lease "
+                    "(it crashed, restarted, or lost its task)"
+                ),
+            )
+            .returning(model.id)
+        ).scalars()
+    )
+    db_session.commit()
+    return failed_ids
+
+
+def fail_expired_doc_permission_sync_attempts(
+    db_session: Session,
+    lease_timeout: timedelta,
+    not_started_timeout: timedelta,
+) -> list[int]:
+    """Fails IN_PROGRESS attempts whose lease expired and NOT_STARTED attempts
+    that never started. Returns the IDs it failed."""
+    return _fail_expired_attempts(
+        DocPermissionSyncAttempt, db_session, lease_timeout, not_started_timeout
+    )
+
+
+def fail_expired_external_group_sync_attempts(
+    db_session: Session,
+    lease_timeout: timedelta,
+    not_started_timeout: timedelta,
+) -> list[int]:
+    """Fails IN_PROGRESS attempts whose lease expired and NOT_STARTED attempts
+    that never started. Returns the IDs it failed."""
+    return _fail_expired_attempts(
+        ExternalGroupPermissionSyncAttempt,
+        db_session,
+        lease_timeout,
+        not_started_timeout,
+    )
 
 
 # =============================================================================
