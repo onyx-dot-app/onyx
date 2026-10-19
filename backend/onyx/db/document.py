@@ -336,7 +336,8 @@ def get_oversized_tabular_documents(
     whole life rather than a sort per run.
 
     Left out: documents whose raw file was never stored, because only a crawl
-    can rebuild their sections, and documents whose cc-pairs are all DELETING.
+    can rebuild their sections, documents whose cc-pairs are all DELETING, and
+    hidden documents, whose head `id_based_retrieval` will not return.
     """
     # One row per document, lowest cc-pair winning, as any of them would write
     # the same chunks. A LATERAL, not DISTINCT ON: that would order the join by
@@ -381,6 +382,7 @@ def get_oversized_tabular_documents(
         .where(
             DbDocument.chunk_count > chunk_count_above,
             DbDocument.file_id.isnot(None),
+            DbDocument.hidden.is_(False),
             or_(
                 # A Drive sheet's name often has no extension; its type does.
                 FileRecord.file_type.in_(sorted(OnyxMimeTypes.TABULAR_MIME_TYPES)),
