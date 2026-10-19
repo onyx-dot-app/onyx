@@ -26,7 +26,12 @@ import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@opal/components";
 import { Formik, Form, useFormikContext, type FormikHelpers } from "formik";
 import * as Yup from "yup";
-import { SvgActions, SvgArrowRightDot, SvgBracketCurly } from "@opal/icons";
+import {
+  SvgActions,
+  SvgArrowRightDot,
+  SvgBracketCurly,
+  SvgInfo,
+} from "@opal/icons";
 import { getActionIcon } from "@/lib/tools/utils";
 import { EmptyMessageCard } from "@opal/components";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -381,9 +386,10 @@ function FormContent({
           >
             {methodSpecs && methodSpecs.length > 0 ? (
               <>
+                <Divider paddingParallel={0} />
                 {name && (
                   <Content
-                    sizePreset="main-content"
+                    sizePreset="main-ui"
                     variant="section"
                     icon={PluginIcon}
                     title={name}
@@ -394,12 +400,13 @@ function FormContent({
                   <Content
                     sizePreset="main-ui"
                     variant="section"
+                    icon={SvgInfo}
                     title={url}
                     description={t("addOpenApiModal.preview.urlDescription")}
                   />
                 )}
                 <Divider paddingParallel={0} />
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
                   {methodSpecs.map((method) => (
                     <Card
                       key={`${method.method}-${method.path}-${method.name}`}
