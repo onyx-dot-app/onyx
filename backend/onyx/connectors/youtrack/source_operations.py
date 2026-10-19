@@ -43,7 +43,7 @@ from onyx.connectors.youtrack.models import (
     YouTrackSlimIssue,
     YouTrackUser,
 )
-from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.models import connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
@@ -118,10 +118,10 @@ class YouTrackRequestError(RuntimeError):
 
 
 def validate_base_url(base_url: str) -> None:
-    """The SSRF protection level decides how strict this is, as for the web
-    connector: private hosts are reachable only when an admin relaxed it, and
+    """The SSRF protection level decides how strict this is, through the
+    shared connector policy: private hosts are reachable only when an admin relaxed it, and
     cloud metadata stays blocked either way."""
-    enforced: bool = web_connector_ssrf_enforced(
+    enforced: bool = connector_ssrf_enforced(
         get_security_settings().ssrf_protection_level
     )
     try:

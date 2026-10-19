@@ -1,5 +1,5 @@
-"""SharePoint site URLs follow the shared SSRF Protection setting: the strict
-levels block private hosts, the relaxed levels reach them, and cloud metadata
+"""SharePoint site URLs follow the shared connector SSRF policy: the strictest
+level blocks private hosts, the other levels reach them, and cloud metadata
 stays blocked at every level."""
 
 from collections.abc import Iterator
@@ -31,26 +31,33 @@ def _policy(level: SSRFProtectionLevel, resolves_to: str) -> Iterator[None]:
             yield
 
 
-@pytest.mark.parametrize(
-    "level", [SSRFProtectionLevel.VALIDATE_ALL, SSRFProtectionLevel.VALIDATE_LLM]
-)
-def test_a_strict_level_blocks_a_private_host(level: SSRFProtectionLevel) -> None:
-    with _policy(level, _PRIVATE_IP), pytest.raises(SiteUrlBlockedError):
+def test_the_strictest_level_blocks_a_private_host() -> None:
+    with (
+        _policy(SSRFProtectionLevel.VALIDATE_ALL, _PRIVATE_IP),
+        pytest.raises(SiteUrlBlockedError),
+    ):
         validate_site_url(_SITE_URL, _SUFFIX, "tenant")
 
 
 @pytest.mark.parametrize(
     "level",
-    [SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK, SSRFProtectionLevel.DISABLED],
+    [
+        SSRFProtectionLevel.VALIDATE_LLM,
+        SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK,
+        SSRFProtectionLevel.DISABLED,
+    ],
 )
 def test_a_relaxed_level_reaches_a_private_host(level: SSRFProtectionLevel) -> None:
     with _policy(level, _PRIVATE_IP):
         validate_site_url(_SITE_URL, _SUFFIX, "tenant")
 
 
-def test_cloud_metadata_stays_blocked_when_protection_is_off() -> None:
+@pytest.mark.parametrize(
+    "level", [SSRFProtectionLevel.VALIDATE_LLM, SSRFProtectionLevel.DISABLED]
+)
+def test_cloud_metadata_stays_blocked(level: SSRFProtectionLevel) -> None:
     with (
-        _policy(SSRFProtectionLevel.DISABLED, "169.254.169.254"),
+        _policy(level, "169.254.169.254"),
         pytest.raises(SiteUrlBlockedError),
     ):
         validate_site_url(_SITE_URL, _SUFFIX, "tenant")
