@@ -4,8 +4,6 @@ Validation and the capability checks probe the same addresses the same way, so
 the rule lives here once and neither path can drift from the other.
 """
 
-from pydantic import BaseModel
-
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OutlookGraphError,
@@ -21,7 +19,7 @@ from onyx.connectors.outlook.errors import (
     USER_LISTING_DENIED,
     raise_for_graph_error,
 )
-from onyx.connectors.outlook.models import OutlookMailbox
+from onyx.connectors.outlook.models import GroupProblem, MailboxProblem, OutlookMailbox
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 
 
@@ -48,18 +46,6 @@ def resolve_mailbox_for_validation(
         return gateway.resolve_mailbox(address=address)
     except OutlookGraphError as e:
         raise_for_graph_error(e, USER_LISTING_DENIED)
-
-
-class MailboxProblem(BaseModel):
-    """Why a named mailbox cannot be indexed. ``status`` is Graph's refusal
-    of its Inbox; None means no user has the address."""
-
-    address: str
-    status: int | None = None
-    code: str | None = None
-
-    def describe(self) -> str:
-        return f"{self.address} ({self.code or 'no such user'})"
 
 
 def describe_unavailable_mailboxes(
@@ -101,19 +87,7 @@ def raise_if_unavailable(problems: list[MailboxProblem]) -> None:
 
 def describe_group_mismatch(identifier: str, match_count: int) -> str:
     """Why a group identifier that does not name exactly one group is unusable."""
-    if match_count == 0:
-        return f"No group matches {identifier}"
-    return f"More than one group is named {identifier}"
-
-
-class GroupProblem(BaseModel):
-    """A configured group that does not name exactly one Entra group."""
-
-    identifier: str
-    match_count: int
-
-    def describe(self) -> str:
-        return describe_group_mismatch(self.identifier, self.match_count)
+    return GroupProblem(identifier=identifier, match_count=match_count).describe()
 
 
 def describe_unavailable_groups(

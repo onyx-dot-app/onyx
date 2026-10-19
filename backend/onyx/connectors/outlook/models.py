@@ -222,3 +222,38 @@ class MailboxStep(BaseModel):
 
     items: list[HierarchyNode | Document | ConnectorFailure] = []
     rows: list[ThreadListing] = []
+
+
+class MailboxProblem(BaseModel):
+    """Why a named mailbox cannot be indexed. ``status`` is Graph's refusal
+    of its Inbox; None means no user has the address."""
+
+    address: str
+    status: int | None = None
+    code: str | None = None
+
+    def describe(self) -> str:
+        return f"{self.address} ({self.code or 'no such user'})"
+
+
+class GroupProblem(BaseModel):
+    """A configured group that does not name exactly one Entra group."""
+
+    identifier: str
+    match_count: int
+
+    def describe(self) -> str:
+        """Why the identifier is unusable."""
+        if self.match_count == 0:
+            return f"No group matches {self.identifier}"
+        return f"More than one group is named {self.identifier}"
+
+
+class MailboxSample(BaseModel):
+    """A mailbox that opened, and the name its rows give it: the address an
+    admin typed, else "a sampled mailbox". Built from the gateway's models
+    without validating them again."""
+
+    mailbox: OutlookMailbox
+    inbox: OutlookFolder
+    name: str

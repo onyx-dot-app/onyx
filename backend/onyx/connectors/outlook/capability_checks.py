@@ -30,8 +30,6 @@ from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
 from typing import NoReturn, TypeVar
 
-from pydantic import BaseModel
-
 from onyx.connectors.capability_checks.findings import bounded_count
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
@@ -76,8 +74,6 @@ from onyx.connectors.outlook.errors import (
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
-    GroupProblem,
-    MailboxProblem,
     configured_addresses,
     configured_groups,
     describe_group_mismatch,
@@ -86,9 +82,11 @@ from onyx.connectors.outlook.mailboxes import (
     resolve_mailbox_for_validation,
 )
 from onyx.connectors.outlook.models import (
+    GroupProblem,
+    MailboxProblem,
+    MailboxSample,
     OutlookEvent,
     OutlookEventPage,
-    OutlookFolder,
     OutlookMailbox,
     OutlookMailboxPage,
 )
@@ -254,19 +252,9 @@ def _raise_for_mailbox_error(
     )
 
 
-class _Sample(BaseModel):
-    """A mailbox that opened, and the name its rows give it: the address an
-    admin typed, else "a sampled mailbox". Built from the gateway's models
-    without validating them again."""
-
-    mailbox: OutlookMailbox
-    inbox: OutlookFolder
-    name: str
-
-
 def _open_configured_mailbox(
     gateway: OutlookSourceOperations, addresses: list[str]
-) -> _Sample:
+) -> MailboxSample:
     """The first named mailbox that opens. A missing or unusable one is
     skipped: "Find selected mailboxes" reports it. None opening FAILS with
     the first one's row."""
@@ -277,7 +265,7 @@ def _open_configured_mailbox(
         if mailbox is None:
             continue
         try:
-            return _Sample.model_construct(
+            return MailboxSample.model_construct(
                 mailbox=mailbox,
                 inbox=gateway.probe_mailbox(mailbox_id=mailbox.id),
                 name=address,
@@ -444,7 +432,7 @@ _SAMPLED_MAIL_DENIED_ROW = _row(
 
 def _open_sample_mailbox(
     gateway: OutlookSourceOperations, config: OutlookConnectorConfig
-) -> _Sample:
+) -> MailboxSample:
     """The first configured mailbox that opens, else the first readable one
     of the configured groups, else of the whole tenant."""
     addresses = configured_addresses(config)
@@ -458,7 +446,9 @@ def _open_sample_mailbox(
         denied_all_row=_SAMPLED_MAIL_DENIED_ROW,
         nothing_to_probe=_NO_MAILBOX_ROW,
     )
-    return _Sample.model_construct(mailbox=mailbox, inbox=inbox, name=_SAMPLED_MAILBOX)
+    return MailboxSample.model_construct(
+        mailbox=mailbox, inbox=inbox, name=_SAMPLED_MAILBOX
+    )
 
 
 class _OutlookCheck(CapabilityCheck[OutlookConnectorConfig]):
@@ -644,7 +634,7 @@ class _MailReadCheck(_ConfigReadingCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway = _gateway(context)
-        sample: _Sample = _open_sample_mailbox(gateway, self.config(context))
+        sample: MailboxSample = _open_sample_mailbox(gateway, self.config(context))
         mailbox: OutlookMailbox = sample.mailbox
         try:
             gateway.get_well_known_folder(
@@ -814,7 +804,7 @@ class _CalendarReadCheck(_ConfigReadingCheck):
 
         addresses = configured_addresses(config)
         if addresses:
-            sample: _Sample = _open_configured_mailbox(gateway, addresses)
+            sample: MailboxSample = _open_configured_mailbox(gateway, addresses)
             try:
                 view(sample.mailbox)
             except OutlookGraphError as e:
