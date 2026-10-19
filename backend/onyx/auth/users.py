@@ -2139,13 +2139,10 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                     except OnyxError:
                         raise
                     except Exception as e:
+                        # No logout/login fallback: it could mint a session
+                        # after a concurrent revoke. The client logs in again.
                         logger.error("Error refreshing session token: %s", str(e))
-                        # Fallback to logout and login if refresh fails, but
-                        # never replace a session that was revoked meanwhile.
-                        if await strategy.read_token(token, user_manager) is None:
-                            raise OnyxError(OnyxErrorCode.SESSION_TERMINATED)
-                        await backend.logout(strategy, user, token)
-                        return await backend.login(strategy, user)
+                        raise OnyxError(OnyxErrorCode.SESSION_TERMINATED)
 
                 # Fallback: logout and login again
                 logger.info(
