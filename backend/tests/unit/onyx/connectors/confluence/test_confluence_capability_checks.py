@@ -794,6 +794,14 @@ def test_user_name_lookup_errors_are_incomplete(error: Exception) -> None:
         _run("confluence_user_names", _context(gateway, _form()))
 
 
+def test_a_user_name_lookup_timeout_is_a_timeout() -> None:
+    gateway = _gateway()
+    gateway.lookup_user_display_name.side_effect = requests.Timeout("slow")
+
+    with pytest.raises(TimedOutValidationError, match="did not answer"):
+        _run("confluence_user_names", _context(gateway, _form()))
+
+
 def test_user_names_without_an_author_are_incomplete() -> None:
     gateway = _gateway()
     gateway.search_pages.side_effect = lambda **_: iter([{"id": "42"}])

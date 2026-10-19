@@ -1209,7 +1209,16 @@ class _UserNamesCheck(_ConfluenceCheck):
                 summary=_REFUSED_ROW.summary,
                 description=_REFUSED_ROW.description,
             ) from e
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except requests.Timeout as e:
+            raise TimedOutValidationError(
+                f"{config.wiki_base} did not answer the user lookup in time: {e}",
+                summary="Timed out",
+                description=(
+                    "Confluence did not answer the user lookup in time.\n"
+                    "Re-run the checks."
+                ),
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 f"Onyx cannot connect to {config.wiki_base} to read user details.",
                 summary=f"Cannot reach {urlparse(config.wiki_base).hostname}",
