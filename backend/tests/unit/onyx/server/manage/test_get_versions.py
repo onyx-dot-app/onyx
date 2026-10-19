@@ -28,11 +28,11 @@ _COMPOSE_TEMPLATE = (
 def _reset_versions_cache() -> Generator[None, None, None]:
     get_state._VERSIONS_CACHE.clear()
     get_state._LAST_GOOD_VERSIONS = None
-    get_state._LAST_VERSIONS_FAILURE_AT = None
+    get_state._VERSIONS_FAILURE_CACHE.clear()
     yield
     get_state._VERSIONS_CACHE.clear()
     get_state._LAST_GOOD_VERSIONS = None
-    get_state._LAST_VERSIONS_FAILURE_AT = None
+    get_state._VERSIONS_FAILURE_CACHE.clear()
 
 
 def _dockerhub_page(_url: str, timeout: int) -> MagicMock:  # noqa: ARG001
@@ -127,15 +127,16 @@ def test_versions_raise_when_dockerhub_fails_with_no_last_good_value() -> None:
         get_versions()
 
 
+def _expire_failure_cooldown() -> None:
+    cache = get_state._VERSIONS_FAILURE_CACHE
+    cache.expire(cache.timer() + get_state._VERSIONS_FAILURE_COOLDOWN_SECONDS)
+
+
 def test_failure_with_no_last_good_value_is_cached_for_the_cooldown() -> None:
-    failed_at = 1000.0
-    with (
-        patch(
-            "onyx.server.manage.get_state.requests.get",
-            side_effect=requests.ConnectionError("dockerhub down"),
-        ) as mock_get,
-        patch.object(get_state.time, "monotonic", return_value=failed_at),
-    ):
+    with patch(
+        "onyx.server.manage.get_state.requests.get",
+        side_effect=requests.ConnectionError("dockerhub down"),
+    ) as mock_get:
         with pytest.raises(requests.ConnectionError):
             get_versions()
         failed_calls = mock_get.call_count
@@ -153,18 +154,15 @@ def test_failure_with_no_last_good_value_is_cached_for_the_cooldown() -> None:
         traceback.extract_tb(first.value.__traceback__)
     )
 
-    after_cooldown = failed_at + get_state._VERSIONS_FAILURE_COOLDOWN_SECONDS
-    with (
-        patch(
-            "onyx.server.manage.get_state.requests.get", side_effect=_dockerhub_page
-        ) as mock_get,
-        patch.object(get_state.time, "monotonic", return_value=after_cooldown),
-    ):
+    _expire_failure_cooldown()
+    with patch(
+        "onyx.server.manage.get_state.requests.get", side_effect=_dockerhub_page
+    ) as mock_get:
         versions = get_versions()
 
     assert mock_get.call_count == len(get_state._DOCKERHUB_REPOS)
     assert versions.stable.onyx == "v3.2.0"
-    assert get_state._LAST_VERSIONS_FAILURE_AT is None
+    assert len(get_state._VERSIONS_FAILURE_CACHE) == 0
 
 
 def test_concurrent_misses_share_one_failed_fetch() -> None:

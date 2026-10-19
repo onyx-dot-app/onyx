@@ -267,9 +267,12 @@ _VERSIONS_KEY = "versions"
 _VERSIONS_LOCK = threading.Lock()
 # Outlives the TTL so a DockerHub outage serves the last good answer.
 _LAST_GOOD_VERSIONS: AllVersions | None = None
-# After a failure, skip refetching for a while: serve last good or re-raise.
-_VERSIONS_FAILURE_COOLDOWN_SECONDS = 60.0
-_LAST_VERSIONS_FAILURE_AT: float | None = None
+# A present entry means the last fetch failed: skip refetching and serve the
+# last good value or raise.
+_VERSIONS_FAILURE_COOLDOWN_SECONDS = 60
+_VERSIONS_FAILURE_CACHE: TTLCache[str, bool] = TTLCache(
+    maxsize=1, ttl=_VERSIONS_FAILURE_COOLDOWN_SECONDS
+)
 
 
 def _get_dockerhub_tags(repo: str) -> list[str]:
@@ -349,16 +352,12 @@ def _fetch_versions() -> AllVersions:
 
 
 def _get_cached_versions() -> AllVersions:
-    global _LAST_GOOD_VERSIONS, _LAST_VERSIONS_FAILURE_AT
+    global _LAST_GOOD_VERSIONS
     with _VERSIONS_LOCK:
         cached = _VERSIONS_CACHE.get(_VERSIONS_KEY)
         if cached is not None:
             return cached
-        if (
-            _LAST_VERSIONS_FAILURE_AT is not None
-            and time.monotonic() - _LAST_VERSIONS_FAILURE_AT
-            < _VERSIONS_FAILURE_COOLDOWN_SECONDS
-        ):
+        if _VERSIONS_KEY in _VERSIONS_FAILURE_CACHE:
             if _LAST_GOOD_VERSIONS is not None:
                 return _LAST_GOOD_VERSIONS
             raise OnyxError(
@@ -368,7 +367,7 @@ def _get_cached_versions() -> AllVersions:
         try:
             versions = _fetch_versions()
         except Exception:
-            _LAST_VERSIONS_FAILURE_AT = time.monotonic()
+            _VERSIONS_FAILURE_CACHE[_VERSIONS_KEY] = True
             if _LAST_GOOD_VERSIONS is None:
                 logger.warning("DockerHub version lookup failed", exc_info=True)
                 raise
@@ -379,7 +378,7 @@ def _get_cached_versions() -> AllVersions:
             return _LAST_GOOD_VERSIONS
         _VERSIONS_CACHE[_VERSIONS_KEY] = versions
         _LAST_GOOD_VERSIONS = versions
-        _LAST_VERSIONS_FAILURE_AT = None
+        _VERSIONS_FAILURE_CACHE.pop(_VERSIONS_KEY, None)
         return versions
 
 
