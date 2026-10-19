@@ -250,7 +250,13 @@ function InputDatePicker({
             ))}
           </div>
 
-          <div className="opal-input-segmented-actions">
+          <div
+            className="opal-input-segmented-actions"
+            // Escape on an action returns focus to the field's first segment.
+            onKeyDown={(event) => {
+              if (event.key === "Escape") monthRef.current?.focus();
+            }}
+          >
             <Popover.Trigger asChild>
               <Button
                 icon={SvgCalendar}
