@@ -197,7 +197,9 @@ function validationOutcome(
   if (
     validation.check_results.some(
       (result) =>
-        result.status === "failed" || result.status === "indeterminate"
+        result.status === "failed" ||
+        result.status === "indeterminate" ||
+        result.status === "incomplete"
     )
   )
     return "warnings";
