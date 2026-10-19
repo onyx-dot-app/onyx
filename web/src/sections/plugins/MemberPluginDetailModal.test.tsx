@@ -1253,11 +1253,13 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
   });
   const requests = jest
     .spyOn(global, "fetch")
-    .mockImplementation(async (_input, init) =>
+    .mockImplementation(async (input, init) =>
       jsonResponse(
-        init?.method === "PUT"
-          ? { ...skill, enabled: true }
-          : { builtins: [], customs: [skill] }
+        String(input).includes("/action-policies/")
+          ? { ...approvalApp, actions: [] }
+          : init?.method === "PUT"
+            ? { ...skill, enabled: true }
+            : { builtins: [], customs: [skill] }
       )
     );
   const onClose = jest.fn();
@@ -1331,12 +1333,14 @@ test("skill preview replaces the same modal content and Back preserves drafts", 
   });
   jest.spyOn(global, "fetch").mockImplementation(async (input) =>
     jsonResponse(
-      String(input).endsWith("/preview")
-        ? {
-            ...skill,
-            instructions_markdown: "Write a weekly report from these notes.",
-          }
-        : { builtins: [], customs: [skill] }
+      String(input).includes("/action-policies/")
+        ? { ...approvalApp, actions: [] }
+        : String(input).endsWith("/preview")
+          ? {
+              ...skill,
+              instructions_markdown: "Write a weekly report from these notes.",
+            }
+          : { builtins: [], customs: [skill] }
     )
   );
   show({
