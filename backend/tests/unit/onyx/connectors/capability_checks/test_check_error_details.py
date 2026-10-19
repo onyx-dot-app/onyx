@@ -214,3 +214,19 @@ def test_a_secret_at_the_redaction_bound_is_not_kept_in_part(
 
     assert detail is not None and detail.response_excerpt is not None
     assert detail.response_excerpt == "api.example.com/x "
+
+
+def test_a_source_api_error_without_a_response_gives_its_cause() -> None:
+    http_error = _http_error(503, "https://api.example.com/v1/items", "Down.")
+    source_error = SourceApiError("Failed.", status_code=None)
+    source_error.__cause__ = http_error
+    try:
+        raise UnexpectedValidationError("Bad.") from source_error
+    except UnexpectedValidationError as error:
+        detail = check_error_detail(error, CheckErrorKind.INVALID, [])
+
+    assert detail == CheckErrorDetail(
+        status_code=503,
+        request="GET api.example.com/v1/items",
+        response_excerpt="Down.",
+    )

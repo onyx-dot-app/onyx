@@ -320,7 +320,10 @@ def _http_detail(error: BaseException) -> CheckErrorDetail | None:
     current: BaseException | None = error
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if isinstance(current, SourceApiError):
+        # A source error without response data can wrap the HTTP error.
+        if isinstance(current, SourceApiError) and (
+            current.status_code is not None or current.url is not None or current.body
+        ):
             return CheckErrorDetail(
                 status_code=current.status_code,
                 request=_request_line(current.method, current.url),
