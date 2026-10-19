@@ -12,7 +12,7 @@ import {
   IllustrationContent,
   SettingsLayouts,
 } from "@opal/layouts";
-import { CardLoader } from "@opal/loaders";
+import { CardLoaders } from "@opal/loaders";
 import { SvgEmpty, SvgPlugBroken } from "@opal/illustrations";
 import { SvgAlertCircle, SvgPlus } from "@opal/icons";
 import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
@@ -92,14 +92,8 @@ function PluginListError({
 function PluginRowsLoading() {
   const t = useTranslations("actions.plugins");
   return (
-    <div
-      role="status"
-      aria-label={t("state.loading")}
-      className="flex flex-col gap-2"
-    >
-      {[0, 1].map((index) => (
-        <CardLoader key={index} padding={4} rounding={4} color="transparent" />
-      ))}
+    <div role="status" aria-label={t("state.loading")}>
+      <CardLoaders />
     </div>
   );
 }

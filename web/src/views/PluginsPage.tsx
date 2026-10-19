@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard, Tabs, Text, Tooltip } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
-import { CardLoader, TextLoader } from "@opal/loaders";
+import { CardLoaders, TextLoader } from "@opal/loaders";
 import {
   SvgChevronRight,
   SvgCodeFile,
@@ -357,19 +357,8 @@ export default function MemberPluginsPage({
                 </div>
               )}
               {isLoading && (
-                <div
-                  role="status"
-                  aria-label={t("state.loading")}
-                  className={styles.grid}
-                >
-                  {[0, 1].map((index) => (
-                    <CardLoader
-                      key={index}
-                      padding={4}
-                      rounding={4}
-                      color="transparent"
-                    />
-                  ))}
+                <div role="status" aria-label={t("state.loading")}>
+                  <CardLoaders />
                 </div>
               )}
               {filtered.length > 0 && (

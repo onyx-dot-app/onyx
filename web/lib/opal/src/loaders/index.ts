@@ -4,6 +4,12 @@ export {
   type CardLoaderProps,
 } from "@opal/loaders/card-loader/components";
 
+/* CardLoaders */
+export {
+  CardLoaders,
+  type CardLoadersProps,
+} from "@opal/loaders/card-loaders/components";
+
 /* IconLoader */
 export {
   IconLoader,
