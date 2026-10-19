@@ -44,7 +44,7 @@ Approval persistence and API:
 
 - `backend/onyx/db/models.py` defines `ActionApproval`,
   `ExternalAppPolicy`, and `ScheduledTaskPreApprovedTarget`.
-- `backend/onyx/db/enums.py` defines `EndpointPolicy`,
+- `backend/onyx/db/enums.py` defines `ActionPolicy`,
   `ApprovalDecision`, and `ApprovalDecidedVia`.
 - `backend/onyx/server/features/build/db/action_approval.py` owns approval DB
   operations. `try_record_decision` is the race arbiter.

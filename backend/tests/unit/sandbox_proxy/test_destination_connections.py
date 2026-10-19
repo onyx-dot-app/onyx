@@ -427,7 +427,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
     from unittest.mock import MagicMock
 
     from onyx.db.enums import (
-        EndpointPolicy,
+        ActionPolicy,
         MCPAuthenticationPerformer,
         MCPAuthenticationType,
     )
@@ -456,7 +456,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
             monkeypatch.setattr(
                 request_evaluator,
                 "get_action_policies",
-                lambda *_args: {"delete_records": EndpointPolicy.DENY},
+                lambda *_args: {"delete_records": ActionPolicy.DENY},
             )
             monkeypatch.setattr(
                 mcp_server, "get_mcp_server_by_id", lambda *_args: stored

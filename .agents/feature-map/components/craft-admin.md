@@ -137,7 +137,7 @@ permission. See §5 for why the flag alone is not the real gate.
   mechanism through this row.
 - `GatedActionPolicy`: sparse per-action overrides
   (`{gated_app_id, action_id, policy}`, `policy` one of
-  `EndpointPolicy.ALWAYS | ASK | DENY`), written by
+  `ActionPolicy.ALWAYS | ASK | DENY`), written by
   `replace_action_policies__no_commit` (`backend/onyx/db/gated_app.py:80`).
   Unset actions resolve to the catalog's `default_policy`, not a stored row.
 - A connected-app request that matches no catalog action gets a synthetic
@@ -204,7 +204,7 @@ outbound HTTPS request from a Craft sandbox
   └─ recognize_actions / apply_credential_gate
        external_apps/matching/engine.py
        (classifies the request into one or more catalog action_ids,
-        each carrying its resolved EndpointPolicy)
+        each carrying its resolved ActionPolicy)
   └─ gate addon                           sandbox_proxy/addons/gate.py
        DENY   -> http_403(POLICY_DENIED)
        ALWAYS -> inject credentials, forward

@@ -30,7 +30,7 @@ const server: MCPServer = {
   groups: [],
   users: [],
   tool_count: 2,
-  tool_policies: { disabled_tool: "DENY" },
+  action_policies: { disabled_tool: "DENY" },
   permissions: { edit: true, manage_status: true },
 };
 const tool: ToolSnapshot = {
@@ -145,7 +145,7 @@ it("uses raw names for Craft policies and preserves disabled-tool overrides", as
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      tool_policies: { raw_tool: "ALWAYS", disabled_tool: "DENY" },
+      action_policies: { raw_tool: "ALWAYS", disabled_tool: "DENY" },
     })
   );
 });
@@ -248,7 +248,7 @@ it("treats mixed permissions as valid and excludes removed tools from saves", as
     <Harness
       value={{
         ...server,
-        tool_policies: { raw_tool: "DENY", removed_tool: "ALWAYS" },
+        action_policies: { raw_tool: "DENY", removed_tool: "ALWAYS" },
       }}
     />
   );
@@ -272,7 +272,7 @@ it("treats mixed permissions as valid and excludes removed tools from saves", as
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      tool_policies: { raw_tool: "ALWAYS" },
+      action_policies: { raw_tool: "ALWAYS" },
     })
   );
 });
@@ -410,7 +410,7 @@ it("searches policy rows while bulk policy changes include hidden enabled tools"
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      tool_policies: {
+      action_policies: {
         raw_tool: "ALWAYS",
         hidden_tool: "ALWAYS",
         disabled_tool: "DENY",

@@ -27,7 +27,7 @@ import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import { refreshMCPServerTools, updateMCPServer } from "@/lib/mcp/svc";
 import { updateToolsStatus } from "@/lib/tools/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 
 interface MCPServerToolsEditorProps {
@@ -68,8 +68,8 @@ export default function MCPServerToolsEditor({
     }
   );
   const [enabledDraft, setEnabledDraft] = useState<Record<number, boolean>>({});
-  const [policies, setPolicies] = useState<Record<string, EndpointPolicy>>({
-    ...server.tool_policies,
+  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({
+    ...server.action_policies,
   });
   const [savedPolicies, setSavedPolicies] = useState(policies);
   const [search, setSearch] = useState("");
@@ -132,7 +132,7 @@ export default function MCPServerToolsEditor({
         const currentPolicies = Object.fromEntries(
           Object.entries(policies).filter(([name]) => toolNames.has(name))
         );
-        await updateMCPServer(server.id, { tool_policies: currentPolicies });
+        await updateMCPServer(server.id, { action_policies: currentPolicies });
         setPolicies(currentPolicies);
         setSavedPolicies(currentPolicies);
       }

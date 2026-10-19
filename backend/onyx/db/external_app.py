@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     ExternalAppType,
     GatedAppKind,
     SkillSharePermission,
@@ -314,7 +314,7 @@ def create_external_app(
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, str],
-    action_policies: dict[str, EndpointPolicy] | None = None,
+    action_policies: dict[str, ActionPolicy] | None = None,
 ) -> ExternalApp:
     """Create an external-app gateway row and its policy state.
 
@@ -594,7 +594,7 @@ def update_external_app(
     upstream_url_patterns: list[str] | UnsetType = UNSET,
     auth_template: dict[str, Any] | UnsetType = UNSET,
     organization_credentials: dict[str, str] | UnsetType = UNSET,
-    action_policies: dict[str, EndpointPolicy] | UnsetType = UNSET,
+    action_policies: dict[str, ActionPolicy] | UnsetType = UNSET,
 ) -> ExternalApp:
     """Partial-update external-app gateway state (flush only).
 
@@ -671,7 +671,7 @@ def set_external_app_organization_credentials(
 def _write_policies__no_commit(
     db_session: Session,
     app: ExternalApp,
-    policies: dict[str, EndpointPolicy],
+    policies: dict[str, ActionPolicy],
 ) -> None:
     """Replace ``app``'s per-action policy rows with exactly ``policies``. No
     commit — runs inside the caller's transaction. ``action_id`` validation is

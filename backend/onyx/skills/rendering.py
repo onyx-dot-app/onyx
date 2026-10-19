@@ -12,7 +12,7 @@ from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
 from onyx.db.external_app import get_external_app_by_skill_id
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, Skill, User
@@ -117,7 +117,7 @@ def render_company_search_skill(
 
 def build_action_availability_section(
     app_type: ExternalAppType,
-    stored: dict[str, EndpointPolicy],
+    stored: dict[str, ActionPolicy],
 ) -> str:
     """The warning listing the app's unavailable actions — cloud-withheld plus
     the ``DENY`` entries from ``stored`` (the admin's per-action overrides) —
@@ -131,7 +131,7 @@ def build_action_availability_section(
     unavailable.extend(
         view.normalised_name
         for view in action_policy_views(app_type, stored)
-        if view.state == EndpointPolicy.DENY
+        if view.state == ActionPolicy.DENY
     )
     if not unavailable:
         return ""
@@ -150,7 +150,7 @@ def substitute_app_values(template: str, values: Mapping[str, str]) -> str:
 def render_external_app_skill(
     template: str,
     app_type: ExternalAppType,
-    stored: dict[str, EndpointPolicy],
+    stored: dict[str, ActionPolicy],
     app_values: Mapping[str, str] | None = None,
 ) -> str:
     """Pure template rendering for an external-app SKILL.md: apply the cloud

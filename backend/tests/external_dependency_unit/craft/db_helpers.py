@@ -28,9 +28,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import (
     AccessType,
     AccountType,
+    ActionPolicy,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
-    EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
     SandboxStatus,
@@ -263,7 +263,7 @@ def make_external_app(
     organization_credentials: dict[str, Any] | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
-    action_policies: dict[str, EndpointPolicy] | None = None,
+    action_policies: dict[str, ActionPolicy] | None = None,
     enabled: bool = True,
 ) -> ExternalApp:
     """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action

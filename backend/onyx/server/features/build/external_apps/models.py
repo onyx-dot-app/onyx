@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.models import ActionPolicyView
 from onyx.server.features.build.connect_app import ConnectAppDecision
 
@@ -29,7 +29,7 @@ class CreateBuiltInExternalAppRequest(BaseModel):
     organization_credentials: dict[str, str]
     # Map full-replaces stored overrides (empty clears); None defaults every
     # action. Keyed by catalog action id; validated on create.
-    action_policies: dict[str, EndpointPolicy] | None = None
+    action_policies: dict[str, ActionPolicy] | None = None
 
 
 class CreateCustomExternalAppRequest(BaseModel):
@@ -61,7 +61,7 @@ class UpdateExternalAppRequest(BaseModel):
     # associations. System-managed built-in associations are preserved.
     associated_skill_ids: list[UUID] | None = None
     # Full-replace stored overrides when present (empty clears); None leaves them.
-    action_policies: dict[str, EndpointPolicy] | None = None
+    action_policies: dict[str, ActionPolicy] | None = None
 
 
 class ExternalAppAssociatedSkill(BaseModel):

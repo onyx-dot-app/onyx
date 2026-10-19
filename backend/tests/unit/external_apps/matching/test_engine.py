@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.engine import (
     WHOLE_DOMAIN_ACTION_TYPE,
@@ -41,7 +41,7 @@ def _request() -> ProxiedRequest:
     return ProxiedRequest(method="POST", path="/api/x")
 
 
-def _matched_actions(*policies: EndpointPolicy) -> AllMatchedActions:
+def _matched_actions(*policies: ActionPolicy) -> AllMatchedActions:
     return AllMatchedActions(
         actions=tuple(
             MatchedAction(
@@ -54,7 +54,7 @@ def _matched_actions(*policies: EndpointPolicy) -> AllMatchedActions:
 
 
 def test_apply_gate_serveable_passes_recognition_through() -> None:
-    matched_actions = _matched_actions(EndpointPolicy.ALWAYS)
+    matched_actions = _matched_actions(ActionPolicy.ALWAYS)
     assert (
         apply_credential_gate(_app(), _request(), matched_actions, is_available=True)
         is matched_actions
@@ -65,7 +65,7 @@ def test_apply_gate_serveable_no_catalog_synthesizes_whole_domain_ask() -> None:
     matched_actions = apply_credential_gate(_app(), _request(), None, is_available=True)
     assert matched_actions is not None
     assert matched_actions.governing_action.action_type == WHOLE_DOMAIN_ACTION_TYPE
-    assert matched_actions.governing_action.policy == EndpointPolicy.ASK
+    assert matched_actions.governing_action.policy == ActionPolicy.ASK
     assert matched_actions.app_name == "Slack"
     assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, 1)
 
@@ -85,7 +85,7 @@ def test_apply_gate_not_serveable_no_catalog_forwards_bare() -> None:
 
 
 def test_apply_gate_not_serveable_without_deny_forwards_bare() -> None:
-    matched_actions = _matched_actions(EndpointPolicy.ALWAYS, EndpointPolicy.ASK)
+    matched_actions = _matched_actions(ActionPolicy.ALWAYS, ActionPolicy.ASK)
     assert (
         apply_credential_gate(_app(), _request(), matched_actions, is_available=False)
         is None
@@ -93,9 +93,9 @@ def test_apply_gate_not_serveable_without_deny_forwards_bare() -> None:
 
 
 def test_apply_gate_not_serveable_keeps_only_deny() -> None:
-    matched_actions = _matched_actions(EndpointPolicy.DENY, EndpointPolicy.ASK)
+    matched_actions = _matched_actions(ActionPolicy.DENY, ActionPolicy.ASK)
     gated = apply_credential_gate(
         _app(), _request(), matched_actions, is_available=False
     )
     assert gated is not None
-    assert [a.policy for a in gated.actions] == [EndpointPolicy.DENY]
+    assert [a.policy for a in gated.actions] == [ActionPolicy.DENY]

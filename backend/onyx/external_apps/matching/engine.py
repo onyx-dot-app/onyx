@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.enums import POLICY_SEVERITY, ActionPolicy, ExternalAppType, GatedAppKind
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
@@ -31,7 +31,7 @@ class MatchedAction(BaseModel):
     action_type: str
     display_name: str
     description: str
-    policy: EndpointPolicy
+    policy: ActionPolicy
 
 
 class GatedTarget(BaseModel):
@@ -112,7 +112,7 @@ def actions_requiring_approval(actions: Iterable[ActionLike]) -> list[str]:
             action_type = action.action_type
         else:
             try:
-                policy = EndpointPolicy(action["policy"])
+                policy = ActionPolicy(action["policy"])
             except (KeyError, TypeError, ValueError):
                 continue
             raw_action_type = action.get("action_type")
@@ -120,7 +120,7 @@ def actions_requiring_approval(actions: Iterable[ActionLike]) -> list[str]:
                 continue
             action_type = raw_action_type
 
-        if policy is EndpointPolicy.ASK:
+        if policy is ActionPolicy.ASK:
             action_types.add(action_type)
     return sorted(action_types)
 
@@ -193,7 +193,7 @@ def apply_credential_gate(
         if matched_actions is None:
             return None
         deny = tuple(
-            a for a in matched_actions.actions if a.policy is EndpointPolicy.DENY
+            a for a in matched_actions.actions if a.policy is ActionPolicy.DENY
         )
         return matched_actions.model_copy(update={"actions": deny}) if deny else None
     if matched_actions is not None:
@@ -204,7 +204,7 @@ def apply_credential_gate(
                 action_type=WHOLE_DOMAIN_ACTION_TYPE,
                 display_name="Perform action",
                 description=f"{request.method} {request.path}",
-                policy=EndpointPolicy.ASK,
+                policy=ActionPolicy.ASK,
             ),
         ),
         target=GatedTarget(

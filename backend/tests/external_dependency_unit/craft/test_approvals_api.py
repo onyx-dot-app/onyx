@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import (
+    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    EndpointPolicy,
     GatedAppKind,
 )
 from onyx.db.models import BuildSession
@@ -353,7 +353,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         db_session, skill=make_skill(db_session), auth_template={}
     )
     ask_send = action_entry("slack.chat.post")
-    always_read = action_entry("slack.channel.read", policy=EndpointPolicy.ALWAYS)
+    always_read = action_entry("slack.channel.read", policy=ActionPolicy.ALWAYS)
     ask_upload = action_entry("slack.files.upload")
 
     current = insert_action_approval(
@@ -509,7 +509,7 @@ def test_list_live_approvals_returns_multi_action_view(
 ) -> None:
     """A row persisted with multiple matched actions surfaces all of them on
     ``ApprovalView.actions``, with each entry's policy round-tripped from the
-    JSONB string back to the ``EndpointPolicy`` enum."""
+    JSONB string back to the ``ActionPolicy`` enum."""
     user = make_user(db_session, email_prefix="multi_action_view")
     session = build_session_with_user(user=user)
 
@@ -519,13 +519,13 @@ def test_list_live_approvals_returns_multi_action_view(
             action_type="linear.issues.create",
             display_name="Create an issue",
             description="Create a new issue.",
-            policy=EndpointPolicy.ASK,
+            policy=ActionPolicy.ASK,
         ),
         MatchedAction(
             action_type="linear.viewer.read",
             display_name="Read the connected user",
             description="Read the authenticated user's profile (viewer).",
-            policy=EndpointPolicy.ALWAYS,
+            policy=ActionPolicy.ALWAYS,
         ),
     ]
     insert_action_approval(
