@@ -39,7 +39,12 @@ export function staticClassNames(
         return;
       case "ObjectExpression":
         node.properties.forEach((property) => {
-          if (property.type === "Property") visit(property.key);
+          if (property.type !== "Property") return;
+          if (property.key.type === "Identifier" && !property.computed) {
+            strings.push(property.key.name);
+          } else {
+            visit(property.key);
+          }
         });
         return;
       default:

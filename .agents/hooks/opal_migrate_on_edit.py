@@ -99,7 +99,7 @@ def main() -> int:
             timeout=_TIMEOUT_SECONDS,
         )
         diagnostics = json.loads(result.stdout).get("diagnostics", [])
-    except (subprocess.TimeoutExpired, json.JSONDecodeError):
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
         return 0
 
     reported = [_format(d) for d in diagnostics if _is_reported(d)]
