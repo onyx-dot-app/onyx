@@ -25,8 +25,6 @@ from contextlib import contextmanager
 from itertools import islice
 from typing import Any, NoReturn
 
-from pydantic import BaseModel
-
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings import bounded_count, bounded_options
 from onyx.connectors.capability_checks.form_state import FormState
@@ -37,6 +35,7 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
+    CheckRowText,
     CountFinding,
     CredentialCapability,
     OptionsFinding,
@@ -163,13 +162,6 @@ _ROW_IDS: dict[str, str] = {
 }
 
 
-class _RowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    summary: str
-    description: str
-
-
 def _gateway(context: CapabilityCheckContext) -> GoogleDriveSourceOperations:
     gateway: SourceOperations | None = context.source_operations
     if not isinstance(gateway, GoogleDriveSourceOperations):
@@ -216,9 +208,9 @@ def _google_errors(
     *,
     api: str,
     denied: str,
-    denied_row: _RowText | None = None,
+    denied_row: CheckRowText | None = None,
     not_found: str | None = None,
-    not_found_row: _RowText | None = None,
+    not_found_row: CheckRowText | None = None,
 ) -> Iterator[None]:
     """Maps the gateway's errors onto the validation-exception family.
     ``api`` names the Google API the probe calls; ``denied`` explains a 403.
@@ -250,9 +242,9 @@ def _raise_google_error(
     *,
     api: str,
     denied: str,
-    denied_row: _RowText | None = None,
+    denied_row: CheckRowText | None = None,
     not_found: str | None = None,
-    not_found_row: _RowText | None = None,
+    not_found_row: CheckRowText | None = None,
 ) -> NoReturn:
     try:
         raise error
@@ -559,7 +551,7 @@ class _AuthCheck(_GoogleDriveCheck):
                 "The credential signs in, but Google Drive does not let the "
                 "primary admin list files"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary=f"{_admin(context)} cannot list files",
                 description=(
                     "The account signs in, but Google Drive refuses to list the "
@@ -629,8 +621,8 @@ class _WorkspaceUsersCheck(_GoogleDriveCheck):
         )
 
 
-def _list_users_denied_row(context: CapabilityCheckContext) -> _RowText:
-    return _RowText(
+def _list_users_denied_row(context: CapabilityCheckContext) -> CheckRowText:
+    return CheckRowText(
         summary=f"{_admin(context)} cannot list users",
         description=(
             "The connector cannot find whose My Drives to index. (HTTP 403)\n"
@@ -661,7 +653,7 @@ def _impersonation_failures(
                     e,
                     api=_DRIVE_API,
                     denied=f"Google Drive refused to act as {email}",
-                    denied_row=_RowText(
+                    denied_row=CheckRowText(
                         summary=f"Drive refused to act as {email}",
                         description=(
                             "Google Drive refused a request as this user. "
@@ -830,8 +822,8 @@ class _SharedDrivesCheck(_GoogleDriveCheck):
         )
 
 
-def _list_drives_denied_row(context: CapabilityCheckContext) -> _RowText:
-    return _RowText(
+def _list_drives_denied_row(context: CapabilityCheckContext) -> CheckRowText:
+    return CheckRowText(
         summary=f"{_admin(context)} cannot list shared drives",
         description=(
             "The primary admin cannot list shared drives. (HTTP 403)\n"
@@ -892,7 +884,7 @@ class _ConfiguredSharedDrivesCheck(_GoogleDriveCheck):
             context,
             api=_DRIVE_API,
             denied="The credential cannot read the configured shared drives",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Cannot read the selected shared drives",
                 description=(
                     "Google refused a request while looking up the selected "
@@ -992,7 +984,7 @@ class _ConfiguredFoldersCheck(_GoogleDriveCheck):
             context,
             api=_DRIVE_API,
             denied="The credential cannot read the configured folders",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Cannot read the selected folders",
                 description=(
                     "Google refused a request while reading the selected "
@@ -1171,7 +1163,7 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
             context,
             api=_DRIVE_API,
             denied=f"Google Drive does not let {found[0]} list files",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary=f"{found[0]} cannot list their files",
                 description=(
                     "Google Drive refuses to list this user's files. (HTTP 403)\n"
@@ -1240,7 +1232,7 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
                 "shared drives as the primary admin and can miss folders with "
                 "limited access"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Cannot read shared drive members",
                 description=(
                     "The primary admin cannot read who belongs to a shared "
@@ -1458,7 +1450,7 @@ class _ContentReadCheck(_GoogleDriveCheck):
             context,
             api=_DRIVE_API,
             denied="The credential cannot list files",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary=f"Cannot list files as {_admin(context)}",
                 description=(
                     "Google Drive refuses to list the primary admin's files. "
@@ -1558,7 +1550,7 @@ class _ContentReadCheck(_GoogleDriveCheck):
                 e,
                 api=_DRIVE_API,
                 denied=f"The credential can see '{name}' but cannot download it",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary=f"Cannot download {name}",
                     description=(
                         "The account can see the file, but Google refuses the "
@@ -1592,7 +1584,7 @@ class _DocsApiCheck(_GoogleDriveCheck):
             context,
             api=_DRIVE_API,
             denied="The credential cannot list Google Docs",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Cannot list Google Docs",
                 description=(
                     "Google Drive refuses to list the primary admin's Google "
@@ -1620,7 +1612,7 @@ class _DocsApiCheck(_GoogleDriveCheck):
             context,
             api=_DOCS_API,
             denied="The credential cannot read Google Docs through the Docs API",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Docs API refused to read a Doc",
                 description=(
                     "Docs would index without links to their headings. (HTTP 403)\n"
@@ -1737,7 +1729,7 @@ class _FilePermissionsCheck(_GoogleDriveCheck):
             context,
             api=_DRIVE_API,
             denied="The credential cannot list files with their permissions",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Cannot list files with permissions",
                 description=(
                     "Google Drive refuses to list files with who can open them. "
@@ -1831,7 +1823,7 @@ class _DirectoryAdminCheck(_GoogleDriveCheck):
                 "Workspace directory API. Reconnect the connector with an "
                 "account that has admin directory access"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary=f"{_admin(context)} cannot read the directory",
                 description=(
                     "The primary admin cannot read the Workspace directory. (HTTP 403)"
@@ -1904,7 +1896,7 @@ class _GroupsCheck(_GoogleDriveCheck):
             context,
             api=_ADMIN_API,
             denied="The primary admin cannot read the Workspace groups",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary=f"{_admin(context)} cannot read groups",
                 description=(
                     "Sharing through groups would not sync. (HTTP 403)\n"
@@ -1968,7 +1960,7 @@ class _DriveMembershipCheck(_GoogleDriveCheck):
             context,
             api=_DRIVE_API,
             denied="The primary admin cannot read the members of shared drives",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Cannot read shared drive members",
                 description=(
                     "The primary admin cannot read who belongs to shared drives. "
@@ -2044,7 +2036,7 @@ class _FolderPermissionsCheck(_GoogleDriveCheck):
             context,
             api=_DRIVE_API,
             denied="The credential cannot list folders with their permissions",
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary="Cannot list folders with permissions",
                 description=(
                     "Google Drive refuses to list folders with who can open them. "
