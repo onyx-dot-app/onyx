@@ -9,7 +9,7 @@ import {
   Text,
   Tooltip,
 } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import useUserSkills from "@/hooks/useUserSkills";
 import type { Skill } from "@/lib/skills/types";
 
@@ -94,7 +94,14 @@ export default function MemberCraftAppSkills({
                 description={skill.description}
                 descriptionMaxLines={2}
                 rightChildren={
-                  <div className="flex items-center gap-3">
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    alignItems="center"
+                    gap={3}
+                    width="auto"
+                    height="auto"
+                  >
                     <Button
                       prominence="secondary"
                       size="sm"
@@ -120,7 +127,7 @@ export default function MemberCraftAppSkills({
                         )}
                       />
                     </Tooltip>
-                  </div>
+                  </Section>
                 }
               />
             </li>
