@@ -220,6 +220,9 @@
         "createFailed": "No se pudo crear la acción de OpenAPI",
         "invalidJson": "El formato JSON de la definición del esquema de OpenAPI no es válido",
         "updateFailed": "No se pudo actualizar la acción de OpenAPI"
+      },
+      "preview": {
+        "urlDescription": "URL encontrada en el esquema. Conéctate solo a servidores de confianza."
       }
     },
     "cardHeader": {

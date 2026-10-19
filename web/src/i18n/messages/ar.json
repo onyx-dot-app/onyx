@@ -220,6 +220,9 @@
         "createFailed": "فشل إنشاء إجراء OpenAPI",
         "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI",
         "updateFailed": "فشل تحديث إجراء OpenAPI"
+      },
+      "preview": {
+        "urlDescription": "عنوان URL موجود في المخطط. اتصل فقط بالخوادم التي تثق بها."
       }
     },
     "cardHeader": {

@@ -220,6 +220,9 @@
         "createFailed": "创建 OpenAPI 操作失败",
         "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
         "updateFailed": "更新 OpenAPI 操作失败"
+      },
+      "preview": {
+        "urlDescription": "在架构中找到的 URL。请仅连接到您信任的服务器。"
       }
     },
     "cardHeader": {

@@ -3,15 +3,14 @@
 import { cn, markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
-import { Modal } from "@opal/components";
+import { Card, Divider, Modal } from "@opal/components";
 import { Text } from "@opal/components";
-import { InputVertical, toast } from "@opal/layouts";
+import { Content, InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CopyButton } from "@opal/components";
 import { Button } from "@opal/components";
-import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
@@ -26,7 +25,7 @@ import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@opal/components";
 import { Formik, Form, useFormikContext, type FormikHelpers } from "formik";
 import * as Yup from "yup";
-import { SvgActions, SvgBracketCurly } from "@opal/icons";
+import { SvgActions, SvgArrowRightDot, SvgBracketCurly } from "@opal/icons";
 import { getActionIcon } from "@/lib/tools/utils";
 import { EmptyMessageCard } from "@opal/components";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -388,30 +387,41 @@ function FormContent({
             {methodSpecs && methodSpecs.length > 0 ? (
               <>
                 {name && (
-                  <div className="flex items-start gap-3 py-2">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-12 border border-border-01 bg-background-neutral-00">
-                      <PluginIcon size={24} className="text-text-03" />
-                    </div>
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <Text font="main-content-emphasis" color="text-05">
-                        {name}
-                      </Text>
-                      {url && (
-                        <div className="break-all">
-                          <Text font="secondary-body" color="text-03">
-                            {url}
-                          </Text>
-                        </div>
-                      )}
-                      {description && (
-                        <Text font="secondary-body" color="text-03">
-                          {description}
-                        </Text>
-                      )}
-                    </div>
-                  </div>
+                  <Content
+                    sizePreset="main-content"
+                    variant="section"
+                    icon={PluginIcon}
+                    title={name}
+                    description={description}
+                  />
                 )}
-                <OpenAPIEndpointList methods={methodSpecs} />
+                {url && (
+                  <Content
+                    sizePreset="main-ui"
+                    variant="section"
+                    title={url}
+                    description={t("addOpenApiModal.preview.urlDescription")}
+                  />
+                )}
+                <Divider paddingParallel={0} />
+                <div className="flex flex-col gap-2">
+                  {methodSpecs.map((method) => (
+                    <Card
+                      key={`${method.method}-${method.path}-${method.name}`}
+                    >
+                      <Content
+                        sizePreset="main-ui"
+                        variant="section"
+                        icon={SvgArrowRightDot}
+                        title={method.name}
+                        description={
+                          method.summary ||
+                          t("addOpenApiModal.method.noSummary")
+                        }
+                      />
+                    </Card>
+                  ))}
+                </div>
               </>
             ) : (
               <EmptyMessageCard

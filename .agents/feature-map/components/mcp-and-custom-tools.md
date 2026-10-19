@@ -182,8 +182,9 @@ Add opens the type dropdown and then its native catalog or creation flow.
 add and edit. Without a `toolId` it adds: it opens on Schema, with Server and Tools disabled until the tool exists.
 Schema combines schema entry and live action review; Continue checks it and unlocks Authentication.
 Editing the schema again locks Authentication until the next Continue.
-The validated schema preview groups its service logo, name, server URL, and
-description in one compact identity row, shared by creation and schema editing.
+In add mode, the validated schema preview shows the API's name and schema
+description, then its server URL with a warning to connect only to trusted servers,
+a divider, and one card per action (operation ID and summary).
 Switching tabs preserves schema and credential drafts.
 Authorization supports OAuth, custom headers/API keys, pass-through when enabled, and explicit no authentication.
 Only the final Add Action creates a record. Auth saves use refreshed permission-stamped rows.
@@ -204,9 +205,8 @@ Schema drafts remain fixed for each open editor, even when saved definitions
 refresh. Fresh capability loss removes write fields; a missing record restores
 the fallback. Rejected saves remain visible through errors and toasts.
 Schema editing remains on one step.
-Review shows one divided list of actions, with method badges and endpoint paths beside each summary.
-Creation and details render `web/src/sections/plugins/OpenAPIEndpointList.tsx`, keeping endpoint typography,
-method badges, spacing, and responsive behavior identical.
+The Tools tab renders `web/src/sections/plugins/OpenAPIEndpointList.tsx`: one divided list of actions,
+with method badges and endpoint paths beside each summary.
 Creation schema and authentication modals use the same centered surface as
 MCP setup. Admin detail tabs embed those same forms without headers
 or nested dialogs, and portal only the active form's save action to the footer.

@@ -220,6 +220,9 @@
         "createFailed": "OpenAPI 액션을 만들지 못했습니다",
         "invalidJson": "OpenAPI 스키마 정의의 JSON 형식이 잘못되었습니다",
         "updateFailed": "OpenAPI 액션을 업데이트하지 못했습니다"
+      },
+      "preview": {
+        "urlDescription": "스키마에서 찾은 URL입니다. 신뢰할 수 있는 서버에만 연결하세요."
       }
     },
     "cardHeader": {

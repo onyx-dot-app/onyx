@@ -220,6 +220,9 @@
         "createFailed": "OpenAPI アクションの作成に失敗しました",
         "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
         "updateFailed": "OpenAPI アクションの更新に失敗しました"
+      },
+      "preview": {
+        "urlDescription": "スキーマで見つかった URL です。信頼できるサーバーにのみ接続してください。"
       }
     },
     "cardHeader": {
