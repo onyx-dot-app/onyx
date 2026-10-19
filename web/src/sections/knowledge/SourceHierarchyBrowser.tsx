@@ -20,11 +20,11 @@ import {
   InputTypeIn,
   Spacer,
   type DropdownItem,
+  OverflowText,
+  SelectButton,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
-import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
   SvgFolder,
   SvgChevronRight,
@@ -902,8 +902,9 @@ export default function SourceHierarchyBrowser({
             <Dropdown.Trigger asChild>
               <div>
                 <SelectButton
+                  variant="select-light"
                   rightIcon={SvgArrowUpDown}
-                  transient={sortDropdownOpen}
+                  interaction={sortDropdownOpen ? "hover" : "rest"}
                 >
                   {sortField === "name"
                     ? t("table.columns.name.header")
@@ -973,11 +974,23 @@ export default function SourceHierarchyBrowser({
                           height="auto"
                           className="min-w-0 grow"
                         >
-                          <Truncated>{item.data.title}</Truncated>
+                          <OverflowText
+                            as="p"
+                            textPosition="text-start"
+                            font="main-ui-body"
+                            color="text-05"
+                          >
+                            {item.data.title}
+                          </OverflowText>
                           {subtitle && (
-                            <Truncated text03 secondaryBody>
+                            <OverflowText
+                              as="p"
+                              textPosition="text-start"
+                              font="secondary-body"
+                              color="text-03"
+                            >
                               {subtitle}
-                            </Truncated>
+                            </OverflowText>
                           )}
                         </GeneralLayouts.Section>
                         {item.data.link && (
