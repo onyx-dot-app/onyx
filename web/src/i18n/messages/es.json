@@ -220,7 +220,8 @@
         "updateFailed": "No se pudo actualizar la acción de OpenAPI"
       },
       "preview": {
-        "urlDescription": "URL encontrada en el esquema. Conéctate solo a servidores de confianza."
+        "urlDescription": "URL encontrada en el esquema. Conéctate solo a servidores de confianza.",
+        "checking": "Comprobando el esquema…"
       }
     },
     "cardHeader": {

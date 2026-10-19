@@ -8,6 +8,7 @@ import {
 } from "@tests/setup/test-utils";
 import { toast } from "@opal/layouts";
 import type { ToolSnapshot } from "@/lib/tools/types";
+import type { RawToolSnapshot } from "@/lib/tools/enrich";
 import messages from "@/i18n/messages/en.json";
 import OpenAPIPluginModal from "@/views/admin/PluginsPage/OpenAPIPluginModal";
 
@@ -52,13 +53,13 @@ const definition = {
 };
 const schemaText = JSON.stringify(definition);
 
-const savedTool: ToolSnapshot = {
+// The raw API shape: an empty name or description is no override, and the
+// modal shows the schema's "Release API" and "Read release status".
+const savedTool: RawToolSnapshot = {
   id: 42,
-  name: "Release API",
-  display_name: "Release API",
-  description: "Read release status",
-  name_override: null,
-  description_override: null,
+  name: "",
+  display_name: "",
+  description: "",
   definition,
   custom_headers: [],
   passthrough_auth: false,
@@ -78,7 +79,7 @@ interface Write {
 }
 
 // A small fake of the server the modal talks to.
-let tools: ToolSnapshot[];
+let tools: RawToolSnapshot[];
 let writes: Write[];
 let configs: Set<number>;
 let toolCreates: number;
@@ -86,12 +87,12 @@ let configCreates: number;
 let validateError: string | null;
 let failCreate: string | null;
 let failNextLink: boolean;
-let createdPermissions: ToolSnapshot["permissions"];
+let createdPermissions: RawToolSnapshot["permissions"];
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status });
 
-function updateTool(id: number, update: Partial<ToolSnapshot>) {
+function updateTool(id: number, update: Partial<RawToolSnapshot>) {
   tools = tools.map((tool) => (tool.id === id ? { ...tool, ...update } : tool));
 }
 
@@ -151,7 +152,7 @@ beforeEach(() => {
     if (path === "/api/admin/tool/custom") {
       if (failCreate) return json({ detail: failCreate }, 400);
       toolCreates += 1;
-      const created: ToolSnapshot = {
+      const created: RawToolSnapshot = {
         ...savedTool,
         id: 43,
         oauth_config_id: null,
@@ -172,7 +173,7 @@ beforeEach(() => {
     if (path === "/api/admin/default-assistant") return json(body);
     const toolMatch = path.match(/^\/api\/admin\/tool\/custom\/(\d+)$/);
     if (toolMatch) {
-      const update = body as Partial<ToolSnapshot>;
+      const update = body as Partial<RawToolSnapshot>;
       if (update.oauth_config_id && failNextLink) {
         failNextLink = false;
         return json({ detail: "Link failed" }, 503);
@@ -530,11 +531,14 @@ describe("edit", () => {
   const onEditClose = jest.fn();
   beforeEach(() => onEditClose.mockClear());
 
-  async function renderEdit(params?: URLSearchParams) {
+  async function renderEdit(
+    params?: URLSearchParams,
+    name: RegExp = /^Edit Release API/
+  ) {
     render(
       <OpenAPIPluginModal toolId={42} params={params} onClose={onEditClose} />
     );
-    return screen.findByRole("dialog", { name: /^Edit Release API/ });
+    return screen.findByRole("dialog", { name });
   }
 
   async function openDetails() {
@@ -551,8 +555,8 @@ describe("edit", () => {
   }
 
   test("opens on the schema, with the stored overrides in Plugin Details", async () => {
-    tools = [{ ...savedTool, name_override: "Releases" }];
-    await renderEdit();
+    tools = [{ ...savedTool, name: "Releases", display_name: "Releases" }];
+    await renderEdit(undefined, /^Edit Releases/);
     expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
       copy.addOpenApiModal.editHeader.description
     );
@@ -783,7 +787,8 @@ describe("edit", () => {
     const user = setupUser();
     await renderEdit();
     await openDetails();
-    expect(screen.getByText(copy.plugins.openapi.readOnly)).toBeVisible();
+    // An empty stored description falls back to the schema's.
+    expect(screen.getByText("Read release status")).toBeVisible();
     expect(
       screen.queryByRole("textbox", { name: /Display Name/ })
     ).not.toBeInTheDocument();

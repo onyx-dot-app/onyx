@@ -20,6 +20,8 @@ export interface OpenApiSchemaCheck {
   error: string | null;
   /** True while `check` runs. */
   checking: boolean;
+  /** True while non-empty text has no result yet, debounced or in flight. */
+  pending: boolean;
   /** Checks the current text now and returns the accepted schema, or null. */
   check: () => Promise<CheckedOpenApiSchema | null>;
 }
@@ -88,6 +90,7 @@ export function useOpenApiSchemaCheck(
     checked: current?.checked ?? null,
     error: current?.error ?? null,
     checking,
+    pending: text.trim() !== "" && current === null,
     check,
   };
 }

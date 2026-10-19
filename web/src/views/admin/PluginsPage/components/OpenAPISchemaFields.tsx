@@ -17,6 +17,7 @@ import {
   InputVertical,
 } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
+import { CardLoaders } from "@opal/loaders";
 import { SvgActions, SvgBracketCurly, SvgInfo } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -120,7 +121,14 @@ export default function OpenAPISchemaFields({
         </InputVertical>
       </InputPadder>
 
-      {checked && checked.methods.length > 0 ? (
+      {schema.pending ? (
+        <>
+          <Divider paddingParallel={2} paddingPerpendicular={2} />
+          <div role="status" aria-label={t("addOpenApiModal.preview.checking")}>
+            <CardLoaders />
+          </div>
+        </>
+      ) : checked && checked.methods.length > 0 ? (
         <>
           <Divider paddingParallel={2} paddingPerpendicular={2} />
           {info?.title && (

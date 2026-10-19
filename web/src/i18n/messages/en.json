@@ -220,7 +220,8 @@
         "updateFailed": "Failed to update OpenAPI action"
       },
       "preview": {
-        "urlDescription": "URL found in the schema. Only connect to servers you trust."
+        "urlDescription": "URL found in the schema. Only connect to servers you trust.",
+        "checking": "Checking schema…"
       }
     },
     "cardHeader": {

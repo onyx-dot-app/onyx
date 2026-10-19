@@ -220,7 +220,8 @@
         "updateFailed": "OpenAPI 액션을 업데이트하지 못했습니다"
       },
       "preview": {
-        "urlDescription": "스키마에서 찾은 URL입니다. 신뢰할 수 있는 서버에만 연결하세요."
+        "urlDescription": "스키마에서 찾은 URL입니다. 신뢰할 수 있는 서버에만 연결하세요.",
+        "checking": "스키마 확인 중…"
       }
     },
     "cardHeader": {

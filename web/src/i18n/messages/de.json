@@ -220,7 +220,8 @@
         "updateFailed": "Die OpenAPI-Aktion konnte nicht aktualisiert werden"
       },
       "preview": {
-        "urlDescription": "URL aus dem Schema. Verbinden Sie sich nur mit Servern, denen Sie vertrauen."
+        "urlDescription": "URL aus dem Schema. Verbinden Sie sich nur mit Servern, denen Sie vertrauen.",
+        "checking": "Schema wird geprüft…"
       }
     },
     "cardHeader": {

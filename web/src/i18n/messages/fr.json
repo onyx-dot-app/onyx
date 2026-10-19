@@ -220,7 +220,8 @@
         "updateFailed": "Échec de la mise à jour de l'action OpenAPI"
       },
       "preview": {
-        "urlDescription": "URL trouvée dans le schéma. Connectez-vous uniquement à des serveurs de confiance."
+        "urlDescription": "URL trouvée dans le schéma. Connectez-vous uniquement à des serveurs de confiance.",
+        "checking": "Vérification du schéma…"
       }
     },
     "cardHeader": {

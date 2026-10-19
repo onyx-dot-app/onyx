@@ -220,7 +220,8 @@
         "updateFailed": "OpenAPI アクションの更新に失敗しました"
       },
       "preview": {
-        "urlDescription": "スキーマで見つかった URL です。信頼できるサーバーにのみ接続してください。"
+        "urlDescription": "スキーマで見つかった URL です。信頼できるサーバーにのみ接続してください。",
+        "checking": "スキーマを確認しています…"
       }
     },
     "cardHeader": {

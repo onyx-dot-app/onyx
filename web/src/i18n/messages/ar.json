@@ -220,7 +220,8 @@
         "updateFailed": "فشل تحديث إجراء OpenAPI"
       },
       "preview": {
-        "urlDescription": "عنوان URL موجود في المخطط. اتصل فقط بالخوادم التي تثق بها."
+        "urlDescription": "عنوان URL موجود في المخطط. اتصل فقط بالخوادم التي تثق بها.",
+        "checking": "جارٍ التحقق من المخطط…"
       }
     },
     "cardHeader": {
