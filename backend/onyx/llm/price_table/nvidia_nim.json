@@ -1880,32 +1880,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "nvidia/nemotron-3-super-120b-a12b": {
-      "attachment": false,
-      "cost": {
-        "input": 0.2,
-        "output": 0.8
-      },
-      "family": "nemotron",
-      "limit": {
-        "context": 262144,
-        "output": 262144
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Nemotron 3 Super",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-03-11",
-      "temperature": true,
-      "tool_call": true
-    },
     "nvidia/nemotron-3-ultra-550b-a55b": {
       "attachment": false,
       "cost": {
@@ -1985,6 +1959,34 @@
       "reasoning": true,
       "release_date": "2026-08-11",
       "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "nemotron",
+      "limit": {
+        "context": 1048576,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nemotron 3.5 Super VL 120B A12B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
       "temperature": true,
       "tool_call": true
     },
@@ -2744,6 +2746,34 @@
       "reasoning": true,
       "release_date": "2026-05-28",
       "status": "deprecated",
+      "temperature": true,
+      "tool_call": true
+    },
+    "stepfun-ai/step-5-preview": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "limit": {
+        "context": 1048576,
+        "input": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Step 5 Preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-16",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
