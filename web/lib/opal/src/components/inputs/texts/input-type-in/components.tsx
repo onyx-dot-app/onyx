@@ -7,6 +7,10 @@ import { SvgSearch, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
 import type { InputVariants, WithoutStyles } from "@opal/types";
+import type { TextFont } from "@onyx-ai/shared/contracts";
+
+/** The fonts an input can use: the body font, or mono for code-like values. */
+export type InputFont = Extract<TextFont, "main-ui-body" | "main-ui-mono">;
 
 export interface InputTypeInProps extends WithoutStyles<
   Omit<React.InputHTMLAttributes<HTMLInputElement>, "disabled" | "readOnly">
@@ -32,6 +36,8 @@ export interface InputTypeInProps extends WithoutStyles<
    * even when focus moves into the list.
    */
   open?: boolean;
+  /** The text's font. @default "main-ui-body" */
+  font?: InputFont;
 }
 
 /**
@@ -74,6 +80,7 @@ export default function InputTypeIn({
   clearButton = false,
   readOnly = false,
   open = false,
+  font = "main-ui-body",
   value,
   onChange,
   name,
@@ -132,6 +139,7 @@ export default function InputTypeIn({
         value={value}
         onChange={onChange}
         className="opal-input-field"
+        data-font={font === "main-ui-mono" ? "mono" : undefined}
         {...props}
       />
 

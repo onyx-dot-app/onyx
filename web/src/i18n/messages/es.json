@@ -560,12 +560,13 @@
       },
       "redirectUri": {
         "copyTooltip": "Copiar el URI de redirección",
-        "label": "Usa el <emphasis>URI de redirección</emphasis>:"
+        "title": "URI de redirección",
+        "description": "Añade esta URI a las URI de redirección permitidas de tu proveedor de OAuth."
       },
       "scopes": {
         "description": "Lista de ámbitos de OAuth que se solicitarán, separados por comas.",
-        "label": "Ámbitos <optional>(opcional)</optional>",
-        "placeholder": "p. ej., repo, user"
+        "placeholder": "p. ej., repo, user",
+        "title": "Ámbitos"
       },
       "submitButton": {
         "label": "Conectar",

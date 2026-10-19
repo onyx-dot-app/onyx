@@ -560,12 +560,13 @@
       },
       "redirectUri": {
         "copyTooltip": "نسخ عنوان إعادة التوجيه",
-        "label": "استخدم <emphasis>عنوان إعادة التوجيه</emphasis>:"
+        "title": "عنوان URI لإعادة التوجيه",
+        "description": "أضف عنوان URI هذا إلى عناوين URI المسموح بها لإعادة التوجيه لدى مزود OAuth."
       },
       "scopes": {
         "description": "قائمة نطاقات OAuth المطلوبة مفصولة بفواصل.",
-        "label": "النطاقات <optional>(اختياري)</optional>",
-        "placeholder": "مثل repo, user"
+        "placeholder": "مثل repo, user",
+        "title": "النطاقات"
       },
       "submitButton": {
         "label": "اتصال",

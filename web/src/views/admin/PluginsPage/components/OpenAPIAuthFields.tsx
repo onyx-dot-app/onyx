@@ -15,8 +15,15 @@ import {
   MessageCard,
   type SelectOption,
 } from "@opal/components";
-import { Content, InputHorizontal, InputPadder, Section } from "@opal/layouts";
+import {
+  Content,
+  InputHorizontal,
+  InputPadder,
+  InputVertical,
+  Section,
+} from "@opal/layouts";
 import { InputSwitchField } from "@opal/form";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { FormField } from "@/refresh-components/form/FormField";
 import Text from "@/refresh-components/texts/Text";
 import { MASKED_OAUTH_CREDENTIAL } from "@/lib/oauth/config";
@@ -195,7 +202,7 @@ export default function OpenAPIAuthFields({
         </FormField>
       </InputPadder>
 
-      {(auth.authMethod === "oauth" || auth.authMethod === "custom-header") && (
+      {auth.authMethod !== "none" && (
         <Divider paddingParallel={2} paddingPerpendicular={2} />
       )}
 
@@ -286,27 +293,17 @@ export default function OpenAPIAuthFields({
               />
             </FormField>
 
-            <FormField name="auth.scopes" state={fieldState("scopes")}>
-              <FormField.Label>
-                {t.rich("openApiAuthModal.scopes.label", {
-                  optional: (chunks) => (
-                    <span className="text-text-03">{chunks}</span>
-                  ),
-                })}
-              </FormField.Label>
-              <FormField.Control asChild>
-                <InputTypeIn
-                  name="auth.scopes"
-                  value={auth.scopes}
-                  onChange={handleChange}
-                  placeholder={t("openApiAuthModal.scopes.placeholder")}
-                />
-              </FormField.Control>
-              <FormField.Description>
-                {t("openApiAuthModal.scopes.description")}
-              </FormField.Description>
-              <FormField.Message messages={{ error: authErrors?.scopes }} />
-            </FormField>
+            <InputVertical
+              withLabel="auth.scopes"
+              title={t("openApiAuthModal.scopes.title")}
+              suffix="optional"
+              subDescription={t("openApiAuthModal.scopes.description")}
+            >
+              <InputTypeInField
+                name="auth.scopes"
+                placeholder={t("openApiAuthModal.scopes.placeholder")}
+              />
+            </InputVertical>
 
             <InputHorizontal
               withLabel="auth.supportsPkce"
@@ -322,37 +319,26 @@ export default function OpenAPIAuthFields({
               disabled={disabled || Boolean(authErrors)}
             />
 
-            <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
-              <div className="flex flex-col gap-2 w-full">
-                <Text
-                  as="p"
-                  text03
-                  secondaryBody
-                  className="flex flex-wrap gap-1"
-                >
-                  {t.rich("openApiAuthModal.redirectUri.label", {
-                    emphasis: (chunks) => (
-                      <span className="font-secondary-action">{chunks}</span>
-                    ),
-                  })}
-                </Text>
-                <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
-                  <Text
-                    as="p"
-                    text04
-                    className="font-mono text-[12px] leading-[16px] truncate flex-1"
-                  >
-                    {redirectUri}
-                  </Text>
+            <InputVertical
+              withLabel="oauth-redirect-uri"
+              title={t("openApiAuthModal.redirectUri.title")}
+              subDescription={t("openApiAuthModal.redirectUri.description")}
+            >
+              <InputTypeIn
+                id="oauth-redirect-uri"
+                variant="readOnly"
+                font="main-ui-mono"
+                value={redirectUri}
+                rightChildren={
                   <CopyButton
                     getCopyText={() => redirectUri}
                     tooltip={t("openApiAuthModal.redirectUri.copyTooltip")}
                     prominence="tertiary"
                     size="sm"
                   />
-                </div>
-              </div>
-            </div>
+                }
+              />
+            </InputVertical>
           </Section>
         </Card>
       )}

@@ -560,12 +560,13 @@
       },
       "redirectUri": {
         "copyTooltip": "リダイレクト URI をコピー",
-        "label": "<emphasis>リダイレクト URI</emphasis> を使用:"
+        "title": "リダイレクト URI",
+        "description": "この URI を OAuth プロバイダーの許可済みリダイレクト URI に追加してください。"
       },
       "scopes": {
         "description": "リクエストする OAuth スコープのカンマ区切りリストです。",
-        "label": "スコープ <optional>(任意)</optional>",
-        "placeholder": "例: repo, user"
+        "placeholder": "例: repo, user",
+        "title": "スコープ"
       },
       "submitButton": {
         "label": "接続",

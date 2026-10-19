@@ -288,6 +288,7 @@ export {
 export {
   default as InputTypeIn,
   type InputTypeInProps,
+  type InputFont,
 } from "@opal/components/inputs/texts/input-type-in/components";
 
 /* InputTypeInTag */

@@ -7,6 +7,10 @@
 .opal-input-field {
   @apply w-full h-6 bg-transparent p-0.5 font-main-ui-body focus:outline-hidden;
 }
+/* `font="main-ui-mono"` on InputTypeIn and InputTextArea, for code-like values. */
+.opal-input-field[data-font="mono"] {
+  @apply font-main-ui-mono;
+}
 
 /* A chosen option's icon, sized like the search icon. */
 /* 2px before and 4px after: the icon lands 8px inside the chrome, where a

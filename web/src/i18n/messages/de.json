@@ -560,12 +560,13 @@
       },
       "redirectUri": {
         "copyTooltip": "Weiterleitungs-URI kopieren",
-        "label": "<emphasis>Weiterleitungs-URI</emphasis> verwenden:"
+        "title": "Weiterleitungs-URI",
+        "description": "Fügen Sie diese URI den erlaubten Weiterleitungs-URIs Ihres OAuth-Anbieters hinzu."
       },
       "scopes": {
         "description": "Durch Kommas getrennte Liste der anzufordernden OAuth-Scopes.",
-        "label": "Scopes <optional>(Optional)</optional>",
-        "placeholder": "z. B. repo, user"
+        "placeholder": "z. B. repo, user",
+        "title": "Scopes"
       },
       "submitButton": {
         "label": "Verbinden",

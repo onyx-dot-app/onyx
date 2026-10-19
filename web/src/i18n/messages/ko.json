@@ -560,12 +560,13 @@
       },
       "redirectUri": {
         "copyTooltip": "리디렉션 URI 복사",
-        "label": "<emphasis>리디렉션 URI</emphasis> 사용:"
+        "title": "리디렉션 URI",
+        "description": "이 URI를 OAuth 공급자의 허용된 리디렉션 URI에 추가하세요."
       },
       "scopes": {
         "description": "요청할 OAuth 스코프를 쉼표로 구분하여 입력하세요.",
-        "label": "스코프 <optional>(선택 사항)</optional>",
-        "placeholder": "예: repo, user"
+        "placeholder": "예: repo, user",
+        "title": "스코프"
       },
       "submitButton": {
         "label": "연결",

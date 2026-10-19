@@ -560,12 +560,13 @@
       },
       "redirectUri": {
         "copyTooltip": "复制重定向 URI",
-        "label": "使用<emphasis>重定向 URI</emphasis>："
+        "title": "重定向 URI",
+        "description": "将此 URI 添加到 OAuth 提供方允许的重定向 URI 中。"
       },
       "scopes": {
         "description": "要请求的 OAuth 权限范围列表，以逗号分隔。",
-        "label": "权限范围 <optional>（可选）</optional>",
-        "placeholder": "例如 repo、user"
+        "placeholder": "例如 repo、user",
+        "title": "权限范围"
       },
       "submitButton": {
         "label": "连接",

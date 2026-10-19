@@ -108,14 +108,13 @@ export default function OpenAPISchemaFields({
                   </Hoverable.Item>
                 </div>
               )}
-              <div className="font-main-ui-mono">
-                <InputTextAreaField
-                  name="definition"
-                  variant={disabled ? "disabled" : undefined}
-                  rows={8}
-                  placeholder={t("addOpenApiModal.definition.placeholder")}
-                />
-              </div>
+              <InputTextAreaField
+                name="definition"
+                font="main-ui-mono"
+                variant={disabled ? "disabled" : undefined}
+                rows={8}
+                placeholder={t("addOpenApiModal.definition.placeholder")}
+              />
             </div>
           </Hoverable.Root>
         </InputVertical>

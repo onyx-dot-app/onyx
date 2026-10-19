@@ -7,6 +7,7 @@ import "@opal/components/inputs/texts/input-text-area/styles.css";
 import React from "react";
 import type { InputVariants, WithoutStyles } from "@opal/types";
 import { cn, mergeRefs } from "@opal/utils";
+import type { InputFont } from "@opal/components/inputs/texts/input-type-in/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +36,9 @@ interface InputTextAreaProps extends WithoutStyles<
   /** Slot pinned to the top-right inside the field. */
   rightSection?: React.ReactNode;
 
+  /** The text's font, as on `InputTypeIn`. @default "main-ui-body" */
+  font?: InputFont;
+
   ref?: React.Ref<HTMLTextAreaElement>;
 }
 
@@ -49,6 +53,7 @@ function InputTextArea({
   autoResize = false,
   maxRows,
   resizable = true,
+  font = "main-ui-body",
   rightSection,
   ref,
   ...props
@@ -98,6 +103,7 @@ function InputTextArea({
         dir="auto"
         disabled={disabled}
         readOnly={isReadOnly}
+        data-font={font === "main-ui-mono" ? "mono" : undefined}
         className={cn(
           "opal-input-field opal-input-textarea-field",
           autoResize || !resizable ? "resize-none" : "resize-y"

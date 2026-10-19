@@ -560,12 +560,13 @@
       },
       "redirectUri": {
         "copyTooltip": "Copier l'URI de redirection",
-        "label": "Utilisez cette <emphasis>URI de redirection</emphasis> :"
+        "title": "URI de redirection",
+        "description": "Ajoutez cette URI aux URI de redirection autorisées de votre fournisseur OAuth."
       },
       "scopes": {
         "description": "Liste des portées OAuth à demander, séparées par des virgules.",
-        "label": "Portées <optional>(facultatif)</optional>",
-        "placeholder": "par ex. repo, user"
+        "placeholder": "par ex. repo, user",
+        "title": "Portées"
       },
       "submitButton": {
         "label": "Connecter",
