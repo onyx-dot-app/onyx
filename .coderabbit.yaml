@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 reviews:
+  # Descriptions become squash commit bodies, so the summary stays out of them.
+  high_level_summary: false
   auto_review:
     # PRs labeled skip-coderabbit get no automatic CodeRabbit review.
     labels:

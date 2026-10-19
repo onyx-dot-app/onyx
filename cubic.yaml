@@ -101,6 +101,10 @@ reviews:
       include:
         - backend/**/*.py
 
+pr_descriptions:
+  # Descriptions become squash commit bodies, so they stay author-written.
+  generate: false
+
 issues:
   fix_with_cubic_buttons: true
   pr_comment_fixes: true
