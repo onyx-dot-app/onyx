@@ -180,7 +180,7 @@ def test_an_optional_check_with_every_type_denied_is_inconclusive() -> None:
 
 @pytest.mark.parametrize("check_id", ["hubspot_associations", "hubspot_notes"])
 def test_a_sample_check_runs_when_one_selected_type_reads(check_id: str) -> None:
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
     gateway.list_records.side_effect = _deny_tickets
 
     results = run_capability_checks(
@@ -197,8 +197,8 @@ def test_a_sample_check_runs_when_one_selected_type_reads(check_id: str) -> None
 def test_a_sample_check_stops_when_no_selected_type_reads(check_id: str) -> None:
     """The first selected type names the cause; unselected types do not apply
     and are left out."""
-    gateway: MagicMock = _gateway()
-    gateway.list_records.side_effect = _refusal("listing", 403)
+    gateway: MagicMock = healthy_gateway()
+    gateway.list_records.side_effect = api_refusal("listing", 403)
 
     results = run_capability_checks(
         build_hubspot_indexing_checks(), _context(gateway, ["deals", "contacts"])
