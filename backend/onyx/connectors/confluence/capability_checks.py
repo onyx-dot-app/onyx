@@ -1852,8 +1852,8 @@ class _PermissionUserEmailsCheck(_ConfluenceCheck):
 
 
 class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
-    """Data Center 9.1+ reads anonymous access with its own call. Before 9.1 the
-    call returns 404, which reads as no anonymous access."""
+    """Reads anonymous access as permission sync does: with its own call where
+    the 9.1+ REST API answers, else from the JSON-RPC permissions."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -1873,10 +1873,21 @@ class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         space_key = _probe_space_key(context, config)
+        gateway = _gateway(context)
         try:
-            operations = _gateway(context).get_anonymous_space_permissions(
-                space_key=space_key
-            )
+            subjects = read_dc_space_subjects(gateway, space_key)
+        except (HTTPError, ConnectorValidationError) as e:
+            raise UnexpectedValidationError(
+                "Onyx cannot read the space permissions, so this check cannot "
+                "run. The space-permission checks report why.",
+                summary="Cannot read space permissions",
+                description="Read space permissions reports why.",
+            ) from e
+        if subjects.api == ConfluenceSpacePermissionsVariant.DC_JSONRPC:
+            state = "on" if subjects.has_anonymous_entry else "off"
+            return CheckOutput(summary=f"{space_key} anonymous access: {state}")
+        try:
+            operations = gateway.get_anonymous_space_permissions(space_key=space_key)
         except InsufficientPermissionsError as e:
             raise InsufficientPermissionsError(
                 f"Confluence returned HTTP 500 for the anonymous permissions of "

@@ -655,6 +655,41 @@ def test_anonymous_access_reads_like_permission_sync(
     assert output.summary == f"KB anonymous access: {state}"
 
 
+@pytest.mark.parametrize(
+    "permissions,state",
+    [
+        (
+            [
+                {
+                    "type": "VIEWSPACE",
+                    "spacePermissions": [
+                        {"userName": "alice"},
+                        {"userName": None, "groupName": None},
+                    ],
+                }
+            ],
+            "on",
+        ),
+        (_DC_JSONRPC_PERMISSIONS, "off"),
+    ],
+    ids=["anonymous_entry", "no_anonymous_entry"],
+)
+def test_anonymous_access_before_91_reads_the_jsonrpc_permissions(
+    permissions: list[dict[str, Any]], state: str
+) -> None:
+    gateway = _gateway()
+    gateway.get_server_version.return_value = (8, 5)
+    gateway.get_space_permissions.side_effect = lambda **_: permissions
+
+    output = _CHECKS_BY_ID["confluence_anonymous_space_access"].run(
+        _context(gateway, _form(is_cloud=False))
+    )
+
+    assert output is not None
+    assert output.summary == f"KB anonymous access: {state}"
+    gateway.get_anonymous_space_permissions.assert_not_called()
+
+
 # Group sync
 
 
