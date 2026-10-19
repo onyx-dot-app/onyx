@@ -122,6 +122,7 @@ export default function OpenAPIAuthFields({
     errors,
     touched,
     handleChange,
+    handleBlur,
     setFieldValue,
     setFieldError,
   } = useFormikContext<OpenAPIPluginFormValues>();
@@ -229,6 +230,7 @@ export default function OpenAPIAuthFields({
                   name="auth.authorizationUrl"
                   value={auth.authorizationUrl}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   placeholder={t("placeholders.oauthAuthorizationUrl")}
                 />
               </FormField.Control>
@@ -246,6 +248,7 @@ export default function OpenAPIAuthFields({
                   name="auth.tokenUrl"
                   value={auth.tokenUrl}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   placeholder={t("placeholders.oauthTokenUrl")}
                 />
               </FormField.Control>
@@ -265,6 +268,7 @@ export default function OpenAPIAuthFields({
                   name="auth.clientId"
                   value={auth.clientId}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   placeholder=" "
                 />
               </FormField.Control>
@@ -288,6 +292,7 @@ export default function OpenAPIAuthFields({
                   name="auth.clientSecret"
                   value={auth.clientSecret}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   placeholder=" "
                 />
               </FormField.Control>

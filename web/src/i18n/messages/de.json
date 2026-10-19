@@ -1088,7 +1088,8 @@
         "workspaceEnabled": {
           "title": "Für Arbeitsbereich aktivieren",
           "description": "Ermöglicht allen in Ihrer Organisation, dieses Plugin zu verwenden, auch in benutzerdefinierten Agenten."
-        }
+        },
+        "schemaRequiredTooltip": "Geben Sie vor dem Fortfahren ein gültiges OpenAPI-Schema ein"
       },
       "title": "Plugins",
       "description": "Verbinde Tools und Apps mit deinem Workspace.",

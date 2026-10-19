@@ -1,7 +1,6 @@
 import { MCPConnectionStatus } from "@/lib/mcp/types";
 import {
   render,
-  deferred,
   screen,
   setupUser,
   waitFor,
@@ -222,21 +221,23 @@ test.each([
   }
 );
 
-test.each([true, false])(
-  "OpenAPI availability label uses its global enabled=%s state",
-  async (enabled) => {
-    defaultToolIds = [99];
-    render(
-      <PluginLifecycleMenu
-        plugin={{ kind: "openapi", tool: { ...tool, enabled } }}
-      />
-    );
-    const label = enabled ? "Disable for workspace" : "Enable for workspace";
-    await setupUser().click(screen.getByRole("button", { name: label }));
-    expect(await screen.findByRole("button", { name: label })).toBeVisible();
-    expect(writes).toEqual([]);
-  }
-);
+test("the OpenAPI gear opens the plugin's detail page instead of a menu", async () => {
+  render(
+    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
+  );
+  expect(
+    screen.queryByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
+  ).not.toBeInTheDocument();
+  await setupUser().click(
+    screen.getByRole("button", { name: "Manage Reports" })
+  );
+  expect(mockPush).toHaveBeenCalledWith("/admin/plugins/openapi/42");
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(reads).toEqual([]);
+  expect(writes).toEqual([]);
+});
 
 test.each([true, false])(
   "Craft app availability label uses its global enabled=%s state",
@@ -360,242 +361,6 @@ test("deletes an external app only after confirmation", async () => {
   );
 });
 
-test("disables an OpenAPI action for the workspace only after confirmation", async () => {
-  const user = setupUser();
-  render(
-    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
-  );
-  await user.click(
-    screen.getByRole("button", {
-      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
-    })
-  );
-  await user.click(
-    await screen.findByRole("menuitem", { name: /Disable for workspace/ })
-  );
-  expect(writes).toEqual([]);
-  const dialog = await screen.findByRole("dialog");
-  expect(within(dialog).getByText(/everyone in your workspace/)).toBeVisible();
-  expect(within(dialog).getByText(/including custom agents/)).toBeVisible();
-  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-  await user.click(
-    within(dialog).getByRole("button", { name: "Disable for workspace" })
-  );
-  await waitFor(() =>
-    expect(writes).toContainEqual({
-      path: "/api/admin/tool/status",
-      method: "PATCH",
-      body: { tool_ids: [42], enabled: false },
-    })
-  );
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-});
-
-test.each([true, false])(
-  "cancelling OpenAPI workspace disable makes no changes, full admin=%s",
-  async (fullAdmin) => {
-    mockFullAdmin = fullAdmin;
-    const user = setupUser();
-    render(
-      <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
-    );
-    await user.click(
-      screen.getByRole("button", {
-        name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
-      })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /Disable for workspace/ })
-    );
-    const dialog = await screen.findByRole("dialog", {
-      name: "Disable Reports for the workspace?",
-    });
-    expect(writes).toEqual([]);
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(writes).toEqual([]);
-  }
-);
-
-test.each([
-  { load: "loading", enabled: true },
-  { load: "error", enabled: true },
-  { load: "loading", enabled: false },
-  { load: "error", enabled: false },
-])(
-  "OpenAPI workspace action handles Chat configuration $load, enabled=$enabled",
-  async ({ load, enabled }) => {
-    const configuration = deferred<Response>();
-    const fetchSetup = jest.mocked(global.fetch).getMockImplementation();
-    jest.mocked(global.fetch).mockImplementation((input, init) => {
-      if (String(input) === "/api/admin/default-assistant/configuration")
-        return load === "loading"
-          ? configuration.promise
-          : Promise.resolve(new Response("{}", { status: 503 }));
-      if (!fetchSetup) throw new Error("Missing setup network");
-      return fetchSetup(input, init);
-    });
-    const user = setupUser();
-    render(
-      <PluginLifecycleMenu
-        plugin={{ kind: "openapi", tool: { ...tool, enabled } }}
-      />
-    );
-    await user.click(
-      screen.getByRole("button", {
-        name: enabled ? "Disable for workspace" : "Enable for workspace",
-      })
-    );
-    const action = await screen.findByRole("menuitem", {
-      name: enabled ? /Disable for workspace/ : /Enable for workspace/,
-    });
-    if (!enabled) {
-      expect(action).toHaveAttribute("aria-disabled", "true");
-      expect(writes).toEqual([]);
-      return;
-    }
-    expect(action).not.toHaveAttribute("aria-disabled", "true");
-    await user.click(action);
-    const dialog = await screen.findByRole("dialog");
-    expect(writes).toEqual([]);
-    await user.click(
-      within(dialog).getByRole("button", { name: "Disable for workspace" })
-    );
-    await waitFor(() =>
-      expect(writes).toEqual([
-        {
-          path: "/api/admin/tool/status",
-          method: "PATCH",
-          body: { tool_ids: [42], enabled: false },
-        },
-      ])
-    );
-  }
-);
-
-test("failed OpenAPI workspace disable stays open for retry", async () => {
-  failDisable = true;
-  const user = setupUser();
-  render(
-    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
-  );
-  await user.click(
-    screen.getByRole("button", {
-      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
-    })
-  );
-  await user.click(
-    await screen.findByRole("menuitem", { name: /Disable for workspace/ })
-  );
-  const dialog = await screen.findByRole("dialog");
-  const submit = within(dialog).getByRole("button", {
-    name: "Disable for workspace",
-  });
-  await user.click(submit);
-  expect(
-    await within(dialog).findByText("Availability update failed")
-  ).toBeVisible();
-  failDisable = false;
-  await user.click(submit);
-  await waitFor(() =>
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-  );
-  expect(writes).toEqual([
-    {
-      path: "/api/admin/tool/status",
-      method: "PATCH",
-      body: { tool_ids: [42], enabled: false },
-    },
-    {
-      path: "/api/admin/tool/status",
-      method: "PATCH",
-      body: { tool_ids: [42], enabled: false },
-    },
-  ]);
-});
-
-test("enables a disabled OpenAPI action and attaches it to default Chat", async () => {
-  defaultToolIds = [99];
-  const user = setupUser();
-  render(
-    <PluginLifecycleMenu
-      craftAvailable
-      plugin={{ kind: "openapi", tool: { ...tool, enabled: false } }}
-    />
-  );
-  await user.click(
-    screen.getByRole("button", {
-      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
-    })
-  );
-  await user.click(
-    await screen.findByRole("menuitem", { name: /Enable for workspace/ })
-  );
-  await waitFor(() =>
-    expect(writes).toContainEqual({
-      path: "/api/admin/default-assistant",
-      method: "PATCH",
-      body: { tool_ids: [99, 42] },
-    })
-  );
-  expect(
-    writes.filter((write) => write.path === "/api/admin/tool/status")
-  ).toHaveLength(1);
-});
-
-test("an enabled OpenAPI action absent from default Chat still confirms workspace disable", async () => {
-  defaultToolIds = [99];
-  const user = setupUser();
-  render(
-    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
-  );
-  await user.click(
-    screen.getByRole("button", {
-      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
-    })
-  );
-  const disable = await screen.findByRole("menuitem", {
-    name: /Disable for workspace/,
-  });
-  expect(
-    screen.queryByRole("menuitem", { name: /Enable for workspace/ })
-  ).not.toBeInTheDocument();
-  await user.click(disable);
-  const dialog = await screen.findByRole("dialog", {
-    name: "Disable Reports for the workspace?",
-  });
-  expect(writes).toEqual([]);
-  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(writes).toEqual([]);
-});
-
-test("scoped OpenAPI managers toggle status without changing default Chat", async () => {
-  mockFullAdmin = false;
-  const user = setupUser();
-  render(
-    <PluginLifecycleMenu
-      craftAvailable
-      plugin={{ kind: "openapi", tool: { ...tool, enabled: false } }}
-    />
-  );
-  await user.click(
-    screen.getByRole("button", {
-      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
-    })
-  );
-  await user.click(
-    await screen.findByRole("menuitem", { name: /Enable for workspace/ })
-  );
-  await waitFor(() => expect(writes).toHaveLength(1));
-  expect(writes[0]).toEqual({
-    path: "/api/admin/tool/status",
-    method: "PATCH",
-    body: { tool_ids: [42], enabled: true },
-  });
-  expect(reads).not.toContain("/api/admin/default-assistant/configuration");
-});
-
 test("confirms deletion from the directory and reports failures inline", async () => {
   failDelete = true;
   const user = setupUser();
@@ -604,7 +369,7 @@ test("confirms deletion from the directory and reports failures inline", async (
   );
   await user.click(await screen.findByRole("button", { name: "Delete" }));
   expect(writes).toHaveLength(0);
-  const dialog = await screen.findByRole("dialog");
+  const dialog = await screen.findByRole("dialog", { name: "Delete Reports" });
   await user.click(within(dialog).getByRole("button", { name: "Delete" }));
   expect(
     await within(dialog).findByText(/Deletion failed/)

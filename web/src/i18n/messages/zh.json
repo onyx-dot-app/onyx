@@ -1088,7 +1088,8 @@
         "workspaceEnabled": {
           "title": "为工作区启用",
           "description": "让组织中的所有人都能使用此插件，包括在自定义智能体中。"
-        }
+        },
+        "schemaRequiredTooltip": "请先输入有效的 OpenAPI 架构再继续"
       },
       "title": "插件",
       "description": "将工具和应用连接到你的工作区。",

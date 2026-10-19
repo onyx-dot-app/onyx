@@ -1088,7 +1088,8 @@
         "workspaceEnabled": {
           "title": "ワークスペースで有効にする",
           "description": "組織の全員がこのプラグインを使えるようにします。カスタムエージェントも含みます。"
-        }
+        },
+        "schemaRequiredTooltip": "続行する前に有効な OpenAPI スキーマを入力してください"
       },
       "title": "プラグイン",
       "description": "ツールやアプリをワークスペースに接続します。",

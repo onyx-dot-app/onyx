@@ -1088,7 +1088,8 @@
         "workspaceEnabled": {
           "title": "워크스페이스에서 사용",
           "description": "조직의 모든 사용자가 사용자 지정 에이전트를 포함해 이 플러그인을 사용할 수 있습니다."
-        }
+        },
+        "schemaRequiredTooltip": "계속하기 전에 유효한 OpenAPI 스키마를 입력하세요"
       },
       "title": "플러그인",
       "description": "도구와 앱을 워크스페이스에 연결하세요.",

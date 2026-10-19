@@ -1088,7 +1088,8 @@
         "workspaceEnabled": {
           "title": "Activar para el espacio de trabajo",
           "description": "Permite que todos en tu organización usen este plugin, también en agentes personalizados."
-        }
+        },
+        "schemaRequiredTooltip": "Introduce un esquema OpenAPI válido antes de continuar"
       },
       "title": "Plugins",
       "description": "Conecta herramientas y aplicaciones a tu espacio de trabajo.",

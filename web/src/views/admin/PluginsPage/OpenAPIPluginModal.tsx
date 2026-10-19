@@ -114,7 +114,8 @@ export default function OpenAPIPluginModal({
     errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
-  const initialTab: Tab = isAdd ? "schema" : "server";
+  // Both add and edit open on the schema, the plugin's source of truth.
+  const initialTab: Tab = "schema";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [visited, setVisited] = useState(() => new Set<Tab>([initialTab]));
   // Kept across submits, so a retry after a failed auth save reuses them.
@@ -388,7 +389,8 @@ export default function OpenAPIPluginModal({
       <OpenAPIPluginForm
         isAdd={isAdd}
         tool={tool}
-        loading={!isAdd && (!ready || (!tool && isLoading))}
+        // A missing tool or failed load is not loading; it shows its error.
+        loading={!isAdd && (tool ? !ready : isLoading)}
         loadFailed={!isAdd && !tool && !isLoading}
         loadError={loadError !== undefined}
         onRetry={() => void mutateOpenApiTools()}
@@ -520,6 +522,12 @@ function OpenAPIPluginForm({
   const schemaTitle: string | undefined = schemaInfo?.title;
   const schemaDescription: string | undefined = schemaInfo?.description;
 
+  // Adding: the other tabs wait for a schema that passes the check.
+  const schemaLocked = isAdd && !schema.checked;
+  const schemaLockedTooltip = schemaLocked
+    ? t("plugins.openapi.schemaRequiredTooltip")
+    : undefined;
+
   const addOnSchema = isAdd && tab === "schema";
   // The label stays fixed; the button's spinner shows work in progress.
   const primaryLabel = t(
@@ -588,7 +596,11 @@ function OpenAPIPluginForm({
             >
               <InputPadder>
                 <Tabs.List>
-                  <Tabs.Trigger value="server" disabled={busy}>
+                  <Tabs.Trigger
+                    value="server"
+                    disabled={busy || schemaLocked}
+                    tooltip={schemaLockedTooltip}
+                  >
                     {t("plugins.openapi.tabs.details")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="schema" disabled={busy}>
@@ -596,7 +608,8 @@ function OpenAPIPluginForm({
                   </Tabs.Trigger>
                   <Tabs.Trigger
                     value="authentication"
-                    disabled={busy || (isAdd && !schema.checked)}
+                    disabled={busy || schemaLocked}
+                    tooltip={schemaLockedTooltip}
                   >
                     {t("mcpDetail.authentication")}
                   </Tabs.Trigger>

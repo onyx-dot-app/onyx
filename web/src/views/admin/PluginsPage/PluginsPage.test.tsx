@@ -176,6 +176,21 @@ function mockNetwork({
   });
 }
 
+/** A plugin card: a labelled `<div>`, so its own buttons never match. */
+function card(name: string) {
+  return screen.getByLabelText(name, { selector: "div" });
+}
+function findCard(name: string) {
+  return screen.findByLabelText(name, { selector: "div" });
+}
+function queryCard(name: string) {
+  return screen.queryByLabelText(name, { selector: "div" });
+}
+/** A New Plugin menu entry; entries with a description add it to the name. */
+function addMenuItem(title: string) {
+  return screen.getByRole("menuitem", { name: new RegExp(`^${title}( |$)`) });
+}
+
 beforeEach(() => {
   mockPush.mockClear();
   mockReplace.mockClear();
@@ -193,15 +208,13 @@ test("Craft-disabled admins see only Chat plugins and never request Craft apps",
   mockSearchParams = new URLSearchParams("add=external-app");
   const network = mockNetwork();
   render(<PluginsPage />);
-  await screen.findByRole("link", { name: "Manage Workspace MCP" });
-  expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
+  await findCard("Manage Workspace MCP");
+  expect(card("View Reports API")).toBeVisible();
   expect(screen.getByRole("tab", { name: "Craft Apps" })).toBeDisabled();
-  expect(
-    screen.queryByRole("link", { name: "Manage Workspace service" })
-  ).not.toBeInTheDocument();
+  expect(queryCard("Manage Workspace service")).not.toBeInTheDocument();
   await setupUser().click(screen.getByRole("button", { name: copy.add.label }));
   expect(
-    screen.queryByRole("menuitem", { name: "Craft Apps" })
+    screen.queryByRole("menuitem", { name: /^Craft Apps/ })
   ).not.toBeInTheDocument();
   expect(
     network.mock.calls.some(([url]) => String(url).startsWith("/api/build/"))
@@ -219,12 +232,10 @@ test("hides installed endpoints in the MCP catalog regardless of their display n
     ],
   });
   render(<PluginsPage />);
-  await screen.findByRole("link", { name: /Renamed workspace/ });
+  await findCard("Manage Renamed workspace");
   await setupUser().click(screen.getByRole("button", { name: copy.add.label }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  await setupUser().click(
-    screen.getByRole("menuitem", { name: copy.kind.mcp })
-  );
+  await setupUser().click(addMenuItem(copy.kind.mcp));
   expect(
     screen.queryByRole("button", { name: "Add Linear" })
   ).not.toBeInTheDocument();
@@ -254,78 +265,83 @@ test("refreshes persisted incomplete servers when MCP setup is dismissed", async
   await screen.findByText(copy.state.noResults.title);
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(
-    await screen.findByRole("link", { name: "Manage Workspace MCP" })
-  ).toHaveAttribute("href", "/admin/plugins/mcp/7");
+  expect(await findCard("Manage Workspace MCP")).toBeVisible();
   expect(
     screen.queryByRole("dialog", { name: "MCP setup" })
   ).not.toBeInTheDocument();
   expect(mcpReads).toBe(2);
 });
 
-test("lists native records with colliding IDs and permission-aware detail links", async () => {
+test("lists native records with colliding IDs as cards that open their detail pages", async () => {
   const network = mockNetwork();
   render(<PluginsPage />);
-  expect(
-    await screen.findByRole("link", { name: "Manage Workspace MCP" })
-  ).toHaveAttribute("href", "/admin/plugins/mcp/7");
-  expect(
-    await screen.findByRole("link", { name: "View Reports API" })
-  ).toHaveAttribute("href", "/admin/plugins/openapi/7");
+  const mcpCard = await findCard("Manage Workspace MCP");
+  const openapiCard = await findCard("View Reports API");
   expect(network.mock.calls.map(([url]) => String(url)).sort()).toEqual([
     "/api/admin/mcp/servers",
     "/api/enterprise-settings",
     "/api/settings",
     "/api/tool/openapi",
   ]);
-  const status = screen.getByRole("button", { name: "Chat on" });
-  expect(status).toBeVisible();
-  expect(screen.getByRole("button", { name: "Enabled" })).toBeVisible();
-  await setupUser().hover(status);
-  const tooltip = await screen.findByRole("tooltip");
-  expect(within(tooltip).getByText("Main Chat")).toBeVisible();
-  expect(within(tooltip).getByText("Craft")).toBeVisible();
-  expect(within(tooltip).getByText("On")).toBeVisible();
-  expect(within(tooltip).getByText("Off")).toBeVisible();
+  expect(within(mcpCard).getByText("MCP")).toBeVisible();
+  expect(within(mcpCard).getByText("Connected")).toBeVisible();
+  expect(within(openapiCard).getByText("OpenAPI")).toBeVisible();
+  expect(within(openapiCard).getByText("Connected")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: /^Chat (on|off)$/ })
+  ).not.toBeInTheDocument();
+  const user = setupUser();
+  await user.click(mcpCard);
+  expect(mockPush).toHaveBeenLastCalledWith("/admin/plugins/mcp/7");
+  await user.click(openapiCard);
+  expect(mockPush).toHaveBeenLastCalledWith("/admin/plugins/openapi/7");
+});
+
+test.each([
+  MCPConnectionStatus.NOT_CONNECTED,
+  MCPConnectionStatus.REAUTH_REQUIRED,
+])("an MCP server with connection status %s needs sign-in", async (status) => {
+  mockNetwork({
+    servers: [
+      {
+        ...mockServer,
+        status: MCPServerStatus.AWAITING_AUTH,
+        connection_status: status,
+      },
+    ],
+  });
+  render(<PluginsPage />);
+  const mcpCard = await findCard("Manage Workspace MCP");
+  expect(within(mcpCard).getByText("Needs sign-in")).toBeVisible();
+  expect(within(mcpCard).queryByText("Connected")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("tab", { name: "Needs sign-in" })
+  ).not.toBeInTheDocument();
 });
 
 test("includes external apps with colliding IDs only for full admins", async () => {
   mockFullAdmin = true;
   mockNetwork();
   render(<PluginsPage />);
-  expect(
-    await screen.findByRole("link", { name: "Manage Workspace service" })
-  ).toHaveAttribute("href", "/admin/plugins/external-app/7");
-  expect(
-    screen.getByRole("link", { name: "Manage Workspace MCP" })
-  ).toHaveAttribute("href", "/admin/plugins/mcp/7");
-  expect(
-    screen.getByRole("link", { name: "View Reports API" })
-  ).toHaveAttribute("href", "/admin/plugins/openapi/7");
-  expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  const appCard = await findCard("Manage Workspace service");
+  expect(within(appCard).getByText("Craft")).toBeVisible();
+  expect(card("Manage Workspace MCP")).toBeVisible();
+  expect(card("View Reports API")).toBeVisible();
+  await setupUser().click(appCard);
+  expect(mockPush).toHaveBeenLastCalledWith("/admin/plugins/external-app/7");
   const filters = screen.getByRole("tablist", { name: "Plugin type" });
   const user = setupUser();
   await user.click(within(filters).getByRole("tab", { name: "MCP" }));
-  expect(
-    screen.getByRole("link", { name: "Manage Workspace MCP" })
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("link", { name: "View Reports API" })
-  ).not.toBeInTheDocument();
+  expect(card("Manage Workspace MCP")).toBeVisible();
+  expect(queryCard("View Reports API")).not.toBeInTheDocument();
   await user.click(within(filters).getByRole("tab", { name: "OpenAPI" }));
-  expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
-  expect(
-    screen.queryByRole("link", { name: "Manage Workspace MCP" })
-  ).not.toBeInTheDocument();
+  expect(card("View Reports API")).toBeVisible();
+  expect(queryCard("Manage Workspace MCP")).not.toBeInTheDocument();
   await user.click(within(filters).getByRole("tab", { name: "Craft Apps" }));
-  expect(
-    screen.getByRole("link", { name: "Manage Workspace service" })
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("link", { name: "View Reports API" })
-  ).not.toBeInTheDocument();
+  expect(card("Manage Workspace service")).toBeVisible();
+  expect(queryCard("View Reports API")).not.toBeInTheDocument();
   await user.click(within(filters).getByRole("tab", { name: "All" }));
-  expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
+  expect(card("View Reports API")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Add Sentry" })
   ).not.toBeInTheDocument();
@@ -336,15 +352,13 @@ test("never requests external admin records or provider options for scoped actio
   mockScopedManager = true;
   const network = mockNetwork();
   render(<PluginsPage />);
-  await screen.findByRole("link", { name: "Manage Workspace MCP" });
+  await findCard("Manage Workspace MCP");
   expect(screen.getByRole("tab", { name: "Craft Apps" })).toBeDisabled();
   await setupUser().click(screen.getByRole("button", { name: copy.add.label }));
   expect(
-    screen.queryByRole("menuitem", { name: copy.kind["external-app"] })
+    screen.queryByRole("menuitem", { name: /^Craft Apps/ })
   ).not.toBeInTheDocument();
-  await setupUser().click(
-    screen.getByRole("menuitem", { name: copy.kind.mcp })
-  );
+  await setupUser().click(addMenuItem(copy.kind.mcp));
   expect(screen.getByRole("button", { name: "Add Sentry" })).toBeVisible();
   expect(
     network.mock.calls.some(([url]) =>
@@ -353,21 +367,7 @@ test("never requests external admin records or provider options for scoped actio
   ).toBe(false);
 });
 
-test("keeps the main Chat indicator off when only Craft is enabled", async () => {
-  mockNetwork({
-    servers: [
-      { ...mockServer, default_chat_enabled: false, available_in_craft: true },
-    ],
-  });
-  render(<PluginsPage />);
-  const status = await screen.findByRole("button", { name: "Chat off" });
-  await setupUser().hover(status);
-  const tooltip = await screen.findByRole("tooltip");
-  expect(within(tooltip).getByText("Craft")).toBeVisible();
-  expect(within(tooltip).getByText("On")).toBeVisible();
-});
-
-test("the status circle and disconnect icon open the same availability menu", async () => {
+test("the card's settings button opens the availability menu without opening the plugin", async () => {
   mockFullAdmin = true;
   mockNetwork({
     servers: [
@@ -376,90 +376,50 @@ test("the status circle and disconnect icon open the same availability menu", as
   });
   render(<PluginsPage />);
   const user = setupUser();
-  const status = await screen.findByRole("button", { name: "Chat on" });
-  await user.click(status);
+  const mcpCard = await findCard("Manage Workspace MCP");
+  await user.click(
+    within(mcpCard).getByRole("button", {
+      name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
+    })
+  );
   expect(
     await screen.findByRole("menuitem", { name: /Disable for main Chat/ })
   ).toBeVisible();
   expect(
     screen.getByRole("menuitem", { name: /Disable for Craft/ })
   ).toBeVisible();
-  expect(
-    screen.queryByRole("menuitem", { name: "Delete" })
-  ).not.toBeInTheDocument();
   expect(screen.getAllByRole("menu")).toHaveLength(1);
-  await user.keyboard("{Escape}");
-  await user.click(
-    within(screen.getByRole("group", { name: mockServer.name })).getByRole(
-      "button",
-      {
-        name: /^(Enable|Disable) for workspace$|^Manage workspace availability$/,
-      }
-    )
-  );
-  expect(
-    await screen.findByRole("menuitem", { name: /Disable for main Chat/ })
-  ).toBeVisible();
-  expect(screen.getAllByRole("menu")).toHaveLength(1);
+  await user.click(screen.getByRole("menuitem", { name: /Disable for Craft/ }));
   expect(mockPush).not.toHaveBeenCalled();
 });
-
-test.each([true, false])(
-  "admin status shows workspace Chat enabled=%s regardless of personal authentication",
-  async (enabled) => {
-    mockNetwork({
-      servers: [
-        {
-          ...mockServer,
-          status: MCPServerStatus.AWAITING_AUTH,
-          connection_status: MCPConnectionStatus.NOT_CONNECTED,
-          default_chat_enabled: enabled,
-          available_in_craft: true,
-        },
-      ],
-    });
-    render(<PluginsPage />);
-    const status = await screen.findByRole("button", {
-      name: enabled ? "Chat on" : "Chat off",
-    });
-    expect(
-      screen.queryByRole("tab", { name: "Needs sign-in" })
-    ).not.toBeInTheDocument();
-    await setupUser().hover(status);
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Main Chat");
-    expect(tooltip).toHaveTextContent(enabled ? "On" : "Off");
-    expect(tooltip).not.toHaveTextContent("Needs sign-in");
-  }
-);
 
 test("filters by description and URL and clears a search without losing either resource", async () => {
   mockNetwork();
   render(<PluginsPage />);
-  await screen.findByRole("link", { name: "Manage Workspace MCP" });
+  await findCard("Manage Workspace MCP");
   const user = setupUser();
   const search = screen.getByRole("textbox", { name: copy.search.placeholder });
   await user.type(search, "weekly");
-  expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
-  expect(
-    screen.queryByRole("link", { name: "Manage Workspace MCP" })
-  ).not.toBeInTheDocument();
+  expect(card("View Reports API")).toBeVisible();
+  expect(queryCard("Manage Workspace MCP")).not.toBeInTheDocument();
   await user.clear(search);
   await user.type(search, "workspace.example.com");
-  expect(
-    screen.getByRole("link", { name: "Manage Workspace MCP" })
-  ).toBeVisible();
+  expect(card("Manage Workspace MCP")).toBeVisible();
   await user.clear(search);
   await user.type(search, "missing");
   expect(screen.getByText(messages.common.searchNoResults.title)).toBeVisible();
   expect(
+    screen.queryByText(copy.state.noResults.title)
+  ).not.toBeInTheDocument();
+  expect(
     screen.queryByRole("button", { name: "View all plugins" })
   ).not.toBeInTheDocument();
-  await user.clear(search);
-  expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
-  expect(
-    screen.getByRole("link", { name: "Manage Workspace MCP" })
-  ).toBeVisible();
+  const field = search.closest("[role='presentation']");
+  if (!(field instanceof HTMLElement)) throw new Error("Missing search field");
+  await user.click(within(field).getByRole("button"));
+  expect(search).toHaveValue("");
+  expect(card("View Reports API")).toBeVisible();
+  expect(card("Manage Workspace MCP")).toBeVisible();
 });
 
 test.each([
@@ -467,24 +427,22 @@ test.each([
     mcpStatus: 503,
     openapiStatus: 200,
     error: copy.state.mcpError,
-    successfulLink: "View Reports API",
+    successfulCard: "View Reports API",
     retryUrl: "/api/admin/mcp/servers",
   },
   {
     mcpStatus: 200,
     openapiStatus: 503,
     error: copy.state.openapiError,
-    successfulLink: "Manage Workspace MCP",
+    successfulCard: "Manage Workspace MCP",
     retryUrl: "/api/tool/openapi",
   },
 ])(
   "keeps the successful list visible when $retryUrl fails and retries only that list",
-  async ({ mcpStatus, openapiStatus, error, successfulLink, retryUrl }) => {
+  async ({ mcpStatus, openapiStatus, error, successfulCard, retryUrl }) => {
     const network = mockNetwork({ mcpStatus, openapiStatus });
     render(<PluginsPage />);
-    expect(
-      await screen.findByRole("link", { name: successfulLink })
-    ).toBeVisible();
+    expect(await findCard(successfulCard)).toBeVisible();
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText(error)).toBeVisible();
     await setupUser().click(
@@ -511,38 +469,47 @@ test("shows an available list while the other list is still loading", async () =
         : new Response(JSON.stringify([tool]))
     );
   render(<PluginsPage />);
-  expect(
-    await screen.findByRole("link", { name: "View Reports API" })
-  ).toBeVisible();
+  expect(await findCard("View Reports API")).toBeVisible();
   expect(
     screen.getByRole("status", { name: copy.state.loading })
   ).toBeVisible();
   pending.resolve(new Response(JSON.stringify({ mcp_servers: [mockServer] })));
-  expect(
-    await screen.findByRole("link", { name: "Manage Workspace MCP" })
-  ).toBeVisible();
+  expect(await findCard("Manage Workspace MCP")).toBeVisible();
 });
 
-test("leads an empty installation through the type dropdown to suggested MCP plugins", async () => {
+test("an empty installation shows one empty state and adds plugins from New Plugin", async () => {
   mockNetwork({ empty: true });
   render(<PluginsPage />);
   expect(await screen.findByText(copy.state.noResults.title)).toBeVisible();
-  await setupUser().click(
-    screen.getAllByRole("button", { name: copy.add.label }).at(-1) ??
-      screen.getByRole("button", { name: copy.add.label })
+  expect(screen.getByText(copy.state.noResults.description)).toBeVisible();
+  expect(
+    screen.queryByText(messages.common.searchNoResults.title)
+  ).not.toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: copy.add.label })).toHaveLength(
+    1
   );
-  await setupUser().click(
-    screen.getByRole("menuitem", { name: copy.kind.mcp })
-  );
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: copy.add.label }));
+  expect(addMenuItem(copy.kind.mcp)).toHaveTextContent(copy.add.mcpDescription);
+  await user.click(addMenuItem(copy.kind.mcp));
   expect(screen.getByRole("button", { name: "Add Linear" })).toBeVisible();
   expect(screen.getByText(copy.catalog.atlassian.summary)).toBeVisible();
 });
 
-test("full admins can open an app-only catalog from Add", async () => {
+test("an empty filter shows the same empty state as an empty installation", async () => {
+  mockNetwork({ servers: [] });
+  render(<PluginsPage />);
+  await findCard("View Reports API");
+  await setupUser().click(screen.getByRole("tab", { name: "MCP" }));
+  expect(screen.getByText(copy.state.noResults.title)).toBeVisible();
+  expect(screen.getByText(copy.state.noResults.description)).toBeVisible();
+});
+
+test("full admins can open an app-only catalog from New Plugin", async () => {
   mockFullAdmin = true;
   const network = mockNetwork();
   render(<PluginsPage />);
-  await screen.findByRole("link", { name: "Manage Workspace service" });
+  await findCard("Manage Workspace service");
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: copy.add.label }));
   expect(screen.getAllByRole("menuitem")).toHaveLength(3);
@@ -550,9 +517,7 @@ test("full admins can open an app-only catalog from Add", async () => {
   expect(
     network.mock.calls.some(([url]) => String(url).endsWith("built-in/options"))
   ).toBe(false);
-  await user.click(
-    screen.getByRole("menuitem", { name: copy.kind["external-app"] })
-  );
+  await user.click(addMenuItem(copy.kind["external-app"]));
   expect(await screen.findByRole("dialog")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Add Sentry" })
@@ -573,9 +538,7 @@ test.each(SUGGESTED_MCP_PLUGINS)(
     await setupUser().click(
       screen.getByRole("button", { name: copy.add.label })
     );
-    await setupUser().click(
-      screen.getByRole("menuitem", { name: copy.kind.mcp })
-    );
+    await setupUser().click(addMenuItem(copy.kind.mcp));
     await setupUser().click(
       screen.getByRole("button", { name: `Add ${name}` })
     );
@@ -594,35 +557,52 @@ test.each(SUGGESTED_MCP_PLUGINS)(
   }
 );
 
-test("opens custom MCP and routes a completed native server to its canonical detail", async () => {
-  mockNetwork();
+test("completing custom MCP setup closes the modal and refreshes without opening the server", async () => {
+  const network = mockNetwork();
   render(<PluginsPage />);
+  await findCard("Manage Workspace MCP");
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: copy.add.label }));
-  await user.click(screen.getByRole("menuitem", { name: copy.kind.mcp }));
+  await user.click(addMenuItem(copy.kind.mcp));
   await user.click(screen.getByRole("button", { name: copy.add.mcp }));
   expect(screen.getByRole("textbox", { name: "Server URL" })).toHaveValue("");
+  const reads = () =>
+    network.mock.calls.filter(([url]) => url === "/api/admin/mcp/servers")
+      .length;
+  const before = reads();
   await user.click(screen.getByRole("button", { name: "Complete setup" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() => expect(reads()).toBe(before + 1));
   expect(mockPush).not.toHaveBeenCalled();
 });
 
-test("opens OpenAPI creation and configures authentication on its canonical detail", async () => {
-  mockNetwork();
+test("adding an OpenAPI action closes the modal and refreshes without opening it", async () => {
+  const network = mockNetwork();
   render(<PluginsPage />);
+  await findCard("View Reports API");
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: copy.add.label }));
-  await user.click(screen.getByRole("menuitem", { name: copy.kind.openapi }));
+  expect(addMenuItem(copy.kind.openapi)).toHaveTextContent(
+    messages.actions.addOpenApiModal.addHeader.description
+  );
+  await user.click(addMenuItem(copy.kind.openapi));
+  expect(screen.getByRole("dialog", { name: "OpenAPI setup" })).toBeVisible();
+  const reads = () =>
+    network.mock.calls.filter(([url]) => url === "/api/tool/openapi").length;
+  const before = reads();
   await user.click(screen.getByRole("button", { name: "Create action" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins/openapi/7");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() => expect(reads()).toBe(before + 1));
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 test("a creation deep link replaces an open catalog instead of opening a second dialog", async () => {
   mockNetwork();
   const view = render(<PluginsPage />);
-  await screen.findByRole("link", { name: "Manage Workspace MCP" });
+  await findCard("Manage Workspace MCP");
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: copy.add.label }));
-  await user.click(screen.getByRole("menuitem", { name: copy.kind.mcp }));
+  await user.click(addMenuItem(copy.kind.mcp));
   expect(screen.getByRole("dialog", { name: copy.kind.mcp })).toBeVisible();
   mockSearchParams = new URLSearchParams({ add: "openapi" });
   view.rerender(<PluginsPage />);

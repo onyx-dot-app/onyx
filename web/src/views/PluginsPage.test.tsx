@@ -225,7 +225,7 @@ test("pending account status stays checking instead of offering a missing-accoun
   const user = setupUser();
   await user.click(screen.getByRole("tab", { name: "Needs sign-in" }));
   expect(screen.queryByText("Checking connection")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: /^All$/ }));
+  await user.click(screen.getByRole("tab", { name: /^All$/ }));
   expect(screen.getByText("Checking connection")).toBeVisible();
   await act(async () => pending.resolve(jsonResponse([])));
   expect(
@@ -298,10 +298,10 @@ test("All keeps connected, missing, checking, unavailable, and workspace-setup e
   expect(screen.queryByText("Workspace setup")).not.toBeInTheDocument();
   expect(screen.queryByText("Linear")).not.toBeInTheDocument();
   expect(screen.getByText("Workspace GitHub")).toBeVisible();
-  await user.click(screen.getByRole("button", { name: /^Connected$/ }));
+  await user.click(screen.getByRole("tab", { name: /^Connected$/ }));
   expect(screen.getByText("Linear")).toBeVisible();
   expect(screen.queryByText("Needs account")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: /^All$/ }));
+  await user.click(screen.getByRole("tab", { name: /^All$/ }));
   expect(screen.getByText("Unknown account")).toBeVisible();
 });
 

@@ -1088,7 +1088,8 @@
         "workspaceEnabled": {
           "title": "Enable for Workspace",
           "description": "Lets everyone in your organization use this plugin, including in custom agents."
-        }
+        },
+        "schemaRequiredTooltip": "Enter a valid OpenAPI schema before proceeding"
       },
       "title": "Plugins",
       "description": "Connect tools and apps to your workspace.",
