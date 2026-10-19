@@ -5,7 +5,8 @@ Read that README instead of guessing props.
 
 ## Where components come from
 
-Use, in priority order:
+Use, in priority order. `.agents/skills/frontend-components/CATALOG.md` lists every component in
+the first two with its import and purpose. The `frontend-components` skill gives the procedure.
 
 1. `web/lib/opal/src/` (`@opal/*`): the design system.
 2. `web/src/refresh-components/`: production components not yet in Opal.
