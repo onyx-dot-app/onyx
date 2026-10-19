@@ -84,12 +84,14 @@ def gateway() -> MagicMock:
         SlackChannelInfoResponse(channel=_channel(channel_id))
     )
     # "1.0" has a reply, "2.0" is a lone message, "3.0" is bot-posted, "4.0" has
-    # a bot reply under a human root, anything else is gone.
+    # a bot reply under a human root, "5.0" a human reply under a bot root,
+    # anything else is gone.
     threads = {
         "1.0": [_msg("1.0", "1.0"), _msg("1.5", "1.0")],
         "2.0": [_msg("2.0")],
         "3.0": [_msg("3.0", bot_id="B1")],
         "4.0": [_msg("4.0", "4.0"), _msg("4.5", "4.0", bot_id="B1")],
+        "5.0": [_msg("5.0", "5.0", bot_id="B1"), _msg("5.5", "5.0")],
     }
     client.fetch_thread_replies.side_effect = lambda *, thread_ts, **_kwargs: iter(
         [SlackHistoryPage(ok=True, messages=threads.get(thread_ts, []))]
@@ -110,17 +112,24 @@ def test_reindex_reads_threads_by_channel_and_root_timestamp(
 ) -> None:
     outputs = list(
         connector.reindex(
-            [_failure("C1__1.0"), _failure("C1__2.0"), _failure("C1__4.0")]
+            [
+                _failure("C1__1.0"),
+                _failure("C1__2.0"),
+                _failure("C1__4.0"),
+                _failure("C1__5.0"),
+            ]
         )
     )
 
     nodes = [o for o in outputs if isinstance(o, HierarchyNode)]
     documents = [o for o in outputs if isinstance(o, Document)]
     assert [n.raw_node_id for n in nodes] == ["C1"]
-    assert [d.id for d in documents] == ["C1__1.0", "C1__2.0", "C1__4.0"]
+    assert [d.id for d in documents] == ["C1__1.0", "C1__2.0", "C1__4.0", "C1__5.0"]
     assert len(documents[0].sections) == 2
-    # The bot reply is dropped, as the crawl drops it.
+    # Bot messages are dropped, as the crawl drops them. A dropped root still
+    # names the thread, so the retry clears the failure the crawl recorded.
     assert len(documents[2].sections) == 1
+    assert len(documents[3].sections) == 1
     assert documents[0].sections[0].link == (
         "https://acme.slack.com/archives/C1/p10?thread_ts=1.0"
     )

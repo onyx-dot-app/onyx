@@ -385,7 +385,12 @@ def thread_to_doc(
     channel_name = channel["name"]
 
     return Document(
-        id=_build_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
+        # The root's ts, even when the filter dropped the root, so the id matches
+        # the failure the crawl records for the thread and a retry can clear it.
+        id=_build_doc_id(
+            channel_id=channel_id,
+            thread_ts=thread[0].get("thread_ts") or thread[0]["ts"],
+        ),
         sections=[
             TextSection(
                 link=get_message_link(
