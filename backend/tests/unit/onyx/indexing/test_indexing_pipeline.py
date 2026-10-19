@@ -33,6 +33,9 @@ from onyx.hooks.points.document_ingestion import (
     DocumentIngestionResponse,
     DocumentIngestionSection,
 )
+from onyx.indexing.adapters.document_indexing_adapter import (
+    DocumentIndexingBatchAdapter,
+)
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import (
@@ -1748,12 +1751,6 @@ def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:
     """A failed write left the old chunks in place, so the new count would
     describe an index state that does not exist - and would hide the document
     from any sweep that looks for an outdated chunk count."""
-    from unittest.mock import MagicMock, patch
-
-    from onyx.indexing.adapters.document_indexing_adapter import (
-        DocumentIndexingBatchAdapter,
-    )
-
     context = MagicMock()
     context.updatable_docs = [
         MagicMock(id="written", doc_updated_at=None, doc_created_at=None),

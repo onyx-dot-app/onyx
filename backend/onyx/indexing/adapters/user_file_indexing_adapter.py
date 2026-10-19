@@ -257,6 +257,8 @@ class UserFileIndexingAdapter:
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,
+        # Unused: one user file is one batch, and the caller fails the whole
+        # file when the pipeline reports any failure at all.
         failed_document_ids: set[str],  # noqa: ARG002
     ) -> None:
         if not isinstance(enrichment, UserFileChunkEnricher):
