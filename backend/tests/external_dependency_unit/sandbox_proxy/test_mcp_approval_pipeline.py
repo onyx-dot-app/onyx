@@ -16,7 +16,6 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db import action_approval
 from onyx.db.action_policy import (
     get_gated_app_id,
     get_or_create_gated_app_id,
@@ -37,6 +36,7 @@ from onyx.db.mcp import (
     update_mcp_server__no_commit,
 )
 from onyx.db.models import BuildSession, GatedApp, MCPServer, Tool
+from onyx.server.features.build.db import action_approval
 from tests.external_dependency_unit.conftest import create_test_user
 
 CraftServerFactory = Callable[..., MCPServer]

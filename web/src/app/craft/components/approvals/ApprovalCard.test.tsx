@@ -49,10 +49,9 @@ describe("Expiry", () => {
         approval={{ ...approval, is_live: false, decision: "EXPIRED" }}
       />
     );
-    expect(screen.getByText("Expired")).toBeInTheDocument();
     expect(screen.queryByText("Rejected")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Approval expired. This request did not run.")
+      screen.getByText("Approval timed out. The action did not run.")
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /approve.*once/i })
@@ -60,10 +59,9 @@ describe("Expiry", () => {
   });
   it("treats abandoned undecided requests outside the live window as expired", () => {
     render(<ApprovalCard approval={{ ...approval, is_live: false }} />);
-    expect(screen.getByText("Expired")).toBeInTheDocument();
     expect(screen.queryByText("Rejected")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Approval expired. This request did not run.")
+      screen.getByText("Approval timed out. The action did not run.")
     ).toBeInTheDocument();
   });
 
@@ -98,4 +96,22 @@ describe("Session approval eligibility", () => {
       screen.getByRole("button", { name: /approve.*once/i })
     ).toBeEnabled();
   });
+});
+
+test("expired outcomes use a collapsed neutral row with expandable details", async () => {
+  const user = setupUser();
+  const { container } = render(
+    <ApprovalCard
+      approval={{ ...approval, decision: "EXPIRED", is_live: false }}
+    />
+  );
+  const row = screen.getByRole("button", { name: /Approval timed out/ });
+  expect(row).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByText("Send message in Slack")).toBeVisible();
+  expect(container.querySelector(".craft-comet")).toBeNull();
+  expect(container.querySelector(".border-status-error-03")).toBeNull();
+  expect(screen.queryByText("No payload.")).not.toBeInTheDocument();
+  await user.click(row);
+  expect(row).toHaveAttribute("aria-expanded", "true");
+  expect(await screen.findByText("No payload.")).toBeVisible();
 });

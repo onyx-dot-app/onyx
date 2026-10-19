@@ -47,7 +47,7 @@ Approval persistence and API:
   and `ScheduledTaskEnabledApp`.
 - `backend/onyx/db/enums.py` defines `ActionPolicy`,
   `ApprovalDecision`, and `ApprovalDecidedVia`.
-- `backend/onyx/db/action_approval.py` owns approval DB
+- `backend/onyx/server/features/build/db/action_approval.py` owns approval DB
   operations. `try_record_decision` is the race arbiter.
 - `backend/onyx/server/features/build/approvals/api.py` exposes live approval
   listing, approve/reject, and approve-for-session.

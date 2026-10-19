@@ -125,3 +125,9 @@ export const BatchedGraphQLMultiAction: Story = {
     }),
   },
 };
+
+export const Expired: Story = {
+  args: {
+    approval: approval({ decision: "EXPIRED", is_live: false }),
+  },
+};

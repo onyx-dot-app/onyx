@@ -15410,7 +15410,7 @@
       "saveError": "No se pudieron guardar las ajustes de aprobación.",
       "emptyActions": "No hay acciones conocidas. Las acciones desconocidas requieren aprobación.",
       "emptyApps": "No hay aplicaciones disponibles.",
-      "expired": "La aprobación caducó. Esta solicitud no se ejecutó.",
+      "expired": "Se agotó el tiempo para aprobar. La acción no se ejecutó.",
       "rejected": "Solicitud rechazada. Esta solicitud no se ejecutó.",
       "deadline": "Aprobar antes de {time}",
       "agentPermissionRequired": "Esta ejecución se detuvo porque una acción requería aprobación. Revisa los permisos y vuelve a ejecutar la tarea.",

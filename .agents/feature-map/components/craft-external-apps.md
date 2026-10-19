@@ -23,7 +23,7 @@
 `backend/onyx/db/external_app.py`, `backend/onyx/db/action_policy.py`,
 `backend/onyx/server/features/build/external_apps/` (`api.py`, `models.py`,
 `oauth.py`), `backend/onyx/server/features/build/approvals/api.py`,
-`backend/onyx/db/action_approval.py`
+`backend/onyx/server/features/build/db/action_approval.py`
 
 **Read first:** `[[craft-admin]]` for the admin surface that configures what
 this document enforces, then

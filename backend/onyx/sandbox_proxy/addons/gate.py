@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
-from onyx.db import action_approval
 from onyx.db.action_policy import (
     get_active_scheduled_task_context,
     get_gated_app_id,
@@ -82,6 +81,7 @@ from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
 )
+from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

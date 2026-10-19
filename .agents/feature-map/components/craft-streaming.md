@@ -45,7 +45,9 @@ independent saved choices.
 Approval cards keep **Approve once**, **Approve for session**, and **Reject**.
 All three call the approval decision endpoint. The session polls lightweight
 approval status every ten seconds. Status changes refresh the history. The history
-contains live requests and recent outcomes, so completed requests remain visible.
+contains live requests and recent outcomes. Completed requests become compact,
+neutral tool rows with details collapsed. Expired requests state that the action
+did not run; only pending requests keep the attention border and decision buttons.
 Approval cards use the server live status to show expiry. Device clock differences cannot block decisions.
 The displayed approval deadline comes from the server; a browser does not own the wait.
 

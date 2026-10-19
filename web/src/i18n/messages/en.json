@@ -15410,7 +15410,7 @@
       "saveError": "Could not save approval settings.",
       "emptyActions": "No known actions. Unknown actions require approval.",
       "emptyApps": "No apps available.",
-      "expired": "Approval expired. This request did not run.",
+      "expired": "Approval timed out. The action did not run.",
       "rejected": "Request rejected. This request did not run.",
       "deadline": "Approve by {time}",
       "agentPermissionRequired": "This run stopped because an action needed approval. Review approval settings, then run the task again.",

@@ -15410,7 +15410,7 @@
       "saveError": "Genehmigungseinstellungen konnten nicht gespeichert werden.",
       "emptyActions": "Keine bekannten Aktionen. Unbekannte Aktionen erfordern eine Genehmigung.",
       "emptyApps": "Keine Apps verfügbar.",
-      "expired": "Genehmigung abgelaufen. Diese Anfrage wurde nicht ausgeführt.",
+      "expired": "Die Genehmigungsfrist ist abgelaufen. Die Aktion wurde nicht ausgeführt.",
       "rejected": "Anfrage abgelehnt. Diese Anfrage wurde nicht ausgeführt.",
       "deadline": "Bis {time} genehmigen",
       "agentPermissionRequired": "Dieser Lauf wurde gestoppt, weil eine Aktion eine Genehmigung benötigte. Prüfen Sie die Berechtigungen und starten Sie erneut.",

@@ -15410,7 +15410,7 @@
       "saveError": "Não foi possível salvar as configurações de aprovação.",
       "emptyActions": "Nenhuma ação conhecida. Ações desconhecidas exigem aprovação.",
       "emptyApps": "Nenhum aplicativo disponível.",
-      "expired": "A aprovação expirou. Esta solicitação não foi executada.",
+      "expired": "O prazo de aprovação expirou. A ação não foi executada.",
       "rejected": "Solicitação rejeitada. Esta solicitação não foi executada.",
       "deadline": "Aprovar até {time}",
       "agentPermissionRequired": "Esta execução parou porque uma ação precisava de aprovação. Revise as permissões e execute a tarefa novamente.",
