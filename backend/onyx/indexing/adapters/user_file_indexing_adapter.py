@@ -256,6 +256,7 @@ class UserFileIndexingAdapter:
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,
+        failed_document_ids: set[str],
     ) -> None:
         if not isinstance(enrichment, UserFileChunkEnricher):
             raise TypeError("User file indexing requires a UserFileChunkEnricher")
@@ -263,12 +264,19 @@ class UserFileIndexingAdapter:
             # Secondary (reindex-port) write: chunks are written; the PRESENT pass owns the
             # terminal side-effects (status/chunk_count/plaintext/notifications) — leave them.
             return
-        user_file_ids = [doc.id for doc in context.updatable_docs]
+        # A failed write left the old chunks in place, so the file is not
+        # complete. Marking it so would also tell its owner it is ready, and
+        # the caller's own failure handling cannot take a notification back.
+        indexed_ids = [
+            doc.id
+            for doc in context.updatable_docs
+            if doc.id not in failed_document_ids
+        ]
 
         user_files = (
             db_session.query(UserFile)
             .options(selectinload(UserFile.assistants).selectinload(Persona.user_files))
-            .filter(UserFile.id.in_(user_file_ids))
+            .filter(UserFile.id.in_(indexed_ids))
             .all()
         )
         for user_file in user_files:
@@ -292,6 +300,8 @@ class UserFileIndexingAdapter:
         # NOTE: this creates its own session to avoid committing the overall
         # transaction.
         for user_file_id, raw_text in enrichment.user_file_id_to_raw_text.items():
+            if user_file_id in failed_document_ids:
+                continue
             store_user_file_plaintext(
                 user_file_id=UUID(user_file_id),
                 plaintext_content=raw_text,
