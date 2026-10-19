@@ -20,9 +20,9 @@ from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.notion.capability_checks import build_notion_indexing_checks
 from onyx.connectors.notion.source_operations import NotionApiError
-from tests.unit.onyx.connectors.notion.test_notion_capability_checks import (
-    _api_error,
-    _gateway,
+from tests.unit.onyx.connectors.notion.notion_check_helpers import (
+    api_error,
+    workspace_gateway,
 )
 
 _ALL_CHECK_IDS = [check.check_id for check in build_notion_indexing_checks()]
@@ -88,7 +88,7 @@ def _run(
 
 
 def _titled_gateway(**kwargs: Any) -> MagicMock:
-    gateway = _gateway(**kwargs)
+    gateway = workspace_gateway(**kwargs)
     gateway.get_bot_user.return_value = _BOT_USER
     return gateway
 
@@ -117,8 +117,8 @@ def test_sign_in_names_the_bot_and_workspace() -> None:
 
 
 def test_a_rejected_token_says_so() -> None:
-    gateway = _gateway()
-    gateway.get_bot_user.side_effect = _api_error(401, "unauthorized")
+    gateway = workspace_gateway()
+    gateway.get_bot_user.side_effect = api_error(401, "unauthorized")
 
     result = _run("notion_auth", gateway)
 
@@ -130,8 +130,8 @@ def test_a_rejected_token_says_so() -> None:
 
 
 def test_a_denied_bot_user_says_so() -> None:
-    gateway = _gateway()
-    gateway.get_bot_user.side_effect = _api_error(403, "restricted_resource")
+    gateway = workspace_gateway()
+    gateway.get_bot_user.side_effect = api_error(403, "restricted_resource")
 
     result = _run("notion_auth", gateway)
 
@@ -140,7 +140,7 @@ def test_a_denied_bot_user_says_so() -> None:
 
 
 def test_a_missing_token_fails_sign_in() -> None:
-    gateway = _gateway()
+    gateway = workspace_gateway()
     gateway.get_bot_user.side_effect = ConnectorMissingCredentialError("Notion")
 
     result = _run("notion_auth", gateway)
@@ -164,7 +164,7 @@ def test_a_missing_token_fails_sign_in() -> None:
 def test_an_unreachable_notion_fails_only_a_form_run(
     error: NotionApiError, summary: str
 ) -> None:
-    gateway = _gateway()
+    gateway = workspace_gateway()
     gateway.get_bot_user.side_effect = error
 
     form = _run("notion_auth", gateway, form_run=True)
@@ -176,8 +176,8 @@ def test_an_unreachable_notion_fails_only_a_form_run(
 
 
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
-    gateway = _gateway()
-    gateway.iter_search.side_effect = _api_error(429, "rate_limited")
+    gateway = workspace_gateway()
+    gateway.iter_search.side_effect = api_error(429, "rate_limited")
 
     results = _run_all(
         ["notion_auth", "notion_shared_content", "notion_user_info"], gateway, {}
@@ -192,8 +192,8 @@ def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
 
 
 def test_a_failed_sign_in_stops_every_check_after_it() -> None:
-    gateway = _gateway()
-    gateway.get_bot_user.side_effect = _api_error(401, "unauthorized")
+    gateway = workspace_gateway()
+    gateway.get_bot_user.side_effect = api_error(401, "unauthorized")
 
     results = _run_all(_ALL_CHECK_IDS, gateway, {})
 
@@ -212,7 +212,7 @@ def test_a_failed_sign_in_stops_every_check_after_it() -> None:
 
 
 def test_an_api_error_carries_the_request_and_body() -> None:
-    gateway = _gateway()
+    gateway = workspace_gateway()
     gateway.get_bot_user.side_effect = NotionApiError(
         "500",
         status_code=500,
@@ -250,7 +250,7 @@ def test_shared_pages_names_a_database_when_no_page_is_shared() -> None:
 
 
 def test_nothing_shared_fails_the_first_check_that_reads_the_scope() -> None:
-    result = _run("notion_shared_content", _gateway(pages=[], data_sources=[]))
+    result = _run("notion_shared_content", workspace_gateway(pages=[], data_sources=[]))
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.error_kind == CheckErrorKind.PERMISSION
@@ -267,8 +267,8 @@ def test_a_long_title_is_cut() -> None:
 
 
 def test_search_without_read_content_names_the_capability() -> None:
-    gateway = _gateway()
-    gateway.iter_search.side_effect = _api_error(403, "restricted_resource")
+    gateway = workspace_gateway()
+    gateway.iter_search.side_effect = api_error(403, "restricted_resource")
 
     result = _run("notion_shared_content", gateway)
 
@@ -281,7 +281,7 @@ def test_search_without_read_content_names_the_capability() -> None:
 
 
 def test_root_page_names_the_page() -> None:
-    gateway = _gateway()
+    gateway = workspace_gateway()
     gateway.get_page.return_value = _page("Handbook")
 
     result = _run("notion_root_page", gateway, {"root_page_id": "root"})
@@ -290,8 +290,8 @@ def test_root_page_names_the_page() -> None:
 
 
 def test_root_page_names_a_wiki() -> None:
-    gateway = _gateway()
-    gateway.get_page.side_effect = _api_error(404, "object_not_found")
+    gateway = workspace_gateway()
+    gateway.get_page.side_effect = api_error(404, "object_not_found")
     gateway.get_database.return_value = {"object": "database", **_data_source("Wiki")}
 
     result = _run("notion_root_page", gateway, {"root_page_id": "root"})
@@ -310,9 +310,9 @@ def test_root_page_names_a_wiki() -> None:
 def test_root_page_failures_have_the_design_lines(
     status: int, summary: str, error_kind: CheckErrorKind
 ) -> None:
-    gateway = _gateway()
-    gateway.get_page.side_effect = _api_error(status)
-    gateway.get_database.side_effect = _api_error(status)
+    gateway = workspace_gateway()
+    gateway.get_page.side_effect = api_error(status)
+    gateway.get_database.side_effect = api_error(status)
 
     result = _run("notion_root_page", gateway, {"root_page_id": "root"})
 
@@ -334,8 +334,8 @@ def test_a_run_without_config_reads_every_shared_page() -> None:
 
 
 def test_page_content_runs_after_the_root_page() -> None:
-    gateway = _gateway()
-    gateway.get_page.side_effect = _api_error(400, "validation_error")
+    gateway = workspace_gateway()
+    gateway.get_page.side_effect = api_error(400, "validation_error")
 
     results = _run_all(_ALL_CHECK_IDS, gateway, {"root_page_id": "root"})
 
@@ -360,8 +360,8 @@ def test_page_content_names_the_page() -> None:
 
 
 def test_unreadable_content_of_a_found_page_is_a_denial() -> None:
-    gateway = _gateway()
-    gateway.get_block_children.side_effect = _api_error(404, "object_not_found")
+    gateway = workspace_gateway()
+    gateway.get_block_children.side_effect = api_error(404, "object_not_found")
 
     result = _run("notion_page_content", gateway)
 
@@ -371,8 +371,8 @@ def test_unreadable_content_of_a_found_page_is_a_denial() -> None:
 
 
 def test_page_content_is_incomplete_when_the_root_page_has_no_blocks() -> None:
-    gateway = _gateway(pages=[])
-    gateway.get_block_children.side_effect = _api_error(404, "object_not_found")
+    gateway = workspace_gateway(pages=[])
+    gateway.get_block_children.side_effect = api_error(404, "object_not_found")
 
     result = _run("notion_page_content", gateway, {"root_page_id": "root"})
 
@@ -406,8 +406,8 @@ def test_an_empty_database_passes_with_a_caveat() -> None:
 
 
 def test_database_rows_without_read_content_names_the_capability() -> None:
-    gateway = _gateway()
-    gateway.query_data_source.side_effect = _api_error(403, "restricted_resource")
+    gateway = workspace_gateway()
+    gateway.query_data_source.side_effect = api_error(403, "restricted_resource")
 
     result = _run("notion_database_rows", gateway)
 
@@ -428,15 +428,15 @@ def test_database_rows_without_read_content_names_the_capability() -> None:
 def test_user_names_counts_the_users(
     users: list[dict[str, Any]], has_more: bool, summary: str
 ) -> None:
-    gateway = _gateway()
+    gateway = workspace_gateway()
     gateway.list_users.return_value = {"results": users, "has_more": has_more}
 
     assert _run("notion_user_info", gateway).summary == summary
 
 
 def test_user_names_without_the_capability_says_so() -> None:
-    gateway = _gateway()
-    gateway.list_users.side_effect = _api_error(403, "restricted_resource")
+    gateway = workspace_gateway()
+    gateway.list_users.side_effect = api_error(403, "restricted_resource")
 
     result = _run("notion_user_info", gateway)
 
