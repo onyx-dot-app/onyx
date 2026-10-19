@@ -298,6 +298,7 @@ class _HubSpotCheck(CapabilityCheck[HubSpotConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         required: bool = True,
         remediation: str | None = None,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
         timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
@@ -310,6 +311,7 @@ class _HubSpotCheck(CapabilityCheck[HubSpotConnectorConfig]):
             requires_connector_instance=False,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
             timeout_text=timeout_text,
         )
@@ -321,6 +323,7 @@ class _TokenCheck(_HubSpotCheck):
             check_id=_TOKEN_CHECK_ID,
             display_name="Sign in to HubSpot",
             remediation="Create a private app in HubSpot and paste its access token.",
+            validates_binding=True,
             fails_when_unreachable=True,
             timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )

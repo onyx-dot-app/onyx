@@ -554,10 +554,10 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
     - ``applies``: a predicate on the form state, for anything the two
       declarations above cannot express.
 
-    ``validates_binding`` marks a check that proves the credential works with
-    the credential-bound fields (e.g. it signs in to the site URL). Such a
-    check may require only bound fields. A create form can wait on these
-    checks before it unlocks the rest of the configuration.
+    ``validates_binding`` marks a check whose pass unlocks the rest of the
+    create form: every source's sign-in check, and a check that proves the
+    credential works with the credential-bound fields (e.g. it lists the
+    site's spaces). Such a check may require only bound fields.
     """
 
     # The source's config model. None for checks that never read the config.

@@ -535,6 +535,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
         credential_kind: GoogleCredentialKind | None = None,
         discovery: bool = False,
         step: CheckStep | None = None,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
         timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
@@ -556,6 +557,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
             docs_link=_DOCS_LINK,
             discovery=discovery,
             step=step,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
             timeout_text=timeout_text,
         )
@@ -590,6 +592,7 @@ class _AuthCheck(_GoogleDriveCheck):
                 "OAuth: connect Google Drive again. Turn on the Google Drive API "
                 "in the Google Cloud project of the credential."
             ),
+            validates_binding=True,
             fails_when_unreachable=True,
             timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )

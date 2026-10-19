@@ -261,6 +261,7 @@ class _NotionCheck(CapabilityCheck[NotionConnectorConfig]):
         display_name: str,
         remediation: str,
         required: bool = True,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
         timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
@@ -273,6 +274,7 @@ class _NotionCheck(CapabilityCheck[NotionConnectorConfig]):
             requires_connector_instance=False,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
             timeout_text=timeout_text,
         )
@@ -299,6 +301,7 @@ class _AuthCheck(_NotionCheck):
                 "settings in Notion (Integrations > the integration > "
                 "Configuration) and update the credential."
             ),
+            validates_binding=True,
             fails_when_unreachable=True,
             timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )

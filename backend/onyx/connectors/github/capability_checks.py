@@ -278,6 +278,7 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = _OWNER_FIELDS,
         requires_connector_config: bool = False,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
         timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
@@ -292,6 +293,7 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
             requires_fields=requires_fields,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
             timeout_text=timeout_text,
         )
@@ -318,6 +320,7 @@ class _AuthCheck(_GitHubCheck):
                 "check the Enterprise Server URL, if one is set."
             ),
             requires_fields=frozenset(),
+            validates_binding=True,
             fails_when_unreachable=True,
             timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
