@@ -24,7 +24,6 @@ from onyx.connectors.capability_checks import creation, runner
 from onyx.connectors.capability_checks.creation import get_cc_pair_dry_run_results
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckStateKind,
     DraftRunStatus,
     read_draft_run_for_user,
 )
@@ -33,6 +32,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CredentialCapability,
+    DraftCheckStateKind,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (

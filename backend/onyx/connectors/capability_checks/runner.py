@@ -2,11 +2,8 @@ import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, wait
 from datetime import datetime, timedelta, timezone
-from enum import Enum
 from functools import partial
 from typing import Any
-
-from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings_setting import check_findings_enabled
@@ -17,13 +14,15 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
-    CheckAdvisory,
     CheckErrorDetail,
     CheckErrorKind,
     CheckFinding,
     CheckNotApplicableError,
     CheckNotRunReason,
+    CheckOutcome,
     CheckOutput,
+    CheckReadiness,
+    CheckReadinessKind,
     CredentialCapability,
     CredentialCapabilityReport,
     check_error_detail,
@@ -115,48 +114,8 @@ _DEFAULT_ROW_TEXT_BY_KIND: dict[CheckErrorKind, tuple[str, str]] = {
 CapabilityCheckProgressCallback = Callable[[Sequence[CapabilityCheckResult]], None]
 
 
-class CheckReadinessKind(str, Enum):
-    NOT_APPLICABLE = "not_applicable"
-    MISSING_FIELDS = "missing_fields"
-    INVALID_FIELDS = "invalid_fields"
-    NEEDS_CONFIG = "needs_config"
-    NEEDS_INSTANCE = "needs_instance"
-    RUNNABLE = "runnable"
-
-
-class CheckReadiness(BaseModel):
-    """Whether a check can run in a context, and why not."""
-
-    kind: CheckReadinessKind
-    # The missing or invalid field names, for those kinds.
-    fields: frozenset[str] = frozenset()
-    message: str = ""
-
-
-class _CheckOutcome(BaseModel):
-    """
-    Outcome of one check execution, before it is joined with the check's
-    metadata into a result row. Shared across checks with one check_id.
-    """
-
-    status: CapabilityCheckStatus
-    message: str = ""
-    error_type: str | None = None
-    error_kind: CheckErrorKind | None = None
-    error_detail: CheckErrorDetail | None = None
-    not_run_reason: CheckNotRunReason | None = None
-    blocked_by: str | None = None
-    partial: bool = False
-    summary: str | None = None
-    description: str | None = None
-    duration_ms: int | None = None
-    applicable: bool = True
-    findings: list[CheckFinding] = []
-    advisories: list[CheckAdvisory] = []
-
-
 def _build_result(
-    check: CapabilityCheck, outcome: _CheckOutcome
+    check: CapabilityCheck, outcome: CheckOutcome
 ) -> CapabilityCheckResult:
     return CapabilityCheckResult(
         capability=check.capability,
@@ -219,7 +178,7 @@ def _error_outcome(
     message: str | None = None,
     duration_ms: int | None = None,
     default_row: CheckRowText | None = None,
-) -> _CheckOutcome:
+) -> CheckOutcome:
     """Maps a check's exception to an outcome, per the check exception
     contract and the check's ``outcome_status``. The row text is the
     error's own, else ``default_row``, else the default of its kind."""
@@ -232,7 +191,7 @@ def _error_outcome(
     if isinstance(error, ValidationError):
         summary = error.summary or summary
         description = error.description or description
-    return _CheckOutcome(
+    return CheckOutcome(
         status=check.outcome_status(error_kind, form_run),
         message=str(error) if message is None else message,
         summary=summary,
@@ -246,7 +205,7 @@ def _error_outcome(
 
 def _missing_instance_outcome(
     check: CapabilityCheck, context: CapabilityCheckContext, form_run: bool
-) -> _CheckOutcome:
+) -> CheckOutcome:
     """
     Maps a missing connector instance to an outcome for an instance-requiring
     check.
@@ -257,7 +216,7 @@ def _missing_instance_outcome(
     contract.
     """
     if context.instantiation_error is None:
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_NEEDS_INSTANCE_MESSAGE,
         )
@@ -300,7 +259,7 @@ def _execute_check(
     context: CapabilityCheckContext,
     timeout_cap_seconds: float | None,
     form_run: bool,
-) -> _CheckOutcome:
+) -> CheckOutcome:
     """
     Executes one check under its hang guard and maps the outcome to a status.
 
@@ -320,7 +279,7 @@ def _execute_check(
             timeout_seconds, check.run, context
         )
     except CheckNotApplicableError as e:
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=str(e),
             error_type=type(e).__name__,
@@ -330,7 +289,7 @@ def _execute_check(
     except NothingToCheckError as e:
         # Unlike a check that does not apply, it keeps its row: the scope is
         # what the admin should know about.
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=str(e),
             summary=e.summary,
@@ -368,7 +327,7 @@ def _execute_check(
             )
         return _error_outcome(check, context, e, form_run, duration_ms=elapsed_ms())
     output = output or CheckOutput()
-    return _CheckOutcome(
+    return CheckOutcome(
         status=(
             CapabilityCheckStatus.INCOMPLETE
             if output.partial
@@ -409,10 +368,10 @@ def _findings_for_source(
 
 def _discovery_skip_outcome(
     validation_results: Iterable[CapabilityCheckResult], keep_findings: bool
-) -> _CheckOutcome | None:
+) -> CheckOutcome | None:
     """Why a discovery check does not run, or None when it runs."""
     if not keep_findings:
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_FINDINGS_OFF_MESSAGE,
             applicable=False,
@@ -421,7 +380,7 @@ def _discovery_skip_outcome(
         result.required and result.status == CapabilityCheckStatus.FAILED
         for result in validation_results
     ):
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_VALIDATION_FAILED_MESSAGE,
             applicable=False,
@@ -540,7 +499,7 @@ _DEPENDENCY_NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
 }
 
 
-def _stop_outcome(dependency: CapabilityCheckResult) -> _CheckOutcome | None:
+def _stop_outcome(dependency: CapabilityCheckResult) -> CheckOutcome | None:
     """The outcome of a check that ``dependency`` stops, or None when it lets
     the check run. A dependency that a gate stopped passes its cause on, so a
     whole chain names the check that failed."""
@@ -548,14 +507,14 @@ def _stop_outcome(dependency: CapabilityCheckResult) -> _CheckOutcome | None:
         own_line = _DEPENDENCY_NOT_RUN_LINE_BY_REASON.get(dependency_reason)
         if own_line is not None:
             line = own_line.format(name=dependency.display_name)
-            return _CheckOutcome(
+            return CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED,
                 message=line,
                 summary=line,
                 not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
                 blocked_by=dependency.check_id,
             )
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=dependency.message,
             summary=dependency.summary,
@@ -567,7 +526,7 @@ def _stop_outcome(dependency: CapabilityCheckResult) -> _CheckOutcome | None:
     if reason is None or dependency.partial:
         return None
     line = _NOT_RUN_LINE_BY_REASON[reason].format(name=dependency.display_name)
-    return _CheckOutcome(
+    return CheckOutcome(
         status=CapabilityCheckStatus.SKIPPED,
         message=line,
         summary=line,
@@ -587,11 +546,11 @@ def _lacks_own_inputs(result: CapabilityCheckResult) -> bool:
 def _any_of_not_run_outcome(
     check: CapabilityCheck,
     results_by_check_id: Mapping[str, CapabilityCheckResult],
-) -> _CheckOutcome | None:
+) -> CheckOutcome | None:
     """The outcome of a check that its ``depends_on_any`` group stops: no
     member passed and at least one stopped it. The first such member, in the
     order the check lists them, names the cause."""
-    first_stop: _CheckOutcome | None = None
+    first_stop: CheckOutcome | None = None
     for member_id in check.depends_on_any:
         member = results_by_check_id.get(member_id)
         if member is None or not member.applicable or _lacks_own_inputs(member):
@@ -606,7 +565,7 @@ def _any_of_not_run_outcome(
 def _dependency_not_run_outcome(
     check: CapabilityCheck,
     results_by_check_id: Mapping[str, CapabilityCheckResult],
-) -> _CheckOutcome | None:
+) -> CheckOutcome | None:
     """The outcome of a check that a dependency stops, or None when its
     dependencies let it run. A dependency without a result, or one that does
     not apply, does not stop it. The first stopping dependency, in the order
@@ -750,7 +709,7 @@ class _CheckRun:
             check.check_id for check in self._ordered if not check.discovery
         }
         self._pending_ids: list[str] = list(self._checks_by_id)
-        self._running: dict[Future[_CheckOutcome], list[CapabilityCheck]] = {}
+        self._running: dict[Future[CheckOutcome], list[CapabilityCheck]] = {}
         self._settled_ids: set[str] = set()
         self._results: list[CapabilityCheckResult] = []
         self._result_by_check_id: dict[str, CapabilityCheckResult] = {
@@ -799,7 +758,7 @@ class _CheckRun:
         """Records the checks of ``check_id`` that do not execute and starts
         the rest on a worker thread. False, with nothing recorded, when they
         must execute and every slot is taken."""
-        recorded: list[tuple[CapabilityCheck, _CheckOutcome]] = []
+        recorded: list[tuple[CapabilityCheck, CheckOutcome]] = []
         to_execute: list[CapabilityCheck] = []
         for check in self._checks_by_id[check_id]:
             outcome = self._own_skip_outcome(check)
@@ -859,7 +818,7 @@ class _CheckRun:
             checks[0].requires_connector_instance for checks in self._running.values()
         )
 
-    def _own_skip_outcome(self, check: CapabilityCheck) -> _CheckOutcome | None:
+    def _own_skip_outcome(self, check: CapabilityCheck) -> CheckOutcome | None:
         """The outcome of a check that must not run for a reason of its own, or
         None. Discovery checks run only when validation found the credential
         usable: they exist to show what a working credential reaches."""
@@ -896,7 +855,7 @@ class _CheckRun:
                 self._record(check, outcome)
             self._settled_ids.add(checks[0].check_id)
 
-    def _record(self, check: CapabilityCheck, outcome: _CheckOutcome) -> None:
+    def _record(self, check: CapabilityCheck, outcome: CheckOutcome) -> None:
         # Read per result: a run can take minutes, and the setting can be
         # turned off meanwhile.
         if outcome.findings and not check_findings_enabled():
@@ -913,14 +872,14 @@ def _run_gate_outcome(
     check: CapabilityCheck,
     result_by_check_id: Mapping[str, CapabilityCheckResult],
     rate_limited: bool,
-) -> _CheckOutcome | None:
+) -> CheckOutcome | None:
     """The outcome of a runnable check that does not run: a dependency stops
     it, or the run is rate limited. None when it executes."""
     dependency_outcome = _dependency_not_run_outcome(check, result_by_check_id)
     if dependency_outcome is not None:
         return dependency_outcome
     if rate_limited:
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_RATE_LIMITED_NOT_RUN_MESSAGE,
             summary=_RATE_LIMITED_NOT_RUN_MESSAGE,
@@ -985,7 +944,7 @@ def decide_check_readiness(
 
 def _unrunnable_outcome(
     check: CapabilityCheck[Any], context: CapabilityCheckContext, form_run: bool
-) -> _CheckOutcome | None:
+) -> CheckOutcome | None:
     """The outcome of a check that must not run in this context, or None when
     it can run."""
     readiness = decide_check_readiness(check, context)
@@ -995,20 +954,20 @@ def _unrunnable_outcome(
         case CheckReadinessKind.NEEDS_INSTANCE:
             return _missing_instance_outcome(check, context, form_run)
         case CheckReadinessKind.INVALID_FIELDS:
-            return _CheckOutcome(
+            return CheckOutcome(
                 status=CapabilityCheckStatus.FAILED,
                 message=readiness.message,
                 error_type=ConnectorValidationError.__name__,
                 error_kind=CheckErrorKind.INVALID,
             )
         case CheckReadinessKind.NOT_APPLICABLE:
-            return _CheckOutcome(
+            return CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED,
                 message=readiness.message,
                 applicable=False,
             )
         case CheckReadinessKind.NEEDS_CONFIG | CheckReadinessKind.MISSING_FIELDS:
-            return _CheckOutcome(
+            return CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED, message=readiness.message
             )
 

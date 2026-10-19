@@ -22,7 +22,6 @@ from onyx.configs.constants import DocumentSource, OnyxCeleryQueues
 from onyx.connectors.capability_checks import draft_runs, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckStateKind,
     DraftRerunMode,
     DraftRunStatus,
 )
@@ -30,6 +29,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CredentialCapability,
+    DraftCheckStateKind,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.slack.config import SlackConnectorConfig

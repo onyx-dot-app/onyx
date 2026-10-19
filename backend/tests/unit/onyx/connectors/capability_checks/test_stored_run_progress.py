@@ -4,13 +4,13 @@ from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
-from onyx.connectors.capability_checks.draft_runs import DraftCheckStateKind
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapability,
+    DraftCheckStateKind,
 )
 from onyx.connectors.capability_checks.stored_run_progress import (
     StoredRunProgressRecorder,

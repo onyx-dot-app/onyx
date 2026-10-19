@@ -26,9 +26,6 @@ from onyx.configs.constants import DocumentSource, OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_CHECK_TIMEOUT_SECONDS,
     DRAFT_RUN_TTL_SECONDS,
-    DraftCheckState,
-    DraftCheckStateKind,
-    DraftRunPairScope,
     DraftRunStatus,
     apply_check_result,
     cache_run_result,
@@ -45,7 +42,12 @@ from onyx.connectors.capability_checks.draft_runs import (
     wait_for_draft_result,
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
-from onyx.connectors.capability_checks.models import CapabilityCheckResult
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckResult,
+    DraftCheckState,
+    DraftCheckStateKind,
+    DraftRunPairScope,
+)
 from onyx.connectors.capability_checks.registry import (
     get_capability_checks,
     has_named_capability_checks,
