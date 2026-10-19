@@ -26,7 +26,11 @@ function InputCheckbox({
 }) {
   return (
     <label className="flex items-center gap-2 text-xs cursor-pointer">
-      <OpalInputCheckbox checked={checked} onChange={onChange} />
+      <OpalInputCheckbox
+        checked={checked}
+        onChange={onChange}
+        aria-label={label}
+      />
       <span className="block font-medium text-text-700 text-sm">{label}</span>
     </label>
   );
