@@ -1,9 +1,9 @@
 "use client";
 
+import { OverflowText } from "@opal/components";
 import React, { memo } from "react";
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
-import Truncated from "@/refresh-components/texts/Truncated";
 
 export interface InfoBlockProps extends React.HTMLAttributes<HTMLDivElement> {
   icon: React.FunctionComponent<IconProps>;
@@ -30,13 +30,23 @@ const InfoBlockInner = React.forwardRef<HTMLDivElement, InfoBlockProps>(
 
         {/* Text Content */}
         <div className="flex flex-col flex-1 items-start min-w-0">
-          <Truncated mainUiAction text04>
+          <OverflowText
+            as="p"
+            textPosition="text-start"
+            font="main-ui-action"
+            color="text-04"
+          >
             {title}
-          </Truncated>
+          </OverflowText>
           {description && (
-            <Truncated secondaryBody text03>
+            <OverflowText
+              as="p"
+              textPosition="text-start"
+              font="secondary-body"
+              color="text-03"
+            >
               {description}
-            </Truncated>
+            </OverflowText>
           )}
         </div>
       </div>

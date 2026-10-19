@@ -1,3 +1,4 @@
+import { OverflowText } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SvgTag } from "@opal/icons";
@@ -9,7 +10,6 @@ import { Dispatch, SetStateAction, useMemo } from "react";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { cn } from "@opal/utils";
-import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
 
 interface DocumentMetadataBlockProps {
@@ -93,9 +93,15 @@ export default function ChatDocumentDisplay({
         ) : (
           <SourceIcon sourceType={document.source_type} iconSize={18} />
         )}
-        <Truncated className="line-clamp-2" side="start">
+        <OverflowText
+          as="p"
+          textPosition="text-start"
+          font="main-ui-body"
+          color="text-05"
+          maxLines={2}
+        >
           {title}
-        </Truncated>
+        </OverflowText>
       </div>
 
       {hasMetadata && (
