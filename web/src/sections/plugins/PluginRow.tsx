@@ -6,7 +6,7 @@ import { useId } from "react";
 import { Button, SelectCard, Text, Tooltip } from "@opal/components";
 import { SvgCodeFile } from "@opal/icons";
 import type { IconProps } from "@opal/types";
-import { cn } from "@opal/utils";
+import PluginStatusIcon from "@/sections/plugins/PluginStatusIcon";
 import { getActionIcon } from "@/lib/tools/utils";
 import { can } from "@/lib/permissions/resource-actions";
 import { pluginDetailHref } from "@/lib/plugins/routes";
@@ -55,48 +55,23 @@ function PluginAvailability({
     plugin.server.available_in_craft !== undefined
       ? t(plugin.server.available_in_craft ? "craftEnabled" : "craftDisabled")
       : null;
-  function StatusIcon({ className }: IconProps) {
-    const chatColor =
-      enabled == null
-        ? "bg-text-02"
-        : enabled
-          ? "bg-status-success-05"
-          : "bg-text-03";
-    if (plugin.kind !== "mcp" || !craftAvailable)
-      return (
-        <span
-          aria-hidden
-          className={cn("block size-3 rounded-full", chatColor, className)}
-        />
-      );
-    const craftColor =
-      plugin.server.available_in_craft == null
-        ? "bg-text-02"
-        : plugin.server.available_in_craft
-          ? "bg-status-success-05"
-          : "bg-text-03";
+  function StatusIcon(props: IconProps) {
+    const craft =
+      plugin.kind === "mcp" ? plugin.server.available_in_craft : undefined;
     return (
-      <span
-        aria-hidden
-        className={cn(
-          "relative block size-3 overflow-hidden rounded-full",
-          className
-        )}
-      >
-        <span
-          className={cn(
-            "absolute inset-0 [clip-path:polygon(0_0,100%_0,0_100%)]",
-            chatColor
-          )}
-        />
-        <span
-          className={cn(
-            "absolute inset-0 [clip-path:polygon(100%_0,100%_100%,0_100%)]",
-            craftColor
-          )}
-        />
-        <span className="absolute inset-x-0 top-1/2 h-px -rotate-45 bg-background-neutral-00" />
-      </span>
+      <PluginStatusIcon
+        {...props}
+        primary={enabled == null ? "unknown" : enabled ? "active" : "inactive"}
+        secondary={
+          plugin.kind === "mcp" && craftAvailable
+            ? craft == null
+              ? "unknown"
+              : craft
+                ? "active"
+                : "inactive"
+            : undefined
+        }
+      />
     );
   }
   return (

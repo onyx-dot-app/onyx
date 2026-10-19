@@ -937,7 +937,11 @@
         "craft": "Craft",
         "on": "オン",
         "off": "オフ",
-        "unknown": "不明"
+        "unknown": "不明",
+        "disabledByAdmin": "管理者が無効にしました",
+        "disabledByYou": "あなたが無効にしました",
+        "agents": "カスタムエージェント",
+        "notAvailable": "利用不可"
       },
       "state": {
         "loading": "プラグインを読み込み中",

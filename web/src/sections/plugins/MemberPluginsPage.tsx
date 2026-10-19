@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Modal, SelectCard, Text, Tooltip } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
@@ -14,7 +14,8 @@ import {
 } from "@opal/icons";
 import { SvgUnPlugged } from "@opal/illustrations";
 import type { IconProps } from "@opal/types";
-import { cn } from "@opal/utils";
+import PluginStatusIcon from "@/sections/plugins/PluginStatusIcon";
+import { useSettings } from "@/lib/settings/hooks";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { getActionIcon } from "@/lib/tools/utils";
@@ -33,7 +34,13 @@ import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
 import { useExternalAppsWithSkillIssues } from "@/lib/externalApps/hooks";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 
-import { memberPluginStatus } from "@/lib/plugins/sort";
+import {
+  memberPluginStatus,
+  memberPluginSurfaceStatus,
+  memberPluginSurfaceAvailability,
+  MEMBER_PLUGIN_SURFACES,
+  sortPlugins,
+} from "@/lib/plugins/sort";
 
 type MemberPluginDialog =
   | { kind: "details"; reference: PluginReference; initialTab?: "approvals" }
@@ -44,10 +51,12 @@ function PluginConnectionStatus({
   plugin,
   onOpen,
   hasSkillIssues = false,
+  craftAvailable,
 }: {
   plugin: MemberPlugin;
   onOpen: () => void;
   hasSkillIssues?: boolean;
+  craftAvailable: boolean;
 }) {
   const t = useTranslations("actions.memberPlugins");
   const skillCopy = useTranslations("craft.apps.page.status");
@@ -55,29 +64,38 @@ function PluginConnectionStatus({
   const needsAuth =
     connection.kind === "oauth" || connection.kind === "credentials";
   const skillWarning = connection.kind === "connected" && hasSkillIssues;
-  const status = memberPluginStatus(plugin, hasSkillIssues);
-  const label = skillWarning
-    ? skillCopy("skillWarningSummary")
-    : needsAuth
-      ? t("filters.needsSignIn")
-      : connection.kind === "connected"
-        ? t(
-            `status.${connection.ownership === "user" ? "connected" : connection.ownership}`
-          )
-        : t(`status.${connection.kind}`);
+  const availabilityCopy = useTranslations("actions.plugins.availability");
+  const connectionLabel = needsAuth
+    ? t("filters.needsSignIn")
+    : connection.kind === "connected"
+      ? t("status.none")
+      : t(`status.${connection.kind}`);
 
-  function StatusIcon({ className }: IconProps) {
+  const requiresWorkspaceSetup = connection.kind === "unconfigured";
+
+  function StatusIcon(props: IconProps) {
+    if (requiresWorkspaceSetup)
+      return <PluginStatusIcon {...props} primary="inactive" />;
     return (
-      <span
-        aria-hidden
-        className={cn(
-          "block size-3 rounded-full",
-          status === "issues"
-            ? "bg-status-warning-05"
-            : status === "active"
-              ? "bg-status-success-05"
-              : "bg-text-03",
-          className
+      <PluginStatusIcon
+        {...props}
+        primary={memberPluginSurfaceStatus(
+          plugin,
+          "chat",
+          hasSkillIssues,
+          craftAvailable
+        )}
+        secondary={memberPluginSurfaceStatus(
+          plugin,
+          "agents",
+          hasSkillIssues,
+          craftAvailable
+        )}
+        tertiary={memberPluginSurfaceStatus(
+          plugin,
+          "craft",
+          hasSkillIssues,
+          craftAvailable
         )}
       />
     );
@@ -89,7 +107,43 @@ function PluginConnectionStatus({
       side="top"
       sideOffset={6}
       delayDuration={250}
-      tooltip={<Text font="secondary-body">{label}</Text>}
+      tooltip={
+        requiresWorkspaceSetup ? (
+          <Text font="secondary-body">{connectionLabel}</Text>
+        ) : (
+          <div className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1.5">
+            {MEMBER_PLUGIN_SURFACES.map((item) => {
+              const { supported, available, personallyEnabled } =
+                memberPluginSurfaceAvailability(plugin, item, craftAvailable);
+              const value = !supported
+                ? t("availability.notAvailable")
+                : connection.kind !== "connected"
+                  ? connectionLabel
+                  : item === "craft" && skillWarning
+                    ? skillCopy("skillWarningSummary")
+                    : available === false
+                      ? t("availability.disabledByAdmin")
+                      : personallyEnabled === false
+                        ? t("availability.disabledByYou")
+                        : available === true
+                          ? t("status.none")
+                          : availabilityCopy("unknown");
+              return (
+                <div key={item} className="contents">
+                  <Text font="secondary-body" color="text-03">
+                    {item === "agents"
+                      ? t("availability.agents")
+                      : availabilityCopy(
+                          item === "chat" ? "mainChat" : "craft"
+                        )}
+                  </Text>
+                  <Text font="secondary-body">{value}</Text>
+                </div>
+              );
+            })}
+          </div>
+        )
+      }
     >
       <Button
         icon={StatusIcon}
@@ -107,12 +161,14 @@ function PluginConnectionStatus({
 
 function MemberPluginRow({
   plugin,
+  craftAvailable,
   hasSkillIssues,
   onDetails,
   onConnect,
 }: {
   plugin: MemberPlugin;
   hasSkillIssues: boolean;
+  craftAvailable: boolean;
   onDetails: () => void;
   onConnect: () => void;
 }) {
@@ -156,21 +212,6 @@ function MemberPluginRow({
             </Text>
           ) : undefined
         }
-        descriptionTag={
-          plugin.kind === "external-app"
-            ? {
-                title: t("externalApp.craftOnly"),
-                color: "gray",
-                tooltip: t("externalApp.craftOnlyDescription"),
-              }
-            : plugin.kind === "openapi"
-              ? {
-                  title: t("openapi.chatOnly"),
-                  color: "gray",
-                  tooltip: t("openapi.chatOnlyDescription"),
-                }
-              : undefined
-        }
         action={
           <>
             <Text font="secondary-body" color="text-03">
@@ -180,6 +221,7 @@ function MemberPluginRow({
               plugin={plugin}
               onOpen={onDetails}
               hasSkillIssues={hasSkillIssues}
+              craftAvailable={craftAvailable}
             />
             <Button
               icon={connectable ? SvgPlus : SvgChevronRight}
@@ -217,6 +259,8 @@ export default function MemberPluginsPage({
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
+  const locale = useLocale();
+  const craftAvailable = useSettings().onyx_craft_enabled === true;
   const [filter, setFilter] = useState(initialFilter);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<MemberPluginDialog>(null);
@@ -229,7 +273,13 @@ export default function MemberPluginsPage({
   const hasSkillIssues = (plugin: MemberPlugin) =>
     plugin.kind === "external-app" && appsWithSkillIssues.has(plugin.app.id);
   const normalizedQuery = query.trim().toLowerCase();
-  const filtered = plugins.filter((plugin) => {
+  const filtered = sortPlugins(
+    plugins,
+    (plugin) =>
+      memberPluginStatus(plugin, hasSkillIssues(plugin), craftAvailable),
+    memberPluginName,
+    locale
+  ).filter((plugin) => {
     if (
       surface === "craft" &&
       (plugin.kind === "openapi" ||
@@ -447,6 +497,7 @@ export default function MemberPluginsPage({
                         key={`${reference.kind}-${reference.id}`}
                         plugin={plugin}
                         hasSkillIssues={hasSkillIssues(plugin)}
+                        craftAvailable={craftAvailable}
                         onDetails={() => show(plugin, "details")}
                         onConnect={() => show(plugin, "connect")}
                       />

@@ -937,7 +937,11 @@
         "craft": "Craft",
         "on": "켜짐",
         "off": "꺼짐",
-        "unknown": "알 수 없음"
+        "unknown": "알 수 없음",
+        "disabledByAdmin": "관리자가 비활성화함",
+        "disabledByYou": "내가 비활성화함",
+        "agents": "사용자 지정 에이전트",
+        "notAvailable": "사용할 수 없음"
       },
       "state": {
         "loading": "플러그인 로딩 중",

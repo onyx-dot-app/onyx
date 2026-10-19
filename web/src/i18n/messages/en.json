@@ -937,7 +937,11 @@
         "craft": "Craft",
         "on": "On",
         "off": "Off",
-        "unknown": "Unknown"
+        "unknown": "Unknown",
+        "disabledByAdmin": "Disabled by admin",
+        "disabledByYou": "Disabled by you",
+        "agents": "Custom agents",
+        "notAvailable": "Not available"
       },
       "state": {
         "loading": "Loading plugins",
