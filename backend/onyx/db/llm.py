@@ -396,7 +396,7 @@ def _model_protocol_flows(
         and LLMModelFlowType.CHAT in stored_flows
     ):
         chat_capable = True
-    if provider in {"openrouter", "typesafe"}:
+    if provider in {"openrouter", "typesafe", "vercel_ai_gateway"}:
         if (
             discovered_decision_models is not None
             and name in discovered_decision_models

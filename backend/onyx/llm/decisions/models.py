@@ -9,6 +9,7 @@ class DecisionProvider(StrEnum):
     ZOOM_AI = "zoom_ai"
     OPENAI = "openai"
     OPENROUTER = "openrouter"
+    VERCEL_AI_GATEWAY = "vercel_ai_gateway"
 
 
 class DecisionModel(BaseModel):

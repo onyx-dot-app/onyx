@@ -544,6 +544,17 @@ def test_llm_configuration(
             and not details.supports_chat
             for item in discovered.get("data", [])
         )
+    if (
+        test_llm_request.provider == LlmProviderNames.VERCEL_AI_GATEWAY
+        and test_llm_request.supports_decisions
+    ):
+        discovered = _get_vercel_ai_gateway_decision_models(
+            api_base=test_llm_request.api_base,
+            api_key=test_api_key,
+            provider_id=test_llm_request.id,
+            db_session=db_session,
+        )
+        decision_only = test_llm_request.model in discovered
     if decision_only:
         try:
             DecisionClient(
@@ -869,28 +880,9 @@ def put_llm_provider(
         ]
 
     try:
-        discovered_decision_models = None
-        if llm_provider_upsert_request.provider == LlmProviderNames.TYPESAFE:
-            discovered_decision_models = {
-                model.name: False
-                for model in fetch_typesafe_models(
-                    llm_provider_upsert_request.api_key or ""
-                )
-            }
-        if llm_provider_upsert_request.provider == "openrouter" and any(
-            model.supports_decisions
-            for model in llm_provider_upsert_request.model_configurations
-        ):
-            discovered = _get_openrouter_models_response(
-                llm_provider_upsert_request.api_base or "https://openrouter.ai/api/v1",
-                llm_provider_upsert_request.api_key,
-                decisions_only=True,
-            )
-            discovered_decision_models = {}
-            for item in discovered.get("data", []):
-                details = OpenRouterModelDetails.model_validate(item)
-                if details.supports_decisions:
-                    discovered_decision_models[details.id] = details.supports_chat
+        discovered_decision_models = _discover_decision_models(
+            llm_provider_upsert_request, db_session
+        )
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
             db_session=db_session,
@@ -2787,6 +2779,71 @@ def _get_openai_compatible_server_response(
     )
 
 
+def _get_vercel_ai_gateway_decision_models(
+    api_base: str | None,
+    api_key: str | None,
+    provider_id: int | None,
+    db_session: Session,
+) -> dict[str, bool]:
+    cleaned_api_base = (
+        (api_base or VERCEL_AI_GATEWAY_DEFAULT_API_BASE).strip().rstrip("/")
+    )
+    url = (
+        f"{cleaned_api_base}/models"
+        if cleaned_api_base.endswith("/v1")
+        else f"{cleaned_api_base}/v1/models"
+    )
+    resolved_api_key = _resolve_api_key(
+        api_key, provider_id, cleaned_api_base, db_session
+    )
+    response = _get_openai_compatible_models_response(
+        url=url,
+        source_name="Vercel AI Gateway",
+        api_key=resolved_api_key,
+    )
+    return {
+        item["id"]: False
+        for item in response.get("data", [])
+        if item.get("type") == "evaluation" and isinstance(item.get("id"), str)
+    }
+
+
+def _discover_decision_models(
+    request: LLMProviderUpsertRequest, db_session: Session
+) -> dict[str, bool] | None:
+    if request.provider == LlmProviderNames.TYPESAFE:
+        return {
+            model.name: False for model in fetch_typesafe_models(request.api_key or "")
+        }
+
+    has_decision_models = any(
+        model.supports_decisions for model in request.model_configurations
+    )
+    if request.provider == LlmProviderNames.OPENROUTER and has_decision_models:
+        discovered = _get_openrouter_models_response(
+            request.api_base or "https://openrouter.ai/api/v1",
+            request.api_key,
+            decisions_only=True,
+        )
+        return {
+            details.id: details.supports_chat
+            for item in discovered.get("data", [])
+            if (
+                details := OpenRouterModelDetails.model_validate(item)
+            ).supports_decisions
+        }
+
+    if request.provider == LlmProviderNames.VERCEL_AI_GATEWAY and has_decision_models:
+        return _get_vercel_ai_gateway_decision_models(
+            api_base=request.api_base,
+            api_key=request.api_key,
+            provider_id=request.id,
+            db_session=db_session,
+        )
+
+    return None
+
+
 @admin_router.post("/vercel-ai-gateway/available-models")
 def get_vercel_ai_gateway_available_models(
     request: VercelAIGatewayModelsRequest,
@@ -2825,8 +2882,9 @@ def get_vercel_ai_gateway_available_models(
     for model in models:
         try:
             model_id = model.get("id", "")
-            # The catalog mixes language, embedding, and media models.
-            if not model_id or model.get("type") != "language":
+            model_type = model.get("type")
+            # Gateway uses "evaluation" for its typed decision models.
+            if not model_id or model_type not in {"language", "evaluation"}:
                 continue
 
             modalities = model.get("modalities") or {}
@@ -2840,6 +2898,8 @@ def get_vercel_ai_gateway_available_models(
                     max_input_tokens=model.get("context_window"),
                     supports_image_input="image" in input_modalities,
                     supports_reasoning="reasoning" in supported_parameters,
+                    supports_chat=model_type == "language",
+                    supports_decisions=model_type == "evaluation",
                 )
             )
         except Exception as e:
@@ -2867,6 +2927,8 @@ def get_vercel_ai_gateway_available_models(
                     max_input_tokens=r.max_input_tokens,
                     supports_image_input=r.supports_image_input,
                     supports_reasoning=r.supports_reasoning,
+                    supports_chat=r.supports_chat,
+                    supports_decisions=r.supports_decisions,
                 )
                 for r in sorted_results
             ],

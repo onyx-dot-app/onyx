@@ -951,6 +951,8 @@ class VercelAIGatewayFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+    supports_chat: bool = True
+    supports_decisions: bool = False
 
 
 # Portkey dynamic models fetch

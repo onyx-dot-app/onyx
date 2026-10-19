@@ -28,6 +28,10 @@ _ENDPOINTS = {
     DecisionProvider.ZOOM_AI: ("https://api.zoom.us/v2", "aiservices/decisions/decide"),
     DecisionProvider.OPENAI: ("https://api.openai.com/v1", "decisions"),
     DecisionProvider.OPENROUTER: ("https://openrouter.ai/api/alpha", "decisions"),
+    DecisionProvider.VERCEL_AI_GATEWAY: (
+        "https://ai-gateway.vercel.sh/v1",
+        "decisions",
+    ),
 }
 
 

@@ -35,6 +35,15 @@ def test_decision_discovery_overrides_stored_chat_capability() -> None:
     ) == {LLMModelFlowType.DECISION}
 
 
+def test_vercel_gateway_discovery_marks_models_decision_only() -> None:
+    assert _model_protocol_flows(
+        "vercel_ai_gateway",
+        "openai/gpt-6-luna-decisions",
+        {LLMModelFlowType.CHAT},
+        {"openai/gpt-6-luna-decisions": False},
+    ) == {LLMModelFlowType.DECISION}
+
+
 class TestSyncModelConfigurations:
     """Tests for sync_model_configurations function."""
 

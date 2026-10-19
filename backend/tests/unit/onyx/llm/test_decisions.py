@@ -142,6 +142,10 @@ def test_system_one_protocol(
             DecisionProvider.ZOOM_AI,
             "https://api.zoom.us/v2/aiservices/decisions/decide",
         ),
+        (
+            DecisionProvider.VERCEL_AI_GATEWAY,
+            "https://ai-gateway.vercel.sh/v1/decisions",
+        ),
     ],
 )
 def test_array_protocol_preserves_refusals(

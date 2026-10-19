@@ -34,7 +34,9 @@ from models that support both chat and decision tasks.
 Chat Preferences also has an optional **Decision model** selection. It starts
 unset and never inherits a chat model. No product workflow consumes it yet.
 TypeSafe System One, Zoom AI Services, OpenAI Decisions, and OpenRouter Decisions
-use the separate client in `backend/onyx/llm/decisions/`.
+use the separate client in `backend/onyx/llm/decisions/`. Vercel AI Gateway
+uses its OpenAI-compatible `/v1/decisions` endpoint. Its model catalog reports
+decision models as `evaluation`; Onyx keeps these separate from chat models.
 
 A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
@@ -78,7 +80,7 @@ Admin router, prefix `/admin/llm`:
 | GET | `/admin/llm/router-models` | `list_router_model_providers` | Providers that own `is_router` model configurations. Options for the admin "Router Model" selector; hidden and persona-restricted routers included. |
 | GET | `/admin/llm/vision-providers` | `get_vision_capable_providers` | |
 | GET | `/admin/llm/provider-contextual-cost` | `get_provider_contextual_cost` | |
-| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
+| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Vercel's `language` models support chat; its `evaluation` models support decision requests. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
 
 Non-admin router, prefix `/llm`:
 
