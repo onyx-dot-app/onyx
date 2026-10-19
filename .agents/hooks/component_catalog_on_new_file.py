@@ -22,7 +22,7 @@ _SKIPPED_SUFFIXES = (".stories.tsx", ".test.tsx")
 
 def main() -> int:
     payload = read_payload(sys.stdin.read())
-    repo = repo_root(payload)
+    repo = repo_root()
     new_files = []
     for path, creates in edited_files(payload):
         if (
