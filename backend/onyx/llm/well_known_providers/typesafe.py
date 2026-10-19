@@ -1,27 +1,13 @@
-from typing import Literal
-
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.well_known_providers.models import TypeSafeDecisionResponse
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 
 TYPESAFE_TEST_MODEL = "jev-latest"
-
-
-class _Answer(BaseModel):
-    type: Literal["noul"]
-    noul: float = Field(ge=0, le=1)
-
-
-class _Answers(BaseModel):
-    connection_test: _Answer
-
-
-class _Response(BaseModel):
-    answers: _Answers
 
 
 def check_typesafe_connection(api_key: str | None, model: str) -> None:
@@ -55,7 +41,7 @@ def check_typesafe_connection(api_key: str | None, model: str) -> None:
                     },
                 )
                 response.raise_for_status()
-                _Response.model_validate(response.json())
+                TypeSafeDecisionResponse.model_validate(response.json())
     except httpx.HTTPStatusError as exc:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
