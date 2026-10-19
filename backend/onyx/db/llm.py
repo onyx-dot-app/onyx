@@ -31,6 +31,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import (
     LLM_PROVIDER_MODEL_PAGE_SIZE,
     SOURCE_API_CONTEXT_LIMIT_PROVIDERS,
+    LlmProviderNames,
 )
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import ReasoningEffort
@@ -649,6 +650,9 @@ def sync_model_configurations(
     provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
     if not provider:
         raise ValueError(f"LLM Provider with id={provider_id} not found")
+
+    if provider.provider == LlmProviderNames.TYPESAFE:
+        raise ValueError("TypeSafe AI does not support chat model discovery")
 
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 

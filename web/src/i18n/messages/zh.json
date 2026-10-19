@@ -7391,6 +7391,9 @@
         "title": "隐藏提供商分组"
       },
       "modals": {
+        "typesafe": {
+          "description": "连接 TypeSafe AI，为未来的决策功能做准备。保存时会使用 Jev 测试 System One。此提供商尚未用于聊天或其他工作流。"
+        },
         "access": {
           "admin": {
             "sharedNote": "始终共享",

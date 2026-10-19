@@ -7391,6 +7391,9 @@
         "title": "プロバイダーのグループ化を非表示"
       },
       "modals": {
+        "typesafe": {
+          "description": "今後の意思決定機能に向けて TypeSafe AI を接続します。保存時に Jev で System One をテストします。このプロバイダーは、チャットやその他のワークフローではまだ使用されません。"
+        },
         "access": {
           "admin": {
             "sharedNote": "常に共有",

@@ -7391,6 +7391,9 @@
         "title": "Ocultar agrupamento por provedor"
       },
       "modals": {
+        "typesafe": {
+          "description": "Conecte o TypeSafe AI para futuros recursos de decisão. Ao salvar, o System One é testado com Jev. Este provedor ainda não é usado no chat nem em outros fluxos."
+        },
         "access": {
           "admin": {
             "sharedNote": "Sempre compartilhado",

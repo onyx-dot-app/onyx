@@ -7391,6 +7391,9 @@
         "title": "Anbietergruppierung ausblenden"
       },
       "modals": {
+        "typesafe": {
+          "description": "Verbinden Sie TypeSafe AI für zukünftige Entscheidungsfunktionen. Beim Speichern wird System One mit Jev getestet. Dieser Anbieter wird noch nicht im Chat oder in anderen Abläufen verwendet."
+        },
         "access": {
           "admin": {
             "sharedNote": "Immer geteilt",

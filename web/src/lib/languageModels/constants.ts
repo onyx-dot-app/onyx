@@ -23,6 +23,7 @@ import {
 import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderName } from "@/lib/languageModels/types";
 import OpenAIModal from "@/sections/modals/languageModels/OpenAIModal";
+import TypeSafeModal from "@/sections/modals/languageModels/TypeSafeModal";
 import AnthropicModal from "@/sections/modals/languageModels/AnthropicModal";
 import OllamaModal from "@/sections/modals/languageModels/OllamaModal";
 import AzureModal from "@/sections/modals/languageModels/AzureModal";
@@ -42,6 +43,12 @@ import type { ProviderEntry } from "@/lib/languageModels/types";
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
 export const PROVIDERS: Record<string, ProviderEntry> = {
+  [LLMProviderName.TYPESAFE]: {
+    icon: SvgCpu,
+    productName: "System One",
+    companyName: "TypeSafe AI",
+    Modal: TypeSafeModal,
+  },
   [LLMProviderName.OPENAI]: {
     icon: SvgOpenAI,
     productName: "GPT",

@@ -7391,6 +7391,9 @@
         "title": "Ocultar agrupación por proveedor"
       },
       "modals": {
+        "typesafe": {
+          "description": "Conecta TypeSafe AI para futuras funciones de decisión. Al guardar, se prueba System One con Jev. Este proveedor aún no se usa en el chat ni en otros flujos."
+        },
         "access": {
           "admin": {
             "sharedNote": "Siempre compartido",

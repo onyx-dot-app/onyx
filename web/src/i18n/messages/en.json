@@ -7391,6 +7391,9 @@
         "title": "Hide Provider Grouping"
       },
       "modals": {
+        "typesafe": {
+          "description": "Connect TypeSafe AI for future decision features. Saving tests System One with Jev. This provider is not used by chat or other workflows yet."
+        },
         "access": {
           "admin": {
             "sharedNote": "Always shared",

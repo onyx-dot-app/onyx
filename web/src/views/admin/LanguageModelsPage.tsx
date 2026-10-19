@@ -454,6 +454,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.VERTEX_AI,
           LLMProviderName.BEDROCK,
           LLMProviderName.AZURE,
+          LLMProviderName.TYPESAFE,
         ],
       },
       {
@@ -487,7 +488,10 @@ export default function LanguageModelsPage() {
   }
 
   const hasProviders = existingLlmProviders.length > 0;
-  const isFirstProvider = !hasProviders;
+  const chatProviderCount = existingLlmProviders.filter(
+    (provider) => provider.provider !== LLMProviderName.TYPESAFE
+  ).length;
+  const isFirstProvider = chatProviderCount === 0;
 
   // Pre-sort providers so the default appears first
   const sortedProviders = [...existingLlmProviders].sort((a, b) => {
@@ -733,7 +737,10 @@ export default function LanguageModelsPage() {
                     key={provider.id}
                     provider={provider}
                     isDefault={defaultText?.provider_id === provider.id}
-                    isLastProvider={sortedProviders.length === 1}
+                    isLastProvider={
+                      provider.provider !== LLMProviderName.TYPESAFE &&
+                      chatProviderCount === 1
+                    }
                   />
                 ))}
               </div>

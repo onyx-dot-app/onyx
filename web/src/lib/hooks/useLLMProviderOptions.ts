@@ -1,5 +1,8 @@
 import useSWR from "swr";
-import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
+import {
+  LLMProviderName,
+  WellKnownLLMProviderDescriptor,
+} from "@/lib/languageModels/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -13,7 +16,9 @@ export function useLLMProviderOptions() {
   });
 
   return {
-    llmProviderOptions: data,
+    llmProviderOptions: data?.filter(
+      (provider) => provider.name !== LLMProviderName.TYPESAFE
+    ),
     isLoading: !error && !data,
     error,
     refetch: mutate,

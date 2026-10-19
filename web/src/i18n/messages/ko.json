@@ -7391,6 +7391,9 @@
         "title": "제공업체 그룹화 숨기기"
       },
       "modals": {
+        "typesafe": {
+          "description": "향후 의사 결정 기능을 위해 TypeSafe AI를 연결합니다. 저장 시 Jev로 System One을 테스트합니다. 이 제공자는 아직 채팅이나 다른 워크플로에서 사용되지 않습니다."
+        },
         "access": {
           "admin": {
             "sharedNote": "항상 공유됨",

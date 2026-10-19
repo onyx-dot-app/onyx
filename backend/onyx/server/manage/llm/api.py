@@ -83,6 +83,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     WellKnownLLMProviderDescriptor,
     fetch_available_well_known_llms,
 )
+from onyx.llm.well_known_providers.typesafe import check_typesafe_connection
 from onyx.server.manage.llm.models import (
     BedrockFinalModelResponse,
     BedrockModelsRequest,
@@ -471,6 +472,14 @@ def test_llm_configuration(
         existing_provider = fetch_existing_llm_provider_by_id(
             id=test_llm_request.id, db_session=db_session
         )
+        if (
+            existing_provider
+            and existing_provider.provider != test_llm_request.provider
+        ):
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "The test provider must match the saved provider",
+            )
         if existing_provider:
             test_custom_config = _restore_masked_custom_config_values(
                 existing_custom_config=existing_provider.custom_config,
@@ -497,6 +506,10 @@ def test_llm_configuration(
         provider=test_llm_request.provider,
         custom_config=test_custom_config,
     )
+
+    if test_llm_request.provider == LlmProviderNames.TYPESAFE:
+        check_typesafe_connection(test_api_key, test_llm_request.model)
+        return
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
@@ -720,6 +733,14 @@ def put_llm_provider(
 
     # SSRF Protection: Validate api_base and custom_config match stored values
     if existing_provider:
+        if (
+            existing_provider.provider != llm_provider_upsert_request.provider
+            and not llm_provider_upsert_request.api_key_changed
+        ):
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Changing the provider requires a new API key",
+            )
         llm_provider_upsert_request.custom_config = (
             _restore_masked_custom_config_values(
                 existing_custom_config=existing_provider.custom_config,
@@ -768,6 +789,14 @@ def put_llm_provider(
         provider=llm_provider_upsert_request.provider,
         custom_config=llm_provider_upsert_request.custom_config,
     )
+
+    if (
+        llm_provider_upsert_request.provider == LlmProviderNames.TYPESAFE
+        and not (llm_provider_upsert_request.api_key or "").strip()
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, "TypeSafe AI requires an API key"
+        )
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
@@ -872,12 +901,15 @@ def set_provider_as_default(
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_model(
-        provider_id=default_model_request.provider_id,
-        model=default_model_request.model_name,
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT,
-    )
+    try:
+        update_default_model(
+            provider_id=default_model_request.provider_id,
+            model=default_model_request.model_name,
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
+    except ValueError as exc:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
     invalidate_provider_listing_cache()
 
 
@@ -1081,6 +1113,11 @@ def _build_provider_descriptors(
     providers: list[LLMProviderModel],
     pinned_models: list[ModelConfiguration | None],
 ) -> list[LLMProviderDescriptor]:
+    providers = [
+        provider
+        for provider in providers
+        if provider.provider != LlmProviderNames.TYPESAFE
+    ]
     windows = _page_model_windows(db_session, providers, pinned_models)
     return [
         LLMProviderDescriptor.from_model(

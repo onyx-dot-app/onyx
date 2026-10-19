@@ -9,7 +9,7 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import resolve_api_surface
-from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
+from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS, LlmProviderNames
 from onyx.llm.model_capabilities import (
     anthropic_supports_thinking,
     catalog_model_supports_image_input,
@@ -177,6 +177,18 @@ class LLMProviderUpsertRequest(LLMProvider):
     # only adds or updates.
     keep_existing_models: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
+
+    @model_validator(mode="after")
+    def validate_typesafe_configuration(self) -> LLMProviderUpsertRequest:
+        if self.provider == LlmProviderNames.TYPESAFE:
+            if self.model_configurations or self.keep_existing_models:
+                raise ValueError(
+                    "TypeSafe AI does not support chat model configuration"
+                )
+            if self.api_base or self.custom_config:
+                raise ValueError("TypeSafe AI uses its hosted System One API")
+            self.is_auto_mode = False
+        return self
 
     @field_validator("provider", mode="before")
     @classmethod

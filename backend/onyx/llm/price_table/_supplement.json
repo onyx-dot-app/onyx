@@ -1,5 +1,14 @@
 {
   "_comment": "Hand-maintained entries for live models missing from the models.dev feed (it prunes deprecated generations, sometimes aggressively). Only models still callable on the named provider belong here — retired models must not be re-added. The sync job ignores files prefixed with '_'. Bedrock entries get cross-region inference-profile aliases generated at load time.",
+  "typesafe": {
+    "models": {
+      "jev-latest": {
+        "name": "TypeSafe Jev (System One)",
+        "mode": "decisions",
+        "modalities": {"input": ["text"], "output": ["decisions"]}
+      }
+    }
+  },
   "openai": {
     "models": {
       "gpt-5-chat": {

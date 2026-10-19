@@ -7391,6 +7391,9 @@
         "title": "Masquer le regroupement par fournisseur"
       },
       "modals": {
+        "typesafe": {
+          "description": "Connectez TypeSafe AI pour les futures fonctions de décision. L’enregistrement teste System One avec Jev. Ce fournisseur n’est pas encore utilisé dans le chat ou les autres flux."
+        },
         "access": {
           "admin": {
             "sharedNote": "Toujours partagé",
