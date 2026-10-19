@@ -28,12 +28,12 @@ from onyx.auth.permissions import (
 )
 from onyx.auth.scoped_permissions import assert_within_scope, get_scoped_groups
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.action_policy import (
     get_or_create_gated_app_id,
     get_workspace_action_policies,
     replace_workspace_action_policies,
 )
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     ActionPolicy,
     GatedAppKind,

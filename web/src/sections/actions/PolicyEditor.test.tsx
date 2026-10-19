@@ -27,8 +27,8 @@ test("shows per-action permissions immediately without an Advanced disclosure", 
   expect(
     screen.queryByRole("button", { name: /Advanced/ })
   ).not.toBeInTheDocument();
-  await setupUser().click(screen.getByRole("button", { name: "Deny" }));
-  expect(screen.getByRole("button", { name: "Deny" })).toHaveAttribute(
+  await setupUser().click(screen.getByRole("button", { name: "Disabled" }));
+  expect(screen.getByRole("button", { name: "Disabled" })).toHaveAttribute(
     "aria-pressed",
     "true"
   );

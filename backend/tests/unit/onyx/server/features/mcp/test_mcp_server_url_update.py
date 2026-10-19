@@ -83,7 +83,7 @@ def test_details_url_change_invalidates_credentials_before_returning_fresh_setti
     )
     monkeypatch.setattr(api, "_hot_reload_craft_sessions", reload_sessions)
     monkeypatch.setattr(api, "get_user_connection_config", lambda *_: None)
-    monkeypatch.setattr(api, "get_action_policies", lambda *_: {})
+    monkeypatch.setattr(api, "get_workspace_action_policies", lambda *_: {})
     result = api.update_mcp_server_simple(
         server.id,
         MCPServerSimpleUpdateRequest(

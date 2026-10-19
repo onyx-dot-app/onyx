@@ -35,8 +35,6 @@ export default function PolicyToggle({
           disabled={disabled}
           aria-pressed={value === option.value}
           size="xs"
-          disabled={disabled}
-          aria-pressed={value === option.value}
           prominence={value === option.value ? "primary" : "tertiary"}
           onClick={() => onChange(option.value)}
         >
