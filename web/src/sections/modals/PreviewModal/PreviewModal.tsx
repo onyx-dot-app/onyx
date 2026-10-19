@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Modal } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Button } from "@opal/components";
 
 import { Section } from "@/layouts/general-layouts";
@@ -239,7 +239,7 @@ export default function PreviewModal({
             </Section>
           ) : loadError ? (
             <Section padding={4}>
-              <Text text03 mainUiBody>
+              <Text font="main-ui-body" color="text-03">
                 {loadError}
               </Text>
               {fileUrl && (

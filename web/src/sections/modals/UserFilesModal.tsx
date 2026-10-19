@@ -4,7 +4,6 @@ import { IconLoader } from "@opal/loaders";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { InputTypeIn } from "@opal/components";
 import { ProjectFile } from "@/lib/projects/providers";
-import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/lib/projects/types";
@@ -258,7 +257,9 @@ export default function UserFilesModal({
           >
             {/* File display section */}
             {filtered.length === 0 ? (
-              <Text text03>{t("emptyState.description")}</Text>
+              <OpalText font="main-ui-body" color="text-03">
+                {t("emptyState.description")}
+              </OpalText>
             ) : (
               <ScrollIndicatorDiv className="p-1 gap-1 max-h-[70vh]">
                 {filtered.map((projectFle) => {
@@ -311,9 +312,9 @@ export default function UserFilesModal({
             {/* Left side: file count and controls */}
             {onPickRecent && (
               <Section flexDirection="row" justifyContent="start" gap={2}>
-                <Text as="p" text03>
+                <OpalText as="p" font="main-ui-body" color="text-03">
                   {t("selectedCount.label", { count: selectedCount })}
-                </Text>
+                </OpalText>
                 <Button
                   icon={SvgEye}
                   prominence="tertiary"

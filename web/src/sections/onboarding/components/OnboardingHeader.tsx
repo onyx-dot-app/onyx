@@ -8,7 +8,7 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Button, Card } from "@opal/components";
 import { SvgProgressCircle, SvgX } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
@@ -64,7 +64,7 @@ const OnboardingHeader = React.memo(
               stepButtonText ? (
                 <Section flexDirection="row">
                   {!isWelcomeStep && (
-                    <Text as="p" text03 mainUiBody>
+                    <Text as="p" font="main-ui-body" color="text-03">
                       {t("header.progress.label", {
                         current: onboardingState.stepIndex,
                         total: onboardingState.totalSteps,

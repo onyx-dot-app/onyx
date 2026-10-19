@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { InputCheckbox, Divider, InputTypeIn, Spacer } from "@opal/components";
 import { SvgFilter } from "@opal/icons";
 
@@ -85,7 +85,7 @@ export function KnowledgeTable<T>({
               gap={1}
               height="auto"
             >
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 {column.header}
               </Text>
             </GeneralLayouts.Section>
@@ -97,7 +97,7 @@ export function KnowledgeTable<T>({
 
       {items.length === 0 ? (
         <GeneralLayouts.Section height="auto" padding={4}>
-          <Text text03 secondaryBody>
+          <Text font="secondary-body" color="text-03">
             {emptyMessage ?? t("table.empty.description")}
           </Text>
         </GeneralLayouts.Section>

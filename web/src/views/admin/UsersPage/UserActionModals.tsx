@@ -6,7 +6,8 @@ import { useSettings } from "@/lib/settings/hooks";
 import { Button, CopyButton, InputTypeIn } from "@opal/components";
 import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { toast } from "@opal/layouts";
 import {
   deactivateUser,
@@ -42,8 +43,8 @@ async function runAction(
 /** Renders the email inside a confirmation sentence with emphasis. */
 function emailTag(chunks: ReactNode) {
   return (
-    <Text as="span" text05>
-      {chunks}
+    <Text as="span" font="main-ui-body" color="text-05">
+      {richNodes(chunks)}
     </Text>
   );
 }
@@ -95,12 +96,14 @@ export function CancelInviteModal({
         </Button>
       }
     >
-      <Text as="p" text03>
-        {t.rich("cancelInviteModal.description", {
-          email,
-          strong: emailTag,
-          appName,
-        })}
+      <Text as="p" font="main-ui-body" color="text-03">
+        {richNodes(
+          t.rich("cancelInviteModal.description", {
+            email,
+            strong: emailTag,
+            appName,
+          })
+        )}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -153,12 +156,14 @@ export function DeactivateUserModal({
         </Button>
       }
     >
-      <Text as="p" text03>
-        {t.rich("deactivateModal.description", {
-          email,
-          strong: emailTag,
-          appName,
-        })}
+      <Text as="p" font="main-ui-body" color="text-03">
+        {richNodes(
+          t.rich("deactivateModal.description", {
+            email,
+            strong: emailTag,
+            appName,
+          })
+        )}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -208,12 +213,14 @@ export function ActivateUserModal({
         </Button>
       }
     >
-      <Text as="p" text03>
-        {t.rich("activateModal.description", {
-          email,
-          strong: emailTag,
-          appName,
-        })}
+      <Text as="p" font="main-ui-body" color="text-03">
+        {richNodes(
+          t.rich("activateModal.description", {
+            email,
+            strong: emailTag,
+            appName,
+          })
+        )}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -266,12 +273,14 @@ export function DeleteUserModal({
         </Button>
       }
     >
-      <Text as="p" text03>
-        {t.rich("deleteModal.description", {
-          email,
-          strong: emailTag,
-          appName,
-        })}
+      <Text as="p" font="main-ui-body" color="text-03">
+        {richNodes(
+          t.rich("deleteModal.description", {
+            email,
+            strong: emailTag,
+            appName,
+          })
+        )}
       </Text>
     </ConfirmationModalLayout>
   );
@@ -340,11 +349,13 @@ export function ResetPasswordModal({
     >
       {newPassword ? (
         <div className="flex flex-col gap-2">
-          <Text as="p" text03>
-            {t.rich("resetPasswordModal.successDescription", {
-              email,
-              strong: emailTag,
-            })}
+          <Text as="p" font="main-ui-body" color="text-03">
+            {richNodes(
+              t.rich("resetPasswordModal.successDescription", {
+                email,
+                strong: emailTag,
+              })
+            )}
           </Text>
           <div className="font-main-ui-mono relative">
             <InputTypeIn value={newPassword} variant="readOnly" />
@@ -360,11 +371,13 @@ export function ResetPasswordModal({
           </div>
         </div>
       ) : (
-        <Text as="p" text03>
-          {t.rich("resetPasswordModal.description", {
-            email,
-            strong: emailTag,
-          })}
+        <Text as="p" font="main-ui-body" color="text-03">
+          {richNodes(
+            t.rich("resetPasswordModal.description", {
+              email,
+              strong: emailTag,
+            })
+          )}
         </Text>
       )}
     </ConfirmationModalLayout>

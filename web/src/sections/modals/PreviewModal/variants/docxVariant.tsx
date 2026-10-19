@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { renderAsync } from "docx-preview";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 import { Section } from "@/layouts/general-layouts";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
@@ -110,7 +110,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
   if (error) {
     return (
       <Section justifyContent="center" alignItems="center" padding={6}>
-        <Text text03 mainUiBody>
+        <Text font="main-ui-body" color="text-03">
           {error}
         </Text>
       </Section>
@@ -162,7 +162,7 @@ export const docxVariant: PreviewVariant = {
       lastDocxResult = null;
       return (
         <Section justifyContent="center" alignItems="center" padding={6}>
-          <Text text03 mainUiBody>
+          <Text font="main-ui-body" color="text-03">
             {ctx.t("docx.legacyDocMessage")}
           </Text>
         </Section>

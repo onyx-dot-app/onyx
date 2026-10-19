@@ -3,7 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import { useEffect, useState, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Pagination } from "@opal/components";
+import { Button, Pagination, Text as OpalText } from "@opal/components";
 import {
   Table,
   TableBody,
@@ -188,9 +188,9 @@ export default function InlineFileManagement({
     <>
       {/* Header with Edit/Save buttons */}
       <div className="flex justify-between items-center mb-4">
-        <Text as="p" mainUiBody>
+        <OpalText as="p" font="main-ui-body" color="text-05">
           {t("fileManagement.header.title", { count: totalFiles })}
-        </Text>
+        </OpalText>
         <div className="flex gap-2">
           {!isEditing ? (
             <Button
@@ -230,9 +230,16 @@ export default function InlineFileManagement({
 
       {/* File List */}
       {totalFilesOnServer === 0 && filesToAdd.length === 0 ? (
-        <Text as="p" mainUiMuted className="text-center py-8">
-          {t("fileManagement.empty.description")}
-        </Text>
+        <div className="py-8">
+          <OpalText
+            as="p"
+            font="main-ui-muted"
+            color="text-05"
+            textPosition="text-center"
+          >
+            {t("fileManagement.empty.description")}
+          </OpalText>
+        </div>
       ) : (
         <div className="border rounded-lg overflow-hidden mb-4">
           {/* Scrollable container with max height */}
@@ -330,9 +337,13 @@ export default function InlineFileManagement({
                     )}
                     <TableCell className="font-medium">
                       {file.name}
-                      <Text as="p" figureSmallValue>
+                      <OpalText
+                        as="p"
+                        font="figure-small-value"
+                        color="text-05"
+                      >
                         {t("fileManagement.newBadge.label")}
-                      </Text>
+                      </OpalText>
                     </TableCell>
                     <TableCell>{formatBytes(file.size)}</TableCell>
                     <TableCell>-</TableCell>
