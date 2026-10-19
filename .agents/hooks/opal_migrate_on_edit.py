@@ -84,7 +84,7 @@ def _web_files(web: Path, paths: list[Path]) -> list[str]:
 
 def main() -> int:
     payload = read_payload(sys.stdin.read())
-    web = repo_root(payload) / "web"
+    web = repo_root() / "web"
     oxlint = web / "node_modules" / ".bin" / "oxlint"
     files = _web_files(web, [path for path, _ in edited_files(payload)])
     if not files or not oxlint.exists():
@@ -114,7 +114,10 @@ def main() -> int:
         )
         return 0
 
-    rc = (web / ".oxlintrc.json").read_text()
+    rc_path = web / ".oxlintrc.json"
+    if not rc_path.exists():
+        return 0
+    rc = rc_path.read_text()
     notes = []
     for marker, rules in _BASELINES.items():
         if marker not in rc:

@@ -7,12 +7,13 @@ payload and reads feedback from a different field:
 - Claude Code: `tool_input.file_path`; feedback in `hookSpecificOutput.additionalContext`.
 - Codex: `apply_patch` with the patch text in `tool_input.command`; feedback in
   `hookSpecificOutput.additionalContext`.
-- Cursor: `file_path` at the top level or in `tool_input`; feedback in
-  `additional_context` after a tool and `agent_message` before one.
+- Cursor: `file_path` at the top level or in `tool_input`. Cursor's docs do not say
+  which output field it reads from hooks it imports, so Cursor feedback carries both
+  the Claude `hookSpecificOutput` shape and Cursor's flat `additional_context` (after
+  a tool) or `agent_message` (before one).
 """
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -35,19 +36,14 @@ def is_cursor(payload: dict[str, Any]) -> bool:
     return "cursor_version" in payload or "conversation_id" in payload
 
 
-def repo_root(payload: dict[str, Any]) -> Path:
-    for key in ("CLAUDE_PROJECT_DIR", "CURSOR_PROJECT_DIR"):
-        if os.environ.get(key):
-            return Path(os.environ[key]).resolve()
-    roots = payload.get("workspace_roots")
-    if isinstance(roots, list) and roots:
-        return Path(str(roots[0])).resolve()
-    return Path(str(payload.get("cwd") or Path.cwd())).resolve()
+def repo_root() -> Path:
+    """The repo (or worktree) that holds this script; independent of the agent's cwd."""
+    return Path(__file__).resolve().parents[2]
 
 
 def edited_files(payload: dict[str, Any]) -> list[tuple[Path, bool]]:
     """(absolute path, the tool creates the file) for each file the tool call writes."""
-    base = Path(str(payload.get("cwd") or repo_root(payload)))
+    base = Path(str(payload.get("cwd") or repo_root()))
     tool_input = payload.get("tool_input")
     tool_input = tool_input if isinstance(tool_input, dict) else {}
 
@@ -74,13 +70,13 @@ def edited_files(payload: dict[str, Any]) -> list[tuple[Path, bool]]:
 
 def give_feedback(payload: dict[str, Any], event: str, message: str) -> None:
     """Print feedback the agent reads as context. It never blocks the tool call."""
+    output: dict[str, Any] = {
+        "hookSpecificOutput": {"hookEventName": event, "additionalContext": message}
+    }
     if is_cursor(payload):
-        key = "additional_context" if event == "PostToolUse" else "agent_message"
-        output: dict[str, Any] = {key: message}
-        if event == "PreToolUse":
+        if event == "PostToolUse":
+            output["additional_context"] = message
+        else:
+            output["agent_message"] = message
             output["permission"] = "allow"
-    else:
-        output = {
-            "hookSpecificOutput": {"hookEventName": event, "additionalContext": message}
-        }
     print(json.dumps(output))
