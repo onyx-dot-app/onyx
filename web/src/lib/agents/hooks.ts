@@ -13,6 +13,7 @@ import {
 } from "@/lib/agents/types";
 import { toast } from "@opal/layouts";
 import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
+import { withEnrichedTools } from "@/lib/tools/enrich";
 import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
 import type { ChatSession } from "@/app/app/interfaces";
@@ -33,10 +34,20 @@ import { Permission } from "@/lib/types";
  * Results are deduplicated for 60 s and not revalidated on focus to avoid
  * redundant round-trips across the app.
  */
+// Agents carry tools; their names resolve before anything reads them.
+async function agentsFetcher(url: string): Promise<MinimalAgent[]> {
+  const agents = await errorHandlingFetcher<MinimalAgent[]>(url);
+  return agents.map(withEnrichedTools);
+}
+
+async function agentFetcher(url: string): Promise<FullAgent> {
+  return withEnrichedTools(await errorHandlingFetcher<FullAgent>(url));
+}
+
 export function useAgents() {
   const { data, error, mutate } = useSWR<MinimalAgent[]>(
     SWR_KEYS.agents,
-    errorHandlingFetcher,
+    agentsFetcher,
     {
       revalidateOnFocus: false,
       revalidateIfStale: false,
@@ -59,7 +70,7 @@ export function useAgents() {
 export function useAgent(agentId: number | null) {
   const { data, error, isLoading, mutate } = useSWR<FullAgent>(
     agentId ? SWR_KEYS.agent(agentId) : null,
-    errorHandlingFetcher,
+    agentFetcher,
     {
       revalidateOnFocus: false,
       revalidateIfStale: false,

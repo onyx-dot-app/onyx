@@ -670,7 +670,6 @@ export default function AppSidebar() {
               </Disabled>
             </div>
           )}
-          {folded && moreAgentsButton}
           <SidebarTab
             icon={SvgPlug}
             href="/app/plugins"
@@ -678,6 +677,9 @@ export default function AppSidebar() {
           >
             {t("appSidebar.plugins.label")}
           </SidebarTab>
+          {/* Folded, the agents and projects sections collapse to these, in
+              the unfolded order: below Plugins. */}
+          {folded && moreAgentsButton}
           {folded && <FoldedProjectsPopover />}
         </SidebarLayouts.Header>
 

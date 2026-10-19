@@ -38,6 +38,7 @@ import {
   upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
 import { useSettings } from "@/lib/settings/hooks";
+import { toolsFetcher } from "@/lib/tools/enrich";
 
 export { MemberPluginConnectionError } from "@/lib/plugins/memberConnection";
 
@@ -208,7 +209,7 @@ export function useMemberPlugins({
   );
   const tools = useSWR<ToolSnapshot[], Error>(
     surface === "craft" ? null : SWR_KEYS.tools,
-    errorHandlingFetcher
+    toolsFetcher
   );
   const oauth = useSWR<OAuthTokenStatus[], Error>(
     surface === "craft" ? null : SWR_KEYS.oauthTokenStatus,
@@ -302,7 +303,7 @@ export async function verifyMemberPluginConnection(
     });
   } else {
     const [tools, tokens] = await Promise.all([
-      errorHandlingFetcher<ToolSnapshot[]>(SWR_KEYS.tools),
+      toolsFetcher(SWR_KEYS.tools),
       errorHandlingFetcher<OAuthTokenStatus[]>(SWR_KEYS.oauthTokenStatus),
     ]);
     plugins = buildMemberPlugins([], tools, { kind: "loaded", tokens });

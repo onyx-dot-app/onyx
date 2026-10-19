@@ -1,4 +1,5 @@
 import type { ApiResponse, MethodSpec, ToolSnapshot } from "@/lib/tools/types";
+import { enrichToolSnapshot, type RawToolSnapshot } from "@/lib/tools/enrich";
 
 // Calls for OpenAPI plugins (custom tools): validate a schema, then create,
 // update or delete the tool built from it.
@@ -50,8 +51,8 @@ export async function createCustomTool(toolData: {
       return { data: null, error: `Failed to create tool: ${errorDetail}` };
     }
 
-    const tool: ToolSnapshot = await response.json();
-    return { data: tool, error: null };
+    const tool: RawToolSnapshot = await response.json();
+    return { data: enrichToolSnapshot(tool), error: null };
   } catch (error) {
     console.error("Error creating tool:", error);
     return { data: null, error: "Error creating tool" };
@@ -85,8 +86,8 @@ export async function updateCustomTool(
       return { data: null, error: `Failed to update tool: ${errorDetail}` };
     }
 
-    const updatedTool: ToolSnapshot = await response.json();
-    return { data: updatedTool, error: null };
+    const updatedTool: RawToolSnapshot = await response.json();
+    return { data: enrichToolSnapshot(updatedTool), error: null };
   } catch (error) {
     console.error("Error updating tool:", error);
     return { data: null, error: "Error updating tool" };

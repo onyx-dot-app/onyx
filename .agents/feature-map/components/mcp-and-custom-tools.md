@@ -220,11 +220,13 @@ Its label stays fixed; a spinner shows while it works, and it is disabled while
 the form is invalid. The header reads "Add OpenAPI action" or
 "Edit *name*". Drafts survive tab switches.
 An OpenAPI plugin's name and description come from its schema's `info.title` and
-`info.description`. The stored `Tool.name` and `Tool.description` are only overrides:
-`ToolSnapshot.from_model` (`backend/onyx/server/features/tool/models.py`) falls back to
-the schema when they are empty, and also returns the stored values as `name_override` and
-`description_override` (null when empty). Creation stores no overrides; the modal's
-Plugin Details fields load and edit the overrides, and clearing a field removes one.
+`info.description`. The API returns the stored `Tool.name` and `Tool.description` as they
+are; they are only overrides. The frontend resolves them as it fetches:
+`enrichToolSnapshot` (`web/src/lib/tools/enrich.ts`) falls back to the schema when an
+override is empty and keeps the stored values as `name_override` and `description_override`.
+The tools, OpenAPI-tools and agent fetchers apply it, so components only see resolved
+tools. Creation stores no overrides; the modal's Plugin Details fields load and edit the
+overrides, and clearing a field removes one.
 Plugin add and edit modals close at once, without an unsaved-changes confirmation.
 Authentication saves reject a changed OAuth link before writing, so stale values
 cannot target a replacement config.

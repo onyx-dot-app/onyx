@@ -4,7 +4,6 @@ import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   ChatSearchFilters,
   ToolSnapshot,
@@ -25,6 +24,7 @@ import {
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
 } from "@/lib/tools/constants";
+import { toolsFetcher } from "@/lib/tools/enrich";
 
 /**
  * Hook to fetch all available tools from the backend.
@@ -47,7 +47,7 @@ import {
 export function useAvailableTools() {
   const { data, isLoading, error, mutate } = useSWR<ToolSnapshot[]>(
     SWR_KEYS.tools,
-    errorHandlingFetcher,
+    toolsFetcher,
     {
       revalidateOnFocus: false,
       revalidateIfStale: false,
