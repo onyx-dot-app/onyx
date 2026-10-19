@@ -268,8 +268,8 @@ def _find_result(
     hidden_line: str,
     message: str,
 ) -> CheckOutput:
-    """A Find of selected entries: all found passes, some missing is a
-    partial result the checks after it run on, none found FAILS."""
+    """A Find of selected entries: all found passes, any missing FAILS, as
+    indexing (``validate_connector_settings``) rejects any missing entry."""
     if not missing:
         return CheckOutput(
             summary=(
@@ -288,13 +288,13 @@ def _find_result(
             ),
         )
     label: str = noun.capitalize() if len(missing) == 1 else f"{noun.capitalize()}s"
-    return CheckOutput(
+    raise ConnectorValidationError(
+        message,
         summary=_fit(
             f"{label} not found: {', '.join(missing)}",
             f"{len(missing)} of {len(selected)} {noun}s not found",
         ),
         description=f"{hidden_line}\nNot found: {', '.join(missing)}.",
-        partial=True,
     )
 
 

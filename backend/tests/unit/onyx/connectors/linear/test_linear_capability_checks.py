@@ -74,10 +74,10 @@ def test_the_teams_check_names_the_missing_keys() -> None:
     ops.list_team_keys.return_value = {"ENG"}
     check = _check(build_linear_indexing_checks(), "linear_teams")
 
-    output = check.run(_context(ops, {"team_keys": ["eng", "des"]}))
+    with pytest.raises(ConnectorValidationError) as error:
+        check.run(_context(ops, {"team_keys": ["eng", "des"]}))
 
-    assert output is not None and output.partial
-    assert output.summary == "Team not found: DES"
+    assert error.value.summary == "Team not found: DES"
     ops.list_team_keys.assert_called_once_with(keys=["DES", "ENG"])
 
 
@@ -95,10 +95,10 @@ def test_the_projects_check_names_the_missing_entries() -> None:
     ops.list_projects.return_value = [LinearProject(name="Roadmap", slug_id="x")]
     check = _check(build_linear_indexing_checks(), "linear_projects")
 
-    output = check.run(_context(ops, {"projects": ["Roadmap", "Gone"]}))
+    with pytest.raises(ConnectorValidationError) as error:
+        check.run(_context(ops, {"projects": ["Roadmap", "Gone"]}))
 
-    assert output is not None and output.partial
-    assert output.summary == "Project not found: Gone"
+    assert error.value.summary == "Project not found: Gone"
 
 
 def test_the_issues_check_reads_one_scoped_page() -> None:

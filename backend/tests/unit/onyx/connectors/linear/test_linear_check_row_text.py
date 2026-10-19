@@ -1,5 +1,5 @@
 """The Linear checks' rows: the design's short lines and descriptions, the
-form-run sign-in policy, the rate-limit stop, the run order, the partial Find
+form-run sign-in policy, the rate-limit stop, the run order, the Find
 of selected teams and projects, Error Details, and what a check that tested
 nothing says."""
 
@@ -292,7 +292,8 @@ def test_finding_every_team_says_how_many() -> None:
     assert two.summary == "Found all 2 teams"
 
 
-def test_some_teams_missing_is_partial_and_the_issues_check_runs() -> None:
+def test_some_teams_missing_fails_and_stops_the_issues_check() -> None:
+    """Indexing rejects any missing team, so the Find fails too."""
     results = _run_all(
         ["linear_token", "linear_teams", "linear_issues"],
         _gateway(),
@@ -300,11 +301,10 @@ def test_some_teams_missing_is_partial_and_the_issues_check_runs() -> None:
     )
 
     teams = results["linear_teams"]
-    assert teams.status == CapabilityCheckStatus.INCOMPLETE
-    assert teams.partial
+    assert teams.status == CapabilityCheckStatus.FAILED
     assert teams.summary == "Team not found: DES"
     assert teams.description is not None and "Not found: DES." in teams.description
-    assert results["linear_issues"].status == CapabilityCheckStatus.PASSED
+    assert results["linear_issues"].blocked_by == "linear_teams"
 
 
 def test_a_long_list_of_missing_teams_is_counted() -> None:
@@ -329,10 +329,10 @@ def test_no_team_found_fails_and_stops_the_issues_check() -> None:
     assert results["linear_issues"].blocked_by == "linear_teams"
 
 
-def test_some_projects_missing_is_partial() -> None:
+def test_some_projects_missing_fails() -> None:
     result = _run("linear_projects", _gateway(), {"projects": ["Roadmap", "Gone"]})
 
-    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.status == CapabilityCheckStatus.FAILED
     assert result.summary == "Project not found: Gone"
 
 
