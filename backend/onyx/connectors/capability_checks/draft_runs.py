@@ -428,18 +428,18 @@ def get_cached_draft_result(key: str) -> CachedDraftResult | None:
 
 def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
     """Caches a terminal result; INCOMPLETE is not cached, nor a sign-in check
-    FAILED by a timeout or an unreachable source. Neither is a check that did
-    not run because of a dependency or a rate limit, nor a SKIPPED discovery
-    check (a failed required check, findings turned off): their skip says
-    nothing about the check once the cause is gone."""
+    FAILED by a timeout or an unreachable source. A check that did not run
+    because of a dependency or a rate limit, or a SKIPPED discovery check (a
+    failed required check, findings turned off), drops its cached result: the
+    skip says nothing about the check once the cause is gone, and an older
+    result would return without its cause."""
     state = _draft_state(result)
-    if (
-        state not in _CACHEABLE_STATES
-        or result.error_kind in TRANSIENT_ERROR_KINDS
-        or result.not_run_reason is not None
+    if result.not_run_reason is not None or (
+        result.discovery and state == DraftCheckStateKind.SKIPPED
     ):
+        get_cache_backend().delete(key)
         return
-    if result.discovery and state == DraftCheckStateKind.SKIPPED:
+    if state not in _CACHEABLE_STATES or result.error_kind in TRANSIENT_ERROR_KINDS:
         return
     cached = CachedDraftResult(
         state=state,
