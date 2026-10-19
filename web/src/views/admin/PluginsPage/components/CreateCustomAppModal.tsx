@@ -16,6 +16,7 @@ import {
 import { InputKeyValue, InputList, type KeyValue } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
 import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
+import { UserManagementSwitch } from "@/sections/actions/PolicyEditor";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {
@@ -72,6 +73,10 @@ export default function CreateCustomAppModal({
   existingApp,
 }: CreateCustomAppModalProps) {
   const t = useTranslations("craft.apps.customApp");
+  const policyText = useTranslations("craft.actionPolicies");
+  const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
+    existingApp?.users_can_manage_policies ?? true
+  );
   const tApps = useTranslations("craft.apps");
   const isEdit = existingApp !== null;
   const nameId = useId();
@@ -110,7 +115,8 @@ export default function CreateCustomAppModal({
       new Set(existingApp.associated_skills.map((skill) => skill.id))
     );
   const configDirty = existingApp
-    ? name !== existingApp.name ||
+    ? usersCanManagePolicies !== existingApp.users_can_manage_policies ||
+      name !== existingApp.name ||
       associationDirty ||
       !isEqual(upstreamPatterns, existingApp.upstream_url_patterns) ||
       !isEqual(toRecord(headers), existingApp.auth_template) ||
@@ -153,6 +159,7 @@ export default function CreateCustomAppModal({
     try {
       if (existingApp) {
         await updateExternalApp(existingApp.id, {
+          users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
@@ -163,6 +170,7 @@ export default function CreateCustomAppModal({
         onClose();
       } else {
         const created = await createCustomExternalApp({
+          users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
@@ -270,6 +278,13 @@ export default function CreateCustomAppModal({
                 value={tab}
                 onValueChange={setTab}
                 busy={isSaving}
+                tools={
+                  <>
+                    <Text font="secondary-body" color="text-03">
+                      {policyText("emptyActions")}
+                    </Text>
+                  </>
+                }
                 configuration={
                   <div className="flex flex-col gap-6">
                     <InputVertical
@@ -298,6 +313,15 @@ export default function CreateCustomAppModal({
                         placeholder={t("placeholders.allowedUrl")}
                       />
                     </div>
+                    <UserManagementSwitch
+                      value={usersCanManagePolicies}
+                      onChange={setUsersCanManagePolicies}
+                      disabled={isSaving}
+                    />
+                  </div>
+                }
+                authentication={
+                  <div className="flex flex-col gap-6">
                     <div className="flex flex-col gap-1">
                       <Text font="main-ui-action">
                         {t("fields.headers.label")}

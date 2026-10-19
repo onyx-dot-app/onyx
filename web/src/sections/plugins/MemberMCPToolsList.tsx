@@ -36,7 +36,7 @@ export default function MemberMCPToolsList({ tools }: MemberMCPToolsListProps) {
         </Text>
       </div>
       {visible.length ? (
-        <ul className="m-0 list-none divide-y divide-border-01 rounded-12 border border-border-01 p-0">
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {visible.map((tool) => (
             <MCPToolRow key={tool.id} tool={tool} />
           ))}

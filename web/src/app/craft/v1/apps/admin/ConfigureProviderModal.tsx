@@ -56,6 +56,9 @@ export default function ConfigureProviderModal({
   const t = useTranslations("craft.apps.configureProvider");
   const tApps = useTranslations("craft.apps");
   const router = useRouter();
+  const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
+    existingApp?.users_can_manage_policies ?? true
+  );
   const upload = useSkillUploadModal();
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
     null
@@ -79,6 +82,7 @@ export default function ConfigureProviderModal({
     ? []
     : [
         {
+          section: "configuration",
           key: NAME_KEY,
           label: t("fields.name.label"),
           description: t("fields.name.description", { name: descriptor.name }),
@@ -86,6 +90,7 @@ export default function ConfigureProviderModal({
           secret: false,
         },
         ...descriptor.required_org_credential_fields.map((field) => ({
+          section: "authentication" as const,
           key: field.key,
           label: field.label,
           description: field.description,
@@ -124,6 +129,7 @@ export default function ConfigureProviderModal({
       // Managed: only policies are persisted; a partial PATCH leaves the rest.
       await updateExternalApp(existingApp.id, {
         action_policies: policies,
+        users_can_manage_policies: usersCanManagePolicies,
         ...associationPatch,
       });
     } else {
@@ -138,6 +144,7 @@ export default function ConfigureProviderModal({
         upstream_url_patterns: descriptor.upstream_url_patterns,
         auth_template: descriptor.auth_template,
         action_policies: policies,
+        users_can_manage_policies: usersCanManagePolicies,
       };
       if (existingApp) {
         // Merge creds so non-credential metadata survives a credential edit.
@@ -222,7 +229,13 @@ export default function ConfigureProviderModal({
           : undefined
       }
       alternateContentConfirmationOpen={upload.confirmationOpen}
-      isAdditionalContentDirty={existingAssociationDirty}
+      usersCanManagePolicies={usersCanManagePolicies}
+      onUsersCanManagePoliciesChange={setUsersCanManagePolicies}
+      isAdditionalContentDirty={
+        existingAssociationDirty ||
+        usersCanManagePolicies !==
+          (existingApp?.users_can_manage_policies ?? true)
+      }
       onClose={upload.isOpen ? upload.requestDismiss : onClose}
       title={existingApp?.name ?? descriptor.name}
       displayUrl={externalAppDisplayUrl(

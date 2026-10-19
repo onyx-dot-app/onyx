@@ -24,6 +24,7 @@ const apps: ExternalAppAdminResponse[] = [
     actions: [],
     associated_skills: [],
     is_onyx_managed: false,
+    users_can_manage_policies: true,
   },
 ];
 

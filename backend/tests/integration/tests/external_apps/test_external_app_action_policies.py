@@ -108,7 +108,7 @@ def test_create_without_policies_yields_action_defaults(
     assert _fetch_states(admin_user, created.id) == states
 
 
-def test_edit_merges_overrides_preserving_unmentioned(
+def test_edit_replaces_overrides_for_the_app(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
@@ -120,7 +120,7 @@ def test_edit_merges_overrides_preserving_unmentioned(
         },
     )
 
-    # A partial map updates only the named action; the rest keep their value.
+    # A submitted map replaces saved overrides; omitted actions use defaults.
     edited = _update_slack(
         admin_user,
         created.id,
@@ -130,8 +130,8 @@ def test_edit_merges_overrides_preserving_unmentioned(
     states = _states(edited)
     assert states[SlackAction.CHANNELS_READ.value] == ActionPolicy.ALWAYS
     assert states[SlackAction.MESSAGES_READ.value] == ActionPolicy.ALWAYS
-    assert states[SlackAction.MESSAGES_WRITE.value] == ActionPolicy.DENY
-    # The full action set is unchanged by the edit (no policy dropped or added).
+    assert states[SlackAction.MESSAGES_WRITE.value] == ActionPolicy.ASK
+    # Replacing choices does not change the action catalog.
     assert set(states) == set(_states(created))
     assert _fetch_states(admin_user, created.id) == states
 

@@ -281,18 +281,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API Key"
+          "label": "API Key",
+          "description": "Use per-user individual API key or organization-wide shared API key."
         },
         "label": "Authentication Method",
         "none": {
-          "label": "No authentication"
+          "label": "No authentication",
+          "description": "Not Recommended"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "Each user need to authenticate via OAuth with their own credentials."
         },
         "placeholder": "Select method",
         "ptOauth": {
-          "label": "OAuth Pass-through"
+          "label": "OAuth Pass-through",
+          "description": "Forward the user's OAuth access token used to authenticate {appName}."
         },
         "required": "Authentication type is required"
       },
@@ -323,7 +327,8 @@
         "clientRegistrationFailed": "Automatic client registration failed. Use your own OAuth client, or check the provider’s setup requirements.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
         "connectionFailed": "The OAuth server could not be reached. Check the server URL and try again.",
-        "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again."
+        "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again.",
+        "oauthInitFailed": "Failed to initiate OAuth: {detail}"
       },
       "header": {
         "defaultTitle": "Configure authentication",
@@ -416,6 +421,13 @@
         "unreachableTitle": "Could not determine if automatic setup is available",
         "missingTitle": "Could not find OAuth endpoints",
         "requiresClientTitle": "Automatic setup may be unavailable"
+      },
+      "advanced": {
+        "description": "Configure a known OAuth provider with explicit authorization and token endpoints instead of automatic discovery.",
+        "title": "Advanced"
+      },
+      "knownProvider": {
+        "hint": "Known-provider mode requires endpoint configuration. Google reference endpoints: authorization {authorizationEndpoint} and token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -654,7 +666,9 @@
       },
       "credentials": {
         "perUserDescription": "Use your credentials to test this MCP and load its tools. They are saved to your account only.",
-        "sharedDescription": "These values are used for every user in your organization."
+        "sharedDescription": "These values are used for every user in your organization.",
+        "perUserTitle": "Only for your own account",
+        "sharedTitle": "Shared organization values"
       },
       "headers": {
         "addButton": {
@@ -678,7 +692,7 @@
         "label": "Ask"
       },
       "deny": {
-        "label": "Deny"
+        "label": "Disabled"
       }
     },
     "switchList": {
@@ -2626,7 +2640,8 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Cannot re-index while indexing is already in progress",
-            "invalid": "Fix the connector configuration before re-indexing"
+            "invalid": "Fix the connector configuration before re-indexing",
+            "paused": "Resume the connector before re-indexing"
           }
         },
         "toggleStatus": {
@@ -2691,6 +2706,91 @@
           "postProcessing": {
             "label": "Post-Processing"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "Batch load"
+          },
+          "batchTotal": {
+            "label": "Batch total"
+          },
+          "batchUnaccounted": {
+            "label": "Unaccounted"
+          },
+          "checkpointLoad": {
+            "label": "Checkpoint load"
+          },
+          "chunking": {
+            "label": "Chunking"
+          },
+          "connectorFetch": {
+            "label": "Connector fetch"
+          },
+          "connectorValidation": {
+            "label": "Connector validation"
+          },
+          "contextualRag": {
+            "label": "Contextual RAG"
+          },
+          "coordLockAcquireWait": {
+            "label": "Coord lock acquire wait"
+          },
+          "coordinationUpdate": {
+            "label": "Coordination update"
+          },
+          "docBatchEnqueue": {
+            "label": "Doc batch enqueue"
+          },
+          "docBatchStore": {
+            "label": "Doc batch store"
+          },
+          "docDbPrepare": {
+            "label": "Doc DB prepare"
+          },
+          "docLockAcquireWait": {
+            "label": "Doc lock acquire wait"
+          },
+          "docprocessingSetup": {
+            "label": "Docprocessing setup"
+          },
+          "embedding": {
+            "label": "Embedding"
+          },
+          "enrichmentPrep": {
+            "label": "Enrichment prep"
+          },
+          "finalization": {
+            "label": "Finalization"
+          },
+          "gcCollect": {
+            "label": "Garbage collection"
+          },
+          "hierarchyUpsert": {
+            "label": "Hierarchy upsert"
+          },
+          "imageProcessing": {
+            "label": "Image processing"
+          },
+          "permissionValidation": {
+            "label": "Permission validation"
+          },
+          "postIndexDbUpdate": {
+            "label": "Post-index DB update"
+          },
+          "queueWait": {
+            "label": "Queue wait"
+          },
+          "vectorDbWrite": {
+            "label": "Vector DB write"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Embedding rate limit wait",
+            "description": "Time embedding requests waited for the embedding rate limit set on Index Settings. Part of Embedding, summed over embedding threads."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Embedding provider throttle wait",
+            "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
+          }
         }
       },
       "statusCard": {
@@ -2722,7 +2822,8 @@
           "released": "Indexing started",
           "releaseFailed": "Couldn't start indexing",
           "viewChecks": "View connector checks"
-        }
+        },
+        "title": "Indexing Status"
       },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",
@@ -2881,7 +2982,9 @@
           "indexed": "indexed",
           "synced": "synced",
           "removed": "removed",
-          "checksRun": "{count, plural, one {# check run} other {# checks run}}"
+          "checksRun": "{count, plural, one {# check run} other {# checks run}}",
+          "memberships": "memberships",
+          "checks": "checks run"
         },
         "counts": {
           "newDocs": "{count, plural, one {# new document} other {# new documents}}",
@@ -2926,7 +3029,8 @@
           "filteredTitle": "No runs match these filters.",
           "pastRuns": "{count, plural, one {# Past Run} other {# Past Runs}}",
           "view": "View",
-          "viewAria": "{count, plural, one {View # past run} other {View # past runs}}"
+          "viewAria": "{count, plural, one {View # past run} other {View # past runs}}",
+          "description": "Runs are scheduled in the background and may take a moment to appear."
         },
         "units": "{count, plural, one {run} other {runs}}",
         "errorModal": {
@@ -2966,7 +3070,8 @@
         "groups": {
           "failures": "{count, plural, =0 {Failures} one {# Failure} other {# Failures}}",
           "errors": "{count, plural, =0 {Errors} one {# Error} other {# Errors}}",
-          "other": "Other"
+          "other": "Other",
+          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}"
         },
         "title": {
           "indexing": {
@@ -3040,7 +3145,8 @@
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}",
-          "resolved": "Resolved"
+          "resolved": "Resolved",
+          "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}"
         },
         "more": "Show more",
         "empty": {
@@ -3073,7 +3179,8 @@
         },
         "trace": {
           "header": "Stack Trace • Run ID: {id}",
-          "copy": "Copy the stack trace"
+          "copy": "Copy the stack trace",
+          "runId": "Run ID: {id}"
         },
         "actions": {
           "resolve": "Resolve"
@@ -3084,6 +3191,9 @@
           "description": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved. They keep their status and move under resolved.",
           "fleetDescription": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved, on the connectors you operate. They keep their status and move under resolved.",
           "confirm": "Resolve all"
+        },
+        "resolved": {
+          "label": "Resolved"
         }
       },
       "stageDetails": {
@@ -9439,7 +9549,9 @@
         "pruned": "Pruned",
         "checking": "Checking",
         "passed": "Completed",
-        "failedToRun": "Failed to run"
+        "failedToRun": "Failed to run",
+        "completedWithErrors": "Completed with errors",
+        "error": "Error"
       }
     },
     "systemInfo": {
@@ -9762,6 +9874,9 @@
       "field": {
         "required": {
           "error": "{label} is required"
+        },
+        "optional": {
+          "title": "{label} (Optional)"
         }
       },
       "loadError": {
@@ -10590,7 +10705,9 @@
       "failedToRun": "Checks failed to run. Try again.",
       "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
       "state": {
-        "inProgress": "Checks in progress..."
+        "inProgress": "Checks in progress...",
+        "completed": "Checks completed.",
+        "waiting": "Waiting for connector settings..."
       },
       "advisory": {
         "title": "Some content won't be indexed.",
@@ -10694,7 +10811,9 @@
           },
           "error": {
             "title": "The settings are not valid"
-          }
+          },
+          "blocks": "The new settings failed validation. Fix them before you apply.",
+          "warns": "Some optional checks failed. You can still apply."
         },
         "warnings": {
           "title": "Warnings"
@@ -13990,7 +14109,8 @@
       },
       "status": {
         "approved": "Approved",
-        "rejected": "Rejected"
+        "rejected": "Rejected",
+        "expired": "Expired"
       },
       "submit": {
         "errorFallback": "Failed to submit decision"
@@ -14186,7 +14306,11 @@
           "description": "Choose what the agent may do. “Ask” requests approval before each action; “Auto-approve” runs without prompting.",
           "title": "Permissions"
         },
-        "savingButton": "Saving…"
+        "savingButton": "Saving…",
+        "advanced": {
+          "description": "Set a policy for each action individually.",
+          "title": "Advanced"
+        }
       },
       "skillsStep": {
         "description": "Optional — associate existing skills or create one for this app.",
@@ -14862,10 +14986,6 @@
             "label": "Name",
             "placeholder": "e.g. Weekly customer escalations digest"
           },
-          "preApproval": {
-            "description": "Craft can use selected apps and MCP servers without pausing when this task runs unattended. Other approval requests pause the run and can cause it to fail.",
-            "label": "Pre-approved apps and MCP servers"
-          },
           "prompt": {
             "description": "This message is sent to Craft each time the task fires.",
             "label": "Prompt",
@@ -14924,31 +15044,6 @@
       "newPage": {
         "description": "Save a prompt + schedule. Craft will run it on a timer.",
         "title": "New Scheduled Task"
-      },
-      "preApproval": {
-        "appFallbackName": "App #{id}",
-        "appsGroupTitle": "Apps",
-        "empty": {
-          "label": "No apps or MCP servers are available in Craft yet."
-        },
-        "errors": {
-          "loadFailed": "Couldn’t load apps and MCP servers. Refresh to try again.",
-          "partialLoadFailed": "Some pre-approval options couldn’t load. Refresh to try again."
-        },
-        "loading": {
-          "label": "Loading apps and MCP servers…"
-        },
-        "mcpGroupTitle": "MCP servers",
-        "mcpServerFallbackName": "MCP server #{id}",
-        "status": {
-          "connected": "Connected",
-          "connectionRequired": "Connection required",
-          "unavailable": "No longer available"
-        },
-        "summary": {
-          "partialLoadFailed": "Some pre-approval details couldn’t load. Refresh to try again.",
-          "title": "Pre-approved apps and MCP servers"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15324,6 +15419,51 @@
       "viewPlans": {
         "label": "View plans"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "{name} Approval settings",
+      "title": "Approval settings",
+      "personalDescription": "These settings control whether actions run automatically or require approval in Craft conversations and new tasks; existing tasks keep their own settings.",
+      "taskDescription": "Only enabled apps are available to this task. Changes apply only to this task.",
+      "newTaskDescription": "Enable the apps this task can use. Each app starts with your current approval settings.",
+      "workspace_disabled": "Disabled for the workspace",
+      "workspace_managed": "Managed by your workspace",
+      "userManagement": "Let users manage approval settings",
+      "userManagementDescription": "Users can change approval settings for available actions.",
+      "loading": "Loading approval settings…",
+      "loadError": "Could not load approval settings.",
+      "retry": "Try again",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saveError": "Could not save approval settings.",
+      "emptyActions": "No known actions. Unknown actions require approval.",
+      "emptyApps": "No apps available.",
+      "expired": "Approval timed out. The action did not run.",
+      "rejected": "Request rejected. This request did not run.",
+      "deadline": "Approve by {time}",
+      "agentPermissionRequired": "This run stopped because an action needed approval. Review approval settings, then run the task again.",
+      "enableForTask": "Enable for this task",
+      "enableAppForTask": "Enable {app} for this task",
+      "enabledForTask": "Enabled for this task",
+      "disabledForTask": "Disabled for this task",
+      "externalApp": "App",
+      "mcpServer": "MCP server",
+      "taskAppsTitle": "Apps and MCP servers",
+      "actionPolicies": "Approval settings",
+      "policyCounts": "{auto} auto-approve · {ask} ask · {disabled} disabled",
+      "manageActions": "Manage actions",
+      "viewActions": "View actions",
+      "taskModalDescription": "Changes apply when you save the task. Workspace restrictions always apply.",
+      "searchActions": "Search actions",
+      "setPermissions": "Set permissions",
+      "applyMatching": "{count} matching editable actions",
+      "noMatchingActions": "No actions match your search.",
+      "close": "Close",
+      "saveChanges": "Save changes",
+      "resetDefaults": "Reset all to defaults",
+      "resetAll": "Reset all to workspace defaults",
+      "workspaceDisabledTooltip": "An admin disabled this action for the workspace."
     }
   },
   "knowledge": {

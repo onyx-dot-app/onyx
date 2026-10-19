@@ -112,4 +112,5 @@
 
 .opal-modal-body {
   @apply flex-auto min-h-0 overflow-y-auto w-full bg-background-tint-01;
+  scrollbar-gutter: stable both-edges;
 }

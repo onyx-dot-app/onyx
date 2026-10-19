@@ -281,18 +281,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "Chave de API"
+          "label": "Chave de API",
+          "description": "Use uma chave de API individual por usuário ou uma chave de API compartilhada com toda a organização."
         },
         "label": "Método de autenticação",
         "none": {
-          "label": "Sem autenticação"
+          "label": "Sem autenticação",
+          "description": "Não recomendado"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "Cada usuário precisa se autenticar via OAuth com as próprias credenciais."
         },
         "placeholder": "Selecionar método",
         "ptOauth": {
-          "label": "Repasse de OAuth"
+          "label": "Repasse de OAuth",
+          "description": "Encaminhar o token de acesso OAuth do usuário usado para autenticar no {appName}."
         },
         "required": "O tipo de autenticação é obrigatório"
       },
@@ -323,7 +327,8 @@
         "clientRegistrationFailed": "O registro automático do cliente falhou. Use seu próprio cliente OAuth ou verifique os requisitos de configuração do provedor.",
         "discoveryFailed": "Não foi possível encontrar as configurações de login OAuth. Verifique a URL do servidor ou insira os endpoints do seu provedor.",
         "connectionFailed": "Não foi possível acessar o servidor OAuth. Verifique a URL do servidor e tente novamente.",
-        "oauthFailed": "Não foi possível iniciar o login OAuth. Verifique as configurações do cliente e tente novamente."
+        "oauthFailed": "Não foi possível iniciar o login OAuth. Verifique as configurações do cliente e tente novamente.",
+        "oauthInitFailed": "Falha ao iniciar o OAuth: {detail}"
       },
       "header": {
         "defaultTitle": "Configurar autenticação",
@@ -416,6 +421,13 @@
         "unreachableTitle": "Não foi possível determinar se a configuração automática está disponível",
         "missingTitle": "Não foi possível encontrar os endpoints OAuth",
         "requiresClientTitle": "A configuração automática pode estar indisponível"
+      },
+      "advanced": {
+        "description": "Configure um provedor OAuth conhecido com endpoints explícitos de autorização e de token em vez da descoberta automática.",
+        "title": "Avançado"
+      },
+      "knownProvider": {
+        "hint": "O modo de provedor conhecido exige a configuração dos endpoints. Endpoints de referência do Google: autorização {authorizationEndpoint} e token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -654,7 +666,9 @@
       },
       "credentials": {
         "perUserDescription": "Use suas credenciais para testar este MCP e carregar suas ferramentas. Elas são salvas apenas na sua conta.",
-        "sharedDescription": "Estes valores são usados para todos os usuários da sua organização."
+        "sharedDescription": "Estes valores são usados para todos os usuários da sua organização.",
+        "perUserTitle": "Somente para sua própria conta",
+        "sharedTitle": "Valores compartilhados da organização"
       },
       "headers": {
         "addButton": {
@@ -678,7 +692,7 @@
         "label": "Perguntar"
       },
       "deny": {
-        "label": "Negar"
+        "label": "Desativada"
       }
     },
     "switchList": {
@@ -2626,7 +2640,8 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Não é possível reindexar enquanto uma indexação está em andamento",
-            "invalid": "Corrija a configuração do conector antes de reindexar"
+            "invalid": "Corrija a configuração do conector antes de reindexar",
+            "paused": "Retome o conector antes de reindexar"
           }
         },
         "toggleStatus": {
@@ -2691,6 +2706,91 @@
           "postProcessing": {
             "label": "Pós-processamento"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "Carga do lote"
+          },
+          "batchTotal": {
+            "label": "Total do lote"
+          },
+          "batchUnaccounted": {
+            "label": "Não contabilizado"
+          },
+          "checkpointLoad": {
+            "label": "Carga do checkpoint"
+          },
+          "chunking": {
+            "label": "Divisão em chunks"
+          },
+          "connectorFetch": {
+            "label": "Busca do conector"
+          },
+          "connectorValidation": {
+            "label": "Validação do conector"
+          },
+          "contextualRag": {
+            "label": "RAG contextual"
+          },
+          "coordLockAcquireWait": {
+            "label": "Espera pelo bloqueio de coordenação"
+          },
+          "coordinationUpdate": {
+            "label": "Atualização da coordenação"
+          },
+          "docBatchEnqueue": {
+            "label": "Enfileiramento do lote de documentos"
+          },
+          "docBatchStore": {
+            "label": "Armazenamento do lote de documentos"
+          },
+          "docDbPrepare": {
+            "label": "Preparação do banco de documentos"
+          },
+          "docLockAcquireWait": {
+            "label": "Espera pelo bloqueio de documento"
+          },
+          "docprocessingSetup": {
+            "label": "Configuração do docprocessing"
+          },
+          "embedding": {
+            "label": "Embedding"
+          },
+          "enrichmentPrep": {
+            "label": "Preparação do enriquecimento"
+          },
+          "finalization": {
+            "label": "Finalização"
+          },
+          "gcCollect": {
+            "label": "Coleta de lixo"
+          },
+          "hierarchyUpsert": {
+            "label": "Upsert da hierarquia"
+          },
+          "imageProcessing": {
+            "label": "Processamento de imagens"
+          },
+          "permissionValidation": {
+            "label": "Validação de permissões"
+          },
+          "postIndexDbUpdate": {
+            "label": "Atualização do banco após a indexação"
+          },
+          "queueWait": {
+            "label": "Espera na fila"
+          },
+          "vectorDbWrite": {
+            "label": "Gravação no banco vetorial"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Espera pelo limite de embedding",
+            "description": "Tempo que as requisições de embedding esperaram pelo limite definido nas Configurações de índice. Parte de Embedding, somado entre as threads de embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Espera por limitação do provedor",
+            "description": "Tempo que as requisições de embedding esperaram depois que o provedor de embedding as limitou. Parte de Embedding, somado entre as threads de embedding."
+          }
         }
       },
       "statusCard": {
@@ -2722,7 +2822,8 @@
           "released": "Indexação iniciada",
           "releaseFailed": "Não foi possível iniciar a indexação",
           "viewChecks": "Ver verificações do conector"
-        }
+        },
+        "title": "Status da indexação"
       },
       "toasts": {
         "completeReindexStarted": "Reindexação completa iniciada com sucesso",
@@ -2881,7 +2982,9 @@
           "indexed": "indexados",
           "synced": "sincronizados",
           "removed": "removidos",
-          "checksRun": "{count, plural, one {# verificação executada} other {# verificações executadas}}"
+          "checksRun": "{count, plural, one {# verificação executada} other {# verificações executadas}}",
+          "memberships": "associações",
+          "checks": "verificações executadas"
         },
         "counts": {
           "newDocs": "{count, plural, one {# documento novo} other {# documentos novos}}",
@@ -2926,7 +3029,8 @@
           "filteredTitle": "Nenhuma execução corresponde a estes filtros.",
           "pastRuns": "{count, plural, one {# execução anterior} other {# execuções anteriores}}",
           "view": "Ver",
-          "viewAria": "{count, plural, one {Ver # execução anterior} other {Ver # execuções anteriores}}"
+          "viewAria": "{count, plural, one {Ver # execução anterior} other {Ver # execuções anteriores}}",
+          "description": "As execuções são agendadas em segundo plano e podem demorar um pouco para aparecer."
         },
         "units": "{count, plural, one {execução} other {execuções}}",
         "errorModal": {
@@ -2966,7 +3070,8 @@
         "groups": {
           "failures": "{count, plural, =0 {Falhas} one {# falha} other {# falhas}}",
           "errors": "{count, plural, =0 {Erros} one {# erro} other {# erros}}",
-          "other": "Outros"
+          "other": "Outros",
+          "resolved": "{count, plural, one {# resolvido} other {# resolvidos}}"
         },
         "title": {
           "indexing": {
@@ -3040,7 +3145,8 @@
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
           "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
-          "resolved": "Resolvido"
+          "resolved": "Resolvido",
+          "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}"
         },
         "more": "Mostrar mais",
         "empty": {
@@ -3073,7 +3179,8 @@
         },
         "trace": {
           "header": "Rastreamento de pilha • ID da execução: {id}",
-          "copy": "Copiar o rastreamento de pilha"
+          "copy": "Copiar o rastreamento de pilha",
+          "runId": "ID da execução: {id}"
         },
         "actions": {
           "resolve": "Resolver"
@@ -3084,6 +3191,9 @@
           "description": "Isso marca como {count, plural, one {resolvida # execução} other {resolvidas # execuções}} que correspondem ao filtro atual. Elas mantêm o status e passam para a seção de resolvidas.",
           "fleetDescription": "Isso marca como {count, plural, one {resolvida # execução} other {resolvidas # execuções}} que correspondem ao filtro atual, nos conectores que você gerencia. Elas mantêm o status e passam para a seção de resolvidas.",
           "confirm": "Resolver tudo"
+        },
+        "resolved": {
+          "label": "Resolvidos"
         }
       },
       "stageDetails": {
@@ -9439,7 +9549,9 @@
         "pruned": "Limpo",
         "checking": "Verificando",
         "passed": "Concluído",
-        "failedToRun": "Não executado"
+        "failedToRun": "Não executado",
+        "completedWithErrors": "Concluído com erros",
+        "error": "Erro"
       }
     },
     "systemInfo": {
@@ -9762,6 +9874,9 @@
       "field": {
         "required": {
           "error": "{label} é obrigatório"
+        },
+        "optional": {
+          "title": "{label} (opcional)"
         }
       },
       "loadError": {
@@ -10590,7 +10705,9 @@
       "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
       "state": {
-        "inProgress": "Verificações em andamento..."
+        "inProgress": "Verificações em andamento...",
+        "completed": "Verificações concluídas.",
+        "waiting": "Aguardando as configurações do conector..."
       },
       "advisory": {
         "title": "Parte do conteúdo não será indexada.",
@@ -10694,7 +10811,9 @@
           },
           "error": {
             "title": "As configurações não são válidas"
-          }
+          },
+          "blocks": "As novas configurações falharam na validação. Corrija-as antes de aplicar.",
+          "warns": "Algumas verificações opcionais falharam. Você ainda pode aplicar."
         },
         "warnings": {
           "title": "Avisos"
@@ -13990,7 +14109,8 @@
       },
       "status": {
         "approved": "Aprovado",
-        "rejected": "Rejeitado"
+        "rejected": "Rejeitado",
+        "expired": "Expirada"
       },
       "submit": {
         "errorFallback": "Falha ao enviar a decisão"
@@ -14186,7 +14306,11 @@
           "description": "Escolha o que o agente pode fazer. “Perguntar” solicita aprovação antes de cada ação; “Aprovar automaticamente” executa sem perguntar.",
           "title": "Permissões"
         },
-        "savingButton": "Salvando…"
+        "savingButton": "Salvando…",
+        "advanced": {
+          "description": "Defina uma política para cada ação individualmente.",
+          "title": "Avançado"
+        }
       },
       "skillsStep": {
         "description": "Opcional: associe habilidades existentes ou crie uma para este app.",
@@ -14862,10 +14986,6 @@
             "label": "Nome",
             "placeholder": "ex.: Resumo semanal de escalonamentos de clientes"
           },
-          "preApproval": {
-            "description": "O Craft pode usar os apps e servidores MCP selecionados sem pausar quando esta tarefa é executada sem supervisão. Outras solicitações de aprovação pausam a execução e podem fazê-la falhar.",
-            "label": "Apps e servidores MCP pré-aprovados"
-          },
           "prompt": {
             "description": "Esta mensagem é enviada ao Craft cada vez que a tarefa dispara.",
             "label": "Prompt",
@@ -14924,31 +15044,6 @@
       "newPage": {
         "description": "Salve um prompt + agendamento. O Craft o executará em um cronograma.",
         "title": "Nova tarefa agendada"
-      },
-      "preApproval": {
-        "appFallbackName": "App nº {id}",
-        "appsGroupTitle": "Apps",
-        "empty": {
-          "label": "Nenhum app ou servidor MCP disponível no Craft ainda."
-        },
-        "errors": {
-          "loadFailed": "Não foi possível carregar os apps e servidores MCP. Atualize para tentar novamente.",
-          "partialLoadFailed": "Algumas opções de pré-aprovação não puderam ser carregadas. Atualize para tentar novamente."
-        },
-        "loading": {
-          "label": "Carregando apps e servidores MCP…"
-        },
-        "mcpGroupTitle": "Servidores MCP",
-        "mcpServerFallbackName": "Servidor MCP nº {id}",
-        "status": {
-          "connected": "Conectado",
-          "connectionRequired": "Conexão necessária",
-          "unavailable": "Não está mais disponível"
-        },
-        "summary": {
-          "partialLoadFailed": "Alguns detalhes de pré-aprovação não puderam ser carregados. Atualize para tentar novamente.",
-          "title": "Apps e servidores MCP pré-aprovados"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15324,6 +15419,51 @@
       "viewPlans": {
         "label": "Ver planos"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "Configurações de aprovação de {name}",
+      "title": "Configurações de aprovação",
+      "personalDescription": "Estas configurações definem se as ações são executadas automaticamente ou exigem aprovação nas conversas do Craft e nas novas tarefas; as tarefas existentes mantêm suas próprias configurações.",
+      "taskDescription": "Somente aplicativos ativados estão disponíveis para esta tarefa. As alterações se aplicam apenas a esta tarefa.",
+      "newTaskDescription": "Ative os aplicativos que esta tarefa pode usar. Cada aplicativo começa com suas configurações de ações atuais.",
+      "workspace_disabled": "Desativada para o espaço de trabalho",
+      "workspace_managed": "Gerenciado pelo espaço de trabalho",
+      "userManagement": "Permitir que usuários gerenciem configurações de aprovação",
+      "userManagementDescription": "Usuários podem alterar a aprovação de ações disponíveis.",
+      "loading": "Carregando configurações de aprovação…",
+      "loadError": "Não foi possível carregar as configurações de aprovação.",
+      "retry": "Tentar novamente",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "cancel": "Cancelar",
+      "saveError": "Não foi possível salvar as configurações de aprovação.",
+      "emptyActions": "Nenhuma ação conhecida. Ações desconhecidas exigem aprovação.",
+      "emptyApps": "Nenhum aplicativo disponível.",
+      "expired": "O prazo de aprovação expirou. A ação não foi executada.",
+      "rejected": "Solicitação rejeitada. Esta solicitação não foi executada.",
+      "deadline": "Aprovar até {time}",
+      "agentPermissionRequired": "Esta execução parou porque uma ação precisava de aprovação. Revise as permissões e execute a tarefa novamente.",
+      "enableForTask": "Ativar para esta tarefa",
+      "enableAppForTask": "Ativar {app} para esta tarefa",
+      "enabledForTask": "Ativado para esta tarefa",
+      "disabledForTask": "Desativado para esta tarefa",
+      "externalApp": "Aplicativo",
+      "mcpServer": "Servidor MCP",
+      "taskAppsTitle": "Aplicativos e servidores MCP",
+      "actionPolicies": "Configurações de aprovação",
+      "policyCounts": "{auto} automáticas · {ask} perguntar · {disabled} desativadas",
+      "manageActions": "Gerenciar ações",
+      "viewActions": "Ver ações",
+      "taskModalDescription": "As alterações se aplicam ao salvar a tarefa. As restrições do espaço de trabalho sempre se aplicam.",
+      "searchActions": "Buscar ações",
+      "setPermissions": "Definir permissões",
+      "applyMatching": "{count} ações editáveis correspondentes",
+      "noMatchingActions": "Nenhuma ação corresponde à busca.",
+      "close": "Fechar",
+      "saveChanges": "Salvar alterações",
+      "resetDefaults": "Redefinir tudo para os padrões",
+      "resetAll": "Redefinir tudo para os padrões do espaço de trabalho",
+      "workspaceDisabledTooltip": "Um administrador desativou esta ação para o espaço de trabalho."
     }
   },
   "knowledge": {

@@ -75,6 +75,7 @@ const app: ExternalAppAdminResponse = {
   })),
   associated_skills: [],
   is_onyx_managed: false,
+  users_can_manage_policies: true,
 };
 
 interface CraftAppSetupStoryProps {
@@ -178,11 +179,11 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const BuiltIn: Story = {};
-export const Permissions: Story = {
+export const Tools: Story = {
   play: async () => {
     await userEvent.click(
       await within(document.body).findByRole("tab", {
-        name: messages.actions.plugins.craftApp.tabs.permissions,
+        name: messages.actions.mcpTools.title,
       })
     );
   },

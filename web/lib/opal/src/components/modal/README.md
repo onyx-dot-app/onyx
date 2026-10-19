@@ -55,9 +55,11 @@ flow opens. Single-screen modals can keep the default `Modal.Content` overlay.
 
 `children` render below the title stack (e.g. a search input).
 
+Use `maxHeight` to cap a content-sized modal, for example `height="fit" maxHeight="80dvh"`. The viewport limit still applies.
+
 ## Modal.Body
 
-The body always has the gray `tint-01` background that separates it from the header and footer. Scrolls when the card height caps.
+The body always has the gray `tint-01` background that separates it from the header and footer. Scrolls when the card height caps. Reserves equal scrollbar space on both sides to keep content centered and prevent shifts when scrolling becomes necessary.
 
 ## Modal.Footer
 

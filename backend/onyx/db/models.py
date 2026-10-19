@@ -6982,6 +6982,7 @@ class ActionApproval(Base):
     """
 
     __tablename__ = "action_approval"
+    __table_args__ = (Index("ix_action_approval_session", "session_id"),)
 
     approval_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -7080,33 +7081,6 @@ class ScheduledTask(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
-    pre_approved_targets: Mapped[list["ScheduledTaskPreApprovedTarget"]] = relationship(
-        "ScheduledTaskPreApprovedTarget",
-        back_populates="task",
-        cascade="all, delete-orphan",
-        order_by="ScheduledTaskPreApprovedTarget.id",
-    )
-
-    @property
-    def pre_approved_external_app_ids(self) -> list[int]:
-        """Granted external-app ids. MCP-server grants are excluded because
-        their target ids live in a different id space."""
-        return [
-            grant.gated_app.external_app_id
-            for grant in self.pre_approved_targets
-            if grant.gated_app.external_app_id is not None
-        ]
-
-    @property
-    def pre_approved_mcp_server_ids(self) -> list[int]:
-        """Granted MCP-server ids. External-app grants are excluded because
-        their target ids live in a different id space."""
-        return [
-            grant.gated_app.mcp_server_id
-            for grant in self.pre_approved_targets
-            if grant.gated_app.mcp_server_id is not None
-        ]
-
     __table_args__ = (
         # Dispatcher hot path: WHERE status='active' AND deleted=false
         #                       AND next_run_at <= now() ORDER BY next_run_at
@@ -7194,50 +7168,6 @@ class ScheduledTaskRun(Base):
         # Session-view banner lookup: get_scheduled_run_context filters by
         # session_id on every session open.
         Index("ix_scheduled_task_run_session", "session_id"),
-    )
-
-
-class ScheduledTaskPreApprovedTarget(Base):
-    """One (task, target) pre-approval grant: the matched target's ASK-gated
-    actions skip the approval park for the task's RUNNING runs.
-
-    The target is a ``gated_app`` row (external app or MCP server). Deleting the
-    task or the target (both CASCADE) drops the grant; a stale grant on a removed
-    target is meaningless. The unique constraint keeps grants idempotent and its
-    index serves the per-task lookup.
-    """
-
-    # The table name predates MCP support. Keep it to avoid a schema-only rename.
-    __tablename__ = "scheduled_task_pre_approved_app"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    scheduled_task_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    gated_app_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("gated_app.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    task: Mapped[ScheduledTask] = relationship(
-        "ScheduledTask", back_populates="pre_approved_targets"
-    )
-    # selectin: the pre-approved target-id properties read gated_app for every
-    # grant, so batch them in one SELECT rather than one per grant.
-    gated_app: Mapped["GatedApp"] = relationship("GatedApp", lazy="selectin")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "scheduled_task_id",
-            "gated_app_id",
-            name="uq_scheduled_task_pre_approved_app",
-        ),
     )
 
 
@@ -7622,17 +7552,16 @@ class GatedApp(Base):
     """Polymorphic identity for a gated egress target — one row per external app
     or MCP server.
 
-    The approval pipeline (per-action policy, approval rows, scheduled-task
-    pre-approvals) references this single id instead of a per-catalog FK, so a
+    The approval pipeline (action policy, approval rows, scheduled-task
+    permissions) references this single id instead of a per-catalog FK, so a
     new target type adds one nullable column here rather than a column on every
-    consumer table. Rows are created lazily via
-    ``onyx.db.gated_app.get_or_create_gated_app_id`` (the migration backfilled
+    consumer table. Rows are created with their target (the migration backfills
     pre-existing targets), so a row's existence doesn't imply the target was
     ever policied or approved.
 
     Exactly one of ``external_app_id`` / ``mcp_server_id`` is set; ``kind`` is
     derived from which. Deleting the underlying target CASCADEs this row away,
-    which in turn CASCADEs its policies and pre-approvals.
+    which in turn CASCADEs its policies.
     """
 
     __tablename__ = "gated_app"
@@ -7647,6 +7576,10 @@ class GatedApp(Base):
         Integer,
         ForeignKey("mcp_server.id", ondelete="CASCADE"),
         nullable=True,
+    )
+
+    users_can_manage_policies: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
     )
 
     # Constraints are named to match the live schema created by the migration.
@@ -7687,18 +7620,18 @@ class GatedApp(Base):
         return self.kind, self.target_id
 
 
-class GatedActionPolicy(Base):
-    """Admin's per-action policy override for a gated target, keyed by the
+class WorkspaceActionPolicy(Base):
+    """Admin's action policy override for a gated target, keyed by the
     ``gated_app`` identity row.
 
-    Sparse: only actions the admin has set are stored; an action without a row
-    resolves to ``ASK`` (the default ask-approval behaviour).
+    Sparse: only actions the admin has set are stored. Missing actions use the
+    provider catalog default; MCP tools default to ``ASK``.
 
     ``action_id`` is a catalog id (external apps) or a tool name (MCP servers);
     display (name/description) comes from the code catalog / discovered tools.
     """
 
-    __tablename__ = "gated_action_policy"
+    __tablename__ = "workspace_action_policy"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     gated_app_id: Mapped[int] = mapped_column(
@@ -7708,7 +7641,7 @@ class GatedActionPolicy(Base):
     )
     action_id: Mapped[str] = mapped_column(Text, nullable=False)
     policy: Mapped[ActionPolicy] = mapped_column(
-        Enum(ActionPolicy, native_enum=False),
+        Enum(ActionPolicy, name="actionpolicy", native_enum=False),
         nullable=False,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -7727,8 +7660,66 @@ class GatedActionPolicy(Base):
         UniqueConstraint(
             "gated_app_id",
             "action_id",
-            name="uq_gated_action_policy",
+            name="uq_workspace_action_policy",
         ),
+    )
+
+
+class UserActionPolicy(Base):
+    """A user's saved choice for an app action, independent of credentials."""
+
+    __tablename__ = "user_action_policy"
+    __table_args__ = (Index("ix_user_action_policy_gated_app", "gated_app_id"),)
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    gated_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("gated_app.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    action_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    policy: Mapped[ActionPolicy] = mapped_column(
+        Enum(ActionPolicy, name="actionpolicy", native_enum=False), nullable=False
+    )
+
+
+class ScheduledTaskEnabledApp(Base):
+    """An app this task may use; absent membership blocks every app action."""
+
+    __tablename__ = "scheduled_task_enabled_app"
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    gated_app_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("gated_app.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class ScheduledTaskActionPolicy(Base):
+    """A scheduled task's independent choices; absent actions require approval."""
+
+    __tablename__ = "scheduled_task_action_policy"
+    __table_args__ = (
+        Index("ix_scheduled_task_action_policy_gated_app", "gated_app_id"),
+    )
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    gated_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("gated_app.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    action_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    policy: Mapped[ActionPolicy] = mapped_column(
+        Enum(ActionPolicy, name="actionpolicy", native_enum=False), nullable=False
     )
 
 
