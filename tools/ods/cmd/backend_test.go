@@ -88,7 +88,10 @@ func TestBackendCommand_runsUvicornWithMergedEnv(t *testing.T) {
 				t.Fatalf("Execute: %v", err)
 			}
 
-			want := []devtoolCall{{Dir: filepath.Join(root, "backend"), Args: []string{"-m", "uvicorn", c.module, "--reload", "--port", port}}}
+			want := []devtoolCall{
+				{Dir: root, Args: []string{"sync", "--frozen"}},
+				{Dir: filepath.Join(root, "backend"), Args: []string{"-m", "uvicorn", c.module, "--reload", "--port", port}},
+			}
 			if got := devtoolCalls(t, uvCalls); !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
@@ -119,7 +122,7 @@ func TestRunBackendServicePreparesPythonBeforeLaunch(t *testing.T) {
 				result := filepath.Join(root, "service-started")
 				t.Setenv("ODS_TEST_PYTHON", python)
 				t.Setenv("ODS_TEST_SERVICE_RESULT", result)
-				devtoolFakeTool(t, os.Getenv("PATH"), "uv", `
+				calls := devtoolFakeTool(t, os.Getenv("PATH"), "uv", `
 [ "$1" = sync ] || exit 42
 /bin/mkdir -p "${ODS_TEST_PYTHON%/*}"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "$ODS_TEST_SERVICE_RESULT"\n' > "$ODS_TEST_PYTHON"
@@ -136,6 +139,10 @@ printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "$ODS_TEST_SERVICE_RESULT"\n' > "$ODS_
 				want := "-m\nuvicorn\n" + module + "\n--reload\n--port\n" + port + "\n"
 				if got := devtoolReadFile(t, result); got != want {
 					t.Fatalf("service arguments=%q, want %q", got, want)
+				}
+				wantCalls := []devtoolCall{{Dir: root, Args: []string{"sync", "--frozen"}}}
+				if got := devtoolCalls(t, calls); !reflect.DeepEqual(got, wantCalls) {
+					t.Fatalf("calls=%v, want %v", got, wantCalls)
 				}
 			})
 		}
@@ -171,10 +178,11 @@ func TestBackendCommand_seedsTheDevLicenseBeforeTheAPIOnly(t *testing.T) {
 			}
 
 			backendDir := filepath.Join(root, "backend")
-			want := []devtoolCall{{Dir: backendDir, Args: []string{"-m", "uvicorn", c.module, "--reload", "--port", port}}}
+			want := []devtoolCall{{Dir: root, Args: []string{"sync", "--frozen"}}}
 			if c.wantSeed {
-				want = append([]devtoolCall{{Dir: backendDir, Args: seed}}, want...)
+				want = append(want, devtoolCall{Dir: backendDir, Args: seed})
 			}
+			want = append(want, devtoolCall{Dir: backendDir, Args: []string{"-m", "uvicorn", c.module, "--reload", "--port", port}})
 			if got := devtoolCalls(t, uvCalls); !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
@@ -197,7 +205,9 @@ func TestRunBackendService_seedOutcomeDecidesTheStart(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			root, _, _ := devtoolBackendRepo(t, c.envFile)
-			uvCalls := devtoolFakeTool(t, os.Getenv("PATH"), "uv", `[ "$ONYX_DEV_LICENSE" = wanted ] || exit 4`+"\n")
+			uvCalls := devtoolFakeTool(t, os.Getenv("PATH"), "uv", `[ "$1" = sync ] && exit 0
+[ "$ONYX_DEV_LICENSE" = wanted ] || exit 4
+`)
 			if c.shell != "" {
 				t.Setenv(devLicenseEnv, c.shell)
 			}
@@ -206,7 +216,10 @@ func TestRunBackendService_seedOutcomeDecidesTheStart(t *testing.T) {
 			err := runBackendService("api", port)
 
 			backendDir := filepath.Join(root, "backend")
-			want := []devtoolCall{{Dir: backendDir, Args: seed}}
+			want := []devtoolCall{
+				{Dir: root, Args: []string{"sync", "--frozen"}},
+				{Dir: backendDir, Args: seed},
+			}
 			if c.wantErr == "" {
 				if err != nil {
 					t.Fatalf("runBackendService: %v", err)
@@ -219,6 +232,24 @@ func TestRunBackendService_seedOutcomeDecidesTheStart(t *testing.T) {
 				t.Fatalf("expected %q, got %q", want, got)
 			}
 		})
+	}
+}
+
+func TestRunBackendService_syncFailurePreventsSeedAndLaunch(t *testing.T) {
+	root, _, _ := devtoolBackendRepo(t, "ONYX_DEV_LICENSE=wanted\n")
+	calls := devtoolFakeTool(t, os.Getenv("PATH"), "uv", "[ \"$1\" = sync ] && exit 9\nexit 10\n")
+
+	err := runBackendService("api", strconv.Itoa(devtoolFreePort(t)))
+	if err == nil || !strings.Contains(err.Error(), "Failed to sync Python dependencies: uv sync --frozen: exit status 9") {
+		t.Fatalf("sync error=%v", err)
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		t.Fatalf("sync failure carries a service exit status: %v", err)
+	}
+	want := []devtoolCall{{Dir: root, Args: []string{"sync", "--frozen"}}}
+	if got := devtoolCalls(t, calls); !reflect.DeepEqual(got, want) {
+		t.Fatalf("calls=%v, want %v", got, want)
 	}
 }
 
@@ -240,7 +271,7 @@ func TestRunBackendService_keepsAnExistingEnvFile(t *testing.T) {
 }
 
 func TestRunBackendService_movesOffABusyPort(t *testing.T) {
-	_, uvCalls, _ := devtoolBackendRepo(t, "")
+	root, uvCalls, _ := devtoolBackendRepo(t, "")
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
 		t.Fatal(err)
@@ -253,13 +284,13 @@ func TestRunBackendService_movesOffABusyPort(t *testing.T) {
 	}
 
 	calls := devtoolCalls(t, uvCalls)
-	if len(calls) != 1 {
-		t.Fatalf("expected one uv call, got %q", calls)
+	if len(calls) != 2 || calls[0].Dir != root || !slices.Equal(calls[0].Args, []string{"sync", "--frozen"}) {
+		t.Fatalf("expected root sync then service launch, got %q", calls)
 	}
-	args := calls[0].Args
+	args := calls[1].Args
 	got, err := strconv.Atoi(args[len(args)-1])
 	if err != nil || got <= busy {
-		t.Fatalf("expected a port above busy port %d, got %q", busy, calls[0])
+		t.Fatalf("expected a port above busy port %d, got %q", busy, calls[1])
 	}
 }
 
@@ -271,7 +302,10 @@ func TestBackendCommandPublishesThePortAndForwardsArguments(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	want := []devtoolCall{{Dir: filepath.Join(root, "backend"), Args: []string{"-m", "uvicorn", "onyx.main:app", "--reload", "--port", port, "--host", "127.0.0.1"}}}
+	want := []devtoolCall{
+		{Dir: root, Args: []string{"sync", "--frozen"}},
+		{Dir: filepath.Join(root, "backend"), Args: []string{"-m", "uvicorn", "onyx.main:app", "--reload", "--port", port, "--host", "127.0.0.1"}},
+	}
 	if got := devtoolCalls(t, calls); !reflect.DeepEqual(got, want) {
 		t.Fatalf("calls=%v, want %v", got, want)
 	}
@@ -357,21 +391,10 @@ func TestRunBackendService_errors(t *testing.T) {
 			want: "token too long",
 		},
 		{
-			name: "Python environment is not installed",
-			setup: func(t *testing.T) string {
-				root, _, _ := devtoolBackendRepo(t, "")
-				if err := os.Remove(filepath.Join(root, ".venv", "bin", "python")); err != nil {
-					t.Fatal(err)
-				}
-				return ""
-			},
-			want: "Failed to run api",
-		},
-		{
 			name: "uvicorn exits with an error",
 			setup: func(t *testing.T) string {
 				devtoolBackendRepo(t, "")
-				devtoolFakeTool(t, os.Getenv("PATH"), "uv", "exit 3\n")
+				devtoolFakeTool(t, os.Getenv("PATH"), "uv", "[ \"$1\" = sync ] && exit 0\nexit 3\n")
 				return ""
 			},
 			want:     "Failed to run api: exit status 3",

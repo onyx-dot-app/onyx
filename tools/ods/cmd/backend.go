@@ -140,7 +140,16 @@ func runBackendService(name, port string, args ...string) error {
 		return fmt.Errorf("load backend launch configuration: %v", err)
 	}
 	options := devstack.ServiceOptions{
-		PreferredPort: preferred, Args: args, BeforeStart: prepareAPIService,
+		PreferredPort: preferred, Args: args,
+		BeforeStart: func(ctx context.Context, sp devstack.Spec) error {
+			if err := runInDir(ctx, root, "uv", "sync", "--frozen"); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return fatalErrorf("Failed to sync Python dependencies: %v", err)
+			}
+			return prepareAPIService(ctx, sp)
+		},
 		IO:       devstack.ServiceIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr},
 		LockWait: 30 * time.Second, StopTimeout: 20 * time.Second,
 	}

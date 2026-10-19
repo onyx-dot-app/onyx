@@ -315,8 +315,15 @@ func TestRunServiceRegistersOneServiceAndAttachesWithoutStoppingIt(t *testing.T)
 	attachCtx, detach := context.WithCancel(context.Background())
 	output := make(serviceOutput, 1)
 	attached := make(chan error, 1)
+	preparations := 0
 	go func() {
-		attached <- s.RunService(attachCtx, target, launch, "api", ServiceOptions{IO: ServiceIO{Stdout: output}})
+		attached <- s.RunService(attachCtx, target, launch, "api", ServiceOptions{
+			IO: ServiceIO{Stdout: output},
+			BeforeStart: func(context.Context, Spec) error {
+				preparations++
+				return nil
+			},
+		})
 	}()
 	select {
 	case text := <-output:
@@ -331,6 +338,9 @@ func TestRunServiceRegistersOneServiceAndAttachesWithoutStoppingIt(t *testing.T)
 	detach()
 	if err := <-attached; err != nil || !isCurrent(api) {
 		t.Fatalf("detach err=%v current=%v", err, isCurrent(api))
+	}
+	if preparations != 0 {
+		t.Fatalf("attach prepared the existing service %d times", preparations)
 	}
 	if err := s.RunService(context.Background(), target, launch, "api", ServiceOptions{Args: []string{"changed"}}); err == nil || !strings.Contains(err.Error(), "another configuration") {
 		t.Fatalf("changed args error=%v", err)

@@ -110,7 +110,7 @@ func (s *Stack) startSingleService(ctx context.Context, target Target, launch *L
 				return ServiceRecord{}, nil, fmt.Errorf("frontend already uses project %s; stop it before selecting %s", st.Project, s.Project)
 			}
 		}
-		st = &State{Ports: map[string]int{}}
+		st = nil
 	}
 	if st != nil {
 		if st.Project != s.Project {
