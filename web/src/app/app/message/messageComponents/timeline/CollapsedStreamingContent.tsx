@@ -2,7 +2,7 @@
 
 import React, { useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState, RenderType } from "../interfaces";
+import { FullChatState, RenderType } from "../types";
 import { TransformedStep } from "./transformers";
 import {
   TimelineRendererComponent,

@@ -7,7 +7,7 @@ import {
   RenderType,
   RendererResult,
   RendererOutput,
-} from "../interfaces";
+} from "../types";
 import { findRenderer } from "../renderMessageComponent";
 
 /** Extended result that includes collapse state */

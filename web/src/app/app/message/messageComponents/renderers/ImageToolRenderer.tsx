@@ -8,7 +8,7 @@ import {
   ImageGenerationToolDelta,
   SectionEnd,
 } from "../../../services/streamingModels";
-import { MessageRenderer, RenderType } from "../interfaces";
+import { MessageRenderer, RenderType } from "../types";
 import { InMessageImage } from "../../../components/files/images/InMessageImage";
 import GeneratingImageDisplay from "../../../components/tools/GeneratingImageDisplay";
 
