@@ -8,7 +8,7 @@ import {
 import ScheduledTasksListPage from "@/app/craft/v1/tasks/page";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import ScheduledTaskDetailPage from "@/app/craft/v1/tasks/[id]/page";
-import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/interfaces";
+import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/types";
 import { TASKS_PATH } from "@/app/craft/v1/tasks/constants";
 
 const mockPush = jest.fn();
@@ -30,8 +30,7 @@ const task: ScheduledTaskDetail = {
   next_run_at: null,
   next_runs: [],
   last_run: null,
-  pre_approved_app_ids: [],
-  pre_approved_mcp_server_ids: [],
+  action_policies: [],
   created_at: "2026-10-19T00:00:00Z",
   updated_at: "2026-10-19T00:00:00Z",
 };
@@ -44,6 +43,15 @@ function mockRequests(deletion: Promise<Response>) {
   let listReadCount = 0;
   return jest.spyOn(global, "fetch").mockImplementation(async (url, init) => {
     if (init?.method === "DELETE") return deletion;
+    if (
+      String(url) === SWR_KEYS.taskActionPolicies(task.id) ||
+      String(url) === SWR_KEYS.buildExternalApps
+    ) {
+      return new Response(JSON.stringify([]));
+    }
+    if (String(url) === SWR_KEYS.mcpServersCraft) {
+      return new Response(JSON.stringify({ mcp_servers: [] }));
+    }
     if (String(url) === SWR_KEYS.scheduledTasks) {
       if (listReadCount++ === 0) {
         return new Response(
