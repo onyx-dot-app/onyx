@@ -434,3 +434,56 @@ def test_docfetching_failure_records_through_the_indexing_attempt_hook(
     (check_result,) = row.report["check_results"]
     assert check_result["is_fallback"] is True
     assert check_result["error_type"] == "RuntimeError"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_pass_without_a_settings_probe_replaces_an_earlier_failure(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Verifies a later pass on a source with no settings probe replaces the
+    failed fallback report that an earlier pass wrote.
+    """
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB)
+    instantiate_mock = MagicMock(side_effect=RuntimeError("bad url"))
+    monkeypatch.setattr(factory, "instantiate_connector", instantiate_mock)
+    monkeypatch.setattr(factory, "INTEGRATION_TESTS_MODE", False)
+    try:
+        with pytest.raises(ConnectorValidationError):
+            validate_ccpair_for_user(
+                cc_pair.connector_id,
+                cc_pair.credential_id,
+                AccessType.PUBLIC,
+                db_session,
+                user=None,
+            )
+        failed_row = get_capability_report_row(
+            db_session, cc_pair.credential_id, cc_pair.connector_id
+        )
+        assert failed_row is not None
+        assert failed_row.report is not None
+        assert failed_row.report["check_results"]
+        instantiate_mock.side_effect = None
+        instantiate_mock.return_value = MagicMock(spec=BaseConnector)
+
+        # Under test.
+        validate_ccpair_for_user(
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
+        )
+
+        # Postcondition.
+        db_session.expire_all()
+        row = get_capability_report_row(
+            db_session, cc_pair.credential_id, cc_pair.connector_id
+        )
+        assert row is not None
+        assert row.report is not None
+        assert row.report["check_results"] == []
+        assert row.report["verdicts"]["indexing"] != "failed"
+    finally:
+        cleanup_cc_pair(db_session, cc_pair)

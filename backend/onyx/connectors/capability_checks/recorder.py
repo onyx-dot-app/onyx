@@ -133,9 +133,9 @@ def record_blocking_validation_outcome(
     """
     try:
         applicable = get_applicable_capabilities(source)
+        # An empty result list is still written: it replaces an earlier failed
+        # fallback report for a source without a settings probe.
         results = _synthesize_results(source, applicable, error, perm_sync_validated)
-        if not results:
-            return
         report = CredentialCapabilityReport(
             credential_id=credential_id,
             source=source,
