@@ -7,8 +7,8 @@ Import-light, like the recorder: no registry, runner or factory imports.
 """
 
 import requests
-from pydantic import BaseModel
 
+from onyx.connectors.capability_checks.models import CheckRowText
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -37,53 +37,48 @@ _UNREACHABLE_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
-class _RowText(BaseModel):
-    summary: str
-    description: str
-
-
-_REJECTED_ROW = _RowText(
+_REJECTED_ROW = CheckRowText(
     summary="Sign-in rejected",
     description=(
         "The source rejected the account's credential.\n"
         "Update the credential in the account, then re-run."
     ),
 )
-_DENIED_ROW = _RowText(
+_DENIED_ROW = CheckRowText(
     summary="No permission for the connector",
     description=(
         "The credential signs in, but lacks a permission the connector needs.\n"
         "Give the account that permission, then re-run."
     ),
 )
-_NOT_FOUND_ROW = _RowText(
+_NOT_FOUND_ROW = CheckRowText(
     summary="Not found at the source",
     description=(
         "The source found nothing at the configured address or ID.\n"
         "Correct the connector settings, then re-run."
     ),
 )
-_SETTINGS_ROW = _RowText(
+_SETTINGS_ROW = CheckRowText(
     summary="Settings not accepted",
     description=(
         "The source did not accept the connector settings.\n"
         "Read the error details, then correct the settings."
     ),
 )
-_RATE_LIMITED_ROW = _RowText(
+_RATE_LIMITED_ROW = CheckRowText(
     summary="Rate limited by the source",
     description=(
         "The source limited the number of requests.\nWait a minute, then re-run."
     ),
 )
-_UNREACHABLE_ROW = _RowText(
+_UNREACHABLE_ROW = CheckRowText(
     summary="Cannot reach the source",
     description=(
         "Onyx could not connect to the source.\n"
         "Check the address in the settings, then re-run."
     ),
 )
-_UNEXPECTED_ROW = _RowText(
+_UNEXPECTED_ROW = CheckRowText(
     summary="Unexpected response from the source",
     description=(
         "The source answered in a way the check does not know.\n"
@@ -106,19 +101,19 @@ def _http_status(error: BaseException) -> int | None:
     return None
 
 
-def _with_status(row: _RowText, status: int | None) -> _RowText:
+def _with_status(row: CheckRowText, status: int | None) -> CheckRowText:
     """Adds the HTTP status to the row's first description line."""
     if status is None:
         return row
     first, newline, rest = row.description.partition("\n")
-    return _RowText(
+    return CheckRowText(
         summary=row.summary, description=f"{first} (HTTP {status}){newline}{rest}"
     )
 
 
 def _typed(
     error: Exception, status: int | None
-) -> tuple[type[ValidationError], _RowText]:
+) -> tuple[type[ValidationError], CheckRowText]:
     """The error's class and row. A typed error keeps its class; an untyped
     one gets its class from its HTTP status, as the named checks map them."""
     if isinstance(error, RateLimitedValidationError) or status == _TOO_MANY_REQUESTS:
