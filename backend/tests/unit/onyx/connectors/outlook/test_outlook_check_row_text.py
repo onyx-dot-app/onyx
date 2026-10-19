@@ -26,9 +26,9 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     mailbox,
     message,
 )
-from tests.unit.onyx.connectors.outlook.test_outlook_capability_checks import (
-    _context,
-    _gateway,
+from tests.unit.onyx.connectors.outlook.outlook_check_helpers import (
+    check_context,
+    healthy_gateway,
 )
 
 _CHECKS: dict[str, CapabilityCheck] = {
@@ -37,7 +37,7 @@ _CHECKS: dict[str, CapabilityCheck] = {
 
 
 def _healthy() -> MagicMock:
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
     gateway.resolve_groups.return_value = [EntraGroup(id="g", displayName="Sales")]
     gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
     gateway.read_any_event.return_value = event()
@@ -51,7 +51,7 @@ def _run_all(
         result.check_id: result
         for result in run_capability_checks(
             [_CHECKS[check_id] for check_id in check_ids],
-            _context(gateway, config if config is not None else {}),
+            check_context(gateway, config if config is not None else {}),
         )
     }
 
