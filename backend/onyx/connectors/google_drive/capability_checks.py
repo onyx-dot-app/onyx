@@ -401,6 +401,19 @@ def _files(
     ]
 
 
+def _no_ids_error(field: str, noun: str) -> ConnectorValidationError:
+    """A URL field that is set but gives no ID: the connector reads it as a
+    specific request for nothing."""
+    return ConnectorValidationError(
+        f"{field} gives no {noun} ID, so Onyx indexes no {noun} from it.",
+        summary=f"No {noun} URL in {field}",
+        description=(
+            f"{field} has no URL with a {noun} ID.\n"
+            f"Enter the URL of each {noun}, separated by commas."
+        ),
+    )
+
+
 def _shared_drive_ids(config: GoogleDriveConnectorConfig) -> list[str]:
     return [
         drive_id
@@ -885,6 +898,8 @@ class _ConfiguredSharedDrivesCheck(_GoogleDriveCheck):
         config: GoogleDriveConnectorConfig = self.config(context)
         ops: GoogleDriveSourceOperations = _gateway(context)
         requested: list[str] = _shared_drive_ids(config)
+        if not requested:
+            raise _no_ids_error("Shared Drive URLs", "drive")
         with _google_errors(
             context,
             api=_DRIVE_API,
@@ -984,6 +999,8 @@ class _ConfiguredFoldersCheck(_GoogleDriveCheck):
         config: GoogleDriveConnectorConfig = self.config(context)
         ops: GoogleDriveSourceOperations = _gateway(context)
         folder_ids: list[str] = _folder_ids(config)
+        if not folder_ids:
+            raise _no_ids_error("Folder URLs", "folder")
         unseen: list[str] = []
         with _google_errors(
             context,

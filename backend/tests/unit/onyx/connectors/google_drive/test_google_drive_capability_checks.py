@@ -358,6 +358,31 @@ def test_configured_shared_drives_that_nobody_sees_fail() -> None:
     assert result.summary == "No selected drive found"
 
 
+@pytest.mark.parametrize(
+    "check_id,field,summary",
+    [
+        (
+            "google_drive_configured_shared_drives",
+            "shared_drive_urls",
+            "No drive URL in Shared Drive URLs",
+        ),
+        (
+            "google_drive_configured_folders",
+            "shared_folder_urls",
+            "No folder URL in Folder URLs",
+        ),
+    ],
+)
+@pytest.mark.parametrize("value", [" , ,", "https://drive.google.com/"])
+def test_a_url_field_without_an_id_fails(
+    check_id: str, field: str, summary: str, value: str
+) -> None:
+    result = _run(check_id, _ops(), {field: value})
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == summary
+
+
 def test_configured_shared_drive_id_that_is_a_visible_folder_passes() -> None:
     ops = _ops()
 
