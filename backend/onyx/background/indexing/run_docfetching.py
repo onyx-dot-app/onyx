@@ -159,6 +159,31 @@ def _get_incremental_window_start(
     return datetime.fromtimestamp(0, tz=timezone.utc)
 
 
+def _should_fetch_permissions_for_index_attempt(
+    *,
+    source: DocumentSource,
+    is_perm_synced: bool,
+    is_primary: bool,
+    from_beginning: bool,
+    has_successful_attempt: bool,
+) -> bool:
+    """Ensure every new JSM attachment receives its ACL at full indexing.
+
+    Unlike other sources, JSM must fetch permissions on incremental indexes
+    too: its permission-sync path refuses to create phantom attachment rows
+    when the attachment has not been indexed yet. Otherwise a sync-before-
+    index race could leave a new attachment without any persisted ACL.
+    """
+    return (
+        is_perm_synced
+        and source_should_fetch_permissions_during_indexing(source)
+        and (
+            source in {DocumentSource.ZOOM, DocumentSource.JIRA_SERVICE_MANAGEMENT}
+            or (is_primary and (from_beginning or not has_successful_attempt))
+        )
+    )
+
+
 def _get_connector_runner(
     db_session: Session,
     attempt: IndexAttempt,
@@ -604,15 +629,14 @@ def connector_document_extraction(
             else 0
         )
         should_fetch_permissions_during_indexing = (
-            index_attempt.connector_credential_pair.access_type.is_perm_synced()
-            and source_should_fetch_permissions_during_indexing(db_connector.source)
-            # if we've already successfully indexed, let the doc_sync job take care
-            # of doc-level permissions. Zoom skips both halves: with no doc_sync to
-            # fall back on, anything indexing misses -- including a document the
-            # secondary crawl creates before the primary sees it -- is missed for good.
-            and (
-                db_connector.source == DocumentSource.ZOOM
-                or (is_primary and (from_beginning or not has_successful_attempt))
+            _should_fetch_permissions_for_index_attempt(
+                source=db_connector.source,
+                is_perm_synced=(
+                    index_attempt.connector_credential_pair.access_type.is_perm_synced()
+                ),
+                is_primary=is_primary,
+                from_beginning=from_beginning,
+                has_successful_attempt=has_successful_attempt,
             )
         )
 

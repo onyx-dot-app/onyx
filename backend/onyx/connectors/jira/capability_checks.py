@@ -536,6 +536,67 @@ class _IssueReadCheck(_JiraCheck):
         return None
 
 
+class _OptionalAttachmentApiCheck(_JiraCheck):
+    """Non-gating read probe for JSM field discovery and attachment access.
+
+    Basic Jira indexing does not need attachments, so failure is advisory.
+    The download probe is bounded: never fetch an arbitrary large attachment
+    simply to verify capabilities.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            check_id="jira_optional_jsm_attachment_access",
+            display_name="Optional JSM attachment API access",
+            required=False,
+            remediation=(
+                "For Jira Service Management attachments, grant read access "
+                "to issue attachments and custom Jira fields."
+            ),
+        )
+        # JSM uses the connector-instantiation fallback until it has its own
+        # source-operations gateway. The optional probe must use that instance.
+        self.requires_connector_instance = True
+
+    def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
+        # Only JSM has this setting. Plain Jira never gets this check.
+        return form_state.values.get("include_attachments") is True
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        from onyx.connectors.jira_service_management.connector import (
+            JiraServiceManagementConnector,
+        )
+
+        connector = context.connector
+        if not isinstance(connector, JiraServiceManagementConnector):
+            raise TypeError("JSM attachment probe requires a JSM connector")
+        gateway = connector.source_operations
+        try:
+            gateway.list_fields()
+            issue = _search_one_issue(gateway, connector._get_jql_query(0, time.time()))
+            if not issue:
+                raise UnexpectedValidationError(
+                    "No issue is available to verify optional attachment access."
+                )
+            attachments = gateway.list_issue_attachments(issue_key=str(issue["key"]))
+            if not attachments:
+                raise UnexpectedValidationError(
+                    "No attachment is available for the optional access probe."
+                )
+            first = attachments[0]
+            size = first.get("size")
+            if not isinstance(size, int) or size > 16384 or size < 0:
+                raise UnexpectedValidationError(
+                    "Attachment is too large or of unknown size for a safe probe."
+                )
+            gateway.download_attachment(attachment_id=str(first["id"]))
+        except JiraApiError as e:
+            _raise_for_api_error(
+                e,
+                denied="Jira does not allow reading optional JSM attachment data",
+            )
+
+
 def build_jira_indexing_checks() -> list[CapabilityCheck]:
     return [
         _SiteAuthCheck(scoped=False),
@@ -545,6 +606,11 @@ def build_jira_indexing_checks() -> list[CapabilityCheck]:
         _JqlQueryCheck(),
         _IssueReadCheck(),
     ]
+
+
+def build_jsm_attachment_checks() -> list[CapabilityCheck]:
+    """Optional JSM-only probe; ordinary Jira never reads JSM attachments."""
+    return [_OptionalAttachmentApiCheck()]
 
 
 # Permission sync. The EE registry registers these checks. Doc sync reads the

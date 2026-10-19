@@ -1397,6 +1397,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jira_service_management": {
+          "description": "Atlassian 服务台"
+        },
         "productboard": {
           "description": "产品管理"
         },
@@ -4112,6 +4115,19 @@
             "comment_email_blacklist": {
               "label": "评论邮箱黑名单",
               "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "为指定的 Jira Service Management 服务台项目中的请求和工单建立索引。",
+          "fields": {
+            "internal_notes": {
+              "label": "包含内部备注",
+              "description": "为标记为 [Internal Note] 的客服内部备注建立索引。默认仅索引公开评论。"
+            },
+            "jql_query": {
+              "description": "此服务台项目的可选 JQL 筛选条件。请勿添加项目或时间筛选条件。"
             }
           }
         },

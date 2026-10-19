@@ -35,7 +35,7 @@ from onyx.connectors.google_drive.models import (
     GoogleGroupMember,
 )
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
-from onyx.connectors.jira.models import JiraGroupPage
+from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
     DriveDeltaPage,
@@ -149,6 +149,17 @@ def _configure_jira_site(spy: MagicMock) -> None:
     }
     spy.list_groups.return_value = JiraGroupPage(group_names=["devs"], total=1)
     spy.get_group_members_page.return_value = {"values": [{"name": "a1"}]}
+    # A safe tiny attachment exercises the optional JSM read probe without
+    # changing the pass criteria for ordinary Jira indexing.
+    issue = {"key": "AS-1", "fields": {"summary": "Issue"}}
+    spy.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1"], next_page_token=None
+    )
+    spy.bulk_fetch_issues.return_value = [issue]
+    spy.search_issues.return_value = [issue]
+    spy.list_fields.return_value = [{"id": "summary", "name": "Summary"}]
+    spy.list_issue_attachments.return_value = [{"id": "att-1", "size": 1}]
+    spy.download_attachment.return_value = b"x"
 
 
 def _configure_jira_cloud_spy(spy: MagicMock) -> None:

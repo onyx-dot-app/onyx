@@ -11,10 +11,16 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
 )
+from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import run_capability_checks
-from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
+from onyx.connectors.jira.capability_checks import (
+    build_jira_indexing_checks,
+)
 from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
+from onyx.connectors.jira_service_management.connector import (
+    JiraServiceManagementConnector,
+)
 
 _CLOUD_URL = "https://example.atlassian.net"
 _DC_URL = "https://jira.example.com"
@@ -440,6 +446,93 @@ def test_issue_read_leaves_a_bad_scope_to_the_scope_checks() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.INDETERMINATE
+
+
+def test_regular_jira_check_list_excludes_optional_jsm_attachment_api() -> None:
+    assert "jira_optional_jsm_attachment_access" not in {
+        check.check_id for check in build_jira_indexing_checks()
+    }
+
+
+def test_jsm_keeps_required_settings_validation_and_optional_probe() -> None:
+    checks = get_capability_checks(DocumentSource.JIRA_SERVICE_MANAGEMENT)
+    by_id = {check.check_id: check for check in checks}
+    assert "jira_service_management_connector_settings" in by_id
+    assert by_id["jira_service_management_connector_settings"].is_fallback
+    assert "jira_optional_jsm_attachment_access" in by_id
+    assert not by_id["jira_optional_jsm_attachment_access"].required
+    assert by_id["jira_optional_jsm_attachment_access"].requires_connector_instance
+
+
+def _run_optional_jsm(
+    gateway: MagicMock,
+    *,
+    enabled: bool = True,
+) -> CapabilityCheckResult:
+    connector = JiraServiceManagementConnector(
+        jira_base_url=_CLOUD_URL, project_key="AS"
+    )
+    connector._source_operations = gateway
+    context = CapabilityCheckContext(
+        source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+        credential_json=_CLOUD_CREDENTIAL,
+        connector_specific_config={
+            "jira_base_url": _CLOUD_URL,
+            "project_key": "AS",
+            "include_attachments": enabled,
+        },
+        connector=connector,
+    )
+    check = next(
+        check
+        for check in get_capability_checks(DocumentSource.JIRA_SERVICE_MANAGEMENT)
+        if check.check_id == "jira_optional_jsm_attachment_access"
+    )
+    (result,) = run_capability_checks([check], context)
+    return result
+
+
+def test_jsm_optional_probe_requires_attachments_enabled() -> None:
+    gateway = _gateway(is_cloud=True)
+    result = _run_optional_jsm(gateway, enabled=False)
+    assert not result.applicable
+    gateway.list_fields.assert_not_called()
+
+
+def test_optional_jsm_attachment_probe_reads_a_small_attachment() -> None:
+    gateway = _gateway(is_cloud=True)
+    gateway.list_fields.return_value = [{"id": "summary", "name": "Summary"}]
+    gateway.list_issue_attachments.return_value = [{"id": "att-1", "size": 100}]
+    gateway.download_attachment.return_value = b"data"
+
+    result = _run_optional_jsm(gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    gateway.list_fields.assert_called_once_with()
+    gateway.list_issue_attachments.assert_called_once_with(issue_key="AS-1")
+    gateway.download_attachment.assert_called_once_with(attachment_id="att-1")
+
+
+def test_optional_jsm_attachment_probe_never_fetches_large_file() -> None:
+    gateway = _gateway(is_cloud=True)
+    gateway.list_issue_attachments.return_value = [
+        {"id": "att-large", "size": 50_000_000}
+    ]
+
+    result = _run_optional_jsm(gateway)
+
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    gateway.download_attachment.assert_not_called()
+
+
+def test_optional_jsm_attachment_probe_cannot_gate_jira_indexing() -> None:
+    gateway = _gateway(is_cloud=True)
+    gateway.list_fields.side_effect = _api_error(403)
+
+    result = _run_optional_jsm(gateway)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_type == "InsufficientPermissionsError"
 
 
 @pytest.mark.parametrize(

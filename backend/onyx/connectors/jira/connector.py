@@ -3,7 +3,7 @@ import json
 import os
 from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 from more_itertools import chunked
 from typing_extensions import override
@@ -318,6 +318,8 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
+    comment_extractor: Callable[[JiraIssue], list[str]] | None = None,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
@@ -333,9 +335,13 @@ def process_jira_issue(
 
     description: str = rich_text(get_issue_field(issue, "description"))
 
-    comments: list[str] = get_comment_strs(
-        issue=issue,
-        comment_email_blacklist=comment_email_blacklist,
+    comments: list[str] = (
+        comment_extractor(issue)
+        if comment_extractor is not None
+        else get_comment_strs(
+            issue=issue,
+            comment_email_blacklist=comment_email_blacklist,
+        )
     )
     ticket_content = f"{description}\n" + "\n".join(
         [f"Comment: {comment}" for comment in comments if comment]
@@ -408,7 +414,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue_key}: {summary}",
         title=f"{issue_key} {summary}",
         doc_updated_at=time_str_to_utc(get_issue_field(issue, _FIELD_UPDATED)),
@@ -438,6 +444,40 @@ class JiraConnector(
     SlimConnectorWithPermSync,
 ):
     slim_listing_honors_indexing_start = True
+    document_source: ClassVar[DocumentSource] = DocumentSource.JIRA
+
+    def _process_issue(
+        self,
+        issue: JiraIssue,
+        parent_hierarchy_raw_node_id: str | None = None,
+    ) -> Document | None:
+        """Convert a raw Jira issue; sources may specialize its semantics."""
+        return process_jira_issue(
+            jira_base_url=self.jira_base,
+            issue=issue,
+            comment_email_blacklist=self.comment_email_blacklist,
+            labels_to_skip=self.labels_to_skip,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            source=self.document_source,
+        )
+
+    def _process_issue_attachments(
+        self,
+        issue: JiraIssue,  # noqa: ARG002
+        parent_hierarchy_raw_node_id: str | None,  # noqa: ARG002
+        ticket_document_id: str,  # noqa: ARG002
+    ) -> list[Document | ConnectorFailure]:
+        return []
+
+    def _process_issue_attachments_slim(
+        self,
+        issue: JiraIssue,  # noqa: ARG002
+        parent_hierarchy_raw_node_id: str | None,  # noqa: ARG002
+        ticket_document_id: str,  # noqa: ARG002
+        include_permissions: bool = False,  # noqa: ARG002
+        project_key: str | None = None,  # noqa: ARG002
+    ) -> list[SlimDocument]:
+        return []
 
     def __init__(
         self,
@@ -738,11 +778,8 @@ class JiraConnector(
                     else None
                 )
 
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
+                if document := self._process_issue(
                     issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ):
                     # Add permission information to the document if requested
@@ -752,6 +789,17 @@ class JiraConnector(
                             add_prefix=True,  # Indexing path - prefix here
                         )
                     yield document
+                    for attachment_output in self._process_issue_attachments(
+                        issue=issue,
+                        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                        ticket_document_id=document.id,
+                    ):
+                        if isinstance(attachment_output, ConnectorFailure):
+                            yield attachment_output
+                            continue
+                        if include_permissions:
+                            attachment_output.external_access = document.external_access
+                        yield attachment_output
 
             except Exception as e:
                 yield ConnectorFailure(
@@ -904,6 +952,19 @@ class JiraConnector(
                         ),
                         # NOTE: doc_created_at population not yet verified against live data
                         doc_created_at=time_str_to_utc(created) if created else None,
+                    )
+                )
+                slim_doc_batch.extend(
+                    self._process_issue_attachments_slim(
+                        issue=issue,
+                        parent_hierarchy_raw_node_id=(
+                            self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                            if project_key
+                            else None
+                        ),
+                        ticket_document_id=doc_id,
+                        include_permissions=include_permissions,
+                        project_key=project_key,
                     )
                 )
                 current_offset += 1

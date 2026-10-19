@@ -1397,6 +1397,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jira_service_management": {
+          "description": "مكتب خدمة Atlassian"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -4112,6 +4115,19 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "إعداد موصل Jira Service Management",
+          "subtext": "فهرسة الطلبات والتذاكر من مشروع مكتب خدمة محدد في Jira Service Management.",
+          "fields": {
+            "internal_notes": {
+              "label": "تضمين الملاحظات الداخلية",
+              "description": "فهرسة ملاحظات الوكلاء الداخلية مع تمييزها بالعلامة [Internal Note]. تتم فهرسة التعليقات العامة فقط بشكل افتراضي."
+            },
+            "jql_query": {
+              "description": "عامل تصفية JQL اختياري لمشروع مكتب الخدمة هذا. لا تضف عوامل تصفية للمشروع أو للوقت."
             }
           }
         },
