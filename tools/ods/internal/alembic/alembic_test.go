@@ -1,6 +1,7 @@
 package alembic
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"os"
@@ -419,4 +420,95 @@ func TestRun_missingSelectedDatabaseNeverUsesAnotherProject(t *testing.T) {
 	if len(calls(t, binary)) != 0 {
 		t.Fatal("Alembic ran against an unknown endpoint")
 	}
+}
+
+func TestRun_rejectsUnreadableEnvironmentBeforeLaunching(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, "exit 1")
+	if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.root, ".vscode", ".env"), []byte("POSTGRES_PASSWORD="+strings.Repeat("x", 65536)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Current(f.target(), SchemaDefault); !errors.Is(err, bufio.ErrTooLong) {
+		t.Fatalf("expected environment read error, got %v", err)
+	}
+	assertLines(t, calls(t, docker), nil)
+	assertLines(t, calls(t, binary), nil)
+}
+
+func TestRun_rejectsEnvironmentChangedDuringDiscovery(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	envPath := filepath.Join(f.root, ".vscode", ".env")
+	if err := os.WriteFile(envPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEST_ENV_FILE", envPath)
+	docker := f.docker(t, `case "$1" in
+inspect) echo true ;;
+port) printf '%065537d\n' 0 > "$TEST_ENV_FILE"; echo 0.0.0.0:25432 ;;
+*) exit 1 ;;
+esac`)
+	if err := Current(f.target(), SchemaDefault); !errors.Is(err, bufio.ErrTooLong) {
+		t.Fatalf("expected changed environment read error, got %v", err)
+	}
+	assertLines(t, calls(t, docker), []string{
+		"inspect -f {{.State.Running}} onyx-relational_db-1",
+		"port onyx-relational_db-1 5432",
+	})
+	assertLines(t, calls(t, binary), nil)
+}
+
+func TestRun_missingSelectedBackendNeverUsesCurrentCheckout(t *testing.T) {
+	f := newFixture(t)
+	t.Setenv("POSTGRES_HOST", "db.test")
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, "exit 1")
+	target := f.target()
+	target.Root = t.TempDir()
+	if err := Current(target, SchemaDefault); err == nil || err.Error() != "failed to find backend directory for selected checkout" {
+		t.Fatalf("expected missing selected backend error, got %v", err)
+	}
+	assertLines(t, calls(t, binary), nil)
+	assertLines(t, calls(t, docker), nil)
+}
+
+func TestRun_hiddenPortNeverUsesUnrelatedAPIContainer(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, `case "$1 $4" in
+"inspect selected-relational_db-1"|"inspect onyx-api_server-1") echo true ;;
+*) exit 1 ;;
+esac`)
+	target := f.target()
+	target.Project = "selected"
+	err := Current(target, SchemaDefault)
+	want := `PostgreSQL for project "selected" has no exposed port and no selected api_server container: no running api_server container found for project "selected"`
+	if err == nil || err.Error() != want {
+		t.Fatalf("expected missing selected API error, got %v", err)
+	}
+	assertLines(t, calls(t, docker), []string{
+		"inspect -f {{.State.Running}} selected-relational_db-1",
+		"port selected-relational_db-1 5432",
+		"inspect -f {{.State.Running}} selected-api_server-1",
+	})
+	assertLines(t, calls(t, binary), nil)
+}
+
+func TestFindAlembicContainer_requiresSelectedProject(t *testing.T) {
+	f := newFixture(t)
+	docker := f.docker(t, "echo true")
+	for _, project := range []string{"", " \t\n"} {
+		container, err := findAlembicContainer(project)
+		if err == nil || err.Error() != "an Alembic project must be selected" || container != "" {
+			t.Fatalf("expected project selection error for %q, got %q, %v", project, container, err)
+		}
+	}
+	assertLines(t, calls(t, docker), nil)
 }
