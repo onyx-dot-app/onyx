@@ -5,7 +5,8 @@ import { useTranslations } from "next-intl";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import RefreshText from "@/refresh-components/texts/Text";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -245,7 +246,7 @@ export default function ExpandableTextDisplay({
       return (
         <div>
           {isTruncated && (
-            <Text as="p" text03 mainUiMuted className="my-0!">
+            <Text as="p" font="main-ui-muted" color="text-03">
               …
             </Text>
           )}
@@ -278,13 +279,13 @@ export default function ExpandableTextDisplay({
     return (
       <div ref={scrollRef} className="overflow-hidden">
         {hasTruncation && (
-          <Text as="span" mainUiMuted text03>
-            …{"\n"}
+          <Text as="span" font="main-ui-muted" color="text-03">
+            {"…\n"}
           </Text>
         )}
-        <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
+        <RefreshText as="p" mainUiMuted text03 className="whitespace-pre-wrap">
           {lines}
-        </Text>
+        </RefreshText>
       </div>
     );
   };
@@ -292,9 +293,9 @@ export default function ExpandableTextDisplay({
   // Render plain text static (CSS line-clamp + scroll-based truncation detection)
   const renderPlainTextStatic = () => (
     <div ref={scrollRef} className={cn("overflow-hidden", lineClampClass)}>
-      <Text as="span" mainUiMuted text03 className="whitespace-pre-wrap">
+      <RefreshText as="span" mainUiMuted text03 className="whitespace-pre-wrap">
         {displayContent ?? content}
-      </Text>
+      </RefreshText>
     </div>
   );
 
@@ -332,12 +333,12 @@ export default function ExpandableTextDisplay({
           <div className="flex items-start justify-between px-4 py-3">
             <div className="flex flex-col">
               <DialogPrimitive.Title asChild>
-                <Text as="span" text04 headingH3>
+                <Text as="span" font="heading-h3" color="text-04">
                   {title}
                 </Text>
               </DialogPrimitive.Title>
               <DialogPrimitive.Description asChild>
-                <Text as="span" text03 secondaryBody>
+                <Text as="span" font="secondary-body" color="text-03">
                   {displaySubtitle}
                 </Text>
               </DialogPrimitive.Description>
@@ -357,16 +358,21 @@ export default function ExpandableTextDisplay({
             {renderContent ? (
               renderContent(content, true)
             ) : (
-              <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
+              <RefreshText
+                as="p"
+                mainUiMuted
+                text03
+                className="whitespace-pre-wrap"
+              >
                 {content}
-              </Text>
+              </RefreshText>
             )}
           </Modal.Body>
 
           {/* Footer */}
           <div className="flex items-center justify-between p-2 bg-background-tint-01">
             <div className="px-2">
-              <Text as="span" mainUiMuted text03>
+              <Text as="span" font="main-ui-muted" color="text-03">
                 {t("lineCount.label", { count: lineCount })}
               </Text>
             </div>

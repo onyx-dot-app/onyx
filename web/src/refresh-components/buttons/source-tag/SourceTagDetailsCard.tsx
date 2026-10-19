@@ -1,7 +1,7 @@
 "use client";
 
 import React, { memo } from "react";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Button } from "@opal/components";
 import {
   SvgArrowLeft,
@@ -58,9 +58,11 @@ const MetadataChip = memo(function MetadataChip({
         </div>
       )}
 
-      <Text secondaryBody text03 className="px-0.5 max-w-40 truncate">
-        {text}
-      </Text>
+      <div className="max-w-40">
+        <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
+          {text}
+        </Text>
+      </div>
     </div>
   );
 });
@@ -108,9 +110,11 @@ const SourceTagDetailsCardInner = ({
               size="sm"
             />
           </div>
-          <Text secondaryBody text03 className="px-1">
-            {currentIndex + 1}/{sources.length}
-          </Text>
+          <div className="px-0.5">
+            <Text as="p" font="secondary-body" color="text-03">
+              {`${currentIndex + 1}/${sources.length}`}
+            </Text>
+          </div>
         </div>
       )}
 
@@ -136,11 +140,7 @@ const SourceTagDetailsCardInner = ({
             )}
           </div>
           <div className="flex-1 min-w-0 px-0.5">
-            <Text
-              mainUiAction
-              text04
-              className="truncate w-full block leading-5"
-            >
+            <Text as="p" font="main-ui-action" color="text-04" maxLines={1}>
               {currentSource.title}
             </Text>
           </div>
@@ -162,7 +162,7 @@ const SourceTagDetailsCardInner = ({
                 <MetadataChip key={tag} text={tag} />
               ))}
               {relativeDate && (
-                <Text secondaryBody text02>
+                <Text font="secondary-body" color="text-02">
                   {relativeDate}
                 </Text>
               )}
@@ -173,7 +173,7 @@ const SourceTagDetailsCardInner = ({
         {/* Description */}
         {currentSource.description && (
           <div className="px-1.5 pb-1">
-            <Text secondaryBody text03 as="span" className="line-clamp-4">
+            <Text as="span" font="secondary-body" color="text-03" maxLines={4}>
               {currentSource.description}
             </Text>
           </div>

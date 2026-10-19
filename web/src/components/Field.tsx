@@ -31,7 +31,7 @@ import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { RichTextSubtext } from "./RichTextSubtext";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
@@ -128,7 +128,7 @@ export function ExplanationText({
       {text}
     </a>
   ) : (
-    <Text as="p" text03 secondaryBody>
+    <Text as="p" font="secondary-body" color="text-03">
       {text}
     </Text>
   );

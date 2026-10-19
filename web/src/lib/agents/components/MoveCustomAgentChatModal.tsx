@@ -5,7 +5,8 @@ import { useTranslations } from "next-intl";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { InputCheckbox } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { SvgAlertCircle } from "@opal/icons";
 interface MoveCustomAgentChatModalProps {
   onCancel: () => void;
@@ -31,10 +32,12 @@ export function MoveCustomAgentChatModal({
       }
     >
       <div className="flex flex-col gap-4">
-        <Text as="p" text03>
-          {t.rich("moveCustomAgentChat.body.description", {
-            b: (chunks) => <b>{chunks}</b>,
-          })}
+        <Text as="p" font="main-ui-body" color="text-03">
+          {richNodes(
+            t.rich("moveCustomAgentChat.body.description", {
+              b: (chunks) => <b>{chunks}</b>,
+            })
+          )}
         </Text>
         <div className="flex items-center gap-1">
           <InputCheckbox

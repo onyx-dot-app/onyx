@@ -14,7 +14,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
@@ -528,7 +528,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
         role="status"
         aria-live="polite"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {emptyMessage}
         </Text>
       </div>
@@ -719,7 +719,7 @@ function CommandMenuAction({
         icon={icon}
         rightChildren={
           shortcut ? (
-            <Text figureKeystroke text02>
+            <Text font="figure-keystroke" color="text-02">
               {shortcut}
             </Text>
           ) : undefined
@@ -771,7 +771,7 @@ function CommandMenuFooterAction({
   return (
     <div className="flex items-center gap-1" aria-label={label}>
       <Icon className="w-3.5 h-3.5 stroke-text-02" aria-hidden="true" />
-      <Text mainUiBody text03>
+      <Text font="main-ui-body" color="text-03">
         {label}
       </Text>
     </div>

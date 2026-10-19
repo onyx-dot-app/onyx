@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -8,15 +8,15 @@ export default function CloudError() {
   const { appName } = useSettings();
   return (
     <ErrorPageLayout>
-      <Text as="p" headingH2>
+      <Text as="p" font="heading-h2" color="text-05">
         {t("heading.title")}
       </Text>
 
-      <Text as="p" text03>
+      <Text as="p" font="main-ui-body" color="text-03">
         {t("checkBack.description", { appName })}
       </Text>
 
-      <Text as="p" text03>
+      <Text as="p" font="main-ui-body" color="text-03">
         {t("apology.description")}
       </Text>
     </ErrorPageLayout>

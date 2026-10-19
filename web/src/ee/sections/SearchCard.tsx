@@ -4,7 +4,8 @@ import { OverflowText } from "@opal/components";
 import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import Chip from "@/refresh-components/Chip";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -98,16 +99,21 @@ export default function SearchCard({
                   ).map((tag, index) => <Chip key={index}>{tag}</Chip>)}
                 {document.updated_at &&
                   !isNaN(new Date(document.updated_at).getTime()) && (
-                    <Text secondaryBody text02>
-                      {timeAgo(document.updated_at, locale)}
+                    <Text font="secondary-body" color="text-02">
+                      {timeAgo(document.updated_at, locale) ?? undefined}
                     </Text>
                   )}
               </Section>
 
               {/* Blurb */}
               {content && (
-                <Text secondaryBody text03 className="text-start">
-                  {content}
+                <Text
+                  as="p"
+                  font="secondary-body"
+                  color="text-03"
+                  textPosition="text-start"
+                >
+                  {richNodes(content)}
                 </Text>
               )}
             </Section>

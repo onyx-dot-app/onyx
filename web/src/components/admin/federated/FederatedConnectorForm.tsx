@@ -25,7 +25,9 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
+import RefreshText from "@/refresh-components/texts/Text";
 import { AlertTriangle, Check, Loader2, Info } from "lucide-react";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import Title from "@/components/ui/title";
@@ -562,16 +564,22 @@ export function FederatedConnectorForm({
             className="flex items-center justify-between gap-4 py-2"
           >
             <div className="flex-1">
-              <Text as="p" mainUiAction text04 className="mb-1">
-                {fieldKey
-                  .replace(/_/g, " ")
-                  .replace(/\b\w/g, (l) => l.toUpperCase())}
-                {fieldSpec.required && (
-                  <span className="text-red-500 ms-1">*</span>
-                )}
-              </Text>
+              <div className="mb-1">
+                <Text as="p" font="main-ui-action" color="text-04">
+                  {richNodes(
+                    <>
+                      {fieldKey
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (l) => l.toUpperCase())}
+                      {fieldSpec.required && (
+                        <span className="text-red-500 ms-1">*</span>
+                      )}
+                    </>
+                  )}
+                </Text>
+              </div>
               {fieldSpec.description && (
-                <Text as="p" mainUiMuted text03>
+                <Text as="p" font="main-ui-muted" color="text-03">
                   {fieldSpec.description}
                 </Text>
               )}
@@ -676,13 +684,13 @@ export function FederatedConnectorForm({
                       }
                     />
                     <div className="flex-1">
-                      <Text as="p" mainUiAction text04>
+                      <Text as="p" font="main-ui-action" color="text-04">
                         {fieldKey
                           .replace(/_/g, " ")
                           .replace(/\b\w/g, (l) => l.toUpperCase())}
                       </Text>
                       {fieldSpec.description && (
-                        <Text as="p" mainUiMuted text03>
+                        <Text as="p" font="main-ui-muted" color="text-03">
                           {fieldSpec.description}
                         </Text>
                       )}
@@ -692,15 +700,19 @@ export function FederatedConnectorForm({
                   <>
                     {isListType ? (
                       <>
-                        <Text as="p" mainUiAction text04>
-                          {fieldSpec.description ||
-                            fieldKey
-                              .replace(/_/g, " ")
-                              .replace(/\b\w/g, (l) => l.toUpperCase())}
-                          {(fieldSpec.required ||
-                            (fieldKey === "channels" &&
-                              isSlackChannelsRequired())) && (
-                            <span className="text-red-500 ms-1">*</span>
+                        <Text as="p" font="main-ui-action" color="text-04">
+                          {richNodes(
+                            <>
+                              {fieldSpec.description ||
+                                fieldKey
+                                  .replace(/_/g, " ")
+                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
+                              {(fieldSpec.required ||
+                                (fieldKey === "channels" &&
+                                  isSlackChannelsRequired())) && (
+                                <span className="text-red-500 ms-1">*</span>
+                              )}
+                            </>
                           )}
                         </Text>
                         <InputList
@@ -732,24 +744,33 @@ export function FederatedConnectorForm({
                           error={!!configValidationErrors[fieldKey]}
                         />
                         {configValidationErrors[fieldKey] && (
-                          <Text as="p" className="text-red-500 text-sm mt-1">
+                          <RefreshText
+                            as="p"
+                            className="text-red-500 text-sm mt-1"
+                          >
                             {configValidationErrors[fieldKey]}
-                          </Text>
+                          </RefreshText>
                         )}
                       </>
                     ) : (
                       <div className="flex items-center justify-between gap-4 py-2">
                         <div className="flex-1">
-                          <Text as="p" mainUiAction text04 className="mb-1">
-                            {fieldKey
-                              .replace(/_/g, " ")
-                              .replace(/\b\w/g, (l) => l.toUpperCase())}
-                            {fieldSpec.required && (
-                              <span className="text-red-500 ms-1">*</span>
-                            )}
-                          </Text>
+                          <div className="mb-1">
+                            <Text as="p" font="main-ui-action" color="text-04">
+                              {richNodes(
+                                <>
+                                  {fieldKey
+                                    .replace(/_/g, " ")
+                                    .replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  {fieldSpec.required && (
+                                    <span className="text-red-500 ms-1">*</span>
+                                  )}
+                                </>
+                              )}
+                            </Text>
+                          </div>
                           {fieldSpec.description && (
-                            <Text as="p" mainUiMuted text03>
+                            <Text as="p" font="main-ui-muted" color="text-03">
                               {fieldSpec.description}
                             </Text>
                           )}
@@ -859,15 +880,15 @@ export function FederatedConnectorForm({
       <Card className="px-8 py-4">
         <CardContent className="p-0">
           <form onSubmit={handleSubmit}>
-            <Text as="p" headingH3>
+            <Text as="p" font="heading-h3" color="text-05">
               {t("credentials.heading")}
             </Text>
-            <Text as="p" mainUiMuted>
+            <Text as="p" font="main-ui-muted" color="text-05">
               {t("credentials.description")}
             </Text>
             <div className="space-y-4">{renderCredentialFields()}</div>
             <Divider />
-            <Text as="p" headingH3>
+            <Text as="p" font="heading-h3" color="text-05">
               {t("configuration.heading")}
             </Text>
             <div className="space-y-4">{renderConfigFields()}</div>

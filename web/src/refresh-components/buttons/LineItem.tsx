@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 import type { Route } from "next";
@@ -122,7 +122,7 @@ export interface LineItemProps extends Omit<
  * </LineItem>
  *
  * // With right content
- * <LineItem icon={SvgKey} rightChildren={<Text as="p" text03>⌘K</Text>}>
+ * <LineItem icon={SvgKey} rightChildren={<Text as="p" font="main-ui-body" color="text-03">⌘K</Text>}>
  *   Keyboard Shortcuts
  * </LineItem>
  *
@@ -276,9 +276,16 @@ export default function LineItem({
             </Section>
             {description &&
               (wrapDescription ? (
-                <Text as="p" secondaryBody text03 className="text-start w-full">
-                  {description}
-                </Text>
+                <div className="w-full">
+                  <Text
+                    as="p"
+                    font="secondary-body"
+                    color="text-03"
+                    textPosition="text-start"
+                  >
+                    {description}
+                  </Text>
+                </div>
               ) : (
                 <Truncated secondaryBody text03 className="text-start w-full">
                   {description}
@@ -288,9 +295,16 @@ export default function LineItem({
         ) : description ? (
           <Section flexDirection="row" gap={2}>
             {wrapDescription ? (
-              <Text as="p" secondaryBody text03 className="text-start w-full">
-                {description}
-              </Text>
+              <div className="w-full">
+                <Text
+                  as="p"
+                  font="secondary-body"
+                  color="text-03"
+                  textPosition="text-start"
+                >
+                  {description}
+                </Text>
+              </div>
             ) : (
               <Truncated secondaryBody text03 className="text-start w-full">
                 {description}

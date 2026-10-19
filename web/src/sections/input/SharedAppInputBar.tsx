@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Button, OpenButton, SelectButton } from "@opal/components";
 import { SvgOpenAI } from "@opal/logos";
 import {
@@ -22,9 +22,11 @@ export default function SharedAppInputBar() {
       <div className="w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16">
         {/* Textarea area */}
         <div className="flex flex-row items-center w-full">
-          <Text text03 className="w-full px-3 pt-3 pb-2 select-none">
-            {t("sharedAppInputBar.input.placeholder", { appName })}
-          </Text>
+          <div className="w-full px-3 pt-3 pb-2 select-none">
+            <Text as="p" font="main-ui-body" color="text-03">
+              {t("sharedAppInputBar.input.placeholder", { appName })}
+            </Text>
+          </div>
         </div>
 
         {/* Bottom toolbar */}
