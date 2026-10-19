@@ -1,7 +1,6 @@
 "use client";
 
 import type { RichStr } from "@opal/types";
-import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { IconLoader } from "@opal/loaders";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -169,7 +168,7 @@ export function SkillPreviewContent({
       </Modal.Body>
       <Modal.Footer>
         <Button onClick={onClose}>
-          {toPlainString(closeLabel ?? t("preview.closeButton.label"))}
+          {closeLabel ?? t("preview.closeButton.label")}
         </Button>
       </Modal.Footer>
     </>

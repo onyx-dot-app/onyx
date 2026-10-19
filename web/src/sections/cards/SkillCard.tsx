@@ -3,7 +3,7 @@
 import { useCallback, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
 import { Button, InputSwitch, Tag, Tooltip } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { Content, Section } from "@opal/layouts";
 import { SvgBlocks, SvgEdit, SvgPlug, SvgTrash, SvgUser } from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
@@ -168,7 +168,14 @@ export default function SkillCard({
               }
               rightChildren={
                 item.source === "custom" && canEdit ? (
-                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100 no-hover:opacity-100">
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    width="fit"
+                    height="auto"
+                    gap={1}
+                    className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100 no-hover:opacity-100"
+                  >
                     <Button
                       prominence="secondary"
                       size="sm"
@@ -190,7 +197,7 @@ export default function SkillCard({
                         }}
                       />
                     )}
-                  </div>
+                  </Section>
                 ) : undefined
               }
             />

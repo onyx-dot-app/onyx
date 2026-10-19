@@ -110,14 +110,12 @@ export default function SkillsPage() {
         { revalidate: false }
       );
       if (deleteTarget.external_app) {
-        try {
-          await mutate(SWR_KEYS.buildExternalAppsAdmin);
-        } catch (error) {
+        void mutate(SWR_KEYS.buildExternalAppsAdmin).catch((error: unknown) => {
           console.error(
             "Failed to refresh external app after skill deletion",
             error
           );
-        }
+        });
       }
       setDeleteTarget(null);
       toast.success(t("editor.toasts.deleted", { name: deleteTarget.name }));

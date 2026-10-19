@@ -1,6 +1,7 @@
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
+  DistributiveOmit,
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
@@ -27,7 +28,7 @@ type ButtonContentProps =
       responsiveHideText?: boolean;
     };
 
-type ButtonProps = InteractiveStatelessProps &
+type ButtonProps = DistributiveOmit<InteractiveStatelessProps, "children"> &
   ButtonContentProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.

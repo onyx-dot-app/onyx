@@ -240,6 +240,35 @@ describe("SkillsPage preference toggles", () => {
     }
   });
 
+  it("finishes deletion while the optional app refresh is pending", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("associated-id", "associated-skill"),
+        user_permission: "OWNER",
+        external_app: {
+          external_app_id: 7,
+          name: "CRM",
+          enabled: true,
+          ready: true,
+        },
+      },
+    ];
+    const refresh = deferred<void>();
+    mockDeleteUserSkill.mockResolvedValue(undefined);
+    mockMutate.mockReturnValue(refresh.promise);
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("button", { name: "Delete associated-skill" })
+    );
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+    expect(skillsData.customs).toHaveLength(0);
+    await act(async () => refresh.resolve());
+  });
+
   it("keeps an invalid skill and reports a failed delete", async () => {
     skillsData.customs = [
       {

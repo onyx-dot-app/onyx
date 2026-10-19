@@ -1,5 +1,9 @@
 import { render, screen } from "@tests/setup/test-utils";
-import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
+import { Modal } from "@opal/components";
+import { markdown } from "@opal/utils";
+import SkillPreviewModal, {
+  SkillPreviewContent,
+} from "@/sections/modals/SkillPreviewModal";
 import type { SkillPreview } from "@/lib/skills/types";
 
 const mockUseSWR = jest.fn();
@@ -82,4 +86,21 @@ describe("SkillPreviewModal", () => {
 
     expect(screen.queryByText("Skill unavailable")).not.toBeInTheDocument();
   });
+});
+
+it("preserves formatted custom close labels", () => {
+  mockUseSWR.mockReturnValue({ data: preview(), isLoading: false });
+  render(
+    <Modal open>
+      <Modal.Content>
+        <SkillPreviewContent
+          skillId="skill-id"
+          onClose={jest.fn()}
+          closeLabel={markdown("**Back** to skills")}
+        />
+      </Modal.Content>
+    </Modal>
+  );
+  const button = screen.getByRole("button", { name: "Back to skills" });
+  expect(button.querySelector("strong")).toHaveTextContent("Back");
 });
