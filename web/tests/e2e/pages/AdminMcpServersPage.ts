@@ -269,8 +269,15 @@ export class AdminMcpServersPage {
   // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
 
-  /** Setup closes once the server is created; the one-time `plugin` param reopens it. */
+  /**
+   * Setup closes once it has created the server and loaded its tools; the
+   * one-time `plugin` param then reopens it. Leaving earlier would cut the
+   * tool load short and leave the server fetching.
+   */
   async openServer(serverId: number): Promise<void> {
+    await expect(this.page.getByRole("dialog")).toBeHidden({
+      timeout: 60_000,
+    });
     await this.page.goto(`/admin/plugins?plugin=mcp:${serverId}`);
   }
 

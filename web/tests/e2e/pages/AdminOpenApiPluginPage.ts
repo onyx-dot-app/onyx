@@ -25,9 +25,9 @@ export class AdminOpenApiPluginPage {
   async createFromSchema(schema: string, name: string): Promise<number> {
     await this.plugins.goto();
     await this.plugins.openAddOpenApi();
+    // The header's description is part of the dialog's name.
     const dialog = this.page.getByRole("dialog", {
-      name: "Add OpenAPI action",
-      exact: true,
+      name: /^Add OpenAPI action\b/,
     });
     await expect(dialog).toBeVisible();
     await dialog
