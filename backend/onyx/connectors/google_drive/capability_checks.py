@@ -133,8 +133,12 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _WORKSPACE_USERS_CHECK_ID: ("google_drive_auth",),
     "google_drive_user_count": (_WORKSPACE_USERS_CHECK_ID,),
     "google_drive_directory_users": ("google_drive_auth",),
-    "google_drive_specific_users": (_WORKSPACE_USERS_CHECK_ID,),
-    "google_drive_configured_my_drives": (_WORKSPACE_USERS_CHECK_ID,),
+    # Sign-in is listed too: Workspace users do not apply with selected users.
+    "google_drive_specific_users": ("google_drive_auth", _WORKSPACE_USERS_CHECK_ID),
+    "google_drive_configured_my_drives": (
+        "google_drive_auth",
+        _WORKSPACE_USERS_CHECK_ID,
+    ),
     _SHARED_DRIVES_CHECK_ID: ("google_drive_auth",),
     "google_drive_shared_drive_listing": (_SHARED_DRIVES_CHECK_ID,),
     "google_drive_configured_shared_drives": (_SHARED_DRIVES_CHECK_ID,),
@@ -347,7 +351,7 @@ def _raise_google_error(
                 "Google rate limited the check. Run the checks again in a minute.",
                 summary="Rate limited by Google Drive",
                 description=(
-                    "Google limited the request rate. (HTTP 429)\n"
+                    f"Google limited the request rate. (HTTP {e.status_code})\n"
                     "Wait a minute, then re-run."
                 ),
             ) from e

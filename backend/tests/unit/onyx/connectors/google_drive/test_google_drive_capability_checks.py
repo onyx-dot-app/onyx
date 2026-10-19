@@ -779,3 +779,40 @@ def test_discovery_checks_are_the_listing_and_the_count() -> None:
         for check in build_google_drive_indexing_checks()
         if check.discovery
     } == {"google_drive_shared_drive_listing", "google_drive_user_count"}
+
+
+@pytest.mark.parametrize(
+    "check_id", ["google_drive_specific_users", "google_drive_configured_my_drives"]
+)
+def test_a_failed_sign_in_stops_the_selected_user_checks(check_id: str) -> None:
+    ops = _ops()
+    ops.list_files.side_effect = _http_error(401)
+    context = CapabilityCheckContext(
+        source=DocumentSource.GOOGLE_DRIVE,
+        credential_json={_CREDENTIAL_KEYS[_SA]: "{}"},
+        connector_specific_config={
+            "include_my_drives": True,
+            "specific_user_emails": _ADMIN,
+            "my_drive_emails": _ADMIN,
+            "credential_kind": _SA.value,
+        },
+        source_operations=ops,
+    )
+
+    results = run_capability_checks(build_google_drive_indexing_checks(), context)
+
+    (result,) = [result for result in results if result.check_id == check_id]
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.blocked_by == "google_drive_auth"
+    ops.get_root_folder_id.assert_not_called()
+
+
+def test_a_rate_limit_names_the_status_google_sent() -> None:
+    ops = _ops()
+    ops.list_files.side_effect = _http_error(403, "userRateLimitExceeded")
+
+    result = _run("google_drive_auth", ops)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.description is not None
+    assert "(HTTP 403)" in result.description
