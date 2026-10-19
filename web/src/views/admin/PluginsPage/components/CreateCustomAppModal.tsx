@@ -15,7 +15,7 @@ import {
 } from "@opal/components";
 import { InputKeyValue, InputList, type KeyValue } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
-import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {

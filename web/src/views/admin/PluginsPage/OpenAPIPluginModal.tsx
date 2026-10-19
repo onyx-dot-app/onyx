@@ -51,7 +51,7 @@ import type { CheckedOpenApiSchema } from "@/lib/plugins/openapi/schema";
 import { useOpenApiSchemaCheck } from "@/lib/plugins/openapi/hooks";
 import { saveOpenApiAuthentication } from "@/lib/plugins/openapi/workflow";
 import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
-import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
 import OpenAPISchemaFields from "@/views/admin/PluginsPage/components/OpenAPISchemaFields";
 import OpenAPIAuthFields, {
   useOpenApiAuthSchema,

@@ -12,7 +12,7 @@ import {
   Text,
 } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
-import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
 import PolicyEditor, {
   type PolicyEditorItem,
 } from "@/sections/actions/PolicyEditor";

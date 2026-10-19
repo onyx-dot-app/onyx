@@ -40,8 +40,9 @@ The App catalog reads installed apps through the same native SWR key. Failed
 installed-app reads show retry rather than an endless loader. Custom app
 editing does not request provider options. Loading and error routes retain
 the modal shell and close control.
-Plugin setup and editors share `PluginModalContent` for medium, centered
-forms. Their headers use the plugin type's icon from `PLUGIN_KIND_ICONS`
+Plugin setup and editors share `PluginModalContent`
+(`web/src/views/admin/PluginsPage/PluginModalContent.tsx`) for medium,
+centered forms. Their headers use the plugin type's icon from `PLUGIN_KIND_ICONS`
 (`web/src/lib/plugins/constants.ts`), which the type tags also use. MCP and
 Craft App catalogs use standard top-anchored Opal `Modal.Content`. Every Opal
 modal body is two-tone. Both use `PluginCatalogCard` for suggested/provider

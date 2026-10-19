@@ -15,7 +15,7 @@ import type {
 } from "@/app/craft/v1/apps/registry";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 import CreateCustomAppModal from "@/views/admin/PluginsPage/components/CreateCustomAppModal";
-import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
 import { useSettings } from "@/lib/settings/hooks";
 import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 

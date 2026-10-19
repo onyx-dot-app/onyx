@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Button, InputTypeIn, Modal, Tabs, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import useSWR from "swr";
-import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
 import MemberMCPToolsList from "@/sections/plugins/MemberMCPToolsList";
 import MemberCraftAppSkills from "@/sections/plugins/MemberCraftAppSkills";
 import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";

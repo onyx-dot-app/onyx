@@ -6,7 +6,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { Button, MessageCard, Modal, Tabs } from "@opal/components";
 import { toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
-import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
 import {
   errorHandlingFetcher,
   isNotFoundError,

@@ -45,7 +45,7 @@ import {
   type MCPProbeProgress,
 } from "@/lib/mcp/types";
 import MCPAuthenticationPage from "@/views/admin/PluginsPage/components/mcp/MCPAuthenticationPage";
-import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
 import {
   MCPAccessControl,
   validateMCPAccess,

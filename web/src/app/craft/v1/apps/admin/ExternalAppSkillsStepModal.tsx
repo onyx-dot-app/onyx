@@ -20,7 +20,7 @@ import {
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
 import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
-import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import PluginModalContent from "@/views/admin/PluginsPage/PluginModalContent";
 
 interface ExternalAppSkillsStepModalProps {
   app: ExternalAppAdminResponse;
