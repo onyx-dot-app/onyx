@@ -3038,9 +3038,11 @@
           "search": {
             "placeholder": "搜索文档…"
           },
-          "resolveAll": "全部解决",
+          "resolveAll": "全部重试",
           "resolveAllTooltip": "重新索引此运行中所有失败的文档",
-          "resolveOne": "解决此文档",
+          "resolveAllUnsupported": "此连接器无法重新索引单个文档。请重新索引连接器以重试。",
+          "resolveOne": "重试此文档",
+          "retry": "{count, plural, other {重试 # 个文档}}",
           "more": "更多",
           "less": "收起",
           "unknownDocument": "未知文档",

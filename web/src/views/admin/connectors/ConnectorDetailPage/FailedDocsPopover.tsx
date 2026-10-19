@@ -16,12 +16,7 @@ import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import {
-  SvgCheckAll,
-  SvgCheckSquare,
-  SvgExternalLink,
-  SvgFile,
-} from "@opal/icons";
+import { SvgExternalLink, SvgFile, SvgRefreshCw } from "@opal/icons";
 import type {
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
@@ -69,8 +64,9 @@ function FailedDocRow({
       height="fit"
       className="group/row rounded-08 hover:bg-background-tint-02"
     >
+      {/* Stretched so the one-line title truncates at the column's edge instead of sizing to its content. */}
       <Section
-        alignItems="start"
+        alignItems="stretch"
         gap={0}
         width={14.25}
         height="fit"
@@ -163,7 +159,7 @@ function FailedDocRow({
           className="opacity-0 no-hover:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100"
         >
           <Button
-            icon={SvgCheckSquare}
+            icon={SvgRefreshCw}
             prominence="tertiary"
             size="xs"
             tooltip={t("resolveOne")}
@@ -262,10 +258,10 @@ function FailedDocsBody({
             onChange={(event) => setSearchInput(event.target.value)}
           />
         </Section>
-        {/* Resolve All takes every open error, so it hides while a search narrows the list. */}
+        {/* Retry all takes every open error, so it hides while a search narrows the list. */}
         {canResolve && q === "" && (
           <Button
-            rightIcon={SvgCheckAll}
+            rightIcon={SvgRefreshCw}
             prominence="tertiary"
             size="xs"
             disabled={resolving}

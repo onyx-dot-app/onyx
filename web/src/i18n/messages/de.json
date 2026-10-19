@@ -3038,9 +3038,11 @@
           "search": {
             "placeholder": "Dokumente durchsuchen…"
           },
-          "resolveAll": "Alle beheben",
+          "resolveAll": "Alle erneut versuchen",
           "resolveAllTooltip": "Alle fehlgeschlagenen Dokumente dieses Laufs neu indexieren",
-          "resolveOne": "Dieses Dokument beheben",
+          "resolveAllUnsupported": "Dieser Connector kann einzelne Dokumente nicht neu indexieren. Indexieren Sie den Connector neu, um sie erneut zu versuchen.",
+          "resolveOne": "Dieses Dokument erneut versuchen",
+          "retry": "{count, plural, one {# Dokument erneut versuchen} other {# Dokumente erneut versuchen}}",
           "more": "Mehr",
           "less": "Weniger",
           "unknownDocument": "Unbekanntes Dokument",

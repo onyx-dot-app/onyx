@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
+  OverflowText,
   Popover,
   SelectButton,
   Tag,
@@ -18,6 +19,7 @@ import {
   SvgCheckCircle,
   SvgCheckSquare,
   SvgFiles,
+  SvgRefreshCw,
   SvgTextLines,
   SvgUserShield,
   SvgUsers,
@@ -150,7 +152,7 @@ export interface ActivityCardProps {
   closed: boolean;
   /** Names the pair in place of the run's kind, for a feed across pairs. */
   connector?: CCPairRef;
-  /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
+  /** Whether the viewer may re-fetch single documents of this pair. Otherwise the retry actions hide, except a disabled Retry when `canResolveRuns` holds. */
   canResolve: boolean;
   /** Whether the viewer may mark the run resolved. */
   canResolveRuns: boolean;
@@ -215,6 +217,8 @@ export default function ActivityCard({
     run.kind === "indexing" ? run.attempt.open_doc_error_count : 0;
   const listsDocs = openDocs > 0;
   const resolvable = canResolve && listsDocs;
+  // The viewer could resolve, but the connector cannot re-fetch single documents. The button stays, disabled, to say so.
+  const resolveUnsupported = listsDocs && canResolveRuns && !canResolve;
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
   const state = cardState(run, group, closed);
@@ -327,13 +331,15 @@ export default function ActivityCard({
                 >
                   {formatDateTimeLog(run.time_created)}
                 </Text>
+                {/* The identity shrinks before the timestamp, so a long connector name truncates with its tooltip. */}
                 <Section
                   flexDirection="row"
+                  justifyContent="end"
                   alignItems="center"
                   gap={0.5}
                   padding={0.5}
-                  width="fit"
                   height="fit"
+                  className="min-w-0"
                 >
                   {run.kind === "indexing" && run.attempt.is_new_model && (
                     <Tag
@@ -342,10 +348,10 @@ export default function ActivityCard({
                       color="purple"
                     />
                   )}
-                  <Text font="secondary-body" color={mutedColor} maxLines={1}>
+                  <OverflowText font="secondary-body" color={mutedColor}>
                     {identity}
-                  </Text>
-                  <IdentityIcon size={12} className="stroke-text-02" />
+                  </OverflowText>
+                  <IdentityIcon size={12} className="shrink-0 stroke-text-02" />
                 </Section>
               </Section>
               <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
@@ -426,16 +432,20 @@ export default function ActivityCard({
                       />
                     </Popover>
                     {/* One click re-indexes every open failed document, without opening the list. */}
-                    {resolvable && !closed && (
+                    {(resolvable || resolveUnsupported) && !closed && (
                       <Button
-                        rightIcon={SvgCheckAll}
+                        rightIcon={SvgRefreshCw}
                         prominence="tertiary"
                         size="xs"
-                        disabled={resolving}
-                        tooltip={t("docs.resolveAllTooltip")}
+                        disabled={resolving || resolveUnsupported}
+                        tooltip={t(
+                          resolveUnsupported
+                            ? "docs.resolveAllUnsupported"
+                            : "docs.resolveAllTooltip"
+                        )}
                         onClick={() => onResolve(null)}
                       >
-                        {t("docs.resolveAll")}
+                        {t("docs.retry", { count: openDocs })}
                       </Button>
                     )}
                   </>
