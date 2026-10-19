@@ -8,9 +8,12 @@ outputs and errors."""
 
 from datetime import datetime, timedelta, timezone
 
-from pydantic import BaseModel, ConfigDict
-
-from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
+from onyx.connectors.microsoft_utils.models import (
+    MicrosoftAccountLabels,
+    MicrosoftRowText,
+    MicrosoftSignIn,
+    MicrosoftTokenInfo,
+)
 
 GRAPH_API = "Microsoft Graph"
 SHAREPOINT_API = "SharePoint API"
@@ -18,40 +21,6 @@ SHAREPOINT_API = "SharePoint API"
 MAX_SUMMARY_LENGTH = 40
 # A certificate this close to its end date gets a caveat on the sign-in row.
 CERTIFICATE_EXPIRY_WARNING = timedelta(days=30)
-
-
-class MicrosoftRowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    model_config = ConfigDict(frozen=True)
-
-    summary: str
-    description: str
-
-
-class MicrosoftAccountLabels(BaseModel):
-    """The names the connector form gives the account's fields, for lines
-    that tell the admin which field to fix."""
-
-    model_config = ConfigDict(frozen=True)
-
-    client_id: str
-    directory_id: str
-    client_secret: str
-    private_key: str
-    certificate_password: str
-
-    @classmethod
-    def with_prefix(
-        cls, prefix: str, *, private_key: str | None = None
-    ) -> "MicrosoftAccountLabels":
-        return cls(
-            client_id=f"{prefix} Client ID",
-            directory_id=f"{prefix} Directory ID",
-            client_secret=f"{prefix} Client Secret",
-            private_key=private_key or f"{prefix} Private Key",
-            certificate_password=f"{prefix} Certificate Password",
-        )
 
 
 DEFAULT_ACCOUNT_LABELS = MicrosoftAccountLabels(
@@ -241,14 +210,6 @@ def credential_rejected_row(
             f"registration and paste its Value into {labels.client_secret}."
         ),
     )
-
-
-class MicrosoftSignIn(BaseModel):
-    """What a passing sign-in check shows: its line, and caveats."""
-
-    summary: str
-    description: str | None = None
-    caveats: list[str] = []
 
 
 def sign_in_text(

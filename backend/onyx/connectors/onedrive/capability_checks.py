@@ -18,10 +18,6 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
 )
-from onyx.connectors.microsoft_utils.check_text import (
-    MicrosoftAccountLabels,
-    MicrosoftSignIn,
-)
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     DriveDeltaItem,
@@ -32,6 +28,10 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
 from onyx.connectors.microsoft_utils.graph_errors import raise_for_graph_error
+from onyx.connectors.microsoft_utils.models import (
+    MicrosoftAccountLabels,
+    MicrosoftSignIn,
+)
 from onyx.connectors.microsoft_utils.sign_in import sign_in
 from onyx.connectors.onedrive.config import OneDriveConnectorConfig
 from onyx.connectors.onedrive.models import (

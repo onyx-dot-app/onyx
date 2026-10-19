@@ -25,10 +25,6 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
 )
-from onyx.connectors.microsoft_utils.check_text import (
-    MicrosoftAccountLabels,
-    MicrosoftSignIn,
-)
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
     DriveDeltaItem,
@@ -52,6 +48,8 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     raise_for_graph_error,
 )
 from onyx.connectors.microsoft_utils.models import (
+    MicrosoftAccountLabels,
+    MicrosoftSignIn,
     SharepointPrincipal,
     SharepointRoleAssignment,
     SharepointSecurable,

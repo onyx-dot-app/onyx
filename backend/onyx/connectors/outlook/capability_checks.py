@@ -42,13 +42,13 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
-from onyx.connectors.microsoft_utils.check_text import (
-    MicrosoftAccountLabels,
-    MicrosoftSignIn,
-)
 from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.models import (
+    MicrosoftAccountLabels,
+    MicrosoftSignIn,
 )
 from onyx.connectors.microsoft_utils.sign_in import sign_in
 from onyx.connectors.outlook.config import OutlookConnectorConfig

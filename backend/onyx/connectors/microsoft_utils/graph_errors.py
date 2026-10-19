@@ -33,8 +33,6 @@ from onyx.connectors.microsoft_utils.check_text import (
     TOKEN_REJECTED_ROW,
     UNKNOWN_SIGN_IN_METHOD_ROW,
     UNREACHABLE_ROW,
-    MicrosoftAccountLabels,
-    MicrosoftRowText,
     certificate_unreadable_row,
     credential_rejected_row,
     missing_field_row,
@@ -44,6 +42,10 @@ from onyx.connectors.microsoft_utils.check_text import (
 from onyx.connectors.microsoft_utils.graph_client import (
     TRANSIENT_TRANSPORT_EXCEPTIONS,
     is_permanent_refusal_status,
+)
+from onyx.connectors.microsoft_utils.models import (
+    MicrosoftAccountLabels,
+    MicrosoftRowText,
 )
 
 NO_ERROR_CODE = "<no code>"

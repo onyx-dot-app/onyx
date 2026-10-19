@@ -4,8 +4,6 @@ app-only token request, mapped onto the sign-in row."""
 from collections.abc import Callable
 
 from onyx.connectors.microsoft_utils.check_text import (
-    MicrosoftAccountLabels,
-    MicrosoftSignIn,
     sign_in_text,
 )
 from onyx.connectors.microsoft_utils.graph_errors import (
@@ -14,7 +12,11 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     raise_for_auth_error,
     raise_for_sign_in_error,
 )
-from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
+from onyx.connectors.microsoft_utils.models import (
+    MicrosoftAccountLabels,
+    MicrosoftSignIn,
+    MicrosoftTokenInfo,
+)
 
 
 def sign_in(

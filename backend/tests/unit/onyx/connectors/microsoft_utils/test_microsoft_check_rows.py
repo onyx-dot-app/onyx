@@ -40,8 +40,6 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.microsoft_utils import check_text
 from onyx.connectors.microsoft_utils.check_text import (
-    MicrosoftAccountLabels,
-    MicrosoftRowText,
     sign_in_text,
 )
 from onyx.connectors.microsoft_utils.graph_auth import (
@@ -62,7 +60,11 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     raise_for_graph_error,
     raise_for_sign_in_error,
 )
-from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
+from onyx.connectors.microsoft_utils.models import (
+    MicrosoftAccountLabels,
+    MicrosoftRowText,
+    MicrosoftTokenInfo,
+)
 from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
 from onyx.connectors.onedrive.source_operations import OneDriveSourceOperations
 from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks

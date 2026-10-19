@@ -25,7 +25,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from msal.exceptions import MsalServiceError
 from office365.runtime.auth.token_response import TokenResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -39,7 +39,7 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     microsoft_error_from_exception,
     msal_http_status,
 )
-from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
+from onyx.connectors.microsoft_utils.models import AccessTokenClaims, MicrosoftTokenInfo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -135,37 +135,27 @@ def certificate_not_after(pfx_data: bytes, password: str) -> datetime | None:
     return certificate.not_valid_after_utc if certificate is not None else None
 
 
-class _AccessTokenClaims(BaseModel):
-    """The claims of an app-only access token that name the app."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    app_displayname: str | None = None
-    appid: str | None = None
-    azp: str | None = None
-
-
-def _access_token_claims(access_token: str) -> _AccessTokenClaims:
+def _access_token_claims(access_token: str) -> AccessTokenClaims:
     """The token's claims, read without verifying its signature: they only
     name the app on the sign-in row. Empty when the token is not a JWT."""
     parts: list[str] = access_token.split(".")
     if len(parts) != 3:
-        return _AccessTokenClaims()
+        return AccessTokenClaims()
     payload: str = parts[1] + "=" * (-len(parts[1]) % 4)
     try:
-        return _AccessTokenClaims.model_validate(
+        return AccessTokenClaims.model_validate(
             json.loads(base64.urlsafe_b64decode(payload))
         )
     except (binascii.Error, ValueError, PydanticValidationError):
         logger.debug("The access token's claims did not decode")
-        return _AccessTokenClaims()
+        return AccessTokenClaims()
 
 
 def token_info(
     auth_context: MicrosoftAuthContext, token_response: dict[str, Any]
 ) -> MicrosoftTokenInfo:
     """What a token response tells about the app that signed in."""
-    claims: _AccessTokenClaims = _access_token_claims(
+    claims: AccessTokenClaims = _access_token_claims(
         str(token_response.get("access_token") or "")
     )
     expires_in: int | str | None = token_response.get("expires_in")
