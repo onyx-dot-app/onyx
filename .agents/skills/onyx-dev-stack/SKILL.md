@@ -80,6 +80,7 @@ Repeat the profile and local-model flag with `start` or `restart`. Use `up` to c
 - Use `ods web dev` for frontend-only diffs with a healthy managed API. Its Ctrl-C behavior leaves the reused API running.
 - Shared status reports the active checkout. Run stop, down, start, and restart there. Only up transfers ownership.
 - Legacy datasets are preserved. If several exist at first shared startup, select the intended one with `--project`; never choose by timestamps. Stop its legacy stack with `--isolated` before adoption.
+- Legacy discovery reads saved `ods stack` state. Compose-only setups need their previous `--project NAME` explicitly. Use `ods --project NAME stack up` to save that shared selection before using the default commands.
 - Project ownership is durable. An explicit project collision fails, including in isolated mode. Select a different project for independent infrastructure.
 - ODS persists port assignments and changes them only when necessary. Read status again after a restart.
 - The selected stack lock coordinates lifecycle changes. Shared handoffs serialize; isolated stacks can start independently.

@@ -203,6 +203,9 @@ Run backend services in the foreground with environment loaded from
 `.vscode/.env`. On first run, copies `.vscode/env_template.txt` to `.vscode/.env`
 if the `.env` file does not already exist.
 
+ODS retains terminal control and forwards line input through a pipe.
+Programs that require terminal stdin or direct `/dev/tty` input need a separate launch.
+
 Paid features need a license in the database. When `ONYX_DEV_LICENSE` is set, in
 the shell or in `.vscode/.env`, `backend api` seeds it before the server starts.
 `compose` reads it from the shell only and seeds it into the api_server once the
@@ -274,6 +277,13 @@ first. ODS remembers the selected project and never guesses between datasets.
 Project ownership is durable. An explicit `--project` that conflicts with another
 managed stack fails, including in isolated mode. Select a different project for
 independent infrastructure.
+
+Legacy discovery uses saved `ods stack` state. A setup created only with
+`ods compose dev` has no such state. To keep its data, select its previous
+Compose project explicitly before the first shared startup, for example
+`ods --project onyx stack up` for an uncustomized checkout named `onyx`.
+Shared startup saves that project for later commands. Until then, repeat
+`--project NAME` with Compose and database commands. Existing volumes are not deleted.
 
 For frontend-only diffs on macOS or Linux, prefer `ods web dev`. It starts the
 frontend against a healthy managed API. It does not start containers, install
