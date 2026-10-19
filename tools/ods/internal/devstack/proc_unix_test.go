@@ -3,6 +3,7 @@
 package devstack
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -17,6 +18,108 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+
+func TestRunServiceTerminalInterruptStopsStubbornChild(t *testing.T) {
+	script, err := exec.LookPath("script")
+	if err != nil {
+		t.Skip("script is required to allocate a disposable terminal")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		args = []string{"-q", "/dev/null", executable, "-test.run=^TestRunServiceTerminalInterruptHelper$"}
+	case "linux":
+		quoted := "'" + strings.ReplaceAll(executable, "'", "'\"'\"'") + "'"
+		args = []string{"-q", "-c", quoted + " -test.run=^TestRunServiceTerminalInterruptHelper$", "/dev/null"}
+	default:
+		t.Skip("terminal fixture supports macOS and Linux")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, script, args...)
+	cmd.Env = append(os.Environ(), "ODS_TEST_TERMINAL_INTERRUPT=1")
+	input, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = input.Close() }()
+	defer func() { _ = writer.Close() }()
+	output, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stdin, cmd.Stderr = input, cmd.Stdout
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	var transcript strings.Builder
+	scanner := bufio.NewScanner(output)
+	sent := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		transcript.WriteString(line + "\n")
+		if line == "interrupt ready\r" || line == "interrupt ready" {
+			if _, err := writer.Write([]byte{3}); err != nil {
+				t.Error(err)
+			}
+			sent = true
+		}
+	}
+	readErr := scanner.Err()
+	err = cmd.Wait()
+	if err != nil || readErr != nil || !sent || !strings.Contains(transcript.String(), "interrupt stopped; terminal restored") {
+		t.Fatalf("terminal interrupt: exit=%v read=%v sent=%v\n%s", err, readErr, sent, transcript.String())
+	}
+}
+
+func TestRunServiceTerminalInterruptHelper(t *testing.T) {
+	if os.Getenv("ODS_TEST_TERMINAL_INTERRUPT") != "1" {
+		return
+	}
+	foreground, err := unix.IoctlGetInt(int(os.Stdin.Fd()), unix.TIOCGPGRP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, target, launch := runnerShellFixture(t, `trap '' INT TERM; printf 'interrupt ready\n'; while :; do sleep 1; done`)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	err = s.RunService(ctx, target, launch, "model", ServiceOptions{
+		PreferredPort: testBasePort + 200, StopTimeout: 100 * time.Millisecond,
+		IO: ServiceIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr},
+	})
+	if ctx.Err() != nil {
+		t.Fatalf("terminal Ctrl-C did not start bounded shutdown before watchdog: %v", err)
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("stubborn child exit=%v, want forced termination", err)
+	}
+	status, ok := exitErr.Sys().(syscall.WaitStatus)
+	if !ok || !status.Signaled() || status.Signal() != syscall.SIGKILL {
+		t.Fatalf("stubborn child status=%v, want SIGKILL", exitErr.Sys())
+	}
+	current, err := unix.IoctlGetInt(int(os.Stdin.Fd()), unix.TIOCGPGRP)
+	if err != nil || current != foreground {
+		t.Fatalf("terminal foreground group=%d, want %d: %v", current, foreground, err)
+	}
+	state, err := s.ReadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state == nil {
+		t.Fatal("service state missing after terminal interrupt")
+	}
+	for _, service := range state.Services {
+		if isCurrent(service) || groupAlive(service.PGID) {
+			t.Fatalf("service survived terminal interrupt: %+v", service)
+		}
+	}
+	fmt.Println("interrupt stopped; terminal restored")
+}
 
 func TestServiceReadsForegroundTerminalInput(t *testing.T) {
 	script, err := exec.LookPath("script")
@@ -84,6 +187,19 @@ func TestServiceTerminalHelper(t *testing.T) {
 	current, err := unix.IoctlGetInt(int(os.Stdin.Fd()), unix.TIOCGPGRP)
 	if err != nil || current != foreground {
 		t.Fatalf("terminal foreground group=%d, want %d: %v", current, foreground, err)
+	}
+	sp.Command = []string{"/bin/sh", "-c", "exit 0"}
+	_, done, err = launchService(sp, filepath.Join(t.TempDir(), "idle-input.log"), ServiceIO{Stdin: os.Stdin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("service exit waited for idle terminal input")
 	}
 	sp.Command = []string{filepath.Join(t.TempDir(), "missing-service")}
 	if _, _, err := launchService(sp, filepath.Join(t.TempDir(), "failed.log"), ServiceIO{Stdin: os.Stdin}); err == nil {
