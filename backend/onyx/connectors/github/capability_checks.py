@@ -769,8 +769,26 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
                     f"{_not_found_line(missing, token)}"
                 ),
             )
-        if missing:
+        failure_kinds: int = sum(map(bool, (missing, denied, unreadable)))
+        if failure_kinds > 1:
+            # One line for each kind of failure, so the row names every repository.
             row: _RowText = _RowText(
+                summary=f"Cannot read {len(messages)} of {len(names)} repositories",
+                description="\n".join(
+                    line
+                    for line in (
+                        _not_found_line(missing, token) if missing else "",
+                        denied_line,
+                        f"Unreadable files: {_names(unreadable)}. Index attempts "
+                        "reject these."
+                        if unreadable
+                        else "",
+                    )
+                    if line
+                ),
+            )
+        elif missing:
+            row = _RowText(
                 summary=f"{len(missing)} of {len(names)} repositories not found",
                 description=(
                     'GitHub answers "not found" for a misspelled name and for a '
@@ -821,13 +839,20 @@ def _target_repositories(
             if len(repositories) >= limit:
                 break
             try:
-                repositories.append(gateway.get_repository(owner=owner, name=name))
+                repository: GitHubRepository = gateway.get_repository(
+                    owner=owner, name=name
+                )
+                # Index attempts reject a repository whose root they cannot read.
+                gateway.list_root_contents(repo_full_name=repository.full_name)
             except GitHubApiError as e:
-                # github_configured_repositories reports a denied or missing
-                # repository; anything else leaves this check unverified.
+                # github_configured_repositories reports a denied, missing or
+                # unreadable repository; anything else leaves this check
+                # unverified.
                 _raise_unless_denied(
                     e, denied=f"The token cannot read `{owner}/{name}`"
                 )
+                continue
+            repositories.append(repository)
         return repositories
     except GitHubApiError as e:
         _raise_for_api_error(

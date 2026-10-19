@@ -554,6 +554,54 @@ def test_files_probe_the_listed_repositories() -> None:
     gateway.get_git_tree.assert_called_once_with(repo_full_name="acme/b", ref="main")
 
 
+def test_files_skip_a_listed_repository_whose_files_are_denied() -> None:
+    gateway = _gateway()
+
+    def list_root_contents(*, repo_full_name: str) -> list[str]:
+        if repo_full_name == "acme/denied":
+            raise _api_error(403, "Resource not accessible")
+        return []
+
+    gateway.list_root_contents.side_effect = list_root_contents
+
+    result = _run("github_files", gateway, _config(repositories="denied, b"))
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    gateway.get_git_tree.assert_called_once_with(repo_full_name="acme/b", ref="main")
+
+
+def test_configured_repositories_name_every_kind_of_failure() -> None:
+    gateway = _gateway()
+    gateway.get_repository.side_effect = [
+        _repo("a"),
+        _api_error(404, "Not Found"),
+        _api_error(403, "Forbidden"),
+        _repo("empty"),
+    ]
+
+    def list_root_contents(*, repo_full_name: str) -> list[str]:
+        if repo_full_name == "acme/empty":
+            raise _api_error(404, "This repository is empty.")
+        return []
+
+    gateway.list_root_contents.side_effect = list_root_contents
+
+    result = _run(
+        "github_configured_repositories",
+        gateway,
+        _config(repositories="a, missing, denied, empty"),
+    )
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "Cannot read 3 of 4 repositories"
+    assert result.description is not None
+    lines = result.description.split("\n")
+    assert len(lines) == 3
+    assert lines[0].startswith("Not found: missing.")
+    assert lines[1].startswith("Denied: denied.")
+    assert lines[2].startswith("Unreadable files: acme/empty.")
+
+
 def test_configured_repositories_are_incomplete_during_a_github_outage() -> None:
     gateway = _gateway()
     gateway.get_repository.side_effect = _api_error(502, "Bad Gateway")
