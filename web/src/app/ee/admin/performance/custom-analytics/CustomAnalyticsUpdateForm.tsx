@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@opal/layouts";
 import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
-import { Button, InputTextArea, Text } from "@opal/components";
+import { Button, InputTextArea, InputTypeIn, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useState } from "react";
 import { Spacer } from "@opal/components";
@@ -70,15 +70,8 @@ export default function CustomAnalyticsUpdateForm() {
             })}
           </>
         </SubLabel>
-        <input
-          className={`
-            border
-            border-border
-            rounded
-            w-full
-            py-2
-            px-3
-            mt-1`}
+        <Spacer rem={0.25} />
+        <InputTypeIn
           type="password"
           value={secretKey}
           onChange={(e) => setSecretKey(e.target.value)}
