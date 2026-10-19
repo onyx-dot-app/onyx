@@ -2,6 +2,8 @@
 
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import type { RichStr } from "@opal/types";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   Text,
   InputSingleSelect,
@@ -26,7 +28,7 @@ interface PolicyEditorProps {
   showDescription?: boolean;
   disabled?: boolean;
   onReset?: () => void;
-  resetLabel?: string;
+  resetLabel?: string | RichStr;
   items: PolicyEditorItem[];
   policies: Record<string, ActionPolicy>;
   onChange?: (policies: Record<string, ActionPolicy>) => void;
@@ -108,7 +110,9 @@ export default function PolicyEditor({
                   options: [
                     {
                       value: "reset",
-                      title: resetLabel ?? t("permissions.defaultOption"),
+                      title: toPlainString(
+                        resetLabel ?? t("permissions.defaultOption")
+                      ),
                     },
                   ],
                 },
