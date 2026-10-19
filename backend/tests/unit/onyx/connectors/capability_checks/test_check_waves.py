@@ -7,6 +7,7 @@ on a timeout instead of passing by chance."""
 
 import threading
 from collections.abc import Callable, Sequence
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,6 +27,7 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     RateLimitedValidationError,
 )
+from onyx.connectors.interfaces import BaseConnector
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 # Bounds every wait, so a wrong schedule fails instead of hanging.
@@ -40,12 +42,13 @@ class _Check(CapabilityCheck):
         *,
         depends_on: tuple[str, ...] = (),
         discovery: bool = False,
+        requires_connector_instance: bool = False,
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
             check_id=check_id,
             display_name=f"Run {check_id}",
-            requires_connector_instance=False,
+            requires_connector_instance=requires_connector_instance,
             discovery=discovery,
             depends_on=depends_on,
         )
@@ -83,8 +86,11 @@ class _Recorded:
 def _run(
     checks: list[CapabilityCheck],
     on_result: Callable[[Sequence[CapabilityCheckResult]], None] | None = None,
+    connector: BaseConnector | None = None,
 ) -> list[CapabilityCheckResult]:
-    context = CapabilityCheckContext(source=DocumentSource.SLACK, credential_json={})
+    context = CapabilityCheckContext(
+        source=DocumentSource.SLACK, credential_json={}, connector=connector
+    )
     return run_capability_checks(checks, context, on_result=on_result)
 
 
@@ -243,3 +249,40 @@ def test_checks_run_with_the_callers_tenant() -> None:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     assert tenants == ["tenant_a"]
+
+
+def test_checks_that_call_the_connector_run_one_at_a_time() -> None:
+    """Connectors are not thread safe: two checks that need the connector
+    instance never overlap, while a gateway check runs beside them."""
+    lock = threading.Lock()
+    in_connector = 0
+    most_in_connector = 0
+    gateway_ran_alongside = threading.Event()
+    connector_started = threading.Event()
+
+    def connector_body() -> None:
+        nonlocal in_connector, most_in_connector
+        with lock:
+            in_connector += 1
+            most_in_connector = max(most_in_connector, in_connector)
+        connector_started.set()
+        gateway_ran_alongside.wait(_WAIT_SECONDS)
+        with lock:
+            in_connector -= 1
+
+    def gateway_body() -> None:
+        if not connector_started.wait(_WAIT_SECONDS):
+            raise RuntimeError("no connector check started")
+        gateway_ran_alongside.set()
+
+    results = _run(
+        [
+            _Check("settings", connector_body, requires_connector_instance=True),
+            _Check("perm_sync", connector_body, requires_connector_instance=True),
+            _Check("gateway", gateway_body),
+        ],
+        connector=MagicMock(spec=BaseConnector),
+    )
+
+    assert {r.status for r in results} == {CapabilityCheckStatus.PASSED}
+    assert most_in_connector == 1

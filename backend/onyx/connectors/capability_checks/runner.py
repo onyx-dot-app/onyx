@@ -817,6 +817,14 @@ class _CheckRun:
             to_execute = []
         if to_execute and len(self._running) >= MAX_PARALLEL_CHECKS:
             return False
+        # Connectors are not thread safe, unlike gateways: checks that call the
+        # connector instance run one at a time.
+        if (
+            to_execute
+            and to_execute[0].requires_connector_instance
+            and self._connector_check_running()
+        ):
+            return False
         for check, outcome in recorded:
             self._record(check, outcome)
         if not to_execute:
@@ -834,6 +842,11 @@ class _CheckRun:
         )
         self._running[future] = to_execute
         return True
+
+    def _connector_check_running(self) -> bool:
+        return any(
+            checks[0].requires_connector_instance for checks in self._running.values()
+        )
 
     def _own_skip_outcome(self, check: CapabilityCheck) -> _CheckOutcome | None:
         """The outcome of a check that must not run for a reason of its own, or
