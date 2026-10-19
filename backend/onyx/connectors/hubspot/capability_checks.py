@@ -16,13 +16,12 @@ index nothing, so the first type's read check FAILS.
 from datetime import datetime, timezone
 from typing import NoReturn
 
-from pydantic import BaseModel
-
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
     form_config,
 )
@@ -96,13 +95,6 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
 }
 
 
-class _RowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    summary: str
-    description: str
-
-
 def _gateway(context: CapabilityCheckContext) -> HubSpotSourceOperations:
     gateway: SourceOperations | None = context.source_operations
     if not isinstance(gateway, HubSpotSourceOperations):
@@ -140,21 +132,21 @@ def _need(scope: str) -> str:
     return f"In HubSpot, add `{scope}` to the private app's scopes."
 
 
-_REJECTED_ROW = _RowText(
+_REJECTED_ROW = CheckRowText(
     summary="HubSpot rejected the API token",
     description=(
         "HubSpot does not accept this token. (HTTP 401)\nIn HubSpot, open the "
         "private app and copy its access token."
     ),
 )
-_UNREACHABLE_ROW = _RowText(
+_UNREACHABLE_ROW = CheckRowText(
     summary="Cannot reach HubSpot",
     description=(
         "The request to HubSpot failed.\nCheck that the server can reach "
         "api.hubapi.com."
     ),
 )
-_UNEXPECTED_ROW = _RowText(
+_UNEXPECTED_ROW = CheckRowText(
     summary="Unexpected response from HubSpot",
     description=(
         "HubSpot answered in a way that this check does not know.\nRe-run the checks."
@@ -167,7 +159,7 @@ def _raise_for_error(
     *,
     denied: str,
     scope: str | None = None,
-    denied_row: _RowText | None = None,
+    denied_row: CheckRowText | None = None,
 ) -> NoReturn:
     """Maps a gateway error onto the validation-exception family. ``denied``
     explains a 403 for this probe; ``denied_row`` is what its row shows."""
@@ -344,7 +336,7 @@ class _TokenCheck(_HubSpotCheck):
             _raise_for_error(
                 error,
                 denied="read the portal",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Token cannot read the account",
                     description=(
                         "HubSpot refused to name the account. (HTTP 403)\nIn "
@@ -417,7 +409,7 @@ class _RecordsReadableCheck(_HubSpotCheck):
                 error,
                 denied=f"read {object_type.value}",
                 scope=scope,
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary=f"Token cannot read {object_type.value}",
                     description=(
                         f"Indexing cannot list or search {object_type.value}. "
@@ -495,7 +487,7 @@ class _AssociationsCheck(_HubSpotCheck):
                     f"list the {to_object_type.value} linked to {object_type.value}"
                 ),
                 scope=to_scope,
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary=f"Cannot read linked {to_object_type.value}",
                     description=(
                         "Documents would index without their linked records. "
@@ -539,7 +531,7 @@ class _NotesCheck(_HubSpotCheck):
             _raise_for_error(
                 error,
                 denied="read notes",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Token cannot read notes",
                     description=(
                         "Record documents would index without their notes. (HTTP "
@@ -581,7 +573,7 @@ class _UsersCheck(_HubSpotCheck):
                 error,
                 denied="list users",
                 scope=_USERS_SCOPE,
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Token cannot list users",
                     description=(
                         "Permission sync cannot turn viewer IDs into emails. (HTTP "
@@ -623,7 +615,7 @@ class _RecordViewersCheck(_HubSpotCheck):
             _raise_for_error(
                 error,
                 denied="read a record's viewers",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Token cannot read record viewers",
                     description=(
                         "Permission sync cannot learn who may view each record. "
@@ -652,7 +644,7 @@ class _RecordViewersCheck(_HubSpotCheck):
                     error,
                     denied=f"list {object_type.value} for a sample record",
                     scope=scope,
-                    denied_row=_RowText(
+                    denied_row=CheckRowText(
                         summary=f"Token cannot read {object_type.value}",
                         description=(
                             f"Permission sync cannot sync {object_type.value}. "
