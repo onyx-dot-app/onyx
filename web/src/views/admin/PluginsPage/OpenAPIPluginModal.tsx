@@ -12,7 +12,7 @@ import {
   Tabs,
   Text,
 } from "@opal/components";
-import { Content, InputVertical, toast } from "@opal/layouts";
+import { Content, InputPadder, InputVertical, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { can } from "@/lib/permissions/resource-actions";
@@ -90,35 +90,41 @@ function MetadataEditor({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <InputVertical title={fields("name.title")} withLabel="plugin-name">
-        <InputTypeIn
-          id="plugin-name"
-          value={name}
-          onChange={(event) =>
-            setDraft({ name: event.target.value, description })
-          }
-          variant={pending ? "disabled" : "primary"}
-        />
-      </InputVertical>
-      <InputVertical
-        title={t("addMcpModal.description.title")}
-        withLabel="plugin-description"
-      >
-        <InputTextArea
-          id="plugin-description"
-          value={description}
-          onChange={(event) =>
-            setDraft({ name, description: event.target.value })
-          }
-          variant={pending ? "disabled" : "primary"}
-          rows={3}
-        />
-      </InputVertical>
+    <div className="flex flex-col">
+      <InputPadder>
+        <InputVertical title={fields("name.title")} withLabel="plugin-name">
+          <InputTypeIn
+            id="plugin-name"
+            value={name}
+            onChange={(event) =>
+              setDraft({ name: event.target.value, description })
+            }
+            variant={pending ? "disabled" : "primary"}
+          />
+        </InputVertical>
+      </InputPadder>
+      <InputPadder>
+        <InputVertical
+          title={t("addMcpModal.description.title")}
+          withLabel="plugin-description"
+        >
+          <InputTextArea
+            id="plugin-description"
+            value={description}
+            onChange={(event) =>
+              setDraft({ name, description: event.target.value })
+            }
+            variant={pending ? "disabled" : "primary"}
+            rows={3}
+          />
+        </InputVertical>
+      </InputPadder>
       {error && (
-        <Text as="p" color="status-error-05">
-          {error}
-        </Text>
+        <InputPadder>
+          <Text as="p" color="status-error-05">
+            {error}
+          </Text>
+        </InputPadder>
       )}
       <MCPFormActions
         variant="page"
@@ -380,7 +386,7 @@ export default function OpenAPIPluginModal({
     oauth: t("openApiAuthModal.authMethod.oauth.label"),
     "pt-oauth": t("openApiAuthModal.authMethod.ptOauth.label"),
     "custom-header": t("openApiAuthModal.authMethod.customHeader.label"),
-    none: t("mcpAuthModal.authType.none.label"),
+    none: t("openApiAuthModal.authMethod.none.label"),
   }[authMethod];
 
   function showTab(value: string) {
@@ -411,7 +417,7 @@ export default function OpenAPIPluginModal({
           }
           onClose={closeDetail}
         />
-        <Modal.Body alignItems="stretch">
+        <Modal.Body alignItems="stretch" padding={2} gap={0}>
           {!isAdd && !tool && isLoading ? (
             <IconLoader />
           ) : !isAdd && !tool ? (
@@ -440,25 +446,27 @@ export default function OpenAPIPluginModal({
               value={tab}
               onValueChange={selectTab}
               variant="contained"
-              gap={4}
+              gap={0}
             >
-              <Tabs.List>
-                <Tabs.Trigger value="server" disabled={busy || isAdd}>
-                  {t("plugins.openapi.detailsTitle")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="schema" disabled={busy}>
-                  {t("plugins.openapi.schemaTitle")}
-                </Tabs.Trigger>
-                <Tabs.Trigger
-                  value="authentication"
-                  disabled={busy || (isAdd && !draft)}
-                >
-                  {t("mcpDetail.authentication")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="tools" disabled={busy || isAdd}>
-                  {t("mcpTools.title")}
-                </Tabs.Trigger>
-              </Tabs.List>
+              <InputPadder>
+                <Tabs.List>
+                  <Tabs.Trigger value="server" disabled={busy || isAdd}>
+                    {t("plugins.openapi.detailsTitle")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="schema" disabled={busy}>
+                    {t("plugins.openapi.schemaTitle")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger
+                    value="authentication"
+                    disabled={busy || (isAdd && !draft)}
+                  >
+                    {t("mcpDetail.authentication")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="tools" disabled={busy || isAdd}>
+                    {t("mcpTools.title")}
+                  </Tabs.Trigger>
+                </Tabs.List>
+              </InputPadder>
               <Tabs.Content
                 value="server"
                 keepMounted
@@ -474,14 +482,16 @@ export default function OpenAPIPluginModal({
                     onSave={saveMetadata}
                   />
                 ) : (
-                  <Content
-                    sizePreset="main-ui"
-                    variant="section"
-                    title={tool.name}
-                    description={
-                      tool.description || t("plugins.openapi.readOnly")
-                    }
-                  />
+                  <InputPadder>
+                    <Content
+                      sizePreset="main-ui"
+                      variant="section"
+                      title={tool.name}
+                      description={
+                        tool.description || t("plugins.openapi.readOnly")
+                      }
+                    />
+                  </InputPadder>
                 )}
               </Tabs.Content>
               <Tabs.Content
@@ -515,12 +525,14 @@ export default function OpenAPIPluginModal({
                       }}
                     />
                   ) : (
-                    <InputTextArea
-                      value={JSON.stringify(tool.definition, null, 2)}
-                      variant="disabled"
-                      rows={12}
-                      aria-label={t("plugins.openapi.schemaTitle")}
-                    />
+                    <InputPadder>
+                      <InputTextArea
+                        value={JSON.stringify(tool.definition, null, 2)}
+                        variant="disabled"
+                        rows={12}
+                        aria-label={t("plugins.openapi.schemaTitle")}
+                      />
+                    </InputPadder>
                   ))}
               </Tabs.Content>
               <Tabs.Content
@@ -564,34 +576,40 @@ export default function OpenAPIPluginModal({
                       onConnect={saveAuthentication}
                     />
                   ) : (
-                    <Content
-                      sizePreset="main-ui"
-                      variant="section"
-                      title={t("mcpDetail.authentication")}
-                      description={authDescription}
-                    />
+                    <InputPadder>
+                      <Content
+                        sizePreset="main-ui"
+                        variant="section"
+                        title={t("mcpDetail.authentication")}
+                        description={authDescription}
+                      />
+                    </InputPadder>
                   ))}
               </Tabs.Content>
               <Tabs.Content value="tools">
-                <div className="flex flex-col gap-4">
-                  <InputTypeIn
-                    searchIcon
-                    value={toolSearch}
-                    onChange={(event) => setToolSearch(event.target.value)}
-                    placeholder={t("mcpTools.search")}
-                    aria-label={t("mcpTools.search")}
-                  />
-                  {filteredMethods.length ? (
-                    <OpenAPIEndpointList methods={filteredMethods} />
-                  ) : (
-                    <Text as="p" color="text-03">
-                      {t(
-                        toolSearch.trim()
-                          ? "toolsList.empty.searchMessage"
-                          : "toolsList.empty.message"
-                      )}
-                    </Text>
-                  )}
+                <div className="flex flex-col">
+                  <InputPadder>
+                    <InputTypeIn
+                      searchIcon
+                      value={toolSearch}
+                      onChange={(event) => setToolSearch(event.target.value)}
+                      placeholder={t("mcpTools.search")}
+                      aria-label={t("mcpTools.search")}
+                    />
+                  </InputPadder>
+                  <InputPadder>
+                    {filteredMethods.length ? (
+                      <OpenAPIEndpointList methods={filteredMethods} />
+                    ) : (
+                      <Text as="p" color="text-03">
+                        {t(
+                          toolSearch.trim()
+                            ? "toolsList.empty.searchMessage"
+                            : "toolsList.empty.message"
+                        )}
+                      </Text>
+                    )}
+                  </InputPadder>
                 </div>
               </Tabs.Content>
             </Tabs>

@@ -511,7 +511,11 @@
           "description": "تمرير رمز وصول OAuth الخاص بالمستخدم المستخدم لمصادقة {appName}.",
           "label": "تمرير OAuth المباشر"
         },
-        "required": "طريقة المصادقة مطلوبة"
+        "required": "طريقة المصادقة مطلوبة",
+        "none": {
+          "label": "بلا مصادقة"
+        },
+        "optionsTitle": "خيارات المصادقة"
       },
       "authorizationUrl": {
         "label": "عنوان URL للتفويض",

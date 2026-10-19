@@ -194,6 +194,12 @@ export interface KeyValueInputProps extends WithoutStyles<
   /** Title for the value column */
   valueTitle?: string;
 
+  /**
+   * Hide the column title row. The titles still name the group and its
+   * inputs for assistive technology.
+   */
+  hideTitles?: boolean;
+
   /** Placeholder for the key input */
   keyPlaceholder?: string;
 
@@ -224,6 +230,7 @@ export interface KeyValueInputProps extends WithoutStyles<
 export default function KeyValueInput({
   keyTitle: keyTitleProp,
   valueTitle: valueTitleProp,
+  hideTitles = false,
   keyPlaceholder,
   valuePlaceholder,
   valueType = "text",
@@ -365,15 +372,19 @@ export default function KeyValueInput({
             We add this space below the "title"-row to add some breathing room between the titles and the key-value items.
             Since we're using a `grid` template, the padding below *one* item in a row applies additional height to *all* items in that row.
           */}
-          <div className="pb-1">
-            <Text font="main-ui-action" color="text-05">
-              {keyTitle}
-            </Text>
-          </div>
-          <Text font="main-ui-action" color="text-05">
-            {valueTitle}
-          </Text>
-          <div aria-hidden />
+          {!hideTitles && (
+            <>
+              <div className="pb-1">
+                <Text font="main-ui-action" color="text-05">
+                  {keyTitle}
+                </Text>
+              </div>
+              <Text font="main-ui-action" color="text-05">
+                {valueTitle}
+              </Text>
+              <div aria-hidden />
+            </>
+          )}
 
           {items.map((item, index) => (
             <KeyValueInputItem

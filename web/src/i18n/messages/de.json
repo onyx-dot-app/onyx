@@ -511,7 +511,11 @@
           "description": "Das OAuth-Zugriffstoken des Benutzers weiterleiten, mit dem {appName} authentifiziert wird.",
           "label": "OAuth Pass-through"
         },
-        "required": "Die Authentifizierungsmethode ist erforderlich"
+        "required": "Die Authentifizierungsmethode ist erforderlich",
+        "none": {
+          "label": "Keine Authentifizierung"
+        },
+        "optionsTitle": "Authentifizierungsoptionen"
       },
       "authorizationUrl": {
         "label": "Autorisierungs-URL",

@@ -511,7 +511,11 @@
           "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。",
           "label": "OAuth パススルー"
         },
-        "required": "認証方法は必須です"
+        "required": "認証方法は必須です",
+        "none": {
+          "label": "認証なし"
+        },
+        "optionsTitle": "認証オプション"
       },
       "authorizationUrl": {
         "label": "認可 URL",

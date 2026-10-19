@@ -511,7 +511,11 @@
           "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。",
           "label": "OAuth 透传"
         },
-        "required": "必须选择身份验证方式"
+        "required": "必须选择身份验证方式",
+        "none": {
+          "label": "无需身份验证"
+        },
+        "optionsTitle": "身份验证选项"
       },
       "authorizationUrl": {
         "label": "授权 URL",

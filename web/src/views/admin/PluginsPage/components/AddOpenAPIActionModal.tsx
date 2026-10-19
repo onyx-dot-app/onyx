@@ -5,7 +5,13 @@ import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
 import { Card, Divider, Modal } from "@opal/components";
 import { Text } from "@opal/components";
-import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  InputPadder,
+  InputVertical,
+  toast,
+} from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -297,10 +303,10 @@ function FormContent({
 
       <Modal.Body
         padding={presentation === "inline" ? 0 : 6}
-        gap={4}
+        gap={presentation === "inline" ? 0 : 4}
         alignItems="stretch"
       >
-        <div className="w-full">
+        <InputPadder>
           <InputVertical
             withLabel="definition"
             title={t("addOpenApiModal.definition.title")}
@@ -349,10 +355,10 @@ function FormContent({
               </div>
             </Hoverable.Root>
           </InputVertical>
-        </div>
+        </InputPadder>
         {presentation === "inline" && isEditMode ? (
           currentDefinition && (
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 p-2">
               <Text font="secondary-body" color="text-03">
                 {t("plugins.openapi.schemaPreview.detected", {
                   count: currentDefinition.methods.length,
@@ -379,32 +385,36 @@ function FormContent({
           <div
             hidden={!isEditMode && !methodSpecs?.length}
             className={cn(
-              "w-full min-w-0 flex-col gap-4",
+              "w-full min-w-0 flex-col",
               !isEditMode && !methodSpecs?.length ? "hidden" : "flex"
             )}
           >
             {methodSpecs && methodSpecs.length > 0 ? (
               <>
-                <Divider paddingParallel={0} />
+                <Divider paddingParallel={2} paddingPerpendicular={2} />
                 {name && (
-                  <Content
-                    sizePreset="main-ui"
-                    variant="section"
-                    icon={PluginIcon}
-                    title={name}
-                    description={description}
-                  />
+                  <InputPadder>
+                    <Content
+                      sizePreset="main-ui"
+                      variant="section"
+                      icon={PluginIcon}
+                      title={name}
+                      description={description}
+                    />
+                  </InputPadder>
                 )}
                 {url && (
-                  <Content
-                    sizePreset="main-ui"
-                    variant="section"
-                    icon={SvgInfo}
-                    title={url}
-                    description={t("addOpenApiModal.preview.urlDescription")}
-                  />
+                  <InputPadder>
+                    <Content
+                      sizePreset="main-ui"
+                      variant="section"
+                      icon={SvgInfo}
+                      title={url}
+                      description={t("addOpenApiModal.preview.urlDescription")}
+                    />
+                  </InputPadder>
                 )}
-                <Divider paddingParallel={0} />
+                <Divider paddingParallel={2} paddingPerpendicular={2} />
                 <div className="flex flex-col gap-1">
                   {sortByOpenApiMethod(methodSpecs).map((method) => (
                     <Card

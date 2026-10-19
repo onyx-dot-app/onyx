@@ -511,7 +511,11 @@
           "description": "{appName} 인증에 사용된 사용자의 OAuth 액세스 token을 전달합니다.",
           "label": "OAuth 패스스루"
         },
-        "required": "인증 방법은 필수입니다"
+        "required": "인증 방법은 필수입니다",
+        "none": {
+          "label": "인증 없음"
+        },
+        "optionsTitle": "인증 옵션"
       },
       "authorizationUrl": {
         "label": "권한 부여 URL",

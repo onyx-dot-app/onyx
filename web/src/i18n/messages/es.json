@@ -511,7 +511,11 @@
           "description": "Reenvía el token de acceso de OAuth que el usuario usa para autenticarse en {appName}.",
           "label": "OAuth de paso directo"
         },
-        "required": "El método de autenticación es obligatorio"
+        "required": "El método de autenticación es obligatorio",
+        "none": {
+          "label": "Sin autenticación"
+        },
+        "optionsTitle": "Opciones de autenticación"
       },
       "authorizationUrl": {
         "label": "URL de autorización",

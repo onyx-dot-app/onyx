@@ -511,7 +511,11 @@
           "description": "Transférez le jeton d'accès OAuth utilisé par l'utilisateur pour s'authentifier auprès de {appName}.",
           "label": "Transfert OAuth"
         },
-        "required": "La méthode d'authentification est obligatoire"
+        "required": "La méthode d'authentification est obligatoire",
+        "none": {
+          "label": "Sans authentification"
+        },
+        "optionsTitle": "Options d'authentification"
       },
       "authorizationUrl": {
         "label": "URL d'autorisation",

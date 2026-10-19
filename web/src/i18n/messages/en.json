@@ -511,7 +511,11 @@
           "description": "Forward the user's OAuth access token used to authenticate {appName}.",
           "label": "OAuth Pass-through"
         },
-        "required": "Authentication method is required"
+        "required": "Authentication method is required",
+        "none": {
+          "label": "No Authentication"
+        },
+        "optionsTitle": "Authentication Options"
       },
       "authorizationUrl": {
         "label": "Authorization URL",

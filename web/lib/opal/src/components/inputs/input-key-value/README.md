@@ -11,3 +11,6 @@ This uses `InputPasswordTypeIn`, with its mask, reveal toggle, and session repla
 Keys remain plain text. Reveal and hide do not change values or validation.
 Adding or removing rows hides password values so reveal state cannot move to another credential.
 Replacing or reordering credentials also hides them. Local typing preserves reveal state and focus.
+
+Set `hideTitles` to drop the column title row, for example when a heading above already names
+the list. `keyTitle` and `valueTitle` still name the group and its inputs for assistive technology.

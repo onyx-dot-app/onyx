@@ -511,7 +511,11 @@
           "description": "Encaminhar o token de acesso OAuth do usuário usado para autenticar no {appName}.",
           "label": "Repasse de OAuth"
         },
-        "required": "O método de autenticação é obrigatório"
+        "required": "O método de autenticação é obrigatório",
+        "none": {
+          "label": "Sem autenticação"
+        },
+        "optionsTitle": "Opções de autenticação"
       },
       "authorizationUrl": {
         "label": "URL de autorização",
