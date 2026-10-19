@@ -6,7 +6,7 @@ New tasks start with all apps disabled. Enabling an app reveals Approval setting
 
 Task-disabled apps and workspace-disabled actions remain blocked. When users cannot manage an app's permissions, workspace settings apply. Otherwise task settings apply, with Ask as the fallback for missing actions.
 
-Approve once and Approve for session remain available. Session approval covers specific actions and cannot override Disabled. The proxy waits up to 180 seconds; it does not durably pause execution.
+Approve once and Approve for session remain available. Session approval covers specific actions and cannot override Disabled. The proxy waits up to 180 seconds; it does not durably pause execution. Expired and rejected requests remain visible in session approval history.
 
 The migration converts known actions only in apps a task previously pre-approved. It creates no settings for other apps. Some actions that previously ran automatically may now require approval. The old grant table and runtime cache are removed.
 

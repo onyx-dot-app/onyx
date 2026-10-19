@@ -69,9 +69,9 @@ def _post_decision(
     return client.post(
         url,
         json={
-            "decision": "REJECTED"
+            "decision": "reject"
             if decision == ApprovalDecision.REJECTED
-            else "APPROVED"
+            else "approve_once"
         },
         headers=user.headers,
         cookies=user.cookies,

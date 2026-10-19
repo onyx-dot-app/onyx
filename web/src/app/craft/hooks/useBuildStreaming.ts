@@ -836,7 +836,7 @@ export function useBuildStreaming({
           }
 
           case "approval_requested": {
-            void globalMutate(SWR_KEYS.buildSessionLiveApprovals(sessionId));
+            void globalMutate(SWR_KEYS.buildSessionApprovals(sessionId));
             break;
           }
 

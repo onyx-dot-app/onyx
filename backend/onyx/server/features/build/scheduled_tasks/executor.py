@@ -24,10 +24,9 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks/overview.md``):
    persisting each event with ``persist_sandbox_event``. Enforce a 30 min
    monotonic budget (Celery thread-pool time limits are silently
    disabled — see CLAUDE.md).
-6. On ``RequestPermissionRequest`` (approval gate): mark
-   ``AWAITING_APPROVAL``, emit a notification, return without writing a
-   terminal status. Resume mechanics are owned by the approvals project;
-   until that ships these runs are "terminal-for-display".
+6. On an agent ``RequestPermissionRequest``, stop execution and record FAILED
+   with an actionable reason. Proxy action approvals instead keep their existing
+   bounded wait and do not end the agent stream.
 7. On clean stream completion: ``finalize_persist``, derive a
    ~120-char summary, mark ``SUCCEEDED``.
 8. On any exception inside the drive loop: mark ``FAILED`` with the
@@ -331,16 +330,12 @@ def _drive_agent(
     task_prompt: str,
     sandbox_id: UUID,
     budget_seconds: int,
-) -> bool:
+) -> None:
     """Drive the agent for a single scheduled run.
 
     Creates the BuildSession, persists the user prompt, iterates sandbox
     events with the shared persistence consumer, and writes the terminal
     run status.
-
-    Returns:
-        ``True`` if the run paused on an approval gate (run status is
-        AWAITING_APPROVAL). ``False`` otherwise (run status is terminal).
     """
     # We open a single session for the whole drive so that the
     # `persist_sandbox_event` calls (which write `BuildMessage` rows) and the
@@ -418,7 +413,7 @@ def _drive_agent(
                     notif_type=NotificationType.SCHEDULED_TASK_FAILED,
                 )
                 db_session.commit()
-                return False
+                return
             output_manager = get_sandbox_manager()
             output_snapshot: TurnOutputSnapshot | None = None
             event_stream = session_manager.yield_sandbox_events(
@@ -455,9 +450,8 @@ def _drive_agent(
                         slot.extend()
                         if slot.lost:
                             break
-                        # Approval gate: mark awaiting_approval, return. Resume
-                        # mechanics are owned by the approvals project; this is
-                        # "terminal for display" until it ships.
+                        # Agent permission requests cannot resume this executor.
+                        # Closing the stream aborts the underlying turn.
                         if isinstance(sandbox_event, RequestPermissionRequest):
                             approval_required = True
                             break
@@ -524,7 +518,9 @@ def _drive_agent(
                     mark_run_status(
                         db_session=db_session,
                         run_id=run_id,
-                        status=ScheduledTaskRunStatus.AWAITING_APPROVAL,
+                        status=ScheduledTaskRunStatus.FAILED,
+                        error_class=ScheduledTaskErrorClass.AGENT_PERMISSION_REQUIRED,
+                        error_detail="Execution stopped because the agent needs permission. Review permissions and run the task again.",
                         summary=summary or None,
                     )
                     _notify(
@@ -533,10 +529,10 @@ def _drive_agent(
                         task_name=task_name,
                         task_id=task_id,
                         run_id=run_id,
-                        notif_type=NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL,
+                        notif_type=NotificationType.SCHEDULED_TASK_FAILED,
                     )
                     db_session.commit()
-                    return True
+                    return
 
                 if terminal_error is not None or cancelled or not got_prompt_response:
                     if terminal_error is not None:
@@ -579,7 +575,7 @@ def _drive_agent(
                         error_class.value,
                         error_detail,
                     )
-                    return False
+                    return
 
                 # Clean completion path.
                 summary = summary_from_chunks or _summary_from_session_messages(
@@ -598,7 +594,7 @@ def _drive_agent(
                     final_event_count,
                     session_id,
                 )
-                return False
+                return
             except Exception as exc:
                 # Roll back any uncommitted persistence work and translate
                 # to FAILED. Do NOT re-raise — Celery would retry, which is
@@ -637,7 +633,7 @@ def _drive_agent(
                         run_id,
                     )
                 logger.exception("Scheduled run %s failed", run_id)
-                return False
+                return
             finally:
                 try:
                     event_stream.close()

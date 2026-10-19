@@ -4,11 +4,14 @@ constructed ``User`` and the test ``db_session`` (no ``TestClient``)."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Barrier
 from uuid import UUID, uuid4
 
 import pytest
 import redis
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
@@ -18,18 +21,21 @@ from onyx.db.enums import (
     ApprovalDecision,
     GatedAppKind,
 )
-from onyx.db.models import BuildSession
+from onyx.db.models import ActionApproval, BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.approvals.api import (
+    ApprovalChoice,
     DecisionBody,
     list_live_approvals,
+    list_session_approval_status,
+    list_session_approvals,
     submit_decision,
-    submit_session_grant,
 )
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from onyx.server.features.build.db import action_approval
 from onyx.server.features.build.db.action_approval import (
     get_action_approval,
     get_action_approval_for_user,
@@ -175,7 +181,7 @@ def test_submit_decision_happy_path_returns_refreshed_row(
 
     view = submit_decision(
         approval_id=approval.approval_id,
-        body=DecisionBody(decision=ApprovalDecision.REJECTED),
+        body=DecisionBody(decision=ApprovalChoice.REJECT),
         user=user,
         db_session=db_session,
     )
@@ -213,13 +219,13 @@ def test_submit_decision_same_decision_retry_is_idempotent(
 
     first = submit_decision(
         approval_id=approval.approval_id,
-        body=DecisionBody(decision=ApprovalDecision.REJECTED),
+        body=DecisionBody(decision=ApprovalChoice.REJECT),
         user=user,
         db_session=db_session,
     )
     second = submit_decision(
         approval_id=approval.approval_id,
-        body=DecisionBody(decision=ApprovalDecision.REJECTED),
+        body=DecisionBody(decision=ApprovalChoice.REJECT),
         user=user,
         db_session=db_session,
     )
@@ -252,7 +258,7 @@ def test_submit_decision_different_decision_raises_conflict(
 
     submit_decision(
         approval_id=approval.approval_id,
-        body=DecisionBody(decision=ApprovalDecision.REJECTED),
+        body=DecisionBody(decision=ApprovalChoice.REJECT),
         user=user,
         db_session=db_session,
     )
@@ -260,7 +266,7 @@ def test_submit_decision_different_decision_raises_conflict(
     with pytest.raises(OnyxError) as exc_info:
         submit_decision(
             approval_id=approval.approval_id,
-            body=DecisionBody(decision=ApprovalDecision.APPROVED),
+            body=DecisionBody(decision=ApprovalChoice.APPROVE_ONCE),
             user=user,
             db_session=db_session,
         )
@@ -296,7 +302,7 @@ def test_submit_decision_not_found(
     with pytest.raises(OnyxError) as exc_info:
         submit_decision(
             approval_id=target_id,
-            body=DecisionBody(decision=ApprovalDecision.APPROVED),
+            body=DecisionBody(decision=ApprovalChoice.APPROVE_ONCE),
             user=user,
             db_session=db_session,
         )
@@ -327,7 +333,7 @@ def test_submit_decision_pushes_wake_on_redis(
 
     view = submit_decision(
         approval_id=approval.approval_id,
-        body=DecisionBody(decision=ApprovalDecision.APPROVED),
+        body=DecisionBody(decision=ApprovalChoice.APPROVE_ONCE),
         user=user,
         db_session=db_session,
     )
@@ -398,8 +404,24 @@ def test_submit_session_grant_approves_matching_pending_rows(
         wakes.append((str(approval_id), decision))
 
     monkeypatch.setattr(approval_cache, "send_wake", _record_wake)
+    read_grants = action_approval.list_session_grant_action_approvals
+    grant_reads = 0
 
-    response = submit_session_grant(
+    def read_grants_once(
+        db_session: Session, session_id: UUID, *, gated_app_id: int | None
+    ) -> list[ActionApproval]:
+        nonlocal grant_reads
+        grant_reads += 1
+        if grant_reads > 1:
+            raise RuntimeError("Database unavailable after the decision commits")
+        return read_grants(db_session, session_id, gated_app_id=gated_app_id)
+
+    monkeypatch.setattr(
+        action_approval, "list_session_grant_action_approvals", read_grants_once
+    )
+
+    response = submit_decision(
+        body=DecisionBody(decision=ApprovalChoice.APPROVE_SESSION),
         approval_id=current.approval_id,
         user=user,
         db_session=db_session,
@@ -475,7 +497,7 @@ def test_submit_decision_swallows_transient_wake_failure(
 
     view = submit_decision(
         approval_id=approval.approval_id,
-        body=DecisionBody(decision=ApprovalDecision.APPROVED),
+        body=DecisionBody(decision=ApprovalChoice.APPROVE_ONCE),
         user=user,
         db_session=db_session,
     )
@@ -545,3 +567,312 @@ def test_list_live_approvals_returns_multi_action_view(
     assert view.app_name == "Linear"
     assert view.payload == {"query": "mutation { issueCreate { id } }"}
     assert view.actions == expected_actions
+
+
+@pytest.mark.parametrize("choice", ["approve_once", "approve_session", "reject"])
+def test_all_decisions_reject_stale_requests(
+    choice: str,
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    _stub_send_wake_noop(monkeypatch)
+    user = make_user(db_session, email_prefix="stale_decision")
+    session = build_session_with_user(user=user)
+    row = insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=_default_actions(),
+        app_name="Slack",
+        payload={},
+    )
+    db_session.commit()
+    force_approval_created_at(
+        db_session,
+        row.approval_id,
+        datetime.now(timezone.utc)
+        - timedelta(seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 10),
+    )
+    with pytest.raises(OnyxError) as exc:
+        submit_decision(
+            row.approval_id,
+            DecisionBody.model_validate({"decision": choice}),
+            user,
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    db_session.refresh(row)
+    assert row.decision is None
+
+
+def test_session_decision_retry_cannot_change_scope(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    _stub_send_wake_noop(monkeypatch)
+    user = make_user(db_session, email_prefix="decision_scope")
+    session = build_session_with_user(user=user)
+    app = make_external_app(db_session, skill=make_skill(db_session), auth_template={})
+    row = insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=_default_actions(),
+        app_name="Slack",
+        payload={},
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
+    )
+    db_session.commit()
+    body = DecisionBody(decision=ApprovalChoice.APPROVE_SESSION)
+    first = submit_decision(row.approval_id, body, user, db_session)
+    retry = submit_decision(row.approval_id, body, user, db_session)
+    assert retry.decision == first.decision == ApprovalDecision.APPROVED
+    with pytest.raises(OnyxError) as exc:
+        submit_decision(
+            row.approval_id,
+            DecisionBody(decision=ApprovalChoice.APPROVE_ONCE),
+            user,
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+
+
+def test_approve_once_cannot_be_upgraded_by_retry(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    _stub_send_wake_noop(monkeypatch)
+    user = make_user(db_session, email_prefix="decision_once")
+    session = build_session_with_user(user=user)
+    row = insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=_default_actions(),
+        app_name="Slack",
+        payload={},
+    )
+    db_session.commit()
+    submit_decision(
+        row.approval_id,
+        DecisionBody(decision=ApprovalChoice.APPROVE_ONCE),
+        user,
+        db_session,
+    )
+    with pytest.raises(OnyxError) as exc:
+        submit_decision(
+            row.approval_id,
+            DecisionBody(decision=ApprovalChoice.APPROVE_SESSION),
+            user,
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    db_session.refresh(row)
+    assert row.decided_via == ApprovalDecidedVia.USER
+
+
+def test_history_retains_expired_requests_and_checks_owner(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    owner = make_user(db_session, email_prefix="history_owner")
+    other = make_user(db_session, email_prefix="history_other")
+    session = build_session_with_user(user=owner)
+    row = insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=_default_actions(),
+        app_name="Slack",
+        payload={},
+    )
+    try_record_decision(
+        db_session, approval_id=row.approval_id, decision=ApprovalDecision.EXPIRED
+    )
+    db_session.commit()
+    assert list_live_approvals(session.id, owner, db_session).items == []
+    history = list_session_approvals(session.id, owner, db_session)
+    assert [item.decision for item in history.items] == [ApprovalDecision.EXPIRED]
+    assert not history.items[0].is_live
+    with pytest.raises(OnyxError) as exc:
+        list_session_approvals(session.id, other, db_session)
+    assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
+
+
+def test_unknown_external_action_can_only_be_approved_once(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    _stub_send_wake_noop(monkeypatch)
+    user = make_user(db_session, email_prefix="unknown_action")
+    session = build_session_with_user(user=user)
+    app = make_external_app(db_session, skill=make_skill(db_session), auth_template={})
+    row = insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=[action_entry("unspecified")],
+        app_name="Custom",
+        payload={},
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
+    )
+    db_session.commit()
+    view = list_session_approvals(session.id, user, db_session).items[0]
+    assert not view.can_approve_for_session
+    with pytest.raises(OnyxError) as exc:
+        submit_decision(
+            row.approval_id,
+            DecisionBody(decision=ApprovalChoice.APPROVE_SESSION),
+            user,
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    result = submit_decision(
+        row.approval_id,
+        DecisionBody(decision=ApprovalChoice.APPROVE_ONCE),
+        user,
+        db_session,
+    )
+    assert result.decision == ApprovalDecision.APPROVED
+
+
+def test_history_keeps_all_live_requests_when_outcomes_exceed_limit(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    owner = make_user(db_session, email_prefix="busy_history")
+    session = build_session_with_user(user=owner)
+    pending = insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=_default_actions(),
+        app_name="Slack",
+        payload={},
+    )
+    for _ in range(51):
+        insert_action_approval(
+            db_session,
+            session_id=session.id,
+            actions=_default_actions(),
+            app_name="Slack",
+            payload={},
+            decision=ApprovalDecision.REJECTED,
+        )
+    db_session.commit()
+
+    history = list_session_approvals(session.id, owner, db_session)
+    assert len(history.items) == 51
+    assert [item.approval_id for item in history.items if item.is_live] == [
+        pending.approval_id
+    ]
+
+
+def test_concurrent_session_approvals_do_not_deadlock(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    from onyx.db.models import User
+    from onyx.server.features.build.db import action_approval
+    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+    user = make_user(db_session, email_prefix="concurrent_grants")
+    session = build_session_with_user(user=user)
+    app = make_external_app(db_session, skill=make_skill(db_session), auth_template={})
+    ids = [
+        insert_action_approval(
+            db_session,
+            session_id=session.id,
+            actions=[action_entry("slack.chat.post")],
+            app_name="Slack",
+            payload={},
+            target=(GatedAppKind.EXTERNAL_APP, app.id),
+        ).approval_id
+        for _ in range(2)
+    ]
+    user_id = user.id
+    db_session.commit()
+    barrier = Barrier(2)
+    original = action_approval.get_action_approval_for_user
+
+    def synchronized_read(
+        db: Session, approval_id: UUID, user_id: UUID, *, lock_session: bool = False
+    ) -> ActionApproval | None:
+        barrier.wait(timeout=10)
+        return original(db, approval_id, user_id, lock_session=lock_session)
+
+    monkeypatch.setattr(
+        action_approval, "get_action_approval_for_user", synchronized_read
+    )
+    _stub_send_wake_noop(monkeypatch)
+    engine = db_session.get_bind()
+
+    def approve(approval_id: UUID) -> ApprovalDecision | None:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+        try:
+            with Session(engine) as db:
+                db.execute(text("SET LOCAL lock_timeout = '5s'"))
+                caller = db.get(User, user_id)
+                assert caller is not None
+                return submit_decision(
+                    approval_id=approval_id,
+                    body=DecisionBody(decision=ApprovalChoice.APPROVE_SESSION),
+                    user=caller,
+                    db_session=db,
+                ).decision
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(approve, ids))
+    assert results == [ApprovalDecision.APPROVED, ApprovalDecision.APPROVED]
+
+
+def test_status_poll_omits_payloads_and_reports_expiry(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    from sqlalchemy import inspect
+
+    from onyx.server.features.build.db.action_approval import (
+        list_session_action_approvals,
+    )
+
+    owner = make_user(db_session, email_prefix="status_owner")
+    other = make_user(db_session, email_prefix="status_other")
+    session = build_session_with_user(user=owner)
+    row = insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=_default_actions(),
+        app_name="Slack",
+        payload={"large": "x" * 100_000},
+    )
+    db_session.commit()
+    approval_id = row.approval_id
+    db_session.expunge(row)
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=180)
+    rows = list_session_action_approvals(
+        db_session, session.id, created_after=cutoff, status_only=True
+    )
+    assert "payload" in inspect(rows[0]).unloaded
+    assert "actions" in inspect(rows[0]).unloaded
+    status = list_session_approval_status(session.id, owner, db_session)
+    assert status[0].model_dump() == {
+        "approval_id": approval_id,
+        "decision": None,
+        "is_live": True,
+    }
+    rows[0].created_at = cutoff - timedelta(seconds=1)
+    db_session.commit()
+    assert not list_session_approval_status(session.id, owner, db_session)[0].is_live
+    with pytest.raises(OnyxError) as exc:
+        list_session_approval_status(session.id, other, db_session)
+    assert exc.value.error_code == OnyxErrorCode.NOT_FOUND

@@ -15412,7 +15412,7 @@
       "saveError": "Impossible d’enregistrer les paramètres d’approbation.",
       "emptyActions": "Aucune action connue. Les actions inconnues nécessitent une approbation.",
       "emptyApps": "Aucune application disponible.",
-      "expired": "Approbation expirée. Cette demande n’a pas été exécutée.",
+      "expired": "Le délai d’approbation a expiré. L’action n’a pas été exécutée.",
       "rejected": "Demande rejetée. Cette demande n’a pas été exécutée.",
       "deadline": "Approuver avant {time}",
       "agentPermissionRequired": "Cette exécution s’est arrêtée car une action nécessitait une approbation. Vérifiez les autorisations, puis relancez la tâche.",

@@ -122,6 +122,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/ee/onyx/server/enterprise_settings/` | whitelabelling-and-theme |
 | `backend/ee/onyx/db/standard_answer.py`, `backend/ee/onyx/server/manage/standard_answer.py`, `*/onyxbot/slack/handlers/handle_standard_answers.py` | standard-answers |
 | `backend/onyx/db/notification.py`, `db/release_notes.py`, `db/admin_banner.py`, `server/features/notifications/`, `features/release_notes/`, `features/admin_banner/` | notifications |
+| `backend/onyx/server/features/build/db/action_approval.py` | craft-external-apps, craft-streaming |
 | `backend/onyx/db/action_policy.py`, `backend/onyx/server/features/build/action_policies.py`, `web/src/sections/actions/PolicyEditor.tsx`, `web/src/lib/plugins/types.ts` | craft-external-apps, craft-scheduled-tasks, craft-admin, editions-and-gating |
 | `backend/onyx/db/models.py` | **any**. Check which tables the diff touches, then map those. |
 | `backend/alembic/`, `backend/alembic_tenants/` | the component that owns the table being migrated |
