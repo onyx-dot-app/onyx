@@ -511,7 +511,8 @@
         },
         "required": "Die Authentifizierungsmethode ist erforderlich",
         "none": {
-          "label": "Keine Authentifizierung"
+          "label": "Keine",
+          "suffix": "(Nicht empfohlen)"
         },
         "optionsTitle": "Authentifizierungsoptionen"
       },
@@ -604,6 +605,10 @@
         "title": "Verbindung testen",
         "start": "Prüfungen starten",
         "testing": "Verbindung wird getestet…"
+      },
+      "noAuthNotice": {
+        "title": "Keine Authentifizierung für diesen Server",
+        "description": "Für diese Verbindung wird keine Authentifizierung verwendet. Stellen Sie sicher, dass Sie diesem Server vertrauen. Sie sind für die über diese Verbindung ausgeführten Aktionen verantwortlich."
       }
     },
     "openApiCard": {

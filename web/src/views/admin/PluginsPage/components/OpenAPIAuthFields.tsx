@@ -174,36 +174,44 @@ export default function OpenAPIAuthFields({
       )}
 
       <InputPadder>
-        <FormField name="auth.authMethod" state={fieldState("authMethod")}>
-          <FormField.Label>
-            {t("openApiAuthModal.authMethod.label")}
-          </FormField.Label>
-          <FormField.Control asChild>
-            <InputSingleSelect
-              value={auth.authMethod}
-              onValueChange={(value) =>
-                void setFieldValue("auth.authMethod", value)
-              }
-              defaultOption="none"
-              placeholder={t("openApiAuthModal.authMethod.placeholder")}
-              options={[
-                {
-                  value: "none",
-                  title: t("openApiAuthModal.authMethod.none.label"),
-                },
-                {
-                  title: t("openApiAuthModal.authMethod.optionsTitle"),
-                  options: methodOptions,
-                },
-              ]}
-            />
-          </FormField.Control>
-          <FormField.Message messages={{ error: authErrors?.authMethod }} />
-        </FormField>
+        <InputVertical
+          withLabel="auth.authMethod"
+          title={t("openApiAuthModal.authMethod.label")}
+        >
+          <InputSingleSelect
+            id="auth.authMethod"
+            value={auth.authMethod}
+            onValueChange={(value) =>
+              void setFieldValue("auth.authMethod", value)
+            }
+            defaultOption="none"
+            placeholder={t("openApiAuthModal.authMethod.placeholder")}
+            options={[
+              {
+                value: "none",
+                title: t("openApiAuthModal.authMethod.none.label"),
+                suffix: t("openApiAuthModal.authMethod.none.suffix"),
+              },
+              {
+                title: t("openApiAuthModal.authMethod.optionsTitle"),
+                options: methodOptions,
+              },
+            ]}
+          />
+        </InputVertical>
       </InputPadder>
 
-      {auth.authMethod !== "none" && (
-        <Divider paddingParallel={2} paddingPerpendicular={2} />
+      <Divider paddingParallel={2} paddingPerpendicular={2} />
+
+      {auth.authMethod === "none" && (
+        <InputPadder>
+          <MessageCard
+            outerPadding={1}
+            innerPadding={1}
+            title={t("openApiAuthModal.noAuthNotice.title")}
+            description={t("openApiAuthModal.noAuthNotice.description")}
+          />
+        </InputPadder>
       )}
 
       {auth.authMethod === "oauth" && (

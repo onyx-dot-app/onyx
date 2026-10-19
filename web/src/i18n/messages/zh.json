@@ -511,7 +511,8 @@
         },
         "required": "必须选择身份验证方式",
         "none": {
-          "label": "无需身份验证"
+          "label": "无",
+          "suffix": "(不推荐)"
         },
         "optionsTitle": "身份验证选项"
       },
@@ -604,6 +605,10 @@
         "title": "测试连接",
         "start": "开始检查",
         "testing": "正在测试连接…"
+      },
+      "noAuthNotice": {
+        "title": "此服务器无身份验证",
+        "description": "此连接不会使用任何身份验证。请确保你信任此服务器。你需要对通过此连接执行的操作负责。"
       }
     },
     "openApiCard": {

@@ -511,7 +511,8 @@
         },
         "required": "Authentication method is required",
         "none": {
-          "label": "No Authentication"
+          "label": "None",
+          "suffix": "(Not Recommended)"
         },
         "optionsTitle": "Authentication Options"
       },
@@ -604,6 +605,10 @@
         "title": "Test Connection",
         "start": "Start Checks",
         "testing": "Testing connection…"
+      },
+      "noAuthNotice": {
+        "title": "No authentication for this server",
+        "description": "No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
       }
     },
     "openApiCard": {
