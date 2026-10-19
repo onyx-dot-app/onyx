@@ -39,13 +39,19 @@ export const noSectionUtilityClassesRule = defineRule({
   },
   createOnce(context) {
     let sectionNames = new Set<string>();
+    let namespaces = new Set<string>();
     return {
       Program() {
         sectionNames = new Set<string>();
+        namespaces = new Set<string>();
       },
       ImportDeclaration(node) {
         if (!SECTION_SOURCES.has(node.source.value)) return;
         for (const specifier of node.specifiers) {
+          if (specifier.type === "ImportNamespaceSpecifier") {
+            namespaces.add(specifier.local.name);
+            continue;
+          }
           if (
             specifier.type === "ImportSpecifier" &&
             specifier.imported.type === "Identifier" &&
@@ -56,12 +62,14 @@ export const noSectionUtilityClassesRule = defineRule({
         }
       },
       JSXOpeningElement(node) {
-        if (
-          node.name.type !== "JSXIdentifier" ||
-          !sectionNames.has(node.name.name)
-        ) {
-          return;
-        }
+        const name = node.name;
+        const isSection =
+          (name.type === "JSXIdentifier" && sectionNames.has(name.name)) ||
+          (name.type === "JSXMemberExpression" &&
+            name.object.type === "JSXIdentifier" &&
+            namespaces.has(name.object.name) &&
+            name.property.name === "Section");
+        if (!isSection) return;
         const attribute = classNameAttribute(node);
         if (attribute === null) return;
         for (const className of staticClassNames(attribute.value)) {
