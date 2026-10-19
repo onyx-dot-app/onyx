@@ -144,9 +144,9 @@ def _get_all_folders(
     since the group syncing system assumes all groups are returned every time.
 
     A service account lists each folder once, the way the connector's phased
-    retrieval does: a shared drive as its organizer, a My Drive as its owner,
-    then the My Drive folders each user can see but does not own, which is
-    where a folder owned outside those partitions reaches the domain. Listing
+    retrieval does: a shared drive as its organizer, every My Drive as its
+    owner, then the My Drive folders each user can see but does not own, which
+    is where a folder owned outside those partitions reaches the domain. Listing
     everything every user can see instead costs users times folders on a large
     domain. OAuth has one identity, so it lists everything that identity can
     see in one pass.
@@ -251,13 +251,15 @@ def _get_all_folders(
         if choice.complete:
             covered_drive_ids.add(drive_id)
 
-    def _user_folders(email: str) -> Generator[FolderInfo, None, None]:
-        """A user's own folders, the My Drive folders the user can see but
-        does not own (which is where a folder owned outside the domain reaches
-        it), and the folders of any shared drive no organizer listed in full:
-        one the admin's inventory did not include, such as a partner domain's
-        drive, one listed by a lesser role, or one whose listing failed."""
+    def _owned_folders(email: str) -> Generator[FolderInfo, None, None]:
         yield from _folders(email, DriveFolderScope.OWNED)
+
+    def _visible_folders(email: str) -> Generator[FolderInfo, None, None]:
+        """The My Drive folders the user can see but does not own (which is
+        where a folder owned outside the domain reaches it), and the folders
+        of any shared drive no organizer listed in full: one the admin's
+        inventory did not include, such as a partner domain's drive, one listed
+        by a lesser role, or one whose listing failed."""
         yield from _folders(email, DriveFolderScope.NOT_OWNED)
         for drive_id in ops.list_drives(
             user_email=email, use_domain_admin_access=False
@@ -286,7 +288,13 @@ def _get_all_folders(
             crawl_deadline,
             abort_on_failures=False,
         )
-        yield from _run_partitions(user_emails, _user_folders, "user", crawl_deadline)
+        # Every owner lists before any non-owner: an owner always reads a
+        # folder's full ACL, while a non-owner's read can stop at a denial, and
+        # the first listing to reach a folder is the one that claims it.
+        yield from _run_partitions(user_emails, _owned_folders, "user", crawl_deadline)
+        yield from _run_partitions(
+            user_emails, _visible_folders, "user", crawl_deadline
+        )
 
     if skipped_no_permissions or skipped_already_seen:
         logger.info(

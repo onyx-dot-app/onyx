@@ -157,12 +157,14 @@ def test_service_account_lists_each_partition_once() -> None:
         )
     )
 
+    # Every owner lists before any non-owner, so the owner's full view of a
+    # folder's permissions claims it first.
     assert _partitions_listed(connector) == [
         (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d1"),
         (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d2"),
         (DriveFolderScope.OWNED, "a@example.com", None),
-        (DriveFolderScope.NOT_OWNED, "a@example.com", None),
         (DriveFolderScope.OWNED, "b@example.com", None),
+        (DriveFolderScope.NOT_OWNED, "a@example.com", None),
         (DriveFolderScope.NOT_OWNED, "b@example.com", None),
     ]
 
