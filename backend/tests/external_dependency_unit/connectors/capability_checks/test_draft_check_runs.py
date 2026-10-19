@@ -61,6 +61,7 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = frozenset(),
         on_run: Callable[[], None] | None = None,
+        depends_on: tuple[str, ...] = (),
     ) -> None:
         super().__init__(
             capability=capability,
@@ -68,6 +69,7 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
             display_name=check_id,
             requires_connector_instance=False,
             requires_fields=requires_fields,
+            depends_on=depends_on,
         )
         self._runs = runs
         self._on_run = on_run
@@ -98,15 +100,20 @@ class _Harness:
 
     def checks(self, source: DocumentSource) -> list[CapabilityCheck[Any]]:
         assert source == DocumentSource.SLACK
+        # Like a real source, every check runs after sign-in.
         return [
             _FakeCheck(_TOKEN, self.runs, on_run=lambda: self._token_hook()),
             _FakeConfigCheck(
-                _CHANNELS, self.runs, requires_fields=frozenset({"channels"})
+                _CHANNELS,
+                self.runs,
+                requires_fields=frozenset({"channels"}),
+                depends_on=(_TOKEN,),
             ),
             _FakeCheck(
                 _PERM_SYNC,
                 self.runs,
                 capability=CredentialCapability.DOC_PERMISSION_SYNC,
+                depends_on=(_TOKEN,),
             ),
         ]
 
