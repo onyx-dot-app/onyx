@@ -392,7 +392,7 @@ def _model_protocol_flows(
     chat_capable = model_supports_chat(provider, name)
     if (
         not decision_capable
-        and provider != "typesafe"
+        and provider not in {"typesafe", "zoom_ai"}
         and LLMModelFlowType.CHAT in stored_flows
     ):
         chat_capable = True

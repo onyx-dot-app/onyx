@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class DecisionProvider(StrEnum):
     TYPESAFE = "typesafe"
+    ZOOM_AI = "zoom_ai"
     OPENAI = "openai"
     OPENROUTER = "openrouter"
 
@@ -164,3 +165,15 @@ class SystemOneResponse(DecisionModel):
         ],
     ]
     usage: DecisionUsage | None = None
+
+
+class ZoomUsage(DecisionModel):
+    input_units: int = Field(ge=0)
+    output_units: int = Field(ge=0)
+    unit_type: str
+
+
+class ZoomResponse(DecisionModel):
+    model: str
+    answers: list[DecisionAnswer]
+    usage: ZoomUsage | None = None
