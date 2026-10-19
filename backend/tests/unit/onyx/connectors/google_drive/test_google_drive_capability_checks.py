@@ -288,6 +288,19 @@ def test_no_shared_drive_passes_with_an_advisory() -> None:
     assert "did not verify" in advisory.message
 
 
+def test_selected_drives_do_not_make_an_empty_listing_visible() -> None:
+    result = _run(
+        "google_drive_shared_drives",
+        _ops(),
+        {"shared_drive_urls": _FOLDER_URL.format("d1")},
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "No shared drives visible"
+    (advisory,) = result.advisories
+    assert "Find selected drives" in advisory.message
+
+
 def test_visible_shared_drive_passes_without_an_advisory() -> None:
     ops = _ops()
     ops.list_drives.side_effect = _listing("d1")

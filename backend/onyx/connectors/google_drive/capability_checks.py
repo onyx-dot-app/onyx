@@ -805,17 +805,22 @@ class _SharedDrivesCheck(_GoogleDriveCheck):
                 ),
                 None,
             )
-        if first_drive is not None or config.shared_drive_urls:
+        if first_drive is not None:
             return CheckOutput(summary="Shared drives visible")
-        # Not FAILED: the domain can have no shared drive yet.
+        # Not FAILED: the domain can have no shared drive yet, and the indexed
+        # users can see selected drives that the primary admin does not.
         return CheckOutput(
             summary="No shared drives visible",
             advisories=[
                 CheckAdvisory(
                     message=(
-                        "The credential sees no shared drive, so Onyx did not "
-                        "verify that it can read shared drives. Shared drives "
-                        "index nothing until the credential sees one."
+                        "The account can list shared drives but sees none. "
+                        "Find selected drives looks for each selected drive as "
+                        "the indexed users."
+                        if config.shared_drive_urls
+                        else "The credential sees no shared drive, so Onyx did "
+                        "not verify that it can read shared drives. Shared "
+                        "drives index nothing until the credential sees one."
                     )
                 )
             ],
