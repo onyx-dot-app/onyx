@@ -24,6 +24,7 @@ jest.mock("@/providers/UserProvider", () => {
 
 let mockFullAdmin = true;
 const mockPush = jest.fn();
+const onOpen = jest.fn<void, [URLSearchParams?]>();
 jest.mock("next/navigation", () => ({
   usePathname: () => "/admin/plugins",
   useRouter: () => ({ push: mockPush }),
@@ -84,6 +85,7 @@ const app: ExternalAppAdminResponse = {
 beforeEach(() => {
   mockFullAdmin = true;
   mockPush.mockClear();
+  onOpen.mockClear();
   writes = [];
   reads = [];
   failDelete = false;
@@ -221,9 +223,13 @@ test.each([
   }
 );
 
-test("the OpenAPI gear opens the plugin's detail page instead of a menu", async () => {
+test("the OpenAPI gear opens the plugin's modal instead of a menu", async () => {
   render(
-    <PluginLifecycleMenu craftAvailable plugin={{ kind: "openapi", tool }} />
+    <PluginLifecycleMenu
+      craftAvailable
+      plugin={{ kind: "openapi", tool }}
+      onOpen={onOpen}
+    />
   );
   expect(
     screen.queryByRole("button", {
@@ -233,7 +239,9 @@ test("the OpenAPI gear opens the plugin's detail page instead of a menu", async 
   await setupUser().click(
     screen.getByRole("button", { name: "Manage Reports" })
   );
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins/openapi/42");
+  expect(onOpen).toHaveBeenCalledTimes(1);
+  expect(onOpen.mock.calls[0]?.[0]).toBeUndefined();
+  expect(mockPush).not.toHaveBeenCalled();
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   expect(reads).toEqual([]);
   expect(writes).toEqual([]);
@@ -584,6 +592,7 @@ test("opens authentication instead of disabling Enable for a server awaiting sig
           permissions: { ...server.permissions, authenticate: true },
         },
       }}
+      onOpen={onOpen}
     />
   );
   await user.click(
@@ -596,14 +605,14 @@ test("opens authentication instead of disabling Enable for a server awaiting sig
   });
   expect(enable).not.toHaveAttribute("aria-disabled", "true");
   await user.click(enable);
-  const destination: unknown = mockPush.mock.calls[0]?.[0];
-  if (typeof destination !== "string")
-    throw new Error("Expected authentication navigation");
-  const target = new URL(destination, window.location.origin);
-  expect(target.pathname).toBe("/admin/plugins/mcp/7");
-  expect(target.searchParams.get("tab")).toBe("authentication");
+  expect(mockPush).not.toHaveBeenCalled();
+  expect(onOpen).toHaveBeenCalledTimes(1);
+  const params = onOpen.mock.calls[0]?.[0];
+  if (!params) throw new Error("Expected the modal to open with parameters");
+  expect(params.get("tab")).toBe("authentication");
+  expect(params.get("enable_chat")).toBe("true");
   expect(
-    consumeMcpChatEnableIntent(target.searchParams.get("enable_chat_intent"), {
+    consumeMcpChatEnableIntent(params.get("enable_chat_intent"), {
       userId: "admin-user",
       serverId: 7,
     })

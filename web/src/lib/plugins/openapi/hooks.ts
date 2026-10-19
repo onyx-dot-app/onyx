@@ -35,6 +35,7 @@ export function useOpenApiSchemaCheck(
   const [result, setResult] = useState<SchemaCheckResult | null>(null);
   const [checking, setChecking] = useState(false);
   const request = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const run = useCallback(
     async (value: string): Promise<CheckedOpenApiSchema | null> => {
@@ -64,14 +65,16 @@ export function useOpenApiSchemaCheck(
   );
 
   useEffect(() => {
-    const timer = setTimeout(() => void run(text), 300);
+    timer.current = setTimeout(() => void run(text), 300);
     return () => {
-      clearTimeout(timer);
+      clearTimeout(timer.current);
       request.current += 1;
     };
   }, [text, run]);
 
   const check = useCallback(async () => {
+    // A pending debounced run would supersede this one and void its result.
+    clearTimeout(timer.current);
     setChecking(true);
     try {
       return await run(text);

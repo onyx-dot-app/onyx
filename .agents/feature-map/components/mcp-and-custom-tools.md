@@ -320,11 +320,14 @@ The credentials prompt's OAuth controls stay busy until navigation leaves the
 page, or a request fails. The Plugins flow instead waits for its new-tab callback.
 
 
-Clicking an MCP row opens a detail modal at `/admin/plugins/mcp/[serverId]`. Rows show the icon,
+Clicking an MCP row opens its detail modal on the Plugins page. Plugin modals are page
+state, not routes: `PluginsPage` holds the open plugin and renders its modal. Rows show the icon,
 name, description, and integration kind. They do not expand tool lists or claim
 live health. Details own configuration, authentication, tool availability, and policies.
-`web/src/app/admin/plugins/layout.tsx` keeps the directory behind both MCP and OpenAPI detail modals,
-including hard links and OAuth returns. Closing returns to Plugins, not browser history.
+Links and OAuth returns use a one-time `?plugin=<kind>:<id>` parameter (`pluginOpenHref` in
+`web/src/lib/plugins/routes.ts`). The page opens that plugin once if it is installed, ignores
+unknown ids, clears the URL, and hands the other parameters (such as `trigger_fetch`) to the
+modal. Modals never read or write the URL; closing returns to the list.
 
 `web/src/views/admin/PluginsPage/MCPPluginDetailPage.tsx` has three filled tabs:
 Server configuration, Authentication, and Tools. All forms are inline. Tab changes
@@ -544,8 +547,8 @@ save, including retries after failed sign-in. Unchanged masked credentials remai
 unchanged in storage. An existing OAuth grant proceeds directly to tool discovery
 without another browser redirect.
 
-**OpenAPI (custom) action.** Each schema has a detail modal at
-`/admin/plugins/openapi/[toolId]`. It reads the permission-stamped OpenAPI list,
+**OpenAPI (custom) action.** Each schema has a detail modal, opened from its card. It reads
+the permission-stamped OpenAPI list,
 not the single-tool or mutation response. Metadata saves preserve `oauth_config_id`.
 Plugin details, OpenAPI schema, Authentication, and Tools use one tab row with
 directly editable fields. Schema and authentication reuse the existing forms
@@ -572,8 +575,8 @@ inline, not a broken turn.
 |---|---|---|
 | `/admin/plugins` | `web/src/app/admin/plugins/page.tsx` | `PluginsPage` (`web/src/views/admin/PluginsPage/index.tsx`) |
 | `/admin/plugins?add=mcp` | Plugins directory | `MCPPluginSetupModal` (`web/src/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal.tsx`) |
-| `/admin/plugins/mcp/[serverId]` | `web/src/app/admin/plugins/mcp/[serverId]/page.tsx` | `MCPPluginDetailPage` (`web/src/views/admin/PluginsPage/MCPPluginDetailPage.tsx`) |
-| `/admin/plugins/openapi/[toolId]` | `web/src/app/admin/plugins/openapi/[toolId]/page.tsx` | `OpenAPIPluginModal` (`web/src/views/admin/PluginsPage/OpenAPIPluginModal.tsx`) |
+| `/admin/plugins?plugin=mcp:<id>` | Plugins directory | `MCPPluginDetailPage` (`web/src/views/admin/PluginsPage/MCPPluginDetailPage.tsx`), opened once |
+| `/admin/plugins?plugin=openapi:<id>` | Plugins directory | `OpenAPIPluginModal` (`web/src/views/admin/PluginsPage/OpenAPIPluginModal.tsx`), opened once |
 | `/admin/mcp-actions`, `/admin/mcp-actions/new`, `/admin/mcp-actions/[serverId]`, `/admin/openapi-actions` | Existing route files | Query-preserving redirects through `web/src/lib/plugins/routes.ts` |
 
 ### HTTP endpoints, MCP (`backend/onyx/server/features/mcp/api.py`, prefixes `/mcp` and `/admin/mcp`)

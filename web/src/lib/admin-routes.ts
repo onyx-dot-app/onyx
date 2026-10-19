@@ -228,16 +228,6 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
-  PLUGINS_EXTERNAL_APP: {
-    path: "/admin/plugins/external-app",
-    icon: SvgPlug,
-    title: "Plugins",
-    sidebarLabel: "",
-    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
-    section: "Agents & Actions",
-    requiredTier: null,
-    visibleWhen: null,
-  },
   MCP_ACTIONS: {
     path: "/admin/mcp-actions",
     icon: SvgMcp,

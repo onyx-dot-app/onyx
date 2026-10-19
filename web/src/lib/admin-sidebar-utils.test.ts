@@ -1,8 +1,4 @@
-import {
-  ADMIN_ROUTES,
-  matchAdminRoute,
-  type FeatureFlags,
-} from "@/lib/admin-routes";
+import { matchAdminRoute, type FeatureFlags } from "@/lib/admin-routes";
 import { buildItems } from "@/lib/admin-sidebar-utils";
 import { Permission } from "@/lib/types";
 import { Tier } from "@/lib/tiers/types";
@@ -56,7 +52,7 @@ test("Craft-enabled admins have one Plugins entry and no separate Apps entry", (
   expect(links).not.toContain("/admin/craft/apps");
 });
 
-test.each(["/admin/plugins/external-app/7", "/admin/craft/apps"])(
+test.each(["/admin/craft/apps"])(
   "retains full-admin authorization for %s",
   (pathname) => {
     expect(matchAdminRoute(pathname)?.requiredPermission).toBe(
@@ -67,8 +63,6 @@ test.each(["/admin/plugins/external-app/7", "/admin/craft/apps"])(
 
 test.each([
   "/admin/plugins",
-  "/admin/plugins/mcp/7",
-  "/admin/plugins/openapi/7",
   "/admin/mcp-actions",
   "/admin/mcp-actions/new",
   "/admin/mcp-actions/7",
@@ -77,8 +71,4 @@ test.each([
   expect(matchAdminRoute(pathname)?.requiredPermission).toBe(
     Permission.MANAGE_ACTIONS
   );
-});
-
-test("matches canonical plugin details to the Plugins registry entry", () => {
-  expect(matchAdminRoute("/admin/plugins/mcp/7")).toBe(ADMIN_ROUTES.PLUGINS);
 });

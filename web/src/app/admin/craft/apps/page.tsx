@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import {
-  pluginDetailHref,
   parsePluginId,
+  pluginOpenHref,
   withPluginSearchParams,
 } from "@/lib/plugins/routes";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -22,11 +22,8 @@ export default async function Page({
       for (const item of value) rest.append(key, item);
   }
   redirect(
-    withPluginSearchParams(
-      id === null
-        ? ADMIN_ROUTES.PLUGINS.path
-        : pluginDetailHref({ kind: "external-app", id }),
-      rest
-    )
+    id === null
+      ? withPluginSearchParams(ADMIN_ROUTES.PLUGINS.path, rest)
+      : pluginOpenHref({ kind: "external-app", id }, rest)
   );
 }

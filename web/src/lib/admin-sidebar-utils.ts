@@ -89,7 +89,6 @@ export const NAV_ITEM_IDS: Record<
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
   PLUGINS: "plugins",
-  PLUGINS_EXTERNAL_APP: null,
   MCP_ACTIONS: null,
   OPENAPI_ACTIONS: null,
   INDEXING_STATUS: "indexingStatus",

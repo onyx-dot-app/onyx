@@ -298,7 +298,7 @@ test("first OAuth setup carries the Chat enable intent and enables after already
     expect.objectContaining({
       server_id: 7,
       return_path: expect.stringMatching(
-        /^\/admin\/plugins\/mcp\/7\?trigger_fetch=true&enable_chat=true&enable_chat_intent=[0-9a-f-]+$/
+        /^\/admin\/plugins\?plugin=mcp%3A7&trigger_fetch=true&enable_chat=true&enable_chat_intent=[0-9a-f-]+$/
       ),
     })
   );

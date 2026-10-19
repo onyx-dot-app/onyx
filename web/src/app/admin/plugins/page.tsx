@@ -1,3 +1,5 @@
+import PluginsPage from "@/views/admin/PluginsPage";
+
 export default function Page() {
-  return null;
+  return <PluginsPage />;
 }

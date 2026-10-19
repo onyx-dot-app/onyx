@@ -7,7 +7,7 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
-test("redirects an in-flight OAuth return to its canonical detail", async () => {
+test("redirects an in-flight OAuth return to its plugin modal", async () => {
   await expect(
     Page({
       searchParams: Promise.resolve({
@@ -19,9 +19,9 @@ test("redirects an in-flight OAuth return to its canonical detail", async () => 
       }),
     })
   ).rejects.toThrow(
-    "/admin/plugins/mcp/7?server_id=7&trigger_fetch=true&message=oauth_connected&tab=tools&tag=one&tag=two"
+    "/admin/plugins?plugin=mcp%3A7&server_id=7&trigger_fetch=true&message=oauth_connected&tab=tools&tag=one&tag=two"
   );
   expect(redirect).toHaveBeenCalledWith(
-    "/admin/plugins/mcp/7?server_id=7&trigger_fetch=true&message=oauth_connected&tab=tools&tag=one&tag=two"
+    "/admin/plugins?plugin=mcp%3A7&server_id=7&trigger_fetch=true&message=oauth_connected&tab=tools&tag=one&tag=two"
   );
 });

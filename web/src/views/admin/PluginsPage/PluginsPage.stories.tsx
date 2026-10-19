@@ -250,13 +250,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** A plugin card: a labelled `<div>`, so its own buttons never match. */
+function findCard(name: string) {
+  return within(document.body).findByLabelText(name, { selector: "div" });
+}
+
 export const Installed: Story = {};
 export const EnabledMCPActions: Story = {
   play: async () => {
     const page = within(document.body);
-    const link = await page.findByRole("link", { name: "Manage Linear" });
-    const row = link.parentElement;
-    if (!row) throw new Error("Plugin row missing");
+    const row = await findCard("Manage Linear");
     await userEvent.click(
       within(row).getByRole("button", {
         name: messages.actions.plugins.controls.disable,
@@ -277,19 +280,21 @@ export const EnabledMCPActions: Story = {
 export const PluginActions: Story = {
   play: async () => {
     const page = within(document.body);
-    const link = await page.findByRole("link", { name: "Manage Team reports" });
-    const row = link.parentElement;
-    if (!row) throw new Error("Plugin row missing");
+    const row = await findCard("Manage Team reports");
     await userEvent.click(
-      within(row).getByRole("button", {
-        name: messages.actions.plugins.controls.disable,
-      })
+      within(row).getByRole("button", { name: "Manage Team reports" })
     );
-    await expect(
-      await page.findByRole("menuitem", {
-        name: new RegExp(messages.actions.plugins.controls.disable),
-      })
-    ).toBeVisible();
+    await expect(await page.findByRole("dialog")).toBeVisible();
+  },
+};
+export const OpenPlugin: Story = {
+  play: async () => {
+    const page = within(document.body);
+    await userEvent.click(await findCard("Manage Team reports"));
+    await expect(await page.findByRole("dialog")).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Close" }));
+    await expect(page.queryByRole("dialog")).not.toBeInTheDocument();
+    await expect(await findCard("Manage Team reports")).toBeVisible();
   },
 };
 export const AddMenu: Story = {
@@ -331,18 +336,16 @@ export const ReadOnly: Story = { args: { scenario: { readOnly: true } } };
 export const Search: Story = {
   play: async () => {
     const page = within(document.body);
-    await page.findByRole("link", { name: "Manage Linear" });
+    await findCard("Manage Linear");
     await userEvent.type(
       page.getByRole("textbox", {
         name: messages.actions.plugins.search.placeholder,
       }),
       "weekly"
     );
+    await expect(await findCard("Manage Team reports")).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Manage Team reports" })
-    ).toBeVisible();
-    await expect(
-      page.queryByRole("link", { name: "Manage Linear" })
+      page.queryByLabelText("Manage Linear", { selector: "div" })
     ).not.toBeInTheDocument();
   },
 };

@@ -1,8 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import {
   parsePluginId,
-  pluginDetailHref,
-  withPluginSearchParams,
+  pluginOpenHref,
   type PluginSearchParams,
 } from "@/lib/plugins/routes";
 
@@ -16,10 +15,5 @@ export default async function Page({
   const { serverId: value } = await params;
   const serverId = parsePluginId(value);
   if (serverId === null) notFound();
-  redirect(
-    withPluginSearchParams(
-      pluginDetailHref({ kind: "mcp", id: serverId }),
-      await searchParams
-    )
-  );
+  redirect(pluginOpenHref({ kind: "mcp", id: serverId }, await searchParams));
 }

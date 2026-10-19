@@ -177,7 +177,6 @@ so verify the callers rather than a single component.
 | `web/src/sections/input/AppInputBar.tsx` | chat-frontend |
 | `web/src/app/app/plugins/` | mcp-and-custom-tools, chat-frontend |
 | `web/src/app/craft/v1/plugins/` | craft-external-apps, mcp-and-custom-tools |
-| `web/src/app/admin/plugins/external-app/` | craft-admin, craft-external-apps |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |

@@ -9,12 +9,12 @@ jest.mock("next/navigation", () => ({
 
 test.each([
   [{}, "/admin/plugins"],
-  [{ editAppId: "7" }, "/admin/plugins/external-app/7"],
+  [{ editAppId: "7" }, "/admin/plugins?plugin=external-app%3A7"],
   [
     { configureAppId: "8", source: "skills" },
-    "/admin/plugins/external-app/8?source=skills",
+    "/admin/plugins?plugin=external-app%3A8&source=skills",
   ],
-  [{ appId: "9" }, "/admin/plugins/external-app/9"],
+  [{ appId: "9" }, "/admin/plugins?plugin=external-app%3A9"],
   [{ editAppId: "invalid", tab: "mcp" }, "/admin/plugins"],
 ])("redirects legacy app links %j", async (query, href) => {
   await expect(Page({ searchParams: Promise.resolve(query) })).rejects.toThrow(

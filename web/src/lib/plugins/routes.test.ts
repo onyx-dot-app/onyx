@@ -1,31 +1,87 @@
 import {
   legacyMcpListHref,
   mcpOAuthReturnHref,
+  OPEN_PLUGIN_PARAM,
   parsePluginId,
-  pluginDetailHref,
+  parsePluginReference,
+  pluginOpenHref,
   withPluginSearchParams,
 } from "@/lib/plugins/routes";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 describe("plugin routes", () => {
   test("qualifies equal numeric IDs by plugin kind", () => {
-    expect(pluginDetailHref({ kind: "mcp", id: 7 })).toBe(
-      "/admin/plugins/mcp/7"
+    expect(OPEN_PLUGIN_PARAM).toBe("plugin");
+    expect(pluginOpenHref({ kind: "mcp", id: 7 })).toBe(
+      "/admin/plugins?plugin=mcp%3A7"
     );
-    expect(pluginDetailHref({ kind: "openapi", id: 7 })).toBe(
-      "/admin/plugins/openapi/7"
+    expect(pluginOpenHref({ kind: "openapi", id: 7 })).toBe(
+      "/admin/plugins?plugin=openapi%3A7"
+    );
+    expect(pluginOpenHref({ kind: "external-app", id: 7 })).toBe(
+      "/admin/plugins?plugin=external-app%3A7"
     );
   });
 
-  test("returns from OAuth to the saved MCP detail with a one-time fetch", () => {
+  test("puts the plugin first and keeps other parameters", () => {
+    expect(
+      pluginOpenHref(
+        { kind: "openapi", id: 7 },
+        new URLSearchParams({ configure: "authentication" })
+      )
+    ).toBe("/admin/plugins?plugin=openapi%3A7&configure=authentication");
+    expect(
+      pluginOpenHref({ kind: "mcp", id: 7 }, { tag: ["one", "two"] })
+    ).toBe("/admin/plugins?plugin=mcp%3A7&tag=one&tag=two");
+  });
+
+  test("returns from OAuth to the saved MCP modal with a one-time fetch", () => {
     expect(mcpOAuthReturnHref(7)).toBe(
-      "/admin/plugins/mcp/7?trigger_fetch=true"
+      "/admin/plugins?plugin=mcp%3A7&trigger_fetch=true"
     );
   });
   test("preserves explicit chat enablement through OAuth", () => {
     expect(mcpOAuthReturnHref(7, true)).toBe(
-      "/admin/plugins/mcp/7?trigger_fetch=true&enable_chat=true"
+      "/admin/plugins?plugin=mcp%3A7&trigger_fetch=true&enable_chat=true"
     );
+  });
+});
+
+describe("plugin reference parsing", () => {
+  test.each([
+    ["mcp:7", { kind: "mcp", id: 7 }],
+    ["openapi:0007", { kind: "openapi", id: 7 }],
+    ["external-app:9", { kind: "external-app", id: 9 }],
+  ])("reads %s", (value, reference) => {
+    expect(parsePluginReference(value)).toEqual(reference);
+  });
+
+  test("reads the value a plugin link produces", () => {
+    const href = pluginOpenHref({ kind: "external-app", id: 9 });
+    const value = new URL(href, "http://localhost").searchParams.get(
+      OPEN_PLUGIN_PARAM
+    );
+    expect(parsePluginReference(value)).toEqual({
+      kind: "external-app",
+      id: 9,
+    });
+  });
+
+  test.each([
+    null,
+    "",
+    "7",
+    ":7",
+    "mcp",
+    "mcp:",
+    "mcp:0",
+    "mcp:7abc",
+    "mcp:-7",
+    "tool:7",
+    "MCP:7",
+    "mcp:7:8",
+  ])("rejects %p", (value) => {
+    expect(parsePluginReference(value)).toBeNull();
   });
 });
 
@@ -56,7 +112,7 @@ describe("route ID boundary", () => {
 });
 
 describe("legacy query strings", () => {
-  test("opens the canonical detail and keeps repeated query values", () => {
+  test("opens the plugin's modal and keeps repeated query values", () => {
     expect(
       legacyMcpListHref({
         server_id: "7",
@@ -67,13 +123,13 @@ describe("legacy query strings", () => {
         missing: undefined,
       })
     ).toBe(
-      "/admin/plugins/mcp/7?server_id=7&tab=authentication&trigger_fetch=true&message=oauth_connected&filter=one&filter=two"
+      "/admin/plugins?plugin=mcp%3A7&server_id=7&tab=authentication&trigger_fetch=true&message=oauth_connected&filter=one&filter=two"
     );
   });
 
   test("uses the first server ID without dropping repeated IDs", () => {
     expect(legacyMcpListHref({ server_id: ["7", "8"] })).toBe(
-      "/admin/plugins/mcp/7?server_id=7&server_id=8"
+      "/admin/plugins?plugin=mcp%3A7&server_id=7&server_id=8"
     );
   });
 

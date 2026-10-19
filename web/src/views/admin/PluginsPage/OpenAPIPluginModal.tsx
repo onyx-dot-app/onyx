@@ -7,7 +7,6 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Formik, useFormikContext, type FormikHelpers } from "formik";
 import * as Yup from "yup";
@@ -37,7 +36,6 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { can } from "@/lib/permissions/resource-actions";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
 import { createCustomTool, updateCustomTool } from "@/lib/plugins/openapi/svc";
 import { updateToolStatus } from "@/lib/tools/svc";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
@@ -65,8 +63,13 @@ type Tab = "server" | "schema" | "authentication";
 interface OpenAPIPluginModalProps {
   /** The tool to edit. Without it, the modal adds a new tool. */
   toolId?: number;
-  /** Add mode only: closes the modal. Edit mode routes back to the list. */
+  /** Closes the modal. */
   onClose?: () => void;
+  /**
+   * One-time parameters the Plugins page read from its URL; with
+   * `configure=authentication`, edit mode opens on Authentication.
+   */
+  params?: URLSearchParams;
   /** Add mode only: runs with the new tool's id once it is saved. */
   onCreated?: (toolId: number) => void;
 }
@@ -91,13 +94,12 @@ export default function OpenAPIPluginModal({
   toolId,
   onClose,
   onCreated,
+  params,
 }: OpenAPIPluginModalProps) {
   const isAdd = toolId === undefined;
   const t = useTranslations("actions");
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const {
     openApiTools,
     isLoading,
@@ -123,7 +125,6 @@ export default function OpenAPIPluginModal({
   const pendingOAuthConfigId = useRef<number | null>(null);
   const checkedSchema = useRef<CheckedOpenApiSchema | null>(null);
   const baseline = useRef<OpenAPIPluginFormValues | null>(null);
-  const consumedConfigure = useRef(new Set<number>());
   const active = useRef(true);
   const canEdit = isAdd || can(tool, "edit");
   const canAuthenticate = isAdd || can(tool, "authenticate");
@@ -182,29 +183,21 @@ export default function OpenAPIPluginModal({
     setVisited((current) => new Set([...current, value]));
   }
 
+  // Opening from a "configure" link starts on Authentication, once.
+  const handledConfigure = useRef(false);
   useEffect(() => {
     if (
       !tool ||
-      searchParams.get("configure") !== "authentication" ||
-      consumedConfigure.current.has(tool.id)
+      handledConfigure.current ||
+      params?.get("configure") !== "authentication"
     )
       return;
-    consumedConfigure.current.add(tool.id);
-    const next = new URLSearchParams(searchParams.toString());
-    next.delete("configure");
-    router.replace(
-      withPluginSearchParams(
-        pluginDetailHref({ kind: "openapi", id: tool.id }),
-        next
-      ),
-      { scroll: false }
-    );
+    handledConfigure.current = true;
     if (can(tool, "authenticate")) showTab("authentication");
-  }, [tool, searchParams, router]);
+  }, [tool, params]);
 
   function close() {
-    if (isAdd) onClose?.();
-    else router.replace("/admin/plugins", { scroll: false });
+    onClose?.();
   }
 
   async function create(values: OpenAPIPluginFormValues) {

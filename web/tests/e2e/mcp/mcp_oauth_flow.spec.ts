@@ -119,7 +119,8 @@ async function configureOauthServer(
   }, "OAuth connect click");
 
   await oauthFlow.completeFlow({
-    expectReturnPathContains: "/admin/plugins/mcp/",
+    // OAuth returns to the Plugins page, which reopens the server's modal.
+    expectReturnPathContains: "/admin/plugins",
     confirmConnected: async () => {
       await adminMcp.expectServerDetail(options.serverName);
     },

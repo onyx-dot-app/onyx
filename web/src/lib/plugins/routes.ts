@@ -2,19 +2,52 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { PluginReference } from "@/lib/plugins/types";
 
 export type PluginSearchParams = Record<string, string | string[] | undefined>;
-type PluginDetailPath = `/admin/plugins/${PluginReference["kind"]}/${number}`;
-type PluginPath = typeof ADMIN_ROUTES.PLUGINS.path | PluginDetailPath;
+type PluginPath = typeof ADMIN_ROUTES.PLUGINS.path;
 type PluginHref = PluginPath | `${PluginPath}?${string}`;
 
-export function pluginDetailHref(reference: PluginReference): PluginDetailPath {
-  return `${ADMIN_ROUTES.PLUGINS.path}/${reference.kind}/${reference.id}`;
+/** The query parameter that opens a plugin's modal once on the Plugins page. */
+export const OPEN_PLUGIN_PARAM = "plugin";
+
+/**
+ * The Plugins page with a plugin's modal opened once, for flows that leave
+ * the app and come back (OAuth sign-in) or old links. Other parameters are
+ * handed to the modal, then the page clears them all.
+ */
+export function pluginOpenHref(
+  reference: PluginReference,
+  params: PluginSearchParams | URLSearchParams = {}
+): PluginHref {
+  return withPluginSearchParams(
+    ADMIN_ROUTES.PLUGINS.path,
+    params,
+    `${OPEN_PLUGIN_PARAM}=${reference.kind}:${reference.id}`
+  );
+}
+
+/** Reads `plugin=<kind>:<id>`; anything else is null. */
+export function parsePluginReference(
+  value: string | null
+): PluginReference | null {
+  if (!value) return null;
+  const separator = value.lastIndexOf(":");
+  const kind = value.slice(0, separator);
+  const id = parsePluginId(value.slice(separator + 1));
+  if (separator < 1 || id === null) return null;
+  if (kind === "mcp" || kind === "openapi" || kind === "external-app")
+    return { kind, id };
+  return null;
 }
 
 export function mcpOAuthReturnHref(
   serverId: number,
   enableChat = false
 ): PluginHref {
-  return `${pluginDetailHref({ kind: "mcp", id: serverId })}?trigger_fetch=true${enableChat ? "&enable_chat=true" : ""}`;
+  return pluginOpenHref(
+    { kind: "mcp", id: serverId },
+    enableChat
+      ? { trigger_fetch: "true", enable_chat: "true" }
+      : { trigger_fetch: "true" }
+  );
 }
 
 export function parsePluginId(value: string | undefined): number | null {
@@ -49,10 +82,7 @@ export function legacyMcpListHref(
 ): PluginHref {
   const value = searchParams.server_id;
   const serverId = parsePluginId(Array.isArray(value) ? value[0] : value);
-  return withPluginSearchParams(
-    serverId === null
-      ? ADMIN_ROUTES.PLUGINS.path
-      : pluginDetailHref({ kind: "mcp", id: serverId }),
-    searchParams
-  );
+  return serverId === null
+    ? withPluginSearchParams(ADMIN_ROUTES.PLUGINS.path, searchParams)
+    : pluginOpenHref({ kind: "mcp", id: serverId }, searchParams);
 }

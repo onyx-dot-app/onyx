@@ -15,12 +15,12 @@ const copy = messages.actions;
 const authCopy = copy.openApiAuthModal;
 
 const mockReplace = jest.fn();
-const mockRouter = { push: jest.fn(), replace: mockReplace };
-let mockQuery = new URLSearchParams();
+const mockPush = jest.fn();
+const mockRouter = { push: mockPush, replace: mockReplace };
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
   useRouter: () => mockRouter,
-  useSearchParams: () => mockQuery,
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 let mockFullAdmin = false;
@@ -97,8 +97,8 @@ function updateTool(id: number, update: Partial<ToolSnapshot>) {
 
 beforeEach(() => {
   toast.clearAll();
-  mockQuery = new URLSearchParams();
   mockReplace.mockClear();
+  mockPush.mockClear();
   mockFullAdmin = false;
   tools = [{ ...savedTool }];
   writes = [];
@@ -527,8 +527,13 @@ describe("add", () => {
 describe("edit", () => {
   const updateLabel = copy.addOpenApiModal.submitButton.saveLabel;
 
-  async function renderEdit() {
-    render(<OpenAPIPluginModal toolId={42} />);
+  const onEditClose = jest.fn();
+  beforeEach(() => onEditClose.mockClear());
+
+  async function renderEdit(params?: URLSearchParams) {
+    render(
+      <OpenAPIPluginModal toolId={42} params={params} onClose={onEditClose} />
+    );
     return screen.findByRole("dialog", { name: /^Edit Release API/ });
   }
 
@@ -579,11 +584,9 @@ describe("edit", () => {
     });
     await waitFor(() => expect(primaryButton(updateLabel)).toBeEnabled());
     await user.click(primaryButton(updateLabel));
-    await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", {
-        scroll: false,
-      })
-    );
+    await waitFor(() => expect(onEditClose).toHaveBeenCalled());
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
     expect(writes).toEqual([
       {
         path: "/api/admin/tool/custom/42",
@@ -603,7 +606,7 @@ describe("edit", () => {
       })
     );
     await user.click(primaryButton(updateLabel));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    await waitFor(() => expect(onEditClose).toHaveBeenCalled());
     expect(writes).toEqual([
       {
         path: "/api/admin/tool/status",
@@ -626,7 +629,7 @@ describe("edit", () => {
     });
     await waitFor(() => expect(primaryButton(updateLabel)).toBeEnabled());
     await user.click(primaryButton(updateLabel));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    await waitFor(() => expect(onEditClose).toHaveBeenCalled());
     expect(writes).toEqual([
       {
         path: "/api/admin/tool/custom/42",
@@ -654,7 +657,7 @@ describe("edit", () => {
     );
     await waitFor(() => expect(primaryButton(updateLabel)).toBeEnabled());
     await user.click(primaryButton(updateLabel));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    await waitFor(() => expect(onEditClose).toHaveBeenCalled());
     expect(writes).toEqual([
       {
         path: "/api/admin/oauth-config/7",
@@ -685,7 +688,7 @@ describe("edit", () => {
     await selectAuthMethod(authCopy.authMethod.none.label);
     await waitFor(() => expect(primaryButton(updateLabel)).toBeEnabled());
     await user.click(primaryButton(updateLabel));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    await waitFor(() => expect(onEditClose).toHaveBeenCalled());
     expect(writes).toEqual([
       {
         path: "/api/admin/tool/custom/42",
@@ -714,7 +717,7 @@ describe("edit", () => {
     const message = "Failed to update tool: Link failed";
     expect(await screen.findByText(message)).toBeVisible();
     expect(showError).toHaveBeenCalledWith(message);
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(onEditClose).not.toHaveBeenCalled();
     expect(primaryButton(updateLabel)).toBeEnabled();
   });
 
@@ -732,22 +735,40 @@ describe("edit", () => {
       await screen.findByText(copy.addOpenApiModal.toasts.updateFailed)
     ).toBeVisible();
     expect(writes).toEqual([]);
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(onEditClose).not.toHaveBeenCalled();
   });
 
-  test("opens Authentication from the configure query and removes it", async () => {
-    mockQuery = new URLSearchParams("configure=authentication&source=create");
-    await renderEdit();
+  test("opens Authentication once from the configure parameter without URL writes", async () => {
+    await renderEdit(
+      new URLSearchParams("configure=authentication&source=create")
+    );
     await waitFor(() =>
       expect(tab(copy.mcpDetail.authentication)).toHaveAttribute(
         "aria-selected",
         "true"
       )
     );
-    expect(mockReplace).toHaveBeenCalledWith(
-      "/admin/plugins/openapi/42?source=create",
-      { scroll: false }
+    await setupUser().click(tab(copy.plugins.openapi.tabs.schema));
+    await waitFor(() =>
+      expect(tab(copy.plugins.openapi.tabs.schema)).toHaveAttribute(
+        "aria-selected",
+        "true"
+      )
     );
+    expect(tab(copy.mcpDetail.authentication)).toHaveAttribute(
+      "aria-selected",
+      "false"
+    );
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  test("closes through onClose without routing", async () => {
+    await renderEdit();
+    await setupUser().click(screen.getByRole("button", { name: "Close" }));
+    expect(onEditClose).toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   test("shows read-only views without edit permissions", async () => {

@@ -1,15 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import { Button, MessageCard, Modal, Tabs } from "@opal/components";
 import { toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
-import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
 import {
   errorHandlingFetcher,
   isNotFoundError,
@@ -31,8 +28,16 @@ import {
 } from "@/sections/actions/mcpChatEnableIntent";
 import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
+const NO_PARAMS = new URLSearchParams();
+
 interface MCPPluginDetailPageProps {
   serverId: number;
+  /**
+   * One-time parameters the Plugins page read from its URL, such as an OAuth
+   * return's `trigger_fetch`. The modal never reads or writes the URL.
+   */
+  params?: URLSearchParams;
+  onClose: () => void;
 }
 
 type DetailTab = "server" | "authentication" | "tools";
@@ -43,10 +48,10 @@ function parseDetailTab(value: string | null): DetailTab {
 
 export default function MCPPluginDetailPage({
   serverId,
+  params: searchParams = NO_PARAMS,
+  onClose,
 }: MCPPluginDetailPageProps) {
   const t = useTranslations("actions");
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
   const { user, userResolution } = useUser();
@@ -87,29 +92,12 @@ export default function MCPPluginDetailPage({
   const close = () => {
     if (busy) return;
     clearMcpChatEnableIntent(enableChatIntent);
-    router.replace(ADMIN_ROUTES.PLUGINS.path);
+    onClose();
   };
-  const selectTab = useCallback(
-    (nextTab: DetailTab) => {
-      setVisited((current) => new Set([...current, nextTab]));
-      setTab(nextTab);
-      const query = new URLSearchParams(searchParams.toString());
-      query.set("tab", nextTab);
-      query.delete("trigger_fetch");
-      if (enableChatCompleted.current) {
-        query.delete("enable_chat");
-        query.delete("enable_chat_intent");
-      }
-      router.replace(
-        withPluginSearchParams(
-          pluginDetailHref({ kind: "mcp", id: serverId }),
-          query
-        ),
-        { scroll: false }
-      );
-    },
-    [router, serverId, searchParams]
-  );
+  const selectTab = useCallback((nextTab: DetailTab) => {
+    setVisited((current) => new Set([...current, nextTab]));
+    setTab(nextTab);
+  }, []);
   const refresh = useCallback(async () => {
     await Promise.all([mutateServer(), mutate(SWR_KEYS.adminMcpServers)]);
   }, [mutateServer, mutate]);

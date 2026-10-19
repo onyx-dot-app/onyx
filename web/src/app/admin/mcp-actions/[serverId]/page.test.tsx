@@ -21,7 +21,7 @@ test("redirects a legacy detail with its complete query", async () => {
       }),
     })
   ).rejects.toThrow(
-    "/admin/plugins/mcp/7?tab=authentication&trigger_fetch=true&message=oauth_connected&tag=one&tag=two"
+    "/admin/plugins?plugin=mcp%3A7&tab=authentication&trigger_fetch=true&message=oauth_connected&tag=one&tag=two"
   );
 });
 

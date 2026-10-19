@@ -1,12 +1,10 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { SelectCard } from "@opal/components";
 import { SvgCheckCircle, SvgCodeFile, SvgXOctagon } from "@opal/icons";
 import { getActionIcon } from "@/lib/tools/utils";
 import { can } from "@/lib/permissions/resource-actions";
-import { pluginDetailHref } from "@/lib/plugins/routes";
 import { externalAppDisplayUrl } from "@/lib/plugins/externalAppDisplayUrl";
 import type { InstalledPlugin } from "@/lib/plugins/types";
 import PluginLifecycleMenu from "@/sections/plugins/PluginLifecycleMenu";
@@ -22,6 +20,8 @@ const NESTED_CONTROLS = "button, a, [role='menuitem'], [role='menu']";
 
 interface PluginCardProps {
   plugin: InstalledPlugin;
+  /** Opens the plugin's modal, with one-time parameters such as a tab. */
+  onOpen: (params?: URLSearchParams) => void;
 }
 
 const HOVER_GROUP = "PluginCard";
@@ -30,7 +30,7 @@ const HOVER_GROUP = "PluginCard";
  * The plugin's sign-in state. Only an MCP server can need a sign-in; OpenAPI
  * tools and apps have no sign-in step, so they always read as connected.
  */
-function PluginStatus({ plugin }: PluginCardProps) {
+function PluginStatus({ plugin }: Pick<PluginCardProps, "plugin">) {
   const t = useTranslations("actions.memberPlugins");
   const needsSignIn =
     plugin.kind === "mcp" &&
@@ -57,9 +57,8 @@ function PluginStatus({ plugin }: PluginCardProps) {
  * manage and delete buttons (delete on hover) below. The card opens the
  * plugin's detail page.
  */
-export default function PluginCard({ plugin }: PluginCardProps) {
+export default function PluginCard({ plugin, onOpen }: PluginCardProps) {
   const t = useTranslations("actions.plugins");
-  const router = useRouter();
   const settings = useSettings();
   const craftAvailable = settings.onyx_craft_available === true;
   const resource =
@@ -103,7 +102,7 @@ export default function PluginCard({ plugin }: PluginCardProps) {
             event.target.closest(NESTED_CONTROLS)
           )
             return;
-          router.push(pluginDetailHref({ kind: plugin.kind, id: resource.id }));
+          onOpen();
         }}
       >
         <ContentAction
@@ -124,6 +123,7 @@ export default function PluginCard({ plugin }: PluginCardProps) {
                   plugin={plugin}
                   craftAvailable={craftAvailable}
                   deleteHoverGroup={HOVER_GROUP}
+                  onOpen={onOpen}
                   size="md"
                 />
               </div>

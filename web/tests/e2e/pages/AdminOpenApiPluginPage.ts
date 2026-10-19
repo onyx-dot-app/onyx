@@ -34,19 +34,30 @@ export class AdminOpenApiPluginPage {
       .getByPlaceholder("Enter your OpenAPI schema here")
       .fill(schema);
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-    // Continue moves the same dialog to its Authentication tab.
+    // Continue moves the same dialog to its Authentication tab. Add closes
+    // the dialog, so the new tool's id comes from the create response.
+    const created = this.page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/admin/tool/custom"
+    );
     await dialog.getByRole("button", { name: "Add", exact: true }).click();
+    const body: unknown = await (await created).json();
+    const toolId =
+      typeof body === "object" && body !== null && "id" in body
+        ? Number(body.id)
+        : NaN;
+    if (!Number.isInteger(toolId))
+      throw new Error("OpenAPI plugin create response has no tool ID");
+    await expect(dialog).toBeHidden();
+    // The modal is not a route; the one-time `plugin` param opens it.
+    await this.page.goto(`/admin/plugins?plugin=openapi:${toolId}`);
     await this.expectDetail(name);
-    const match = new URL(this.page.url()).pathname.match(/\/openapi\/(\d+)$/);
-    if (!match?.[1])
-      throw new Error("OpenAPI plugin detail URL has no tool ID");
-    return Number(match[1]);
+    return toolId;
   }
 
   async expectDetail(name: string): Promise<void> {
-    await expect(this.page).toHaveURL(
-      /\/admin\/plugins\/openapi\/\d+(?:\?.*)?$/
-    );
+    await expect(this.page).toHaveURL(/\/admin\/plugins(?:\?.*)?$/);
     await expect(
       this.page.getByRole("dialog").getByText(name, { exact: true })
     ).toBeVisible();

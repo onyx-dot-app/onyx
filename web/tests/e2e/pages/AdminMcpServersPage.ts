@@ -270,7 +270,7 @@ export class AdminMcpServersPage {
   // ---------------------------------------------------------------------------
 
   async expectServerDetail(serverName: string): Promise<void> {
-    await expect(this.page).toHaveURL(/\/admin\/plugins\/mcp\/\d+(?:\?.*)?$/);
+    await expect(this.page).toHaveURL(/\/admin\/plugins(?:\?.*)?$/);
     await expect(this.page.getByRole("dialog")).toBeVisible();
     await expect(
       this.page.getByText(serverName, { exact: true }).first()

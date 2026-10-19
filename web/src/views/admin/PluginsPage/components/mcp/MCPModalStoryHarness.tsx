@@ -537,9 +537,24 @@ function ModalCanvas({
   kind: "auth" | "add" | "detail";
   scenario: MCPStoryScenario;
 }) {
-  if (kind === "detail") return <MCPPluginDetailPage serverId={42} />;
+  if (kind === "detail") return <DetailModalCanvas />;
   if (kind === "add" && !scenario.edit) return <SetupModalCanvas />;
   return <SavedEditorCanvas kind={kind} />;
+}
+
+/** The detail modal as the Plugins page opens it, with a way to reopen it. */
+function DetailModalCanvas() {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <div className="p-6">
+        <Button onClick={() => setOpen(true)}>{REOPEN_PREVIEW}</Button>
+      </div>
+      {open && (
+        <MCPPluginDetailPage serverId={42} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
 }
 
 export function MCPModalStory({
@@ -559,7 +574,7 @@ export function MCPModalStory({
 function SetupModalCanvas() {
   const [open, setOpen] = useState(true);
   const [completed, setCompleted] = useState(false);
-  if (completed) return <MCPPluginDetailPage serverId={42} />;
+  if (completed) return <DetailModalCanvas />;
   return (
     <>
       <div className="p-6">

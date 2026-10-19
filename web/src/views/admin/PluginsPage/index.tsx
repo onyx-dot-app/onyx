@@ -19,7 +19,14 @@ import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useInstalledPlugins } from "@/lib/plugins/hooks";
-import { withPluginSearchParams } from "@/lib/plugins/routes";
+import {
+  OPEN_PLUGIN_PARAM,
+  parsePluginReference,
+  withPluginSearchParams,
+} from "@/lib/plugins/routes";
+import type { PluginReference } from "@/lib/plugins/types";
+import MCPPluginDetailPage from "@/views/admin/PluginsPage/MCPPluginDetailPage";
+import ExternalAppPluginDetailPage from "@/views/admin/PluginsPage/ExternalAppPluginDetailPage";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import PluginCard from "@/views/admin/PluginsPage/PluginCard";
 import PluginAddCatalogModal, {
@@ -129,6 +136,12 @@ export default function PluginsPage() {
   );
   const creation = dialog?.kind === "create" ? dialog.creation : null;
   const handledCreateQuery = useRef<string | null>(null);
+  // The plugin whose modal is open, with one-time parameters for it.
+  const [opened, setOpened] = useState<{
+    reference: PluginReference;
+    params: URLSearchParams;
+  } | null>(null);
+  const handledOpenQuery = useRef(false);
 
   useEffect(() => {
     const add = searchParams.get("add");
@@ -152,6 +165,37 @@ export default function PluginsPage() {
       withPluginSearchParams(ADMIN_ROUTES.PLUGINS.path, nextQuery)
     );
   }, [canCreate, canManageActions, canManageApps, router, searchParams]);
+
+  const listsLoading =
+    mcp.isLoading || openapi.isLoading || externalApps.isLoading;
+
+  // `?plugin=<kind>:<id>` (OAuth returns, old links) opens that plugin once,
+  // if it is installed. The page then clears the URL; the modal keeps the
+  // parameters it was opened with.
+  useEffect(() => {
+    const reference = parsePluginReference(searchParams.get(OPEN_PLUGIN_PARAM));
+    if (!searchParams.has(OPEN_PLUGIN_PARAM)) {
+      handledOpenQuery.current = false;
+      return;
+    }
+    if (handledOpenQuery.current || listsLoading) return;
+    handledOpenQuery.current = true;
+    const installed =
+      reference !== null &&
+      plugins.some(
+        (plugin) =>
+          plugin.kind === reference.kind &&
+          (plugin.kind === "mcp"
+            ? plugin.server.id
+            : plugin.kind === "openapi"
+              ? plugin.tool.id
+              : plugin.app.id) === reference.id
+      );
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(OPEN_PLUGIN_PARAM);
+    if (installed) setOpened({ reference, params });
+    router.replace(ADMIN_ROUTES.PLUGINS.path, { scroll: false });
+  }, [searchParams, listsLoading, plugins, router]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPlugins = plugins.filter((plugin) => {
@@ -313,6 +357,17 @@ export default function PluginsPage() {
               <div className="flex flex-col gap-2">
                 {filteredPlugins.map((plugin) => (
                   <PluginCard
+                    onOpen={(params = new URLSearchParams()) =>
+                      setOpened({
+                        reference:
+                          plugin.kind === "mcp"
+                            ? { kind: "mcp", id: plugin.server.id }
+                            : plugin.kind === "openapi"
+                              ? { kind: "openapi", id: plugin.tool.id }
+                              : { kind: "external-app", id: plugin.app.id },
+                        params,
+                      })
+                    }
                     key={`${plugin.kind}:${plugin.kind === "mcp" ? plugin.server.id : plugin.kind === "openapi" ? plugin.tool.id : plugin.app.id}`}
                     plugin={plugin}
                   />
@@ -401,6 +456,29 @@ export default function PluginsPage() {
               setDialog(null);
               void openapi.refresh();
             }}
+          />
+        )}
+        {opened?.reference.kind === "mcp" && (
+          <MCPPluginDetailPage
+            key={opened.reference.id}
+            serverId={opened.reference.id}
+            params={opened.params}
+            onClose={() => setOpened(null)}
+          />
+        )}
+        {opened?.reference.kind === "openapi" && (
+          <OpenAPIPluginModal
+            key={opened.reference.id}
+            toolId={opened.reference.id}
+            params={opened.params}
+            onClose={() => setOpened(null)}
+          />
+        )}
+        {opened?.reference.kind === "external-app" && (
+          <ExternalAppPluginDetailPage
+            key={opened.reference.id}
+            appId={opened.reference.id}
+            onClose={() => setOpened(null)}
           />
         )}
       </SettingsLayouts.Root>

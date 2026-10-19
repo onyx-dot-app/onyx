@@ -4,7 +4,6 @@ import { MCPConnectionStatus } from "@/lib/mcp/types";
 
 import { useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import {
   Button,
@@ -21,7 +20,6 @@ import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { deleteMCPServer, updateMCPServer } from "@/lib/mcp/svc";
 import { MCPServerStatus } from "@/lib/mcp/types";
-import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import { can } from "@/lib/permissions/resource-actions";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -47,6 +45,8 @@ export interface PluginLifecycleMenuProps {
   deleteHoverGroup?: string;
   /** Button size. `"md"` matches a settings card's actions row. @default "sm" */
   size?: "sm" | "md";
+  /** Opens the plugin's modal, with one-time parameters such as a tab. */
+  onOpen?: (params?: URLSearchParams) => void;
 }
 
 /** Shows the delete button only while `group` is hovered, when one is given. */
@@ -71,9 +71,9 @@ export default function PluginLifecycleMenu({
   craftAvailable = false,
   deleteHoverGroup,
   size = "sm",
+  onOpen,
 }: PluginLifecycleMenuProps) {
   const t = useTranslations("actions");
-  const router = useRouter();
   const [activation, setActivation] = useState<
     "availability" | "delete" | null
   >(null);
@@ -100,8 +100,7 @@ export default function PluginLifecycleMenu({
     plugin.kind === "mcp" && (isGlobalHolder || can(plugin.server, "edit"));
   const manageLabel = t("plugins.row.manage.label", { name: resource.name });
   function openPlugin() {
-    if (plugin.kind === "openapi")
-      router.push(pluginDetailHref({ kind: "openapi", id: plugin.tool.id }));
+    onOpen?.();
   }
   if (activation)
     return (
@@ -112,6 +111,7 @@ export default function PluginLifecycleMenu({
         craftAvailable={craftAvailable}
         deleteHoverGroup={deleteHoverGroup}
         size={size}
+        onOpen={onOpen}
       />
     );
   return (
@@ -173,6 +173,7 @@ function ActivePluginLifecycleMenu({
   craftAvailable,
   deleteHoverGroup,
   size,
+  onOpen,
 }: {
   plugin: Exclude<InstalledPlugin, { kind: "external-app" }>;
   initialAction: "availability" | "delete";
@@ -180,9 +181,9 @@ function ActivePluginLifecycleMenu({
   craftAvailable: boolean;
   deleteHoverGroup?: string;
   size: "sm" | "md";
+  onOpen?: PluginLifecycleMenuProps["onOpen"];
 }) {
   const t = useTranslations("actions");
-  const router = useRouter();
   const { mutate } = useSWRConfig();
   const availabilityLabel = t(
     `plugins.controls.${workspaceAvailabilityLabel(plugin, craftAvailable)}`
@@ -312,15 +313,12 @@ function ActivePluginLifecycleMenu({
               return;
             }
             setOpen(false);
-            router.push(
-              withPluginSearchParams(
-                pluginDetailHref({ kind: "mcp", id: server.id }),
-                {
-                  tab: "authentication",
-                  enable_chat: "true",
-                  enable_chat_intent: intent,
-                }
-              )
+            onOpen?.(
+              new URLSearchParams({
+                tab: "authentication",
+                enable_chat: "true",
+                enable_chat_intent: intent,
+              })
             );
             return;
           }
@@ -476,11 +474,7 @@ function ActivePluginLifecycleMenu({
             })}
             tooltip={t("plugins.row.manage.label", { name: resource.name })}
             disabled={busy}
-            onClick={() =>
-              router.push(
-                pluginDetailHref({ kind: "openapi", id: plugin.tool.id })
-              )
-            }
+            onClick={() => onOpen?.()}
           />
         ) : items.length ? (
           <Dropdown open={open} onOpenChange={setOpen} align="end">

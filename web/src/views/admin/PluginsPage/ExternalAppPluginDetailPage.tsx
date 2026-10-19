@@ -1,7 +1,6 @@
 "use client";
 
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Modal } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
@@ -10,7 +9,6 @@ import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type {
   ExternalAppAdminResponse,
   BuiltInExternalAppDescriptor,
@@ -23,24 +21,26 @@ import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
 interface ExternalAppPluginDetailPageProps {
   appId: number;
+  onClose: () => void;
 }
 
 export default function ExternalAppPluginDetailPage({
   appId,
+  onClose,
 }: ExternalAppPluginDetailPageProps) {
   const { isGlobalHolder } = usePermissionAuthority(
     Permission.FULL_ADMIN_PANEL_ACCESS
   );
   const settings = useSettings();
   return isGlobalHolder && settings.onyx_craft_available === true ? (
-    <AuthorizedExternalAppDetail appId={appId} />
+    <AuthorizedExternalAppDetail appId={appId} onClose={onClose} />
   ) : null;
 }
 
 function AuthorizedExternalAppDetail({
   appId,
+  onClose: close,
 }: ExternalAppPluginDetailPageProps) {
-  const router = useRouter();
   const t = useTranslations("actions.plugins");
   const tApps = useTranslations("admin.externalApps");
   const apps = useSWR<ExternalAppAdminResponse[], Error>(
@@ -54,9 +54,6 @@ function AuthorizedExternalAppDetail({
       : null,
     errorHandlingFetcher
   );
-  function close() {
-    router.replace(ADMIN_ROUTES.PLUGINS.path, { scroll: false });
-  }
   function saved() {
     void apps.mutate();
   }

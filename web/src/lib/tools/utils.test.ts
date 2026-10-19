@@ -19,11 +19,11 @@ const tool: ToolSnapshot = {
   default_enabled: false,
 };
 
-test("opens the selected OpenAPI plugin detail from a tool configuration link", () => {
+test("opens the selected OpenAPI plugin modal from a tool configuration link", () => {
   expect(
     getAdminConfigureInfo(tool, { openapi: "Configure custom tool" })
   ).toEqual({
-    href: "/admin/plugins/openapi/7",
+    href: "/admin/plugins?plugin=openapi%3A7",
     tooltip: "Configure custom tool",
   });
 });

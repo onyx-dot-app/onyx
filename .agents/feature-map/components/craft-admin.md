@@ -85,7 +85,7 @@ those org instructions are appended to.
 |---|---|---|
 | `/admin/craft/access` | `CraftPage` (`web/src/views/admin/CraftPage/index.tsx`) | `Permission.FULL_ADMIN_PANEL_ACCESS`; hidden in the sidebar unless `FeatureFlags.craftAvailable` |
 | `/admin/craft/apps` | Redirect to `/admin/plugins`, preserving external-app edit links | same |
-| `/admin/plugins/external-app/[appId]` | `ExternalAppPluginDetailPage` | `Permission.FULL_ADMIN_PANEL_ACCESS` |
+| `/admin/plugins?plugin=external-app:<id>` | `ExternalAppPluginDetailPage`, opened once on the Plugins page | `Permission.FULL_ADMIN_PANEL_ACCESS` |
 | `/admin/craft/preferences` | `CraftPreferencesPage` (`web/src/views/admin/CraftPreferencesPage/index.tsx`) | same |
 
 All three carry `requiredTier: null` (`web/src/lib/admin-routes.ts:159-186`): visibility is not tied

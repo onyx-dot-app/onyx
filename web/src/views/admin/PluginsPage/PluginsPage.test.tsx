@@ -12,6 +12,8 @@ import {
 import PluginsPage from "@/views/admin/PluginsPage";
 import type MCPPluginSetupModal from "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal";
 import type OpenAPIPluginModal from "@/views/admin/PluginsPage/OpenAPIPluginModal";
+import type MCPPluginDetailPage from "@/views/admin/PluginsPage/MCPPluginDetailPage";
+import type ExternalAppPluginDetailPage from "@/views/admin/PluginsPage/ExternalAppPluginDetailPage";
 import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { SUGGESTED_MCP_PLUGINS } from "@/lib/plugins/catalog";
@@ -67,15 +69,67 @@ jest.mock(
     },
   })
 );
+/** An opened plugin's modal: its name, the parameters it got, and Close. */
+function MockOpenedModal({
+  name,
+  params,
+  onClose,
+}: {
+  name: string;
+  params?: URLSearchParams;
+  onClose?: () => void;
+}) {
+  return (
+    <div role="dialog" aria-label={name}>
+      <output aria-label="Opened with">{params?.toString() ?? ""}</output>
+      <button onClick={onClose}>Close</button>
+    </div>
+  );
+}
 jest.mock("@/views/admin/PluginsPage/OpenAPIPluginModal", () => ({
   __esModule: true,
   default: function MockOpenAPIModal(
     props: ComponentProps<typeof OpenAPIPluginModal>
   ) {
+    if (props.toolId !== undefined)
+      return (
+        <MockOpenedModal
+          name={`OpenAPI plugin ${props.toolId}`}
+          params={props.params}
+          onClose={props.onClose}
+        />
+      );
     return (
       <div role="dialog" aria-label="OpenAPI setup">
         <button onClick={() => props.onCreated?.(7)}>Create action</button>
       </div>
+    );
+  },
+}));
+jest.mock("@/views/admin/PluginsPage/MCPPluginDetailPage", () => ({
+  __esModule: true,
+  default: function MockMCPDetail(
+    props: ComponentProps<typeof MCPPluginDetailPage>
+  ) {
+    return (
+      <MockOpenedModal
+        name={`MCP plugin ${props.serverId}`}
+        params={props.params}
+        onClose={props.onClose}
+      />
+    );
+  },
+}));
+jest.mock("@/views/admin/PluginsPage/ExternalAppPluginDetailPage", () => ({
+  __esModule: true,
+  default: function MockExternalAppDetail(
+    props: ComponentProps<typeof ExternalAppPluginDetailPage>
+  ) {
+    return (
+      <MockOpenedModal
+        name={`App plugin ${props.appId}`}
+        onClose={props.onClose}
+      />
     );
   },
 }));
@@ -272,7 +326,7 @@ test("refreshes persisted incomplete servers when MCP setup is dismissed", async
   expect(mcpReads).toBe(2);
 });
 
-test("lists native records with colliding IDs as cards that open their detail pages", async () => {
+test("lists native records with colliding IDs as cards that open their modals", async () => {
   const network = mockNetwork();
   render(<PluginsPage />);
   const mcpCard = await findCard("Manage Workspace MCP");
@@ -292,10 +346,117 @@ test("lists native records with colliding IDs as cards that open their detail pa
   ).not.toBeInTheDocument();
   const user = setupUser();
   await user.click(mcpCard);
-  expect(mockPush).toHaveBeenLastCalledWith("/admin/plugins/mcp/7");
+  expect(screen.getByRole("dialog", { name: "MCP plugin 7" })).toBeVisible();
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "Close" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await user.click(openapiCard);
-  expect(mockPush).toHaveBeenLastCalledWith("/admin/plugins/openapi/7");
+  expect(
+    screen.getByRole("dialog", { name: "OpenAPI plugin 7" })
+  ).toBeVisible();
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(mockPush).not.toHaveBeenCalled();
+  expect(mockReplace).not.toHaveBeenCalled();
 });
+
+test("closing an opened plugin's modal returns to the list without routing", async () => {
+  mockNetwork();
+  render(<PluginsPage />);
+  const user = setupUser();
+  await user.click(await findCard("Manage Workspace MCP"));
+  expect(screen.getByRole("status", { name: "Opened with" })).toHaveTextContent(
+    ""
+  );
+  await user.click(screen.getByRole("button", { name: "Close" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(card("Manage Workspace MCP")).toBeVisible();
+  expect(card("View Reports API")).toBeVisible();
+  expect(mockPush).not.toHaveBeenCalled();
+  expect(mockReplace).not.toHaveBeenCalled();
+});
+
+test("the OpenAPI gear opens the plugin's modal without routing", async () => {
+  mockNetwork();
+  render(<PluginsPage />);
+  const openapiCard = await findCard("View Reports API");
+  await setupUser().click(
+    within(openapiCard).getByRole("button", { name: "Manage Reports API" })
+  );
+  expect(
+    screen.getByRole("dialog", { name: "OpenAPI plugin 7" })
+  ).toBeVisible();
+  expect(mockPush).not.toHaveBeenCalled();
+});
+
+test("a plugin parameter opens that plugin once and clears the URL", async () => {
+  mockNetwork();
+  mockSearchParams = new URLSearchParams(
+    "plugin=mcp:7&trigger_fetch=true&enable_chat=true"
+  );
+  const view = render(<PluginsPage />);
+  expect(
+    await screen.findByRole("dialog", { name: "MCP plugin 7" })
+  ).toBeVisible();
+  expect(screen.getByRole("status", { name: "Opened with" })).toHaveTextContent(
+    "trigger_fetch=true&enable_chat=true"
+  );
+  expect(mockReplace).toHaveBeenCalledTimes(1);
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", {
+    scroll: false,
+  });
+  view.rerender(<PluginsPage />);
+  await setupUser().click(screen.getByRole("button", { name: "Close" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  // The router has not cleared the URL yet; the page must not reopen.
+  view.rerender(<PluginsPage />);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(mockReplace).toHaveBeenCalledTimes(1);
+  mockSearchParams = new URLSearchParams();
+  view.rerender(<PluginsPage />);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(mockPush).not.toHaveBeenCalled();
+});
+
+test("waits for the lists before it opens a plugin from the URL", async () => {
+  const openapi = deferred<Response>();
+  const network = mockNetwork();
+  const respond = network.getMockImplementation();
+  if (!respond) throw new Error("Expected the network mock");
+  network.mockImplementation(async (input, init) =>
+    String(input) === "/api/tool/openapi"
+      ? openapi.promise
+      : respond(input, init)
+  );
+  mockSearchParams = new URLSearchParams("plugin=openapi:7");
+  render(<PluginsPage />);
+  await findCard("Manage Workspace MCP");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(mockReplace).not.toHaveBeenCalled();
+  openapi.resolve(new Response(JSON.stringify([tool])));
+  expect(
+    await screen.findByRole("dialog", { name: "OpenAPI plugin 7" })
+  ).toBeVisible();
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", {
+    scroll: false,
+  });
+});
+
+test.each(["mcp:99", "openapi:99", "external-app:7", "mcp:abc", "nope"])(
+  "a plugin parameter %s that is not in the list opens nothing and clears the URL",
+  async (value) => {
+    mockNetwork();
+    mockSearchParams = new URLSearchParams({ plugin: value, tab: "tools" });
+    render(<PluginsPage />);
+    await findCard("Manage Workspace MCP");
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith("/admin/plugins", {
+        scroll: false,
+      })
+    );
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  }
+);
 
 test.each([
   MCPConnectionStatus.NOT_CONNECTED,
@@ -328,7 +489,9 @@ test("includes external apps with colliding IDs only for full admins", async () 
   expect(card("Manage Workspace MCP")).toBeVisible();
   expect(card("View Reports API")).toBeVisible();
   await setupUser().click(appCard);
-  expect(mockPush).toHaveBeenLastCalledWith("/admin/plugins/external-app/7");
+  expect(screen.getByRole("dialog", { name: "App plugin 7" })).toBeVisible();
+  expect(mockPush).not.toHaveBeenCalled();
+  await setupUser().click(screen.getByRole("button", { name: "Close" }));
   const filters = screen.getByRole("tablist", { name: "Plugin type" });
   const user = setupUser();
   await user.click(within(filters).getByRole("tab", { name: "MCP" }));
