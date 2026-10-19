@@ -28,8 +28,15 @@ def mcp_oauth_client_metadata_url() -> str:
 
 
 def is_mcp_oauth_cimd_client_id(client_id: str | None) -> bool:
-    """A CIMD registration's client_id is the metadata document URL itself."""
-    return client_id == mcp_oauth_client_metadata_url()
+    """A CIMD registration's client_id is the metadata document URL itself.
+
+    Matched by shape rather than the current WEB_DOMAIN so a registration made
+    under an earlier domain is still recognized."""
+    return bool(
+        client_id
+        and client_id.startswith("https://")
+        and client_id.endswith(MCP_OAUTH_CLIENT_METADATA_PUBLIC_PATH)
+    )
 
 
 def validated_mcp_oauth_client_metadata_url() -> str | None:

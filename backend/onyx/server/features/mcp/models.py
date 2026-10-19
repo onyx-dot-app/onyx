@@ -652,7 +652,8 @@ class MCPOAuthServerSnapshot(BaseModel):
     auth_type: MCPAuthenticationType
     auth_performer: MCPAuthenticationPerformer
     provider_mode: MCPOAuthProviderMode
-    cimd_enabled: bool
+    # Defaulted so attempts persisted before this field existed still complete.
+    cimd_enabled: bool = True
     transport: MCPTransport | None
     authorization_endpoint: str | None
     token_endpoint: str | None

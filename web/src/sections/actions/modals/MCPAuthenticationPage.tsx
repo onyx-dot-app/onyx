@@ -506,10 +506,6 @@ export default function MCPAuthenticationPage({
                             authType === MCPAuthenticationType.OAUTH
                               ? values.oauth_provider_mode
                               : MCPOAuthProviderMode.AUTO_DISCOVERY,
-                          oauth_cimd_enabled:
-                            authType === MCPAuthenticationType.OAUTH
-                              ? values.oauth_cimd_enabled
-                              : true,
                           api_token: scopeChanged ? "" : values.api_token,
                           user_credentials: scopeChanged
                             ? {}
