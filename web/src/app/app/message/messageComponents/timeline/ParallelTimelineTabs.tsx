@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState } from "../types";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { TurnGroup } from "./transformers";
 import {
   getToolName,

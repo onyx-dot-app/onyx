@@ -16,7 +16,7 @@ import {
   RenderType,
   RendererResult,
   RendererOutput,
-} from "./types";
+} from "@/app/app/message/messageComponents/types";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
 import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "./timeline/renderers/code/PythonToolRenderer";
