@@ -6,11 +6,16 @@ file and keeps the design-system diagnostics:
 
 - `opal/no-replaced-refresh-import`: a refresh-components import that Opal replaces;
 - `react/forbid-elements`: a raw `<button>`, `<input>`, `<select>` or `<textarea>`;
-- `no-restricted-imports`: `lucide-react`, `react-icons` or `@/components/*`.
+- `no-restricted-imports`: `lucide-react`, `react-icons` or `@/components/*`;
+- `opal/no-layout-div`: a `<div>`/`<span>` flex or grid container;
+- `opal/no-section-utility-classes`: padding, gap or size classes on `Section`.
 
-Baseline files only warn on the last two rules, so pre-commit passes them. The hook
-still reports those warnings, except legacy `@/components/*` imports, which often
-have no replacement yet. It gives the findings to the agent as context so the agent
+Files in the design-system baseline only warn on `react/forbid-elements` and
+`no-restricted-imports`, and files in the layout baseline only warn on
+`opal/no-layout-div`, so pre-commit passes them. The hook still reports the baseline
+warnings, except legacy `@/components/*` imports, which often have no replacement
+yet, and layout divs, because moving a div to `Section` changes its defaults
+(centered, full size, gap 4) and is not a mechanical swap. It gives the findings to the agent as context so the agent
 migrates the file before it continues. `agent_hook_io` handles each agent's payload
 and output format.
 """
@@ -28,8 +33,16 @@ _RULES = {
     "opal(no-replaced-refresh-import)",
     "react(forbid-elements)",
     "eslint(no-restricted-imports)",
+    "opal(no-layout-div)",
+    "opal(no-section-utility-classes)",
 }
-_BASELINE_MARKER = "Design-system baseline"
+_BASELINES = {
+    "Design-system baseline": {
+        "react(forbid-elements)",
+        "eslint(no-restricted-imports)",
+    },
+    "Layout baseline": {"opal(no-layout-div)"},
+}
 
 
 def _is_reported(diagnostic: dict[str, object]) -> bool:
@@ -37,6 +50,8 @@ def _is_reported(diagnostic: dict[str, object]) -> bool:
         return False
     if diagnostic.get("severity") == "error":
         return True
+    if diagnostic.get("code") == "opal(no-layout-div)":
+        return False
     return "'@/components/" not in str(diagnostic.get("message", ""))
 
 
@@ -100,19 +115,26 @@ def main() -> int:
         return 0
 
     rc = (web / ".oxlintrc.json").read_text()
-    baseline = rc.split(_BASELINE_MARKER, 1)[1] if _BASELINE_MARKER in rc else ""
-    dirty = {d.get("filename") for d in diagnostics if d.get("code") in _RULES}
-    clean = [
-        f'"{_baseline_glob(path)}"'
-        for path in files
-        if path not in dirty and f'"{_baseline_glob(path)}"' in baseline
-    ]
-    if clean:
+    notes = []
+    for marker, rules in _BASELINES.items():
+        if marker not in rc:
+            continue
+        baseline = rc.split(marker, 1)[1].split('"rules"', 1)[0]
+        dirty = {d.get("filename") for d in diagnostics if d.get("code") in rules}
+        clean = [
+            f'"{_baseline_glob(path)}"'
+            for path in files
+            if path not in dirty and f'"{_baseline_glob(path)}"' in baseline
+        ]
+        if clean:
+            notes.append(f"the {marker.lower()}: " + ", ".join(clean))
+    if notes:
         give_feedback(
             payload,
             "PostToolUse",
-            "These files are now clean of the design-system rules. Remove them from "
-            "the design-system baseline in web/.oxlintrc.json: " + ", ".join(clean),
+            "These files are now clean of a baseline's rules. Remove them from "
+            + "; and from ".join(notes)
+            + " (both in web/.oxlintrc.json).",
         )
     return 0
 

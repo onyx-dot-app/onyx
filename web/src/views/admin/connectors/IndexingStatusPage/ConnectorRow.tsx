@@ -198,11 +198,7 @@ export default function ConnectorRow({
             data-testid={`indexing-connector-${row.cc_pair_id}`}
           >
             <Section alignItems="stretch" gap={0} height="fit">
-              <Section
-                alignItems="stretch"
-                height="fit"
-                className={expanded ? "px-2 pt-2 pb-1" : "p-2"}
-              >
+              <Section alignItems="stretch" height="fit">
                 <Section
                   flexDirection="row"
                   alignItems="start"
