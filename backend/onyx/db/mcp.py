@@ -318,6 +318,7 @@ def create_mcp_server__no_commit(
     oauth_token_endpoint: str | None = None,
     oauth_scopes_override: list[str] | None = None,
     oauth_additional_auth_params: dict[str, str] | None = None,
+    oauth_cimd_enabled: bool = True,
     admin_connection_config_id: int | None = None,
     is_public: bool = True,
     available_in_craft: bool = False,
@@ -336,6 +337,7 @@ def create_mcp_server__no_commit(
         oauth_token_endpoint=oauth_token_endpoint,
         oauth_scopes_override=oauth_scopes_override,
         oauth_additional_auth_params=oauth_additional_auth_params,
+        oauth_cimd_enabled=oauth_cimd_enabled,
         admin_connection_config_id=admin_connection_config_id,
         is_public=is_public,
         available_in_craft=available_in_craft,
@@ -359,6 +361,7 @@ def update_mcp_server__no_commit(
     oauth_token_endpoint: str | None | UnsetType = UNSET,
     oauth_scopes_override: list[str] | None | UnsetType = UNSET,
     oauth_additional_auth_params: dict[str, str] | None | UnsetType = UNSET,
+    oauth_cimd_enabled: bool | None = None,
     transport: MCPTransport | None = None,
     status: MCPServerStatus | None = None,
     last_refreshed_at: datetime.datetime | None = None,
@@ -392,6 +395,8 @@ def update_mcp_server__no_commit(
         server.oauth_scopes_override = oauth_scopes_override
     if not isinstance(oauth_additional_auth_params, UnsetType):
         server.oauth_additional_auth_params = oauth_additional_auth_params
+    if oauth_cimd_enabled is not None:
+        server.oauth_cimd_enabled = oauth_cimd_enabled
     if transport is not None:
         server.transport = transport
     if status is not None:

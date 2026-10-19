@@ -441,6 +441,10 @@
           "description": "Introduce un ID de cliente de tu proveedor. Añade un secreto solo si es necesario."
         }
       },
+      "cimd": {
+        "label": "Usar el documento de metadatos del cliente",
+        "description": "Si está activado, el proveedor obtiene el documento de metadatos del cliente de {appName} a través de la Internet pública. Desactívalo si esta instancia de {appName} es privada. {appName} usará entonces el registro automático de clientes."
+      },
       "discovery": {
         "checking": "Comprobando la configuración automática…",
         "supported": "La configuración automática está disponible",

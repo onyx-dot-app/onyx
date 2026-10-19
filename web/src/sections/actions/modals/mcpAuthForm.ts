@@ -105,6 +105,7 @@ export type MCPAuthSource = Pick<MCPServer, "server_url"> &
       | "auth_performer"
       | "admin_credentials"
       | "oauth_provider_mode"
+      | "oauth_cimd_enabled"
       | "oauth_authorization_endpoint"
       | "oauth_token_endpoint"
       | "oauth_scopes_override"
@@ -138,6 +139,7 @@ export function getMCPAuthInitialValues(
     oauth_client_secret: fullServer.admin_credentials?.client_secret || "",
     oauth_provider_mode:
       fullServer.oauth_provider_mode || MCPOAuthProviderMode.AUTO_DISCOVERY,
+    oauth_cimd_enabled: fullServer.oauth_cimd_enabled ?? true,
     oauth_authorization_endpoint: fullServer.oauth_authorization_endpoint || "",
     oauth_token_endpoint: fullServer.oauth_token_endpoint || "",
     oauth_scopes_override: fullServer.oauth_scopes_override
@@ -286,6 +288,10 @@ export function prepareMCPAuthPayload(
     oauth_provider_mode:
       authType === MCPAuthenticationType.OAUTH
         ? values.oauth_provider_mode
+        : undefined,
+    oauth_cimd_enabled:
+      authType === MCPAuthenticationType.OAUTH
+        ? values.oauth_cimd_enabled
         : undefined,
     oauth_authorization_endpoint: isKnownProviderOauth
       ? values.oauth_authorization_endpoint

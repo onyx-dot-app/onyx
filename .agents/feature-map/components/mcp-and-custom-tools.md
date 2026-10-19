@@ -813,7 +813,10 @@ choice at server-creation time is what decides this, and it is visible on the
 Automatic discovery finds OAuth settings after the admin selects OAuth. It
 does not detect the authentication method. Client setup can use supplied
 credentials, a Client ID Metadata Document (CIMD), or Dynamic Client
-Registration (DCR), as supported by the provider. Tool discovery follows
+Registration (DCR), as supported by the provider. CIMD needs the provider to
+fetch the deployment's metadata document, so `MCPServer.oauth_cimd_enabled`
+lets an admin turn it off per server. Automatic discovery then registers
+through DCR, which a private deployment needs. Tool discovery follows
 authentication; it is separate from OAuth discovery.
 
 1. **Connect.** The frontend calls `POST /mcp/oauth/connect` (user) or
