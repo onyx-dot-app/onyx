@@ -14,6 +14,8 @@ from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 
 GRAPH_API = "Microsoft Graph"
 SHAREPOINT_API = "SharePoint API"
+# A row's summary is this many characters or fewer.
+MAX_SUMMARY_LENGTH = 40
 # A certificate this close to its end date gets a caveat on the sign-in row.
 CERTIFICATE_EXPIRY_WARNING = timedelta(days=30)
 
@@ -67,6 +69,13 @@ def grant_line(permission: str, api: str = GRAPH_API) -> str:
         f"Grant `{permission}` ({api}, application) to the app registration and "
         "admin-consent it."
     )
+
+
+def fit_line(prefix: str, name: str, suffix: str = "") -> str:
+    """``prefix``, ``name`` and ``suffix``, with the name cut to fit a summary."""
+    room: int = MAX_SUMMARY_LENGTH - len(prefix) - len(suffix)
+    cut: str = name if len(name) <= room else name[: room - 1] + "\u2026"
+    return f"{prefix}{cut}{suffix}"
 
 
 def format_date(moment: datetime) -> str:
@@ -246,25 +255,30 @@ def sign_in_text(
     token: MicrosoftTokenInfo, labels: MicrosoftAccountLabels
 ) -> MicrosoftSignIn:
     """The app's name from the token, and the certificate's end date. A
-    certificate near its end date gets a caveat."""
-    summary: str = (
-        f"Signed in as {token.app_name}"
-        if token.app_name
-        else f"Signed in as app {token.app_id}"
-        if token.app_id
-        else "Signed in to Microsoft"
-    )
+    certificate near its end date gets a caveat. A name too long for the
+    summary is cut there and given in full in the description."""
+    summary: str = "Signed in to Microsoft"
+    lines: list[str] = []
+    if token.app_name:
+        summary = fit_line("Signed in as ", token.app_name)
+        if summary != f"Signed in as {token.app_name}":
+            lines.append(f"App: {token.app_name}")
+    elif token.app_id:
+        summary = fit_line("Signed in as app ", token.app_id)
+        if summary != f"Signed in as app {token.app_id}":
+            lines.append(f"App ID: {token.app_id}")
     not_after: datetime | None = token.certificate_not_after
-    if not_after is None:
-        return MicrosoftSignIn(summary=summary)
     caveats: list[str] = []
-    if not_after - datetime.now(timezone.utc) <= CERTIFICATE_EXPIRY_WARNING:
-        caveats.append(
-            f"The certificate expires on {format_date(not_after)}. Upload a new "
-            f".pfx as {labels.private_key} before then, or sign-in stops working."
-        )
+    if not_after is not None:
+        lines.append(f"Certificate valid until {format_date(not_after)}.")
+        if not_after - datetime.now(timezone.utc) <= CERTIFICATE_EXPIRY_WARNING:
+            caveats.append(
+                f"The certificate expires on {format_date(not_after)}. Upload a "
+                f"new .pfx as {labels.private_key} before then, or sign-in stops "
+                "working."
+            )
     return MicrosoftSignIn(
         summary=summary,
-        description=f"Certificate valid until {format_date(not_after)}.",
+        description="\n".join(lines) or None,
         caveats=caveats,
     )

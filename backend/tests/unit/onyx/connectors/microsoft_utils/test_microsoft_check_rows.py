@@ -112,6 +112,33 @@ def test_every_shared_line_is_short_enough() -> None:
         assert len(row.description.splitlines()) <= 3, row.description
 
 
+@pytest.mark.parametrize(
+    ("token", "full_value"),
+    [
+        (
+            MicrosoftTokenInfo(app_id="00000000-0000-0000-0000-000000000000"),
+            "App ID: 00000000-0000-0000-0000-000000000000",
+        ),
+        (
+            MicrosoftTokenInfo(
+                app_name="Contoso Enterprise Search Indexer Production",
+                certificate_not_after=datetime.now(timezone.utc) + timedelta(days=200),
+            ),
+            "App: Contoso Enterprise Search Indexer Production",
+        ),
+    ],
+)
+def test_a_long_app_name_or_id_fits_the_sign_in_line(
+    token: MicrosoftTokenInfo, full_value: str
+) -> None:
+    sign_in = sign_in_text(token, _LABELS)
+
+    assert len(sign_in.summary) <= 40, sign_in.summary
+    assert sign_in.description is not None
+    assert sign_in.description.splitlines()[0] == full_value
+    assert len(sign_in.description.splitlines()) <= 3
+
+
 # --- Sign-in refusals ---
 
 
