@@ -39,6 +39,10 @@ class Emitter:
         if self._query_observation is not None:
             self._query_observation.tool_started(is_search=is_search)
 
+    def llm_step_started(self) -> None:
+        if self._query_observation is not None:
+            self._query_observation.llm_step_started(model_idx=self._model_idx)
+
     def emit(self, packet: Packet) -> None:
         if self._drain_done is not None and self._drain_done.is_set():
             return

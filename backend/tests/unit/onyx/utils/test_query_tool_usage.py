@@ -36,7 +36,9 @@ def test_executed_tools_determine_one_query_category(
 ) -> None:
     sink = Mock()
     monkeypatch.setattr(telemetry, "emit_telemetry", sink)
-    observation = telemetry.QueryObservation(channel="web", mode="chat")
+    observation = telemetry.QueryObservation(
+        channel="web", mode=telemetry.QueryMode.CHAT
+    )
     for tool_type in tool_types:
         tool = Mock(spec=tool_type)
         # A custom tool with a search-like name must still count as another tool.
@@ -70,7 +72,9 @@ def test_parallel_models_share_usage_and_cancellation_freezes_it(
 ) -> None:
     sink = Mock()
     monkeypatch.setattr(telemetry, "emit_telemetry", sink)
-    observation = telemetry.QueryObservation(channel="api", mode="chat")
+    observation = telemetry.QueryObservation(
+        channel="api", mode=telemetry.QueryMode.CHAT
+    )
     emitters = [
         Emitter(Queue(), model_idx=i, query_observation=observation) for i in range(2)
     ]
@@ -85,7 +89,7 @@ def test_parallel_models_share_usage_and_cancellation_freezes_it(
     assert sink.call_args.args[1]["tool_usage"] == "search_and_other"
     assert sink.call_args.args[1]["outcome"] == "canceled"
 
-    stopped = telemetry.QueryObservation(channel="web", mode="chat")
+    stopped = telemetry.QueryObservation(channel="web", mode=telemetry.QueryMode.CHAT)
     stopped.tool_started(is_search=True)
     stopped.finish()
     stopped.tool_started(is_search=False)
@@ -99,5 +103,5 @@ def test_search_mode_does_not_claim_chat_tool_usage(
 ) -> None:
     sink = Mock()
     monkeypatch.setattr(telemetry, "emit_telemetry", sink)
-    telemetry.QueryObservation(channel="api", mode="search").finish()
+    telemetry.QueryObservation(channel="api", mode=telemetry.QueryMode.SEARCH).finish()
     assert sink.call_args.args[1]["tool_usage"] is None

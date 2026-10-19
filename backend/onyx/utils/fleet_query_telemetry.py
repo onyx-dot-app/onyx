@@ -43,12 +43,26 @@ _CHAT_ERROR_CATEGORIES: dict[str, str] = {
 }
 
 
+class QueryMode(str, Enum):
+    CHAT = "chat"
+    SEARCH = "search"
+    # Runs its own orchestration, so the fleet keeps its latency apart from chat.
+    DEEP_RESEARCH = "deep_research"
+
+
 def _channel(kwargs: dict[str, Any]) -> str:
     request = kwargs.get("new_msg_req")
     if request is None:
         return "web"
     # The origin enum is part of SendMessageRequest, not user text.
     return _ORIGIN_CHANNELS.get(request.origin.value.lower(), "web")
+
+
+def _mode(kwargs: dict[str, Any]) -> QueryMode:
+    request = kwargs.get("new_msg_req")
+    if request is not None and request.deep_research:
+        return QueryMode.DEEP_RESEARCH
+    return QueryMode.CHAT
 
 
 class QueryToolUsage(str, Enum):
@@ -59,10 +73,10 @@ class QueryToolUsage(str, Enum):
 
 
 class QueryObservation:
-    def __init__(self, *, channel: str, mode: str) -> None:
+    def __init__(self, *, channel: str, mode: QueryMode) -> None:
         self.started: float = time.monotonic()
         self.channel: str = channel
-        self.mode: str = mode
+        self.mode: QueryMode = mode
         self.first_answer_ms: float | None = None
         self.time_to_results_ms: float | None = None
         # None: the request was rejected before it ran, so there is no query to report.
@@ -72,7 +86,24 @@ class QueryObservation:
         self._lock = threading.Lock()
         self._used_search = False
         self._used_other_tool = False
+        # Chat-loop LLM calls per model index; model comparisons share one observation.
+        self._llm_steps: dict[int, int] = {}
+        self._answer_llm_steps: int | None = None
         self._finished = False
+
+    def llm_step_started(self, *, model_idx: int) -> None:
+        with self._lock:
+            if self._finished:
+                return
+            self._llm_steps[model_idx] = self._llm_steps.get(model_idx, 0) + 1
+
+    def _llm_cycles(self) -> int:
+        """LLM calls up to the first answer token, or every call when none arrived.
+        Text streamed before a tool call is the first answer, so later cycles
+        are not part of ``first_answer_ms``."""
+        if self._answer_llm_steps is not None:
+            return self._answer_llm_steps
+        return max(self._llm_steps.values(), default=0)
 
     def tool_started(self, *, is_search: bool) -> None:
         with self._lock:
@@ -105,7 +136,7 @@ class QueryObservation:
 
         if isinstance(packet, Packet):
             if isinstance(packet.obj, AgentResponseDelta) and packet.obj.content:
-                self.answer()
+                self.answer(model_idx=packet.placement.model_index or 0)
             elif isinstance(packet.obj, OverallStop):
                 stop_outcome = _STOP_OUTCOMES.get(packet.obj.stop_reason or "")
                 if stop_outcome is not None:
@@ -113,9 +144,13 @@ class QueryObservation:
         elif isinstance(packet, StreamingError):
             self.error_packet(packet)
 
-    def answer(self) -> None:
+    def answer(self, *, model_idx: int) -> None:
         if self.first_answer_ms is None:
             self.first_answer_ms = max(0, (time.monotonic() - self.started) * 1000)
+            # The writer drains packets as workers queue them, and a model's next
+            # cycle waits for a tool round, so this count is still current.
+            with self._lock:
+                self._answer_llm_steps = self._llm_steps.get(model_idx, 0)
 
     def results(self) -> None:
         if self.time_to_results_ms is None:
@@ -151,7 +186,8 @@ class QueryObservation:
             if self._finished:
                 return
             self._finished = True
-            tool_usage = self._tool_usage() if self.mode == "chat" else None
+            tool_usage = self._tool_usage() if self.mode != QueryMode.SEARCH else None
+            llm_cycles = self._llm_cycles() if self.mode == QueryMode.CHAT else None
         if self.outcome is None:
             return
         # emit_telemetry never raises, so a stream always finishes normally.
@@ -166,6 +202,7 @@ class QueryObservation:
                 "time_to_results_ms": self.time_to_results_ms,
                 "error_code": self.error_code,
                 "tool_usage": tool_usage,
+                "llm_cycles": llm_cycles,
             },
         )
 
@@ -176,7 +213,7 @@ def observe_chat_packets(
     channel: str,
     observation: QueryObservation | None = None,
 ) -> Iterator[Any]:
-    observation = observation or QueryObservation(channel=channel, mode="chat")
+    observation = observation or QueryObservation(channel=channel, mode=QueryMode.CHAT)
     try:
         for packet in packets:
             if not observation.writer_owned:
@@ -207,7 +244,7 @@ def telemetry_chat(function: F) -> F:
             channel = _channel(kwargs)
         except Exception:
             channel = "web"
-        observation = QueryObservation(channel=channel, mode="chat")
+        observation = QueryObservation(channel=channel, mode=_mode(kwargs))
         yield from observe_chat_packets(
             function(*args, **kwargs, query_observation=observation),
             channel=channel,
@@ -217,7 +254,7 @@ def telemetry_chat(function: F) -> F:
     return cast(F, stream)
 
 
-def telemetry_query(*, mode: str) -> Callable[[F], F]:
+def telemetry_query(*, mode: QueryMode) -> Callable[[F], F]:
     """Decorator for search functions/generators; preserve the callable signature."""
 
     def decorate(function: F) -> F:

@@ -2147,3 +2147,68 @@ def test_project_instructions_supplement_agent_prompt(
         assert history[1].message_type == MessageType.USER
     else:
         assert history[0].message_type == MessageType.SYSTEM
+
+
+def test_each_llm_call_counts_as_a_query_cycle_before_it_runs() -> None:
+    """Fleet query telemetry gets one cycle per chat-loop LLM call, counted
+    before the call so a first answer token is attributed to its own cycle."""
+    calls: list[str] = []
+    emitter = Mock()
+    emitter.llm_step_started.side_effect = lambda: calls.append("counted")
+    tool_call = ToolCallKickoff(
+        tool_call_id="search-1",
+        tool_name=SearchTool.NAME,
+        tool_args={"queries": ["ticket"]},
+        placement=Placement(turn_index=0),
+    )
+    results = [
+        (LlmStepResult(answer=None, tool_calls=[tool_call], reasoning=None), False),
+        (LlmStepResult(answer="Done", tool_calls=None, reasoning=None), False),
+    ]
+
+    def step(**_: Any) -> tuple[LlmStepResult, bool]:
+        calls.append("called")
+        return results.pop(0)
+
+    search_tool = Mock()
+    search_tool.name = SearchTool.NAME
+    search_tool.id = 1
+    llm = Mock()
+    llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-5.2",
+        temperature=0,
+        max_input_tokens=100000,
+    )
+    with (
+        patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+        patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+        patch(
+            "onyx.chat.llm_loop.get_session_with_current_tenant",
+            return_value=nullcontext(),
+        ),
+        patch("onyx.chat.llm_loop.get_default_base_system_prompt", return_value=""),
+        patch("onyx.chat.llm_loop.compute_all_tool_tokens", return_value=0),
+        patch("onyx.chat.llm_loop.run_llm_step", side_effect=step),
+        # A tool round that returns nothing still sends the model another cycle.
+        patch(
+            "onyx.chat.llm_loop.run_tool_calls",
+            return_value=ParallelToolCallResponse(
+                tool_responses=[], updated_citation_mapping={}
+            ),
+        ),
+    ):
+        run_llm_loop(
+            emitter=emitter,
+            state_container=Mock(),
+            simple_chat_history=[create_message("Find it", MessageType.USER, 5)],
+            tools=[search_tool],
+            custom_agent_prompt=None,
+            context_files=create_context_files(),
+            persona=None,
+            user_memory_context=None,
+            llm=llm,
+            token_counter=lambda _: 10,
+        )
+
+    assert calls == ["counted", "called", "counted", "called"]

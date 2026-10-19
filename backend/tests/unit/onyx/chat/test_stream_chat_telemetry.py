@@ -206,3 +206,19 @@ def test_client_disconnect_still_emits_query_record(
     stream.close()
 
     assert _query_outcomes(telemetry_sink) == ["disconnected"]
+
+
+def test_deep_research_reports_its_own_mode(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
+) -> None:
+    _install_turn(monkeypatch, _two_packet_turn)
+
+    response = _call_endpoint(SendMessageRequest(message="hello", deep_research=True))
+    assert isinstance(response, StreamingResponse)
+    _drain(response)
+
+    telemetry_sink.assert_called_once()
+    data = telemetry_sink.call_args.args[1]
+    assert (data["mode"], data["outcome"]) == ("deep_research", "success")
+    # Its orchestration is not a chat loop, so it reports no cycle count.
+    assert data["llm_cycles"] is None
