@@ -294,6 +294,7 @@ interface UpsertMCPServerResponse {
   auth_type: string;
   auth_performer: string;
   oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_cimd_enabled?: boolean;
   oauth_authorization_endpoint?: string;
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];
@@ -313,6 +314,7 @@ export async function upsertMCPServer(serverData: {
   oauth_client_id?: string;
   oauth_client_secret?: string;
   oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_cimd_enabled?: boolean;
   oauth_authorization_endpoint?: string;
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];

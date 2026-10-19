@@ -6074,6 +6074,11 @@ class MCPServer(Base):
     oauth_additional_auth_params: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # CIMD makes the authorization server fetch this deployment's client metadata
+    # document. When off, auto-discovery registers through DCR instead.
+    oauth_cimd_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     # Status tracking for configuration flow
     status: Mapped[MCPServerStatus] = mapped_column(
         Enum(MCPServerStatus, native_enum=False),

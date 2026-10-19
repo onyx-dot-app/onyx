@@ -53,6 +53,7 @@ def _server(
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         transport=transport,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
         oauth_scopes_override=None,
@@ -538,6 +539,7 @@ def test_reverse_order_completions_restore_their_own_registration(
                 "connection_config_id": 101,
                 "transport": "STREAMABLE_HTTP",
                 "oauth_provider_mode": "AUTO_DISCOVERY",
+                "oauth_cimd_enabled": True,
             },
         )
         exchange = AsyncMock()
