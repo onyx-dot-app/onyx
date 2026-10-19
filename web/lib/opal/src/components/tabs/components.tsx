@@ -196,9 +196,6 @@ function TabsList({
       data-variant={variant}
       data-focus-ring={keyboardFocus || undefined}
       className="opal-tabs-list"
-      // Each tab is its own Tab stop (see Tabs.Trigger), so the list is not
-      // one. Radix would otherwise make it the entry point.
-      tabIndex={-1}
       style={
         variant === "contained"
           ? {
@@ -209,11 +206,15 @@ function TabsList({
       {...props}
       onKeyDown={(event) => {
         props.onKeyDown?.(event);
-        if (event.key === "Escape") {
+        if (
+          event.key === "Escape" &&
+          event.target instanceof HTMLElement &&
+          event.target.getAttribute("role") === "tab"
+        ) {
           // Escape leaves the tabs: the tab loses focus, and its ring.
           keyMovedFocusRef.current = false;
           setKeyboardFocus(false);
-          if (event.target instanceof HTMLElement) event.target.blur();
+          event.target.blur();
         } else if (FOCUS_KEYS.has(event.key)) {
           keyMovedFocusRef.current = true;
         }
@@ -427,8 +428,6 @@ function TabsTrigger({
         disabled={disabled}
         data-variant={variant}
         className="opal-tabs-trigger"
-        // Tab steps through every tab, as well as the arrows.
-        tabIndex={0}
         {...props}
         onMouseDown={(event) => {
           props.onMouseDown?.(event);

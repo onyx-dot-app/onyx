@@ -1,13 +1,24 @@
 "use client";
 
 import "@opal/components/inputs/texts/input-type-in/styles.css";
-import { useCallback } from "react";
 import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
 import { useOpalStrings } from "@opal/strings";
 import type { InputVariants, WithoutStyles } from "@opal/types";
+
+/**
+ * Clears an input through the browser, so React sends its `onChange` a real
+ * change event, as for typing.
+ */
+function clearNativeInput(input: HTMLInputElement) {
+  Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  )?.set?.call(input, "");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
 export interface InputTypeInProps extends WithoutStyles<
   Omit<React.InputHTMLAttributes<HTMLInputElement>, "disabled" | "readOnly">
@@ -84,16 +95,6 @@ export default function InputTypeIn({
   const disabled = variant === "disabled";
   const isReadOnly = readOnly || variant === "readOnly";
 
-  const handleClear = useCallback(() => {
-    onChange?.({
-      target: { value: "", name: name ?? "" },
-      currentTarget: { value: "", name: name ?? "" },
-      type: "change",
-      bubbles: true,
-      cancelable: true,
-    } as React.ChangeEvent<HTMLInputElement>);
-  }, [onChange, name]);
-
   return (
     <div
       role="presentation"
@@ -145,13 +146,14 @@ export default function InputTypeIn({
             disabled={disabled}
             onClick={(event) => {
               event.stopPropagation();
-              handleClear();
+              const input = event.currentTarget
+                .closest(".opal-input")
+                ?.querySelector("input");
+              if (!input) return;
+              clearNativeInput(input);
               // The button hides once the field is empty; keep focus in the
               // field rather than losing it to the page.
-              event.currentTarget
-                .closest(".opal-input")
-                ?.querySelector("input")
-                ?.focus();
+              input.focus();
             }}
             type="button"
             prominence="tertiary"

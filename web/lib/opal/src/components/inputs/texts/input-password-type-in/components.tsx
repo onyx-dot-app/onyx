@@ -116,16 +116,21 @@ function InputPasswordTypeIn({
         (e.key === "Backspace" || e.key === "Delete")
       ) {
         e.preventDefault();
+        // The real input is the target: its value is already "" (the tag
+        // shows instead), so the event reads as clearing it.
+        const input = e.currentTarget;
         onChange?.({
-          target: { value: "", name: props.name ?? "" },
-          currentTarget: { value: "", name: props.name ?? "" },
+          ...e,
           type: "change",
-          bubbles: true,
-          cancelable: true,
-        } as React.ChangeEvent<HTMLInputElement>);
+          target: input,
+          currentTarget: input,
+          preventDefault: () => e.preventDefault(),
+          stopPropagation: () => e.stopPropagation(),
+          persist: () => e.persist(),
+        });
       }
     },
-    [isExistingValue, onChange, onKeyDown, props.name, props.readOnly]
+    [isExistingValue, onChange, onKeyDown, props.readOnly]
   );
 
   return (

@@ -5,7 +5,7 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
-import { Tabs } from "@opal/components";
+import { Button, Tabs } from "@opal/components";
 
 function ConditionalTabs({ showPermissions }: { showPermissions: boolean }) {
   return (
@@ -44,7 +44,7 @@ it("allocates grid columns only for visible tabs as conditional tabs change", as
 function FilterTabs({ dir }: { dir?: "ltr" | "rtl" }) {
   return (
     <>
-      <button type="button">Before</button>
+      <Button prominence="secondary">Before</Button>
       <Tabs defaultValue="all" dir={dir}>
         <Tabs.List>
           <Tabs.Trigger value="all">All</Tabs.Trigger>
@@ -55,28 +55,24 @@ function FilterTabs({ dir }: { dir?: "ltr" | "rtl" }) {
           <Tabs.Trigger value="openapi">OpenAPI</Tabs.Trigger>
         </Tabs.List>
       </Tabs>
-      <button type="button">After</button>
+      <Button prominence="secondary">After</Button>
     </>
   );
 }
 
 describe("keyboard", () => {
-  it("Tab steps through every enabled tab, then leaves", async () => {
+  it("Tab enters on the selected tab, then leaves the tab list", async () => {
     const user = setupUser();
     render(<FilterTabs />);
     await user.click(screen.getByRole("button", { name: "Before" }));
     await user.tab();
     expect(screen.getByRole("tab", { name: "All" })).toHaveFocus();
-    await user.tab();
-    expect(screen.getByRole("tab", { name: "MCP" })).toHaveFocus();
-    await user.tab();
-    expect(screen.getByRole("tab", { name: "OpenAPI" })).toHaveFocus();
     expect(screen.getByRole("tablist")).toHaveAttribute("data-focus-ring");
     await user.tab();
     expect(screen.getByRole("button", { name: "After" })).toHaveFocus();
     expect(screen.getByRole("tablist")).not.toHaveAttribute("data-focus-ring");
     await user.tab({ shift: true });
-    expect(screen.getByRole("tab", { name: "OpenAPI" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "All" })).toHaveFocus();
   });
 
   it("moves with Left and Right, skipping a disabled tab, and selects with Enter", async () => {
@@ -94,7 +90,7 @@ describe("keyboard", () => {
     expect(mcp).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(mcp).toHaveAttribute("aria-selected", "true");
-    // Tab moves on to the next tab, and Shift+Tab comes back.
+    // Tab leaves the tab list, and Shift+Tab comes back to the selected tab.
     await user.tab();
     await user.tab({ shift: true });
     expect(mcp).toHaveFocus();
@@ -122,6 +118,24 @@ describe("keyboard", () => {
     expect(screen.getByRole("tab", { name: "OpenAPI" })).not.toHaveFocus();
     fireEvent.mouseDown(mcp);
     expect(list).not.toHaveAttribute("data-focus-ring");
+  });
+
+  it("Escape on a control beside the tabs keeps its focus", async () => {
+    const user = setupUser();
+    render(
+      <Tabs defaultValue="a" variant="pill">
+        <Tabs.List
+          rightChildren={<Button prominence="tertiary">Expand</Button>}
+        >
+          <Tabs.Trigger value="a">A</Tabs.Trigger>
+          <Tabs.Trigger value="b">B</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs>
+    );
+    const expand = screen.getByRole("button", { name: "Expand" });
+    await user.click(expand);
+    await user.keyboard("{Escape}");
+    expect(expand).toHaveFocus();
   });
 
   it("does not focus a tab on a right click or Ctrl-click", () => {
