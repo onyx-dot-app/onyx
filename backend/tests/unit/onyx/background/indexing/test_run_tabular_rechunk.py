@@ -18,6 +18,7 @@ import pytest
 
 from onyx.background.indexing.run_tabular_rechunk import (
     DocumentChangedError,
+    IndexSwappedError,
     _rebuild_document,
     _RechunkAdapter,
     _tabular_file_name,
@@ -176,13 +177,15 @@ def _document(document_id: str) -> Document:
     )
 
 
-def _lock_against(live: list[DbDocument]) -> None:
-    """Enters the adapter's lock context with `live` as the stored rows."""
+def _lock_against(live: list[DbDocument], live_index: str = "idx-a") -> None:
+    """Enters the adapter's lock context with `live` as the stored rows and
+    `live_index` as the index the search settings now name."""
     adapter = _RechunkAdapter(
         connector_id=1,
         credential_id=1,
         tenant_id="t",
         index_attempt_metadata=MagicMock(),
+        index_name="idx-a",
         targets=[
             TabularRechunkTarget(
                 document=DbDocument(id="doc-1", file_id="file-abc", chunk_count=40),
@@ -201,6 +204,10 @@ def _lock_against(live: list[DbDocument]) -> None:
     with (
         patch(f"{module}.DocumentIndexingBatchAdapter.lock_context", lock),
         patch(f"{module}.get_documents_by_ids", return_value=live),
+        patch(
+            f"{module}.get_current_search_settings",
+            return_value=SimpleNamespace(index_name=live_index),
+        ),
     ):
         with adapter.lock_context([_document("doc-1")]):
             pass
@@ -225,3 +232,12 @@ def test_the_write_is_dropped_when_a_crawl_rewrote_the_document() -> None:
 
 def test_an_untouched_document_still_writes() -> None:
     _lock_against([DbDocument(id="doc-1", file_id="file-abc", chunk_count=40)])
+
+
+def test_the_write_is_dropped_when_the_live_index_moved_mid_batch() -> None:
+    """The scan checks the live index once a page. A swap landing while the
+    batch embeds would put these chunks in the retired index and lower the
+    shared chunk_count, stranding the document in the new one."""
+    unchanged = DbDocument(id="doc-1", file_id="file-abc", chunk_count=40)
+    with pytest.raises(IndexSwappedError):
+        _lock_against([unchanged], live_index="idx-b")

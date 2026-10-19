@@ -33,7 +33,11 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
 )
-from onyx.connectors.models import Document, IndexAttemptMetadata
+from onyx.connectors.models import (
+    ConnectorStopSignal,
+    Document,
+    IndexAttemptMetadata,
+)
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.document import (
     TabularRechunkTarget,
@@ -175,6 +179,11 @@ class DocumentChangedError(Exception):
     """A crawl rewrote a document between the scan and the chunk write."""
 
 
+class IndexSwappedError(ConnectorStopSignal):
+    """The live index moved while the batch embedded. A ConnectorStopSignal, so
+    the pipeline stops rather than retry each document into the retired one."""
+
+
 class _RechunkAdapter(DocumentIndexingBatchAdapter):
     """The standard adapter plus the check `force_update` needs: the scan reads
     the workbook before the batch embeds, so a crawl can write newer chunks in
@@ -188,6 +197,7 @@ class _RechunkAdapter(DocumentIndexingBatchAdapter):
         tenant_id: str,
         index_attempt_metadata: IndexAttemptMetadata,
         targets: list[TabularRechunkTarget],
+        index_name: str,
     ) -> None:
         super().__init__(
             connector_id=connector_id,
@@ -195,6 +205,7 @@ class _RechunkAdapter(DocumentIndexingBatchAdapter):
             tenant_id=tenant_id,
             index_attempt_metadata=index_attempt_metadata,
         )
+        self.index_name = index_name
         self.scanned_versions = {
             target.document.id: _DocumentVersion.from_row(target.document)
             for target in targets
@@ -203,6 +214,11 @@ class _RechunkAdapter(DocumentIndexingBatchAdapter):
     @contextlib.contextmanager
     def lock_context(self, documents: list[Document]) -> Generator[Session, None, None]:
         with super().lock_context(documents) as db_session:
+            # The scan checks this once a page; a batch embeds for minutes.
+            if get_current_search_settings(db_session).index_name != self.index_name:
+                raise IndexSwappedError(
+                    f"the live index left {self.index_name} while this batch embedded"
+                )
             live = {
                 db_doc.id: _DocumentVersion.from_row(db_doc)
                 for db_doc in get_documents_by_ids(
@@ -230,6 +246,7 @@ def _rechunk_batch(
     embedder: IndexingEmbedder,
     document_index: OpenSearchDocumentIndex,
     batch_num: int,
+    index_name: str,
 ) -> tuple[int, list[str]]:
     """Re-chunks one cc-pair's worth of documents. Returns (indexed, failed)."""
     heads = _chunk_heads(document_index, [target.document.id for target in targets])
@@ -288,6 +305,7 @@ def _rechunk_batch(
                 tenant_id=tenant_id,
                 index_attempt_metadata=metadata,
                 targets=targets,
+                index_name=index_name,
             ),
         )
     finally:
@@ -355,20 +373,28 @@ def run_tabular_rechunk(
         for target in targets:
             grouped[(target.connector_id, target.credential_id)].append(target)
 
-        for (connector_id, credential_id), batch in grouped.items():
-            batch_indexed, batch_failed = _rechunk_batch(
-                targets=batch,
-                connector_id=connector_id,
-                credential_id=credential_id,
-                tenant_id=tenant_id,
-                embedder=embedder,
-                document_index=document_index,
-                batch_num=batch_num,
-            )
-            indexed += batch_indexed
-            failed.extend(batch_failed)
-            batch_num += 1
-            on_batch()
+        try:
+            for (connector_id, credential_id), batch in grouped.items():
+                batch_indexed, batch_failed = _rechunk_batch(
+                    targets=batch,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                    tenant_id=tenant_id,
+                    embedder=embedder,
+                    document_index=document_index,
+                    batch_num=batch_num,
+                    index_name=index_name,
+                )
+                indexed += batch_indexed
+                failed.extend(batch_failed)
+                batch_num += 1
+                on_batch()
+        except IndexSwappedError:
+            # The cursor stays on the last finished page. Re-reading this one
+            # costs nothing: what it re-chunked is under the ceiling already.
+            logger.info("tabular re-chunk: the live index changed mid-batch, stopping")
+            finished = False
+            break
 
         if targets:
             cursor = targets[-1].document.id
