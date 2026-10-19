@@ -541,7 +541,8 @@ export function MemberPluginDetailContent({
           event.preventDefault();
           guard.cancelLeave();
         }}
-        onPointerDownOutside={(event) => {
+        onInteractOutside={(event) => {
+          if (event.defaultPrevented) return;
           event.preventDefault();
           guard.cancelLeave();
         }}
@@ -568,7 +569,8 @@ export function MemberPluginDetailContent({
         event.preventDefault();
         dismiss();
       }}
-      onPointerDownOutside={(event) => {
+      onInteractOutside={(event) => {
+        if (event.defaultPrevented) return;
         event.preventDefault();
         dismiss();
       }}

@@ -120,7 +120,8 @@ export function MemberPluginConnectionContent({
         event.preventDefault();
         close();
       }}
-      onPointerDownOutside={(event) => {
+      onInteractOutside={(event) => {
+        if (event.defaultPrevented) return;
         event.preventDefault();
         close();
       }}

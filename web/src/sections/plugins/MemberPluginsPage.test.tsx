@@ -4,6 +4,7 @@ import { MCPConnectionStatus } from "@/lib/mcp/types";
 import {
   act,
   deferred,
+  fireEvent,
   render as renderWithProviders,
   screen,
   setupUser,
@@ -281,6 +282,57 @@ test("connecting from details replaces the detail dialog and dismissing leaves n
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+test.each([{ button: 2 }, { button: 0, ctrlKey: true }])(
+  "context-menu gestures outside member dialogs do not dismiss them: %p",
+  async (gesture) => {
+    network({
+      servers: [
+        memberServer({ connection_status: MCPConnectionStatus.NOT_CONNECTED }),
+      ],
+    });
+    render(<MemberPluginsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByText("Linear"));
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerdown", { ...gesture, bubbles: true })
+    );
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerup", { ...gesture, bubbles: true })
+    );
+    fireEvent.click(document.body, gesture);
+    expect(screen.getByRole("dialog", { name: /^Linear/ })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    // Radix arms the replacement content's outside-pointer listener next tick.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerdown", { ...gesture, bubbles: true })
+    );
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerup", { ...gesture, bubbles: true })
+    );
+    fireEvent.click(document.body, gesture);
+    expect(
+      screen.getByRole("dialog", { name: /^Connect Linear/ })
+    ).toBeVisible();
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerdown", { button: 0, bubbles: true })
+    );
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerup", { button: 0, bubbles: true })
+    );
+    fireEvent.click(document.body, { button: 0 });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  }
+);
 
 test("plugin details use Cancel and Save without navigating to Chat or Craft", async () => {
   network();
