@@ -373,12 +373,11 @@ export default function ActivityPanel({
                 gap={1}
                 height="fit"
               >
-                {/* The chart's span sits with the other filters, inside the row that wraps instead of overflowing. */}
+                {/* The filters shrink and wrap before the counts, so a narrow panel never clips the counts. */}
                 <Section
                   flexDirection="row"
                   justifyContent="start"
                   gap={1}
-                  width="fit"
                   height="fit"
                   wrap
                 >
