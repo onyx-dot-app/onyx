@@ -656,22 +656,37 @@ def test_loopback_blocked_on_self_hosted_below_disabled(
         validate_custom_tool_url(_LOOPBACK_URL, resolve_dns=False)
 
 
-@pytest.mark.parametrize("url", [_LOOPBACK_URL, "http://[fe80::1]/"])
-def test_loopback_and_link_local_allowed_on_self_hosted_when_disabled(
-    monkeypatch: pytest.MonkeyPatch, url: str
+def test_loopback_allowed_on_self_hosted_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_ssrf_level(monkeypatch, SSRFProtectionLevel.DISABLED)
-    validate_custom_tool_url(url, resolve_dns=False)
+    validate_custom_tool_url(_LOOPBACK_URL, resolve_dns=False)
 
 
-@pytest.mark.parametrize("level", _BELOW_DISABLED_LEVELS)
-@pytest.mark.parametrize("url", ["http://[fe80::1]/", "http://169.254.10.10/"])
-def test_link_local_blocked_on_self_hosted_below_disabled(
-    monkeypatch: pytest.MonkeyPatch, url: str, level: SSRFProtectionLevel
+_LINK_LOCAL_URLS = [
+    "http://[fe80::1]/",
+    "http://169.254.10.10/",
+    "http://[::ffff:169.254.169.254]/latest/meta-data",
+    "http://[::ffff:a9fe:a9fe]/",
+]
+
+
+@pytest.mark.parametrize("multi_tenant", [False, True])
+@pytest.mark.parametrize("level", list(SSRFProtectionLevel))
+@pytest.mark.parametrize("url", _LINK_LOCAL_URLS)
+def test_link_local_blocked_at_every_level(
+    monkeypatch: pytest.MonkeyPatch,
+    url: str,
+    level: SSRFProtectionLevel,
+    multi_tenant: bool,
 ) -> None:
-    _set_ssrf_level(monkeypatch, level)
+    _set_ssrf_level(monkeypatch, level, multi_tenant)
     with pytest.raises(SSRFException):
         validate_custom_tool_url(url, resolve_dns=False)
+    with patch("onyx.utils.url._pinned_request") as pinned:
+        with pytest.raises(ToolCallException):
+            _run_ping(url)
+        pinned.assert_not_called()
 
 
 @pytest.mark.parametrize("level", list(SSRFProtectionLevel))

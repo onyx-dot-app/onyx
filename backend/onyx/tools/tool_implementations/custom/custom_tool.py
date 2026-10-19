@@ -53,8 +53,8 @@ CUSTOM_TOOL_REQUEST_TIMEOUT: tuple[float, float] = (10, 120)
 
 
 def custom_tool_ssrf_params() -> OutboundSSRFParams:
-    """Cloud blocks every internal target. Self-hosted allows private hosts
-    and blocks loopback and link-local unless SSRF protection is DISABLED."""
+    """Cloud blocks every internal target. Self-hosted allows private hosts,
+    allows loopback only at DISABLED, and always blocks link-local/metadata."""
     if MULTI_TENANT:
         return OutboundSSRFParams(
             allow_private_network=False,
@@ -67,7 +67,7 @@ def custom_tool_ssrf_params() -> OutboundSSRFParams:
     return OutboundSSRFParams(
         allow_private_network=True,
         block_loopback_and_link_local=not ssrf_disabled,
-        block_link_local_only=False,
+        block_link_local_only=ssrf_disabled,
     )
 
 
