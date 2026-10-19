@@ -583,13 +583,7 @@ export default function RunsCard({
         data-testid="connector-runs"
       >
         {logModal}
-        <Section
-          flexDirection="row"
-          alignItems="center"
-          gap={1}
-          height="fit"
-          className="px-2 pb-2"
-        >
+        <Section flexDirection="row" alignItems="center" gap={1} height="fit">
           <Section height="fit" className="min-w-0 flex-1">
             {searchInputField}
           </Section>
