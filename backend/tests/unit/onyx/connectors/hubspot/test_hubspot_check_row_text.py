@@ -163,7 +163,7 @@ def test_a_sign_in_timeout_fails_only_a_form_run() -> None:
 
 
 def test_a_request_timeout_after_sign_in_is_incomplete_on_a_form_run() -> None:
-    gateway = _gateway()
+    gateway = healthy_gateway()
     gateway.list_records.side_effect = HubSpotConnectionError(
         "tickets", timed_out=True, detail="read timed out"
     )
