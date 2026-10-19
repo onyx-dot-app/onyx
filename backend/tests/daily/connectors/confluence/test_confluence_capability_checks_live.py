@@ -11,6 +11,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckErrorKind,
     CredentialCapability,
     OptionsFinding,
     compute_capability_verdicts,
@@ -104,7 +105,14 @@ def test_indexing_checks_pass_on_the_test_space(
     failures = {
         result.check_id: result.message
         for result in results
-        if result.applicable and result.status != CapabilityCheckStatus.PASSED
+        if result.applicable
+        and result.status != CapabilityCheckStatus.PASSED
+        and not (
+            # The sampled page can have no comments, which cannot decide.
+            result.check_id == "confluence_comments_read"
+            and result.status == CapabilityCheckStatus.INCOMPLETE
+            and result.error_kind == CheckErrorKind.INCONCLUSIVE
+        )
     }
     assert not failures, failures
     assert by_id[mode_check_id].status == CapabilityCheckStatus.PASSED
@@ -113,7 +121,14 @@ def test_indexing_checks_pass_on_the_test_space(
     )
     assert by_id[auth_check_id].status == CapabilityCheckStatus.PASSED
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
-    assert verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.PASSED
+    comments_passed = (
+        by_id["confluence_comments_read"].status == CapabilityCheckStatus.PASSED
+    )
+    assert verdicts[CredentialCapability.INDEXING] == (
+        CapabilityVerdict.PASSED
+        if comments_passed
+        else CapabilityVerdict.PASSED_WITH_WARNINGS
+    )
     # The discovery check lists the test space as an option for the space field,
     # unless the listing stopped at the option cap before reaching it.
     listings: list[OptionsFinding] = [
