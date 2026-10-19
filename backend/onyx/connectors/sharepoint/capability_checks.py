@@ -103,7 +103,11 @@ from onyx.connectors.sharepoint.connector_utils import (
     tenant_domain_from_site_urls,
     validate_content_types,
 )
-from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
+from onyx.connectors.sharepoint.models import (
+    SharepointDrive,
+    SitePagesPage,
+    SiteUrlListing,
+)
 from onyx.connectors.sharepoint.source_operations import (
     GRAPH_API_VERSION,
     SharepointSourceOperations,
@@ -485,7 +489,7 @@ def _probe_sites(
         sites: list[SiteDescriptor] = _descriptors(config)[:_PROBE_SITES]
         return _found_sites(gateway, sites) if found_only else sites
     try:
-        site_urls: list[str] = gateway.list_site_urls(max_pages=1)
+        site_urls: list[str] = gateway.list_site_urls(max_pages=1).site_urls
     except MicrosoftGraphError as error:
         raise_for_graph_error(
             error,
@@ -1167,7 +1171,7 @@ class _SitesVisibleCheck(_SharepointCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
-            site_urls: list[str] = _gateway(context).list_site_urls(max_pages=1)
+            listing: SiteUrlListing = _gateway(context).list_site_urls(max_pages=1)
         except MicrosoftGraphError as error:
             raise_for_graph_error(
                 error,
@@ -1176,6 +1180,7 @@ class _SitesVisibleCheck(_SharepointCheck):
                 denied_row=_LIST_SITES_DENIED_ROW,
                 request="the site listing",
             )
+        site_urls: list[str] = listing.site_urls
         if not site_urls:
             raise InsufficientPermissionsError(
                 "Graph lists no sites for this app. With `Sites.Selected` the "
@@ -1185,6 +1190,16 @@ class _SitesVisibleCheck(_SharepointCheck):
             )
         patterns: list[str] = _excluded_patterns(_config(context))
         if all(is_site_excluded(site_url, patterns) for site_url in site_urls):
+            if not listing.complete:
+                raise InconclusiveValidationError(
+                    "Every site on the first page of the site listing matches an "
+                    "excluded site pattern. Later pages were not read.",
+                    summary="No included site in the sample",
+                    description=(
+                        "The bounded sample found no included site.\nLater "
+                        "sites in the listing can still be indexed."
+                    ),
+                )
             raise ConnectorValidationError(
                 "Every listed site matches an excluded site pattern, so indexing "
                 "reads nothing.",

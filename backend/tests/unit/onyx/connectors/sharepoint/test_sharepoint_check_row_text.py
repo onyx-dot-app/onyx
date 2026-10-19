@@ -32,7 +32,7 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_indexing_checks,
 )
 from onyx.connectors.sharepoint.connector import SharepointConnector
-from onyx.connectors.sharepoint.models import SitePagesPage
+from onyx.connectors.sharepoint.models import SitePagesPage, SiteUrlListing
 from tests.unit.onyx.connectors.sharepoint.test_sharepoint_perm_sync_checks import (
     ITEM_JSON,
     OTHER_SITE_URL,
@@ -190,6 +190,29 @@ def test_a_site_on_another_tenant_says_so() -> None:
     )
 
     assert result.summary == "Site is on another host: x"
+
+
+@pytest.mark.parametrize(
+    ("complete", "status", "summary"),
+    [
+        (True, CapabilityCheckStatus.FAILED, "Every listed site is excluded"),
+        (False, CapabilityCheckStatus.INCOMPLETE, "No included site in the sample"),
+    ],
+)
+def test_an_excluded_listing_page_fails_only_a_whole_listing(
+    complete: bool, status: CapabilityCheckStatus, summary: str
+) -> None:
+    gateway = _healthy()
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[SITE_URL], complete=complete
+    )
+
+    result = _run(
+        "sharepoint_sites_visible", gateway, _config(sites=[], excluded_sites=["*/eng"])
+    )
+
+    assert result.status == status
+    assert result.summary == summary
 
 
 def test_every_site_excluded_fails_the_find() -> None:

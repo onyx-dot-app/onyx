@@ -43,7 +43,11 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_doc_permission_sync_checks,
     build_sharepoint_group_sync_checks,
 )
-from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
+from onyx.connectors.sharepoint.models import (
+    SharepointDrive,
+    SitePagesPage,
+    SiteUrlListing,
+)
 from onyx.connectors.sharepoint.source_operations import SharepointSourceOperations
 
 SITE_URL = "https://contoso.sharepoint.com/sites/eng"
@@ -131,7 +135,9 @@ def _gateway() -> MagicMock:
     Entra group, holding one library with one file in a folder and one page."""
     gateway: MagicMock = create_autospec(SharepointSourceOperations, instance=True)
     gateway.get_auth_method.return_value = MicrosoftAuthMethod.CERTIFICATE
-    gateway.list_site_urls.return_value = [SITE_URL, OTHER_SITE_URL]
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[SITE_URL, OTHER_SITE_URL], complete=True
+    )
     gateway.get_site_id.return_value = "site-id"
     gateway.list_drives.return_value = [DRIVE]
     gateway.get_delta_page.return_value = _delta_page(ITEM_JSON)
@@ -304,10 +310,10 @@ def test_configured_sites_the_exclusions_remove_leave_nothing_to_probe() -> None
 
 def test_discovered_probe_sites_leave_out_personal_sites() -> None:
     gateway: MagicMock = _gateway()
-    gateway.list_site_urls.return_value = [
-        "https://contoso-my.sharepoint.com/personal/alice",
-        OTHER_SITE_URL,
-    ]
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=["https://contoso-my.sharepoint.com/personal/alice", OTHER_SITE_URL],
+        complete=True,
+    )
 
     _run("sharepoint_site_permissions_read", _context(gateway, _config(sites=[])))
 

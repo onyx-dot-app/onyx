@@ -34,3 +34,11 @@ class SitePagesPage(BaseModel):
 
     pages: list[dict[str, Any]]
     next_link: str | None = None
+
+
+class SiteUrlListing(BaseModel):
+    """The tenant's site listing, by web URL. ``complete`` is False when a
+    page cap stopped the read before the last page."""
+
+    site_urls: list[str]
+    complete: bool

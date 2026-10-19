@@ -46,6 +46,7 @@ from onyx.connectors.sharepoint.capability_checks import (
 from onyx.connectors.sharepoint.models import (
     SharepointDrive,
     SitePagesPage,
+    SiteUrlListing,
 )
 from onyx.connectors.sharepoint.source_operations import SharepointSourceOperations
 from onyx.utils.url import SSRFException
@@ -94,7 +95,9 @@ def _gateway() -> MagicMock:
     gateway.check_token.return_value = MicrosoftTokenInfo(
         expires_in=3599, app_name="Onyx"
     )
-    gateway.list_site_urls.return_value = [SITE_URL, OTHER_SITE_URL]
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[SITE_URL, OTHER_SITE_URL], complete=True
+    )
     gateway.get_site_id.return_value = "site-id"
     gateway.list_drives.return_value = [DRIVE]
     gateway.get_delta_page.return_value = _delta_page(ITEM_JSON)
@@ -336,10 +339,10 @@ def test_configured_sites_the_exclusions_remove_are_not_replaced() -> None:
 
 def test_discovered_probe_sites_leave_out_personal_sites() -> None:
     gateway: MagicMock = _gateway()
-    gateway.list_site_urls.return_value = [
-        "https://contoso-my.sharepoint.com/personal/alice",
-        OTHER_SITE_URL,
-    ]
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=["https://contoso-my.sharepoint.com/personal/alice", OTHER_SITE_URL],
+        complete=True,
+    )
 
     _run("sharepoint_documents_read", _context(gateway, _config(sites=[])))
 
@@ -369,7 +372,7 @@ def test_only_the_first_sites_are_probed() -> None:
 
 def test_an_empty_site_listing_fails() -> None:
     gateway: MagicMock = _gateway()
-    gateway.list_site_urls.return_value = []
+    gateway.list_site_urls.return_value = SiteUrlListing(site_urls=[], complete=True)
 
     with pytest.raises(ConnectorValidationError, match="Sites.Selected"):
         _run("sharepoint_sites_visible", _context(gateway, _config(sites=[])))

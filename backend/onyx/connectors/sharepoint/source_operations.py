@@ -92,6 +92,7 @@ from onyx.connectors.sharepoint.models import (
     SharepointCredentials,
     SharepointDrive,
     SitePagesPage,
+    SiteUrlListing,
 )
 from onyx.connectors.source_operations import (
     OperationConsumes,
@@ -131,17 +132,19 @@ def _drive(drive: Drive) -> SharepointDrive:
     )
 
 
-def _iter_site_listing(
-    sites: SitesWithRoot, max_pages: int | None
-) -> Generator[Site, None, None]:
+def _read_site_listing(sites: SitesWithRoot, max_pages: int | None) -> SiteUrlListing:
+    site_urls: list[str] = []
     pages: int = 0
     while sites:
         if sites.current_page:
-            yield from sites.current_page
+            site_urls.extend(
+                site.web_url for site in sites.current_page if site.web_url
+            )
         pages += 1
         if not sites.has_next or (max_pages is not None and pages >= max_pages):
             break
         sites = sites._get_next().execute_query()
+    return SiteUrlListing(site_urls=site_urls, complete=not sites or not sites.has_next)
 
 
 class SharepointSourceOperations(SourceOperations):
@@ -340,18 +343,14 @@ class SharepointSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def list_site_urls(self, *, max_pages: int | None = None) -> list[str]:
+    def list_site_urls(self, *, max_pages: int | None = None) -> SiteUrlListing:
         """Site collections in the tenant, by web URL: every one, or the first
         ``max_pages`` listing pages for a probe."""
         with raise_microsoft_errors():
             sites: SitesWithRoot = (
                 self._graph_client().sites.get_all_sites().execute_query()
             )
-            return [
-                site.web_url
-                for site in _iter_site_listing(sites, max_pages)
-                if site.web_url
-            ]
+            return _read_site_listing(sites, max_pages)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

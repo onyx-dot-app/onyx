@@ -879,7 +879,7 @@ class SharepointConnector(
         return result
 
     def fetch_sites(self) -> list[SiteDescriptor]:
-        site_urls = self.ops.list_site_urls()
+        site_urls = self.ops.list_site_urls().site_urls
 
         if not site_urls:
             raise RuntimeError("No sites found in the tenant")
