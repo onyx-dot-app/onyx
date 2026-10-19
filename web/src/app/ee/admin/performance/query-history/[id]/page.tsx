@@ -6,7 +6,7 @@ import { Divider, Text } from "@opal/components";
 import Title from "@/components/ui/title";
 import { Spacer } from "@opal/components";
 import { ChatSessionSnapshot, MessageSnapshot } from "../../usage/types";
-import { FiBook } from "react-icons/fi";
+import { SvgBook } from "@opal/icons";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { FeedbackBadge } from "../FeedbackBadge";
@@ -35,7 +35,8 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
           {message.documents.slice(0, 5).map((document) => {
             return (
               <div className="text-sm flex" key={document.document_id}>
-                <FiBook
+                <SvgBook
+                  size={14}
                   className={
                     "my-auto me-1" + (document.link ? " text-link" : " ")
                   }

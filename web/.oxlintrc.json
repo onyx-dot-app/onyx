@@ -182,7 +182,6 @@
       // Design-system baseline: files that broke these rules when they landed.
       // Remove a file once it is clean. Never add one.
       "files": [
-        "src/app/admin/agents/CollapsibleSection.tsx",
         "src/app/admin/bots/SlackBotTable.tsx",
         "src/app/admin/bots/SlackBotUpdateForm.tsx",
         "src/app/admin/bots/SlackTokensForm.tsx",
@@ -208,7 +207,6 @@
         "src/app/app/message/HumanMessage.tsx",
         "src/app/app/message/MemoizedTextComponents.tsx",
         "src/app/app/message/errorHelpers.tsx",
-        "src/app/app/message/messageComponents/interfaces.ts",
         "src/app/app/message/messageComponents/toolDisplayHelpers.tsx",
         "src/app/app/shared/[[]chatId]/SharedChatDisplay.tsx",
         "src/app/auth/forgot-password/page.tsx",
@@ -274,7 +272,6 @@
         "src/views/SettingsPage.tsx",
         "src/views/admin/connectors/AddConnectorPage/form/FieldRendering.tsx",
         "src/views/admin/connectors/ConnectorDetailPage/InlineFileManagement.tsx",
-        "src/views/admin/connectors/FederatedDetailPage/index.tsx",
         "src/views/admin/connectors/OAuthFinalizePage/index.tsx"
       ],
       "rules": {
