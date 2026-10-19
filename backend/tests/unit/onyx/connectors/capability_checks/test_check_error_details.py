@@ -28,10 +28,7 @@ def _http_error(status: int, url: str, body: str) -> requests.HTTPError:
 
 
 def _detail(error: Exception) -> CheckErrorDetail | None:
-    try:
-        raise error
-    except Exception as raised:
-        return check_error_detail(raised, check_error_kind(raised), [])
+    return check_error_detail(error, check_error_kind(error), [])
 
 
 def test_a_mapped_http_error_keeps_the_response_but_not_the_query() -> None:
