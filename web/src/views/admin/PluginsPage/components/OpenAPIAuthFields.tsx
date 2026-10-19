@@ -413,14 +413,16 @@ export default function OpenAPIAuthFields({
       )}
 
       {auth.authMethod === "pt-oauth" && (
-        <MessageCard
-          outerPadding={1}
-          innerPadding={1}
-          title={t("openApiAuthModal.passThroughNotice.title")}
-          description={t("openApiAuthModal.passThroughNotice.description", {
-            appName,
-          })}
-        />
+        <InputPadder>
+          <MessageCard
+            outerPadding={1}
+            innerPadding={1}
+            title={t("openApiAuthModal.passThroughNotice.title")}
+            description={t("openApiAuthModal.passThroughNotice.description", {
+              appName,
+            })}
+          />
+        </InputPadder>
       )}
     </fieldset>
   );
