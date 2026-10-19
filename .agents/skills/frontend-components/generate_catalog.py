@@ -36,9 +36,16 @@ def _readme_entry(readme: Path) -> tuple[str, str, str]:
     import_line = next((line for line in lines if line.startswith("**Import:**")), "")
     import_match = re.search(r"from \"([^\"]+)\"", import_line)
     source = import_match.group(1) if import_match else ""
+    imports = re.search(r"import\s*\{([^}]+)\}", import_line)
+    if imports:
+        name = ", ".join(
+            item.strip().split(" as ")[0]
+            for item in imports.group(1).split(",")
+            if item.strip() and not item.strip().startswith("type ")
+        )
     paragraph: list[str] = []
     for line in lines[1:]:
-        if line.startswith(("**Import:**", "#", "|", "```")) or (
+        if line.startswith(("**Import:**", "**Formik:**", "#", "|", "```")) or (
             not line.strip() and not paragraph
         ):
             if paragraph:
@@ -69,22 +76,29 @@ def _opal_section(kind: str) -> list[str]:
         if readme.parent == _OPAL / kind:
             continue
         name, source, description = _readme_entry(readme)
+        if source == f"@opal/{kind}":
+            names = [item for item in name.split(", ") if item in exported]
+            if not names:
+                raise ValueError(f"No public exports in {readme}: {name}")
+            name = ", ".join(names)
         if not source:
             if name.split(".")[0] not in exported:
                 continue
             source = f"@opal/{kind}"
-        path = readme.relative_to(_WEB).as_posix()
+        path = readme.relative_to(_REPO).as_posix()
         rows.append(f"| `{name}` | `{source}` | {description} | `{path}` |")
     return rows
 
 
 def _jsdoc_description(source: str) -> str:
     export = re.search(r"^export default (?:async )?function", source, re.MULTILINE)
-    before = source[: export.start()] if export else source
-    blocks = re.findall(r"/\*\*(.*?)\*/", before, re.DOTALL)
-    if not blocks:
+    if not export:
         return ""
-    text = re.sub(r"^\s*\* ?", "", blocks[-1], flags=re.MULTILINE)
+    before = source[: export.start()]
+    block = re.search(r"/\*\*((?:(?!\*/).)*)\*/\s*$", before, re.DOTALL)
+    if not block:
+        return ""
+    text = re.sub(r"^\s*\* ?", "", block.group(1), flags=re.MULTILINE)
     text = text.split("@", 1)[0]
     paragraph = text.strip().split("\n\n", 1)[0]
     return _first_sentence(re.sub(r"^\S+ Component\s*", "", paragraph.strip()))

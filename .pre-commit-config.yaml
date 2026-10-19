@@ -320,6 +320,7 @@ repos:
         language: system
         entry: python3 .agents/skills/frontend-components/generate_catalog.py --check
         pass_filenames: false
+        always_run: true
         files: ^(web/lib/opal/src/(components|layouts)/|web/src/refresh-components/|web/tools/oxlint/opal/|\.agents/skills/frontend-components/)
         stages: [pre-commit]
       - id: feature-map-integrity
