@@ -49,18 +49,20 @@ and custom choices. There is no separate custom-app footer.
 Craft App setup editors share a combined Configuration/credentials pane, with
 Permissions and Skills tabs only where supported. Their logo/name headers,
 fixed-height scroll panes, and bottom save rows match plugin editor patterns.
-Each row retains its native resource and a kind-qualified identity. Search matches names,
-descriptions, and MCP server URLs. Independent loading and retry states keep one source's
-failure from hiding the other sources. The unified list uses compact two-column
-rows on wider screens and one column on narrow screens.
-Admin and member directories share `PluginDirectoryToolbar`: filters, when
-present, sit before the search field. Add and Manage workspace plugins use
-the header action slot, matching Agents and Skills. Both use the same
-heading/description layout and responsive toolbar sizing.
-Admin filters use the member directory's compact pill-button layout: All,
-MCP, OpenAPI, and Craft Apps. Craft Apps appears only for full admins. Search applies
-within the selected type; clearing an empty result resets both filters.
-On the member page, empty-state actions say "View all plugins" and reset search and filters. On the admin page, a search with no match shows the shared `SearchNoResults` state from `@/lib/common/components`. A tab or list that is empty without a search shows the empty illustration.
+Each admin plugin is a settings-style `PluginCard`
+(`web/src/views/admin/PluginsPage/PluginCard.tsx`) in one column: its logo, name,
+type tag (MCP, OpenAPI or Craft), description, a "Connected" or "Needs sign-in"
+status, and settings and delete-on-hover buttons. Clicking it opens the plugin's
+modal. Search matches names, descriptions, and MCP server URLs. Independent loading
+and retry states keep one source's failure from hiding the other sources.
+Admin and member directories share `PluginDirectoryToolbar`: the shared `SearchField`
+(`@/lib/common/components`, with a clear button and the "/" shortcut) comes first,
+then the filter tabs at their natural width. The admin header's New Plugin button
+opens a menu of MCP, OpenAPI and Craft.
+Admin filters are Opal tabs: All, MCP, OpenAPI, and Craft Apps. Below the Business
+tier, Craft Apps stays visible but disabled, with the upgrade tooltip. Search
+applies within the selected tab.
+On the member page, empty-state actions say "View all plugins" and reset search and filters. On the admin page, a search with no match shows the shared `SearchNoResults` state from `@/lib/common/components`. Any other empty list shows one empty state ("No plugins found"), with no button under it.
 When Craft is unavailable, admin lists do not fetch Craft Apps or offer their
 creation, filters, or direct-link editors. MCP indicators show Chat only.
 Member defaults, Craft metadata, skills links, and Craft actions require the
@@ -165,13 +167,12 @@ checks server access before reading credentials, validating them, or saving them
 
 Main Chat still executes MCP and OpenAPI calls without Craft approval enforcement.
 Member UI does not display read/write policy badges or promise approval before writes.
-Installed rows show a status control between the type label and the row menu.
+Member rows show a status control between the type label and the row menu.
 MCP circles split diagonally: the upper-left half shows main Chat and the lower-right
 half shows Craft. Each half uses the standard success green when enabled and
 neutral gray when disabled, matching member directory indicators.
-Admin indicators show workspace availability only; individual authentication
-never changes their color or tooltip. Personal pages retain orange needs-auth
-indicators. Tooltips show both workspace states when Craft is available.
+Admin cards show the admin's own sign-in state instead ("Connected" or
+"Needs sign-in"). Personal pages retain orange needs-auth indicators. Tooltips show both workspace states when Craft is available.
 OpenAPI dots follow the action's enabled flag.
 The status control uses a compact borderless circle and a neutral two-column tooltip.
 MCP Chat state comes from the admin

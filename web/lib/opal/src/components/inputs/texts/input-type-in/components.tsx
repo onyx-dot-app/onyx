@@ -6,6 +6,7 @@ import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
+import { useOpalStrings } from "@opal/strings";
 import type { InputVariants, WithoutStyles } from "@opal/types";
 import type { TextFont } from "@onyx-ai/shared/contracts";
 
@@ -86,6 +87,7 @@ export default function InputTypeIn({
   name,
   ...props
 }: InputTypeInProps) {
+  const strings = useOpalStrings();
   const disabled = variant === "disabled";
   const isReadOnly = readOnly || variant === "readOnly";
 
@@ -147,6 +149,7 @@ export default function InputTypeIn({
         <div className={cn(value === "" && "invisible")}>
           <Button
             icon={SvgX}
+            aria-label={strings.clear}
             disabled={disabled}
             onClick={(event) => {
               event.stopPropagation();
