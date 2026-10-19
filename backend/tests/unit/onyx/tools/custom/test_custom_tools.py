@@ -138,7 +138,7 @@ class TestCustomTool(unittest.TestCase):
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with(
-            "GET", expected_url, json=None, headers={}, **_REQUEST_KWARGS
+            expected_url, method="GET", json=None, headers={}, **_REQUEST_KWARGS
         )
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
@@ -179,7 +179,7 @@ class TestCustomTool(unittest.TestCase):
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/456"
         mock_request.assert_called_once_with(
-            "POST", expected_url, json=None, headers={}, **_REQUEST_KWARGS
+            expected_url, method="POST", json=None, headers={}, **_REQUEST_KWARGS
         )
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
@@ -231,7 +231,11 @@ class TestCustomTool(unittest.TestCase):
             "Custom-Header": "CustomValue",
         }
         mock_request.assert_called_once_with(
-            "GET", expected_url, json=None, headers=expected_headers, **_REQUEST_KWARGS
+            expected_url,
+            method="GET",
+            json=None,
+            headers=expected_headers,
+            **_REQUEST_KWARGS,
         )
 
     @patch("onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request")
@@ -264,7 +268,7 @@ class TestCustomTool(unittest.TestCase):
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with(
-            "GET", expected_url, json=None, headers={}, **_REQUEST_KWARGS
+            expected_url, method="GET", json=None, headers={}, **_REQUEST_KWARGS
         )
 
     def test_invalid_openapi_schema(self) -> None:
@@ -362,7 +366,11 @@ class TestCustomTool(unittest.TestCase):
             "X-Onyx-User-Email": "USER_EMAIL",
         }
         mock_request.assert_called_once_with(
-            "GET", expected_url, json=None, headers=expected_headers, **_REQUEST_KWARGS
+            expected_url,
+            method="GET",
+            json=None,
+            headers=expected_headers,
+            **_REQUEST_KWARGS,
         )
 
     @patch("onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request")
@@ -414,8 +422,8 @@ class TestCustomTool(unittest.TestCase):
         )
 
         mock_request.assert_called_once_with(
-            "GET",
             "http://localhost:8080/users/USER_ID/ping",
+            method="GET",
             json=None,
             headers={},
             **_REQUEST_KWARGS,
@@ -600,6 +608,8 @@ def _addr_info(ip: str) -> list[tuple[Any, ...]]:
     return [(None, None, None, "", (ip, 0))]
 
 
+# In BLOCKED_HOSTNAMES, so the shared floor in utils/url.py blocks them even
+# when custom-tool checks are off.
 _METADATA_URLS = [
     "http://169.254.169.254/latest/meta-data",
     "http://[fd00:ec2::254]/",
@@ -646,11 +656,22 @@ def test_loopback_blocked_on_self_hosted_below_disabled(
         validate_custom_tool_url(_LOOPBACK_URL, resolve_dns=False)
 
 
-def test_loopback_allowed_on_self_hosted_when_disabled(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("url", [_LOOPBACK_URL, "http://[fe80::1]/"])
+def test_loopback_and_link_local_allowed_on_self_hosted_when_disabled(
+    monkeypatch: pytest.MonkeyPatch, url: str
 ) -> None:
     _set_ssrf_level(monkeypatch, SSRFProtectionLevel.DISABLED)
-    validate_custom_tool_url(_LOOPBACK_URL, resolve_dns=False)
+    validate_custom_tool_url(url, resolve_dns=False)
+
+
+@pytest.mark.parametrize("level", _BELOW_DISABLED_LEVELS)
+@pytest.mark.parametrize("url", ["http://[fe80::1]/", "http://169.254.10.10/"])
+def test_link_local_blocked_on_self_hosted_below_disabled(
+    monkeypatch: pytest.MonkeyPatch, url: str, level: SSRFProtectionLevel
+) -> None:
+    _set_ssrf_level(monkeypatch, level)
+    with pytest.raises(SSRFException):
+        validate_custom_tool_url(url, resolve_dns=False)
 
 
 @pytest.mark.parametrize("level", list(SSRFProtectionLevel))

@@ -412,7 +412,7 @@ def _resolve_permissive_ip(
     )
 
 
-def _make_ssrf_safe_request(
+def ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
@@ -481,32 +481,6 @@ def _make_ssrf_safe_request(
     )
 
 
-def ssrf_safe_request(
-    method: str,
-    url: str,
-    *,
-    headers: dict[str, str] | None = None,
-    timeout: float | tuple[float, float] = 15,
-    allow_private_network: bool = False,
-    block_loopback_and_link_local: bool = True,
-    block_link_local_only: bool = False,
-    **kwargs: Any,
-) -> requests.Response:
-    """Send one request of any method with SSRF protection and DNS pinning.
-    Redirects are not followed: a 3xx comes back to the caller as is, so
-    request bodies and auth headers never go to an unvalidated host."""
-    return _make_ssrf_safe_request(
-        url,
-        headers,
-        timeout,
-        allow_private_network=allow_private_network,
-        block_loopback_and_link_local=block_loopback_and_link_local,
-        block_link_local_only=block_link_local_only,
-        method=method,
-        **kwargs,
-    )
-
-
 def ssrf_safe_get(
     url: str,
     headers: dict[str, str] | None = None,
@@ -544,7 +518,7 @@ def ssrf_safe_get(
         ValueError: If the URL is malformed
         requests.RequestException: If the request fails
     """
-    response = _make_ssrf_safe_request(
+    response = ssrf_safe_request(
         url,
         headers,
         timeout,
@@ -585,7 +559,7 @@ def ssrf_safe_get(
             # Validate and follow the redirect (this will raise SSRFException if invalid)
             response.close()
             current_url = redirect_url
-            response = _make_ssrf_safe_request(
+            response = ssrf_safe_request(
                 redirect_url,
                 headers,
                 timeout,

@@ -117,9 +117,11 @@ targets are allowed.
 
 Custom OpenAPI tools get their policy from
 `custom_tool.py:custom_tool_ssrf_params`, used at save time and at call time.
-Multi-tenant blocks private, loopback, and cloud metadata targets. Self-hosted
-allows private (RFC1918) targets at every level and allows loopback only at
-`DISABLED`. Cloud metadata is blocked at every level. `CustomTool.run`
+Multi-tenant blocks private, loopback, and link-local targets. Self-hosted
+allows private (RFC1918) targets at every level. It allows loopback and
+link-local only at `DISABLED`. The shared floor in `onyx/utils/url.py` still
+blocks cloud metadata (`169.254.0.0/16`, `fd00:ec2::254`) and
+`BLOCKED_HOSTNAMES` at every level. `CustomTool.run`
 sends through `onyx/utils/url.py:ssrf_safe_request`, which resolves and pins
 the IP, has a `(10, 120)` second timeout, and does not follow redirects.
 
