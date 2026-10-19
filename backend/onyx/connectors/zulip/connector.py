@@ -1,3 +1,4 @@
+import configparser
 import os
 import tempfile
 import urllib.parse
@@ -9,6 +10,8 @@ from zulip import Client
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.outbound import validate_connector_url
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -34,6 +37,21 @@ from onyx.utils.logger import setup_logger
 # 2. Add end date support once https://github.com/zulip/zulip/issues/25436 is solved
 
 logger = setup_logger()
+
+
+def _validate_zuliprc_site(zuliprc: str) -> None:
+    # The zulip Client calls the server while it is built.
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        parser.read_string(zuliprc)
+    except configparser.Error as e:
+        raise ConnectorValidationError("Invalid zuliprc file") from e
+    site = parser.get("api", "site", fallback=None)
+    if site is None:
+        return
+    if not site.startswith("http"):
+        site = f"https://{site}"
+    validate_connector_url(site, "Zulip server URL")
 
 
 class ZulipConnector(LoadConnector, PollConnector):
@@ -80,6 +98,7 @@ class ZulipConnector(LoadConnector, PollConnector):
         # The input field converts newlines to spaces in the provided
         # zuliprc file. This reverts them back to newlines.
         contents_spaces_to_newlines = contents.replace(" ", "\n")
+        _validate_zuliprc_site(contents_spaces_to_newlines)
         fd: int
         config_file: str
         fd, config_file = tempfile.mkstemp(prefix="zuliprc-")

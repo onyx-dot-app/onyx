@@ -22,6 +22,7 @@ from more_itertools import chunked
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
+from onyx.connectors.cross_connector_utils.outbound import validate_connector_url
 from onyx.connectors.jira.config import JiraCredentialBinding
 from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION, JIRA_SERVER_API_VERSION
@@ -170,6 +171,11 @@ class JiraSourceOperations(SourceOperations):
         ``requests.HTTPError`` on failure."""
         binding: JiraCredentialBinding = self._binding()
         jira_base: str = binding.jira_base_url.rstrip("/")
+        # Gateways bypass instantiate_connector, so check the host here too.
+        validate_connector_url(
+            jira_base if "://" in jira_base else f"https://{jira_base}",
+            "jira_base_url",
+        )
         return scoped_url(jira_base, "jira") if binding.scoped_token else jira_base
 
     def _build_client(self, api_url: str) -> JIRA:

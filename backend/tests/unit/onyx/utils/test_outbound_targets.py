@@ -52,7 +52,7 @@ def test_gitlab_blocks_metadata_before_constructing_client(
 ) -> None:
     with (
         patch(
-            "onyx.connectors.gitlab.connector.get_security_settings", create=True
+            "onyx.connectors.cross_connector_utils.outbound.get_security_settings"
         ) as settings,
         patch("onyx.connectors.gitlab.connector.gitlab.Gitlab") as client,
     ):
@@ -218,7 +218,9 @@ def test_playwright_rechecks_final_url_before_returning_content(
 
 def test_gitlab_normalizes_credential_destination() -> None:
     with (
-        patch("onyx.connectors.gitlab.connector.get_security_settings") as settings,
+        patch(
+            "onyx.connectors.cross_connector_utils.outbound.get_security_settings"
+        ) as settings,
         patch("onyx.connectors.gitlab.connector.gitlab.Gitlab") as client,
     ):
         settings.return_value.ssrf_protection_level = SSRFProtectionLevel.DISABLED
@@ -262,7 +264,9 @@ def test_gitlab_checks_each_redirect(destination: str) -> None:
         return response
 
     with (
-        patch("onyx.connectors.gitlab.connector.get_security_settings") as settings,
+        patch(
+            "onyx.connectors.cross_connector_utils.outbound.get_security_settings"
+        ) as settings,
         patch(
             "socket.getaddrinfo",
             return_value=[
@@ -394,7 +398,9 @@ def test_canvas_checks_redirect_destinations(destination: str) -> None:
 
 @pytest.mark.parametrize("port", ["invalid", "65536"])
 def test_gitlab_invalid_port_is_validation_error(port: str) -> None:
-    with patch("onyx.connectors.gitlab.connector.get_security_settings") as settings:
+    with patch(
+        "onyx.connectors.cross_connector_utils.outbound.get_security_settings"
+    ) as settings:
         settings.return_value.ssrf_protection_level = SSRFProtectionLevel.DISABLED
         with pytest.raises(ConnectorValidationError):
             GitlabConnector("owner", "project").load_credentials(

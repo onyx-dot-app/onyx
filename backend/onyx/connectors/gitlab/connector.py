@@ -17,6 +17,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.cross_connector_utils.outbound import validate_connector_url
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -31,11 +32,8 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
-from onyx.server.security.models import web_connector_ssrf_enforced
-from onyx.server.security.store import get_security_settings
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 T = TypeVar("T")
 
@@ -156,20 +154,7 @@ def _should_exclude(path: str) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in exclude_patterns)
 
 
-def _validate_credential_url(gitlab_url: str) -> None:
-    enforced: bool = web_connector_ssrf_enforced(
-        get_security_settings().ssrf_protection_level
-    )
-    try:
-        _ = urlsplit(gitlab_url).port
-        validate_outbound_http_url(
-            gitlab_url,
-            https_only=True,
-            allow_private_network=not enforced,
-            block_link_local_only=not enforced,
-        )
-    except (SSRFException, ValueError) as e:
-        raise ConnectorValidationError(f"Invalid GitLab URL '{gitlab_url}': {e}") from e
+_URL_FIELD = "GitLab URL"
 
 
 class _GitlabSession(requests.Session):
@@ -184,7 +169,7 @@ class _GitlabSession(requests.Session):
     ) -> requests.Response:
         if request.url is None:
             raise ConnectorValidationError("GitLab request has no destination")
-        _validate_credential_url(request.url)
+        validate_connector_url(request.url, _URL_FIELD, https_only=True)
         parsed = urlsplit(request.url)
         port = parsed.port if parsed.port is not None else 443
         if parsed.hostname != self._host or port != self._port:
@@ -214,7 +199,7 @@ class GitlabConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         gitlab_url: str = credentials["gitlab_url"].strip()
-        _validate_credential_url(gitlab_url)
+        validate_connector_url(gitlab_url, _URL_FIELD, https_only=True)
         self.gitlab_client = gitlab.Gitlab(
             gitlab_url,
             private_token=credentials["gitlab_access_token"],
