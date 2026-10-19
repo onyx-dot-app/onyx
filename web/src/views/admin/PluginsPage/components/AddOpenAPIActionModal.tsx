@@ -12,11 +12,11 @@ import { createPortal } from "react-dom";
 import { CopyButton } from "@opal/components";
 import { Button } from "@opal/components";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import { OpenAPIMethodPath } from "@/lib/plugins/components";
 import {
-  OPENAPI_METHOD_CSS_COLORS,
-  OpenAPIMethodPath,
-  openApiMethodColor,
-} from "@/sections/plugins/OpenAPIEndpointList";
+  openApiMethodColoredIcon,
+  sortByOpenApiMethod,
+} from "@/lib/plugins/openapi/methods";
 import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import { can } from "@/lib/permissions/resource-actions";
@@ -30,13 +30,7 @@ import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@opal/components";
 import { Formik, Form, useFormikContext, type FormikHelpers } from "formik";
 import * as Yup from "yup";
-import {
-  SvgActions,
-  SvgArrowLeftDot,
-  SvgArrowRightDot,
-  SvgBracketCurly,
-  SvgInfo,
-} from "@opal/icons";
+import { SvgActions, SvgBracketCurly, SvgInfo } from "@opal/icons";
 import { getActionIcon } from "@/lib/tools/utils";
 import { EmptyMessageCard } from "@opal/components";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -412,7 +406,7 @@ function FormContent({
                 )}
                 <Divider paddingParallel={0} />
                 <div className="flex flex-col gap-1">
-                  {methodSpecs.map((method) => (
+                  {sortByOpenApiMethod(methodSpecs).map((method) => (
                     <Card
                       key={`${method.method}-${method.path}-${method.name}`}
                       padding={2}
@@ -423,24 +417,7 @@ function FormContent({
                         variant="section"
                         padding={0}
                         rightChildren={<OpenAPIMethodPath method={method} />}
-                        icon={(props) => {
-                          const Icon =
-                            method.method.toUpperCase() === "GET"
-                              ? SvgArrowRightDot
-                              : SvgArrowLeftDot;
-                          return (
-                            <Icon
-                              {...props}
-                              style={{
-                                ...props.style,
-                                color:
-                                  OPENAPI_METHOD_CSS_COLORS[
-                                    openApiMethodColor(method.method)
-                                  ],
-                              }}
-                            />
-                          );
-                        }}
+                        icon={openApiMethodColoredIcon(method.method)}
                         title={method.name}
                         description={
                           method.summary ||
