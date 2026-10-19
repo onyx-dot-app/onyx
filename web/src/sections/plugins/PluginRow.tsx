@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useId } from "react";
 import { Button, SelectCard, Text, Tooltip } from "@opal/components";
-import { SvgFileBraces } from "@opal/icons";
+import { SvgCodeFile } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
 import { getActionIcon } from "@/lib/tools/utils";
@@ -176,7 +176,7 @@ export function PluginRow({ plugin }: PluginRowProps) {
     plugin.kind === "mcp"
       ? getActionIcon(plugin.server.server_url, plugin.server.name)
       : plugin.kind === "openapi"
-        ? SvgFileBraces
+        ? SvgCodeFile
         : getAppTypeLogo(plugin.app.app_type);
   const canManage =
     plugin.kind === "external-app" ||

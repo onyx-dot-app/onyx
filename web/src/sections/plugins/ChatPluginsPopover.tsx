@@ -11,7 +11,7 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { SvgChevronRight, SvgFileBraces, SvgPlug } from "@opal/icons";
+import { SvgChevronRight, SvgCodeFile, SvgPlug } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { useFocusOnMount } from "@opal/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -259,7 +259,7 @@ export default function ChatPluginsPopover({
                             plugin.server.server_url,
                             plugin.server.name
                           )
-                        : SvgFileBraces
+                        : SvgCodeFile
                     }
                     sizePreset="main-ui"
                     padding={0}
